@@ -14,7 +14,7 @@
  limitations under the License.
 */
 
-package IstioProvider
+package istioprovider
 
 import (
 	"context"
@@ -38,9 +38,7 @@ type IstioProvider struct {
 }
 
 // +kubebuilder:rbac:groups=networking.istio.io,resources=virtualservices,verbs=get;list;watch;create;update;patch;delete
-
 func New(logger logr.Logger, client client.Client) *IstioProvider {
-
 	// Register the Istio Scheme into the client, so we can interact with istio objects.
 	utilruntime.Must(istio.AddToScheme(client.Scheme()))
 
@@ -53,8 +51,7 @@ func New(logger logr.Logger, client client.Client) *IstioProvider {
 	}
 }
 
-func (is *IstioProvider) Create(ctx context.Context, api v1beta1.Api) error {
-
+func (is *IstioProvider) Create(ctx context.Context, api v1beta1.API) error {
 	httpRoutes := is.GetHTTPRoutes(api)
 
 	virtualService := istio.VirtualService{
@@ -73,14 +70,14 @@ func (is *IstioProvider) Create(ctx context.Context, api v1beta1.Api) error {
 
 	err := is.K8sClient.Create(ctx, &virtualService)
 	if err != nil {
-		return fmt.Errorf("Failing to create Istio virtualservice for %s: %s", api.GetName(), err)
+		return fmt.Errorf("failing to create Istio virtualservice for %s: %w", api.GetName(), err)
 	}
 
 	return nil
 }
 
-func (is *IstioProvider) addOwnerReference(virtualService istio.VirtualService, api v1beta1.Api) {
-	// TODO: the OwnerReference is not working accross Namespaces
+func (is *IstioProvider) addOwnerReference(virtualService istio.VirtualService, api v1beta1.API) {
+	// TODO: the OwnerReference is not working across Namespaces
 	virtualService.SetOwnerReferences(append(
 		virtualService.GetOwnerReferences(),
 		metav1.OwnerReference{
@@ -91,9 +88,9 @@ func (is *IstioProvider) addOwnerReference(virtualService istio.VirtualService, 
 		}))
 }
 
-func (is *IstioProvider) GetHTTPRoutes(api v1beta1.Api) []*v1alpha3.HTTPRoute {
+func (is *IstioProvider) GetHTTPRoutes(api v1beta1.API) []*v1alpha3.HTTPRoute {
 	// Let's create the virtual service and the routes.
-	var httpRoutes []*v1alpha3.HTTPRoute
+	httpRoutes := make([]*v1alpha3.HTTPRoute, len(api.Spec.Operations))
 
 	for _, operation := range api.Spec.Operations {
 		//TODO: Create the proper AuthorizationPolicy based on the security field.
@@ -131,18 +128,18 @@ func (is *IstioProvider) GetHTTPRoutes(api v1beta1.Api) []*v1alpha3.HTTPRoute {
 	return httpRoutes
 }
 
-func (is *IstioProvider) Validate(api v1beta1.Api) error {
+func (is *IstioProvider) Validate(api v1beta1.API) error {
 	return nil
 }
 
-func (is *IstioProvider) Update(ctx context.Context, api v1beta1.Api) error {
+func (is *IstioProvider) Update(ctx context.Context, api v1beta1.API) error {
 	return nil
 }
 
-func (is *IstioProvider) Status(api v1beta1.Api) (bool, error) {
+func (is *IstioProvider) Status(api v1beta1.API) (bool, error) {
 	return true, nil
 }
 
-func (is *IstioProvider) Delete(ctx context.Context, api v1beta1.Api) error {
+func (is *IstioProvider) Delete(ctx context.Context, api v1beta1.API) error {
 	return nil
 }

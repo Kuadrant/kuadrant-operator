@@ -1,5 +1,5 @@
 apiVersion: networking.kuadrant.io/v1beta1
-kind: Api
+kind: API
 metadata:
   name: api-sample
 spec:
@@ -23,4 +23,3 @@ spec:
         namespace: default
         path: /api1/
         port: 8080
-        

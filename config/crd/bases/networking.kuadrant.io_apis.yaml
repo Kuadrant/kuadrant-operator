@@ -10,8 +10,8 @@ metadata:
 spec:
   group: networking.kuadrant.io
   names:
-    kind: Api
-    listKind: ApiList
+    kind: API
+    listKind: APIList
     plural: apis
     singular: api
   scope: Namespaced
@@ -19,7 +19,7 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: Api is the Schema for the apis API
+        description: API is the Schema for the apis API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -34,7 +34,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ApiSpec defines the desired state of Api
+            description: APISpec defines the desired state of API
             properties:
               backendServers:
                 items:
@@ -190,7 +190,7 @@ spec:
             - operations
             type: object
           status:
-            description: ApiStatus defines the observed state of Api
+            description: APIStatus defines the observed state of API
             properties:
               observedGeneration:
                 format: int64

@@ -19,7 +19,7 @@ package networking
 import (
 	"context"
 
-	"github.com/kuadrant/kuadrant-controller/pkg/IngressProviders"
+	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
 	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/go-logr/logr"
@@ -29,12 +29,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// ApiReconciler reconciles a Api object
-type ApiReconciler struct {
+// APIReconciler reconciles a API object
+type APIReconciler struct {
 	client.Client
 	Log             logr.Logger
 	Scheme          *runtime.Scheme
-	IngressProvider IngressProviders.IngressProvider
+	IngressProvider ingressproviders.IngressProvider
 }
 
 // +kubebuilder:rbac:groups=networking.kuadrant.io,resources=apis,verbs=get;list;watch;create;update;patch;delete
@@ -43,10 +43,10 @@ type ApiReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-func (r *ApiReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *APIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("api", req.NamespacedName)
 
-	api := networkingv1beta1.Api{}
+	api := networkingv1beta1.API{}
 	err := r.Get(ctx, req.NamespacedName, &api)
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("API Object has been deleted.")
@@ -83,8 +83,8 @@ func (r *ApiReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ApiReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *APIReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&networkingv1beta1.Api{}).
+		For(&networkingv1beta1.API{}).
 		Complete(r)
 }

@@ -20,7 +20,7 @@ import (
 	"flag"
 	"os"
 
-	"github.com/kuadrant/kuadrant-controller/pkg/IngressProviders"
+	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -79,14 +79,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&networkingcontrollers.ApiReconciler{
+	if err = (&networkingcontrollers.APIReconciler{
 		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Api"),
+		Log:    ctrl.Log.WithName("controllers").WithName("API"),
 		Scheme: mgr.GetScheme(),
-		IngressProvider: IngressProviders.GetIngressProvider(ctrl.Log.WithName("IngressProvider").WithName("Provider"),
+		IngressProvider: ingressproviders.GetIngressProvider(ctrl.Log.WithName("IngressProvider").WithName("Provider"),
 			mgr.GetClient()),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Api")
+		setupLog.Error(err, "unable to create controller", "controller", "API")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

@@ -34,10 +34,10 @@ jobs:
           - gofmt
 
         include:
-        - tool: gofmt
-          options: -s
-        - tool: goimports
-          importpath: golang.org/x/tools/cmd/goimports
+          - tool: gofmt
+            options: -s
+          - tool: goimports
+            importpath: golang.org/x/tools/cmd/goimports
 
     steps:
       - name: Set up Go 1.15.x
@@ -100,7 +100,7 @@ jobs:
 
       - name: Install Tools
         env:
-          WOKE_VERSION: v0.4.1
+          WOKE_VERSION: v0.5.0
         run: |
           TEMP_PATH="$(mktemp -d)"
           cd $TEMP_PATH
@@ -127,7 +127,7 @@ jobs:
         if: steps.golangci_configuration.outputs.files_exists == 'true'
         uses: golangci/golangci-lint-action@v2
         with:
-          version: v1.32
+          version: v1.35
 
       - name: misspell
         shell: bash
@@ -141,7 +141,12 @@ jobs:
           echo '::group:: Running github.com/client9/misspell with reviewdog 🐶 ...'
           # Don't fail because of misspell
           set +o pipefail
-          find . -type f -not -path './vendor/*' -not -path './third_party/*' -not -path './hack/*' -not -path './utils/local-deployment/istio-manifests/*' -not -path './.git/*' |
+          # Exclude generated and vendored files, plus some legacy
+          # paths until we update all .gitattributes
+          git ls-files |
+          git check-attr --stdin linguist-generated | grep -Ev ': (set|true)$' | cut -d: -f1 |
+          git check-attr --stdin linguist-vendored | grep -Ev ': (set|true)$' | cut -d: -f1 |
+          grep -Ev '^(vendor/|third_party/|.git|utils/)' |
           xargs misspell -error |
           reviewdog -efm="%f:%l:%c: %m" \
                 -name="github.com/client9/misspell" \
@@ -152,28 +157,34 @@ jobs:
 
           echo '::endgroup::'
 
-      - name: trailing whitespace
-        shell: bash
-        if: ${{ always() }}
-        env:
-          REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          cd "${GITHUB_WORKSPACE}" || exit 1
-
-          echo '::group:: Flagging trailing whitespace with reviewdog 🐶 ...'
-          # Don't fail because of grep
-          set +o pipefail
-          find . -type f -not -path './vendor/*' -not -path './third_party/*' -not -path './hack/*' -not -path './utils/local-deployment/istio-manifests/*' -not -path './.git/*' |
-          xargs grep -nE " +$" |
-          reviewdog -efm="%f:%l:%m" \
-                -name="trailing whitespace" \
-                -reporter="github-pr-check" \
-                -filter-mode="added" \
-                -fail-on-error="true" \
-                -level="error"
-
-          echo '::endgroup::'
+#      - name: trailing whitespace
+#        shell: bash
+#        if: ${{ always() }}
+#        env:
+#          REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
+#        run: |
+#          set -e
+#          cd "${GITHUB_WORKSPACE}" || exit 1
+#
+#          echo '::group:: Flagging trailing whitespace with reviewdog 🐶 ...'
+#          # Don't fail because of grep
+#          set +o pipefail
+#
+#          # Exclude generated and vendored files, plus some legacy
+#          # paths until we update all .gitattributes
+#          git ls-files |
+#          git check-attr --stdin linguist-generated | grep -Ev ': (set|true)$' | cut -d: -f1 |
+#          git check-attr --stdin linguist-vendored | grep -Ev ': (set|true)$' | cut -d: -f1 |
+#          grep -Ev '^(vendor/|third_party/|.git|utils/)' |
+#          xargs grep -nE " +$" |
+#          reviewdog -efm="%f:%l:%m" \
+#                -name="trailing whitespace" \
+#                -reporter="github-pr-check" \
+#                -filter-mode="added" \
+#                -fail-on-error="true" \
+#                -level="error"
+#
+#          echo '::endgroup::'
 
       - name: EOF newline
         shell: bash
@@ -192,7 +203,13 @@ jobs:
           #  - nothing in third_party
           #  - nothing in .git/
           #  - no *.ai (Adobe Illustrator) files.
-          for x in $(find . -type f -not -name '*.ai' -not -path './vendor/*' -not -path './hack/*' -not -path './utils/local-deployment/istio-manifests/*' -not -path './third_party/*' -not -path './.git/*'); do
+          LINT_FILES=$(git ls-files |
+          git check-attr --stdin linguist-generated | grep -Ev ': (set|true)$' | cut -d: -f1 |
+          git check-attr --stdin linguist-vendored | grep -Ev ': (set|true)$' | cut -d: -f1 |
+          grep -Ev '^(vendor/|third_party/|.git|utils/)' |
+          grep -v '\.ai$')
+
+          for x in $LINT_FILES; do
             # Based on https://stackoverflow.com/questions/34943632/linux-check-if-there-is-an-empty-line-at-the-end-of-a-file
             if [[ -f $x && ! ( -s "$x" && -z "$(tail -c 1 $x)" ) ]]; then
               # We add 1 to `wc -l` here because of this limitation (from the man page):
@@ -225,7 +242,6 @@ jobs:
             cat > .wokeignore <<EOF
             vendor/*
             third_party/*
-            utils/local-deployment/istio-manifests/*
           EOF
           fi
 

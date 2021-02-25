@@ -29,8 +29,8 @@ import (
 // TODO: API definition is missing kubebuilder annotations for validation, add them.
 // TODO: Add proper comments for each of the API fields and Structs, so we can create proper docs.
 
-// ApiSpec defines the desired state of Api
-type ApiSpec struct {
+// APISpec defines the desired state of API
+type APISpec struct {
 	Hosts          []string          `json:"hosts"`
 	Operations     []*Operation      `json:"operations"`
 	BackendServer  []*BackendServer  `json:"backendServers"`
@@ -47,7 +47,7 @@ type Operation struct {
 }
 
 type SecurityParameters struct {
-	ApiKeyAuth []string `json:"apiKeyAuth,omitempty"`
+	APIKeyAuth []string `json:"apiKeyAuth,omitempty"`
 	Oauth2     []string `json:"Oauth2,omitempty"`
 }
 
@@ -72,8 +72,8 @@ type OpenIDConnectAuth struct {
 	URL string `json:"url"`
 }
 
-// ApiStatus defines the observed state of Api
-type ApiStatus struct {
+// APIStatus defines the observed state of API
+type APIStatus struct {
 	Ready              bool  `json:"ready"`
 	ObservedGeneration int64 `json:"observedGeneration"`
 }
@@ -81,32 +81,32 @@ type ApiStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// Api is the Schema for the apis API
-type Api struct {
+// API is the Schema for the apis API
+type API struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ApiSpec   `json:"spec,omitempty"`
-	Status ApiStatus `json:"status,omitempty"`
+	Spec   APISpec   `json:"spec,omitempty"`
+	Status APIStatus `json:"status,omitempty"`
 }
 
-func (api *Api) GetName() string {
+func (api *API) GetName() string {
 	return fmt.Sprintf("%s/%s", api.Namespace, api.Name)
 }
 
 // +kubebuilder:object:root=true
 
-// ApiList contains a list of Api
-type ApiList struct {
+// APIList contains a list of API
+type APIList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Api `json:"items"`
+	Items           []API `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Api{}, &ApiList{})
+	SchemeBuilder.Register(&API{}, &APIList{})
 }
 
-func (api Api) GetHosts() []string {
+func (api API) GetHosts() []string {
 	return api.Spec.Hosts
 }

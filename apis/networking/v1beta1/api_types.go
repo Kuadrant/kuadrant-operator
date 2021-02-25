@@ -17,6 +17,8 @@ limitations under the License.
 package v1beta1
 
 import (
+	"fmt"
+
 	v12 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -86,6 +88,10 @@ type Api struct {
 
 	Spec   ApiSpec   `json:"spec,omitempty"`
 	Status ApiStatus `json:"status,omitempty"`
+}
+
+func (api *Api) GetName() string {
+	return fmt.Sprintf("%s/%s", api.Namespace, api.Name)
 }
 
 // +kubebuilder:object:root=true

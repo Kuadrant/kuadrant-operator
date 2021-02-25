@@ -18,6 +18,8 @@ package IstioProvider
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	"istio.io/api/networking/v1alpha3"
@@ -34,6 +36,7 @@ type IstioProvider struct {
 	Log       logr.Logger
 	K8sClient client.Client
 }
+
 // +kubebuilder:rbac:groups=networking.istio.io,resources=virtualservices,verbs=get;list;watch;create;update;patch;delete
 
 func New(logger logr.Logger, client client.Client) *IstioProvider {
@@ -70,20 +73,22 @@ func (is *IstioProvider) Create(ctx context.Context, api v1beta1.Api) error {
 
 	err := is.K8sClient.Create(ctx, &virtualService)
 	if err != nil {
-		return err
+		return fmt.Errorf("Failing to create Istio virtualservice for %s: %s", api.GetName(), err)
 	}
 
 	return nil
 }
 
 func (is *IstioProvider) addOwnerReference(virtualService istio.VirtualService, api v1beta1.Api) {
-	// Todo: Append the owner reference instead of replacing it.
-	virtualService.SetOwnerReferences([]metav1.OwnerReference{{
-		APIVersion: api.APIVersion,
-		Kind:       api.Kind,
-		Name:       api.Name,
-		UID:        api.UID,
-	}})
+	// TODO: the OwnerReference is not working accross Namespaces
+	virtualService.SetOwnerReferences(append(
+		virtualService.GetOwnerReferences(),
+		metav1.OwnerReference{
+			APIVersion: api.APIVersion,
+			Kind:       api.Kind,
+			Name:       api.Name,
+			UID:        api.UID,
+		}))
 }
 
 func (is *IstioProvider) GetHTTPRoutes(api v1beta1.Api) []*v1alpha3.HTTPRoute {

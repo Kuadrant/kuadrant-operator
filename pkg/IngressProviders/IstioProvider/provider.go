@@ -60,6 +60,7 @@ func (is *IstioProvider) Create(ctx context.Context, api v1beta1.Api) error {
 			Namespace: KuadrantNamespace,
 		},
 		Spec: v1alpha3.VirtualService{
+			Gateways: []string{"kuadrant-gateway"},
 			Hosts: api.GetHosts(),
 			Http:  httpRoutes,
 		},
@@ -112,7 +113,9 @@ func (is *IstioProvider) GetHTTPRoutes(api v1beta1.Api) []*v1alpha3.HTTPRoute {
 			if backendServer.Name == operation.BackendServerName {
 				httpRouteDestination := v1alpha3.HTTPRouteDestination{
 					Destination: &v1alpha3.Destination{
-						Host: backendServer.ServiceRef.Name + "." + backendServer.ServiceRef.Namespace,
+						//TODO: Detect the cluster host and append it, instead of hardcoding it.
+						Host: backendServer.ServiceRef.Name + "." + backendServer.ServiceRef.Namespace + ".svc." +
+							"cluster.local",
 					},
 				}
 				httpRoute.Route = append(httpRoute.Route, &httpRouteDestination)

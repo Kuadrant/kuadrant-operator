@@ -64,8 +64,8 @@ func (is *IstioProvider) Create(ctx context.Context, api v1beta1.Api) error {
 		},
 		Spec: v1alpha3.VirtualService{
 			Gateways: []string{"kuadrant-gateway"},
-			Hosts: api.GetHosts(),
-			Http:  httpRoutes,
+			Hosts:    api.GetHosts(),
+			Http:     httpRoutes,
 		},
 	}
 

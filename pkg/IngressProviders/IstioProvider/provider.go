@@ -18,7 +18,6 @@ package IstioProvider
 
 import (
 	"context"
-
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	"istio.io/api/networking/v1alpha3"
@@ -28,10 +27,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+//TODO: move the const to a proper place, or get it from config
+const KuadrantNamespace = "kuadrant-system"
+
 type IstioProvider struct {
 	Log       logr.Logger
 	K8sClient client.Client
 }
+// +kubebuilder:rbac:groups=networking.istio.io,resources=virtualservices,verbs=get;list;watch;create;update;patch;delete
 
 func New(logger logr.Logger, client client.Client) *IstioProvider {
 
@@ -53,8 +56,8 @@ func (is *IstioProvider) Create(ctx context.Context, api v1beta1.Api) error {
 
 	virtualService := istio.VirtualService{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      api.Name,
-			Namespace: api.Namespace,
+			Name:      api.Name + api.Namespace,
+			Namespace: KuadrantNamespace,
 		},
 		Spec: v1alpha3.VirtualService{
 			Hosts: api.GetHosts(),

@@ -33,7 +33,7 @@ echo "Deploying Ingress Provider"
 kubectl apply -f utils/local-deployment/istio-manifests/Base/Base.yaml
 kubectl apply -f utils/local-deployment/istio-manifests/Base/Pilot/Pilot.yaml
 kubectl apply -f utils/local-deployment/istio-manifests/Base/Pilot/IngressGateways/IngressGateways.yaml
-kubectl apply -f utils/local-deployment/istio-manifests/default-gateway.yaml
+kubectl apply -n "${KUADRANT_NAMESPACE}" -f utils/local-deployment/istio-manifests/default-gateway.yaml
 
 echo "Deploying Kuadrant control plane"
 kustomize build config/default | kubectl -n "${KUADRANT_NAMESPACE}" apply -f -

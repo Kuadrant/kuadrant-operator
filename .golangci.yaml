@@ -1,0 +1,24 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - asciicheck
+    - errorlint
+    - golint
+    - gosec
+    - prealloc
+    - stylecheck
+    - tparallel
+    - unconvert
+    - unparam
+    - whitespace
+  disable:
+    - errcheck
+
+issues:
+  exclude-rules:
+    # This check has quite a few false positives where there isn't much value in the package comment.
+    - text: "ST1000: at least one file in a package should have a package comment"
+      linters:
+        - stylecheck

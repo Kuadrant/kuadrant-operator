@@ -1,0 +1,8 @@
+domain: kuadrant.io
+multigroup: true
+repo: github.com/kuadrant/kuadrant
+resources:
+- group: networking
+  kind: Api
+  version: v1beta1
+version: 3-alpha

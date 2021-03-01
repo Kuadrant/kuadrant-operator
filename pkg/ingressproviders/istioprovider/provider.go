@@ -38,6 +38,7 @@ type IstioProvider struct {
 }
 
 // +kubebuilder:rbac:groups=networking.istio.io,resources=virtualservices,verbs=get;list;watch;create;update;patch;delete
+
 func New(logger logr.Logger, client client.Client) *IstioProvider {
 	// Register the Istio Scheme into the client, so we can interact with istio objects.
 	utilruntime.Must(istio.AddToScheme(client.Scheme()))

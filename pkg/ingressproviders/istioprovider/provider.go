@@ -25,6 +25,7 @@ import (
 	"istio.io/api/networking/v1alpha3"
 	istio "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -66,7 +67,6 @@ func (is *IstioProvider) Create(ctx context.Context, api v1beta1.API) error {
 			Http:     httpRoutes,
 		},
 	}
-	is.addOwnerReference(virtualService, api)
 
 	err := is.K8sClient.Create(ctx, &virtualService)
 	if err != nil {
@@ -74,18 +74,6 @@ func (is *IstioProvider) Create(ctx context.Context, api v1beta1.API) error {
 	}
 
 	return nil
-}
-
-func (is *IstioProvider) addOwnerReference(virtualService istio.VirtualService, api v1beta1.API) {
-	// TODO: the OwnerReference is not working across Namespaces
-	virtualService.SetOwnerReferences(append(
-		virtualService.GetOwnerReferences(),
-		metav1.OwnerReference{
-			APIVersion: api.APIVersion,
-			Kind:       api.Kind,
-			Name:       api.Name,
-			UID:        api.UID,
-		}))
 }
 
 func (is *IstioProvider) getHTTPRoutes(api v1beta1.API) []*v1alpha3.HTTPRoute {
@@ -140,5 +128,19 @@ func (is *IstioProvider) Status(api v1beta1.API) (bool, error) {
 }
 
 func (is *IstioProvider) Delete(ctx context.Context, api v1beta1.API) error {
-	return nil
+	log := is.Log.WithValues("api", api.GetFullName())
+
+	var virtualService istio.VirtualService
+	err := is.K8sClient.Get(
+		ctx,
+		types.NamespacedName{
+			Name:      api.GetFullName(),
+			Namespace: KuadrantNamespace,
+		},
+		&virtualService)
+	if err != nil {
+		log.Error(err, "cannot get Istio VirtualService to delete it")
+		return err
+	}
+	return is.K8sClient.Delete(ctx, &virtualService)
 }

@@ -37,6 +37,10 @@ type APIReconciler struct {
 	IngressProvider ingressproviders.IngressProvider
 }
 
+const (
+	finalizerName = "kuadrant.io/api"
+)
+
 // +kubebuilder:rbac:groups=networking.kuadrant.io,resources=apis,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.kuadrant.io,resources=apis/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=networking.kuadrant.io,resources=apis/finalizers,verbs=update
@@ -50,9 +54,28 @@ func (r *APIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	err := r.Get(ctx, req.NamespacedName, &api)
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("API Object has been deleted.")
-		// TODO: Now the deletion is handled by the Owner reference, but a proper way should be to use finalizers.
 		return ctrl.Result{}, nil
 	} else if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if !api.ObjectMeta.DeletionTimestamp.IsZero() {
+		if !api.HasFinalizer(finalizerName) {
+			return ctrl.Result{}, nil
+		}
+
+		if err = r.IngressProvider.Delete(ctx, api); err != nil {
+			// return here because can be retried another time if this fail.
+			log.Error(err, "Failed on delete IstioProvider")
+			return ctrl.Result{}, err
+		}
+
+		api.RemoveFinalizer(finalizerName)
+		if err = r.Update(ctx, &api); err != nil {
+			log.Error(err, "Failed to remove the Finalizers")
+			return ctrl.Result{}, err
+		}
+
 		return ctrl.Result{}, err
 	}
 
@@ -60,6 +83,13 @@ func (r *APIReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	//TODO: use the provider validation and verify its status is Ready TOO
 	if api.Status.Ready && api.GetGeneration() == api.Status.ObservedGeneration {
 		return ctrl.Result{}, nil
+	}
+
+	if api.AddUniqueFinalizer(finalizerName) {
+		if err = r.Update(ctx, &api); err != nil {
+			log.Error(err, "Failed to update API object with finalizer")
+			return ctrl.Result{}, err
+		}
 	}
 
 	err = r.IngressProvider.Create(ctx, api)

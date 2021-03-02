@@ -94,6 +94,38 @@ func (api *API) GetFullName() string {
 	return fmt.Sprintf("%s.%s", api.Namespace, api.Name)
 }
 
+// RemoveFinalizer removes the given finalizer from the API object
+func (api *API) RemoveFinalizer(name string) {
+	res := []string{}
+	for _, v := range api.ObjectMeta.Finalizers {
+		if v == name {
+			continue
+		}
+		res = append(res, v)
+	}
+	api.ObjectMeta.Finalizers = res
+}
+
+func (api *API) HasFinalizer(name string) bool {
+	for _, v := range api.ObjectMeta.Finalizers {
+		if v == name {
+			return true
+		}
+	}
+	return false
+}
+
+// AddUniqueFinalizer adds a finalizer string to the array, only if it's not
+// added before. Returns True if was added before, false if it was already in
+// there
+func (api *API) AddUniqueFinalizer(name string) bool {
+	if api.HasFinalizer(name) {
+		return false
+	}
+	api.ObjectMeta.Finalizers = append(api.ObjectMeta.Finalizers, name)
+	return true
+}
+
 // +kubebuilder:object:root=true
 
 // APIList contains a list of API

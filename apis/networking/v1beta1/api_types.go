@@ -90,8 +90,8 @@ type API struct {
 	Status APIStatus `json:"status,omitempty"`
 }
 
-func (api *API) GetName() string {
-	return fmt.Sprintf("%s/%s", api.Namespace, api.Name)
+func (api *API) GetFullName() string {
+	return fmt.Sprintf("%s.%s", api.Namespace, api.Name)
 }
 
 // +kubebuilder:object:root=true

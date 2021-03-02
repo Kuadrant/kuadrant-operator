@@ -53,11 +53,11 @@ func New(logger logr.Logger, client client.Client) *IstioProvider {
 }
 
 func (is *IstioProvider) Create(ctx context.Context, api v1beta1.API) error {
-	httpRoutes := is.GetHTTPRoutes(api)
+	httpRoutes := is.getHTTPRoutes(api)
 
 	virtualService := istio.VirtualService{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      api.Name + api.Namespace,
+			Name:      api.GetFullName(),
 			Namespace: KuadrantNamespace,
 		},
 		Spec: v1alpha3.VirtualService{
@@ -66,12 +66,11 @@ func (is *IstioProvider) Create(ctx context.Context, api v1beta1.API) error {
 			Http:     httpRoutes,
 		},
 	}
-
 	is.addOwnerReference(virtualService, api)
 
 	err := is.K8sClient.Create(ctx, &virtualService)
 	if err != nil {
-		return fmt.Errorf("failing to create Istio virtualservice for %s: %w", api.GetName(), err)
+		return fmt.Errorf("failing to create Istio virtualservice for %s: %w", api.GetFullName(), err)
 	}
 
 	return nil
@@ -89,11 +88,10 @@ func (is *IstioProvider) addOwnerReference(virtualService istio.VirtualService, 
 		}))
 }
 
-func (is *IstioProvider) GetHTTPRoutes(api v1beta1.API) []*v1alpha3.HTTPRoute {
+func (is *IstioProvider) getHTTPRoutes(api v1beta1.API) []*v1alpha3.HTTPRoute {
 	// Let's create the virtual service and the routes.
 	httpRoutes := make([]*v1alpha3.HTTPRoute, len(api.Spec.Operations))
-
-	for _, operation := range api.Spec.Operations {
+	for i, operation := range api.Spec.Operations {
 		//TODO: Create the proper AuthorizationPolicy based on the security field.
 		httpRoute := v1alpha3.HTTPRoute{
 			Name: operation.ID,
@@ -124,7 +122,7 @@ func (is *IstioProvider) GetHTTPRoutes(api v1beta1.API) []*v1alpha3.HTTPRoute {
 				httpRoute.Route = append(httpRoute.Route, &httpRouteDestination)
 			}
 		}
-		httpRoutes = append(httpRoutes, &httpRoute)
+		httpRoutes[i] = &httpRoute
 	}
 	return httpRoutes
 }

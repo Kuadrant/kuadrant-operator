@@ -1,0 +1,71 @@
+# Copyright 2020 The Knative Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This file is automagically synced here from github.com/knative-sandbox/.github
+# repo by knobots: https://github.com/knative-sandbox/knobots and will be overwritten.
+
+name: Testing
+
+on: pull_request
+
+jobs:
+  unittests:
+    name: Run unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.15.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.15.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: run tests
+        run: |
+          make test-unit
+
+  integrationtests:
+    name: Run integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.1.0
+        with:
+          version: v0.10.0
+          config: utils/local-deployment/kind-cluster.yaml
+      - name: run tests
+        run: |
+          make test-integration
+
+  verify-istio-manifest:
+    name: Verify istio manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.15.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.15.x
+        id: go
+      - name: Install istioctl@v1.9.0
+        run: |
+          curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.9.0 TARGET_ARCH=x86_64 sh -
+          cd istio-1.9.0
+          sudo install bin/istioctl /usr/local/bin
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: run tests
+        run: |
+          make istio-manifest-update-test

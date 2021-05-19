@@ -1,0 +1,7 @@
+apiVersion: networking.kuadrant.io/v1beta1
+kind: APIProduct
+metadata:
+  name: apiproduct-sample
+spec:
+  # Add fields here
+  foo: bar

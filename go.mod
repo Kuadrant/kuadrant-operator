@@ -8,6 +8,7 @@ require (
 	github.com/onsi/gomega v1.10.2
 	istio.io/api v0.0.0-20210219142745-68975986cccb
 	istio.io/client-go v1.9.0
+	k8s.io/api v0.20.2
 	k8s.io/apiextensions-apiserver v0.20.1
 	k8s.io/apimachinery v0.20.2
 	k8s.io/client-go v0.20.2

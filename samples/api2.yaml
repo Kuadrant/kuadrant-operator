@@ -1,0 +1,14 @@
+apiVersion: networking.kuadrant.io/v1beta1
+kind: API
+metadata:
+  name: cats-api
+spec:
+  hosts:
+    - "mycatsapi"
+  operations:
+    - name: getcats
+      path: /cats
+      method: GET
+    - name: postcat
+      path: /cats
+      method: POST

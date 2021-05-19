@@ -1,5 +1,8 @@
 SHELL := /bin/bash
 
+MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+PROJECT_PATH := $(patsubst %/,%,$(dir $(MKFILE_PATH)))
+
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
@@ -44,12 +47,23 @@ endif
 
 all: manager
 
-# Run tests
+# Run all tests
+test: test-unit test-integration
+
+# Run e2e tests
 ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
-test: generate fmt vet manifests
+test-integration: clean-cov generate fmt vet manifests
 	mkdir -p ${ENVTEST_ASSETS_DIR}
 	test -f ${ENVTEST_ASSETS_DIR}/setup-envtest.sh || curl -sSLo ${ENVTEST_ASSETS_DIR}/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/v0.7.0/hack/setup-envtest.sh
-	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; fetch_envtest_tools $(ENVTEST_ASSETS_DIR); setup_envtest_env $(ENVTEST_ASSETS_DIR); go test ./... -coverprofile cover.out
+	# Do not enable runnning specs in parallel. Current e2e tests expect single namespace with expected name "kuadrant-system"
+	# TODO: add support for running specs in parallel in several namespaces
+	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; fetch_envtest_tools $(ENVTEST_ASSETS_DIR); setup_envtest_env $(ENVTEST_ASSETS_DIR); USE_EXISTING_CLUSTER=true go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
+
+test-unit: clean-cov generate fmt vet manifests
+	go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags unit -v -timeout 0
+
+clean-cov:
+	rm -rf $(PROJECT_PATH)/cover.out
 
 # Build manager binary
 manager: generate fmt vet
@@ -93,7 +107,7 @@ generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Build the docker image
-docker-build: test
+docker-build: test-unit
 	docker build -t ${IMG} .
 
 # Push the docker image
@@ -140,12 +154,17 @@ bundle-build:
 # Download kind locally if necessary
 KIND = $(shell pwd)/bin/kind
 kind:
-	$(call go-get-tool,$(KIND),sigs.k8s.io/kind@v0.9.0)
+	$(call go-get-tool,$(KIND),sigs.k8s.io/kind@v0.10.0)
 
 # Generates istio manifests with patches.
 .PHONY: generate-istio-manifests
 generate-istio-manifests:
 	istioctl manifest generate --set profile=minimal --set values.gateways.istio-ingressgateway.autoscaleEnabled=false --set values.pilot.autoscaleEnabled=false --set values.global.istioNamespace=kuadrant-system -f utils/local-deployment/patches/istio-externalProvider.yaml -o utils/local-deployment/istio-manifests
+
+.PHONY: istio-manifest-update-test
+istio-manifest-update-test: generate-istio-manifests
+	git diff --exit-code ./utils/local-deployment/istio-manifests
+	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./utils/local-deployment/istio-manifests)" ]
 
 .PHONY: local-setup
 local-setup: kind local-cleanup manifests kustomize generate

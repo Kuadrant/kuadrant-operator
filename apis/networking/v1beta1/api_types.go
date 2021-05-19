@@ -17,9 +17,6 @@ limitations under the License.
 package v1beta1
 
 import (
-	"fmt"
-
-	v12 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -33,27 +30,19 @@ import (
 type APISpec struct {
 	Hosts          []string          `json:"hosts"`
 	Operations     []*Operation      `json:"operations"`
-	BackendServer  []*BackendServer  `json:"backendServers"`
 	SecurityScheme []*SecurityScheme `json:"securityScheme,omitempty"`
 }
 
 type Operation struct {
-	Name              string                `json:"name"`
-	ID                string                `json:"id"`
-	Path              string                `json:"path"`
-	Method            string                `json:"method"`
-	Security          []*SecurityParameters `json:"security,omitempty"`
-	BackendServerName string                `json:"backendServerName"`
+	Name     string                `json:"name"`
+	Path     string                `json:"path"`
+	Method   string                `json:"method"`
+	Security []*SecurityParameters `json:"security,omitempty"`
 }
 
 type SecurityParameters struct {
 	APIKeyAuth []string `json:"apiKeyAuth,omitempty"`
 	Oauth2     []string `json:"Oauth2,omitempty"`
-}
-
-type BackendServer struct {
-	Name       string               `json:"name"`
-	ServiceRef v12.ServiceReference `json:"serviceRef"`
 }
 
 type SecurityScheme struct {
@@ -63,9 +52,8 @@ type SecurityScheme struct {
 }
 
 type APIKeyAuth struct {
-	Location       string               `json:"location"`
-	Name           string               `json:"name"`
-	APIKeySelector metav1.LabelSelector `json:"APIKeySelector"`
+	Location string `json:"location"`
+	Name     string `json:"name"`
 }
 
 type OpenIDConnectAuth struct {
@@ -90,42 +78,6 @@ type API struct {
 	Status APIStatus `json:"status,omitempty"`
 }
 
-func (api *API) GetFullName() string {
-	return fmt.Sprintf("%s.%s", api.Namespace, api.Name)
-}
-
-// RemoveFinalizer removes the given finalizer from the API object
-func (api *API) RemoveFinalizer(name string) {
-	res := []string{}
-	for _, v := range api.ObjectMeta.Finalizers {
-		if v == name {
-			continue
-		}
-		res = append(res, v)
-	}
-	api.ObjectMeta.Finalizers = res
-}
-
-func (api *API) HasFinalizer(name string) bool {
-	for _, v := range api.ObjectMeta.Finalizers {
-		if v == name {
-			return true
-		}
-	}
-	return false
-}
-
-// AddUniqueFinalizer adds a finalizer string to the array, only if it's not
-// added before. Returns True if was added before, false if it was already in
-// there
-func (api *API) AddUniqueFinalizer(name string) bool {
-	if api.HasFinalizer(name) {
-		return false
-	}
-	api.ObjectMeta.Finalizers = append(api.ObjectMeta.Finalizers, name)
-	return true
-}
-
 // +kubebuilder:object:root=true
 
 // APIList contains a list of API
@@ -137,8 +89,4 @@ type APIList struct {
 
 func init() {
 	SchemeBuilder.Register(&API{}, &APIList{})
-}
-
-func (api API) GetHosts() []string {
-	return api.Spec.Hosts
 }

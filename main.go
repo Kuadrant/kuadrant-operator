@@ -79,14 +79,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&networkingcontrollers.APIReconciler{
+	if err = (&networkingcontrollers.APIProductReconciler{
 		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("API"),
+		Log:    ctrl.Log.WithName("controllers").WithName("networking").WithName("APIProduct"),
 		Scheme: mgr.GetScheme(),
 		IngressProvider: ingressproviders.GetIngressProvider(ctrl.Log.WithName("IngressProvider").WithName("Provider"),
 			mgr.GetClient()),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "API")
+		setupLog.Error(err, "unable to create controller", "controller", "APIProduct")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

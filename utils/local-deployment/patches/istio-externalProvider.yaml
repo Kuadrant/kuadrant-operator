@@ -12,5 +12,31 @@ spec:
       - name: kuadrant-gateway
         enabled: true
         namespace: kuadrant-system
+        k8s:
+          service:
+            type: NodePort
+            ports:
+              - name: status-port
+                port: 15021
+                protocol: TCP
+                targetPort: 15021
+              - name: http2
+                port: 80
+                protocol: TCP
+                targetPort: 8080
+                nodePort: 30950
+              - name: https
+                port: 443
+                protocol: TCP
+                targetPort: 8443
+                nodePort: 30951
+              - name: tcp-istiod
+                port: 15012
+                protocol: TCP
+                targetPort: 15012
+              - name: tls
+                port: 15443
+                protocol: TCP
+                targetPort: 15443
         label:
           istio: kuadrant-system

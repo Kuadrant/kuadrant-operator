@@ -12,9 +12,18 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  controller: true
+  controller: false
   domain: networking.kuadrant.io
   kind: API
+  path: github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1
+  version: v1beta1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: kuadrant.io
+  group: networking
+  kind: APIProduct
   path: github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1
   version: v1beta1
 version: "3"

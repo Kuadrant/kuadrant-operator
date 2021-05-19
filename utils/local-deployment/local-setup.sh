@@ -20,7 +20,7 @@ set -euo pipefail
 
 export KUADRANT_NAMESPACE="kuadrant-system"
 export KIND_CLUSTER_NAME="kuadrant-local"
-kind create cluster
+kind create cluster --name ${KIND_CLUSTER_NAME} --config utils/local-deployment/kind-cluster.yaml
 
 echo "Building kuadrant"
 docker build -t kuadrant:devel ./
@@ -49,4 +49,6 @@ echo
 echo "Now you can export the kuadrant gateway by doing:"
 echo "kubectl port-forward --namespace ${KUADRANT_NAMESPACE} deployment/kuadrant-gateway 8080:8080 8443:8443"
 echo "after that, you can curl -H \"Host: myhost.com\" localhost:8080"
+echo "-- Linux only -- Ingress gateway is exported using nodePort service in port 9080"
+echo "curl -H \"Host: myhost.com\" localhost:9080"
 echo

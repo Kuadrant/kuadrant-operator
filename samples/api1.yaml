@@ -1,0 +1,14 @@
+apiVersion: networking.kuadrant.io/v1beta1
+kind: API
+metadata:
+  name: dogs-api
+spec:
+  hosts:
+    - "mydogsapi"
+  operations:
+    - name: getdogs
+      path: /dogs
+      method: GET
+    - name: postdog
+      path: /dogs
+      method: POST

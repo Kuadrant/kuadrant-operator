@@ -7,6 +7,14 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - networking.istio.io
   resources:
   - virtualservices
@@ -21,6 +29,7 @@ rules:
 - apiGroups:
   - networking.kuadrant.io
   resources:
+  - apiproducts
   - apis
   verbs:
   - create
@@ -33,12 +42,14 @@ rules:
 - apiGroups:
   - networking.kuadrant.io
   resources:
+  - apiproducts/finalizers
   - apis/finalizers
   verbs:
   - update
 - apiGroups:
   - networking.kuadrant.io
   resources:
+  - apiproducts/status
   - apis/status
   verbs:
   - get

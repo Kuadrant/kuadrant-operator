@@ -1,4 +1,5 @@
 ## Append samples you want in your CSV to this file as resources ##
 resources:
 - networking_v1beta1_api.yaml
+- networking_v1beta1_apiproduct.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

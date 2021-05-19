@@ -10,11 +10,11 @@ import (
 )
 
 type IngressProvider interface {
-	Create(ctx context.Context, api v1beta1.API) error
-	Delete(ctx context.Context, api v1beta1.API) error
-	Update(ctx context.Context, api v1beta1.API) error
-	Validate(api v1beta1.API) error
-	Status(api v1beta1.API) (bool, error)
+	Create(ctx context.Context, apip v1beta1.APIProduct) error
+	Delete(ctx context.Context, apip v1beta1.APIProduct) error
+	Update(ctx context.Context, apip v1beta1.APIProduct) error
+	Validate(apip v1beta1.APIProduct) error
+	Status(apip v1beta1.APIProduct) (bool, error)
 }
 
 // GetIngressProvider returns the IngressProvider desired

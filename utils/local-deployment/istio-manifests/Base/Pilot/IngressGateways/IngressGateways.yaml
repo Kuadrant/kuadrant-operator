@@ -312,47 +312,45 @@ subjects:
 apiVersion: v1
 kind: Service
 metadata:
-  name: kuadrant-gateway
-  namespace: kuadrant-system
-  annotations:
+  annotations: null
   labels:
     app: istio-ingressgateway
-    istio: kuadrant-system
-    release: istio
-    istio.io/rev: default
     install.operator.istio.io/owning-resource: unknown
-    operator.istio.io/component: "IngressGateways"
+    istio: kuadrant-system
+    istio.io/rev: default
+    operator.istio.io/component: IngressGateways
+    release: istio
+  name: kuadrant-gateway
+  namespace: kuadrant-system
 spec:
-  type: LoadBalancer
+  ports:
+  - name: status-port
+    port: 15021
+    protocol: TCP
+    targetPort: 15021
+  - name: http2
+    nodePort: 30950
+    port: 80
+    protocol: TCP
+    targetPort: 8080
+  - name: https
+    nodePort: 30951
+    port: 443
+    protocol: TCP
+    targetPort: 8443
+  - name: tcp-istiod
+    port: 15012
+    protocol: TCP
+    targetPort: 15012
+  - name: tls
+    port: 15443
+    protocol: TCP
+    targetPort: 15443
   selector:
     app: istio-ingressgateway
     istio: kuadrant-system
-  ports:
-    -
-      name: status-port
-      port: 15021
-      protocol: TCP
-      targetPort: 15021
-    -
-      name: http2
-      port: 80
-      protocol: TCP
-      targetPort: 8080
-    -
-      name: https
-      port: 443
-      protocol: TCP
-      targetPort: 8443
-    -
-      name: tcp-istiod
-      port: 15012
-      protocol: TCP
-      targetPort: 15012
-    -
-      name: tls
-      port: 15443
-      protocol: TCP
-      targetPort: 15443
+  type: NodePort
+
 ---
 
 

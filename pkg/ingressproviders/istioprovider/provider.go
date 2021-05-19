@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 
+	v1 "k8s.io/api/core/v1"
+
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	"istio.io/api/networking/v1alpha3"
@@ -39,6 +41,7 @@ type IstioProvider struct {
 }
 
 // +kubebuilder:rbac:groups=networking.istio.io,resources=virtualservices,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch
 
 func New(logger logr.Logger, client client.Client) *IstioProvider {
 	// Register the Istio Scheme into the client, so we can interact with istio objects.
@@ -53,94 +56,169 @@ func New(logger logr.Logger, client client.Client) *IstioProvider {
 	}
 }
 
-func (is *IstioProvider) Create(ctx context.Context, api v1beta1.API) error {
-	httpRoutes := is.getHTTPRoutes(api)
+func (is *IstioProvider) Create(ctx context.Context, apip v1beta1.APIProduct) error {
+	log := is.Log.WithValues("apiproduct", client.ObjectKeyFromObject(&apip))
+	log.V(1).Info("Istio Provider Create")
+	for _, environment := range apip.Spec.Environments {
+		virtualService, err := is.environmentToVirtualService(ctx, apip, environment)
+		if err != nil {
+			return err
+		}
 
-	virtualService := istio.VirtualService{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      api.GetFullName(),
-			Namespace: KuadrantNamespace,
-		},
-		Spec: v1alpha3.VirtualService{
-			Gateways: []string{"kuadrant-gateway"},
-			Hosts:    api.GetHosts(),
-			Http:     httpRoutes,
-		},
-	}
-
-	err := is.K8sClient.Create(ctx, &virtualService)
-	if err != nil {
-		return fmt.Errorf("failing to create Istio virtualservice for %s: %w", api.GetFullName(), err)
+		log.Info("Istio Provider Create", "virtualservice", virtualService.GetName())
+		err = is.K8sClient.Create(ctx, &virtualService)
+		if err != nil {
+			return fmt.Errorf("failing to create Istio virtualservice for %s: %w", apip.Name+environment.Name, err)
+		}
 	}
 
 	return nil
 }
 
-func (is *IstioProvider) getHTTPRoutes(api v1beta1.API) []*v1alpha3.HTTPRoute {
-	// Let's create the virtual service and the routes.
-	httpRoutes := make([]*v1alpha3.HTTPRoute, len(api.Spec.Operations))
-	for i, operation := range api.Spec.Operations {
-		//TODO: Create the proper AuthorizationPolicy based on the security field.
-		httpRoute := v1alpha3.HTTPRoute{
-			Name: operation.ID,
-			Match: []*v1alpha3.HTTPMatchRequest{
+//TODO(jmprusi): pending refactor...
+func (is *IstioProvider) environmentToVirtualService(ctx context.Context, apip v1beta1.APIProduct, environment *v1beta1.Environment) (istio.VirtualService, error) {
+	httpRoutes := make([]*v1alpha3.HTTPRoute, 0)
+
+	virtualService := istio.VirtualService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      apip.Name + apip.Namespace + environment.Name,
+			Namespace: KuadrantNamespace,
+		},
+		Spec: v1alpha3.VirtualService{
+			Gateways: []string{"kuadrant-gateway"},
+			Hosts:    environment.Hosts,
+		},
+	}
+
+	for _, backendService := range environment.BackendServers {
+		// Lets find the referenced API in the APIs List.
+		found := -1
+		for i, api := range apip.Spec.APIs {
+			if api.Name == backendService.API {
+				found = i
+				break
+			}
+		}
+
+		if found == -1 {
+			return istio.VirtualService{}, fmt.Errorf("referenced API in backendService not found/part of this product. %s",
+				backendService.API)
+		}
+
+		// Try to get the API object from k8s.
+		api := v1beta1.API{}
+		err := is.K8sClient.Get(ctx, types.NamespacedName{
+			Namespace: apip.Namespace,
+			Name:      apip.Spec.APIs[found].Name,
+		}, &api)
+		if err != nil {
+			return istio.VirtualService{}, err
+		}
+
+		service := v1.Service{}
+		err = is.K8sClient.Get(ctx, types.NamespacedName{Name: backendService.Destination.ServiceSelector.Name,
+			Namespace: backendService.Destination.ServiceSelector.Namespace},
+			&service)
+		if err != nil {
+			return istio.VirtualService{}, err
+		}
+
+		// TODO(jmprusi): Get the actual internal cluster hostname instead of hardcoding it.
+		destination := v1alpha3.HTTPRouteDestination{
+			Destination: &v1alpha3.Destination{
+				Host: service.Name + "." + service.Namespace + ".svc.cluster.local",
+				Port: &v1alpha3.PortSelector{
+					Number: uint32(*backendService.Destination.ServiceSelector.Port),
+				},
+			},
+		}
+		// if we have been able to get the API object, lets compute the HTTRoutes
+		for _, operation := range api.Spec.Operations {
+			//TODO(jmprusi): Right now we are ignoring the security field of the operation, we should review this.
+			matchPath := ""
+			httpRoute := v1alpha3.HTTPRoute{
+				Name: operation.Name,
+				// Here we are rewriting the auhtority of the request to one of the hosts in the API definition.
+				// TODO(jmprusi): Is this something expected? should we allow for a host override?
+				Rewrite: &v1alpha3.HTTPRewrite{
+					Authority: api.Spec.Hosts[0],
+				},
+			}
+			// Handle Prefix Override.
+			if apip.Spec.APIs[found].PrefixOverride != "" {
+				// If there's an Override, lets append it to the actual Operation Path.
+				matchPath = apip.Spec.APIs[found].PrefixOverride + operation.Path
+				// We need to rewrite the path, to match what the service expects, basically,
+				// removing the prefixOverride
+				httpRoute.Rewrite.Uri = operation.Path
+			}
+
+			httpRoute.Match = []*v1alpha3.HTTPMatchRequest{
 				{
 					Uri: &v1alpha3.StringMatch{
-						MatchType: &v1alpha3.StringMatch_Prefix{Prefix: operation.Path},
+						MatchType: &v1alpha3.StringMatch_Prefix{Prefix: matchPath},
 					},
 					Method: &v1alpha3.StringMatch{
 						MatchType: &v1alpha3.StringMatch_Exact{Exact: operation.Method},
 					},
 				},
-			},
-			Route: []*v1alpha3.HTTPRouteDestination{},
-		}
-
-		// Find the backendServer referenced by the operation.
-		// TODO: Return an error if the reference is not found.
-		for _, backendServer := range api.Spec.BackendServer {
-			if backendServer.Name == operation.BackendServerName {
-				httpRouteDestination := v1alpha3.HTTPRouteDestination{
-					Destination: &v1alpha3.Destination{
-						//TODO: Detect the cluster host and append it, instead of hardcoding it.
-						Host: backendServer.ServiceRef.Name + "." + backendServer.ServiceRef.Namespace + ".svc." +
-							"cluster.local",
-					},
-				}
-				httpRoute.Route = append(httpRoute.Route, &httpRouteDestination)
 			}
+			httpRoute.Route = []*v1alpha3.HTTPRouteDestination{&destination}
+			httpRoutes = append(httpRoutes, &httpRoute)
 		}
-		httpRoutes[i] = &httpRoute
 	}
-	return httpRoutes
+	virtualService.Spec.Http = httpRoutes
+	return virtualService, nil
 }
 
-func (is *IstioProvider) Validate(api v1beta1.API) error {
+func (is *IstioProvider) Validate(apip v1beta1.APIProduct) error {
 	return nil
 }
 
-func (is *IstioProvider) Update(ctx context.Context, api v1beta1.API) error {
+func (is *IstioProvider) Update(ctx context.Context, apip v1beta1.APIProduct) error {
+	log := is.Log.WithValues("apiproduct", client.ObjectKeyFromObject(&apip))
+	log.V(1).Info("Istio Provider Update")
+	for _, environment := range apip.Spec.Environments {
+		virtualService, err := is.environmentToVirtualService(ctx, apip, environment)
+		if err != nil {
+			return err
+		}
+		currentVS := &istio.VirtualService{}
+		err = is.K8sClient.Get(ctx, client.ObjectKeyFromObject(&virtualService), currentVS)
+		if err != nil {
+			return err
+		}
+
+		virtualService.ResourceVersion = currentVS.ResourceVersion
+
+		log.Info("Istio Provider Update", "virtualservice", virtualService.GetName())
+		err = is.K8sClient.Update(ctx, &virtualService)
+		if err != nil {
+			return fmt.Errorf("failing to update Istio virtualservice for %s: %w", apip.Name+environment.Name, err)
+		}
+	}
 	return nil
 }
 
-func (is *IstioProvider) Status(api v1beta1.API) (bool, error) {
+func (is *IstioProvider) Status(apip v1beta1.APIProduct) (bool, error) {
+
 	return true, nil
 }
 
-func (is *IstioProvider) Delete(ctx context.Context, api v1beta1.API) error {
-	log := is.Log.WithValues("api", api.GetFullName())
+func (is *IstioProvider) Delete(ctx context.Context, apip v1beta1.APIProduct) error {
+	log := is.Log.WithValues("apiproduct", client.ObjectKeyFromObject(&apip))
+	log.V(1).Info("Istio Provider Delete")
 
-	var virtualService istio.VirtualService
-	err := is.K8sClient.Get(
-		ctx,
-		types.NamespacedName{
-			Name:      api.GetFullName(),
-			Namespace: KuadrantNamespace,
-		},
-		&virtualService)
-	if err != nil {
-		log.Error(err, "cannot get Istio VirtualService to delete it")
-		return err
+	for _, environment := range apip.Spec.Environments {
+		virtualService := istio.VirtualService{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      apip.Name + apip.Namespace + environment.Name,
+				Namespace: KuadrantNamespace,
+			},
+		}
+		log.Info("Istio Provider Delete", "virtualservice", virtualService.GetName())
+		is.K8sClient.Delete(ctx, &virtualService)
 	}
-	return is.K8sClient.Delete(ctx, &virtualService)
+
+	return nil
 }

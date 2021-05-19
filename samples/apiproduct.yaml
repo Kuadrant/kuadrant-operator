@@ -1,0 +1,34 @@
+apiVersion: networking.kuadrant.io/v1beta1
+kind: APIProduct
+metadata:
+  name: petstore-api
+spec:
+  information:
+    description: My super nice API Product.
+    owner: whoever@mycompany.com
+  environments:
+    - name: live
+      hosts:
+        - petstore.127.0.0.1.nip.io
+      backendServers:
+        - API: cats-api
+          destination:
+            serviceSelector:
+              name: echo-api
+              namespace: default
+              port: 80
+        - API: dogs-api
+          destination:
+            serviceSelector:
+              name: echo-api
+              namespace: default
+              port: 80
+      credentialSources:
+        - name: test
+  securityScheme:
+    - name: testScheme
+  APIs:
+    - name: cats-api
+      prefixOverride: /cats
+    - name: dogs-api
+      prefixOverride: /dogs

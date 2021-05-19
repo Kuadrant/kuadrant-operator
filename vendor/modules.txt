@@ -67,6 +67,9 @@ github.com/hashicorp/golang-lru/simplelru
 github.com/imdario/mergo
 # github.com/json-iterator/go v1.1.10
 github.com/json-iterator/go
+# github.com/kuadrant/authorino v0.0.0-20210422165318-a53c0df15d51
+## explicit
+github.com/kuadrant/authorino/api/v1beta1
 # github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
@@ -124,7 +127,7 @@ github.com/prometheus/client_golang/prometheus/internal
 github.com/prometheus/client_golang/prometheus/promhttp
 # github.com/prometheus/client_model v0.2.0
 github.com/prometheus/client_model/go
-# github.com/prometheus/common v0.10.0
+# github.com/prometheus/common v0.14.0
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
 github.com/prometheus/common/model
@@ -242,7 +245,7 @@ google.golang.org/protobuf/types/known/timestamppb
 gopkg.in/inf.v0
 # gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7
 gopkg.in/tomb.v1
-# gopkg.in/yaml.v2 v2.3.0
+# gopkg.in/yaml.v2 v2.4.0
 gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
 gopkg.in/yaml.v3
@@ -251,9 +254,12 @@ gopkg.in/yaml.v3
 istio.io/api/analysis/v1alpha1
 istio.io/api/meta/v1alpha1
 istio.io/api/networking/v1alpha3
+istio.io/api/security/v1beta1
+istio.io/api/type/v1beta1
 # istio.io/client-go v1.9.0
 ## explicit
 istio.io/client-go/pkg/apis/networking/v1alpha3
+istio.io/client-go/pkg/apis/security/v1beta1
 # istio.io/gogo-genproto v0.0.0-20210113155706-4daf5697332f
 istio.io/gogo-genproto/googleapis/google/api
 # k8s.io/api v0.20.2

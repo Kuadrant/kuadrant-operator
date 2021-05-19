@@ -35,6 +35,10 @@ kubectl apply -f utils/local-deployment/istio-manifests/Base/Pilot/Pilot.yaml
 kubectl apply -f utils/local-deployment/istio-manifests/Base/Pilot/IngressGateways/IngressGateways.yaml
 kubectl apply -n "${KUADRANT_NAMESPACE}" -f utils/local-deployment/istio-manifests/default-gateway.yaml
 
+echo "Deploying Authorino to the kuadrant-system namespace"
+kubectl apply -n "${KUADRANT_NAMESPACE}" -f utils/local-deployment/authorino.yaml
+
+
 echo "Deploying Kuadrant control plane"
 kustomize build config/default | kubectl -n "${KUADRANT_NAMESPACE}" apply -f -
 kubectl -n "${KUADRANT_NAMESPACE}" patch deployment kuadrant-controller-manager -p '{"spec": {"template": {"spec":{"containers":[{"name": "manager","image":"kuadrant:devel", "imagePullPolicy":"IfNotPresent"}]}}}}'

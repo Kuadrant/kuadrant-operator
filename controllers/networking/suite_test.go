@@ -77,6 +77,9 @@ var _ = BeforeSuite(func() {
 	err = networkingv1beta1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = networkingv1beta1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	// +kubebuilder:scaffold:scheme
 
 	k8sClient, err = client.New(clusterCfg, client.Options{Scheme: scheme.Scheme})

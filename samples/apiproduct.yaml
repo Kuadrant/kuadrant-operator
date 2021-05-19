@@ -24,9 +24,16 @@ spec:
               namespace: default
               port: 80
       credentialSources:
-        - name: test
+        - name: MyAPIKey
+          apiKeyAuth:
+            labelSelectors:
+              secret.kuadrant.io/managed-by: authorino
+              api: live-petstore
   securityScheme:
-    - name: testScheme
+    - name: MyAPIKey
+      apiKeyAuth:
+        location: authorization_header
+        name: APIKEY
   APIs:
     - name: cats-api
       prefixOverride: /cats

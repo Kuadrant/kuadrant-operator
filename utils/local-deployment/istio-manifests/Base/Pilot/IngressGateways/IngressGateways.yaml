@@ -46,7 +46,7 @@ spec:
       serviceAccountName: kuadrant-gateway-service-account
       containers:
         - name: istio-proxy
-          image: "docker.io/istio/proxyv2:1.9.0"
+          image: "docker.io/istio/proxyv2:1.9.4"
           ports:
             - containerPort: 15021
               protocol: TCP

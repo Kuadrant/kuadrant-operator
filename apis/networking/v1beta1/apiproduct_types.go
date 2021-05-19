@@ -66,7 +66,17 @@ type Environment struct {
 }
 
 type CredentialSource struct {
-	Name string `json:"name"`
+	Name              string                        `json:"name"`
+	APIKeyAuth        *APIKeyAuthCredentials        `json:"apiKeyAuth,omitempty"`
+	OpenIDConnectAuth *OpenIDConnectAuthCredentials `json:"openIDConnectAuth,omitempty"`
+}
+
+type APIKeyAuthCredentials struct {
+	LabelSelectors map[string]string `json:"labelSelectors"`
+}
+
+type OpenIDConnectAuthCredentials struct {
+	Endpoint string `json:"endpoint"`
 }
 
 type BackendServer struct {

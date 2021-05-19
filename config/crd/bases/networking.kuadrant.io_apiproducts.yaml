@@ -95,8 +95,24 @@ spec:
                     credentialSources:
                       items:
                         properties:
+                          apiKeyAuth:
+                            properties:
+                              labelSelectors:
+                                additionalProperties:
+                                  type: string
+                                type: object
+                            required:
+                            - labelSelectors
+                            type: object
                           name:
                             type: string
+                          openIDConnectAuth:
+                            properties:
+                              endpoint:
+                                type: string
+                            required:
+                            - endpoint
+                            type: object
                         required:
                         - name
                         type: object

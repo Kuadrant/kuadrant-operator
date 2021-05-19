@@ -4,6 +4,7 @@ go 1.15
 
 require (
 	github.com/go-logr/logr v0.3.0
+	github.com/kuadrant/authorino v0.0.0-20210422165318-a53c0df15d51
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
 	istio.io/api v0.0.0-20210219142745-68975986cccb

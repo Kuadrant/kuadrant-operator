@@ -20,6 +20,8 @@ import (
 	"flag"
 	"os"
 
+	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
+
 	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -80,9 +82,10 @@ func main() {
 	}
 
 	if err = (&networkingcontrollers.APIProductReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("networking").WithName("APIProduct"),
-		Scheme: mgr.GetScheme(),
+		Client:       mgr.GetClient(),
+		Log:          ctrl.Log.WithName("controllers").WithName("networking").WithName("APIProduct"),
+		Scheme:       mgr.GetScheme(),
+		AuthProvider: authproviders.GetAuthProvider(ctrl.Log.WithName("AuthProvider"), mgr.GetClient()),
 		IngressProvider: ingressproviders.GetIngressProvider(ctrl.Log.WithName("IngressProvider").WithName("Provider"),
 			mgr.GetClient()),
 	}).SetupWithManager(mgr); err != nil {

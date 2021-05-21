@@ -36,6 +36,33 @@ spec:
           spec:
             description: APISpec defines the desired state of API
             properties:
+              globalSecurityRequirements:
+                items:
+                  properties:
+                    apiKeyAuth:
+                      additionalProperties:
+                        properties:
+                          name:
+                            type: string
+                          required:
+                            type: boolean
+                        type: object
+                      type: object
+                    openIDConnectAuth:
+                      additionalProperties:
+                        properties:
+                          name:
+                            type: string
+                          required:
+                            type: boolean
+                          scopes:
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      type: object
+                  type: object
+                type: array
               hosts:
                 items:
                   type: string
@@ -52,14 +79,28 @@ spec:
                     security:
                       items:
                         properties:
-                          Oauth2:
-                            items:
-                              type: string
-                            type: array
                           apiKeyAuth:
-                            items:
-                              type: string
-                            type: array
+                            additionalProperties:
+                              properties:
+                                name:
+                                  type: string
+                                required:
+                                  type: boolean
+                              type: object
+                            type: object
+                          openIDConnectAuth:
+                            additionalProperties:
+                              properties:
+                                name:
+                                  type: string
+                                required:
+                                  type: boolean
+                                scopes:
+                                  items:
+                                    type: string
+                                  type: array
+                              type: object
+                            type: object
                         type: object
                       type: array
                   required:

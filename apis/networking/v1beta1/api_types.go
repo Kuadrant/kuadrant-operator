@@ -26,23 +26,37 @@ import (
 // TODO: API definition is missing kubebuilder annotations for validation, add them.
 // TODO: Add proper comments for each of the API fields and Structs, so we can create proper docs.
 
+type APIKeyAuthSecurityParameters struct {
+	Name     string `json:"name,omitempty"`
+	Required *bool  `json:"required,omitempty"`
+}
+
+type OpenIDConnectAuthSecurityParameters struct {
+	Name     string   `json:"name,omitempty"`
+	Required *bool    `json:"required,omitempty"`
+	Scopes   []string `json:"scopes,omitempty"`
+}
+
+type SecurityRequirement struct {
+	APIKeyAuth        map[string]APIKeyAuthSecurityParameters        `json:"apiKeyAuth,omitempty"`
+	OpenIDConnectAuth map[string]OpenIDConnectAuthSecurityParameters `json:"openIDConnectAuth,omitempty"`
+}
+
+type SecurityRequirements []SecurityRequirement
+
 // APISpec defines the desired state of API
 type APISpec struct {
-	Hosts          []string          `json:"hosts"`
-	Operations     []*Operation      `json:"operations"`
-	SecurityScheme []*SecurityScheme `json:"securityScheme,omitempty"`
+	Hosts                      []string             `json:"hosts"`
+	Operations                 []*Operation         `json:"operations"`
+	SecurityScheme             []*SecurityScheme    `json:"securityScheme,omitempty"`
+	GlobalSecurityRequirements SecurityRequirements `json:"globalSecurityRequirements,omitempty"`
 }
 
 type Operation struct {
-	Name     string                `json:"name"`
-	Path     string                `json:"path"`
-	Method   string                `json:"method"`
-	Security []*SecurityParameters `json:"security,omitempty"`
-}
-
-type SecurityParameters struct {
-	APIKeyAuth []string `json:"apiKeyAuth,omitempty"`
-	Oauth2     []string `json:"Oauth2,omitempty"`
+	Name     string               `json:"name"`
+	Path     string               `json:"path"`
+	Method   string               `json:"method"`
+	Security SecurityRequirements `json:"security,omitempty"`
 }
 
 type SecurityScheme struct {

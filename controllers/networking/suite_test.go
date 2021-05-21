@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
+	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
 	// +kubebuilder:scaffold:imports
 )
@@ -93,9 +94,10 @@ var _ = BeforeSuite(func() {
 
 	// Register reconcilers
 	err = (&APIProductReconciler{
-		Client: mgr.GetClient(),
-		Log:    zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)),
-		Scheme: mgr.GetScheme(),
+		Client:       mgr.GetClient(),
+		Log:          zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)),
+		Scheme:       mgr.GetScheme(),
+		AuthProvider: authproviders.GetAuthProvider(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)), mgr.GetClient()),
 		IngressProvider: ingressproviders.GetIngressProvider(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)),
 			mgr.GetClient()),
 	}).SetupWithManager(mgr)

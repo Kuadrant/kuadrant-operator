@@ -156,10 +156,25 @@ KIND = $(shell pwd)/bin/kind
 kind:
 	$(call go-get-tool,$(KIND),sigs.k8s.io/kind@v0.10.0)
 
+# Download istioctl.
+ISTIOCTL = $(shell pwd)/bin/istioctl
+ISTIOCTLVERSION = 1.9.4
+istioctl:
+ifeq (,$(wildcard $(ISTIOCTL)))
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(ISTIOCTL)) ;\
+	curl -sSL https://raw.githubusercontent.com/istio/istio/master/release/downloadIstioCtl.sh | ISTIO_VERSION=$(ISTIOCTLVERSION) HOME=$(shell pwd)/bin/ sh - > /dev/null 2>&1;\
+	mv $(shell pwd)/bin/.istioctl/bin/istioctl $(ISTIOCTL) ;\
+	rm -r $(shell pwd)/bin/.istioctl ;\
+	chmod +x $(ISTIOCTL) ;\
+	}
+endif
+
 # Generates istio manifests with patches.
 .PHONY: generate-istio-manifests
-generate-istio-manifests:
-	istioctl manifest generate --set profile=minimal --set values.gateways.istio-ingressgateway.autoscaleEnabled=false --set values.pilot.autoscaleEnabled=false --set values.global.istioNamespace=kuadrant-system -f utils/local-deployment/patches/istio-externalProvider.yaml -o utils/local-deployment/istio-manifests
+generate-istio-manifests: istioctl
+	$(ISTIOCTL) manifest generate --set profile=minimal --set values.gateways.istio-ingressgateway.autoscaleEnabled=false --set values.pilot.autoscaleEnabled=false --set values.global.istioNamespace=kuadrant-system -f utils/local-deployment/patches/istio-externalProvider.yaml -o utils/local-deployment/istio-manifests
 
 .PHONY: istio-manifest-update-test
 istio-manifest-update-test: generate-istio-manifests

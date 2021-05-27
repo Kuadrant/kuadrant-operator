@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders/istioprovider"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,9 +34,25 @@ func New(logger logr.Logger, client client.Client) *AuthorinoProvider {
 }
 func (a *AuthorinoProvider) Create(ctx context.Context, apip v1beta1.APIProduct) (err error) {
 
+	serviceConfigs, err := APIProductToServiceConfigs(apip)
+	if err != nil {
+		return err
+	}
+
+	for _, serviceConfig := range serviceConfigs {
+		err = a.K8sClient.Create(ctx, &serviceConfig)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func APIProductToServiceConfigs(apip v1beta1.APIProduct) ([]authorino.Service, error) {
+	serviceConfigs := make([]authorino.Service, 0)
 	for _, environment := range apip.Spec.Environments {
 		service := authorino.Service{
-			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      apip.Name + apip.Namespace + environment.Name,
 				Namespace: istioprovider.KuadrantNamespace,
@@ -56,7 +74,6 @@ func (a *AuthorinoProvider) Create(ctx context.Context, apip v1beta1.APIProduct)
 				APIKey:         nil,
 				KubernetesAuth: nil,
 			}
-
 			if securityScheme.APIKeyAuth != nil {
 				apikey := authorino.Identity_APIKey{}
 				found := false
@@ -71,7 +88,7 @@ func (a *AuthorinoProvider) Create(ctx context.Context, apip v1beta1.APIProduct)
 					}
 				}
 				if !found {
-					return fmt.Errorf("securityScheme credential source not found")
+					return nil, fmt.Errorf("securityScheme credential source not found")
 				}
 				identity.Credentials.In = authorino.Credentials_In(securityScheme.APIKeyAuth.Location)
 				identity.Credentials.KeySelector = securityScheme.APIKeyAuth.Name
@@ -81,14 +98,9 @@ func (a *AuthorinoProvider) Create(ctx context.Context, apip v1beta1.APIProduct)
 			}
 			service.Spec.Identity = append(service.Spec.Identity, &identity)
 		}
-
-		err := a.K8sClient.Create(ctx, &service)
-		if err != nil {
-			return err
-		}
+		serviceConfigs = append(serviceConfigs, service)
 	}
-
-	return nil
+	return serviceConfigs, nil
 }
 
 func (a *AuthorinoProvider) Update(ctx context.Context, apip v1beta1.APIProduct) (err error) {
@@ -99,6 +111,27 @@ func (a *AuthorinoProvider) Delete(ctx context.Context, apip v1beta1.APIProduct)
 	return nil
 }
 
-func (a *AuthorinoProvider) Status(apip v1beta1.APIProduct) (ready bool, err error) {
+func (a *AuthorinoProvider) Status(ctx context.Context, apip v1beta1.APIProduct) (ready bool, err error) {
+	// Right now, we just try to get all the objects that should have been created, and check their status.
+	// If any object is missing/not-created, Status returns false.
+	serviceConfigs, err := APIProductToServiceConfigs(apip)
+	if err != nil {
+		return false, err
+	}
+
+	for _, serviceConfig := range serviceConfigs {
+		existingServiceConfig := authorino.Service{}
+		err = a.K8sClient.Get(ctx, client.ObjectKeyFromObject(&serviceConfig), &existingServiceConfig)
+		if err != nil && errors.IsNotFound(err) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
+		// TODO(jmprusi): No status in authorino serviceConfig objects, yet.
+		//if !existingServiceConfig.Status.Ready {
+		//	return false, nil
+		//}
+	}
+
 	return true, nil
 }

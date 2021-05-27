@@ -16,7 +16,7 @@ type AuthProvider interface {
 	Create(ctx context.Context, apip v1beta1.APIProduct) error
 	Update(ctx context.Context, apip v1beta1.APIProduct) error
 	Delete(ctx context.Context, apip v1beta1.APIProduct) error
-	Status(apip v1beta1.APIProduct) (bool, error)
+	Status(ctx context.Context, apip v1beta1.APIProduct) (bool, error)
 }
 
 // GetAuthProvider returns the desired authproviders

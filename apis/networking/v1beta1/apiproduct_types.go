@@ -38,6 +38,9 @@ type APIProductSpec struct {
 type APIProductStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	// TODO(jmprusi): use proper conditions to give feedback to the user
+	ObservedGen int64 `json:"observedgen"`
+	Ready       bool  `json:"ready"`
 }
 
 //+kubebuilder:object:root=true

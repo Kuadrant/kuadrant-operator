@@ -75,6 +75,10 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		log.V(1).Info(string(jsonData))
 	}
 
+	if apip.Status.Ready && apip.Status.ObservedGen == apip.GetGeneration() {
+		return ctrl.Result{}, nil
+	}
+
 	// APIProduct has been marked for deletion
 	if apip.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(&apip, finalizerName) {
 		// cleanup the Ingress objects.
@@ -118,12 +122,32 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Check if the provider objects are set to Ready.
-	ok, err := r.IngressProvider.Status(apip)
+	ingressOK, err := r.IngressProvider.Status(ctx, apip)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if ok {
-		// TODO(jmprusi): Set the APIProduct object ready.
+	authOK, err := r.AuthProvider.Status(ctx, apip)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	//Mark the object as ready if both provider are OK.
+	if ingressOK && authOK {
+		apip.Status.Ready = true
+		apip.Status.ObservedGen = apip.GetGeneration()
+		err := r.Client.Status().Update(ctx, &apip)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+	} else {
+		// If theres some issue with the ingresses or the authorization objects, mark the object as not ready.
+		apip.Status.Ready = false
+		apip.Status.ObservedGen = apip.GetGeneration()
+		err := r.Client.Status().Update(ctx, &apip)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	return ctrl.Result{}, nil

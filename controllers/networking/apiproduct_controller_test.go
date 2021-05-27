@@ -172,14 +172,14 @@ func apiProduct(ns string) *networkingv1beta1.APIProduct {
 				Owner:       "whoever@mycompany.com",
 			},
 			Environments: []*networkingv1beta1.Environment{
-				&networkingv1beta1.Environment{
+				{
 					Name:  "live",
 					Hosts: []string{"petstore.127.0.0.1.nip.io"},
 					CredentialSources: []*networkingv1beta1.CredentialSource{
-						&networkingv1beta1.CredentialSource{Name: "test"},
+						{Name: "test"},
 					},
 					BackendServers: []*networkingv1beta1.BackendServer{
-						&networkingv1beta1.BackendServer{
+						{
 							API: "cats-api",
 							Destination: networkingv1beta1.Destination{
 								ServiceSelector: &apiextensionsv1.ServiceReference{
@@ -193,10 +193,10 @@ func apiProduct(ns string) *networkingv1beta1.APIProduct {
 				},
 			},
 			SecurityScheme: []*networkingv1beta1.SecurityScheme{
-				&networkingv1beta1.SecurityScheme{Name: "testScheme"},
+				{Name: "testScheme"},
 			},
 			APIs: []*networkingv1beta1.APISelector{
-				&networkingv1beta1.APISelector{
+				{
 					Name:           "cats-api",
 					PrefixOverride: "/cats",
 				},

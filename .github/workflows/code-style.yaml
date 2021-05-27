@@ -64,6 +64,7 @@ jobs:
           -o -path './third_party' -prune
           -o -name '*.pb.go' -prune
           -o -name 'wire_gen.go' -prune
+          -o -name '*.deepcopy.go' -prune
           -o -type f -name '*.go' -print)
 
       - name: Verify ${{ matrix.tool }}

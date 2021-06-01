@@ -94,7 +94,9 @@ func APIProductToServiceConfigs(apip v1beta1.APIProduct) ([]authorino.Service, e
 				identity.Credentials.KeySelector = securityScheme.APIKeyAuth.Name
 				identity.APIKey = &apikey
 			} else if securityScheme.OpenIDConnectAuth != nil {
-				//TODO(jmprusi): Implement
+				identity.Oidc = &authorino.Identity_OidcConfig{
+					Endpoint: securityScheme.OpenIDConnectAuth.URL,
+				}
 			}
 			service.Spec.Identity = append(service.Spec.Identity, &identity)
 		}

@@ -22,17 +22,21 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	"github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	"istio.io/api/networking/v1alpha3"
 	v1beta12 "istio.io/api/security/v1beta1"
 	v1beta13 "istio.io/api/type/v1beta1"
 	istio "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioSecurity "istio.io/client-go/pkg/apis/security/v1beta1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
+	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
 
 //TODO: move the const to a proper place, or get it from config
@@ -42,58 +46,75 @@ const (
 )
 
 type IstioProvider struct {
-	Log       logr.Logger
-	K8sClient client.Client
+	*reconcilers.BaseReconciler
+	logger logr.Logger
 }
 
 // +kubebuilder:rbac:groups=security.istio.io,resources=authorizationpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.istio.io,resources=virtualservices,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch
 
-func New(logger logr.Logger, client client.Client) *IstioProvider {
+func New(baseReconciler *reconcilers.BaseReconciler) *IstioProvider {
 	// Register the Istio Scheme into the client, so we can interact with istio objects.
-	utilruntime.Must(istio.AddToScheme(client.Scheme()))
-	utilruntime.Must(istioSecurity.AddToScheme(client.Scheme()))
+	utilruntime.Must(istio.AddToScheme(baseReconciler.Scheme()))
+	utilruntime.Must(istioSecurity.AddToScheme(baseReconciler.Scheme()))
 
 	// TODO: Create the gateway for Kuadrant
 	// TODO: Add the proper config to the mesh for the extAuthz.
 
 	return &IstioProvider{
-		Log:       logger,
-		K8sClient: client,
+		BaseReconciler: baseReconciler,
+		logger:         ctrl.Log.WithName("kuadrant").WithName("ingressprovider").WithName("istio"),
 	}
 }
 
-func (is *IstioProvider) Create(ctx context.Context, apip v1beta1.APIProduct) error {
-	log := is.Log.WithValues("apiproduct", client.ObjectKeyFromObject(&apip))
-	log.V(1).Info("Istio Provider Create")
+func (is *IstioProvider) Logger() logr.Logger {
+	return is.logger
+}
+
+func (is *IstioProvider) Reconcile(ctx context.Context, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
+	log := is.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
+	log.V(1).Info("Reconcile")
 
 	virtualServices, err := is.toVirtualServices(ctx, apip)
 	if err != nil {
-		return err
+		return ctrl.Result{}, err
 	}
 
-	for _, virtualService := range virtualServices {
-		err = is.K8sClient.Create(ctx, virtualService)
+	for _, desiredVS := range virtualServices {
+		err = is.ReconcileIstioVirtualService(ctx, desiredVS, alwaysUpdateVirtualService)
 		if err != nil {
-			return fmt.Errorf("failing to create Istio virtualservice for %s: %w", virtualService.GetName(), err)
+			return ctrl.Result{}, err
 		}
-		err = is.K8sClient.Get(ctx, client.ObjectKeyFromObject(virtualService), virtualService)
+
+		existingVS := &istio.VirtualService{}
+		err = is.GetResource(ctx, client.ObjectKeyFromObject(desiredVS), existingVS)
 		if err != nil {
-			return err
+			if errors.IsNotFound(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
+			return ctrl.Result{}, err
 		}
-		authPolicy := getAuthorizationPolicy(*virtualService)
-		err = is.K8sClient.Create(ctx, &authPolicy)
+
+		authPolicy := getAuthorizationPolicy(existingVS)
+		err = is.ReconcileIstioAuthorizationPolicy(ctx, authPolicy, alwaysUpdateAuthPolicy)
 		if err != nil {
-			return fmt.Errorf("failing to create Istio AuthorizationPolicy for %s: %w",
-				virtualService.GetName(), err)
+			return ctrl.Result{}, err
 		}
 	}
 
-	return nil
+	return ctrl.Result{}, nil
 }
 
-func getAuthorizationPolicy(virtualService istio.VirtualService) istioSecurity.AuthorizationPolicy {
+func (is *IstioProvider) ReconcileIstioVirtualService(ctx context.Context, desired *istio.VirtualService, mutatefn reconcilers.MutateFn) error {
+	return is.ReconcileResource(ctx, &istio.VirtualService{}, desired, mutatefn)
+}
+
+func (is *IstioProvider) ReconcileIstioAuthorizationPolicy(ctx context.Context, desired *istioSecurity.AuthorizationPolicy, mutatefn reconcilers.MutateFn) error {
+	return is.ReconcileResource(ctx, &istioSecurity.AuthorizationPolicy{}, desired, mutatefn)
+}
+
+func getAuthorizationPolicy(virtualService *istio.VirtualService) *istioSecurity.AuthorizationPolicy {
 	var policyHosts []string
 	for _, host := range virtualService.Spec.Hosts {
 		if !strings.Contains(host, ":") {
@@ -101,7 +122,11 @@ func getAuthorizationPolicy(virtualService istio.VirtualService) istioSecurity.A
 		}
 		policyHosts = append(policyHosts, host)
 	}
-	authPolicy := istioSecurity.AuthorizationPolicy{
+	authPolicy := &istioSecurity.AuthorizationPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "AuthorizationPolicy",
+			APIVersion: "security.istio.io/v1beta1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      virtualService.GetName(),
 			Namespace: KuadrantNamespace,
@@ -129,15 +154,13 @@ func getAuthorizationPolicy(virtualService istio.VirtualService) istioSecurity.A
 			},
 		},
 	}
-	reference := getOwnerReference(virtualService)
-	ownerReferences := authPolicy.GetOwnerReferences()
-	ownerReferences = append(ownerReferences, reference)
-	authPolicy.SetOwnerReferences(ownerReferences)
+	owner := getOwnerReference(virtualService)
+	authPolicy.SetOwnerReferences(append(authPolicy.GetOwnerReferences(), owner))
 
 	return authPolicy
 }
 
-func getOwnerReference(virtualService istio.VirtualService) metav1.OwnerReference {
+func getOwnerReference(virtualService *istio.VirtualService) metav1.OwnerReference {
 	return metav1.OwnerReference{
 		APIVersion: virtualService.APIVersion,
 		Kind:       virtualService.Kind,
@@ -147,7 +170,7 @@ func getOwnerReference(virtualService istio.VirtualService) metav1.OwnerReferenc
 }
 
 // TODO(jmprusi): Pending refactor...
-func (is *IstioProvider) toVirtualServices(ctx context.Context, apip v1beta1.APIProduct) ([]*istio.VirtualService, error) {
+func (is *IstioProvider) toVirtualServices(ctx context.Context, apip *networkingv1beta1.APIProduct) ([]*istio.VirtualService, error) {
 	virtualServices := make([]*istio.VirtualService, 0)
 	for _, environment := range apip.Spec.Environments {
 		httpRoutes := make([]*v1alpha3.HTTPRoute, 0)
@@ -179,16 +202,16 @@ func (is *IstioProvider) toVirtualServices(ctx context.Context, apip v1beta1.API
 					backendService.API)
 			}
 			// Try to get the API object from k8s.
-			api := v1beta1.API{}
-			err := is.K8sClient.Get(ctx, types.NamespacedName{
+			api := &networkingv1beta1.API{}
+			err := is.Client().Get(ctx, types.NamespacedName{
 				Namespace: apip.Namespace,
 				Name:      apip.Spec.APIs[found].Name,
-			}, &api)
+			}, api)
 			if err != nil {
 				return nil, err
 			}
 			service := v1.Service{}
-			err = is.K8sClient.Get(ctx, types.NamespacedName{Name: backendService.Destination.ServiceSelector.Name,
+			err = is.Client().Get(ctx, types.NamespacedName{Name: backendService.Destination.ServiceSelector.Name,
 				Namespace: backendService.Destination.ServiceSelector.Namespace},
 				&service)
 			if err != nil {
@@ -245,65 +268,53 @@ func (is *IstioProvider) toVirtualServices(ctx context.Context, apip v1beta1.API
 	return virtualServices, nil
 }
 
-func (is *IstioProvider) Update(ctx context.Context, apip v1beta1.APIProduct) error {
-	log := is.Log.WithValues("apiproduct", client.ObjectKeyFromObject(&apip))
-	log.V(1).Info("Istio Provider Update")
-
-	virtualServices, err := is.toVirtualServices(ctx, apip)
-	if err != nil {
-		return err
-	}
-
-	for _, virtualService := range virtualServices {
-		currentVS := istio.VirtualService{}
-		err = is.K8sClient.Get(ctx, client.ObjectKeyFromObject(virtualService), &currentVS)
-		if err != nil {
-			return err
-		}
-
-		virtualService.ResourceVersion = currentVS.ResourceVersion
-		err = is.K8sClient.Update(ctx, virtualService)
-		if err != nil {
-			return fmt.Errorf("failing to update Istio virtualservice for %s: %w", virtualService.GetName(), err)
-		}
-
-		currentAuthPolicy := istioSecurity.AuthorizationPolicy{}
-		authPolicy := getAuthorizationPolicy(*virtualService)
-		// TODO(jmprusi): Handle the case where the AuthPolicy doesn't exist.
-		err = is.K8sClient.Get(ctx, client.ObjectKeyFromObject(&authPolicy), &currentAuthPolicy)
-		if err != nil {
-			return fmt.Errorf("failing to update Istio AuthorizationPolicy for %s: %w",
-				authPolicy.GetName(), err)
-		}
-		authPolicy.ResourceVersion = currentAuthPolicy.ResourceVersion
-		err = is.K8sClient.Update(ctx, &authPolicy)
-		if err != nil {
-			return fmt.Errorf("failing to update Istio AuthorizationPolicy for %s: %w",
-				authPolicy.GetName(), err)
-		}
-	}
-	return nil
-}
-
-func (is *IstioProvider) Status(ctx context.Context, apip v1beta1.APIProduct) (bool, error) {
-
+func (is *IstioProvider) Status(ctx context.Context, apip *networkingv1beta1.APIProduct) (bool, error) {
+	log := is.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
+	log.V(1).Info("Status")
 	return true, nil
 }
 
-func (is *IstioProvider) Delete(ctx context.Context, apip v1beta1.APIProduct) error {
-	log := is.Log.WithValues("apiproduct", client.ObjectKeyFromObject(&apip))
-	log.V(1).Info("Istio Provider Delete")
+func (is *IstioProvider) Delete(ctx context.Context, apip *networkingv1beta1.APIProduct) error {
+	log := is.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
+	log.V(1).Info("Delete")
 
 	for _, environment := range apip.Spec.Environments {
-		virtualService := istio.VirtualService{
+		virtualService := &istio.VirtualService{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      apip.Name + apip.Namespace + environment.Name,
 				Namespace: KuadrantNamespace,
 			},
 		}
-		log.Info("Istio Provider Delete", "virtualservice", virtualService.GetName())
-		is.K8sClient.Delete(ctx, &virtualService)
+		is.DeleteResource(ctx, virtualService)
 	}
 
 	return nil
+}
+
+func alwaysUpdateVirtualService(existingObj, desiredObj client.Object) (bool, error) {
+	existing, ok := existingObj.(*istio.VirtualService)
+	if !ok {
+		return false, fmt.Errorf("%T is not a *istio.VirtualService", existingObj)
+	}
+	desired, ok := desiredObj.(*istio.VirtualService)
+	if !ok {
+		return false, fmt.Errorf("%T is not a *istio.VirtualService", desiredObj)
+	}
+
+	existing.Spec = desired.Spec
+	return true, nil
+}
+
+func alwaysUpdateAuthPolicy(existingObj, desiredObj client.Object) (bool, error) {
+	existing, ok := existingObj.(*istioSecurity.AuthorizationPolicy)
+	if !ok {
+		return false, fmt.Errorf("%T is not a *istioSecurity.AuthorizationPolicy", existingObj)
+	}
+	desired, ok := desiredObj.(*istioSecurity.AuthorizationPolicy)
+	if !ok {
+		return false, fmt.Errorf("%T is not a *istioSecurity.AuthorizationPolicy", desiredObj)
+	}
+
+	existing.Spec = desired.Spec
+	return true, nil
 }

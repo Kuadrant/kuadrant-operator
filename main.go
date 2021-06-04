@@ -20,10 +20,6 @@ import (
 	"flag"
 	"os"
 
-	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
-
-	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
-
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -37,6 +33,9 @@ import (
 
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	networkingcontrollers "github.com/kuadrant/kuadrant-controller/controllers/networking"
+	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
+	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
+	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -57,13 +56,12 @@ func main() {
 		"The controller will load its initial configuration from this file. "+
 			"Omit this flag to use the default configuration values. "+
 			"Command-line flags override configuration from this file.")
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
+
+	loggerOpts := zap.Options{}
+	loggerOpts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&loggerOpts)))
 
 	var err error
 	options := ctrl.Options{Scheme: scheme}
@@ -81,13 +79,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	baseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		ctrl.Log.WithName("controllers").WithName("kuadrant"),
+		mgr.GetEventRecorderFor("APIProduct"),
+	)
+
 	if err = (&networkingcontrollers.APIProductReconciler{
-		Client:       mgr.GetClient(),
-		Log:          ctrl.Log.WithName("controllers").WithName("networking").WithName("APIProduct"),
-		Scheme:       mgr.GetScheme(),
-		AuthProvider: authproviders.GetAuthProvider(ctrl.Log.WithName("AuthProvider"), mgr.GetClient()),
-		IngressProvider: ingressproviders.GetIngressProvider(ctrl.Log.WithName("IngressProvider").WithName("Provider"),
-			mgr.GetClient()),
+		BaseReconciler:  baseReconciler,
+		AuthProvider:    authproviders.GetAuthProvider(baseReconciler),
+		IngressProvider: ingressproviders.GetIngressProvider(baseReconciler),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "APIProduct")
 		os.Exit(1)

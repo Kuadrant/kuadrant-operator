@@ -20,33 +20,27 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
-
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
-	"k8s.io/apimachinery/pkg/api/errors"
-
-	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
+	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
+	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
+	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
-
-// APIProductReconciler reconciles a APIProduct object
-type APIProductReconciler struct {
-	client.Client
-	Log             logr.Logger
-	Scheme          *runtime.Scheme
-	IngressProvider ingressproviders.IngressProvider
-	AuthProvider    authproviders.AuthProvider
-}
 
 const (
 	finalizerName = "kuadrant.io/apiproduct"
 )
+
+// APIProductReconciler reconciles a APIProduct object
+type APIProductReconciler struct {
+	*reconcilers.BaseReconciler
+	IngressProvider ingressproviders.IngressProvider
+	AuthProvider    authproviders.AuthProvider
+}
 
 //+kubebuilder:rbac:groups=networking.kuadrant.io,resources=apiproducts;apis,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.kuadrant.io,resources=apiproducts/status;apis/status,verbs=get;update;patch
@@ -55,13 +49,13 @@ const (
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Log.WithValues("apiproduct", req.NamespacedName)
+	log := r.Logger().WithValues("apiproduct", req.NamespacedName)
 	log.Info("Reconciling APIProduct")
 
-	apip := networkingv1beta1.APIProduct{}
-	err := r.Client.Get(ctx, req.NamespacedName, &apip)
+	apip := &networkingv1beta1.APIProduct{}
+	err := r.Client().Get(ctx, req.NamespacedName, apip)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("APIProduct Object has been deleted.")
+		log.Info("resource not found. Ignoring since object must have been deleted")
 		return ctrl.Result{}, nil
 	} else if err != nil {
 		return ctrl.Result{}, err
@@ -76,57 +70,94 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if apip.Status.Ready && apip.Status.ObservedGen == apip.GetGeneration() {
+		log.Info("nothing to be done")
 		return ctrl.Result{}, nil
 	}
 
 	// APIProduct has been marked for deletion
-	if apip.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(&apip, finalizerName) {
-		// cleanup the Ingress objects.
-		err = r.IngressProvider.Delete(ctx, apip)
+	if apip.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(apip, finalizerName) {
+		err := r.IngressProvider.Delete(ctx, apip)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
-		// cleanup the authorization objects.
 		err = r.AuthProvider.Delete(ctx, apip)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
 		//Remove finalizer and update the object.
-		controllerutil.RemoveFinalizer(&apip, finalizerName)
-		err := r.Client.Update(ctx, &apip)
+		controllerutil.RemoveFinalizer(apip, finalizerName)
+		err = r.UpdateResource(ctx, apip)
 		log.Info("Removing finalizer", "error", err)
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	if !controllerutil.ContainsFinalizer(&apip, finalizerName) {
-		controllerutil.AddFinalizer(&apip, finalizerName)
-		err := r.Update(ctx, &apip)
+	if !controllerutil.ContainsFinalizer(apip, finalizerName) {
+		controllerutil.AddFinalizer(apip, finalizerName)
+		err := r.UpdateResource(ctx, apip)
 		log.Info("Adding finalizer", "error", err)
-		if err != nil {
-			return ctrl.Result{}, err
+		return ctrl.Result{Requeue: true}, err
+	}
+
+	result, err := r.reconcileSpec(ctx, apip)
+	log.Info("spec reconcile done", "result", result, "error", err)
+	if err != nil {
+		// Ignore conflicts, resource might just be outdated.
+		if errors.IsConflict(err) {
+			log.Info("Resource update conflict error. Requeuing...")
+			return ctrl.Result{Requeue: true}, nil
 		}
+		r.EventRecorder().Eventf(apip, corev1.EventTypeWarning, "ReconcileError", "%v", err)
+		return ctrl.Result{}, err
 	}
 
-	// Create or Update the Ingress using the provider
-	result, err := r.createOrUpdateIngress(ctx, apip)
+	if result.Requeue {
+		log.Info("Reconciling not finished. Requeueing.")
+		return result, nil
+	}
+
+	result, err = r.reconcileStatus(ctx, apip)
+	log.Info("status reconcile done", "result", result, "error", err)
+
 	if err != nil {
-		return result, err
+		// Ignore conflicts, resource might just be outdated.
+		if errors.IsConflict(err) {
+			log.Info("Resource update conflict error. Requeuing...")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		return ctrl.Result{}, err
 	}
 
-	// Create or Update the Authorization objects using the provider
-	result, err = r.createOrUpdateAuth(ctx, apip)
-	if err != nil {
-		return result, err
+	if result.Requeue {
+		log.Info("Reconciling not finished. Requeueing.")
+		return result, nil
 	}
 
-	// Check if the provider objects are set to Ready.
+	return ctrl.Result{}, nil
+}
+
+func (r *APIProductReconciler) reconcileSpec(ctx context.Context, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
+	res, err := r.IngressProvider.Reconcile(ctx, apip)
+	if err != nil || res.Requeue {
+		return res, err
+	}
+
+	res, err = r.AuthProvider.Reconcile(ctx, apip)
+	if err != nil || res.Requeue {
+		return res, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *APIProductReconciler) reconcileStatus(ctx context.Context, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
 	ingressOK, err := r.IngressProvider.Status(ctx, apip)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	authOK, err := r.AuthProvider.Status(ctx, apip)
+
+	authOK, err := r.IngressProvider.Status(ctx, apip)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -135,15 +166,14 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if ingressOK && authOK {
 		apip.Status.Ready = true
 		apip.Status.ObservedGen = apip.GetGeneration()
-		err := r.Client.Status().Update(ctx, &apip)
+		err := r.UpdateResourceStatus(ctx, apip)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 	} else {
-		// If theres some issue with the ingresses or the authorization objects, mark the object as not ready.
 		apip.Status.Ready = false
 		apip.Status.ObservedGen = apip.GetGeneration()
-		err := r.Client.Status().Update(ctx, &apip)
+		err := r.UpdateResourceStatus(ctx, apip)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -158,32 +188,4 @@ func (r *APIProductReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&networkingv1beta1.APIProduct{}).
 		Complete(r)
-}
-
-func (r *APIProductReconciler) createOrUpdateIngress(ctx context.Context, apip networkingv1beta1.APIProduct) (ctrl.Result, error) {
-	err := r.IngressProvider.Create(ctx, apip)
-
-	if err != nil && errors.IsAlreadyExists(err) {
-		err = r.IngressProvider.Update(ctx, apip)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-	} else if err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
-}
-
-func (r *APIProductReconciler) createOrUpdateAuth(ctx context.Context, apip networkingv1beta1.APIProduct) (ctrl.Result, error) {
-	err := r.AuthProvider.Create(ctx, apip)
-
-	if err != nil && errors.IsAlreadyExists(err) {
-		err = r.AuthProvider.Update(ctx, apip)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-	} else if err != nil {
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
 }

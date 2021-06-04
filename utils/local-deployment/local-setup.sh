@@ -22,9 +22,11 @@ export KUADRANT_NAMESPACE="kuadrant-system"
 export KIND_CLUSTER_NAME="kuadrant-local"
 kind create cluster --name ${KIND_CLUSTER_NAME} --config utils/local-deployment/kind-cluster.yaml
 
-echo "Building kuadrant"
-docker build -t kuadrant:devel ./
-kind load docker-image kuadrant:devel --name ${KIND_CLUSTER_NAME}
+if [ -z "${RUN_OPERATOR_LOCALLY+x}" ]; then
+    echo "Building kuadrant"
+    docker build -t kuadrant:devel ./
+    kind load docker-image kuadrant:devel --name ${KIND_CLUSTER_NAME}
+fi
 
 echo "Creating namespace"
 kubectl create namespace "${KUADRANT_NAMESPACE}"
@@ -38,10 +40,13 @@ kubectl apply -n "${KUADRANT_NAMESPACE}" -f utils/local-deployment/istio-manifes
 echo "Deploying Authorino to the kuadrant-system namespace"
 kubectl apply -n "${KUADRANT_NAMESPACE}" -f utils/local-deployment/authorino.yaml
 
-
-echo "Deploying Kuadrant control plane"
-kustomize build config/default | kubectl -n "${KUADRANT_NAMESPACE}" apply -f -
-kubectl -n "${KUADRANT_NAMESPACE}" patch deployment kuadrant-controller-manager -p '{"spec": {"template": {"spec":{"containers":[{"name": "manager","image":"kuadrant:devel", "imagePullPolicy":"IfNotPresent"}]}}}}'
+if [ -z "${RUN_OPERATOR_LOCALLY+x}" ]; then
+    echo "Deploying Kuadrant control plane"
+    kustomize build config/default | kubectl -n "${KUADRANT_NAMESPACE}" apply -f -
+    kubectl -n "${KUADRANT_NAMESPACE}" patch deployment kuadrant-controller-manager -p '{"spec": {"template": {"spec":{"containers":[{"name": "manager","image":"kuadrant:devel", "imagePullPolicy":"IfNotPresent"}]}}}}'
+else
+	kustomize build config/crd | kubectl apply -f -
+fi
 
 echo "Deploying EchoAPI to the default namespace"
 kubectl apply -n default -f utils/local-deployment/echo-api.yaml

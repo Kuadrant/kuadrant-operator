@@ -39,105 +39,23 @@ spec:
               APIs:
                 items:
                   properties:
-                    name:
-                      type: string
-                    prefixOverride:
-                      type: string
-                  required:
-                  - name
-                  type: object
-                type: array
-              environments:
-                items:
-                  properties:
-                    backendServers:
-                      items:
-                        properties:
-                          API:
-                            type: string
-                          destination:
-                            properties:
-                              serviceSelector:
-                                description: ServiceReference holds a reference to
-                                  Service.legacy.k8s.io
-                                properties:
-                                  name:
-                                    description: name is the name of the service.
-                                      Required
-                                    type: string
-                                  namespace:
-                                    description: namespace is the namespace of the
-                                      service. Required
-                                    type: string
-                                  path:
-                                    description: path is an optional URL path at which
-                                      the webhook will be contacted.
-                                    type: string
-                                  port:
-                                    description: port is an optional service port
-                                      at which the webhook will be contacted. `port`
-                                      should be a valid port number (1-65535, inclusive).
-                                      Defaults to 443 for backward compatibility.
-                                    format: int32
-                                    type: integer
-                                required:
-                                - name
-                                - namespace
-                                type: object
-                            required:
-                            - serviceSelector
-                            type: object
-                        required:
-                        - API
-                        - destination
-                        type: object
-                      type: array
-                    credentialSources:
-                      items:
-                        properties:
-                          apiKeyAuth:
-                            properties:
-                              labelSelectors:
-                                additionalProperties:
-                                  type: string
-                                type: object
-                            required:
-                            - labelSelectors
-                            type: object
-                          name:
-                            type: string
-                          openIDConnectAuth:
-                            properties:
-                              endpoint:
-                                type: string
-                            required:
-                            - endpoint
-                            type: object
-                        required:
-                        - name
-                        type: object
-                      type: array
-                    hosts:
-                      items:
-                        type: string
-                      type: array
-                    name:
-                      type: string
-                    tlsConfig:
+                    mapping:
                       properties:
-                        plainHTTP:
-                          type: string
-                        tlsSecretName:
+                        prefix:
                           type: string
                       required:
-                      - plainHTTP
-                      - tlsSecretName
+                      - prefix
                       type: object
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                    tag:
+                      type: string
                   required:
-                  - backendServers
-                  - credentialSources
-                  - hosts
                   - name
+                  - namespace
+                  - tag
                   type: object
                 type: array
               information:
@@ -152,16 +70,38 @@ spec:
                 - description
                 - owner
                 type: object
+              routing:
+                properties:
+                  expose:
+                    type: boolean
+                  hosts:
+                    items:
+                      type: string
+                    type: array
+                required:
+                - expose
+                - hosts
+                type: object
               securityScheme:
                 items:
                   properties:
                     apiKeyAuth:
                       properties:
+                        credential_source:
+                          properties:
+                            labelSelectors:
+                              additionalProperties:
+                                type: string
+                              type: object
+                          required:
+                          - labelSelectors
+                          type: object
                         location:
                           type: string
                         name:
                           type: string
                       required:
+                      - credential_source
                       - location
                       - name
                       type: object
@@ -180,8 +120,8 @@ spec:
                 type: array
             required:
             - APIs
-            - environments
             - information
+            - routing
             - securityScheme
             type: object
           status:

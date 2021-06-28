@@ -46,17 +46,17 @@ type SecurityRequirements []SecurityRequirement
 
 // APISpec defines the desired state of API
 type APISpec struct {
-	Hosts                      []string             `json:"hosts"`
-	Operations                 []*Operation         `json:"operations"`
-	SecurityScheme             []*SecurityScheme    `json:"securityScheme,omitempty"`
-	GlobalSecurityRequirements SecurityRequirements `json:"globalSecurityRequirements,omitempty"`
+	TAGs []Tag `json:"tags"`
 }
 
-type Operation struct {
-	Name     string               `json:"name"`
-	Path     string               `json:"path"`
-	Method   string               `json:"method"`
-	Security SecurityRequirements `json:"security,omitempty"`
+type APIDefinition struct {
+	OAS string `json:"oas"`
+}
+
+type Tag struct {
+	Name          string        `json:"name"`
+	Destination   Destination   `json:"destination"`
+	APIDefinition APIDefinition `json:"api_definition"`
 }
 
 type SecurityScheme struct {
@@ -66,8 +66,9 @@ type SecurityScheme struct {
 }
 
 type APIKeyAuth struct {
-	Location string `json:"location"`
-	Name     string `json:"name"`
+	Location         string                `json:"location"`
+	Name             string                `json:"name"`
+	CredentialSource APIKeyAuthCredentials `json:"credential_source"`
 }
 
 type OpenIDConnectAuth struct {

@@ -2,7 +2,6 @@ package authorino
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-logr/logr"
 	authorino "github.com/kuadrant/authorino/api/v1beta1"
@@ -41,18 +40,16 @@ func (a *AuthorinoProvider) Reconcile(ctx context.Context, apip *networkingv1bet
 	log := a.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
 	log.V(1).Info("Reconcile")
 
-	serviceConfigs, err := APIProductToServiceConfigs(apip)
+	serviceConfig, err := APIProductToServiceConfigs(apip)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	for _, serviceConfig := range serviceConfigs {
-		// Currently, authorino will not be updated
-		// TODO implement mutator to reconcile desired object -> existing object
-		err = a.ReconcileAuthorinoService(ctx, serviceConfig, reconcilers.CreateOnlyMutator)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
+	// Currently, authorino will not be updated
+	// TODO implement mutator to reconcile desired object -> existing object
+	err = a.ReconcileAuthorinoService(ctx, serviceConfig, reconcilers.CreateOnlyMutator)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
@@ -62,60 +59,44 @@ func (a *AuthorinoProvider) ReconcileAuthorinoService(ctx context.Context, desir
 	return a.ReconcileResource(ctx, &authorino.Service{}, desired, mutatefn)
 }
 
-func APIProductToServiceConfigs(apip *networkingv1beta1.APIProduct) ([]*authorino.Service, error) {
-	serviceConfigs := make([]*authorino.Service, 0)
-	for _, environment := range apip.Spec.Environments {
-		service := &authorino.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      apip.Name + apip.Namespace + environment.Name,
-				Namespace: istioprovider.KuadrantNamespace,
-			},
-			Spec: authorino.ServiceSpec{
-				Hosts:         environment.Hosts,
-				Identity:      nil,
-				Metadata:      nil,
-				Authorization: nil,
-			},
-		}
-
-		for _, securityScheme := range apip.Spec.SecurityScheme {
-			identity := authorino.Identity{
-				Name:           securityScheme.Name,
-				Credentials:    authorino.Credentials{},
-				OAuth2:         nil,
-				Oidc:           nil,
-				APIKey:         nil,
-				KubernetesAuth: nil,
-			}
-			if securityScheme.APIKeyAuth != nil {
-				apikey := authorino.Identity_APIKey{}
-				found := false
-				for _, credentialSource := range environment.CredentialSources {
-					if credentialSource.Name == securityScheme.Name {
-						apikey.LabelSelectors = make(map[string]string)
-						for k, v := range credentialSource.APIKeyAuth.LabelSelectors {
-							apikey.LabelSelectors[k] = v
-						}
-						found = true
-						break
-					}
-				}
-				if !found {
-					return nil, fmt.Errorf("securityScheme credential source not found")
-				}
-				identity.Credentials.In = authorino.Credentials_In(securityScheme.APIKeyAuth.Location)
-				identity.Credentials.KeySelector = securityScheme.APIKeyAuth.Name
-				identity.APIKey = &apikey
-			} else if securityScheme.OpenIDConnectAuth != nil {
-				identity.Oidc = &authorino.Identity_OidcConfig{
-					Endpoint: securityScheme.OpenIDConnectAuth.URL,
-				}
-			}
-			service.Spec.Identity = append(service.Spec.Identity, &identity)
-		}
-		serviceConfigs = append(serviceConfigs, service)
+func APIProductToServiceConfigs(apip *networkingv1beta1.APIProduct) (*authorino.Service, error) {
+	serviceConfig := &authorino.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      apip.Name + apip.Namespace,
+			Namespace: istioprovider.KuadrantNamespace,
+		},
+		Spec: authorino.ServiceSpec{
+			Hosts:         apip.Spec.Routing.Hosts,
+			Identity:      nil,
+			Metadata:      nil,
+			Authorization: nil,
+		},
 	}
-	return serviceConfigs, nil
+
+	for _, securityScheme := range apip.Spec.SecurityScheme {
+		identity := authorino.Identity{
+			Name:           securityScheme.Name,
+			Credentials:    authorino.Credentials{},
+			OAuth2:         nil,
+			Oidc:           nil,
+			APIKey:         nil,
+			KubernetesAuth: nil,
+		}
+		if securityScheme.APIKeyAuth != nil {
+			apikey := authorino.Identity_APIKey{
+				LabelSelectors: securityScheme.APIKeyAuth.CredentialSource.LabelSelectors,
+			}
+			identity.Credentials.In = authorino.Credentials_In(securityScheme.APIKeyAuth.Location)
+			identity.Credentials.KeySelector = securityScheme.APIKeyAuth.Name
+			identity.APIKey = &apikey
+		} else if securityScheme.OpenIDConnectAuth != nil {
+			identity.Oidc = &authorino.Identity_OidcConfig{
+				Endpoint: securityScheme.OpenIDConnectAuth.URL,
+			}
+		}
+		serviceConfig.Spec.Identity = append(serviceConfig.Spec.Identity, &identity)
+	}
+	return serviceConfig, nil
 }
 
 func (a *AuthorinoProvider) Delete(ctx context.Context, apip *networkingv1beta1.APIProduct) (err error) {
@@ -130,24 +111,22 @@ func (a *AuthorinoProvider) Status(ctx context.Context, apip *networkingv1beta1.
 
 	// Right now, we just try to get all the objects that should have been created, and check their status.
 	// If any object is missing/not-created, Status returns false.
-	serviceConfigs, err := APIProductToServiceConfigs(apip)
+	serviceConfig, err := APIProductToServiceConfigs(apip)
 	if err != nil {
 		return false, err
 	}
 
-	for _, serviceConfig := range serviceConfigs {
-		existingServiceConfig := &authorino.Service{}
-		err = a.Client().Get(ctx, client.ObjectKeyFromObject(serviceConfig), existingServiceConfig)
-		if err != nil && errors.IsNotFound(err) {
-			return false, nil
-		} else if err != nil {
-			return false, err
-		}
-		// TODO(jmprusi): No status in authorino serviceConfig objects, yet.
-		//if !existingServiceConfig.Status.Ready {
-		//	return false, nil
-		//}
+	existingServiceConfig := &authorino.Service{}
+	err = a.Client().Get(ctx, client.ObjectKeyFromObject(serviceConfig), existingServiceConfig)
+	if err != nil && errors.IsNotFound(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
 	}
+	// TODO(jmprusi): No status in authorino serviceConfig objects, yet.
+	//if !existingServiceConfig.Status.Ready {
+	//	return false, nil
+	//}
 
 	return true, nil
 }

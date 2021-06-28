@@ -2,4 +2,5 @@
 resources:
 - networking_v1beta1_api.yaml
 - networking_v1beta1_apiproduct.yaml
+- k8s.io.api_v1_service.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

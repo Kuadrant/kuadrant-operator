@@ -20,6 +20,10 @@ import (
 	"flag"
 	"os"
 
+	"github.com/kuadrant/kuadrant-controller/controllers/discovery"
+
+	corev1 "k8s.io/api/core/v1"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -47,6 +51,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(networkingv1beta1.AddToScheme(scheme))
+	utilruntime.Must(corev1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -91,6 +96,15 @@ func main() {
 		IngressProvider: ingressproviders.GetIngressProvider(baseReconciler),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "APIProduct")
+		os.Exit(1)
+	}
+
+	if err = (&discovery.ServiceReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("k8s.io.api").WithName("Service"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Service")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

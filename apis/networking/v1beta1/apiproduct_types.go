@@ -29,7 +29,7 @@ type APIProductSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	Information    ProductInformation `json:"information"`
-	Environments   []*Environment     `json:"environments"`
+	Routing        Routing            `json:"routing"`
 	SecurityScheme []*SecurityScheme  `json:"securityScheme"`
 	APIs           []*APISelector     `json:"APIs"`
 }
@@ -60,35 +60,22 @@ type ProductInformation struct {
 	Owner       string `json:"owner"`
 }
 
-type Environment struct {
-	Name              string              `json:"name"`
-	Hosts             []string            `json:"hosts"`
-	TLSConfig         *TLSConfig          `json:"tlsConfig,omitempty"`
-	CredentialSources []*CredentialSource `json:"credentialSources"`
-	BackendServers    []*BackendServer    `json:"backendServers"`
-}
-
-type CredentialSource struct {
-	Name              string                        `json:"name"`
-	APIKeyAuth        *APIKeyAuthCredentials        `json:"apiKeyAuth,omitempty"`
-	OpenIDConnectAuth *OpenIDConnectAuthCredentials `json:"openIDConnectAuth,omitempty"`
-}
-
 type APIKeyAuthCredentials struct {
 	LabelSelectors map[string]string `json:"labelSelectors"`
+}
+
+type Routing struct {
+	Hosts  []string `json:"hosts"`
+	Expose bool     `json:"expose"`
 }
 
 type OpenIDConnectAuthCredentials struct {
 	Endpoint string `json:"endpoint"`
 }
 
-type BackendServer struct {
-	API         string      `json:"API"`
-	Destination Destination `json:"destination"`
-}
-
 type Destination struct {
-	ServiceSelector *v12.ServiceReference `json:"serviceSelector"`
+	Schema                string `json:"schema,omitempty"`
+	*v12.ServiceReference `json:"serviceReference"`
 }
 
 type TLSConfig struct {
@@ -97,8 +84,14 @@ type TLSConfig struct {
 }
 
 type APISelector struct {
-	Name           string `json:"name"`
-	PrefixOverride string `json:"prefixOverride,omitempty"`
+	Name      string  `json:"name"`
+	Namespace string  `json:"namespace"`
+	Tag       string  `json:"tag"`
+	Mapping   Mapping `json:"mapping,omitempty"`
+}
+
+type Mapping struct {
+	Prefix string `json:"prefix"`
 }
 
 //+kubebuilder:object:root=true

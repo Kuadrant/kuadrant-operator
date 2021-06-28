@@ -1,41 +1,32 @@
 apiVersion: networking.kuadrant.io/v1beta1
 kind: APIProduct
 metadata:
-  name: petstore-api
+  name: animaltoys
 spec:
   information:
     description: My super nice API Product.
     owner: whoever@mycompany.com
-  environments:
-    - name: live
-      hosts:
-        - petstore.127.0.0.1.nip.io
-      backendServers:
-        - API: cats-api
-          destination:
-            serviceSelector:
-              name: echo-api
-              namespace: default
-              port: 80
-        - API: dogs-api
-          destination:
-            serviceSelector:
-              name: echo-api
-              namespace: default
-              port: 80
-      credentialSources:
-        - name: MyAPIKey
-          apiKeyAuth:
-            labelSelectors:
-              secret.kuadrant.io/managed-by: authorino
-              api: live-petstore
+  routing:
+    hosts:
+      - api.animaltoys.127.0.0.1.nip.io
+    expose: true
+  APIs:
+    - name: dogs
+      namespace: default
+      tag: production
+      mapping:
+        prefix: /dogs
+    - name: cats
+      namespace: default
+      tag: production
+      mapping:
+        prefix: /cats
   securityScheme:
     - name: MyAPIKey
       apiKeyAuth:
         location: authorization_header
         name: APIKEY
-  APIs:
-    - name: cats-api
-      prefixOverride: /cats
-    - name: dogs-api
-      prefixOverride: /dogs
+        credential_source:
+          labelSelectors:
+            secret.kuadrant.io/managed-by: authorino
+            api: animaltoys

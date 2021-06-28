@@ -36,108 +36,58 @@ spec:
           spec:
             description: APISpec defines the desired state of API
             properties:
-              globalSecurityRequirements:
+              api_definition:
+                properties:
+                  oas:
+                    type: string
+                required:
+                - oas
+                type: object
+              tags:
                 items:
                   properties:
-                    apiKeyAuth:
-                      additionalProperties:
-                        properties:
-                          name:
-                            type: string
-                          required:
-                            type: boolean
-                        type: object
-                      type: object
-                    openIDConnectAuth:
-                      additionalProperties:
-                        properties:
-                          name:
-                            type: string
-                          required:
-                            type: boolean
-                          scopes:
-                            items:
+                    destination:
+                      properties:
+                        schema:
+                          type: string
+                        serviceReference:
+                          description: ServiceReference holds a reference to Service.legacy.k8s.io
+                          properties:
+                            name:
+                              description: name is the name of the service. Required
                               type: string
-                            type: array
-                        type: object
-                      type: object
-                  type: object
-                type: array
-              hosts:
-                items:
-                  type: string
-                type: array
-              operations:
-                items:
-                  properties:
-                    method:
-                      type: string
-                    name:
-                      type: string
-                    path:
-                      type: string
-                    security:
-                      items:
-                        properties:
-                          apiKeyAuth:
-                            additionalProperties:
-                              properties:
-                                name:
-                                  type: string
-                                required:
-                                  type: boolean
-                              type: object
-                            type: object
-                          openIDConnectAuth:
-                            additionalProperties:
-                              properties:
-                                name:
-                                  type: string
-                                required:
-                                  type: boolean
-                                scopes:
-                                  items:
-                                    type: string
-                                  type: array
-                              type: object
-                            type: object
-                        type: object
-                      type: array
-                  required:
-                  - method
-                  - name
-                  - path
-                  type: object
-                type: array
-              securityScheme:
-                items:
-                  properties:
-                    apiKeyAuth:
-                      properties:
-                        location:
-                          type: string
-                        name:
-                          type: string
+                            namespace:
+                              description: namespace is the namespace of the service.
+                                Required
+                              type: string
+                            path:
+                              description: path is an optional URL path at which the
+                                webhook will be contacted.
+                              type: string
+                            port:
+                              description: port is an optional service port at which
+                                the webhook will be contacted. `port` should be a
+                                valid port number (1-65535, inclusive). Defaults to
+                                443 for backward compatibility.
+                              format: int32
+                              type: integer
+                          required:
+                          - name
+                          - namespace
+                          type: object
                       required:
-                      - location
-                      - name
+                      - serviceReference
                       type: object
                     name:
                       type: string
-                    openIDConnectAuth:
-                      properties:
-                        url:
-                          type: string
-                      required:
-                      - url
-                      type: object
                   required:
+                  - destination
                   - name
                   type: object
                 type: array
             required:
-            - hosts
-            - operations
+            - api_definition
+            - tags
             type: object
           status:
             description: APIStatus defines the observed state of API

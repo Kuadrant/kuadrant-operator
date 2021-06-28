@@ -6,13 +6,12 @@ multigroup: true
 plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
-projectName: kuadrant-controller-upgrade
+projectName: kuadrant-controller
 repo: github.com/kuadrant/kuadrant-controller
 resources:
 - api:
     crdVersion: v1
     namespaced: true
-  controller: false
   domain: networking.kuadrant.io
   kind: API
   path: github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1

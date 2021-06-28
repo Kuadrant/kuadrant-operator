@@ -3,21 +3,18 @@ kind: Deployment
 metadata:
   name: echo-api
   labels:
-    app: authorino
     svc: echo-api
 spec:
   selector:
     matchLabels:
-      app: authorino
       svc: echo-api
   template:
     metadata:
       labels:
-        app: authorino
         svc: echo-api
     spec:
       containers:
-      - name: authorino
+      - name: echo-api
         image: quay.io/3scale/authorino:echo-api
         env:
         - name: PORT
@@ -30,11 +27,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: echo-api
-  labels:
-    app: authorino
 spec:
   selector:
-    app: authorino
     svc: echo-api
   ports:
     - port: 80

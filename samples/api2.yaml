@@ -1,14 +1,61 @@
-apiVersion: networking.kuadrant.io/v1beta1
-kind: API
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: cats-api
+  name: dogs
+  labels:
+    svc: dogs
 spec:
-  hosts:
-    - "mycatsapi"
-  operations:
-    - name: getcats
-      path: /cats
-      method: GET
-    - name: postcat
-      path: /cats
-      method: POST
+  selector:
+    matchLabels:
+      svc: dogs
+  template:
+    metadata:
+      labels:
+        svc: dogs
+    spec:
+      containers:
+        - name: dogs
+          image: quay.io/3scale/authorino:echo-api
+          env:
+            - name: PORT
+              value: "3000"
+          ports:
+            - containerPort: 3000
+  replicas: 1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dogs-api
+  annotations:
+    discovery.kuadrant.io/scheme: "http"
+    discovery.kuadrant.io/api-name: "dogs"
+    discovery.kuadrant.io/tag: "production"
+    discovery.kuadrant.io/port: "80"
+    discovery.kuadrant.io/oas-configmap: "dogs-oas"
+  labels:
+    discovery.kuadrant.io/enabled: "true"
+spec:
+  selector:
+    svc: dogs
+  ports:
+    - port: 80
+      protocol: TCP
+      targetPort: 3000
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dogs-oas
+data:
+  openapi.yaml: |
+    openapi: "3.0.0"
+    info:
+      title: "toy API"
+    version: "1.0.0"
+    servers:
+      - url: http://toys/
+    paths:
+      /toys:
+        get:
+          operationId: "getToys"

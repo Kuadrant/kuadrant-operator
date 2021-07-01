@@ -64,3 +64,18 @@ jobs:
       - name: run tests
         run: |
           make istio-manifest-update-test
+
+  verify-kuadrant-manifest:
+    name: Verify kuadrant manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.15.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.15.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: run tests
+        run: |
+          make manifests-update-test

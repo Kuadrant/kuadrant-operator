@@ -36,16 +36,16 @@ spec:
           spec:
             description: APISpec defines the desired state of API
             properties:
-              api_definition:
-                properties:
-                  oas:
-                    type: string
-                required:
-                - oas
-                type: object
               tags:
                 items:
                   properties:
+                    api_definition:
+                      properties:
+                        oas:
+                          type: string
+                      required:
+                      - oas
+                      type: object
                     destination:
                       properties:
                         schema:
@@ -81,12 +81,12 @@ spec:
                     name:
                       type: string
                   required:
+                  - api_definition
                   - destination
                   - name
                   type: object
                 type: array
             required:
-            - api_definition
             - tags
             type: object
           status:

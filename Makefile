@@ -232,3 +232,8 @@ catalog-build: opm ## Build a catalog image.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+
+.PHONY: manifests-update-test
+manifests-update-test: manifests
+	git diff --exit-code ./config
+	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./config)" ]

@@ -5,7 +5,7 @@ linters:
   enable:
     - asciicheck
     - errorlint
-    - golint
+    - revive
     - gosec
     - prealloc
     - stylecheck

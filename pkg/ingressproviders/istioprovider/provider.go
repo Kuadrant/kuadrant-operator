@@ -115,7 +115,7 @@ func (is *IstioProvider) ReconcileIstioAuthorizationPolicy(ctx context.Context, 
 }
 
 func getAuthorizationPolicy(virtualService *istio.VirtualService) *istioSecurity.AuthorizationPolicy {
-	var policyHosts []string
+	policyHosts := []string{}
 
 	// Now we need to generate the list of hosts that will match the authorization policy,
 	// to be sure, we will match the "$host" and "$host:*".
@@ -291,7 +291,6 @@ func (is *IstioProvider) toVirtualServices(ctx context.Context, apip *networking
 				}
 				httpRoute.Route = []*v1alpha3.HTTPRouteDestination{&istioDestination}
 				httpRoutes = append(httpRoutes, &httpRoute)
-
 			}
 		}
 	}

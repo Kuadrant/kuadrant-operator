@@ -237,3 +237,14 @@ catalog-push: ## Push a catalog image.
 manifests-update-test: manifests
 	git diff --exit-code ./config
 	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./config)" ]
+
+GOLANGCI-LINT=$(PROJECT_PATH)/bin/golangci-lint
+$(GOLANGCI-LINT):
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(PROJECT_PATH)/bin v1.41.1
+
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI-LINT)
+
+.PHONY: run-lint
+run-lint: $(GOLANGCI-LINT)
+	$(GOLANGCI-LINT) run

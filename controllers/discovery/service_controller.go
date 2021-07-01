@@ -107,7 +107,6 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 func (r *ServiceReconciler) APIFromAnnotations(ctx context.Context, service corev1.Service) (*v1beta1.API, error) {
-
 	//Supported Annotations for now:
 	//discovery.kuadrant.io/scheme: "https"
 	//discovery.kuadrant.io/api-name: "dogs-api"
@@ -148,7 +147,7 @@ func (r *ServiceReconciler) APIFromAnnotations(ctx context.Context, service core
 	// Let's find out the port, this annotation is a little bit more tricky.
 	if port, ok = service.Annotations["discovery.kuadrant.io/port"]; ok {
 		// check if the port is a number already.
-		if num, err := strconv.Atoi(port); err == nil {
+		if num, err := strconv.ParseInt(port, 10, 32); err == nil {
 			int32num := int32(num)
 			Tag.Destination.Port = &int32num
 		} else {

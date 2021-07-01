@@ -52,7 +52,7 @@ func ApplyResources(fileName string, k8sClient client.Client, ns string) error {
 	for {
 		n, err := docDecoder.Read(buf)
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return err

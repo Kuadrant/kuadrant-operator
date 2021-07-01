@@ -16,27 +16,27 @@ import (
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
 
-type AuthorinoProvider struct {
+type Provider struct {
 	*reconcilers.BaseReconciler
 	logger logr.Logger
 }
 
 // +kubebuilder:rbac:groups=config.authorino.3scale.net,resources=services,verbs=get;list;watch;create;update;patch;delete
 
-func New(baseReconciler *reconcilers.BaseReconciler) *AuthorinoProvider {
+func New(baseReconciler *reconcilers.BaseReconciler) *Provider {
 	utilruntime.Must(authorino.AddToScheme(baseReconciler.Scheme()))
 
-	return &AuthorinoProvider{
+	return &Provider{
 		BaseReconciler: baseReconciler,
 		logger:         ctrl.Log.WithName("kuadrant").WithName("authprovider").WithName("authorino"),
 	}
 }
 
-func (a *AuthorinoProvider) Logger() logr.Logger {
+func (a *Provider) Logger() logr.Logger {
 	return a.logger
 }
 
-func (a *AuthorinoProvider) Reconcile(ctx context.Context, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
+func (a *Provider) Reconcile(ctx context.Context, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
 	log := a.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
 	log.V(1).Info("Reconcile")
 
@@ -55,7 +55,7 @@ func (a *AuthorinoProvider) Reconcile(ctx context.Context, apip *networkingv1bet
 	return ctrl.Result{}, nil
 }
 
-func (a *AuthorinoProvider) ReconcileAuthorinoService(ctx context.Context, desired *authorino.Service, mutatefn reconcilers.MutateFn) error {
+func (a *Provider) ReconcileAuthorinoService(ctx context.Context, desired *authorino.Service, mutatefn reconcilers.MutateFn) error {
 	return a.ReconcileResource(ctx, &authorino.Service{}, desired, mutatefn)
 }
 
@@ -99,13 +99,13 @@ func APIProductToServiceConfigs(apip *networkingv1beta1.APIProduct) (*authorino.
 	return serviceConfig, nil
 }
 
-func (a *AuthorinoProvider) Delete(ctx context.Context, apip *networkingv1beta1.APIProduct) (err error) {
+func (a *Provider) Delete(ctx context.Context, apip *networkingv1beta1.APIProduct) (err error) {
 	log := a.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
 	log.V(1).Info("Delete")
 	return nil
 }
 
-func (a *AuthorinoProvider) Status(ctx context.Context, apip *networkingv1beta1.APIProduct) (ready bool, err error) {
+func (a *Provider) Status(ctx context.Context, apip *networkingv1beta1.APIProduct) (ready bool, err error) {
 	log := a.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
 	log.V(1).Info("Status")
 

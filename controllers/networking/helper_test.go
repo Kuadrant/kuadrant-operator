@@ -150,8 +150,8 @@ func CheckForDeploymentsReady(ns string, k8sClient client.Client) error {
 		return err
 	}
 
-	if len(deploymentList.Items) < 3 {
-		return errors.New("Expecting at least 3 Deployments")
+	if len(deploymentList.Items) < 4 {
+		return errors.New("Expecting at least 4 Deployments")
 	}
 
 	for idx, deployment := range deploymentList.Items {

@@ -211,7 +211,6 @@ func (is *IstioProvider) toVirtualServices(ctx context.Context, apip *networking
 		if destination == nil {
 			return nil, fmt.Errorf("tag not found in target API")
 		}
-
 		service := v1.Service{}
 		err = is.Client().Get(ctx, types.NamespacedName{Name: destination.Name,
 			Namespace: destination.Namespace},

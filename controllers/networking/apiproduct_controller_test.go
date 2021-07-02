@@ -27,7 +27,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	v12 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -101,12 +101,8 @@ var _ = Describe("APIPRoduct controller", func() {
 
 			start := time.Now()
 
-			// Echo API
-			err := ApplyResources(filepath.Join("..", "..", "utils", "local-deployment", "echo-api.yaml"), k8sClient, testNamespace)
-			Expect(err).ToNot(HaveOccurred())
-
 			// Ingress Provider: Istio
-			err = ApplyResources(filepath.Join("..", "..", "utils", "local-deployment", "istio-manifests", "Base", "Base.yaml"), k8sClient, testNamespace)
+			err := ApplyResources(filepath.Join("..", "..", "utils", "local-deployment", "istio-manifests", "Base", "Base.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
 			err = ApplyResources(filepath.Join("..", "..", "utils", "local-deployment", "istio-manifests", "Base", "Pilot", "Pilot.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
@@ -114,9 +110,11 @@ var _ = Describe("APIPRoduct controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = ApplyResources(filepath.Join("..", "..", "utils", "local-deployment", "istio-manifests", "default-gateway.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "..", "samples", "api1.yaml"), k8sClient, testNamespace)
+			err = ApplyResources(filepath.Join("..", "..", "utils", "local-deployment", "authorino.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "..", "samples", "api2.yaml"), k8sClient, testNamespace)
+			err = ApplyResources(filepath.Join("..", "..", "samples", "secret.yaml"), k8sClient, testNamespace)
+			Expect(err).ToNot(HaveOccurred())
+			err = ApplyResources(filepath.Join("..", "..", "samples", "api1.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
 
 			Eventually(func() bool {
@@ -127,6 +125,10 @@ var _ = Describe("APIPRoduct controller", func() {
 				return err == nil
 			}, 5*time.Minute, 5*time.Second).Should(BeTrue())
 
+			apiObject := apiObject(testNamespace)
+			err = k8sClient.Create(context.Background(), apiObject)
+			Expect(err).ToNot(HaveOccurred())
+
 			// Create APIPRoduct
 			apiProduct := apiProduct(testNamespace)
 			err = k8sClient.Create(context.Background(), apiProduct)
@@ -136,13 +138,15 @@ var _ = Describe("APIPRoduct controller", func() {
 			// Polling will be used
 			Eventually(func() bool {
 				httpClient := &http.Client{}
-				req, err := http.NewRequest("GET", "http://127.0.0.1:9080/cats/cats", nil)
+				req, err := http.NewRequest("GET", "http://127.0.0.1:9080/cats/toys", nil)
 				if err != nil {
 					logf.Log.Info("Error creating HTTP request", "error", err)
 					return false
 				}
 				// Host defined in APIProduct spec
 				req.Host = "petstore.127.0.0.1.nip.io"
+				// api key defined in the secret
+				req.Header.Add("Authorization", "APIKEY JUSTFORDEMOSOBVIOUSLYqDQsqSPMHkRhriEOtcRx")
 				resp, err := httpClient.Do(req)
 				if err != nil {
 					logf.Log.Info("Error on HTTP request", "error", err)
@@ -162,8 +166,47 @@ var _ = Describe("APIPRoduct controller", func() {
 	})
 })
 
+func apiObject(ns string) *networkingv1beta1.API {
+	var port int32 = 80
+	return &networkingv1beta1.API{
+		ObjectMeta: metav1.ObjectMeta{Name: "cats", Namespace: ns},
+		Spec: networkingv1beta1.APISpec{
+			TAGs: []networkingv1beta1.Tag{
+				{
+					Name: "production",
+					Destination: networkingv1beta1.Destination{
+						ServiceReference: &v12.ServiceReference{
+							Name:      "cats-api",
+							Namespace: ns,
+							Port:      &port,
+						},
+						Schema: "http",
+					},
+					APIDefinition: networkingv1beta1.APIDefinition{
+						OAS: `
+openapi: "3.0.0"
+info:
+  title: "toy API"
+  description: "toy API"
+  version: "1.0.0"
+servers:
+  - url: http://toys/
+paths:
+  /toys:
+    get:
+      operationId: "getToys"
+      responses:
+        405:
+          description: "invalid input"
+`,
+					},
+				},
+			},
+		},
+	}
+}
+
 func apiProduct(ns string) *networkingv1beta1.APIProduct {
-	var tmpPort int32 = 80
 	return &networkingv1beta1.APIProduct{
 		ObjectMeta: metav1.ObjectMeta{Name: "apiproduct01", Namespace: ns},
 		Spec: networkingv1beta1.APIProductSpec{
@@ -171,34 +214,32 @@ func apiProduct(ns string) *networkingv1beta1.APIProduct {
 				Description: "My super nice API Product",
 				Owner:       "whoever@mycompany.com",
 			},
-			Environments: []*networkingv1beta1.Environment{
+			Routing: networkingv1beta1.Routing{
+				Hosts: []string{"petstore.127.0.0.1.nip.io"},
+			},
+			APIs: []*networkingv1beta1.APISelector{
 				{
-					Name:  "live",
-					Hosts: []string{"petstore.127.0.0.1.nip.io"},
-					CredentialSources: []*networkingv1beta1.CredentialSource{
-						{Name: "test"},
-					},
-					BackendServers: []*networkingv1beta1.BackendServer{
-						{
-							API: "cats-api",
-							Destination: networkingv1beta1.Destination{
-								ServiceSelector: &apiextensionsv1.ServiceReference{
-									Name:      "echo-api",
-									Namespace: ns,
-									Port:      &tmpPort,
-								},
-							},
-						},
+					Name:      "cats",
+					Namespace: ns,
+					Tag:       "production",
+					Mapping: networkingv1beta1.Mapping{
+						Prefix: "/cats",
 					},
 				},
 			},
 			SecurityScheme: []*networkingv1beta1.SecurityScheme{
-				{Name: "testScheme"},
-			},
-			APIs: []*networkingv1beta1.APISelector{
 				{
-					Name:           "cats-api",
-					PrefixOverride: "/cats",
+					Name: "MyAPIKey",
+					APIKeyAuth: &networkingv1beta1.APIKeyAuth{
+						Location: "authorization_header",
+						Name:     "APIKEY",
+						CredentialSource: networkingv1beta1.APIKeyAuthCredentials{
+							LabelSelectors: map[string]string{
+								"secret.kuadrant.io/managed-by": "authorino",
+								"api":                           "animaltoys",
+							},
+						},
+					},
 				},
 			},
 		},

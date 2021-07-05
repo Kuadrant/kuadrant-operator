@@ -107,38 +107,38 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return result, nil
 	}
 
-	result, err = r.reconcileSpec(ctx, apip)
-	log.Info("spec reconcile done", "result", result, "error", err)
-	if err != nil {
+	specResult, specErr := r.reconcileSpec(ctx, apip)
+	log.Info("spec reconcile done", "result", specResult, "error", specErr)
+	if specErr != nil && specResult.Requeue {
+		log.Info("Reconciling not finished. Requeueing.")
+		return specResult, nil
+	}
+
+	// reconcile status regardless specErr
+	statusResult, statusErr := r.reconcileStatus(ctx, apip)
+	log.Info("status reconcile done", "result", statusResult, "error", statusErr)
+	if statusErr != nil {
 		// Ignore conflicts, resource might just be outdated.
-		if errors.IsConflict(err) {
+		if errors.IsConflict(statusErr) {
 			log.Info("Resource update conflict error. Requeuing...")
 			return ctrl.Result{Requeue: true}, nil
 		}
-		r.EventRecorder().Eventf(apip, corev1.EventTypeWarning, "ReconcileError", "%v", err)
-		return ctrl.Result{}, err
+		return ctrl.Result{}, statusErr
 	}
 
-	if result.Requeue {
-		log.Info("Reconciling not finished. Requeueing.")
-		return result, nil
-	}
-
-	result, err = r.reconcileStatus(ctx, apip)
-	log.Info("status reconcile done", "result", result, "error", err)
-
-	if err != nil {
+	if specErr != nil {
 		// Ignore conflicts, resource might just be outdated.
-		if errors.IsConflict(err) {
+		if errors.IsConflict(specErr) {
 			log.Info("Resource update conflict error. Requeuing...")
 			return ctrl.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{}, err
+		r.EventRecorder().Eventf(apip, corev1.EventTypeWarning, "ReconcileError", "%v", specErr)
+		return ctrl.Result{}, specErr
 	}
 
-	if result.Requeue {
+	if statusResult.Requeue {
 		log.Info("Reconciling not finished. Requeueing.")
-		return result, nil
+		return statusResult, nil
 	}
 
 	return ctrl.Result{}, nil

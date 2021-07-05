@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package networking
+package controllers
 
 import (
 	"path/filepath"
@@ -63,7 +63,7 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
 	}
 
 	clusterCfg, err := testEnv.Start()
@@ -74,9 +74,6 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = apiextensionsv1beta1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = networkingv1beta1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = networkingv1beta1.AddToScheme(scheme.Scheme)
@@ -93,17 +90,28 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).ToNot(HaveOccurred())
 
-	baseReconciler := reconcilers.NewBaseReconciler(
+	apiProductBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		ctrl.Log.WithName("controllers").WithName("kuadrant"),
+		ctrl.Log.WithName("controllers").WithName("kuadrant").WithName("apiproduct"),
 		mgr.GetEventRecorderFor("APIProduct"),
+	)
+
+	serviceBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		ctrl.Log.WithName("controllers").WithName("kuadrant").WithName("service"),
+		mgr.GetEventRecorderFor("Service"),
 	)
 
 	// Register reconcilers
 	err = (&APIProductReconciler{
-		BaseReconciler:  baseReconciler,
-		AuthProvider:    authproviders.GetAuthProvider(baseReconciler),
-		IngressProvider: ingressproviders.GetIngressProvider(baseReconciler),
+		BaseReconciler:  apiProductBaseReconciler,
+		AuthProvider:    authproviders.GetAuthProvider(apiProductBaseReconciler),
+		IngressProvider: ingressproviders.GetIngressProvider(apiProductBaseReconciler),
+	}).SetupWithManager(mgr)
+	Expect(err).ToNot(HaveOccurred())
+
+	err = (&ServiceReconciler{
+		BaseReconciler: serviceBaseReconciler,
 	}).SetupWithManager(mgr)
 	Expect(err).ToNot(HaveOccurred())
 

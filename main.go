@@ -20,8 +20,6 @@ import (
 	"flag"
 	"os"
 
-	"github.com/kuadrant/kuadrant-controller/controllers/discovery"
-
 	corev1 "k8s.io/api/core/v1"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -36,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
-	networkingcontrollers "github.com/kuadrant/kuadrant-controller/controllers/networking"
+	"github.com/kuadrant/kuadrant-controller/controllers"
 	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
@@ -84,25 +82,29 @@ func main() {
 		os.Exit(1)
 	}
 
-	baseReconciler := reconcilers.NewBaseReconciler(
+	apiProductBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		ctrl.Log.WithName("controllers").WithName("kuadrant"),
+		ctrl.Log.WithName("controllers").WithName("kuadrant").WithName("apiproduct"),
 		mgr.GetEventRecorderFor("APIProduct"),
 	)
 
-	if err = (&networkingcontrollers.APIProductReconciler{
-		BaseReconciler:  baseReconciler,
-		AuthProvider:    authproviders.GetAuthProvider(baseReconciler),
-		IngressProvider: ingressproviders.GetIngressProvider(baseReconciler),
+	serviceBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		ctrl.Log.WithName("controllers").WithName("kuadrant").WithName("service"),
+		mgr.GetEventRecorderFor("Service"),
+	)
+
+	if err = (&controllers.APIProductReconciler{
+		BaseReconciler:  apiProductBaseReconciler,
+		AuthProvider:    authproviders.GetAuthProvider(apiProductBaseReconciler),
+		IngressProvider: ingressproviders.GetIngressProvider(apiProductBaseReconciler),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "APIProduct")
 		os.Exit(1)
 	}
 
-	if err = (&discovery.ServiceReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("k8s.io.api").WithName("Service"),
-		Scheme: mgr.GetScheme(),
+	if err = (&controllers.ServiceReconciler{
+		BaseReconciler: serviceBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Service")
 		os.Exit(1)

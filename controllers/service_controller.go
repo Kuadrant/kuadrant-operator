@@ -14,41 +14,33 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package discovery
+package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 
-	"k8s.io/apimachinery/pkg/types"
-
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
-
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	"k8s.io/apimachinery/pkg/api/errors"
-
-	corev1 "k8s.io/api/core/v1"
-
-	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
+	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
 
 const kuadrantDiscoveryLabel = "discovery.kuadrant.io/enabled"
 
 // ServiceReconciler reconciles a Service object
 type ServiceReconciler struct {
-	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	*reconcilers.BaseReconciler
 }
 
 //+kubebuilder:rbac:groups=core,resources=services;configmaps,verbs=get;list;watch
@@ -63,18 +55,27 @@ type ServiceReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.2/pkg/reconcile
 func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Log.WithValues("service", req.NamespacedName)
-	service := corev1.Service{}
-	err := r.Client.Get(ctx, req.NamespacedName, &service)
+	log := r.Logger().WithValues("service", req.NamespacedName)
+	log.Info("Reconciling kuadrant service")
+
+	service := &corev1.Service{}
+	err := r.Client().Get(ctx, req.NamespacedName, service)
 
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("resource not found. handling possible deletion.")
+		log.Info("resource not found. Ignoring since object must have been deleted")
 		//TODO(jmprusi): Handle deletion of the Service. I guess using an OwnerReference could work for now.
 		return ctrl.Result{}, nil
 	} else if err != nil {
 		return ctrl.Result{}, err
 	}
-	log.Info("reconciling", service.GetNamespace(), service.GetName())
+
+	if log.V(1).Enabled() {
+		jsonData, err := json.MarshalIndent(service, "", "  ")
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		log.V(1).Info(string(jsonData))
+	}
 
 	// Let's generate the API object based on the Service annotations
 	//TODO(jmprusi): If the user changes the api-name annotation, there will be a dangling API object. Fix this.
@@ -84,21 +85,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	currentAPI := v1beta1.API{}
-	err = r.Client.Get(ctx, client.ObjectKeyFromObject(desiredAPI), &currentAPI)
-	if err != nil && errors.IsNotFound(err) {
-		//TODO(jmprusi): Set owner reference!
-		err := r.Client.Create(ctx, desiredAPI)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
-	} else if err != nil {
-		return ctrl.Result{}, err
-	}
-	// TODO(jmprusi): Compare.. Update the API etc.
-	desiredAPI.ResourceVersion = currentAPI.ResourceVersion
-	err = r.Client.Update(ctx, desiredAPI)
+	err = r.ReconcileResource(ctx, &v1beta1.API{}, desiredAPI, alwaysUpdateAPI)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -106,7 +93,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return ctrl.Result{}, nil
 }
 
-func (r *ServiceReconciler) APIFromAnnotations(ctx context.Context, service corev1.Service) (*v1beta1.API, error) {
+func (r *ServiceReconciler) APIFromAnnotations(ctx context.Context, service *corev1.Service) (*v1beta1.API, error) {
 	//Supported Annotations for now:
 	//discovery.kuadrant.io/scheme: "https"
 	//discovery.kuadrant.io/api-name: "dogs-api"
@@ -173,7 +160,7 @@ func (r *ServiceReconciler) APIFromAnnotations(ctx context.Context, service core
 
 	// Ok, let's get the configmap referenced by the annotation.
 	oasConfigmap := corev1.ConfigMap{}
-	err := r.Client.Get(ctx, types.NamespacedName{
+	err := r.Client().Get(ctx, types.NamespacedName{
 		Namespace: service.Namespace,
 		Name:      oasConfigmapName,
 	}, &oasConfigmap)
@@ -243,4 +230,18 @@ func onlyLabeledServices() predicate.Predicate {
 			return ok
 		},
 	}
+}
+
+func alwaysUpdateAPI(existingObj, desiredObj client.Object) (bool, error) {
+	existing, ok := existingObj.(*v1beta1.API)
+	if !ok {
+		return false, fmt.Errorf("%T is not a *v1beta1.API", existingObj)
+	}
+	desired, ok := desiredObj.(*v1beta1.API)
+	if !ok {
+		return false, fmt.Errorf("%T is not a *v1beta1.API", desiredObj)
+	}
+
+	existing.Spec = desired.Spec
+	return true, nil
 }

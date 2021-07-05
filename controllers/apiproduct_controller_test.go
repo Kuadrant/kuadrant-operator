@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package networking
+package controllers
 
 import (
 	"context"
@@ -27,7 +27,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
-	v12 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -102,19 +101,19 @@ var _ = Describe("APIPRoduct controller", func() {
 			start := time.Now()
 
 			// Ingress Provider: Istio
-			err := ApplyResources(filepath.Join("..", "..", "utils", "local-deployment", "istio-manifests", "Base", "Base.yaml"), k8sClient, testNamespace)
+			err := ApplyResources(filepath.Join("..", "utils", "local-deployment", "istio-manifests", "Base", "Base.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "..", "utils", "local-deployment", "istio-manifests", "Base", "Pilot", "Pilot.yaml"), k8sClient, testNamespace)
+			err = ApplyResources(filepath.Join("..", "utils", "local-deployment", "istio-manifests", "Base", "Pilot", "Pilot.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "..", "utils", "local-deployment", "istio-manifests", "Base", "Pilot", "IngressGateways", "IngressGateways.yaml"), k8sClient, testNamespace)
+			err = ApplyResources(filepath.Join("..", "utils", "local-deployment", "istio-manifests", "Base", "Pilot", "IngressGateways", "IngressGateways.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "..", "utils", "local-deployment", "istio-manifests", "default-gateway.yaml"), k8sClient, testNamespace)
+			err = ApplyResources(filepath.Join("..", "utils", "local-deployment", "istio-manifests", "default-gateway.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "..", "utils", "local-deployment", "authorino.yaml"), k8sClient, testNamespace)
+			err = ApplyResources(filepath.Join("..", "utils", "local-deployment", "authorino.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "..", "samples", "secret.yaml"), k8sClient, testNamespace)
+			err = ApplyResources(filepath.Join("..", "samples", "secret.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "..", "samples", "api1.yaml"), k8sClient, testNamespace)
+			err = ApplyResources(filepath.Join("..", "samples", "api1.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
 
 			Eventually(func() bool {
@@ -124,10 +123,6 @@ var _ = Describe("APIPRoduct controller", func() {
 				}
 				return err == nil
 			}, 5*time.Minute, 5*time.Second).Should(BeTrue())
-
-			apiObject := apiObject(testNamespace)
-			err = k8sClient.Create(context.Background(), apiObject)
-			Expect(err).ToNot(HaveOccurred())
 
 			// Create APIPRoduct
 			apiProduct := apiProduct(testNamespace)
@@ -165,46 +160,6 @@ var _ = Describe("APIPRoduct controller", func() {
 		})
 	})
 })
-
-func apiObject(ns string) *networkingv1beta1.API {
-	var port int32 = 80
-	return &networkingv1beta1.API{
-		ObjectMeta: metav1.ObjectMeta{Name: "cats", Namespace: ns},
-		Spec: networkingv1beta1.APISpec{
-			TAGs: []networkingv1beta1.Tag{
-				{
-					Name: "production",
-					Destination: networkingv1beta1.Destination{
-						ServiceReference: &v12.ServiceReference{
-							Name:      "cats-api",
-							Namespace: ns,
-							Port:      &port,
-						},
-						Schema: "http",
-					},
-					APIDefinition: networkingv1beta1.APIDefinition{
-						OAS: `
-openapi: "3.0.0"
-info:
-  title: "toy API"
-  description: "toy API"
-  version: "1.0.0"
-servers:
-  - url: http://toys/
-paths:
-  /toys:
-    get:
-      operationId: "getToys"
-      responses:
-        405:
-          description: "invalid input"
-`,
-					},
-				},
-			},
-		},
-	}
-}
 
 func apiProduct(ns string) *networkingv1beta1.APIProduct {
 	return &networkingv1beta1.APIProduct{

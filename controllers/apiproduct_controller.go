@@ -22,8 +22,11 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
@@ -69,11 +72,6 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		log.V(1).Info(string(jsonData))
 	}
 
-	if apip.Status.Ready && apip.Status.ObservedGen == apip.GetGeneration() {
-		log.Info("nothing to be done")
-		return ctrl.Result{}, nil
-	}
-
 	// APIProduct has been marked for deletion
 	if apip.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(apip, finalizerName) {
 		err := r.IngressProvider.Delete(ctx, apip)
@@ -100,7 +98,16 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	result, err := r.reconcileSpec(ctx, apip)
+	result, err := r.setDefaults(ctx, apip)
+	log.Info("set defaults", "error", err, "result", result)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if result.Requeue {
+		return result, nil
+	}
+
+	result, err = r.reconcileSpec(ctx, apip)
 	log.Info("spec reconcile done", "result", result, "error", err)
 	if err != nil {
 		// Ignore conflicts, resource might just be outdated.
@@ -183,9 +190,52 @@ func (r *APIProductReconciler) reconcileStatus(ctx context.Context, apip *networ
 	return ctrl.Result{}, nil
 }
 
+func (r *APIProductReconciler) setDefaults(ctx context.Context, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
+	changed, err := r.reconcileAPIProductLabels(ctx, apip)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if changed {
+		err = r.UpdateResource(ctx, apip)
+	}
+
+	return ctrl.Result{Requeue: changed}, err
+}
+
+func (r *APIProductReconciler) reconcileAPIProductLabels(ctx context.Context, apip *networkingv1beta1.APIProduct) (bool, error) {
+	apiUIDs, err := r.getAPIUIDs(ctx, apip)
+	if err != nil {
+		return false, err
+	}
+
+	return replaceAPILabels(apip, apiUIDs), nil
+}
+
+func (r *APIProductReconciler) getAPIUIDs(ctx context.Context, apip *networkingv1beta1.APIProduct) ([]string, error) {
+	uids := []string{}
+	for _, apiSel := range apip.Spec.APIs {
+		api := &networkingv1beta1.API{}
+		err := r.Client().Get(ctx, types.NamespacedName{Namespace: apiSel.Namespace, Name: apiSel.Name}, api)
+		if err != nil {
+			return nil, err
+		}
+		uids = append(uids, string(api.GetUID()))
+	}
+	return uids, nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *APIProductReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	apiEventMapper := &APIProductAPIEventMapper{
+		K8sClient: r.Client(),
+		Logger:    r.Logger().WithName("apiHandler"),
+	}
 	return ctrl.NewControllerManagedBy(mgr).
+		Watches(
+			&source.Kind{Type: &networkingv1beta1.API{}},
+			handler.EnqueueRequestsFromMapFunc(apiEventMapper.Map),
+		).
 		For(&networkingv1beta1.APIProduct{}).
 		Complete(r)
 }

@@ -140,6 +140,8 @@ func CreateOrUpdateK8SObject(obj runtime.Object, k8sClient client.Client) error 
 	return k8sClient.Update(context.Background(), k8sObjCopy)
 }
 
+// TODO(eastizle): Generalize this method to be useful for any context.
+// number of deployments or deployment list should be passed as argument.
 func CheckForDeploymentsReady(ns string, k8sClient client.Client) error {
 	deploymentList := &appsv1.DeploymentList{}
 	listOptions := &client.ListOptions{}

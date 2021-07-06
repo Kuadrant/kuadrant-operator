@@ -49,6 +49,16 @@ type APISpec struct {
 	TAGs []Tag `json:"tags"`
 }
 
+func (a *APISpec) Tag(tag string) (Tag, bool) {
+	for i := range a.TAGs {
+		if a.TAGs[i].Name == tag {
+			return a.TAGs[i], true
+		}
+	}
+
+	return Tag{}, false
+}
+
 type APIDefinition struct {
 	OAS string `json:"oas"`
 }

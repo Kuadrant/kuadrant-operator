@@ -19,7 +19,6 @@ package istioprovider
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -29,7 +28,6 @@ import (
 	v1beta13 "istio.io/api/type/v1beta1"
 	istio "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioSecurity "istio.io/client-go/pkg/apis/security/v1beta1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -78,7 +76,7 @@ func (is *IstioProvider) Reconcile(ctx context.Context, apip *networkingv1beta1.
 	log := is.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
 	log.V(1).Info("Reconcile")
 
-	virtualService, err := is.toVirtualServices(ctx, apip)
+	virtualService, err := is.virtualServiceFromAPIProduct(ctx, apip)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -172,129 +170,44 @@ func getOwnerReference(virtualService *istio.VirtualService) metav1.OwnerReferen
 	}
 }
 
-// TODO(jmprusi): Pending refactor...
-func (is *IstioProvider) toVirtualServices(ctx context.Context, apip *networkingv1beta1.APIProduct) (*istio.VirtualService, error) {
-	httpRoutes := make([]*v1alpha3.HTTPRoute, 0)
-	virtualService := istio.VirtualService{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "VirtualService",
-			APIVersion: "networking.istio.io/v1alpha3",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      apip.Name + apip.Namespace,
-			Namespace: KuadrantNamespace,
-		},
-		Spec: v1alpha3.VirtualService{
-			Gateways: []string{"kuadrant-gateway"},
-			Hosts:    apip.Spec.Routing.Hosts,
-		},
-	}
+func (is *IstioProvider) virtualServiceFromAPIProduct(ctx context.Context, apip *networkingv1beta1.APIProduct) (*istio.VirtualService, error) {
+	httpRoutes := []*v1alpha3.HTTPRoute{}
 	for _, apiSel := range apip.Spec.APIs {
-		// Try to get the API object from k8s.
-		api := &networkingv1beta1.API{}
-		err := is.Client().Get(ctx, types.NamespacedName{
-			Namespace: apiSel.Namespace,
-			Name:      apiSel.Name,
-		}, api)
+		apiHTTPRoutes, err := is.apiHTTPRoutes(ctx, apiSel)
 		if err != nil {
 			return nil, err
 		}
-
-		destination := &networkingv1beta1.Destination{}
-		// TODO(jmprusi): improve by making a map and pushing this logic to the API def
-		for i := range api.Spec.TAGs {
-			if api.Spec.TAGs[i].Name == apiSel.Tag {
-				destination = &api.Spec.TAGs[i].Destination
-				break
-			}
-		}
-		if destination == nil {
-			return nil, fmt.Errorf("tag not found in target API")
-		}
-		service := v1.Service{}
-		err = is.Client().Get(ctx, types.NamespacedName{Name: destination.Name,
-			Namespace: destination.Namespace},
-			&service)
-		if err != nil {
-			return nil, err
-		}
-
-		// TODO(jmprusi): Get the actual internal cluster hostname instead of hardcoding it.
-		istioDestination := v1alpha3.HTTPRouteDestination{
-			Destination: &v1alpha3.Destination{
-				Host: service.Name + "." + service.Namespace + ".svc.cluster.local",
-				Port: &v1alpha3.PortSelector{
-					Number: uint32(*destination.Port),
-				},
-			},
-		}
-
-		// TODO(jmprusi): All the OAS logic should be encapsulated into the API type.
-		wantedTag := networkingv1beta1.Tag{}
-		found := false
-		for _, tagInfo := range api.Spec.TAGs {
-			if tagInfo.Name == apiSel.Tag {
-				wantedTag = tagInfo
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, fmt.Errorf("tag %s not found", apiSel.Tag)
-		}
-
-		loader := openapi3.Loader{Context: ctx}
-		doc, err := loader.LoadFromData([]byte(wantedTag.APIDefinition.OAS))
-		if err != nil {
-			return nil, err
-		}
-
-		// TODO(jmprusi): Getting one of the hosts from the OpenAPISpec... extract this logic and improve.
-		serverURL := doc.Servers[0].URL
-		u, err := url.Parse(serverURL)
-		if err != nil {
-			return nil, err
-		}
-		apiHost := u.Host
-
-		for path, pathItem := range doc.Paths {
-			for opVerb, operation := range pathItem.Operations() {
-				//TODO(jmprusi): Right now we are ignoring the security field of the operation, we should review this.
-				matchPath := path
-				httpRoute := v1alpha3.HTTPRoute{
-					Name: operation.OperationID,
-					// Here we are rewriting the auhtority of the request to one of the hosts in the API definition.
-					// TODO(jmprusi): Is this something expected? should we allow for a host override?
-					Rewrite: &v1alpha3.HTTPRewrite{
-						Authority: apiHost,
-					},
-				}
-				// Handle Prefix Override.
-				if apiSel.Mapping.Prefix != "" {
-					// If there's an Override, lets append it to the actual Operation Path.
-					matchPath = apiSel.Mapping.Prefix + path
-					// We need to rewrite the path, to match what the service expects, basically,
-					// removing the prefixOverride
-					httpRoute.Rewrite.Uri = path
-				}
-
-				httpRoute.Match = []*v1alpha3.HTTPMatchRequest{
-					{
-						Uri: &v1alpha3.StringMatch{
-							MatchType: &v1alpha3.StringMatch_Prefix{Prefix: matchPath},
-						},
-						Method: &v1alpha3.StringMatch{
-							MatchType: &v1alpha3.StringMatch_Exact{Exact: opVerb},
-						},
-					},
-				}
-				httpRoute.Route = []*v1alpha3.HTTPRouteDestination{&istioDestination}
-				httpRoutes = append(httpRoutes, &httpRoute)
-			}
-		}
+		httpRoutes = append(httpRoutes, apiHTTPRoutes...)
 	}
-	virtualService.Spec.Http = httpRoutes
-	return &virtualService, nil
+
+	factory := VirtualServiceFactory{
+		ObjectName: apip.Name + apip.Namespace,
+		Namespace:  KuadrantNamespace,
+		Hosts:      apip.Spec.Routing.Hosts,
+		HTTPRoutes: httpRoutes,
+	}
+
+	return factory.VirtualService(), nil
+}
+
+func (is *IstioProvider) apiHTTPRoutes(ctx context.Context, apiSel *networkingv1beta1.APISelector) ([]*v1alpha3.HTTPRoute, error) {
+	api := &networkingv1beta1.API{}
+	err := is.Client().Get(ctx, types.NamespacedName{Namespace: apiSel.Namespace, Name: apiSel.Name}, api)
+	if err != nil {
+		return nil, err
+	}
+
+	tag, ok := api.Spec.Tag(apiSel.Tag)
+	if !ok {
+		return nil, fmt.Errorf("tag %s not found in target API %s:%s", apiSel.Tag, apiSel.Namespace, apiSel.Name)
+	}
+
+	doc, err := openapi3.NewLoader().LoadFromData([]byte(tag.APIDefinition.OAS))
+	if err != nil {
+		return nil, err
+	}
+
+	return HTTPRoutesFromOAS(doc, apiSel.Mapping.Prefix, tag)
 }
 
 func (is *IstioProvider) Status(ctx context.Context, apip *networkingv1beta1.APIProduct) (bool, error) {

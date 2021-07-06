@@ -17,13 +17,17 @@ limitations under the License.
 package common
 
 import (
+	"encoding/json"
 	"fmt"
+	"sort"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	DeleteTagAnnotation = "kuadrant.io//delete"
+	DeleteTagAnnotation      = "kuadrant.io/delete"
+	ReadyStatusConditionType = "Ready"
 )
 
 func ObjectInfo(obj client.Object) string {
@@ -48,4 +52,19 @@ func IsObjectTaggedToDelete(obj client.Object) bool {
 
 	annotation, ok := annotations[DeleteTagAnnotation]
 	return ok && annotation == "true"
+}
+
+// StatusConditionsMarshalJSON marshals the list of conditions as a JSON array, sorted by
+// condition type.
+func StatusConditionsMarshalJSON(input []metav1.Condition) ([]byte, error) {
+	conds := make([]metav1.Condition, len(input))
+	for idx := range input {
+		conds = append(conds, input[idx])
+	}
+
+	sort.Slice(conds, func(a, b int) bool {
+		return conds[a].Type < conds[b].Type
+	})
+
+	return json.Marshal(conds)
 }

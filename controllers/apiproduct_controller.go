@@ -98,15 +98,6 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	result, err := r.setDefaults(ctx, apip)
-	log.Info("set defaults", "error", err, "result", result)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if result.Requeue {
-		return result, nil
-	}
-
 	specResult, specErr := r.reconcileSpec(ctx, apip)
 	log.Info("spec reconcile done", "result", specResult, "error", specErr)
 	if specErr != nil && specResult.Requeue {
@@ -115,12 +106,12 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// reconcile status regardless specErr
-	statusResult, statusErr := r.reconcileStatus(ctx, apip)
+	statusResult, statusErr := r.reconcileStatus(ctx, log, apip)
 	log.Info("status reconcile done", "result", statusResult, "error", statusErr)
 	if statusErr != nil {
 		// Ignore conflicts, resource might just be outdated.
 		if errors.IsConflict(statusErr) {
-			log.Info("Resource update conflict error. Requeuing...")
+			log.Info("Failed to update status: resource might just be outdated")
 			return ctrl.Result{Requeue: true}, nil
 		}
 		return ctrl.Result{}, statusErr
@@ -145,7 +136,12 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func (r *APIProductReconciler) reconcileSpec(ctx context.Context, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
-	res, err := r.IngressProvider.Reconcile(ctx, apip)
+	res, err := r.setDefaults(ctx, apip)
+	if err != nil || res.Requeue {
+		return res, err
+	}
+
+	res, err = r.IngressProvider.Reconcile(ctx, apip)
 	if err != nil || res.Requeue {
 		return res, err
 	}
@@ -153,38 +149,6 @@ func (r *APIProductReconciler) reconcileSpec(ctx context.Context, apip *networki
 	res, err = r.AuthProvider.Reconcile(ctx, apip)
 	if err != nil || res.Requeue {
 		return res, err
-	}
-
-	return ctrl.Result{}, nil
-}
-
-func (r *APIProductReconciler) reconcileStatus(ctx context.Context, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
-	ingressOK, err := r.IngressProvider.Status(ctx, apip)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	authOK, err := r.IngressProvider.Status(ctx, apip)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	//Mark the object as ready if both provider are OK.
-	if ingressOK && authOK {
-		apip.Status.Ready = true
-		apip.Status.ObservedGen = apip.GetGeneration()
-		err := r.UpdateResourceStatus(ctx, apip)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-	} else {
-		apip.Status.Ready = false
-		apip.Status.ObservedGen = apip.GetGeneration()
-		err := r.UpdateResourceStatus(ctx, apip)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
 	}
 
 	return ctrl.Result{}, nil

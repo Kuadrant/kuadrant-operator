@@ -17,8 +17,12 @@ limitations under the License.
 package v1beta1
 
 import (
+	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
 	v12 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/kuadrant/kuadrant-controller/pkg/common"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -38,9 +42,35 @@ type APIProductSpec struct {
 type APIProductStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	// TODO(jmprusi): use proper conditions to give feedback to the user
+
+	// Conditions represent the latest available observations of an object's state
+	// Known .status.conditions.type are: "Ready"
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+
 	ObservedGen int64 `json:"observedgen"`
-	Ready       bool  `json:"ready"`
+}
+
+func (a *APIProductStatus) Equals(other *APIProductStatus, logger logr.Logger) bool {
+	if a.ObservedGen != other.ObservedGen {
+		diff := cmp.Diff(a.ObservedGen, other.ObservedGen)
+		logger.V(1).Info("status.ObservedGen not equal", "difference", diff)
+		return false
+	}
+
+	// Conditions
+	currentMarshaledJSON, _ := common.StatusConditionsMarshalJSON(a.Conditions)
+	otherMarshaledJSON, _ := common.StatusConditionsMarshalJSON(other.Conditions)
+	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
+		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
+		logger.V(1).Info("Conditions not equal", "difference", diff)
+		return false
+	}
+
+	return true
 }
 
 //+kubebuilder:object:root=true

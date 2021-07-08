@@ -22,8 +22,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -100,7 +100,7 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	specResult, specErr := r.reconcileSpec(ctx, apip)
 	log.Info("spec reconcile done", "result", specResult, "error", specErr)
-	if specErr != nil && specResult.Requeue {
+	if specErr == nil && specResult.Requeue {
 		log.Info("Reconciling not finished. Requeueing.")
 		return specResult, nil
 	}
@@ -177,10 +177,13 @@ func (r *APIProductReconciler) reconcileAPIProductLabels(ctx context.Context, ap
 }
 
 func (r *APIProductReconciler) getAPIUIDs(ctx context.Context, apip *networkingv1beta1.APIProduct) ([]string, error) {
+	log := r.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
+
 	uids := []string{}
 	for _, apiSel := range apip.Spec.APIs {
 		api := &networkingv1beta1.API{}
-		err := r.Client().Get(ctx, types.NamespacedName{Namespace: apiSel.Namespace, Name: apiSel.Name}, api)
+		err := r.Client().Get(ctx, apiSel.APINamespacedName(), api)
+		log.V(1).Info("get API", "objectKey", apiSel.APINamespacedName(), "error", err)
 		if err != nil {
 			return nil, err
 		}

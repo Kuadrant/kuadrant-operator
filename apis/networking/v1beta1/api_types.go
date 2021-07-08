@@ -17,7 +17,12 @@ limitations under the License.
 package v1beta1
 
 import (
+	"fmt"
+
+	apiextentionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	gatewayapiv1alpha1 "sigs.k8s.io/gateway-api/apis/v1alpha1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -26,63 +31,33 @@ import (
 // TODO: API definition is missing kubebuilder annotations for validation, add them.
 // TODO: Add proper comments for each of the API fields and Structs, so we can create proper docs.
 
-type APIKeyAuthSecurityParameters struct {
-	Name     string `json:"name,omitempty"`
-	Required *bool  `json:"required,omitempty"`
+const (
+	APIKind = "API"
+)
+
+type Destination struct {
+	Schema                           string `json:"schema,omitempty"`
+	apiextentionsv1.ServiceReference `json:"serviceReference"`
 }
 
-type OpenIDConnectAuthSecurityParameters struct {
-	Name     string   `json:"name,omitempty"`
-	Required *bool    `json:"required,omitempty"`
-	Scopes   []string `json:"scopes,omitempty"`
+func (d Destination) NamespacedName() types.NamespacedName {
+	return types.NamespacedName{Namespace: d.Namespace, Name: d.Name}
 }
 
-type SecurityRequirement struct {
-	APIKeyAuth        map[string]APIKeyAuthSecurityParameters        `json:"apiKeyAuth,omitempty"`
-	OpenIDConnectAuth map[string]OpenIDConnectAuthSecurityParameters `json:"openIDConnectAuth,omitempty"`
-}
+type APIMappings struct {
+	// Inline OAS
+	// +optional
+	OAS *string `json:"OAS,omitempty"`
 
-type SecurityRequirements []SecurityRequirement
+	// Select a HTTP route by matching the HTTP request path.
+	// +optional
+	HTTPPathMatch *gatewayapiv1alpha1.HTTPPathMatch `json:"HTTPPathMatch,omitempty"`
+}
 
 // APISpec defines the desired state of API
 type APISpec struct {
-	TAGs []Tag `json:"tags"`
-}
-
-func (a *APISpec) Tag(tag string) (Tag, bool) {
-	for i := range a.TAGs {
-		if a.TAGs[i].Name == tag {
-			return a.TAGs[i], true
-		}
-	}
-
-	return Tag{}, false
-}
-
-type APIDefinition struct {
-	OAS string `json:"oas"`
-}
-
-type Tag struct {
-	Name          string        `json:"name"`
-	Destination   Destination   `json:"destination"`
-	APIDefinition APIDefinition `json:"api_definition"`
-}
-
-type SecurityScheme struct {
-	Name              string             `json:"name"`
-	APIKeyAuth        *APIKeyAuth        `json:"apiKeyAuth,omitempty"`
-	OpenIDConnectAuth *OpenIDConnectAuth `json:"openIDConnectAuth,omitempty"`
-}
-
-type APIKeyAuth struct {
-	Location         string                `json:"location"`
-	Name             string                `json:"name"`
-	CredentialSource APIKeyAuthCredentials `json:"credential_source"`
-}
-
-type OpenIDConnectAuth struct {
-	URL string `json:"url"`
+	Destination Destination `json:"destination"`
+	Mappings    APIMappings `json:"mappings"`
 }
 
 // APIStatus defines the observed state of API
@@ -101,6 +76,10 @@ type API struct {
 
 	Spec   APISpec   `json:"spec,omitempty"`
 	Status APIStatus `json:"status,omitempty"`
+}
+
+func APIObjectName(base, tag string) string {
+	return fmt.Sprintf("%s.%s", base, tag)
 }
 
 // +kubebuilder:object:root=true

@@ -28,12 +28,14 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
+	"github.com/kuadrant/kuadrant-controller/pkg/common"
 )
 
 var _ = Describe("APIPRoduct controller", func() {
@@ -115,6 +117,8 @@ var _ = Describe("APIPRoduct controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = ApplyResources(filepath.Join("..", "samples", "api1.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
+			err = ApplyResources(filepath.Join("..", "samples", "api2.yaml"), k8sClient, testNamespace)
+			Expect(err).ToNot(HaveOccurred())
 
 			Eventually(func() bool {
 				err := CheckForDeploymentsReady(testNamespace, k8sClient)
@@ -129,11 +133,42 @@ var _ = Describe("APIPRoduct controller", func() {
 			err = k8sClient.Create(context.Background(), apiProduct)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Currently APIProduct status is not implemented to check availability
-			// Polling will be used
+			Eventually(func() bool {
+				ready, err := CheckForAPiProductReady(apiProduct, k8sClient)
+				if err != nil {
+					logf.Log.Info("Waiting for apiproduct availability", "err", err)
+					return false
+				}
+				return ready
+			}, 5*time.Minute, 5*time.Second).Should(BeTrue())
+
 			Eventually(func() bool {
 				httpClient := &http.Client{}
 				req, err := http.NewRequest("GET", "http://127.0.0.1:9080/cats/toys", nil)
+				if err != nil {
+					logf.Log.Info("Error creating HTTP request", "error", err)
+					return false
+				}
+				// Host defined in APIProduct spec
+				req.Host = "petstore.127.0.0.1.nip.io"
+				// api key defined in the secret
+				req.Header.Add("Authorization", "APIKEY JUSTFORDEMOSOBVIOUSLYqDQsqSPMHkRhriEOtcRx")
+				resp, err := httpClient.Do(req)
+				if err != nil {
+					logf.Log.Info("Error on HTTP request", "error", err)
+					return false
+				}
+				if resp.StatusCode != 200 {
+					logf.Log.Info("Expecting HTTP response status code 200", "received status code", resp.StatusCode)
+					return false
+				}
+
+				return true
+			}, 5*time.Minute, 5*time.Second).Should(BeTrue())
+
+			Eventually(func() bool {
+				httpClient := &http.Client{}
+				req, err := http.NewRequest("GET", "http://127.0.0.1:9080/dogs/whatever", nil)
 				if err != nil {
 					logf.Log.Info("Error creating HTTP request", "error", err)
 					return false
@@ -162,7 +197,12 @@ var _ = Describe("APIPRoduct controller", func() {
 })
 
 func apiProduct(ns string) *networkingv1beta1.APIProduct {
+	tag := "production"
 	return &networkingv1beta1.APIProduct{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       networkingv1beta1.APIProductKind,
+			APIVersion: networkingv1beta1.GroupVersion.String(),
+		},
 		ObjectMeta: metav1.ObjectMeta{Name: "apiproduct01", Namespace: ns},
 		Spec: networkingv1beta1.APIProductSpec{
 			Information: networkingv1beta1.ProductInformation{
@@ -176,9 +216,17 @@ func apiProduct(ns string) *networkingv1beta1.APIProduct {
 				{
 					Name:      "cats",
 					Namespace: ns,
-					Tag:       "production",
+					Tag:       &tag,
 					Mapping: networkingv1beta1.Mapping{
 						Prefix: "/cats",
+					},
+				},
+				{
+					Name:      "dogs",
+					Namespace: ns,
+					Tag:       &tag,
+					Mapping: networkingv1beta1.Mapping{
+						Prefix: "/dogs",
 					},
 				},
 			},
@@ -199,4 +247,14 @@ func apiProduct(ns string) *networkingv1beta1.APIProduct {
 			},
 		},
 	}
+}
+
+func CheckForAPiProductReady(apiproduct *networkingv1beta1.APIProduct, k8sClient client.Client) (bool, error) {
+	existing := &networkingv1beta1.APIProduct{}
+	err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(apiproduct), existing)
+	if err != nil {
+		return false, err
+	}
+
+	return meta.IsStatusConditionTrue(existing.Status.Conditions, common.ReadyStatusConditionType), nil
 }

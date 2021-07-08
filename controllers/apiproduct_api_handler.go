@@ -35,8 +35,6 @@ type APIProductAPIEventMapper struct {
 }
 
 func (a *APIProductAPIEventMapper) Map(obj client.Object) []reconcile.Request {
-	a.Logger.V(1).Info("Processing object", "Name", obj.GetName(), "Namespace", obj.GetNamespace())
-
 	apiProductList := &networkingv1beta1.APIProductList{}
 	// all namespaces
 	// filter by API UID
@@ -45,6 +43,8 @@ func (a *APIProductAPIEventMapper) Map(obj client.Object) []reconcile.Request {
 		a.Logger.Error(err, "reading apiproduct list")
 		return nil
 	}
+
+	a.Logger.V(1).Info("Processing object", "key", client.ObjectKeyFromObject(obj), "accepted", len(apiProductList.Items) > 0)
 
 	requests := []reconcile.Request{}
 	for idx := range apiProductList.Items {

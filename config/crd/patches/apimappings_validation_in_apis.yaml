@@ -1,0 +1,9 @@
+# The following patch adds `anyOf` OpenAPI
+# validation for the APIMappings of API CRD
+# Ay the moment of writing this (2021-07-06) kubebuilder
+# does not support `anyOf` statement OpenAPI validation
+- op: add
+  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/mappings/anyOf
+  value:
+    - required: ["OAS"]
+    - required: ["HTTPPathMatch"]

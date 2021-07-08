@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-logr/logr"
 	"istio.io/api/networking/v1alpha3"
 	v1beta12 "istio.io/api/security/v1beta1"
@@ -30,7 +29,6 @@ import (
 	istioSecurity "istio.io/client-go/pkg/apis/security/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -192,22 +190,16 @@ func (is *IstioProvider) virtualServiceFromAPIProduct(ctx context.Context, apip 
 
 func (is *IstioProvider) apiHTTPRoutes(ctx context.Context, apiSel *networkingv1beta1.APISelector) ([]*v1alpha3.HTTPRoute, error) {
 	api := &networkingv1beta1.API{}
-	err := is.Client().Get(ctx, types.NamespacedName{Namespace: apiSel.Namespace, Name: apiSel.Name}, api)
+	err := is.Client().Get(ctx, apiSel.APINamespacedName(), api)
 	if err != nil {
 		return nil, err
 	}
 
-	tag, ok := api.Spec.Tag(apiSel.Tag)
-	if !ok {
-		return nil, fmt.Errorf("tag %s not found in target API %s:%s", apiSel.Tag, apiSel.Namespace, apiSel.Name)
+	if api.Spec.Mappings.OAS != nil {
+		return HTTPRoutesFromOAS(*api.Spec.Mappings.OAS, apiSel.Mapping.Prefix, api.Spec.Destination)
 	}
 
-	doc, err := openapi3.NewLoader().LoadFromData([]byte(tag.APIDefinition.OAS))
-	if err != nil {
-		return nil, err
-	}
-
-	return HTTPRoutesFromOAS(doc, apiSel.Mapping.Prefix, tag)
+	return HTTPRoutesFromPath(api.Spec.Mappings.HTTPPathMatch, apiSel.Mapping.Prefix, api.Spec.Destination)
 }
 
 func (is *IstioProvider) Status(ctx context.Context, apip *networkingv1beta1.APIProduct) (bool, error) {

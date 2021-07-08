@@ -55,7 +55,6 @@ spec:
                   required:
                   - name
                   - namespace
-                  - tag
                   type: object
                 type: array
               information:

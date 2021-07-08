@@ -19,14 +19,71 @@ package v1beta1
 import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
-	v12 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+const (
+	APIProductKind = "APIProduct"
+)
+
+type OpenIDConnectAuth struct {
+	URL string `json:"url"`
+}
+
+type APIKeyAuthCredentials struct {
+	LabelSelectors map[string]string `json:"labelSelectors"`
+}
+
+type APIKeyAuth struct {
+	Location         string                `json:"location"`
+	Name             string                `json:"name"`
+	CredentialSource APIKeyAuthCredentials `json:"credential_source"`
+}
+
+type SecurityScheme struct {
+	Name              string             `json:"name"`
+	APIKeyAuth        *APIKeyAuth        `json:"apiKeyAuth,omitempty"`
+	OpenIDConnectAuth *OpenIDConnectAuth `json:"openIDConnectAuth,omitempty"`
+}
+
+type ProductInformation struct {
+	Description string `json:"description"`
+	Owner       string `json:"owner"`
+}
+
+type Routing struct {
+	Hosts  []string `json:"hosts"`
+	Expose bool     `json:"expose"`
+}
+
+type Mapping struct {
+	Prefix string `json:"prefix"`
+}
+
+type APISelector struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+
+	// +optional
+	Tag *string `json:"tag,omitempty"`
+
+	Mapping Mapping `json:"mapping,omitempty"`
+}
+
+func (a *APISelector) APINamespacedName() types.NamespacedName {
+	name := a.Name
+	if a.Tag != nil {
+		name = APIObjectName(a.Name, *a.Tag)
+	}
+
+	return types.NamespacedName{Namespace: a.Namespace, Name: name}
+}
 
 // APIProductSpec defines the desired state of APIProduct
 type APIProductSpec struct {
@@ -83,45 +140,6 @@ type APIProduct struct {
 
 	Spec   APIProductSpec   `json:"spec,omitempty"`
 	Status APIProductStatus `json:"status,omitempty"`
-}
-
-type ProductInformation struct {
-	Description string `json:"description"`
-	Owner       string `json:"owner"`
-}
-
-type APIKeyAuthCredentials struct {
-	LabelSelectors map[string]string `json:"labelSelectors"`
-}
-
-type Routing struct {
-	Hosts  []string `json:"hosts"`
-	Expose bool     `json:"expose"`
-}
-
-type OpenIDConnectAuthCredentials struct {
-	Endpoint string `json:"endpoint"`
-}
-
-type Destination struct {
-	Schema                string `json:"schema,omitempty"`
-	*v12.ServiceReference `json:"serviceReference"`
-}
-
-type TLSConfig struct {
-	PlainHTTP     string `json:"plainHTTP"`
-	TLSSecretName string `json:"tlsSecretName"`
-}
-
-type APISelector struct {
-	Name      string  `json:"name"`
-	Namespace string  `json:"namespace"`
-	Tag       string  `json:"tag"`
-	Mapping   Mapping `json:"mapping,omitempty"`
-}
-
-type Mapping struct {
-	Prefix string `json:"prefix"`
 }
 
 //+kubebuilder:object:root=true

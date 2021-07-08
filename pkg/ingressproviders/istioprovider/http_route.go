@@ -17,37 +17,44 @@
 package istioprovider
 
 import (
+	"net/http"
 	"net/url"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"istio.io/api/networking/v1alpha3"
+	gatewayapiv1alpha1 "sigs.k8s.io/gateway-api/apis/v1alpha1"
 
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 )
 
+type PathMatchType string
+
+// PathMatchType constants.
+const (
+	PathMatchExact             PathMatchType = "Exact"
+	PathMatchPrefix            PathMatchType = "Prefix"
+	PathMatchRegularExpression PathMatchType = "RegularExpression"
+)
+
 type HTTPRouteFactory struct {
-	OperationID     string
-	APIHost         string
-	MatchPath       string
-	OpVerb          string
+	Name            string
+	RewriteHost     *string
+	RewriteURI      *string
+	URIMatchPath    string
+	URIMatchType    PathMatchType
+	Method          string
 	DestinationHost string
 	DestinationPort uint32
-	RewriteURI      *string
 }
 
 func (h *HTTPRouteFactory) HTTPRoute() *v1alpha3.HTTPRoute {
 	httpRoute := &v1alpha3.HTTPRoute{
-		Name: h.OperationID,
-		// Here we are rewriting the auhtority of the request to one of the hosts in the API definition.
-		// TODO(jmprusi): Is this something expected? should we allow for a host override?
-		Rewrite: &v1alpha3.HTTPRewrite{Authority: h.APIHost},
+		Name: h.Name,
 		Match: []*v1alpha3.HTTPMatchRequest{
 			{
-				Uri: &v1alpha3.StringMatch{
-					MatchType: &v1alpha3.StringMatch_Prefix{Prefix: h.MatchPath},
-				},
+				Uri: stringMatch(h.URIMatchPath, h.URIMatchType),
 				Method: &v1alpha3.StringMatch{
-					MatchType: &v1alpha3.StringMatch_Exact{Exact: h.OpVerb},
+					MatchType: &v1alpha3.StringMatch_Exact{Exact: h.Method},
 				},
 			},
 		},
@@ -63,14 +70,59 @@ func (h *HTTPRouteFactory) HTTPRoute() *v1alpha3.HTTPRoute {
 		},
 	}
 
+	// Here we are rewriting the auhtority of the request to one of the hosts in the API definition.
+	// TODO(jmprusi): Is this something expected? should we allow for a host override?
+	if h.RewriteHost != nil {
+		if httpRoute.Rewrite == nil {
+			httpRoute.Rewrite = &v1alpha3.HTTPRewrite{}
+		}
+		httpRoute.Rewrite.Authority = *h.RewriteHost
+	}
+
 	if h.RewriteURI != nil {
+		if httpRoute.Rewrite == nil {
+			httpRoute.Rewrite = &v1alpha3.HTTPRewrite{}
+		}
 		httpRoute.Rewrite.Uri = *h.RewriteURI
 	}
 
 	return httpRoute
 }
 
-func HTTPRoutesFromOAS(doc *openapi3.T, pathPrefix string, tag networkingv1beta1.Tag) ([]*v1alpha3.HTTPRoute, error) {
+func ConvertPathMatchType(matchType gatewayapiv1alpha1.PathMatchType) PathMatchType {
+	switch matchType {
+	case gatewayapiv1alpha1.PathMatchExact:
+		return PathMatchExact
+	case gatewayapiv1alpha1.PathMatchPrefix:
+		return PathMatchPrefix
+	default:
+		return PathMatchRegularExpression
+	}
+}
+
+func stringMatch(path string, matchType PathMatchType) *v1alpha3.StringMatch {
+	switch matchType {
+	case PathMatchExact:
+		return &v1alpha3.StringMatch{
+			MatchType: &v1alpha3.StringMatch_Exact{Exact: path},
+		}
+	case PathMatchPrefix:
+		return &v1alpha3.StringMatch{
+			MatchType: &v1alpha3.StringMatch_Prefix{Prefix: path},
+		}
+	default:
+		return &v1alpha3.StringMatch{
+			MatchType: &v1alpha3.StringMatch_Regex{Regex: path},
+		}
+	}
+}
+
+func HTTPRoutesFromOAS(oasContent string, pathPrefix string, destination networkingv1beta1.Destination) ([]*v1alpha3.HTTPRoute, error) {
+	doc, err := openapi3.NewLoader().LoadFromData([]byte(oasContent))
+	if err != nil {
+		return nil, err
+	}
+
 	// TODO(jmprusi): Getting one of the hosts from the OpenAPISpec... extract this logic and improve.
 	oasURL, err := url.Parse(doc.Servers[0].URL)
 	if err != nil {
@@ -83,13 +135,14 @@ func HTTPRoutesFromOAS(doc *openapi3.T, pathPrefix string, tag networkingv1beta1
 			//TODO(jmprusi): Right now we are ignoring the security field of the operation, we should review this.
 
 			factory := HTTPRouteFactory{
-				OperationID: operation.OperationID,
-				APIHost:     oasURL.Host,
-				MatchPath:   path,
-				OpVerb:      opVerb,
+				Name:         operation.OperationID,
+				RewriteHost:  &oasURL.Host,
+				URIMatchPath: path,
+				URIMatchType: PathMatchExact,
+				Method:       opVerb,
 				// TODO(jmprusi): Get the actual internal cluster hostname instead of hardcoding it.
-				DestinationHost: tag.Destination.Name + "." + tag.Destination.Namespace + ".svc.cluster.local",
-				DestinationPort: uint32(*tag.Destination.Port),
+				DestinationHost: destination.Name + "." + destination.Namespace + ".svc.cluster.local",
+				DestinationPort: uint32(*destination.Port),
 			}
 
 			// Handle Prefix Override.
@@ -98,11 +151,50 @@ func HTTPRoutesFromOAS(doc *openapi3.T, pathPrefix string, tag networkingv1beta1
 				// removing the prefixOverride
 				factory.RewriteURI = &path
 				// If there's an Override, lets append it to the actual Operation Path.
-				factory.MatchPath = pathPrefix + path
+				factory.URIMatchPath = pathPrefix + path
 			}
 
 			httpRoutes = append(httpRoutes, factory.HTTPRoute())
 		}
+	}
+
+	return httpRoutes, nil
+}
+
+func HTTPRoutesFromPath(pathMatch *gatewayapiv1alpha1.HTTPPathMatch, pathPrefix string, destination networkingv1beta1.Destination) ([]*v1alpha3.HTTPRoute, error) {
+	if pathMatch == nil {
+		return nil, nil
+	}
+
+	// Allow any valid HTTP method
+	methods := []string{
+		http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
+		http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace,
+	}
+
+	httpRoutes := make([]*v1alpha3.HTTPRoute, 0, len(methods))
+
+	for _, method := range methods {
+		factory := HTTPRouteFactory{
+			Name:         method,
+			URIMatchPath: *pathMatch.Value,
+			URIMatchType: ConvertPathMatchType(*pathMatch.Type),
+			Method:       method,
+			// TODO(jmprusi): Get the actual internal cluster hostname instead of hardcoding it.
+			DestinationHost: destination.Name + "." + destination.Namespace + ".svc.cluster.local",
+			DestinationPort: uint32(*destination.Port),
+		}
+
+		// Handle Prefix Override.
+		if pathPrefix != "" {
+			// We need to rewrite the path, to match what the service expects, basically,
+			// removing the prefixOverride
+			factory.RewriteURI = pathMatch.Value
+			// If there's an Override, lets append it to the actual Operation Path.
+			factory.URIMatchPath = pathPrefix + *pathMatch.Value
+		}
+
+		httpRoutes = append(httpRoutes, factory.HTTPRoute())
 	}
 
 	return httpRoutes, nil

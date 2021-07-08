@@ -19,24 +19,33 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	gatewayapiv1alpha1 "sigs.k8s.io/gateway-api/apis/v1alpha1"
 
-	"github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
+	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
 
-const kuadrantDiscoveryLabel = "discovery.kuadrant.io/enabled"
+const (
+	KuadrantDiscoveryLabel                   = "discovery.kuadrant.io/enabled"
+	KuadrantDiscoveryAnnotationScheme        = "discovery.kuadrant.io/scheme"
+	KuadrantDiscoveryAnnotationAPIName       = "discovery.kuadrant.io/api-name"
+	KuadrantDiscoveryAnnotationTag           = "discovery.kuadrant.io/tag"
+	KuadrantDiscoveryAnnotationPort          = "discovery.kuadrant.io/port"
+	KuadrantDiscoveryAnnotationOASConfigMap  = "discovery.kuadrant.io/oas-configmap"
+	KuadrantDiscoveryAnnotationMatchPath     = "discovery.kuadrant.io/matchpath"
+	KuadrantDiscoveryAnnotationMatchPathType = "discovery.kuadrant.io/matchpath-type"
+)
 
 // ServiceReconciler reconciles a Service object
 type ServiceReconciler struct {
@@ -61,7 +70,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	service := &corev1.Service{}
 	err := r.Client().Get(ctx, req.NamespacedName, service)
 
-	if err != nil && errors.IsNotFound(err) {
+	if err != nil && apierrors.IsNotFound(err) {
 		log.Info("resource not found. Ignoring since object must have been deleted")
 		//TODO(jmprusi): Handle deletion of the Service. I guess using an OwnerReference could work for now.
 		return ctrl.Result{}, nil
@@ -85,7 +94,7 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	err = r.ReconcileResource(ctx, &v1beta1.API{}, desiredAPI, alwaysUpdateAPI)
+	err = r.ReconcileResource(ctx, &networkingv1beta1.API{}, desiredAPI, alwaysUpdateAPI)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -93,103 +102,121 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return ctrl.Result{}, nil
 }
 
-func (r *ServiceReconciler) APIFromAnnotations(ctx context.Context, service *corev1.Service) (*v1beta1.API, error) {
+func (r *ServiceReconciler) APIFromAnnotations(ctx context.Context, service *corev1.Service) (*networkingv1beta1.API, error) {
 	//Supported Annotations for now:
 	//discovery.kuadrant.io/scheme: "https"
 	//discovery.kuadrant.io/api-name: "dogs-api"
 	//discovery.kuadrant.io/tag: "production"
 	//discovery.kuadrant.io/port: 80 / name
 	//discovery.kuadrant.io/oas-configmap: configmapName
+	//discovery.kuadrant.io/matchpath: /
+	//discovery.kuadrant.io/matchpath-type: Prefix
 	// Related to https://github.com/Kuadrant/kuadrant-controller/issues/28
 
-	var oasConfigmapName, apiName, scheme, tagLabel, port string
+	log := r.Logger().WithValues("service", client.ObjectKeyFromObject(service))
+
+	var apiName, scheme, tagLabel, port string
 	var ok bool
 
 	// Let's do some basic validation and setting defaults.
-	if oasConfigmapName, ok = service.Annotations["discovery.kuadrant.io/oas-configmap"]; !ok {
-		return nil, fmt.Errorf("discovery.kuadrant.io/oas-configmap annotation is missing or invalid")
-	}
-	if scheme, ok = service.Annotations["discovery.kuadrant.io/scheme"]; !ok {
+	if scheme, ok = service.Annotations[KuadrantDiscoveryAnnotationScheme]; !ok {
 		scheme = "http"
 	}
-	if apiName, ok = service.Annotations["discovery.kuadrant.io/api-name"]; !ok {
+	if apiName, ok = service.Annotations[KuadrantDiscoveryAnnotationAPIName]; !ok {
 		apiName = service.GetName()
 	}
-	if tagLabel, ok = service.Annotations["discovery.kuadrant.io/tag"]; !ok {
-		return nil, fmt.Errorf("discovery.kuadrant.io/tagLabel annotation is missing or invalid")
+
+	if tagLabel, ok = service.Annotations[KuadrantDiscoveryAnnotationTag]; ok {
+		apiName = networkingv1beta1.APIObjectName(apiName, tagLabel)
 	}
 
-	Tag := v1beta1.Tag{
-		Name: tagLabel,
-		Destination: v1beta1.Destination{
-			Schema: scheme,
-			ServiceReference: &v1.ServiceReference{
-				Namespace: service.Namespace,
-				Name:      service.Name,
-				Path:      nil,
-			},
-		},
+	var oasContentPtr *string
+	var pathMatchPtr *gatewayapiv1alpha1.HTTPPathMatch
+	if oasConfigmapName, ok := service.Annotations[KuadrantDiscoveryAnnotationOASConfigMap]; ok {
+		oasContent, err := r.fetchOpenAPIFromConfigMap(
+			ctx,
+			types.NamespacedName{Name: oasConfigmapName, Namespace: service.Namespace},
+		)
+		log.V(1).Info("get OAS configmap", "objectKey", types.NamespacedName{Name: oasConfigmapName, Namespace: service.Namespace}, "error", err)
+		if err != nil {
+			return nil, err
+		}
+		oasContentPtr = &oasContent
+	} else {
+		// apply pathmatch
+		defaultType := gatewayapiv1alpha1.PathMatchPrefix
+		defaultValue := "/"
+		pathMatchPtr = &gatewayapiv1alpha1.HTTPPathMatch{Type: &defaultType, Value: &defaultValue}
+		if path, ok := service.Annotations[KuadrantDiscoveryAnnotationMatchPath]; ok {
+			pathMatchPtr.Value = &path
+		}
+		if pathMatchTypeVal, ok := service.Annotations[KuadrantDiscoveryAnnotationMatchPathType]; ok {
+			pathMatchType := gatewayapiv1alpha1.PathMatchType(pathMatchTypeVal)
+			switch pathMatchType {
+			case gatewayapiv1alpha1.PathMatchExact, gatewayapiv1alpha1.PathMatchPrefix, gatewayapiv1alpha1.PathMatchRegularExpression:
+				pathMatchPtr.Type = &pathMatchType
+			default:
+				return nil, fmt.Errorf("annotation '%s' value %s is invalid", KuadrantDiscoveryAnnotationMatchPathType, pathMatchTypeVal)
+			}
+		}
 	}
+
+	var destinationPort int32
 
 	// Let's find out the port, this annotation is a little bit more tricky.
-	if port, ok = service.Annotations["discovery.kuadrant.io/port"]; ok {
+	if port, ok = service.Annotations[KuadrantDiscoveryAnnotationPort]; ok {
 		// check if the port is a number already.
 		if num, err := strconv.ParseInt(port, 10, 32); err == nil {
-			int32num := int32(num)
-			Tag.Destination.Port = &int32num
+			destinationPort = int32(num)
 		} else {
 			// As the port is name, resolv the port from the service
 			for _, p := range service.Spec.Ports {
 				if p.Name == port {
-					Tag.Destination.Port = &p.Port
+					destinationPort = p.Port
 					break
 				}
 			}
 		}
 	} else {
-		// As the annotation has not been set, let's check if the service has only on port, if that's the case,
+		// As the annotation has not been set, let's check if the service has only one port, if that's the case,
 		//default to it.
 		if len(service.Spec.Ports) == 1 {
-			Tag.Destination.Port = &service.Spec.Ports[0].Port
+			destinationPort = service.Spec.Ports[0].Port
 		}
 	}
 	// If we reach this point and the Port is still nil, this means bad news
-	if Tag.Destination.Port == nil {
-		return nil, fmt.Errorf("discovery.kuadrant.io/port is missing or invalid")
+	if destinationPort == 0 {
+		return nil, fmt.Errorf("%s is missing or invalid", KuadrantDiscoveryAnnotationPort)
 	}
 
-	// Ok, let's get the configmap referenced by the annotation.
-	oasConfigmap := corev1.ConfigMap{}
-	err := r.Client().Get(ctx, types.NamespacedName{
-		Namespace: service.Namespace,
-		Name:      oasConfigmapName,
-	}, &oasConfigmap)
+	apiFactory := APIFactory{
+		Name: apiName,
+		// TODO(jmprusi): We will create the API object in the same namespace as the service to simplify the deletion,
+		// review this later.
+		Namespace:            service.Namespace,
+		DestinationSchema:    scheme,
+		DestinationName:      service.Name,
+		DestinationNamespace: service.Namespace,
+		DestinationPort:      &destinationPort,
+		OASContent:           oasContentPtr,
+		HTTPPathMatch:        pathMatchPtr,
+	}
+
+	return apiFactory.API(), nil
+}
+
+func (r *ServiceReconciler) fetchOpenAPIFromConfigMap(ctx context.Context, cmKey types.NamespacedName) (string, error) {
+	oasConfigmap := &corev1.ConfigMap{}
+	err := r.Client().Get(ctx, cmKey, oasConfigmap)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	// TODO(jmprusi): The openapispec.yaml data entry in the configmap is hardcoded, review this.
 	if _, ok := oasConfigmap.Data["openapi.yaml"]; !ok {
-		return nil, fmt.Errorf("oas configmap is missing the openapispec.yaml entry")
+		return "", errors.New("oas configmap is missing the openapi.yaml entry")
 	}
 
-	Tag.APIDefinition = v1beta1.APIDefinition{
-		OAS: oasConfigmap.Data["openapi.yaml"],
-	}
-
-	// TODO(jmprusi): We will create the API object in the same namespace as the service to simplify the deletion,
-	// review this later.
-	desiredAPI := v1beta1.API{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      apiName,
-			Namespace: service.Namespace,
-		},
-		Spec: v1beta1.APISpec{
-			TAGs: nil,
-		},
-	}
-
-	desiredAPI.Spec.TAGs = append(desiredAPI.Spec.TAGs, Tag)
-	return &desiredAPI, nil
+	return oasConfigmap.Data["openapi.yaml"], nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -204,7 +231,7 @@ func onlyLabeledServices() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			// Lets filter for only Services that have the kuadrant label and are enabled.
-			if val, ok := e.Object.GetLabels()[kuadrantDiscoveryLabel]; ok {
+			if val, ok := e.Object.GetLabels()[KuadrantDiscoveryLabel]; ok {
 				enabled, _ := strconv.ParseBool(val)
 				return enabled
 			}
@@ -212,12 +239,12 @@ func onlyLabeledServices() predicate.Predicate {
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			// In case the update object had the kuadrant label set to true, we need to reconcile it.
-			if val, ok := e.ObjectOld.GetLabels()[kuadrantDiscoveryLabel]; ok {
+			if val, ok := e.ObjectOld.GetLabels()[KuadrantDiscoveryLabel]; ok {
 				enabled, _ := strconv.ParseBool(val)
 				return enabled
 			}
 			// In case that service gets update by adding the label, and set to true, we need to reconcile it.
-			if val, ok := e.ObjectNew.GetLabels()[kuadrantDiscoveryLabel]; ok {
+			if val, ok := e.ObjectNew.GetLabels()[KuadrantDiscoveryLabel]; ok {
 				enabled, _ := strconv.ParseBool(val)
 				return enabled
 			}
@@ -226,20 +253,20 @@ func onlyLabeledServices() predicate.Predicate {
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			// If the object had the Kuadrant label, we need to handle its deletion
-			_, ok := e.Object.GetLabels()[kuadrantDiscoveryLabel]
+			_, ok := e.Object.GetLabels()[KuadrantDiscoveryLabel]
 			return ok
 		},
 	}
 }
 
 func alwaysUpdateAPI(existingObj, desiredObj client.Object) (bool, error) {
-	existing, ok := existingObj.(*v1beta1.API)
+	existing, ok := existingObj.(*networkingv1beta1.API)
 	if !ok {
-		return false, fmt.Errorf("%T is not a *v1beta1.API", existingObj)
+		return false, fmt.Errorf("%T is not a *networkingv1beta1.API", existingObj)
 	}
-	desired, ok := desiredObj.(*v1beta1.API)
+	desired, ok := desiredObj.(*networkingv1beta1.API)
 	if !ok {
-		return false, fmt.Errorf("%T is not a *v1beta1.API", desiredObj)
+		return false, fmt.Errorf("%T is not a *networkingv1beta1.API", desiredObj)
 	}
 
 	existing.Spec = desired.Spec

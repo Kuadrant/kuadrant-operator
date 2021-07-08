@@ -57,7 +57,7 @@ func IsObjectTaggedToDelete(obj client.Object) bool {
 // StatusConditionsMarshalJSON marshals the list of conditions as a JSON array, sorted by
 // condition type.
 func StatusConditionsMarshalJSON(input []metav1.Condition) ([]byte, error) {
-	conds := make([]metav1.Condition, len(input))
+	conds := make([]metav1.Condition, 0, len(input))
 	for idx := range input {
 		conds = append(conds, input[idx])
 	}

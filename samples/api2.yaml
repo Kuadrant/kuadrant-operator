@@ -32,7 +32,8 @@ metadata:
     discovery.kuadrant.io/api-name: "dogs"
     discovery.kuadrant.io/tag: "production"
     discovery.kuadrant.io/port: "80"
-    discovery.kuadrant.io/oas-configmap: "dogs-oas"
+    discovery.kuadrant.io/matchpath: "/"
+    discovery.kuadrant.io/matchpath-type: Prefix
   labels:
     discovery.kuadrant.io/enabled: "true"
 spec:
@@ -42,20 +43,3 @@ spec:
     - port: 80
       protocol: TCP
       targetPort: 3000
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: dogs-oas
-data:
-  openapi.yaml: |
-    openapi: "3.0.0"
-    info:
-      title: "toy API"
-    version: "1.0.0"
-    servers:
-      - url: http://toys/
-    paths:
-      /toys:
-        get:
-          operationId: "getToys"

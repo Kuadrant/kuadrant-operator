@@ -620,7 +620,7 @@ spec:
         - --enable-leader-election
         command:
         - /manager
-        image: quay.io/3scale/authorino:latest
+        image: quay.io/3scale/authorino:20210518
         env:
           - name: AUTHORINO_SECRET_LABEL_KEY
             value: "secret.kuadrant.io/managed-by"

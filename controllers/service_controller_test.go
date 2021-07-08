@@ -33,6 +33,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	discoveryv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
+	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 )
 
 var OAS = `
@@ -108,6 +109,7 @@ var _ = Describe("Service controller", func() {
 				serviceName   = "myservice"
 				oasCMName     = "cats-oas"
 				apiName       = "cats"
+				tag           = "production"
 			)
 
 			start := time.Now()
@@ -116,30 +118,30 @@ var _ = Describe("Service controller", func() {
 			err := k8sClient.Create(context.Background(), oasConfigMap)
 			Expect(err).ToNot(HaveOccurred())
 
-			serviceObject := serviceObject(serviceName, testNamespace, apiName, oasCMName)
-			err = k8sClient.Create(context.Background(), serviceObject)
+			serviceObj := serviceObject(serviceName, testNamespace, apiName, tag, oasCMName)
+			err = k8sClient.Create(context.Background(), serviceObj)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Currently API status is not implemented to check availability
 			// Polling will be used
 			apiObj := &discoveryv1beta1.API{}
 			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), types.NamespacedName{Name: apiName, Namespace: testNamespace}, apiObj)
+				apiObjName := networkingv1beta1.APIObjectName(apiName, tag)
+				err := k8sClient.Get(context.Background(), types.NamespacedName{Name: apiObjName, Namespace: testNamespace}, apiObj)
 				if err != nil {
 					return false
 				}
 				return true
 			}, 5*time.Minute, 5*time.Second).Should(BeTrue())
 
-			Expect(len(apiObj.Spec.TAGs)).Should(BeNumerically("==", 1))
-			Expect(apiObj.Spec.TAGs[0].Name).Should(Equal("production"))
-			Expect(apiObj.Spec.TAGs[0].Destination.Schema).Should(Equal("http"))
-			Expect(apiObj.Spec.TAGs[0].Destination.ServiceReference).ShouldNot(BeNil())
-			Expect(apiObj.Spec.TAGs[0].Destination.Name).Should(Equal(serviceName))
-			Expect(apiObj.Spec.TAGs[0].Destination.Namespace).Should(Equal(testNamespace))
-			Expect(apiObj.Spec.TAGs[0].Destination.Port).ShouldNot(BeNil())
-			Expect(*apiObj.Spec.TAGs[0].Destination.Port).Should(BeNumerically("==", 80))
-			Expect(apiObj.Spec.TAGs[0].APIDefinition.OAS).Should(Equal(OAS))
+			Expect(apiObj.Spec.Destination.Schema).Should(Equal("http"))
+			Expect(apiObj.Spec.Destination.ServiceReference).ShouldNot(BeNil())
+			Expect(apiObj.Spec.Destination.Name).Should(Equal(serviceName))
+			Expect(apiObj.Spec.Destination.Namespace).Should(Equal(testNamespace))
+			Expect(apiObj.Spec.Destination.Port).ShouldNot(BeNil())
+			Expect(*apiObj.Spec.Destination.Port).Should(BeNumerically("==", 80))
+			Expect(apiObj.Spec.Mappings.OAS).ShouldNot(BeNil())
+			Expect(*apiObj.Spec.Mappings.OAS).Should(Equal(OAS))
 
 			elapsed := time.Since(start)
 			logf.Log.Info("e2e Service controller", "API creation and availability took", elapsed)
@@ -147,19 +149,19 @@ var _ = Describe("Service controller", func() {
 	})
 })
 
-func serviceObject(name, ns, apiName, oasName string) *v1.Service {
+func serviceObject(name, ns, apiName, tag, oasName string) *v1.Service {
 	return &v1.Service{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Service"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
-			Labels:    map[string]string{"discovery.kuadrant.io/enabled": "true"},
+			Labels:    map[string]string{KuadrantDiscoveryLabel: "true"},
 			Annotations: map[string]string{
-				"discovery.kuadrant.io/scheme":        "http",
-				"discovery.kuadrant.io/api-name":      apiName,
-				"discovery.kuadrant.io/tag":           "production",
-				"discovery.kuadrant.io/port":          "80",
-				"discovery.kuadrant.io/oas-configmap": oasName,
+				KuadrantDiscoveryAnnotationScheme:       "http",
+				KuadrantDiscoveryAnnotationAPIName:      apiName,
+				KuadrantDiscoveryAnnotationTag:          tag,
+				KuadrantDiscoveryAnnotationPort:         "80",
+				KuadrantDiscoveryAnnotationOASConfigMap: oasName,
 			},
 		},
 		Spec: v1.ServiceSpec{

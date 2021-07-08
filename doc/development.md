@@ -3,9 +3,9 @@
 ## Technology stack required for development
 
 * [operator-sdk] version v1.16.1
-* [kind] version v0.9.0
+* [kind] version v0.10.0
 * [git][git_tool]
-* [go] version 1.15+
+* [go] version 1.16+
 * [kubernetes] version v1.19+
 * [kubectl] version v1.19+
 

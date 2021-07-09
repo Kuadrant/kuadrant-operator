@@ -32,6 +32,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
@@ -93,7 +94,11 @@ func (is *IstioProvider) Reconcile(ctx context.Context, apip *networkingv1beta1.
 		return ctrl.Result{}, err
 	}
 
-	authPolicy := getAuthorizationPolicy(existingVS)
+	authPolicy, err := is.getAuthorizationPolicy(existingVS)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	err = is.ReconcileIstioAuthorizationPolicy(ctx, authPolicy, alwaysUpdateAuthPolicy)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -110,7 +115,7 @@ func (is *IstioProvider) ReconcileIstioAuthorizationPolicy(ctx context.Context, 
 	return is.ReconcileResource(ctx, &istioSecurity.AuthorizationPolicy{}, desired, mutatefn)
 }
 
-func getAuthorizationPolicy(virtualService *istio.VirtualService) *istioSecurity.AuthorizationPolicy {
+func (is *IstioProvider) getAuthorizationPolicy(virtualService *istio.VirtualService) (*istioSecurity.AuthorizationPolicy, error) {
 	policyHosts := []string{}
 
 	// Now we need to generate the list of hosts that will match the authorization policy,
@@ -153,19 +158,11 @@ func getAuthorizationPolicy(virtualService *istio.VirtualService) *istioSecurity
 			},
 		},
 	}
-	owner := getOwnerReference(virtualService)
-	authPolicy.SetOwnerReferences(append(authPolicy.GetOwnerReferences(), owner))
 
-	return authPolicy
-}
+	// Add "controlled" owner reference. Prevents other controller to adopt this resource
+	err := controllerutil.SetControllerReference(virtualService, authPolicy, is.Scheme())
 
-func getOwnerReference(virtualService *istio.VirtualService) metav1.OwnerReference {
-	return metav1.OwnerReference{
-		APIVersion: virtualService.APIVersion,
-		Kind:       virtualService.Kind,
-		Name:       virtualService.Name,
-		UID:        virtualService.UID,
-	}
+	return authPolicy, err
 }
 
 func (is *IstioProvider) virtualServiceFromAPIProduct(ctx context.Context, apip *networkingv1beta1.APIProduct) (*istio.VirtualService, error) {

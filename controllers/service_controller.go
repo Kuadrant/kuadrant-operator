@@ -28,11 +28,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gatewayapiv1alpha1 "sigs.k8s.io/gateway-api/apis/v1alpha1"
 
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
+	"github.com/kuadrant/kuadrant-controller/pkg/common"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
 
@@ -84,6 +86,12 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return ctrl.Result{}, err
 		}
 		log.V(1).Info(string(jsonData))
+	}
+
+	serviceLabels := service.GetLabels()
+	if kuadrantEnabled, ok := serviceLabels[KuadrantDiscoveryLabel]; !ok || kuadrantEnabled != "true" {
+		// this service used to be kuadrant protected, not anymore
+		return r.handleDisabledService(ctx, service)
 	}
 
 	// Let's generate the API object based on the Service annotations
@@ -202,7 +210,12 @@ func (r *ServiceReconciler) APIFromAnnotations(ctx context.Context, service *cor
 		HTTPPathMatch:        pathMatchPtr,
 	}
 
-	return apiFactory.API(), nil
+	desiredAPI := apiFactory.API()
+
+	// Add "controlled" owner reference. Prevents other controller to adopt this resource
+	err := controllerutil.SetControllerReference(service, desiredAPI, r.Scheme())
+
+	return desiredAPI, err
 }
 
 func (r *ServiceReconciler) fetchOpenAPIFromConfigMap(ctx context.Context, cmKey types.NamespacedName) (string, error) {
@@ -217,6 +230,41 @@ func (r *ServiceReconciler) fetchOpenAPIFromConfigMap(ctx context.Context, cmKey
 	}
 
 	return oasConfigmap.Data["openapi.yaml"], nil
+}
+
+func (r *ServiceReconciler) handleDisabledService(ctx context.Context, service *corev1.Service) (ctrl.Result, error) {
+	// This implementation assumes API resources are created in the same namespace as the service and there is an ownership relationship
+	log := r.Logger().WithValues("service", client.ObjectKeyFromObject(service))
+	log.V(1).Info("handleDisabledService")
+
+	ownedAPI, err := r.getOwnedAPI(ctx, service)
+	if err != nil || ownedAPI == nil {
+		return ctrl.Result{}, err
+	}
+
+	// delete
+	err = r.Client().Delete(ctx, ownedAPI)
+	log.V(1).Info("handleDisabledService: deleting API", "api", client.ObjectKeyFromObject(ownedAPI), "error", err)
+	return ctrl.Result{}, err
+}
+
+func (r *ServiceReconciler) getOwnedAPI(ctx context.Context, service *corev1.Service) (*networkingv1beta1.API, error) {
+	log := r.Logger().WithValues("service", client.ObjectKeyFromObject(service))
+
+	apiList := &networkingv1beta1.APIList{}
+	err := r.Client().List(ctx, apiList, client.InNamespace(service.Namespace))
+	log.V(1).Info("reading API list", "namespace", service.Namespace, "len(api)", len(apiList.Items), "error", err)
+	if err != nil {
+		return nil, err
+	}
+
+	for idx := range apiList.Items {
+		if common.IsOwnedBy(&apiList.Items[idx], service) {
+			return &apiList.Items[idx], nil
+		}
+	}
+
+	return nil, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

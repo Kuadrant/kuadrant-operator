@@ -22,6 +22,7 @@ import (
 	"sort"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -67,4 +68,22 @@ func StatusConditionsMarshalJSON(input []metav1.Condition) ([]byte, error) {
 	})
 
 	return json.Marshal(conds)
+}
+
+func IsOwnedBy(owned, owner client.Object) bool {
+	ownerGVK := owner.GetObjectKind().GroupVersionKind()
+
+	for _, o := range owned.GetOwnerReferences() {
+		oGV, err := schema.ParseGroupVersion(o.APIVersion)
+		if err != nil {
+			return false
+		}
+
+		// Version needs to be checked???
+		if oGV.Group == ownerGVK.Group && o.Kind == ownerGVK.Kind && owner.GetName() == o.Name {
+			return true
+		}
+	}
+
+	return false
 }

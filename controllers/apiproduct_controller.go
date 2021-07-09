@@ -21,7 +21,7 @@ import (
 	"encoding/json"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -57,7 +57,7 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	apip := &networkingv1beta1.APIProduct{}
 	err := r.Client().Get(ctx, req.NamespacedName, apip)
-	if err != nil && errors.IsNotFound(err) {
+	if err != nil && apierrors.IsNotFound(err) {
 		log.Info("resource not found. Ignoring since object must have been deleted")
 		return ctrl.Result{}, nil
 	} else if err != nil {
@@ -110,7 +110,7 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	log.Info("status reconcile done", "result", statusResult, "error", statusErr)
 	if statusErr != nil {
 		// Ignore conflicts, resource might just be outdated.
-		if errors.IsConflict(statusErr) {
+		if apierrors.IsConflict(statusErr) {
 			log.Info("Failed to update status: resource might just be outdated")
 			return ctrl.Result{Requeue: true}, nil
 		}
@@ -119,10 +119,18 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if specErr != nil {
 		// Ignore conflicts, resource might just be outdated.
-		if errors.IsConflict(specErr) {
+		if apierrors.IsConflict(specErr) {
 			log.Info("Resource update conflict error. Requeuing...")
 			return ctrl.Result{Requeue: true}, nil
 		}
+
+		if apierrors.IsInvalid(specErr) {
+			// On Validation error, no need to retry as spec is not valid and needs to be changed
+			log.Info("ERROR", "spec validation error", specErr)
+			r.EventRecorder().Eventf(apip, corev1.EventTypeWarning, "Invalid APIProduct Spec", "%v", specErr)
+			return ctrl.Result{}, nil
+		}
+
 		r.EventRecorder().Eventf(apip, corev1.EventTypeWarning, "ReconcileError", "%v", specErr)
 		return ctrl.Result{}, specErr
 	}
@@ -136,6 +144,11 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func (r *APIProductReconciler) reconcileSpec(ctx context.Context, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
+	err := r.validateSpec(ctx, apip)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	res, err := r.setDefaults(ctx, apip)
 	if err != nil || res.Requeue {
 		return res, err
@@ -190,6 +203,36 @@ func (r *APIProductReconciler) getAPIUIDs(ctx context.Context, apip *networkingv
 		uids = append(uids, string(api.GetUID()))
 	}
 	return uids, nil
+}
+
+func (r *APIProductReconciler) validateSpec(ctx context.Context, apip *networkingv1beta1.APIProduct) error {
+	log := r.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
+
+	err := apip.Validate()
+	log.V(1).Info("validate SPEC", "error", err)
+	if err != nil {
+		return err
+	}
+
+	for _, apiSel := range apip.Spec.APIs {
+		// Check API exist
+		api := &networkingv1beta1.API{}
+		err := r.Client().Get(ctx, apiSel.APINamespacedName(), api)
+		log.V(1).Info("get API", "objectKey", apiSel.APINamespacedName(), "error", err)
+		if err != nil {
+			return err
+		}
+
+		// Check destination service exist
+		service := &corev1.Service{}
+		err = r.Client().Get(ctx, api.Spec.Destination.NamespacedName(), service)
+		log.V(1).Info("get service", "objectKey", api.Spec.Destination.NamespacedName(), "error", err)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

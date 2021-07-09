@@ -21,13 +21,10 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
@@ -35,10 +32,10 @@ import (
 )
 
 const (
-	ServiceNotFoundReason       = "ServiceNotFound"
-	APINotFoundReason           = "APINotFound"
-	DuplicatedPrefixFoundReason = "DuplicatedPrefix"
-	UnknownReason               = "Unknown"
+	ServiceNotFoundReason = "ServiceNotFound"
+	APINotFoundReason     = "APINotFound"
+	InvalidSpecReason     = "InvalidSpec"
+	UnknownReason         = "Unknown"
 )
 
 func (r *APIProductReconciler) reconcileStatus(ctx context.Context, logger logr.Logger, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
@@ -113,59 +110,11 @@ func (r *APIProductReconciler) calculateReadyCondition(ctx context.Context, apip
 		readyCondition.Reason = "Unknown"
 	}
 
-	ok, message, reason, err := r.apiReferenceStatus(ctx, apip)
-	if err != nil {
-		return metav1.Condition{}, err
-	}
-
-	if !ok {
+	if err := r.validateSpec(ctx, apip); err != nil {
 		readyCondition.Status = metav1.ConditionFalse
-		readyCondition.Message = message
-		readyCondition.Reason = reason
+		readyCondition.Message = err.Error()
+		readyCondition.Reason = string(apierrors.ReasonForError(err))
 	}
 
 	return *readyCondition, nil
-}
-
-func (r *APIProductReconciler) apiReferenceStatus(ctx context.Context, apip *networkingv1beta1.APIProduct) (bool, string, string, error) {
-	log := r.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
-	fieldErrors := field.ErrorList{}
-	apisFldPath := field.NewPath("spec").Child("APIs")
-
-	mappingPrefix := map[string]interface{}{}
-	for idx, apiSel := range apip.Spec.APIs {
-		apiField := apisFldPath.Index(idx)
-
-		if _, ok := mappingPrefix[apiSel.Mapping.Prefix]; ok {
-			fieldErrors = append(fieldErrors, field.Invalid(apiField, apiSel, "duplicated prefix"))
-			return false, fieldErrors.ToAggregate().Error(), DuplicatedPrefixFoundReason, nil
-		}
-		mappingPrefix[apiSel.Mapping.Prefix] = nil
-
-		api := &networkingv1beta1.API{}
-		err := r.Client().Get(ctx, apiSel.APINamespacedName(), api)
-		log.V(1).Info("get API", "objectKey", apiSel.APINamespacedName(), "error", err)
-		if err != nil && errors.IsNotFound(err) {
-			fieldErrors = append(fieldErrors, field.Invalid(apiField, apiSel, "Not found"))
-			return false, fieldErrors.ToAggregate().Error(), APINotFoundReason, nil
-		}
-
-		if err != nil {
-			return false, err.Error(), UnknownReason, err
-		}
-
-		// Check destinations
-		service := &corev1.Service{}
-		err = r.Client().Get(ctx, api.Spec.Destination.NamespacedName(), service)
-		log.V(1).Info("get service", "objectKey", api.Spec.Destination.NamespacedName(), "error", err)
-		if err != nil && errors.IsNotFound(err) {
-			fieldErrors = append(fieldErrors, field.Invalid(apiField, apiSel, "the API resource references a service which has not been found"))
-			return false, fieldErrors.ToAggregate().Error(), ServiceNotFoundReason, nil
-		}
-
-		if err != nil {
-			return false, err.Error(), UnknownReason, err
-		}
-	}
-	return true, "", "", nil
 }

@@ -19,8 +19,10 @@ package v1beta1
 import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
 )
@@ -140,6 +142,33 @@ type APIProduct struct {
 
 	Spec   APIProductSpec   `json:"spec,omitempty"`
 	Status APIProductStatus `json:"status,omitempty"`
+}
+
+func (a *APIProduct) Validate() error {
+	fieldErrors := field.ErrorList{}
+	apisFldPath := field.NewPath("spec").Child("APIs")
+
+	// Look for duplicated mapping prefixes
+	mappingPrefix := map[string]interface{}{}
+	for idx, apiSel := range a.Spec.APIs {
+		apiField := apisFldPath.Index(idx)
+
+		if _, ok := mappingPrefix[apiSel.Mapping.Prefix]; ok {
+			fieldErrors = append(fieldErrors, field.Invalid(apiField, apiSel.APINamespacedName(), "duplicated prefix"))
+		}
+
+		mappingPrefix[apiSel.Mapping.Prefix] = nil
+	}
+
+	if len(fieldErrors) > 0 {
+		return apierrors.NewInvalid(
+			GroupVersion.WithKind(APIProductKind).GroupKind(),
+			a.Name,
+			fieldErrors,
+		)
+	}
+
+	return nil
 }
 
 //+kubebuilder:object:root=true

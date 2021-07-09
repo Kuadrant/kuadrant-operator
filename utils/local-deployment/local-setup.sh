@@ -48,9 +48,6 @@ else
 	kustomize build config/crd | kubectl apply -f -
 fi
 
-echo "Deploying EchoAPI to the default namespace"
-kubectl apply -n default -f utils/local-deployment/echo-api.yaml
-
 echo "Wait for all deployments to be up"
 kubectl -n "${KUADRANT_NAMESPACE}" wait --timeout=300s --for=condition=Available deployments --all
 

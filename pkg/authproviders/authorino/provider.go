@@ -2,6 +2,8 @@ package authorino
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 
 	"github.com/go-logr/logr"
 	authorino "github.com/kuadrant/authorino/api/v1beta1"
@@ -45,9 +47,7 @@ func (a *Provider) Reconcile(ctx context.Context, apip *networkingv1beta1.APIPro
 		return ctrl.Result{}, err
 	}
 
-	// Currently, authorino will not be updated
-	// TODO implement mutator to reconcile desired object -> existing object
-	err = a.ReconcileAuthorinoService(ctx, serviceConfig, reconcilers.CreateOnlyMutator)
+	err = a.ReconcileAuthorinoService(ctx, serviceConfig, authorinoServiceBasicMutator)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -129,4 +129,23 @@ func (a *Provider) Status(ctx context.Context, apip *networkingv1beta1.APIProduc
 	//}
 
 	return true, nil
+}
+
+func authorinoServiceBasicMutator(existingObj, desiredObj client.Object) (bool, error) {
+	existing, ok := existingObj.(*authorino.Service)
+	if !ok {
+		return false, fmt.Errorf("%T is not a *authorino.Service", existingObj)
+	}
+	desired, ok := desiredObj.(*authorino.Service)
+	if !ok {
+		return false, fmt.Errorf("%T is not a *authorino.Service", desiredObj)
+	}
+
+	updated := false
+	if !reflect.DeepEqual(existing.Spec, desired.Spec) {
+		existing.Spec = desired.Spec
+		updated = true
+	}
+
+	return updated, nil
 }

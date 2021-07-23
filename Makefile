@@ -154,7 +154,7 @@ bundle-build:
 # Download kind locally if necessary
 KIND = $(shell pwd)/bin/kind
 kind:
-	$(call go-get-tool,$(KIND),sigs.k8s.io/kind@v0.10.0)
+	$(call go-get-tool,$(KIND),sigs.k8s.io/kind@v0.11.1)
 
 # Download istioctl.
 ISTIOCTL = $(shell pwd)/bin/istioctl

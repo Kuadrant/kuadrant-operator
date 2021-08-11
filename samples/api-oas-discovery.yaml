@@ -1,0 +1,60 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: petstore
+  name: petstore
+spec:
+  selector:
+    matchLabels:
+      app: petstore
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: petstore
+    spec:
+      containers:
+      - command:
+        - /petstore
+        image: quay.io/eastizle/petstore:1.0.0
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: petstore
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    discovery.kuadrant.io/scheme: "http"
+    discovery.kuadrant.io/api-name: "petstore"
+    discovery.kuadrant.io/tag: "production"
+    discovery.kuadrant.io/port: api
+    discovery.kuadrant.io/oas-path: "/openapi"
+    discovery.kuadrant.io/oas-name-port: openapi
+  labels:
+    discovery.kuadrant.io/enabled: "true"
+    app: petstore
+  name: petstore
+spec:
+  ports:
+  - name: api
+    port: 8080
+    targetPort: 8080
+  - name: openapi
+    port: 9090
+    targetPort: 9090
+  selector:
+    app: petstore

@@ -1,12 +1,13 @@
 module github.com/kuadrant/kuadrant-controller
 
-go 1.15
+go 1.16
 
 require (
 	github.com/Azure/go-autorest/autorest v0.11.19 // indirect
 	github.com/getkin/kin-openapi v0.63.0
 	github.com/go-logr/logr v0.4.0
 	github.com/google/go-cmp v0.5.5
+	github.com/jarcoal/httpmock v1.0.8
 	github.com/kuadrant/authorino v0.0.0-20210422165318-a53c0df15d51
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.13.0

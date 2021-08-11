@@ -19,6 +19,8 @@ Kuadrant can leverage annotations. A good place to annotate is the Service used 
 - **discovery.kuadrant.io/oas-configmap**: *OPTIONAL* Configmap that contains the OAS spec.
 - **discovery.kuadrant.io/matchpath**: *OPTIONAL* Define a single specific path, prefix or regex. Defaults to `/`.
 - **discovery.kuadrant.io/matchpath-type**: *OPTIONAL* Specifies how to match against the `matchpath` value. Accepted values are `Exact`, `Prefix` and `RegularExpression`. Defaults to `Prefix`.
+- **discovery.kuadrant.io/oas-path**: *OPTIONAL* Define a specific path for retrieving the config from the service itself.
+- **discovery.kuadrant.io/oas-name-port**: *OPTIONAL* The port to be used to retrieve the OAS config, if not defined, it will used the first one
 
 ### Labels:
 - **discovery.kuadrant.io/enabled:**: *REQUIRED* true or false, marks the object to be discovered by kuadrant.
@@ -88,6 +90,71 @@ spec:
     - port: 80
       protocol: TCP
       targetPort: 3000
+```
+
+Example of a kuadrant annotated service providing OpenAPI spec in the service.
+
+```yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: petstore
+  name: petstore
+spec:
+  selector:
+    matchLabels:
+      app: petstore
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: petstore
+    spec:
+      containers:
+      - command:
+        - /petstore
+        image: quay.io/eastizle/petstore:1.0.0
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: petstore
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    discovery.kuadrant.io/scheme: "http"
+    discovery.kuadrant.io/api-name: "petstore"
+    discovery.kuadrant.io/tag: "production"
+    discovery.kuadrant.io/port: api
+    discovery.kuadrant.io/oas-path: "/openapi"
+    discovery.kuadrant.io/oas-name-port: openapi
+  labels:
+    discovery.kuadrant.io/enabled: "true"
+    app: petstore
+  name: petstore
+spec:
+  ports:
+  - name: api
+    port: 8080
+    targetPort: 8080
+  - name: openapi
+    port: 9090
+    targetPort: 9090
+  selector:
+    app: petstore
 ```
 
 ### Service discovery: OAS or MatchPath

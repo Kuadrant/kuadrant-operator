@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -33,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gatewayapiv1alpha1 "sigs.k8s.io/gateway-api/apis/v1alpha1"
 
+	"github.com/go-logr/logr"
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
@@ -47,6 +50,10 @@ const (
 	KuadrantDiscoveryAnnotationOASConfigMap  = "discovery.kuadrant.io/oas-configmap"
 	KuadrantDiscoveryAnnotationMatchPath     = "discovery.kuadrant.io/matchpath"
 	KuadrantDiscoveryAnnotationMatchPathType = "discovery.kuadrant.io/matchpath-type"
+	KuadrantDiscoveryAnnotationOASPath       = "discovery.kuadrant.io/oas-path"
+	KuadrantDiscoveryAnnotationOASNamePort   = "discovery.kuadrant.io/oas-name-port"
+
+	maxBodyLog = 128 // How many bytes from HTTP request body should be log.
 )
 
 // ServiceReconciler reconciles a Service object
@@ -110,6 +117,65 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return ctrl.Result{}, nil
 }
 
+func (r *ServiceReconciler) isOASDefined(ctx context.Context, service *corev1.Service, log logr.Logger) (bool, string, error) {
+	var oasContent string
+	if oasConfigmapName, ok := service.Annotations[KuadrantDiscoveryAnnotationOASConfigMap]; ok {
+		oasContent, err := r.fetchOpenAPIFromConfigMap(
+			ctx,
+			types.NamespacedName{Name: oasConfigmapName, Namespace: service.Namespace},
+		)
+		log.V(1).Info("get OAS configmap", "objectKey", types.NamespacedName{Name: oasConfigmapName, Namespace: service.Namespace}, "error", err)
+		return true, oasContent, err
+	}
+
+	// The annotations for authodiscovery are the following, if not namedPort, it'll use the first one.
+	// discovery.kuadrant.io/oas-path: "/openapi"
+	// discovery.kuadrant.io/oas-port: openapi
+	if oasURLdefined, ok := service.Annotations[KuadrantDiscoveryAnnotationOASPath]; ok {
+		var targetPort int32 = 80
+		if oasNamePort, ok := service.Annotations[KuadrantDiscoveryAnnotationOASNamePort]; ok {
+			for _, port := range service.Spec.Ports {
+				if port.Name == oasNamePort {
+					targetPort = port.Port
+					// TODO: log messsage here
+					break
+				}
+			}
+		} else {
+			if len(service.Spec.Ports) > 0 {
+				targetPort = service.Spec.Ports[0].Port
+			}
+		}
+
+		var targetURL = fmt.Sprintf("http://%s.%s.svc:%d", service.Name, service.Namespace, targetPort)
+		resp, err := http.Get(fmt.Sprintf("%s%s", targetURL, oasURLdefined))
+		if err != nil {
+			return true, "", err
+		}
+		defer resp.Body.Close()
+
+		// We read the body here, just before checking the status code, just
+		// because the team want to log the body in case of a invalid status code.
+		// Context: https://github.com/Kuadrant/kuadrant-controller/pull/44#discussion_r684146743
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return true, "", fmt.Errorf("cannot read the body of %s: %w", targetURL, err)
+		}
+
+		if resp.StatusCode != 200 {
+			var bodyLogMax = maxBodyLog
+			if len(body) < bodyLogMax {
+				bodyLogMax = len(body)
+			}
+			return true, "", fmt.Errorf("cannot retrieve OAS from '%s' statusCode='%d' body='%s'", targetURL, resp.StatusCode, body[0:bodyLogMax])
+		}
+
+		return true, string(body), nil
+	}
+
+	return false, oasContent, nil
+}
+
 func (r *ServiceReconciler) APIFromAnnotations(ctx context.Context, service *corev1.Service) (*networkingv1beta1.API, error) {
 	//Supported Annotations for now:
 	//discovery.kuadrant.io/scheme: "https"
@@ -140,18 +206,17 @@ func (r *ServiceReconciler) APIFromAnnotations(ctx context.Context, service *cor
 
 	var oasContentPtr *string
 	var pathMatchPtr *gatewayapiv1alpha1.HTTPPathMatch
-	if oasConfigmapName, ok := service.Annotations[KuadrantDiscoveryAnnotationOASConfigMap]; ok {
-		oasContent, err := r.fetchOpenAPIFromConfigMap(
-			ctx,
-			types.NamespacedName{Name: oasConfigmapName, Namespace: service.Namespace},
-		)
-		log.V(1).Info("get OAS configmap", "objectKey", types.NamespacedName{Name: oasConfigmapName, Namespace: service.Namespace}, "error", err)
-		if err != nil {
-			return nil, err
-		}
-		oasContentPtr = &oasContent
-	} else {
-		// apply pathmatch
+
+	hasOas, OASContent, err := r.isOASDefined(ctx, service, log)
+	if err != nil {
+		return nil, err
+	}
+
+	if OASContent != "" {
+		oasContentPtr = &OASContent
+	}
+
+	if !hasOas {
 		defaultType := gatewayapiv1alpha1.PathMatchPrefix
 		defaultValue := "/"
 		pathMatchPtr = &gatewayapiv1alpha1.HTTPPathMatch{Type: &defaultType, Value: &defaultValue}
@@ -213,7 +278,7 @@ func (r *ServiceReconciler) APIFromAnnotations(ctx context.Context, service *cor
 	desiredAPI := apiFactory.API()
 
 	// Add "controlled" owner reference. Prevents other controller to adopt this resource
-	err := controllerutil.SetControllerReference(service, desiredAPI, r.Scheme())
+	err = controllerutil.SetControllerReference(service, desiredAPI, r.Scheme())
 
 	return desiredAPI, err
 }

@@ -37,6 +37,7 @@ import (
 	"github.com/kuadrant/kuadrant-controller/controllers"
 	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
+	"github.com/kuadrant/kuadrant-controller/pkg/ratelimitproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 	// +kubebuilder:scaffold:imports
 )
@@ -95,9 +96,10 @@ func main() {
 	)
 
 	if err = (&controllers.APIProductReconciler{
-		BaseReconciler:  apiProductBaseReconciler,
-		AuthProvider:    authproviders.GetAuthProvider(apiProductBaseReconciler),
-		IngressProvider: ingressproviders.GetIngressProvider(apiProductBaseReconciler),
+		BaseReconciler:    apiProductBaseReconciler,
+		AuthProvider:      authproviders.GetAuthProvider(apiProductBaseReconciler),
+		IngressProvider:   ingressproviders.GetIngressProvider(apiProductBaseReconciler),
+		RateLimitProvider: ratelimitproviders.GetRateLimitProvider(apiProductBaseReconciler),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "APIProduct")
 		os.Exit(1)

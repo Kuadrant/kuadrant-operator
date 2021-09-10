@@ -55,8 +55,6 @@ ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
 test-integration: clean-cov generate fmt vet manifests
 	mkdir -p ${ENVTEST_ASSETS_DIR}
 	test -f ${ENVTEST_ASSETS_DIR}/setup-envtest.sh || curl -sSLo ${ENVTEST_ASSETS_DIR}/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/v0.7.0/hack/setup-envtest.sh
-	# Do not enable runnning specs in parallel. Current e2e tests expect single namespace with expected name "kuadrant-system"
-	# TODO: add support for running specs in parallel in several namespaces
 	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; fetch_envtest_tools $(ENVTEST_ASSETS_DIR); setup_envtest_env $(ENVTEST_ASSETS_DIR); USE_EXISTING_CLUSTER=true go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
 
 test-unit: clean-cov generate fmt vet manifests
@@ -182,11 +180,27 @@ istio-manifest-update-test: generate-istio-manifests
 	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./utils/local-deployment/istio-manifests)" ]
 
 .PHONY: local-setup
-local-setup: kind local-cleanup manifests kustomize generate
+local-setup: local-cleanup local-setup-kind manifests kustomize generate
 	./utils/local-deployment/local-setup.sh
 
+# Deploys all services and manifests required by kuadrant to run
+# kuadrant is not deployed
+.PHONY: local-env-setup
+local-env-setup: local-cleanup local-setup-kind deploy-kuadrant-deps generate install
+
+.PHONY: deploy-kuadrant-deps
+deploy-kuadrant-deps:
+	./utils/local-deployment/deploy-kuadrant-deps.sh
+
+KIND_CLUSTER_NAME = kuadrant-local
+
+.PHONY: local-setup-kind
+local-setup-kind: kind
+	$(KIND) create cluster --name $(KIND_CLUSTER_NAME) --config utils/local-deployment/kind-cluster.yaml
+
+.PHONY: local-cleanup
 local-cleanup: kind
-	kind delete cluster --name kuadrant-local
+	$(KIND) delete cluster --name $(KIND_CLUSTER_NAME)
 
 .PHONY: bundle-push
 bundle-push: ## Push the bundle image.

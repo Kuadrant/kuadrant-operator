@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -39,33 +40,30 @@ import (
 )
 
 var _ = Describe("APIPRoduct controller", func() {
+	var testNamespace string
+
 	BeforeEach(func() {
-		namespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
-		err := k8sClient.Delete(context.Background(), namespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
-		if err != nil && apierrors.IsNotFound(err) {
-			err = nil
+		var generatedTestNamespace = "test-namespace-" + uuid.New().String()
+
+		namespace := &v1.Namespace{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
+			ObjectMeta: metav1.ObjectMeta{Name: generatedTestNamespace},
 		}
-		Expect(err).ToNot(HaveOccurred())
-		Eventually(func() bool {
-			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: testNamespace}, &v1.Namespace{})
-			if err != nil && apierrors.IsNotFound(err) {
-				return true
-			}
-			return false
-		}, 5*time.Minute, 5*time.Second).Should(BeTrue())
 
 		// Add any setup steps that needs to be executed before each test
-		err = k8sClient.Create(context.Background(), namespace)
+		err := k8sClient.Create(context.Background(), namespace)
 		Expect(err).ToNot(HaveOccurred())
 
 		existingNamespace := &v1.Namespace{}
 		Eventually(func() bool {
-			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: testNamespace}, existingNamespace)
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: generatedTestNamespace}, existingNamespace)
 			if err != nil {
 				return false
 			}
 			return true
 		}, 5*time.Minute, 5*time.Second).Should(BeTrue())
+
+		testNamespace = existingNamespace.Name
 	})
 
 	AfterEach(func() {
@@ -102,31 +100,17 @@ var _ = Describe("APIPRoduct controller", func() {
 
 			start := time.Now()
 
-			// Ingress Provider: Istio
-			err := ApplyResources(filepath.Join("..", "utils", "local-deployment", "istio-manifests", "Base", "Base.yaml"), k8sClient, testNamespace)
-			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "utils", "local-deployment", "istio-manifests", "Base", "Pilot", "Pilot.yaml"), k8sClient, testNamespace)
-			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "utils", "local-deployment", "istio-manifests", "Base", "Pilot", "IngressGateways", "IngressGateways.yaml"), k8sClient, testNamespace)
-			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "utils", "local-deployment", "istio-manifests", "default-gateway.yaml"), k8sClient, testNamespace)
-			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "utils", "local-deployment", "authorino.yaml"), k8sClient, testNamespace)
-			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "samples", "secret.yaml"), k8sClient, testNamespace)
+			err := ApplyResources(filepath.Join("..", "samples", "secret.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
 			err = ApplyResources(filepath.Join("..", "samples", "api1.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
 			err = ApplyResources(filepath.Join("..", "samples", "api2.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
 
-			Eventually(func() bool {
-				err := CheckForDeploymentsReady(testNamespace, k8sClient)
-				if err != nil {
-					logf.Log.Info("Waiting for full availability", "err", err)
-				}
-				return err == nil
-			}, 5*time.Minute, 5*time.Second).Should(BeTrue())
+			dogsKey := types.NamespacedName{Name: "dogs", Namespace: testNamespace}
+			catsKey := types.NamespacedName{Name: "cats", Namespace: testNamespace}
+			err = WaitForDeploymentsReady(k8sClient, dogsKey, catsKey)
+			Expect(err).ToNot(HaveOccurred())
 
 			// Create APIPRoduct
 			apiProduct := apiProduct(testNamespace)

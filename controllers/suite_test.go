@@ -37,6 +37,7 @@ import (
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
+	"github.com/kuadrant/kuadrant-controller/pkg/ratelimitproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 	// +kubebuilder:scaffold:imports
 )
@@ -45,9 +46,8 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	k8sClient     client.Client
-	testEnv       *envtest.Environment
-	testNamespace string = "kuadrant-system"
+	k8sClient client.Client
+	testEnv   *envtest.Environment
 )
 
 func TestAPIs(t *testing.T) {
@@ -104,9 +104,10 @@ var _ = BeforeSuite(func() {
 
 	// Register reconcilers
 	err = (&APIProductReconciler{
-		BaseReconciler:  apiProductBaseReconciler,
-		AuthProvider:    authproviders.GetAuthProvider(apiProductBaseReconciler),
-		IngressProvider: ingressproviders.GetIngressProvider(apiProductBaseReconciler),
+		BaseReconciler:    apiProductBaseReconciler,
+		AuthProvider:      authproviders.GetAuthProvider(apiProductBaseReconciler),
+		IngressProvider:   ingressproviders.GetIngressProvider(apiProductBaseReconciler),
+		RateLimitProvider: ratelimitproviders.GetRateLimitProvider(apiProductBaseReconciler),
 	}).SetupWithManager(mgr)
 	Expect(err).ToNot(HaveOccurred())
 

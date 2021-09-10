@@ -17,6 +17,8 @@ limitations under the License.
 package v1beta1
 
 import (
+	"fmt"
+
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -87,6 +89,27 @@ func (a *APISelector) APINamespacedName() types.NamespacedName {
 	return types.NamespacedName{Namespace: a.Namespace, Name: name}
 }
 
+type RateLimitDefinitionSpec struct {
+	// MaxValue represents the number of requests allowed per defined period of time.
+	MaxValue int32 `json:"maxValue"`
+	// Period represents the period of time in seconds.
+	Period int32 `json:"period"`
+}
+
+type RateLimitSpec struct {
+	// Global configures a single global rate limit for all requests.
+	// +optional
+	GlobalRateLimit *RateLimitDefinitionSpec `json:"global,omitempty"`
+
+	// PerRemoteIPRateLimit configures the same rate limit parameters per each remote address
+	// +optional
+	PerRemoteIPRateLimit *RateLimitDefinitionSpec `json:"perRemoteIP,omitempty"`
+
+	// AuthRateLimit configures the same rate limit parameters per each authenticated client
+	// +optional
+	AuthRateLimit *RateLimitDefinitionSpec `json:"authenticated,omitempty"`
+}
+
 // APIProductSpec defines the desired state of APIProduct
 type APIProductSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -95,6 +118,10 @@ type APIProductSpec struct {
 	Routing        Routing            `json:"routing"`
 	SecurityScheme []*SecurityScheme  `json:"securityScheme"`
 	APIs           []*APISelector     `json:"APIs"`
+
+	// RateLimit configures global rate limit parameters
+	// +optional
+	RateLimit *RateLimitSpec `json:"rateLimit,omitempty"`
 }
 
 // APIProductStatus defines the observed state of APIProduct
@@ -169,6 +196,66 @@ func (a *APIProduct) Validate() error {
 	}
 
 	return nil
+}
+
+func (a *APIProduct) RateLimitDomainName() string {
+	// APIProduct name/namespace should be unique in the cluster
+	return fmt.Sprintf("%s.%s", a.Name, a.Namespace)
+}
+
+func (a *APIProduct) GlobalRateLimit() *RateLimitDefinitionSpec {
+	if a.Spec.RateLimit == nil {
+		return nil
+	}
+
+	return a.Spec.RateLimit.GlobalRateLimit
+}
+
+func (a *APIProduct) PerRemoteIPRateLimit() *RateLimitDefinitionSpec {
+	if a.Spec.RateLimit == nil {
+		return nil
+	}
+
+	return a.Spec.RateLimit.PerRemoteIPRateLimit
+}
+
+func (a *APIProduct) AuthRateLimit() *RateLimitDefinitionSpec {
+	if a.Spec.RateLimit == nil {
+		return nil
+	}
+
+	return a.Spec.RateLimit.AuthRateLimit
+}
+
+func (a *APIProduct) IsRateLimitEnabled() bool {
+	return a.AuthRateLimit() != nil ||
+		a.PerRemoteIPRateLimit() != nil ||
+		a.GlobalRateLimit() != nil
+}
+
+func (a *APIProduct) IsPreAuthRateLimitEnabled() bool {
+	return a.PerRemoteIPRateLimit() != nil ||
+		a.GlobalRateLimit() != nil
+}
+
+func (a *APIProduct) HasAPIKeyAuth() bool {
+	for _, securityScheme := range a.Spec.SecurityScheme {
+		if securityScheme.APIKeyAuth != nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (a *APIProduct) HasOIDCAuth() bool {
+	for _, securityScheme := range a.Spec.SecurityScheme {
+		if securityScheme.OpenIDConnectAuth != nil {
+			return true
+		}
+	}
+
+	return false
 }
 
 //+kubebuilder:object:root=true

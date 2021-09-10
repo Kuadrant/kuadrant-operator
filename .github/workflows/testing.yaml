@@ -60,6 +60,9 @@ jobs:
       - name: Check cluster info
         run: |
           kubectl cluster-info dump
+      - name: Deploy Kuadrant deps
+        run: |
+          make deploy-kuadrant-deps
       - name: run tests
         run: |
           make test-integration

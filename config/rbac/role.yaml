@@ -7,9 +7,9 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - config.authorino.3scale.net
+  - authorino.3scale.net
   resources:
-  - services
+  - authconfigs
   verbs:
   - create
   - delete
@@ -34,6 +34,30 @@ rules:
   verbs:
   - get
   - list
+  - watch
+- apiGroups:
+  - limitador.3scale.net
+  resources:
+  - ratelimits
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.istio.io
+  resources:
+  - envoyfilters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - networking.istio.io

@@ -22,6 +22,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -54,33 +55,30 @@ paths:
 `
 
 var _ = Describe("Service controller", func() {
+	var testNamespace string
+
 	BeforeEach(func() {
-		namespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testNamespace}}
-		err := k8sClient.Delete(context.Background(), namespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
-		if err != nil && apierrors.IsNotFound(err) {
-			err = nil
+		var generatedTestNamespace = "test-namespace-" + uuid.New().String()
+
+		namespace := &v1.Namespace{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
+			ObjectMeta: metav1.ObjectMeta{Name: generatedTestNamespace},
 		}
-		Expect(err).ToNot(HaveOccurred())
-		Eventually(func() bool {
-			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: testNamespace}, &v1.Namespace{})
-			if err != nil && apierrors.IsNotFound(err) {
-				return true
-			}
-			return false
-		}, 5*time.Minute, 5*time.Second).Should(BeTrue())
 
 		// Add any setup steps that needs to be executed before each test
-		err = k8sClient.Create(context.Background(), namespace)
+		err := k8sClient.Create(context.Background(), namespace)
 		Expect(err).ToNot(HaveOccurred())
 
 		existingNamespace := &v1.Namespace{}
 		Eventually(func() bool {
-			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: testNamespace}, existingNamespace)
+			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: generatedTestNamespace}, existingNamespace)
 			if err != nil {
 				return false
 			}
 			return true
 		}, 5*time.Minute, 5*time.Second).Should(BeTrue())
+
+		testNamespace = existingNamespace.Name
 	})
 
 	AfterEach(func() {

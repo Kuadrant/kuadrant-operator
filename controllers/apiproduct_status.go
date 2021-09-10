@@ -110,6 +110,18 @@ func (r *APIProductReconciler) calculateReadyCondition(ctx context.Context, apip
 		readyCondition.Reason = "Unknown"
 	}
 
+	rateLimitOK, err := r.RateLimitProvider.Status(ctx, apip)
+	if err != nil {
+		return metav1.Condition{}, err
+	}
+
+	if !rateLimitOK {
+		readyCondition.Status = metav1.ConditionFalse
+		readyCondition.Message = "RateLimit was not reconciled"
+		// TODO(eastizle): provide more info from the providers
+		readyCondition.Reason = "Unknown"
+	}
+
 	if err := r.validateSpec(ctx, apip); err != nil {
 		readyCondition.Status = metav1.ConditionFalse
 		readyCondition.Message = err.Error()

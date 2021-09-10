@@ -20,9 +20,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
+	"time"
 
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -140,29 +144,28 @@ func CreateOrUpdateK8SObject(obj runtime.Object, k8sClient client.Client) error 
 	return k8sClient.Update(context.Background(), k8sObjCopy)
 }
 
-// TODO(eastizle): Generalize this method to be useful for any context.
-// number of deployments or deployment list should be passed as argument.
-func CheckForDeploymentsReady(ns string, k8sClient client.Client) error {
-	deploymentList := &appsv1.DeploymentList{}
-	listOptions := &client.ListOptions{}
-	client.InNamespace(ns).ApplyToList(listOptions)
-	err := k8sClient.List(context.Background(), deploymentList, listOptions)
-	if err != nil {
-		logf.Log.Error(err, "reading deployment list")
-		return err
-	}
+func WaitForDeploymentsReady(k8sClient client.Client, keys ...client.ObjectKey) error {
+	for idx := range keys {
+		Eventually(func() bool {
+			existingDeployment := &appsv1.Deployment{}
+			err := k8sClient.Get(context.Background(), keys[idx], existingDeployment)
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					fmt.Fprintf(GinkgoWriter, "Deployment %s available\n", keys[idx].Name)
+				} else {
+					fmt.Fprintf(GinkgoWriter, "error reading deployments: %s\n", err.Error())
+				}
+				return false
+			}
 
-	if len(deploymentList.Items) < 5 {
-		return errors.New("Expecting at least 5 Deployments")
-	}
+			if !IsDeploymentConfigAvailable(existingDeployment) {
+				fmt.Fprintf(GinkgoWriter, "Deployment %s. Available: %d. Desired: %d", existingDeployment.Name, existingDeployment.Status.AvailableReplicas, *existingDeployment.Spec.Replicas)
+				return false
+			}
 
-	for idx, deployment := range deploymentList.Items {
-		if !IsDeploymentConfigAvailable(&deploymentList.Items[idx]) {
-			logf.Log.Info("Waiting for full availability", "Deployment", deployment.GetName(), "available", deployment.Status.AvailableReplicas, "desired", *deployment.Spec.Replicas)
-			return errors.New("deployments not available yet")
-		}
-
-		logf.Log.Info("Deployment", deployment.GetName(), "available")
+			fmt.Fprintf(GinkgoWriter, "Deployment %s available", existingDeployment.Name)
+			return true
+		}, 5*time.Minute, 5*time.Second).Should(BeTrue())
 	}
 
 	return nil

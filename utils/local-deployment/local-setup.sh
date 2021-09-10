@@ -18,36 +18,19 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
 export KUADRANT_NAMESPACE="kuadrant-system"
 export KIND_CLUSTER_NAME="kuadrant-local"
-kind create cluster --name ${KIND_CLUSTER_NAME} --config utils/local-deployment/kind-cluster.yaml
 
-if [ -z "${RUN_OPERATOR_LOCALLY+x}" ]; then
-    echo "Building kuadrant"
-    docker build -t kuadrant:devel ./
-    kind load docker-image kuadrant:devel --name ${KIND_CLUSTER_NAME}
-fi
+${SCRIPT_DIR}/deploy-kuadrant-deps.sh
 
-echo "Creating namespace"
-kubectl create namespace "${KUADRANT_NAMESPACE}"
-
-echo "Deploying Ingress Provider"
-kubectl apply -f utils/local-deployment/istio-manifests/Base/Base.yaml
-kubectl apply -f utils/local-deployment/istio-manifests/Base/Pilot/Pilot.yaml
-kubectl apply -f utils/local-deployment/istio-manifests/Base/Pilot/IngressGateways/IngressGateways.yaml
-kubectl apply -n "${KUADRANT_NAMESPACE}" -f utils/local-deployment/istio-manifests/default-gateway.yaml
-
-echo "Deploying Authorino to the kuadrant-system namespace"
-kubectl apply -n "${KUADRANT_NAMESPACE}" -f utils/local-deployment/authorino.yaml
-
-if [ -z "${RUN_OPERATOR_LOCALLY+x}" ]; then
-    echo "Deploying Kuadrant control plane"
-    kustomize build config/default | kubectl -n "${KUADRANT_NAMESPACE}" apply -f -
-    kubectl -n "${KUADRANT_NAMESPACE}" patch deployment kuadrant-controller-manager -p '{"spec": {"template": {"spec":{"containers":[{"name": "manager","image":"kuadrant:devel", "imagePullPolicy":"IfNotPresent"}]}}}}'
-else
-	kustomize build config/crd | kubectl apply -f -
-fi
-
+echo "Building kuadrant"
+docker build -t kuadrant:devel ./
+kind load docker-image kuadrant:devel --name ${KIND_CLUSTER_NAME}
+echo "Deploying Kuadrant control plane"
+kustomize build config/default | kubectl -n "${KUADRANT_NAMESPACE}" apply -f -
+kubectl -n "${KUADRANT_NAMESPACE}" patch deployment kuadrant-controller-manager -p '{"spec": {"template": {"spec":{"containers":[{"name": "manager","image":"kuadrant:devel", "imagePullPolicy":"IfNotPresent"}]}}}}'
 echo "Wait for all deployments to be up"
 kubectl -n "${KUADRANT_NAMESPACE}" wait --timeout=300s --for=condition=Available deployments --all
 

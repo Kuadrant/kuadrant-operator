@@ -31,6 +31,7 @@ import (
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
+	"github.com/kuadrant/kuadrant-controller/pkg/ratelimitproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
 
@@ -41,8 +42,9 @@ const (
 // APIProductReconciler reconciles a APIProduct object
 type APIProductReconciler struct {
 	*reconcilers.BaseReconciler
-	IngressProvider ingressproviders.IngressProvider
-	AuthProvider    authproviders.AuthProvider
+	IngressProvider   ingressproviders.IngressProvider
+	AuthProvider      authproviders.AuthProvider
+	RateLimitProvider ratelimitproviders.RateLimitProvider
 }
 
 //+kubebuilder:rbac:groups=networking.kuadrant.io,resources=apiproducts;apis,verbs=get;list;watch;create;update;patch;delete
@@ -84,11 +86,22 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			return ctrl.Result{}, err
 		}
 
+		err = r.RateLimitProvider.Delete(ctx, apip)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
 		//Remove finalizer and update the object.
 		controllerutil.RemoveFinalizer(apip, finalizerName)
 		err = r.UpdateResource(ctx, apip)
 		log.Info("Removing finalizer", "error", err)
 		return ctrl.Result{Requeue: true}, err
+	}
+
+	// Ignore deleted resources, this can happen when foregroundDeletion is enabled
+	// https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/#foreground-cascading-deletion
+	if apip.GetDeletionTimestamp() != nil {
+		return ctrl.Result{}, nil
 	}
 
 	if !controllerutil.ContainsFinalizer(apip, finalizerName) {
@@ -160,6 +173,11 @@ func (r *APIProductReconciler) reconcileSpec(ctx context.Context, apip *networki
 	}
 
 	res, err = r.AuthProvider.Reconcile(ctx, apip)
+	if err != nil || res.Requeue {
+		return res, err
+	}
+
+	res, err = r.RateLimitProvider.Reconcile(ctx, apip)
 	if err != nil || res.Requeue {
 		return res, err
 	}

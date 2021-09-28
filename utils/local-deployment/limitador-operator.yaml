@@ -11,9 +11,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
-  name: limitadors.limitador.3scale.net
+  name: limitadors.limitador.kuadrant.io
 spec:
-  group: limitador.3scale.net
+  group: limitador.kuadrant.io
   names:
     kind: Limitador
     listKind: LimitadorList
@@ -63,9 +63,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
-  name: ratelimits.limitador.3scale.net
+  name: ratelimits.limitador.kuadrant.io
 spec:
-  group: limitador.3scale.net
+  group: limitador.kuadrant.io
   names:
     kind: RateLimit
     listKind: RateLimitList
@@ -188,7 +188,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - limitador.3scale.net
+  - limitador.kuadrant.io
   resources:
   - limitadors
   verbs:
@@ -200,13 +200,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - limitador.3scale.net
+  - limitador.kuadrant.io
   resources:
   - limitadors/finalizers
   verbs:
   - update
 - apiGroups:
-  - limitador.3scale.net
+  - limitador.kuadrant.io
   resources:
   - limitadors/status
   verbs:
@@ -214,7 +214,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - limitador.3scale.net
+  - limitador.kuadrant.io
   resources:
   - ratelimits
   verbs:
@@ -226,13 +226,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - limitador.3scale.net
+  - limitador.kuadrant.io
   resources:
   - ratelimits/finalizers
   verbs:
   - update
 - apiGroups:
-  - limitador.3scale.net
+  - limitador.kuadrant.io
   resources:
   - ratelimits/status
   verbs:
@@ -321,7 +321,7 @@ data:
       port: 9443
     leaderElection:
       leaderElect: true
-      resourceName: 3745a16e.3scale.net
+      resourceName: 3745a16e.kuadrant.io
 kind: ConfigMap
 metadata:
   name: limitador-operator-manager-config
@@ -376,7 +376,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: quay.io/3scale/limitador-operator:v0.1.1
+        image: quay.io/3scale/limitador-operator:v0.2.0
         livenessProbe:
           httpGet:
             path: /healthz

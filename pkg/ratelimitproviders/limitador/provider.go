@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"reflect"
 
-	limitadorv1alpha1 "github.com/3scale/limitador-operator/api/v1alpha1"
 	"github.com/go-logr/logr"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -39,7 +39,7 @@ type Provider struct {
 	logger logr.Logger
 }
 
-// +kubebuilder:rbac:groups=limitador.3scale.net,resources=ratelimits,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=limitador.kuadrant.io,resources=ratelimits,verbs=get;list;watch;create;update;patch;delete
 
 func New(baseReconciler *reconcilers.BaseReconciler) *Provider {
 	utilruntime.Must(limitadorv1alpha1.AddToScheme(baseReconciler.Scheme()))

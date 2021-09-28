@@ -45,6 +45,8 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+KUADRANT_NAMESPACE=kuadrant-system
+
 all: manager
 
 # Run all tests
@@ -172,7 +174,7 @@ endif
 # Generates istio manifests with patches.
 .PHONY: generate-istio-manifests
 generate-istio-manifests: istioctl
-	$(ISTIOCTL) manifest generate --set profile=minimal --set values.gateways.istio-ingressgateway.autoscaleEnabled=false --set values.pilot.autoscaleEnabled=false --set values.global.istioNamespace=kuadrant-system -f utils/local-deployment/patches/istio-externalProvider.yaml -o utils/local-deployment/istio-manifests
+	$(ISTIOCTL) manifest generate --set profile=minimal --set values.gateways.istio-ingressgateway.autoscaleEnabled=false --set values.pilot.autoscaleEnabled=false --set values.global.istioNamespace=$(KUADRANT_NAMESPACE) -f utils/local-deployment/patches/istio-externalProvider.yaml -o utils/local-deployment/istio-manifests
 
 .PHONY: istio-manifest-update-test
 istio-manifest-update-test: generate-istio-manifests
@@ -262,3 +264,16 @@ golangci-lint: $(GOLANGCI-LINT)
 .PHONY: run-lint
 run-lint: $(GOLANGCI-LINT)
 	$(GOLANGCI-LINT) run
+
+# Generates limitador manifests.
+LIMITADOR_OPERATOR_VERSION=v0.2.0
+LIMITADOR_OPERATOR_IMAGE=quay.io/3scale/limitador-operator:$(LIMITADOR_OPERATOR_VERSION)
+.PHONY: generate-limitador-operator-manifests
+generate-limitador-operator-manifests:
+	$(eval TMP := $(shell mktemp -d))
+	cd $(TMP); git clone --depth 1 --branch $(LIMITADOR_OPERATOR_VERSION) https://github.com/kuadrant/limitador-operator.git
+	cd $(TMP)/limitador-operator; make kustomize
+	cd $(TMP)/limitador-operator/config/manager; $(TMP)/limitador-operator/bin/kustomize edit set image controller=$(LIMITADOR_OPERATOR_IMAGE)
+	cd $(TMP)/limitador-operator/config/default; $(TMP)/limitador-operator/bin/kustomize edit set namespace $(KUADRANT_NAMESPACE)
+	cd $(TMP)/limitador-operator; bin/kustomize build config/default -o $(PROJECT_PATH)/utils/local-deployment/limitador-operator.yaml
+	-rm -rf $(TMP)

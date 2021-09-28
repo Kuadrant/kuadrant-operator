@@ -17,7 +17,7 @@
 package limitador
 
 import (
-	limitadorv1alpha1 "github.com/3scale/limitador-operator/api/v1alpha1"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -35,7 +35,7 @@ func (r *RateLimitFactory) RateLimit() *limitadorv1alpha1.RateLimit {
 	return &limitadorv1alpha1.RateLimit{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimit",
-			APIVersion: "limitador.3scale.net/v1alpha1",
+			APIVersion: "limitador.kuadrant.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.Key.Name,

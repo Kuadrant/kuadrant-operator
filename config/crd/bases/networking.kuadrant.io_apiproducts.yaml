@@ -57,18 +57,6 @@ spec:
                   - namespace
                   type: object
                 type: array
-              information:
-                description: 'INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-                  Important: Run "make" to regenerate code after modifying this file'
-                properties:
-                  description:
-                    type: string
-                  owner:
-                    type: string
-                required:
-                - description
-                - owner
-                type: object
               rateLimit:
                 description: RateLimit configures global rate limit parameters
                 properties:
@@ -126,14 +114,11 @@ spec:
                 type: object
               routing:
                 properties:
-                  expose:
-                    type: boolean
                   hosts:
                     items:
                       type: string
                     type: array
                 required:
-                - expose
                 - hosts
                 type: object
               securityScheme:
@@ -174,7 +159,6 @@ spec:
                 type: array
             required:
             - APIs
-            - information
             - routing
             - securityScheme
             type: object

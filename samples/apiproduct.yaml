@@ -3,13 +3,9 @@ kind: APIProduct
 metadata:
   name: animaltoys
 spec:
-  information:
-    description: My super nice API Product.
-    owner: whoever@mycompany.com
   routing:
     hosts:
       - api.animaltoys.127.0.0.1.nip.io
-    expose: true
   APIs:
     - name: dogs
       namespace: default

@@ -24,13 +24,7 @@ import (
 )
 
 func TestAPIProductTypeBasic(t *testing.T) {
-	apiProduct := APIProduct{
-		Spec: APIProductSpec{
-			Information: ProductInformation{
-				Description: "some descr",
-			},
-		},
-	}
+	apiProduct := APIProduct{}
 	_, err := json.MarshalIndent(apiProduct, "", "  ")
 	if err != nil {
 		t.Error(err)

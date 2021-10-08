@@ -56,14 +56,8 @@ type SecurityScheme struct {
 	OpenIDConnectAuth *OpenIDConnectAuth `json:"openIDConnectAuth,omitempty"`
 }
 
-type ProductInformation struct {
-	Description string `json:"description"`
-	Owner       string `json:"owner"`
-}
-
 type Routing struct {
-	Hosts  []string `json:"hosts"`
-	Expose bool     `json:"expose"`
+	Hosts []string `json:"hosts"`
 }
 
 type Mapping struct {
@@ -112,12 +106,9 @@ type RateLimitSpec struct {
 
 // APIProductSpec defines the desired state of APIProduct
 type APIProductSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	Information    ProductInformation `json:"information"`
-	Routing        Routing            `json:"routing"`
-	SecurityScheme []*SecurityScheme  `json:"securityScheme"`
-	APIs           []*APISelector     `json:"APIs"`
+	Routing        Routing           `json:"routing"`
+	SecurityScheme []*SecurityScheme `json:"securityScheme"`
+	APIs           []*APISelector    `json:"APIs"`
 
 	// RateLimit configures global rate limit parameters
 	// +optional

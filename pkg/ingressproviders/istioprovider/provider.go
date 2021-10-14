@@ -184,7 +184,7 @@ func (is *IstioProvider) virtualServiceFromAPIProduct(ctx context.Context, apip 
 	factory := VirtualServiceFactory{
 		ObjectName: apip.Name + apip.Namespace,
 		Namespace:  common.KuadrantNamespace,
-		Hosts:      apip.Spec.Routing.Hosts,
+		Hosts:      apip.Spec.Hosts,
 		HTTPRoutes: httpRoutes,
 	}
 

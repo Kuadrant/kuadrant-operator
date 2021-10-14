@@ -56,10 +56,6 @@ type SecurityScheme struct {
 	OpenIDConnectAuth *OpenIDConnectAuth `json:"openIDConnectAuth,omitempty"`
 }
 
-type Routing struct {
-	Hosts []string `json:"hosts"`
-}
-
 type Mapping struct {
 	Prefix string `json:"prefix"`
 }
@@ -106,7 +102,12 @@ type RateLimitSpec struct {
 
 // APIProductSpec defines the desired state of APIProduct
 type APIProductSpec struct {
-	Routing        Routing           `json:"routing"`
+	// The destination hosts to which traffic is being sent. Could
+	// be a DNS name with wildcard prefix or an IP address.  Depending on the
+	// platform, short-names can also be used instead of a FQDN (i.e. has no
+	// dots in the name). In such a scenario, the FQDN of the host would be
+	// derived based on the underlying platform.
+	Hosts          []string          `json:"hosts"`
 	SecurityScheme []*SecurityScheme `json:"securityScheme"`
 	APIs           []*APISelector    `json:"APIs"`
 

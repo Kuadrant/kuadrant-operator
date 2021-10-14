@@ -92,7 +92,7 @@ func preAuthEnvoyFilter(apip *networkingv1beta1.APIProduct) *istionetworkingv1al
 
 	factory.Patches = append(factory.Patches, preAuthHTTPFilterEnvoyPatch(apip))
 
-	for _, host := range apip.Spec.Routing.Hosts {
+	for _, host := range apip.Spec.Hosts {
 		factory.Patches = append(factory.Patches, preAuthActionsEnvoyPatch(apip, host))
 	}
 
@@ -114,7 +114,7 @@ func postAuthEnvoyFilter(apip *networkingv1beta1.APIProduct) *istionetworkingv1a
 
 	factory.Patches = append(factory.Patches, postAuthHTTPFilterEnvoyPatch(apip))
 
-	for _, host := range apip.Spec.Routing.Hosts {
+	for _, host := range apip.Spec.Hosts {
 		factory.Patches = append(factory.Patches, postAuthActionsEnvoyPatch(host))
 	}
 

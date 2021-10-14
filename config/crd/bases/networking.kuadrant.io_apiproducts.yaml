@@ -57,6 +57,15 @@ spec:
                   - namespace
                   type: object
                 type: array
+              hosts:
+                description: The destination hosts to which traffic is being sent.
+                  Could be a DNS name with wildcard prefix or an IP address.  Depending
+                  on the platform, short-names can also be used instead of a FQDN
+                  (i.e. has no dots in the name). In such a scenario, the FQDN of
+                  the host would be derived based on the underlying platform.
+                items:
+                  type: string
+                type: array
               rateLimit:
                 description: RateLimit configures global rate limit parameters
                 properties:
@@ -112,15 +121,6 @@ spec:
                     - period
                     type: object
                 type: object
-              routing:
-                properties:
-                  hosts:
-                    items:
-                      type: string
-                    type: array
-                required:
-                - hosts
-                type: object
               securityScheme:
                 items:
                   properties:
@@ -159,7 +159,7 @@ spec:
                 type: array
             required:
             - APIs
-            - routing
+            - hosts
             - securityScheme
             type: object
           status:

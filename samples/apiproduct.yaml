@@ -3,9 +3,8 @@ kind: APIProduct
 metadata:
   name: animaltoys
 spec:
-  routing:
-    hosts:
-      - api.animaltoys.127.0.0.1.nip.io
+  hosts:
+    - api.animaltoys.127.0.0.1.nip.io
   APIs:
     - name: dogs
       namespace: default

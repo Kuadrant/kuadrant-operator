@@ -63,7 +63,7 @@ func buildAuthConfig(apip *networkingv1beta1.APIProduct) *authorino.AuthConfig {
 			Namespace: common.KuadrantNamespace,
 		},
 		Spec: authorino.AuthConfigSpec{
-			Hosts:         apip.Spec.Routing.Hosts,
+			Hosts:         apip.Spec.Hosts,
 			Identity:      nil,
 			Metadata:      nil,
 			Authorization: nil,

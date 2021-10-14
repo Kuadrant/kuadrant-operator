@@ -189,9 +189,7 @@ func apiProduct(ns string) *networkingv1beta1.APIProduct {
 		},
 		ObjectMeta: metav1.ObjectMeta{Name: "apiproduct01", Namespace: ns},
 		Spec: networkingv1beta1.APIProductSpec{
-			Routing: networkingv1beta1.Routing{
-				Hosts: []string{"petstore.127.0.0.1.nip.io"},
-			},
+			Hosts: []string{"petstore.127.0.0.1.nip.io"},
 			APIs: []*networkingv1beta1.APISelector{
 				{
 					Name:      "cats",

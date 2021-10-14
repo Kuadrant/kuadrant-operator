@@ -117,7 +117,7 @@ func stringMatch(path string, matchType PathMatchType) *v1alpha3.StringMatch {
 	}
 }
 
-func HTTPRoutesFromOAS(oasContent string, pathPrefix string, destination networkingv1beta1.Destination) ([]*v1alpha3.HTTPRoute, error) {
+func HTTPRoutesFromOAS(oasContent string, pathPrefix *string, destination networkingv1beta1.Destination) ([]*v1alpha3.HTTPRoute, error) {
 	doc, err := openapi3.NewLoader().LoadFromData([]byte(oasContent))
 	if err != nil {
 		return nil, err
@@ -146,12 +146,12 @@ func HTTPRoutesFromOAS(oasContent string, pathPrefix string, destination network
 			}
 
 			// Handle Prefix Override.
-			if pathPrefix != "" {
+			if pathPrefix != nil {
 				// We need to rewrite the path, to match what the service expects, basically,
 				// removing the prefixOverride
 				factory.RewriteURI = &path
 				// If there's an Override, lets append it to the actual Operation Path.
-				factory.URIMatchPath = pathPrefix + path
+				factory.URIMatchPath = *pathPrefix + path
 			}
 
 			httpRoutes = append(httpRoutes, factory.HTTPRoute())
@@ -161,7 +161,7 @@ func HTTPRoutesFromOAS(oasContent string, pathPrefix string, destination network
 	return httpRoutes, nil
 }
 
-func HTTPRoutesFromPath(pathMatch *gatewayapiv1alpha1.HTTPPathMatch, pathPrefix string, destination networkingv1beta1.Destination) ([]*v1alpha3.HTTPRoute, error) {
+func HTTPRoutesFromPath(pathMatch *gatewayapiv1alpha1.HTTPPathMatch, pathPrefix *string, destination networkingv1beta1.Destination) ([]*v1alpha3.HTTPRoute, error) {
 	if pathMatch == nil {
 		return nil, nil
 	}
@@ -186,12 +186,12 @@ func HTTPRoutesFromPath(pathMatch *gatewayapiv1alpha1.HTTPPathMatch, pathPrefix 
 		}
 
 		// Handle Prefix Override.
-		if pathPrefix != "" {
+		if pathPrefix != nil {
 			// We need to rewrite the path, to match what the service expects, basically,
 			// removing the prefixOverride
 			factory.RewriteURI = pathMatch.Value
 			// If there's an Override, lets append it to the actual Operation Path.
-			factory.URIMatchPath = pathPrefix + *pathMatch.Value
+			factory.URIMatchPath = *pathPrefix + *pathMatch.Value
 		}
 
 		httpRoutes = append(httpRoutes, factory.HTTPRoute())

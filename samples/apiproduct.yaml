@@ -1,3 +1,4 @@
+---
 apiVersion: networking.kuadrant.io/v1beta1
 kind: APIProduct
 metadata:
@@ -9,13 +10,11 @@ spec:
     - name: dogs
       namespace: default
       tag: production
-      mapping:
-        prefix: /dogs
+      prefix: /dogs
     - name: cats
       namespace: default
       tag: production
-      mapping:
-        prefix: /cats
+      prefix: /cats
   securityScheme:
     - name: MyAPIKey
       apiKeyAuth:

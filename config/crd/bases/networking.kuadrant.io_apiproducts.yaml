@@ -37,18 +37,18 @@ spec:
             description: APIProductSpec defines the desired state of APIProduct
             properties:
               APIs:
+                description: The list of kuadrant API to be protected
                 items:
                   properties:
-                    mapping:
-                      properties:
-                        prefix:
-                          type: string
-                      required:
-                      - prefix
-                      type: object
                     name:
+                      description: Kuadrant API object name
                       type: string
                     namespace:
+                      description: Kuadrant API object namespace
+                      type: string
+                    prefix:
+                      description: Public prefix path to be added to all paths exposed
+                        by the API
                       type: string
                     tag:
                       type: string
@@ -56,6 +56,7 @@ spec:
                   - name
                   - namespace
                   type: object
+                minItems: 1
                 type: array
               hosts:
                 description: The destination hosts to which traffic is being sent.

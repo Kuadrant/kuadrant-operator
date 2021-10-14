@@ -173,8 +173,8 @@ func (is *IstioProvider) getAuthorizationPolicy(virtualService *istio.VirtualSer
 
 func (is *IstioProvider) virtualServiceFromAPIProduct(ctx context.Context, apip *networkingv1beta1.APIProduct) (*istio.VirtualService, error) {
 	httpRoutes := []*v1alpha3.HTTPRoute{}
-	for _, apiSel := range apip.Spec.APIs {
-		apiHTTPRoutes, err := is.apiHTTPRoutes(ctx, apiSel)
+	for idx := range apip.Spec.APIs {
+		apiHTTPRoutes, err := is.apiHTTPRoutes(ctx, &apip.Spec.APIs[idx])
 		if err != nil {
 			return nil, err
 		}
@@ -191,18 +191,18 @@ func (is *IstioProvider) virtualServiceFromAPIProduct(ctx context.Context, apip 
 	return factory.VirtualService(), nil
 }
 
-func (is *IstioProvider) apiHTTPRoutes(ctx context.Context, apiSel *networkingv1beta1.APISelector) ([]*v1alpha3.HTTPRoute, error) {
+func (is *IstioProvider) apiHTTPRoutes(ctx context.Context, apiRef *networkingv1beta1.APIReference) ([]*v1alpha3.HTTPRoute, error) {
 	api := &networkingv1beta1.API{}
-	err := is.Client().Get(ctx, apiSel.APINamespacedName(), api)
+	err := is.Client().Get(ctx, apiRef.APINamespacedName(), api)
 	if err != nil {
 		return nil, err
 	}
 
 	if api.Spec.Mappings.OAS != nil {
-		return HTTPRoutesFromOAS(*api.Spec.Mappings.OAS, apiSel.Mapping.Prefix, api.Spec.Destination)
+		return HTTPRoutesFromOAS(*api.Spec.Mappings.OAS, apiRef.Prefix, api.Spec.Destination)
 	}
 
-	return HTTPRoutesFromPath(api.Spec.Mappings.HTTPPathMatch, apiSel.Mapping.Prefix, api.Spec.Destination)
+	return HTTPRoutesFromPath(api.Spec.Mappings.HTTPPathMatch, apiRef.Prefix, api.Spec.Destination)
 }
 
 func (is *IstioProvider) Status(ctx context.Context, apip *networkingv1beta1.APIProduct) (bool, error) {

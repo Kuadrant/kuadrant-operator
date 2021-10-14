@@ -56,21 +56,22 @@ type SecurityScheme struct {
 	OpenIDConnectAuth *OpenIDConnectAuth `json:"openIDConnectAuth,omitempty"`
 }
 
-type Mapping struct {
-	Prefix string `json:"prefix"`
-}
+type APIReference struct {
+	// Kuadrant API object name
+	Name string `json:"name"`
 
-type APISelector struct {
-	Name      string `json:"name"`
+	// Kuadrant API object namespace
 	Namespace string `json:"namespace"`
 
 	// +optional
 	Tag *string `json:"tag,omitempty"`
 
-	Mapping Mapping `json:"mapping,omitempty"`
+	// Public prefix path to be added to all paths exposed by the API
+	// +optional
+	Prefix *string `json:"prefix,omitempty"`
 }
 
-func (a *APISelector) APINamespacedName() types.NamespacedName {
+func (a *APIReference) APINamespacedName() types.NamespacedName {
 	name := a.Name
 	if a.Tag != nil {
 		name = APIObjectName(a.Name, *a.Tag)
@@ -109,7 +110,10 @@ type APIProductSpec struct {
 	// derived based on the underlying platform.
 	Hosts          []string          `json:"hosts"`
 	SecurityScheme []*SecurityScheme `json:"securityScheme"`
-	APIs           []*APISelector    `json:"APIs"`
+
+	// The list of kuadrant API to be protected
+	// +kubebuilder:validation:MinItems=1
+	APIs []APIReference `json:"APIs"`
 
 	// RateLimit configures global rate limit parameters
 	// +optional
@@ -169,14 +173,18 @@ func (a *APIProduct) Validate() error {
 
 	// Look for duplicated mapping prefixes
 	mappingPrefix := map[string]interface{}{}
-	for idx, apiSel := range a.Spec.APIs {
-		apiField := apisFldPath.Index(idx)
-
-		if _, ok := mappingPrefix[apiSel.Mapping.Prefix]; ok {
-			fieldErrors = append(fieldErrors, field.Invalid(apiField, apiSel.APINamespacedName(), "duplicated prefix"))
+	for idx := range a.Spec.APIs {
+		apiRef := &a.Spec.APIs[idx]
+		if apiRef.Prefix == nil {
+			continue
 		}
 
-		mappingPrefix[apiSel.Mapping.Prefix] = nil
+		apiField := apisFldPath.Index(idx)
+		if _, ok := mappingPrefix[*apiRef.Prefix]; ok {
+			fieldErrors = append(fieldErrors, field.Invalid(apiField, apiRef.APINamespacedName(), "duplicated prefix"))
+		}
+
+		mappingPrefix[*apiRef.Prefix] = nil
 	}
 
 	if len(fieldErrors) > 0 {

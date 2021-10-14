@@ -182,6 +182,8 @@ var _ = Describe("APIPRoduct controller", func() {
 
 func apiProduct(ns string) *networkingv1beta1.APIProduct {
 	tag := "production"
+	catsPrefix := "/cats"
+	dogsPrefix := "/dogs"
 	return &networkingv1beta1.APIProduct{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       networkingv1beta1.APIProductKind,
@@ -190,22 +192,18 @@ func apiProduct(ns string) *networkingv1beta1.APIProduct {
 		ObjectMeta: metav1.ObjectMeta{Name: "apiproduct01", Namespace: ns},
 		Spec: networkingv1beta1.APIProductSpec{
 			Hosts: []string{"petstore.127.0.0.1.nip.io"},
-			APIs: []*networkingv1beta1.APISelector{
+			APIs: []networkingv1beta1.APIReference{
 				{
 					Name:      "cats",
 					Namespace: ns,
 					Tag:       &tag,
-					Mapping: networkingv1beta1.Mapping{
-						Prefix: "/cats",
-					},
+					Prefix:    &catsPrefix,
 				},
 				{
 					Name:      "dogs",
 					Namespace: ns,
 					Tag:       &tag,
-					Mapping: networkingv1beta1.Mapping{
-						Prefix: "/dogs",
-					},
+					Prefix:    &dogsPrefix,
 				},
 			},
 			SecurityScheme: []*networkingv1beta1.SecurityScheme{

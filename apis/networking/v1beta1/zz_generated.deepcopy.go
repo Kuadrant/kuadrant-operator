@@ -217,13 +217,9 @@ func (in *APIProductSpec) DeepCopyInto(out *APIProductSpec) {
 	}
 	if in.SecurityScheme != nil {
 		in, out := &in.SecurityScheme, &out.SecurityScheme
-		*out = make([]*SecurityScheme, len(*in))
+		*out = make([]SecurityScheme, len(*in))
 		for i := range *in {
-			if (*in)[i] != nil {
-				in, out := &(*in)[i], &(*out)[i]
-				*out = new(SecurityScheme)
-				(*in).DeepCopyInto(*out)
-			}
+			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
 	if in.APIs != nil {

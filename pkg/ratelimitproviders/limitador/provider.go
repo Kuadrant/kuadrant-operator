@@ -110,37 +110,40 @@ func (p *Provider) Delete(ctx context.Context, apip *networkingv1beta1.APIProduc
 func (p *Provider) Status(ctx context.Context, apip *networkingv1beta1.APIProduct) (bool, error) {
 	log := p.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
 	log.V(1).Info("Status")
-	if apip.Spec.RateLimit == nil {
-		return true, nil
-	}
 
 	// Right now, we just try to get all the objects that should have been created, and check their status.
 	// If any object is missing/not-created, Status returns false.
 	desiredGlobalRateLimit := p.globalRateLimit(apip)
-	existing := &limitadorv1alpha1.RateLimit{}
-	err := p.GetResource(ctx, client.ObjectKeyFromObject(desiredGlobalRateLimit), existing)
-	if err != nil && apierrors.IsNotFound(err) {
-		return false, nil
-	} else if err != nil {
-		return false, err
+	if !common.IsObjectTaggedToDelete(desiredGlobalRateLimit) {
+		existing := &limitadorv1alpha1.RateLimit{}
+		err := p.GetResource(ctx, client.ObjectKeyFromObject(desiredGlobalRateLimit), existing)
+		if err != nil && apierrors.IsNotFound(err) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
 	}
 
 	desiredperRemoteIPRateLimit := p.perRemoteIPRateLimit(apip)
-	existing = &limitadorv1alpha1.RateLimit{}
-	err = p.GetResource(ctx, client.ObjectKeyFromObject(desiredperRemoteIPRateLimit), existing)
-	if err != nil && apierrors.IsNotFound(err) {
-		return false, nil
-	} else if err != nil {
-		return false, err
+	if !common.IsObjectTaggedToDelete(desiredperRemoteIPRateLimit) {
+		existing := &limitadorv1alpha1.RateLimit{}
+		err := p.GetResource(ctx, client.ObjectKeyFromObject(desiredperRemoteIPRateLimit), existing)
+		if err != nil && apierrors.IsNotFound(err) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
 	}
 
 	authenticatedAuthRateLimit := p.authenticatedRateLimit(apip)
-	existing = &limitadorv1alpha1.RateLimit{}
-	err = p.GetResource(ctx, client.ObjectKeyFromObject(authenticatedAuthRateLimit), existing)
-	if err != nil && apierrors.IsNotFound(err) {
-		return false, nil
-	} else if err != nil {
-		return false, err
+	if !common.IsObjectTaggedToDelete(authenticatedAuthRateLimit) {
+		existing := &limitadorv1alpha1.RateLimit{}
+		err := p.GetResource(ctx, client.ObjectKeyFromObject(authenticatedAuthRateLimit), existing)
+		if err != nil && apierrors.IsNotFound(err) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
 	}
 
 	return true, nil

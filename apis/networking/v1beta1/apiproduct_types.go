@@ -108,8 +108,11 @@ type APIProductSpec struct {
 	// platform, short-names can also be used instead of a FQDN (i.e. has no
 	// dots in the name). In such a scenario, the FQDN of the host would be
 	// derived based on the underlying platform.
-	Hosts          []string          `json:"hosts"`
-	SecurityScheme []*SecurityScheme `json:"securityScheme"`
+	Hosts []string `json:"hosts"`
+
+	// Configure authentication mechanisms
+	// +optional
+	SecurityScheme []SecurityScheme `json:"securityScheme,omitempty"`
 
 	// The list of kuadrant API to be protected
 	// +kubebuilder:validation:MinItems=1
@@ -236,6 +239,10 @@ func (a *APIProduct) IsRateLimitEnabled() bool {
 func (a *APIProduct) IsPreAuthRateLimitEnabled() bool {
 	return a.PerRemoteIPRateLimit() != nil ||
 		a.GlobalRateLimit() != nil
+}
+
+func (a *APIProduct) HasSecurity() bool {
+	return len(a.Spec.SecurityScheme) > 0
 }
 
 func (a *APIProduct) HasAPIKeyAuth() bool {

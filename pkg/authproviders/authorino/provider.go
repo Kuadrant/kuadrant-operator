@@ -71,6 +71,11 @@ func buildAuthConfig(apip *networkingv1beta1.APIProduct) *authorino.AuthConfig {
 		},
 	}
 
+	if !apip.HasSecurity() {
+		common.TagObjectToDelete(authConfig)
+		return authConfig
+	}
+
 	for _, securityScheme := range apip.Spec.SecurityScheme {
 		identity := authorino.Identity{
 			Name:           securityScheme.Name,
@@ -153,17 +158,19 @@ func (a *Provider) Status(ctx context.Context, apip *networkingv1beta1.APIProduc
 	// If any object is missing/not-created, Status returns false.
 	authConfig := buildAuthConfig(apip)
 
-	existingAuthConfig := &authorino.AuthConfig{}
-	err := a.Client().Get(ctx, client.ObjectKeyFromObject(authConfig), existingAuthConfig)
-	if err != nil && errors.IsNotFound(err) {
-		return false, nil
-	} else if err != nil {
-		return false, err
+	if !common.IsObjectTaggedToDelete(authConfig) {
+		existingAuthConfig := &authorino.AuthConfig{}
+		err := a.Client().Get(ctx, client.ObjectKeyFromObject(authConfig), existingAuthConfig)
+		if err != nil && errors.IsNotFound(err) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
+		// TODO(jmprusi): No status in authorino serviceConfig objects, yet.
+		//if !existingServiceConfig.Status.Ready {
+		//	return false, nil
+		//}
 	}
-	// TODO(jmprusi): No status in authorino serviceConfig objects, yet.
-	//if !existingServiceConfig.Status.Ready {
-	//	return false, nil
-	//}
 
 	return true, nil
 }

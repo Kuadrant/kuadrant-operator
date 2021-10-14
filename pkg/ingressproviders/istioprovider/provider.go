@@ -95,7 +95,7 @@ func (is *IstioProvider) Reconcile(ctx context.Context, apip *networkingv1beta1.
 		return ctrl.Result{}, err
 	}
 
-	authPolicy, err := is.getAuthorizationPolicy(existingVS)
+	authPolicy, err := is.getAuthorizationPolicy(apip, existingVS)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -121,17 +121,7 @@ func (is *IstioProvider) ReconcileIstioAuthorizationPolicy(ctx context.Context, 
 	return is.ReconcileResource(ctx, &istioSecurity.AuthorizationPolicy{}, desired, mutatefn)
 }
 
-func (is *IstioProvider) getAuthorizationPolicy(virtualService *istio.VirtualService) (*istioSecurity.AuthorizationPolicy, error) {
-	policyHosts := []string{}
-
-	// Now we need to generate the list of hosts that will match the authorization policy,
-	// to be sure, we will match the "$host" and "$host:*".
-	for _, host := range virtualService.Spec.Hosts {
-		//TODO(jmprusi): avoid duplicates
-		hostSplitted := strings.Split(host, ":")
-		policyHosts = append(policyHosts, hostSplitted[0]+":*")
-		policyHosts = append(policyHosts, hostSplitted[0])
-	}
+func (is *IstioProvider) getAuthorizationPolicy(apip *networkingv1beta1.APIProduct, virtualService *istio.VirtualService) (*istioSecurity.AuthorizationPolicy, error) {
 	authPolicy := &istioSecurity.AuthorizationPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "AuthorizationPolicy",
@@ -141,26 +131,42 @@ func (is *IstioProvider) getAuthorizationPolicy(virtualService *istio.VirtualSer
 			Name:      virtualService.GetName(),
 			Namespace: common.KuadrantNamespace,
 		},
-		Spec: v1beta12.AuthorizationPolicy{
-			Selector: &v1beta13.WorkloadSelector{
-				MatchLabels: map[string]string{
-					"app": "istio-ingressgateway",
-				},
+	}
+
+	if !apip.HasSecurity() {
+		common.TagObjectToDelete(authPolicy)
+		return authPolicy, nil
+	}
+
+	// Now we need to generate the list of hosts that will match the authorization policy,
+	// to be sure, we will match the "$host" and "$host:*".
+	policyHosts := []string{}
+	for _, host := range virtualService.Spec.Hosts {
+		//TODO(jmprusi): avoid duplicates
+		hostSplitted := strings.Split(host, ":")
+		policyHosts = append(policyHosts, hostSplitted[0]+":*")
+		policyHosts = append(policyHosts, hostSplitted[0])
+	}
+
+	authPolicy.Spec = v1beta12.AuthorizationPolicy{
+		Selector: &v1beta13.WorkloadSelector{
+			MatchLabels: map[string]string{
+				"app": "istio-ingressgateway",
 			},
-			Rules: []*v1beta12.Rule{
-				{
-					To: []*v1beta12.Rule_To{{
-						Operation: &v1beta12.Operation{
-							Hosts: policyHosts,
-						},
-					}},
-				},
+		},
+		Rules: []*v1beta12.Rule{
+			{
+				To: []*v1beta12.Rule_To{{
+					Operation: &v1beta12.Operation{
+						Hosts: policyHosts,
+					},
+				}},
 			},
-			Action: v1beta12.AuthorizationPolicy_CUSTOM,
-			ActionDetail: &v1beta12.AuthorizationPolicy_Provider{
-				Provider: &v1beta12.AuthorizationPolicy_ExtensionProvider{
-					Name: common.KuadrantAuthorizationProvider,
-				},
+		},
+		Action: v1beta12.AuthorizationPolicy_CUSTOM,
+		ActionDetail: &v1beta12.AuthorizationPolicy_Provider{
+			Provider: &v1beta12.AuthorizationPolicy_ExtensionProvider{
+				Name: common.KuadrantAuthorizationProvider,
 			},
 		},
 	}

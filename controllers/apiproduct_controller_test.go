@@ -206,7 +206,7 @@ func apiProduct(ns string) *networkingv1beta1.APIProduct {
 					Prefix:    &dogsPrefix,
 				},
 			},
-			SecurityScheme: []*networkingv1beta1.SecurityScheme{
+			SecurityScheme: []networkingv1beta1.SecurityScheme{
 				{
 					Name: "MyAPIKey",
 					APIKeyAuth: &networkingv1beta1.APIKeyAuth{

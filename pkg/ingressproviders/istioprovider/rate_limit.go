@@ -106,7 +106,7 @@ func postAuthEnvoyFilter(apip *networkingv1beta1.APIProduct) *istionetworkingv1a
 		Patches:    make([]*istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, 0),
 	}
 
-	if apip.AuthRateLimit() == nil {
+	if apip.AuthRateLimit() == nil || !apip.HasSecurity() {
 		envoyFilter := factory.EnvoyFilter()
 		common.TagObjectToDelete(envoyFilter)
 		return envoyFilter

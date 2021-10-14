@@ -123,6 +123,7 @@ spec:
                     type: object
                 type: object
               securityScheme:
+                description: Configure authentication mechanisms
                 items:
                   properties:
                     apiKeyAuth:
@@ -161,7 +162,6 @@ spec:
             required:
             - APIs
             - hosts
-            - securityScheme
             type: object
           status:
             description: APIProductStatus defines the observed state of APIProduct

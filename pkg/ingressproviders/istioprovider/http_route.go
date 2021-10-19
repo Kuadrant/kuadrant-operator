@@ -123,10 +123,13 @@ func HTTPRoutesFromOAS(oasContent string, pathPrefix *string, destination networ
 		return nil, err
 	}
 
-	// TODO(jmprusi): Getting one of the hosts from the OpenAPISpec... extract this logic and improve.
-	oasURL, err := url.Parse(doc.Servers[0].URL)
-	if err != nil {
-		return nil, err
+	var rewriteHost *string
+	if len(doc.Servers) > 0 {
+		oasURL, err := url.Parse(doc.Servers[0].URL)
+		if err != nil {
+			return nil, err
+		}
+		rewriteHost = &oasURL.Host
 	}
 
 	httpRoutes := []*v1alpha3.HTTPRoute{}
@@ -136,7 +139,7 @@ func HTTPRoutesFromOAS(oasContent string, pathPrefix *string, destination networ
 
 			factory := HTTPRouteFactory{
 				Name:         operation.OperationID,
-				RewriteHost:  &oasURL.Host,
+				RewriteHost:  rewriteHost,
 				URIMatchPath: path,
 				URIMatchType: PathMatchExact,
 				Method:       opVerb,

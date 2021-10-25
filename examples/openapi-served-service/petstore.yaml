@@ -37,15 +37,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  annotations:
-    discovery.kuadrant.io/scheme: "http"
-    discovery.kuadrant.io/api-name: "petstore"
-    discovery.kuadrant.io/tag: "production"
-    discovery.kuadrant.io/port: api
-    discovery.kuadrant.io/oas-path: "/openapi"
-    discovery.kuadrant.io/oas-name-port: openapi
   labels:
-    discovery.kuadrant.io/enabled: "true"
     app: petstore
   name: petstore
 spec:

@@ -1,172 +1,100 @@
-# kuadrant-controller
+# Kuadrant Controller
 
+[![Code Style](https://github.com/Kuadrant/kuadrant-controller/actions/workflows/code-style.yaml/badge.svg)](https://github.com/Kuadrant/kuadrant-controller/actions/workflows/code-style.yaml)
+[![Testing](https://github.com/Kuadrant/kuadrant-controller/actions/workflows/testing.yaml/badge.svg)](https://github.com/Kuadrant/kuadrant-controller/actions/workflows/testing.yaml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0)
 
+## Table of contents
+
+* [Overview](#overview)
+* [CustomResourceDefinitions](#customresourcedefinitions)
+* [List of features](#list-of-features)
+* [Architecture](#architecture)
+* [<a href="doc/getting-started.md">Getting started</a>](#getting-started)
+* [User Guides](#user-guides)
+   * [<a href="doc/service-discovery-oas-configmap.md">HTTP routing rules from OpenAPI stored in a configmap</a>](#http-routing-rules-from-openapi-stored-in-a-configmap)
+   * [<a href="doc/service-discovery-oas-service.md">HTTP routing rules from OpenAPI served by the service</a>](#http-routing-rules-from-openapi-served-by-the-service)
+   * [<a href="doc/service-discovery-path-match.md">HTTP routing rules with path matching</a>](#http-routing-rules-with-path-matching)
+   * [<a href="doc/authn-api-key.md">AuthN based on API key</a>](#authn-based-on-api-key)
+   * [<a href="doc/authn-oidc.md">AuthN based on OpenID Connect</a>](#authn-based-on-openid-connect)
+   * [<a href="doc/rate-limit.md">Rate limiting</a>](#rate-limiting)
+* [Contributing](#contributing)
+* [Licensing](#licensing)
+
 ## Overview
-Kuadrant is a re-architecture of API Management using Cloud Native concepts and separating the components to be less coupled, more reusable and leverage the underlying platform.
 
-## Service Discovery
+Kuadrant is a re-architecture of API Management using Cloud Native concepts and separating the components to be less coupled,
+more reusable and leverage the underlying kubernetes platform. It aims to deliver a smooth experience to providers and consumers
+of applications & services when it comes to rate limiting, authentication, authorization, discoverability, change management, usage contracts, insights, etc.
 
-When adding a new application that contains an API, to reduce the number of objects that a user has to author,
-Kuadrant can leverage annotations. A good place to annotate is the Service used to drive traffic to the user API.
+Kuadrant aims to produce a set of loosely coupled functionalities built directly on top of Kubernetes.
+Furthermore it only strives to provide what Kubernetes doesn’t offer out of the box, i.e. Kuadrant won’t be designing a new Gateway/proxy,
+instead it will opt to connect with what’s there and what’s being developed (think Envoy, GatewayAPI).
 
-### Annotations:
+Kuadrant is a system of cloud-native k8s components that grows as users’ needs grow.
+* From simple protection of a Service (via **AuthN**) that is used by teammates working on the same cluster, or “sibling” services, up to **AuthN** of users using OIDC plus custom policies.
+* From no rate-limiting to rate-limiting for global service protection on to rate-limiting by users/plans
 
-- **discovery.kuadrant.io/scheme**: *OPTIONAL* Either HTTP or HTTPS specifies how the kuadrant gateway will connect to this API.
-- **discovery.kuadrant.io/api-name**: *OPTIONAL* If not set, the name of the API can be matched with the service name.
-- **discovery.kuadrant.io/tag**: *OPTIONAL* A special tag used to distinguish this deployment between several instances of the API.
-- **discovery.kuadrant.io/port**: *OPTIONAL* Only required if there are multiple ports in the service. Either the Name of the port or the Number.
-- **discovery.kuadrant.io/oas-configmap**: *OPTIONAL* Configmap that contains the OAS spec.
-- **discovery.kuadrant.io/matchpath**: *OPTIONAL* Define a single specific path, prefix or regex. Defaults to `/`.
-- **discovery.kuadrant.io/matchpath-type**: *OPTIONAL* Specifies how to match against the `matchpath` value. Accepted values are `Exact`, `Prefix` and `RegularExpression`. Defaults to `Prefix`.
-- **discovery.kuadrant.io/oas-path**: *OPTIONAL* Define a specific path for retrieving the config from the service itself.
-- **discovery.kuadrant.io/oas-name-port**: *OPTIONAL* The port to be used to retrieve the OAS config, if not defined, it will used the first one
+towards a full system that is more analogous to current API Management systems where business rules
+and plans define protections and Business/User related Analytics are available.
 
-### Labels:
-- **discovery.kuadrant.io/enabled:**: *REQUIRED* true or false, marks the object to be discovered by kuadrant.
+## CustomResourceDefinitions
 
+A core feature of the kuadrant controller is to monitor the Kubernetes API server for changes to
+specific objects and ensure the owned k8s components configuration match these objects.
+The kuadrant controller acts on the following [CRDs](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/):
 
-Example of a kuadrant annotated service providing OpenAPI spec in a configmap.
+| CRD | Description |
+| --- | --- |
+| [APIProduct](apis/networking/v1beta1/apiproduct_types.go) | Customer-facing APIs. APIProduct facilitates the creation of strong and simplified offerings for API consumers |
+| [API](apis/networking/v1beta1/api_types.go) | Internal APIs bundled in a product. Kuadrant API objects grant API providers the freedom to map their internal API organization structure to kuadrant |
 
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: cats-api
-  annotations:
-    discovery.kuadrant.io/scheme: "http"
-    discovery.kuadrant.io/api-name: "cats"
-    discovery.kuadrant.io/tag: "production"
-    discovery.kuadrant.io/port: "80"
-    discovery.kuadrant.io/oas-configmap: "cats-oas"
-  labels:
-    discovery.kuadrant.io/enabled: "true"
-spec:
-  selector:
-    svc: cats
-  ports:
-    - port: 80
-      protocol: TCP
-      targetPort: 3000
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: cats-oas
-data:
-  openapi.yaml: |
-    openapi: "3.0.0"
-    info:
-      title: "toy API"
-    version: "1.0.0"
-    servers:
-      - url: http://toys/
-    paths:
-      /toys:
-        get:
-          operationId: "getToys"
-```
+For a detailed description of the CRDs above, refer to the [Architecture](doc/architecture.md) page.
 
-Example of a kuadrant annotated service with a `catch-all` match path.
+## List of features
 
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: dogs-api
-  annotations:
-    discovery.kuadrant.io/scheme: "http"
-    discovery.kuadrant.io/api-name: "dogs"
-    discovery.kuadrant.io/tag: "production"
-    discovery.kuadrant.io/port: "80"
-    discovery.kuadrant.io/matchpath: "/"
-    discovery.kuadrant.io/matchpath-type: Prefix
-  labels:
-    discovery.kuadrant.io/enabled: "true"
-spec:
-  selector:
-    svc: dogs
-  ports:
-    - port: 80
-      protocol: TCP
-      targetPort: 3000
-```
+| Feature | Description | Stage |
+| --- | --- | --- |
+| [OpenAPI 3.x](https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.0.2.md) | OpenAPI driven configuration. The document can be read from a configmap or served from the upstream API service | *Ready* |
+| *Path Match* based routing | HTTP routing rules will be configured based on request path expressions. Accepted values are `Exact`, `Prefix` and `RegularExpression` | *Ready* |
+| [Service Discovery](doc/service-discovery.md) | kubernetes [annotations](https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/) and [labels](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) for a seamless integration | *Ready* |
+| **AuthN** based on API key | Protect your service with a simple API key based authentication mechanism | *Ready* |
+| **AuthN** based on [OpenID Connect (OIDC)](https://openid.net/connect/) | Kuadrant can verify OIDC (JWTs) tokens to authenticate users | *Ready* |
+| Global Rate Limiting | Single global rate limit for all requests. Main use case for protecting infrastructure resources | *Ready* |
+| Rate Limiting Per Remote IP | Rate limit configuration per each remote IP address. Main use case for protecting infrastructure resources | *Ready* |
+| Authenticated Rate Limiting | Rate limit configuration per each authenticated client | *Ready* |
+| Server TLS | TLS termination for downstream connections | Planned |
+| Upstream TLS | Client certificates upstream connections | Planned |
+| mTLS | Mutual TLS termination for downstream connections | Planned |
+| [Gateway API](https://gateway-api.sigs.k8s.io/) | Implementation of kuadrant features on top of the Gateway API | Planned |
+| Monitoring and Alerting | Observability based on [Grafana](https://grafana.com/) and [Prometheus](https://prometheus.io/) | Planned |
 
-Example of a kuadrant annotated service providing OpenAPI spec in the service.
+For a detailed description of the features above, refer to the [Architecture](doc/architecture.md) page.
 
-```yaml
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    app: petstore
-  name: petstore
-spec:
-  selector:
-    matchLabels:
-      app: petstore
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        app: petstore
-    spec:
-      containers:
-      - command:
-        - /petstore
-        image: quay.io/eastizle/petstore:1.0.0
-        imagePullPolicy: Always
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 8080
-          initialDelaySeconds: 15
-          periodSeconds: 20
-        name: petstore
-        readinessProbe:
-          httpGet:
-            path: /healthz
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 10
----
-apiVersion: v1
-kind: Service
-metadata:
-  annotations:
-    discovery.kuadrant.io/scheme: "http"
-    discovery.kuadrant.io/api-name: "petstore"
-    discovery.kuadrant.io/tag: "production"
-    discovery.kuadrant.io/port: api
-    discovery.kuadrant.io/oas-path: "/openapi"
-    discovery.kuadrant.io/oas-name-port: openapi
-  labels:
-    discovery.kuadrant.io/enabled: "true"
-    app: petstore
-  name: petstore
-spec:
-  ports:
-  - name: api
-    port: 8080
-    targetPort: 8080
-  - name: openapi
-    port: 9090
-    targetPort: 9090
-  selector:
-    app: petstore
-```
+## Architecture
 
-### Service discovery: OAS or MatchPath
+The [Architecture](doc/architecture.md) section of the docs covers the details of protecting your APIs with Kuadrant.
 
-Kuadrant will protect the annotated service either by the OpenAPI spec or the MatchPath spec. 
+## [Getting started](doc/getting-started.md)
 
-* If `discovery.kuadrant.io/oas-configmap` annotation is found, the *matchpath* mechanism will be disabled and the *matchpath* annotations will be **ignored** by kuadrant controller.
-* If `discovery.kuadrant.io/matchpath` is not found, the assigned value will be `/`.
-* If `discovery.kuadrant.io/matchpath-type` is not found, the assigned type will be `Prefix`.
+## User Guides
+
+### [HTTP routing rules from OpenAPI stored in a configmap](doc/service-discovery-oas-configmap.md)
+
+### [HTTP routing rules from OpenAPI served by the service](doc/service-discovery-oas-service.md)
+
+### [HTTP routing rules with path matching](doc/service-discovery-path-match.md)
+
+### [AuthN based on API key](doc/authn-api-key.md)
+
+### [AuthN based on OpenID Connect](doc/authn-oidc.md)
+
+### [Rate limiting](doc/rate-limit.md)
 
 ## Contributing
-The [Development guide](doc/development.md) describes how to build the kuadrant controller and how to test your changes before submitting a patch or opening a PR.
+
+The [Development guide](doc/development.md) describes how to build the kuadrant controller and
+how to test your changes before submitting a patch or opening a PR.
 
 ## Licensing
 

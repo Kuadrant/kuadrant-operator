@@ -100,11 +100,11 @@ var _ = Describe("APIPRoduct controller", func() {
 
 			start := time.Now()
 
-			err := ApplyResources(filepath.Join("..", "samples", "secret.yaml"), k8sClient, testNamespace)
+			err := ApplyResources(filepath.Join("..", "examples", "dogs-cats", "secret.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "samples", "api1.yaml"), k8sClient, testNamespace)
+			err = ApplyResources(filepath.Join("..", "examples", "dogs-cats", "dogs.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
-			err = ApplyResources(filepath.Join("..", "samples", "api2.yaml"), k8sClient, testNamespace)
+			err = ApplyResources(filepath.Join("..", "examples", "dogs-cats", "cats.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
 
 			dogsKey := types.NamespacedName{Name: "dogs", Namespace: testNamespace}

@@ -3,13 +3,35 @@
 ## Technology stack required for development
 
 * [operator-sdk] version v1.16.1
-* [kind] version v0.10.0
+* [kind] version v0.11.1
 * [git][git_tool]
 * [go] version 1.16+
 * [kubernetes] version v1.19+
 * [kubectl] version v1.19+
 
-## Local setup
+## Build
+
+```
+$ make
+```
+
+## Run locally
+
+You need an active session open to a kubernetes cluster.
+
+Optionally, run kind and deploy kuadrant deps
+
+```
+$ make local-env-setup
+```
+
+Then, run the controller locally
+
+```
+$ make run
+```
+
+## Deploy the controller in a deployment object
 
 ```
 $ make local-setup
@@ -18,41 +40,73 @@ $ make local-setup
 List of tasks done by the command above:
 
 * Create local cluster using kind
-* Build kuadrant docker image
-* Deploy **ingress provider** (currently [Istio](https://istio.io))
-* Deploy Kuadrant control plane
-* Deploy EchoAPI
+* Build kuadrant docker image from the current working directory
+* Deploy Kuadrant control plane (including istio, authorino and limitador)
 
-### Cleaning up
+## Cleaning up
 
 ```
 $ make local-cleanup
 ```
 
-### Upgrade [Authorino](https://github.com/Kuadrant/authorino)
+## Run tests
 
-Define some environment variables.
-
-```
-$ export AUTHORINO_NAMESPACE=kuadrant-system
-$ export AUTHORINO_IMAGE=quay.io/3scale/authorino:371d0408998f6223b3d7be170704688901647772
-$ export AUTHORINO_DEPLOYMENT=cluster-wide-notls
-# Replace KUADRANT_PROJECT
-$ export AUTHORINO_MANIFEST_FILE=${KUADRANT_PROJECT}/utils/local-deployment/authorino.yaml
-```
-
-Generate manifest file.
+### Unittests
 
 ```
-$ git clone https://github.com/Kuadrant/authorino
-$ cd authorino
-$ cd deploy/base/ && kustomize edit set image authorino=${AUTHORINO_IMAGE}
-$ cd -
-$ cd deploy/overlays/${AUTHORINO_DEPLOYMENT} && kustomize edit set namespace ${AUTHORINO_NAMESPACE}
-$ cd -
-$ kustomize build install > ${AUTHORINO_MANIFEST_FILE}
-$ echo "---" >> ${AUTHORINO_MANIFEST_FILE}
-$ kustomize build deploy/overlays/${AUTHORINO_DEPLOYMENT} >> ${AUTHORINO_MANIFEST_FILE}
+$ make test-unit
+```
+
+### Integration tests
+
+You need an active session open to a kubernetes cluster.
+
+Optionally, run kind and deploy kuadrant deps
+
+```
+$ make local-env-setup
+```
+
+Run integration tests
+
+```
+$ make test-integration
+```
+
+### All tests
+
+You need an active session open to a kubernetes cluster.
+
+Optionally, run kind and deploy kuadrant deps
+
+```
+$ make local-env-setup
+```
+
+Run all tests
+
+```
+$ make test
+```
+
+### Lint tests
+
+```
+$ make run-lint
+```
+
+## (Un)Install Kuadrant CRDs
+
+You need an active session open to a kubernetes cluster.
+
+```
+$ make install
+```
+
+Remove CRDs
+
+```
+$ make uninstall
 ```
 
 [git_tool]:https://git-scm.com/downloads

@@ -29,6 +29,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -335,12 +336,12 @@ func (r *ServiceReconciler) getOwnedAPI(ctx context.Context, service *corev1.Ser
 // SetupWithManager sets up the controller with the Manager.
 func (r *ServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		WithEventFilter(onlyLabeledServices()).
-		For(&corev1.Service{}).
+		For(&corev1.Service{}, builder.WithPredicates(kuadrantServicesPredicate())).
+		Owns(&networkingv1beta1.API{}).
 		Complete(r)
 }
 
-func onlyLabeledServices() predicate.Predicate {
+func kuadrantServicesPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			// Lets filter for only Services that have the kuadrant label and are enabled.

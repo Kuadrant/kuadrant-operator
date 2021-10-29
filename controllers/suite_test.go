@@ -31,12 +31,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
+	"github.com/kuadrant/kuadrant-controller/pkg/log"
 	"github.com/kuadrant/kuadrant-controller/pkg/ratelimitproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 	// +kubebuilder:scaffold:imports
@@ -59,8 +58,6 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
-
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
@@ -92,13 +89,13 @@ var _ = BeforeSuite(func() {
 
 	apiProductBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		ctrl.Log.WithName("controllers").WithName("kuadrant").WithName("apiproduct"),
+		log.Log.WithName("apiproduct"),
 		mgr.GetEventRecorderFor("APIProduct"),
 	)
 
 	serviceBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		ctrl.Log.WithName("controllers").WithName("kuadrant").WithName("service"),
+		log.Log.WithName("service"),
 		mgr.GetEventRecorderFor("Service"),
 	)
 

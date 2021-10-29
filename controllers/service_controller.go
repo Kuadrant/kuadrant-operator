@@ -39,6 +39,7 @@ import (
 	"github.com/go-logr/logr"
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	"github.com/kuadrant/kuadrant-controller/pkg/log"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
 
@@ -73,27 +74,28 @@ type ServiceReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.2/pkg/reconcile
-func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Logger().WithValues("service", req.NamespacedName)
-	log.Info("Reconciling kuadrant service")
+func (r *ServiceReconciler) Reconcile(eventCtx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := r.Logger().WithValues("service", req.NamespacedName)
+	logger.Info("Reconciling kuadrant service")
+	ctx := logr.NewContext(eventCtx, logger)
 
 	service := &corev1.Service{}
 	err := r.Client().Get(ctx, req.NamespacedName, service)
 
 	if err != nil && apierrors.IsNotFound(err) {
-		log.Info("resource not found. Ignoring since object must have been deleted")
+		logger.Info("resource not found. Ignoring since object must have been deleted")
 		//TODO(jmprusi): Handle deletion of the Service. I guess using an OwnerReference could work for now.
 		return ctrl.Result{}, nil
 	} else if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if log.V(1).Enabled() {
+	if logger.V(1).Enabled() {
 		jsonData, err := json.MarshalIndent(service, "", "  ")
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		log.V(1).Info(string(jsonData))
+		logger.V(1).Info(string(jsonData))
 	}
 
 	serviceLabels := service.GetLabels()
@@ -118,14 +120,15 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return ctrl.Result{}, nil
 }
 
-func (r *ServiceReconciler) isOASDefined(ctx context.Context, service *corev1.Service, log logr.Logger) (bool, string, error) {
+func (r *ServiceReconciler) isOASDefined(ctx context.Context, service *corev1.Service) (bool, string, error) {
+	logger := logr.FromContext(ctx)
 	var oasContent string
 	if oasConfigmapName, ok := service.Annotations[KuadrantDiscoveryAnnotationOASConfigMap]; ok {
 		oasContent, err := r.fetchOpenAPIFromConfigMap(
 			ctx,
 			types.NamespacedName{Name: oasConfigmapName, Namespace: service.Namespace},
 		)
-		log.V(1).Info("get OAS configmap", "objectKey", types.NamespacedName{Name: oasConfigmapName, Namespace: service.Namespace}, "error", err)
+		logger.V(1).Info("get OAS configmap", "objectKey", types.NamespacedName{Name: oasConfigmapName, Namespace: service.Namespace}, "error", err)
 		return true, oasContent, err
 	}
 
@@ -138,7 +141,11 @@ func (r *ServiceReconciler) isOASDefined(ctx context.Context, service *corev1.Se
 			for _, port := range service.Spec.Ports {
 				if port.Name == oasNamePort {
 					targetPort = port.Port
-					// TODO: log messsage here
+					logger.V(1).Info("reading OAS from service", "objectKey",
+						client.ObjectKeyFromObject(service),
+						"portName", oasNamePort,
+						"port", targetPort,
+					)
 					break
 				}
 			}
@@ -188,8 +195,6 @@ func (r *ServiceReconciler) APIFromAnnotations(ctx context.Context, service *cor
 	//discovery.kuadrant.io/matchpath-type: Prefix
 	// Related to https://github.com/Kuadrant/kuadrant-controller/issues/28
 
-	log := r.Logger().WithValues("service", client.ObjectKeyFromObject(service))
-
 	var apiName, scheme, tagLabel, port string
 	var ok bool
 
@@ -208,7 +213,7 @@ func (r *ServiceReconciler) APIFromAnnotations(ctx context.Context, service *cor
 	var oasContentPtr *string
 	var pathMatchPtr *gatewayapiv1alpha1.HTTPPathMatch
 
-	hasOas, OASContent, err := r.isOASDefined(ctx, service, log)
+	hasOas, OASContent, err := r.isOASDefined(ctx, service)
 	if err != nil {
 		return nil, err
 	}
@@ -300,8 +305,7 @@ func (r *ServiceReconciler) fetchOpenAPIFromConfigMap(ctx context.Context, cmKey
 
 func (r *ServiceReconciler) handleDisabledService(ctx context.Context, service *corev1.Service) (ctrl.Result, error) {
 	// This implementation assumes API resources are created in the same namespace as the service and there is an ownership relationship
-	log := r.Logger().WithValues("service", client.ObjectKeyFromObject(service))
-	log.V(1).Info("handleDisabledService")
+	logger := logr.FromContext(ctx)
 
 	ownedAPI, err := r.getOwnedAPI(ctx, service)
 	if err != nil || ownedAPI == nil {
@@ -310,16 +314,16 @@ func (r *ServiceReconciler) handleDisabledService(ctx context.Context, service *
 
 	// delete
 	err = r.Client().Delete(ctx, ownedAPI)
-	log.V(1).Info("handleDisabledService: deleting API", "api", client.ObjectKeyFromObject(ownedAPI), "error", err)
+	logger.V(1).Info("handleDisabledService: deleting API", "api", client.ObjectKeyFromObject(ownedAPI), "error", err)
 	return ctrl.Result{}, err
 }
 
 func (r *ServiceReconciler) getOwnedAPI(ctx context.Context, service *corev1.Service) (*networkingv1beta1.API, error) {
-	log := r.Logger().WithValues("service", client.ObjectKeyFromObject(service))
+	logger := logr.FromContext(ctx)
 
 	apiList := &networkingv1beta1.APIList{}
 	err := r.Client().List(ctx, apiList, client.InNamespace(service.Namespace))
-	log.V(1).Info("reading API list", "namespace", service.Namespace, "len(api)", len(apiList.Items), "error", err)
+	logger.V(1).Info("reading API list", "namespace", service.Namespace, "len(api)", len(apiList.Items), "error", err)
 	if err != nil {
 		return nil, err
 	}
@@ -338,6 +342,7 @@ func (r *ServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Service{}, builder.WithPredicates(kuadrantServicesPredicate())).
 		Owns(&networkingv1beta1.API{}).
+		WithLogger(log.Log). // use base logger, the manager will add prefixes for watched sources
 		Complete(r)
 }
 

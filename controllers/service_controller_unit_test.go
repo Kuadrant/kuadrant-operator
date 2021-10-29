@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 
 	"github.com/jarcoal/httpmock"
@@ -16,8 +17,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/kuadrant/kuadrant-controller/pkg/log"
 )
 
 const (
@@ -88,7 +90,7 @@ func getReconciler() *reconcilers.BaseReconciler {
 	clientAPIReader := fake.NewFakeClient(objs...)
 	recorder := record.NewFakeRecorder(10000)
 
-	baseReconciler := reconcilers.NewBaseReconciler(cl, s, clientAPIReader, LOGTEST, recorder)
+	baseReconciler := reconcilers.NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
 	return baseReconciler
 }
 
@@ -118,10 +120,11 @@ func getSampleService() *v1.Service {
 // TestOasDiscoveryNoAnnotation test that check if no annotation nothing
 // happens at all
 func TestOasDiscoveryNoAnnotation(t *testing.T) {
+	baseCtx := context.Background()
+	ctx := logr.NewContext(baseCtx, log.Log)
 	serviceReconciler := getServiceReconciler()
 	svc := getSampleService()
-	log := ctrl.Log.WithName("test")
-	hasOas, result, err := serviceReconciler.isOASDefined(context.Background(), svc, log)
+	hasOas, result, err := serviceReconciler.isOASDefined(ctx, svc)
 	if hasOas {
 		t.Errorf("Returning OAS when it shouldn't res='%+v', err='%s'", result, err)
 	}
@@ -136,6 +139,8 @@ func TestOasDiscoveryNoAnnotation(t *testing.T) {
 // and checking the port Name.
 // A complete example of this can be found on samples/api-oas-discovery.yaml
 func TestOasDiscoveryServiceDiscovery(t *testing.T) {
+	baseCtx := context.Background()
+	ctx := logr.NewContext(baseCtx, log.Log)
 	serviceReconciler := getServiceReconciler()
 	svc := getSampleService()
 	svc.ObjectMeta.Annotations = map[string]string{
@@ -145,8 +150,7 @@ func TestOasDiscoveryServiceDiscovery(t *testing.T) {
 
 	// first test, should return error, API is not working at all
 
-	log := ctrl.Log.WithName("test")
-	hasOas, result, err := serviceReconciler.isOASDefined(context.Background(), svc, log)
+	hasOas, result, err := serviceReconciler.isOASDefined(ctx, svc)
 	if err == nil {
 		t.Errorf("HTTP request cannot perform, should return an error")
 	}
@@ -158,7 +162,7 @@ func TestOasDiscoveryServiceDiscovery(t *testing.T) {
 		"GET",
 		"http://test.test.svc:10000/openapi",
 		httpmock.NewStringResponder(200, PetStoreOAS))
-	hasOas, result, err = serviceReconciler.isOASDefined(context.Background(), svc, log)
+	hasOas, result, err = serviceReconciler.isOASDefined(ctx, svc)
 
 	httpmock.Deactivate()
 	if err != nil {
@@ -184,7 +188,7 @@ func TestOasDiscoveryServiceDiscovery(t *testing.T) {
 		"GET",
 		"http://test.test.svc:8080/openapi",
 		httpmock.NewStringResponder(200, PetStoreOAS))
-	hasOas, result, err = serviceReconciler.isOASDefined(context.Background(), svc, log)
+	hasOas, result, err = serviceReconciler.isOASDefined(ctx, svc)
 
 	if err != nil {
 		t.Errorf("returning error when it shouldn't")
@@ -204,6 +208,8 @@ func TestOasDiscoveryServiceDiscovery(t *testing.T) {
 // retrieve the information from there, it check all options, missing CM or
 // valid one,  and valid one with wrong data.
 func TestOasDiscoveryConfigMapDiscovery(t *testing.T) {
+	baseCtx := context.Background()
+	ctx := logr.NewContext(baseCtx, log.Log)
 	serviceReconciler := getServiceReconciler()
 	svc := getSampleService()
 	svc.ObjectMeta.Annotations = map[string]string{
@@ -211,8 +217,7 @@ func TestOasDiscoveryConfigMapDiscovery(t *testing.T) {
 	}
 	// First test, no configmap
 
-	log := ctrl.Log.WithName("test")
-	hasOas, result, err := serviceReconciler.isOASDefined(context.Background(), svc, log)
+	hasOas, result, err := serviceReconciler.isOASDefined(ctx, svc)
 	if err != nil && err.Error() != "configmaps \"cat-oas-invalid\" not found" {
 		t.Errorf("Should return a error err='%s'", err)
 	}
@@ -229,7 +234,7 @@ func TestOasDiscoveryConfigMapDiscovery(t *testing.T) {
 	svc.ObjectMeta.Annotations = map[string]string{
 		TestKuadrantDiscoveryAnnotationOASConfigMap: "cat-oas",
 	}
-	hasOas, result, err = serviceReconciler.isOASDefined(context.Background(), svc, log)
+	hasOas, result, err = serviceReconciler.isOASDefined(ctx, svc)
 	if err != nil {
 		t.Errorf("returning error when it shouldn't")
 	}
@@ -245,7 +250,7 @@ func TestOasDiscoveryConfigMapDiscovery(t *testing.T) {
 	svc.ObjectMeta.Annotations = map[string]string{
 		TestKuadrantDiscoveryAnnotationOASConfigMap: "dog-oas",
 	}
-	hasOas, result, err = serviceReconciler.isOASDefined(context.Background(), svc, log)
+	hasOas, result, err = serviceReconciler.isOASDefined(ctx, svc)
 	if err != nil && err.Error() != "oas configmap is missing the openapi.yaml entry" {
 		t.Errorf("Returned error is not a valid one err='%s'", err)
 	}

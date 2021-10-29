@@ -137,27 +137,32 @@ func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired cli
 }
 
 func (b *BaseReconciler) GetResource(ctx context.Context, objKey types.NamespacedName, obj client.Object) error {
-	b.Logger().Info("get object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", objKey.Name, "namespace", objKey.Namespace)
+	logger := logr.FromContext(ctx)
+	logger.Info("get object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", objKey.Name, "namespace", objKey.Namespace)
 	return b.Client().Get(ctx, objKey, obj)
 }
 
 func (b *BaseReconciler) CreateResource(ctx context.Context, obj client.Object) error {
-	b.Logger().Info("create object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
+	logger := logr.FromContext(ctx)
+	logger.Info("create object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
 	return b.Client().Create(ctx, obj)
 }
 
 func (b *BaseReconciler) UpdateResource(ctx context.Context, obj client.Object) error {
-	b.Logger().Info("update object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
+	logger := logr.FromContext(ctx)
+	logger.Info("update object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
 	return b.Client().Update(ctx, obj)
 }
 
 func (b *BaseReconciler) DeleteResource(ctx context.Context, obj client.Object, options ...client.DeleteOption) error {
-	b.Logger().Info("delete object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
+	logger := logr.FromContext(ctx)
+	logger.Info("delete object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
 	return b.Client().Delete(ctx, obj, options...)
 }
 
 func (b *BaseReconciler) UpdateResourceStatus(ctx context.Context, obj client.Object) error {
-	b.Logger().Info("update object status", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
+	logger := logr.FromContext(ctx)
+	logger.Info("update object status", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
 	return b.Client().Status().Update(ctx, obj)
 }
 

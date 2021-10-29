@@ -24,13 +24,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
 
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
-)
-
-var (
-	LOGTEST = ctrl.Log.WithName("test_controllers")
 )
 
 func TestReplaceAPILabels(t *testing.T) {

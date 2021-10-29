@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -36,11 +38,22 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/kuadrant/kuadrant-controller/pkg/log"
 )
 
+func TestMain(m *testing.M) {
+	logger := log.NewLogger(
+		log.SetLevel(log.DebugLevel),
+		log.SetMode(log.ModeDev),
+		log.WriteTo(GinkgoWriter),
+	).WithName("controller_test")
+	log.SetLogger(logger)
+	os.Exit(m.Run())
+}
+
 func ApplyResources(fileName string, k8sClient client.Client, ns string) error {
-	logf.Log.Info("ApplyResources", "Resource file", fileName)
+	log.Log.Info("ApplyResources", "Resource file", fileName)
 	data, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return err
@@ -70,7 +83,7 @@ func ApplyResources(fileName string, k8sClient client.Client, ns string) error {
 		docData := buf[:n]
 		obj, _, err := decoder.Decode(docData, nil, nil)
 		if err != nil {
-			logf.Log.Info("Document decode error", "error", err)
+			log.Log.Info("Document decode error", "error", err)
 			continue
 		}
 
@@ -105,7 +118,7 @@ func CreateOrUpdateK8SObject(obj runtime.Object, k8sClient client.Client) error 
 	if !ok {
 		return errors.New("runtime.Object could not be casted to client.Object")
 	}
-	logf.Log.Info("CreateOrUpdateK8SObject", "GKV", k8sObj.GetObjectKind(), "name", k8sObj.GetName())
+	log.Log.Info("CreateOrUpdateK8SObject", "GKV", k8sObj.GetObjectKind(), "name", k8sObj.GetName())
 
 	err := k8sClient.Create(context.Background(), k8sObj)
 	if err == nil {

@@ -30,7 +30,7 @@ docker build -t kuadrant:devel ./
 kind load docker-image kuadrant:devel --name ${KIND_CLUSTER_NAME}
 echo "Deploying Kuadrant control plane"
 kustomize build config/default | kubectl -n "${KUADRANT_NAMESPACE}" apply -f -
-kubectl -n "${KUADRANT_NAMESPACE}" patch deployment kuadrant-controller-manager -p '{"spec": {"template": {"spec":{"containers":[{"name": "manager","image":"kuadrant:devel", "imagePullPolicy":"IfNotPresent"}]}}}}'
+kubectl -n "${KUADRANT_NAMESPACE}" patch deployment kuadrant-controller-manager -p '{"spec": {"template": {"spec":{"containers":[{"name": "manager","image":"kuadrant:devel", "env": [{"name": "LOG_LEVEL", "value": "debug"}, {"name": "LOG_MODE", "value": "development"}], "imagePullPolicy":"IfNotPresent"}]}}}}'
 echo "Wait for all deployments to be up"
 kubectl -n "${KUADRANT_NAMESPACE}" wait --timeout=300s --for=condition=Available deployments --all
 

@@ -20,7 +20,6 @@ import (
 
 type Provider struct {
 	*reconcilers.BaseReconciler
-	logger logr.Logger
 }
 
 // +kubebuilder:rbac:groups=authorino.3scale.net,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -28,19 +27,12 @@ type Provider struct {
 func New(baseReconciler *reconcilers.BaseReconciler) *Provider {
 	utilruntime.Must(authorino.AddToScheme(baseReconciler.Scheme()))
 
-	return &Provider{
-		BaseReconciler: baseReconciler,
-		logger:         ctrl.Log.WithName("kuadrant").WithName("authprovider").WithName("authorino"),
-	}
-}
-
-func (a *Provider) Logger() logr.Logger {
-	return a.logger
+	return &Provider{BaseReconciler: baseReconciler}
 }
 
 func (a *Provider) Reconcile(ctx context.Context, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
-	log := a.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
-	log.V(1).Info("Reconcile")
+	logger := logr.FromContext(ctx).WithName("authprovider").WithName("authorino")
+	logger.V(1).Info("Reconcile")
 
 	authConfig := buildAuthConfig(apip)
 

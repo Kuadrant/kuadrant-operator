@@ -20,10 +20,10 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -31,6 +31,7 @@ import (
 	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
 	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
+	"github.com/kuadrant/kuadrant-controller/pkg/log"
 	"github.com/kuadrant/kuadrant-controller/pkg/ratelimitproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
@@ -54,25 +55,26 @@ type APIProductReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Logger().WithValues("apiproduct", req.NamespacedName)
-	log.Info("Reconciling APIProduct")
+func (r *APIProductReconciler) Reconcile(eventCtx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := r.Logger().WithValues("apiproduct", req.NamespacedName)
+	logger.Info("Reconciling APIProduct")
+	ctx := logr.NewContext(eventCtx, logger)
 
 	apip := &networkingv1beta1.APIProduct{}
 	err := r.Client().Get(ctx, req.NamespacedName, apip)
 	if err != nil && apierrors.IsNotFound(err) {
-		log.Info("resource not found. Ignoring since object must have been deleted")
+		logger.Info("resource not found. Ignoring since object must have been deleted")
 		return ctrl.Result{}, nil
 	} else if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if log.V(1).Enabled() {
+	if logger.V(1).Enabled() {
 		jsonData, err := json.MarshalIndent(apip, "", "  ")
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		log.V(1).Info(string(jsonData))
+		logger.V(1).Info(string(jsonData))
 	}
 
 	// APIProduct has been marked for deletion
@@ -95,7 +97,7 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		//Remove finalizer and update the object.
 		controllerutil.RemoveFinalizer(apip, finalizerName)
 		err = r.UpdateResource(ctx, apip)
-		log.Info("Removing finalizer", "error", err)
+		logger.Info("Removing finalizer", "error", err)
 		return ctrl.Result{Requeue: true}, err
 	}
 
@@ -108,24 +110,24 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if !controllerutil.ContainsFinalizer(apip, finalizerName) {
 		controllerutil.AddFinalizer(apip, finalizerName)
 		err := r.UpdateResource(ctx, apip)
-		log.Info("Adding finalizer", "error", err)
+		logger.Info("Adding finalizer", "error", err)
 		return ctrl.Result{Requeue: true}, err
 	}
 
 	specResult, specErr := r.reconcileSpec(ctx, apip)
-	log.Info("spec reconcile done", "result", specResult, "error", specErr)
+	logger.Info("spec reconcile done", "result", specResult, "error", specErr)
 	if specErr == nil && specResult.Requeue {
-		log.Info("Reconciling not finished. Requeueing.")
+		logger.Info("Reconciling not finished. Requeueing.")
 		return specResult, nil
 	}
 
 	// reconcile status regardless specErr
-	statusResult, statusErr := r.reconcileStatus(ctx, log, apip)
-	log.Info("status reconcile done", "result", statusResult, "error", statusErr)
+	statusResult, statusErr := r.reconcileStatus(ctx, apip)
+	logger.Info("status reconcile done", "result", statusResult, "error", statusErr)
 	if statusErr != nil {
 		// Ignore conflicts, resource might just be outdated.
 		if apierrors.IsConflict(statusErr) {
-			log.Info("Failed to update status: resource might just be outdated")
+			logger.Info("Failed to update status: resource might just be outdated")
 			return ctrl.Result{Requeue: true}, nil
 		}
 		return ctrl.Result{}, statusErr
@@ -134,13 +136,13 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if specErr != nil {
 		// Ignore conflicts, resource might just be outdated.
 		if apierrors.IsConflict(specErr) {
-			log.Info("Resource update conflict error. Requeuing...")
+			logger.Info("Resource update conflict error. Requeuing...")
 			return ctrl.Result{Requeue: true}, nil
 		}
 
 		if apierrors.IsInvalid(specErr) {
 			// On Validation error, no need to retry as spec is not valid and needs to be changed
-			log.Info("ERROR", "spec validation error", specErr)
+			logger.Info("ERROR", "spec validation error", specErr)
 			r.EventRecorder().Eventf(apip, corev1.EventTypeWarning, "Invalid APIProduct Spec", "%v", specErr)
 			return ctrl.Result{}, nil
 		}
@@ -150,7 +152,7 @@ func (r *APIProductReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if statusResult.Requeue {
-		log.Info("Reconciling not finished. Requeueing.")
+		logger.Info("Reconciling not finished. Requeueing.")
 		return statusResult, nil
 	}
 
@@ -209,13 +211,13 @@ func (r *APIProductReconciler) reconcileAPIProductLabels(ctx context.Context, ap
 }
 
 func (r *APIProductReconciler) getAPIUIDs(ctx context.Context, apip *networkingv1beta1.APIProduct) ([]string, error) {
-	log := r.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
+	logger := logr.FromContext(ctx)
 
 	uids := []string{}
 	for _, apiSel := range apip.Spec.APIs {
 		api := &networkingv1beta1.API{}
 		err := r.Client().Get(ctx, apiSel.APINamespacedName(), api)
-		log.V(1).Info("get API", "objectKey", apiSel.APINamespacedName(), "error", err)
+		logger.V(1).Info("get API", "objectKey", apiSel.APINamespacedName(), "error", err)
 		if err != nil {
 			return nil, err
 		}
@@ -225,10 +227,10 @@ func (r *APIProductReconciler) getAPIUIDs(ctx context.Context, apip *networkingv
 }
 
 func (r *APIProductReconciler) validateSpec(ctx context.Context, apip *networkingv1beta1.APIProduct) error {
-	log := r.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
+	logger := logr.FromContext(ctx)
 
 	err := apip.Validate()
-	log.V(1).Info("validate SPEC", "error", err)
+	logger.V(1).Info("validate SPEC", "error", err)
 	if err != nil {
 		return err
 	}
@@ -237,7 +239,7 @@ func (r *APIProductReconciler) validateSpec(ctx context.Context, apip *networkin
 		// Check API exist
 		api := &networkingv1beta1.API{}
 		err := r.Client().Get(ctx, apiSel.APINamespacedName(), api)
-		log.V(1).Info("get API", "objectKey", apiSel.APINamespacedName(), "error", err)
+		logger.V(1).Info("get API", "objectKey", apiSel.APINamespacedName(), "error", err)
 		if err != nil {
 			return err
 		}
@@ -245,7 +247,7 @@ func (r *APIProductReconciler) validateSpec(ctx context.Context, apip *networkin
 		// Check destination service exist
 		service := &corev1.Service{}
 		err = r.Client().Get(ctx, api.Spec.Destination.NamespacedName(), service)
-		log.V(1).Info("get service", "objectKey", api.Spec.Destination.NamespacedName(), "error", err)
+		logger.V(1).Info("get service", "objectKey", api.Spec.Destination.NamespacedName(), "error", err)
 		if err != nil {
 			return err
 		}
@@ -266,5 +268,6 @@ func (r *APIProductReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(apiEventMapper.Map),
 		).
 		For(&networkingv1beta1.APIProduct{}).
+		WithLogger(log.Log). // use base logger, the manager will add prefixes for watched sources
 		Complete(r)
 }

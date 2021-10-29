@@ -21,8 +21,11 @@ package reconcilers
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
+	"github.com/go-logr/logr"
+	. "github.com/onsi/ginkgo"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -30,16 +33,22 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	"github.com/kuadrant/kuadrant-controller/pkg/log"
 )
 
-var (
-	LOGTEST = ctrl.Log.WithName("test_base_reconcilers")
-)
+func TestMain(m *testing.M) {
+	logger := log.NewLogger(
+		log.SetLevel(log.DebugLevel),
+		log.SetMode(log.ModeDev),
+		log.WriteTo(GinkgoWriter),
+	).WithName("reconcilers_test")
+	log.SetLogger(logger)
+	os.Exit(m.Run())
+}
 
 func TestCreateOnlyMutator(t *testing.T) {
 	desired := &v1.ConfigMap{}
@@ -53,6 +62,8 @@ func TestBaseReconcilerCreate(t *testing.T) {
 	var (
 		namespace = "operator-unittest"
 	)
+	baseCtx := context.Background()
+	ctx := logr.NewContext(baseCtx, log.Log)
 
 	s := scheme.Scheme
 	err := appsv1.AddToScheme(s)
@@ -68,7 +79,7 @@ func TestBaseReconcilerCreate(t *testing.T) {
 	clientAPIReader := fake.NewFakeClient(objs...)
 	recorder := record.NewFakeRecorder(10000)
 
-	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, LOGTEST, recorder)
+	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
 
 	desiredConfigmap := &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -84,14 +95,14 @@ func TestBaseReconcilerCreate(t *testing.T) {
 		},
 	}
 
-	err = baseReconciler.ReconcileResource(context.TODO(), &v1.ConfigMap{}, desiredConfigmap, CreateOnlyMutator)
+	err = baseReconciler.ReconcileResource(ctx, &v1.ConfigMap{}, desiredConfigmap, CreateOnlyMutator)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	reconciledConfigmap := &v1.ConfigMap{}
 	objectKey := client.ObjectKeyFromObject(desiredConfigmap)
-	err = cl.Get(context.TODO(), objectKey, reconciledConfigmap)
+	err = cl.Get(ctx, objectKey, reconciledConfigmap)
 	// object must exist, that is all required to be tested
 	if err != nil {
 		t.Errorf("error fetching existing: %v", err)
@@ -104,6 +115,8 @@ func TestBaseReconcilerUpdateNeeded(t *testing.T) {
 		name      = "myConfigmap"
 		namespace = "operator-unittest"
 	)
+	baseCtx := context.Background()
+	ctx := logr.NewContext(baseCtx, log.Log)
 
 	s := runtime.NewScheme()
 	err := appsv1.AddToScheme(s)
@@ -133,7 +146,7 @@ func TestBaseReconcilerUpdateNeeded(t *testing.T) {
 	clientAPIReader := fake.NewFakeClient(objs...)
 	recorder := record.NewFakeRecorder(10000)
 
-	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, LOGTEST, recorder)
+	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
 
 	desiredConfigmap := &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -161,14 +174,14 @@ func TestBaseReconcilerUpdateNeeded(t *testing.T) {
 		return true, nil
 	}
 
-	err = baseReconciler.ReconcileResource(context.TODO(), &v1.ConfigMap{}, desiredConfigmap, customMutator)
+	err = baseReconciler.ReconcileResource(ctx, &v1.ConfigMap{}, desiredConfigmap, customMutator)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	reconciled := &v1.ConfigMap{}
 	objectKey := client.ObjectKeyFromObject(desiredConfigmap)
-	err = cl.Get(context.TODO(), objectKey, reconciled)
+	err = cl.Get(ctx, objectKey, reconciled)
 	if err != nil {
 		t.Fatalf("error fetching reconciled: %v", err)
 	}
@@ -188,6 +201,8 @@ func TestBaseReconcilerDelete(t *testing.T) {
 		resourceName = "example-resource"
 		namespace    = "operator-unittest"
 	)
+	baseCtx := context.Background()
+	ctx := logr.NewContext(baseCtx, log.Log)
 
 	s := runtime.NewScheme()
 	err := appsv1.AddToScheme(s)
@@ -217,7 +232,7 @@ func TestBaseReconcilerDelete(t *testing.T) {
 	clientAPIReader := fake.NewFakeClient(objs...)
 	recorder := record.NewFakeRecorder(10000)
 
-	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, LOGTEST, recorder)
+	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
 
 	desired := &v1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
@@ -234,14 +249,14 @@ func TestBaseReconcilerDelete(t *testing.T) {
 	}
 	common.TagObjectToDelete(desired)
 
-	err = baseReconciler.ReconcileResource(context.TODO(), &v1.ConfigMap{}, desired, CreateOnlyMutator)
+	err = baseReconciler.ReconcileResource(ctx, &v1.ConfigMap{}, desired, CreateOnlyMutator)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	objectKey := client.ObjectKeyFromObject(desired)
 	reconciled := &v1.ConfigMap{}
-	err = cl.Get(context.TODO(), objectKey, reconciled)
+	err = cl.Get(ctx, objectKey, reconciled)
 	// object should not exist, that is all required to be tested
 	if !errors.IsNotFound(err) {
 		t.Fatal(err)

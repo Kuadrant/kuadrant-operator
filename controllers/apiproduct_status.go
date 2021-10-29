@@ -38,7 +38,8 @@ const (
 	UnknownReason         = "Unknown"
 )
 
-func (r *APIProductReconciler) reconcileStatus(ctx context.Context, logger logr.Logger, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
+func (r *APIProductReconciler) reconcileStatus(ctx context.Context, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
+	logger := logr.FromContext(ctx)
 	logger.V(1).Info("reconcile status START")
 
 	newStatus, err := r.calculateStatus(ctx, apip)

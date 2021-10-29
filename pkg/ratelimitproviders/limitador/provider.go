@@ -36,7 +36,6 @@ import (
 
 type Provider struct {
 	*reconcilers.BaseReconciler
-	logger logr.Logger
 }
 
 // +kubebuilder:rbac:groups=limitador.kuadrant.io,resources=ratelimits,verbs=get;list;watch;create;update;patch;delete
@@ -44,19 +43,12 @@ type Provider struct {
 func New(baseReconciler *reconcilers.BaseReconciler) *Provider {
 	utilruntime.Must(limitadorv1alpha1.AddToScheme(baseReconciler.Scheme()))
 
-	return &Provider{
-		BaseReconciler: baseReconciler,
-		logger:         ctrl.Log.WithName("kuadrant").WithName("ratelimitprovider").WithName("limitador"),
-	}
-}
-
-func (p *Provider) Logger() logr.Logger {
-	return p.logger
+	return &Provider{BaseReconciler: baseReconciler}
 }
 
 func (p *Provider) Reconcile(ctx context.Context, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
-	log := p.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
-	log.V(1).Info("Reconcile")
+	logger := logr.FromContext(ctx).WithName("ratelimitprovider").WithName("limitador")
+	logger.V(1).Info("Reconcile")
 
 	err := p.ReconcileRateLimit(ctx, p.globalRateLimit(apip), rateLimitBasicMutator)
 	if err != nil {
@@ -77,29 +69,29 @@ func (p *Provider) Reconcile(ctx context.Context, apip *networkingv1beta1.APIPro
 }
 
 func (p *Provider) Delete(ctx context.Context, apip *networkingv1beta1.APIProduct) error {
-	log := p.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
-	log.V(1).Info("Delete")
+	logger := logr.FromContext(ctx).WithName("ratelimitprovider").WithName("limitador")
+	logger.V(1).Info("Delete")
 	if apip.Spec.RateLimit == nil {
 		return nil
 	}
 
 	desiredGlobalRateLimit := p.globalRateLimit(apip)
 	err := p.DeleteResource(ctx, desiredGlobalRateLimit)
-	log.V(1).Info("Removing global RateLimit", "ratelimit", client.ObjectKeyFromObject(desiredGlobalRateLimit), "error", err)
+	logger.V(1).Info("Removing global RateLimit", "ratelimit", client.ObjectKeyFromObject(desiredGlobalRateLimit), "error", err)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 
 	desiredperRemoteIPRateLimit := p.perRemoteIPRateLimit(apip)
 	err = p.DeleteResource(ctx, desiredperRemoteIPRateLimit)
-	log.V(1).Info("Removing perRemoteIP RateLimit", "ratelimit", client.ObjectKeyFromObject(desiredperRemoteIPRateLimit), "error", err)
+	logger.V(1).Info("Removing perRemoteIP RateLimit", "ratelimit", client.ObjectKeyFromObject(desiredperRemoteIPRateLimit), "error", err)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 
 	authenticatedAuthRateLimit := p.authenticatedRateLimit(apip)
 	err = p.DeleteResource(ctx, authenticatedAuthRateLimit)
-	log.V(1).Info("Removing auth RateLimit", "ratelimit", client.ObjectKeyFromObject(authenticatedAuthRateLimit), "error", err)
+	logger.V(1).Info("Removing auth RateLimit", "ratelimit", client.ObjectKeyFromObject(authenticatedAuthRateLimit), "error", err)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
@@ -108,8 +100,8 @@ func (p *Provider) Delete(ctx context.Context, apip *networkingv1beta1.APIProduc
 }
 
 func (p *Provider) Status(ctx context.Context, apip *networkingv1beta1.APIProduct) (bool, error) {
-	log := p.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
-	log.V(1).Info("Status")
+	logger := logr.FromContext(ctx).WithName("ratelimitprovider").WithName("limitador")
+	logger.V(1).Info("Status")
 
 	// Right now, we just try to get all the objects that should have been created, and check their status.
 	// If any object is missing/not-created, Status returns false.

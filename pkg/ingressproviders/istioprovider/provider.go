@@ -46,7 +46,6 @@ var (
 
 type IstioProvider struct {
 	*reconcilers.BaseReconciler
-	logger logr.Logger
 }
 
 // +kubebuilder:rbac:groups=security.istio.io,resources=authorizationpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -62,19 +61,12 @@ func New(baseReconciler *reconcilers.BaseReconciler) *IstioProvider {
 	// TODO: Create the gateway for Kuadrant
 	// TODO: Add the proper config to the mesh for the extAuthz.
 
-	return &IstioProvider{
-		BaseReconciler: baseReconciler,
-		logger:         ctrl.Log.WithName("kuadrant").WithName("ingressprovider").WithName("istio"),
-	}
-}
-
-func (is *IstioProvider) Logger() logr.Logger {
-	return is.logger
+	return &IstioProvider{BaseReconciler: baseReconciler}
 }
 
 func (is *IstioProvider) Reconcile(ctx context.Context, apip *networkingv1beta1.APIProduct) (ctrl.Result, error) {
-	log := is.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
-	log.V(1).Info("Reconcile")
+	logger := logr.FromContext(ctx).WithName("ingressprovider").WithName("istio")
+	logger.V(1).Info("Reconcile")
 
 	virtualService, err := is.virtualServiceFromAPIProduct(ctx, apip)
 	if err != nil {
@@ -212,14 +204,14 @@ func (is *IstioProvider) apiHTTPRoutes(ctx context.Context, apiRef *networkingv1
 }
 
 func (is *IstioProvider) Status(ctx context.Context, apip *networkingv1beta1.APIProduct) (bool, error) {
-	log := is.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
-	log.V(1).Info("Status")
+	logger := logr.FromContext(ctx).WithName("ingressprovider").WithName("istio")
+	logger.V(1).Info("Status")
 	return true, nil
 }
 
 func (is *IstioProvider) Delete(ctx context.Context, apip *networkingv1beta1.APIProduct) error {
-	log := is.Logger().WithValues("apiproduct", client.ObjectKeyFromObject(apip))
-	log.V(1).Info("Delete")
+	logger := logr.FromContext(ctx).WithName("ingressprovider").WithName("istio")
+	logger.V(1).Info("Delete")
 
 	virtualService := &istio.VirtualService{
 		ObjectMeta: metav1.ObjectMeta{

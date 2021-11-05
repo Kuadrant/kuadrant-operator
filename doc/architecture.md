@@ -37,8 +37,8 @@ are configured to obey customer's desired behavior.
 
 | CRD | Description |
 | --- | --- |
-| [APIProduct](apis/networking/v1beta1/apiproduct_types.go) | Customer-facing APIs. APIProduct facilitates the creation of strong and simplified offerings for API consumers |
-| [API](apis/networking/v1beta1/api_types.go) | Internal APIs bundled in a product. Kuadrant API objects grant API providers the freedom to map their internal API organization structure to kuadrant |
+| [APIProduct](/apis/networking/v1beta1/apiproduct_types.go) | Customer-facing APIs. APIProduct facilitates the creation of strong and simplified offerings for API consumers |
+| [API](/apis/networking/v1beta1/api_types.go) | Internal APIs bundled in a product. Kuadrant API objects grant API providers the freedom to map their internal API organization structure to kuadrant |
 
 An API Product can contain multiple APIs, and an API can be used in multiple API Products. In other words, to integrate and manage your API in kuadrant you need to create both:
 
@@ -47,9 +47,11 @@ An API Product can contain multiple APIs, and an API can be used in multiple API
 
 The following diagram illustrates the relationship between the CRDs with a simple example involving two API Products and two APIs.
 
-![Kuadrant CRD](doc/kuadrant-crd.svg)
+![Kuadrant CRD](kuadrant-crd.svg)
 
 ### API Product CRD
+
+Customer-facing APIs. APIProduct facilitates the creation of strong and simplified offerings for API consumers.
 
 The APIProduct CRD contains basically:
 * `hosts`: Domains names to apply the configuration
@@ -118,6 +120,9 @@ Kuadrant will expose the API referenced by `dogs` with a prefix of `/dogs`.
 The upstream request will not have the added prefix to match upstream API.
 
 ### API CRD
+
+Internal APIs bundled in a product. Kuadrant API objects grant API providers the freedom to map
+their internal API organization structure to kuadrant.
 
 An API custom resource looks like this:
 

@@ -1,0 +1,24 @@
+# permissions for end users to edit kuadrants.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kuadrant-editor-role
+rules:
+- apiGroups:
+  - kuadrant.kuadrant.io
+  resources:
+  - kuadrants
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kuadrant.kuadrant.io
+  resources:
+  - kuadrants/status
+  verbs:
+  - get

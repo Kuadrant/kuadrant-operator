@@ -1,0 +1,47 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: kuadrant-operator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: Kuadrant is the Schema for the kuadrants API
+      displayName: Kuadrant
+      kind: Kuadrant
+      name: kuadrants.kuadrant.kuadrant.io
+      version: v1beta1
+  description: Kuadrant Operator
+  displayName: Kuadrant
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - api
+  - api-management
+  - Kuadrant
+  links:
+  - name: Kuadrant Operator
+    url: https://kuadrant-operator.domain
+  maturity: alpha
+  provider:
+    name: Red Hat
+    url: https://github.com/Kuadrant/kuadrant-operator
+  version: 0.0.0

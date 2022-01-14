@@ -1,0 +1,5 @@
+namespace: kuadrant-operator-system
+
+resources:
+  - ../default
+  - ../dependencies

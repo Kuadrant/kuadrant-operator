@@ -16,12 +16,18 @@ metadata:
     capabilities: Basic Install
     operators.operatorframework.io/builder: operator-sdk-v1.14.0+git
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
-  name: kuadrant-operator.v0.0.1
+  name: kuadrant-operator.v0.0.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - kind: APIProduct
+      name: apiproducts.networking.kuadrant.io
+      version: v1beta1
+    - kind: API
+      name: apis.networking.kuadrant.io
+      version: v1beta1
     - description: Kuadrant is the Schema for the kuadrants API
       displayName: Kuadrant
       kind: Kuadrant
@@ -35,6 +41,133 @@ spec:
   install:
     spec:
       clusterPermissions:
+      - rules:
+        - apiGroups:
+          - authorino.kuadrant.io
+          resources:
+          - authconfigs
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - services
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - services
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - limitador.kuadrant.io
+          resources:
+          - ratelimits
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - networking.istio.io
+          resources:
+          - envoyfilters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - networking.istio.io
+          resources:
+          - virtualservices
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - networking.kuadrant.io
+          resources:
+          - apiproducts
+          - apis
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - networking.kuadrant.io
+          resources:
+          - apiproducts/finalizers
+          - apis/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - networking.kuadrant.io
+          resources:
+          - apiproducts/status
+          - apis/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - security.istio.io
+          resources:
+          - authorizationpolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - authentication.k8s.io
+          resources:
+          - tokenreviews
+          verbs:
+          - create
+        - apiGroups:
+          - authorization.k8s.io
+          resources:
+          - subjectaccessreviews
+          verbs:
+          - create
+        serviceAccountName: kuadrant-controller-manager
       - rules:
         - apiGroups:
           - kuadrant.kuadrant.io
@@ -134,7 +267,95 @@ spec:
                 runAsNonRoot: true
               serviceAccountName: kuadrant-operator-controller-manager
               terminationGracePeriodSeconds: 10
+      - name: kuadrant-controller-manager
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: kuadrant
+              control-plane: controller-manager
+          strategy: {}
+          template:
+            metadata:
+              labels:
+                app: kuadrant
+                control-plane: controller-manager
+            spec:
+              containers:
+              - args:
+                - --config=controller_manager_config.yaml
+                command:
+                - /manager
+                image: quay.io/kuadrant/kuadrant-controller:latest
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: manager
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 100m
+                    memory: 30Mi
+                  requests:
+                    cpu: 100m
+                    memory: 20Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                volumeMounts:
+                - mountPath: /controller_manager_config.yaml
+                  name: manager-config
+                  subPath: controller_manager_config.yaml
+              - args:
+                - --secure-listen-address=0.0.0.0:8443
+                - --upstream=http://127.0.0.1:8080/
+                - --logtostderr=true
+                - --v=10
+                image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
+                name: kube-rbac-proxy
+                ports:
+                - containerPort: 8443
+                  name: https
+                resources: {}
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: kuadrant-controller-manager
+              terminationGracePeriodSeconds: 10
+              volumes:
+              - configMap:
+                  name: kuadrant-manager-config
+                name: manager-config
       permissions:
+      - rules:
+        - apiGroups:
+          - ""
+          - coordination.k8s.io
+          resources:
+          - configmaps
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: kuadrant-controller-manager
       - rules:
         - apiGroups:
           - ""
@@ -189,4 +410,4 @@ spec:
   provider:
     name: Red Hat
     url: https://github.com/Kuadrant/kuadrant-operator
-  version: 0.0.1
+  version: 0.0.0

@@ -1,0 +1,8 @@
+# Adds namespace to all resources.
+namespace: kuadrant-operator-system
+
+resources:
+- namespace.yaml
+- operatorgroup.yaml
+- catalogsource.yaml
+- subscription.yaml

@@ -3,7 +3,7 @@
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 0.0.1
+VERSION ?= 0.0.0
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -24,19 +24,31 @@ BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
+# Address of the container registry
+REGISTRY = quay.io
+
+# Organization in container registry
+ORG ?= kuadrant
+
 # IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
 # This variable is used to construct full image tags for bundle and catalog images.
 #
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
 # quay.io/kuadrant/kuadrant-operator-bundle:$VERSION and quay.io/kuadrant/kuadrant-operator-catalog:$VERSION.
-IMAGE_TAG_BASE ?= quay.io/kuadrant/kuadrant-operator
+IMAGE_TAG_BASE ?= $(REGISTRY)/$(ORG)/kuadrant-operator
+
+ifeq (0.0.0,$(VERSION))
+IMAGE_TAG = latest
+else
+IMAGE_TAG = v$(VERSION)
+endif
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
-BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
+BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:$(IMAGE_TAG)
 
 # Image URL to use all building/pushing image targets
-IMG ?= quay.io/kuadrant/kuadrant-operator:latest
+IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.22
 
@@ -52,6 +64,42 @@ endif
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
+
+# Kuadrant component versions
+## kuadrant controller
+#ToDo Pin this version once we have an initial release of the controller
+KUADRANT_CONTROLLER_VERSION ?= latest
+ifeq (latest,$(KUADRANT_CONTROLLER_VERSION))
+KUADRANT_CONTROLLER_GITREF = main
+else
+KUADRANT_CONTROLLER_GITREF = $(KUADRANT_CONTROLLER_VERSION)
+endif
+## authorino
+#ToDo Pin this version once we have an initial release of authorino
+AUTHORINO_OPERATOR_VERSION ?= latest
+ifeq (latest,$(AUTHORINO_OPERATOR_VERSION))
+AUTHORINO_OPERATOR_BUNDLE_VERSION = 0.0.0
+AUTHORINO_OPERATOR_BUNDLE_IMG_TAG = latest
+AUTHORINO_OPERATOR_GITREF = main
+else
+AUTHORINO_OPERATOR_BUNDLE_VERSION = ${AUTHORINO_OPERATOR_VERSION}
+AUTHORINO_OPERATOR_BUNDLE_IMG_TAG = v$(AUTHORINO_OPERATOR_BUNDLE_VERSION)
+AUTHORINO_OPERATOR_GITREF = v$(AUTHORINO_OPERATOR_BUNDLE_VERSION)
+endif
+AUTHORINO_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/authorino-operator-bundle:$(AUTHORINO_OPERATOR_BUNDLE_IMG_TAG)
+## limitador
+#ToDo Pin this version once we have an initial release of limitador
+LIMITADOR_OPERATOR_VERSION ?= latest
+ifeq (latest,$(LIMITADOR_OPERATOR_VERSION))
+LIMITADOR_OPERATOR_BUNDLE_VERSION = 0.0.0
+LIMITADOR_OPERATOR_BUNDLE_IMG_TAG = latest
+LIMITADOR_OPERATOR_GITREF = main
+else
+LIMITADOR_OPERATOR_BUNDLE_VERSION = $(LIMITADOR_OPERATOR_VERSION)
+LIMITADOR_OPERATOR_BUNDLE_IMG_TAG = v$(LIMITADOR_OPERATOR_BUNDLE_VERSION)
+LIMITADOR_OPERATOR_GITREF = v$(LIMITADOR_OPERATOR_BUNDLE_VERSION)
+endif
+LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LIMITADOR_OPERATOR_BUNDLE_IMG_TAG)
 
 all: build
 
@@ -73,8 +121,23 @@ help: ## Display this help.
 
 ##@ Development
 
-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+manifests: controller-gen dependencies-manifests ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+
+.PHONY: dependencies-manifests
+dependencies-manifests: export KUADRANT_CONTROLLER_GITREF := $(KUADRANT_CONTROLLER_GITREF)
+dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
+dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
+dependencies-manifests: ## Update kuadrant dependencies manifests.
+	envsubst \
+        < config/dependencies/controller/kustomization.template.yaml \
+        > config/dependencies/controller/kustomization.yaml
+	envsubst \
+        < config/dependencies/authorino/kustomization.template.yaml \
+        > config/dependencies/authorino/kustomization.yaml
+	envsubst \
+        < config/dependencies/limitador/kustomization.template.yaml \
+        > config/dependencies/limitador/kustomization.yaml
 
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
@@ -96,7 +159,7 @@ build: generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
-docker-build: test ## Build docker image with the manager.
+docker-build: ## Build docker image with the manager.
 	docker build -t ${IMG} .
 
 docker-push: ## Push docker image with the manager.
@@ -112,11 +175,24 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default | kubectl apply -f -
+	$(KUSTOMIZE) build config/deploy | kubectl apply -f -
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/default | kubectl delete -f -
+	$(KUSTOMIZE) build config/deploy | kubectl delete -f -
 
+.PHONY: install-olm
+install-olm:
+	$(OPERATOR_SDK) olm install
+
+.PHONY: uninstall-olm
+uninstall-olm:
+	$(OPERATOR_SDK) olm uninstall
+
+deploy-olm: ## Deploy controller to the K8s cluster specified in ~/.kube/config using OLM catalog image.
+	$(KUSTOMIZE) build config/deploy/olm | kubectl apply -f -
+
+undeploy-olm: ## Undeploy controller from the K8s cluster specified in ~/.kube/config using OLM catalog image.
+	$(KUSTOMIZE) build config/deploy/olm | kubectl delete -f -
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
@@ -149,8 +225,14 @@ OPERATOR_SDK_VERSION = v1.15.0
 operator-sdk: ## Download operator-sdk locally if necessary.
 	./utils/install-operator-sdk.sh $(OPERATOR_SDK) $(OPERATOR_SDK_VERSION)
 
+.PHONY: bundle-dependencies
+bundle-dependencies: export AUTHORINO_OPERATOR_BUNDLE_VERSION := $(AUTHORINO_OPERATOR_BUNDLE_VERSION)
+bundle-dependencies: export LIMITADOR_OPERATOR_BUNDLE_VERSION := $(LIMITADOR_OPERATOR_BUNDLE_VERSION)
+bundle-dependencies: ## Generate bundle dependencies file.
+	./utils/generate-dependencies-yaml.sh > bundle/metadata/dependencies.yaml
+
 .PHONY: bundle
-bundle: manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
+bundle: manifests kustomize operator-sdk bundle-dependencies ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
@@ -183,10 +265,10 @@ endif
 
 # A comma-separated list of bundle images (e.g. make catalog-build BUNDLE_IMGS=example.com/operator-bundle:v0.1.0,example.com/operator-bundle:v0.2.0).
 # These images MUST exist in a registry and be pull-able.
-BUNDLE_IMGS ?= $(BUNDLE_IMG)
+BUNDLE_IMGS ?= $(BUNDLE_IMG),$(LIMITADOR_OPERATOR_BUNDLE_IMG),$(AUTHORINO_OPERATOR_BUNDLE_IMG)
 
 # The image tag given to the resulting catalog image (e.g. make catalog-build CATALOG_IMG=example.com/operator-catalog:v0.2.0).
-CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:v$(VERSION)
+CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:$(IMAGE_TAG)
 
 # Set CATALOG_BASE_IMG to an existing catalog image tag to add $BUNDLE_IMGS to that image.
 ifneq ($(origin CATALOG_BASE_IMG), undefined)

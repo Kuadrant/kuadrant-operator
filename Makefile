@@ -1,5 +1,3 @@
-SHELL := /bin/bash
-
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 PROJECT_PATH := $(patsubst %/,%,$(dir $(MKFILE_PATH)))
 
@@ -11,10 +9,10 @@ PROJECT_PATH := $(patsubst %/,%,$(dir $(MKFILE_PATH)))
 VERSION ?= 0.0.1
 
 # CHANNELS define the bundle channels used in the bundle.
-# Add a new line here if you would like to change its default config. (E.g CHANNELS = "preview,fast,stable")
+# Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
 # To re-generate a bundle for other specific channels without changing the standard setup, you can:
-# - use the CHANNELS as arg of the bundle target (e.g make bundle CHANNELS=preview,fast,stable)
-# - use environment variables to overwrite this value (e.g export CHANNELS="preview,fast,stable")
+# - use the CHANNELS as arg of the bundle target (e.g make bundle CHANNELS=candidate,fast,stable)
+# - use environment variables to overwrite this value (e.g export CHANNELS="candidate,fast,stable")
 ifneq ($(origin CHANNELS), undefined)
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
 endif
@@ -29,14 +27,22 @@ BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
+# IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
+# This variable is used to construct full image tags for bundle and catalog images.
+#
+# For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
+# quay.io/kuadrant/kuadrant-controller-bundle:$VERSION and quay.io/kuadrant/kuadrant-controller-catalog:$VERSION.
+IMAGE_TAG_BASE ?= quay.io/kuadrant/kuadrant-controller
+
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
-BUNDLE_IMG ?= controller-bundle:$(VERSION)
+BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:v$(VERSION)
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
-# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
+DEFAULT_IMG ?= $(IMAGE_TAG_BASE):latest
+IMG ?= $(DEFAULT_IMG)
+# ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
+ENVTEST_K8S_VERSION = 1.22
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -45,86 +51,110 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-KUADRANT_NAMESPACE=kuadrant-system
+# Setting SHELL to bash allows bash commands to be executed by recipes.
+# This is a requirement for 'setup-envtest.sh' in the test target.
+# Options are set to exit when a recipe line exits non-zero or a piped command fails.
+SHELL = /usr/bin/env bash -o pipefail
+.SHELLFLAGS = -ec
 
-all: manager
+all: build
 
-# Run all tests
-test: test-unit test-integration
+##@ General
 
-# Run e2e tests
-ENVTEST_ASSETS_DIR=$(shell pwd)/testbin
-test-integration: clean-cov generate fmt vet manifests
-	mkdir -p ${ENVTEST_ASSETS_DIR}
-	test -f ${ENVTEST_ASSETS_DIR}/setup-envtest.sh || curl -sSLo ${ENVTEST_ASSETS_DIR}/setup-envtest.sh https://raw.githubusercontent.com/kubernetes-sigs/controller-runtime/v0.7.0/hack/setup-envtest.sh
-	source ${ENVTEST_ASSETS_DIR}/setup-envtest.sh; fetch_envtest_tools $(ENVTEST_ASSETS_DIR); setup_envtest_env $(ENVTEST_ASSETS_DIR); USE_EXISTING_CLUSTER=true go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
+# The help target prints out all targets with their descriptions organized
+# beneath their categories. The categories are represented by '##@' and the
+# target descriptions by '##'. The awk commands is responsible for reading the
+# entire set of makefiles included in this invocation, looking for lines of the
+# file as xyz: ## something, and then pretty-format the target and help. Then,
+# if there's a line with ##@ something, that gets pretty-printed as a category.
+# More info on the usage of ANSI control characters for terminal formatting:
+# https://en.wikipedia.org/wiki/ANSI_escape_code#SGR_parameters
+# More info on the awk command:
+# http://linuxcommand.org/lc3_adv_awk.php
 
-test-unit: clean-cov generate fmt vet manifests
+help: ## Display this help.
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-30s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+
+##@ Development
+
+manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(MAKE) deploy-manifest
+
+.PHONY: deploy-manifest
+deploy-manifest: kustomize ## Generate deployment manifests.
+	mkdir -p $(PROJECT_DIR)/config/deploy
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	$(KUSTOMIZE) build config/default > $(PROJECT_DIR)/config/deploy/manifests.yaml
+	# clean up
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(DEFAULT_IMG)
+
+generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+fmt: ## Run go fmt against code.
+	go fmt ./...
+
+vet: ## Run go vet against code.
+	go vet ./...
+
+test: test-unit test-integration ## Run all tests
+
+test-integration: clean-cov generate fmt vet manifests envtest ## Run Integration tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" USE_EXISTING_CLUSTER=true go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
+
+test-unit: clean-cov generate fmt vet manifests ## Run Unit tests.
 	go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags unit -v -timeout 0
 
 clean-cov:
 	rm -rf $(PROJECT_PATH)/cover.out
 
-# Build manager binary
-manager: generate fmt vet
+##@ Build
+
+build: generate fmt vet ## Build manager binary.
 	go build -o bin/manager main.go
 
-# Run against the configured Kubernetes cluster in ~/.kube/config
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
-run: generate fmt vet manifests
+run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
-# Install CRDs into a cluster
-install: manifests kustomize
+docker-build: ## Build docker image with the manager.
+	docker build -t ${IMG} .
+
+docker-push: ## Push docker image with the manager.
+	docker push ${IMG}
+
+# old
+manager: build
+
+##@ Deployment
+
+install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl apply -f -
 
-# Uninstall CRDs from a cluster
-uninstall: manifests kustomize
+uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
 
-# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests kustomize
+deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | kubectl apply -f -
 
-# UnDeploy controller from the configured Kubernetes cluster in ~/.kube/config
-undeploy:
+undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/default | kubectl delete -f -
 
-# Generate manifests e.g. CRD, RBAC etc.
-manifests: controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
-# Run go fmt against code
-fmt:
-	go fmt ./...
-
-# Run go vet against code
-vet:
-	go vet ./...
-
-# Generate code
-generate: controller-gen
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
-
-# Build the docker image
-docker-build:
-	docker build -t ${IMG} .
-
-# Push the docker image
-docker-push:
-	docker push ${IMG}
-
-# Download controller-gen locally if necessary
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
-controller-gen:
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.4.1)
+controller-gen: ## Download controller-gen locally if necessary.
+	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.7.0)
 
-# Download kustomize locally if necessary
 KUSTOMIZE = $(shell pwd)/bin/kustomize
-kustomize:
+kustomize: ## Download kustomize locally if necessary.
 	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v3@v3.8.7)
+
+ENVTEST = $(shell pwd)/bin/setup-envtest
+envtest: ## Download envtest-setup locally if necessary.
+	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
 
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -140,71 +170,16 @@ rm -rf $$TMP_DIR ;\
 }
 endef
 
-# Generate bundle manifests and metadata, then validate generated files.
 .PHONY: bundle
-bundle: manifests kustomize
+bundle: manifests kustomize ## Generate bundle manifests and metadata, then validate generated files.
 	operator-sdk generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
 	operator-sdk bundle validate ./bundle
 
-# Build the bundle image.
 .PHONY: bundle-build
-bundle-build:
+bundle-build: ## Build the bundle image.
 	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
-
-# Download kind locally if necessary
-KIND = $(shell pwd)/bin/kind
-kind:
-	$(call go-get-tool,$(KIND),sigs.k8s.io/kind@v0.11.1)
-
-# Download istioctl.
-ISTIOCTL = $(shell pwd)/bin/istioctl
-ISTIOCTLVERSION = 1.9.4
-istioctl:
-ifeq (,$(wildcard $(ISTIOCTL)))
-	@{ \
-	set -e ;\
-	mkdir -p $(dir $(ISTIOCTL)) ;\
-	curl -sSL https://raw.githubusercontent.com/istio/istio/master/release/downloadIstioCtl.sh | ISTIO_VERSION=$(ISTIOCTLVERSION) HOME=$(shell pwd)/bin/ sh - > /dev/null 2>&1;\
-	mv $(shell pwd)/bin/.istioctl/bin/istioctl $(ISTIOCTL) ;\
-	rm -r $(shell pwd)/bin/.istioctl ;\
-	chmod +x $(ISTIOCTL) ;\
-	}
-endif
-
-# Generates istio manifests with patches.
-.PHONY: generate-istio-manifests
-generate-istio-manifests: istioctl
-	$(ISTIOCTL) manifest generate --set profile=minimal --set values.gateways.istio-ingressgateway.autoscaleEnabled=false --set values.pilot.autoscaleEnabled=false --set values.global.istioNamespace=$(KUADRANT_NAMESPACE) -f utils/local-deployment/patches/istio-externalProvider.yaml -o utils/local-deployment/istio-manifests
-
-.PHONY: istio-manifest-update-test
-istio-manifest-update-test: generate-istio-manifests
-	git diff --exit-code ./utils/local-deployment/istio-manifests
-	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./utils/local-deployment/istio-manifests)" ]
-
-.PHONY: local-setup
-local-setup: local-cleanup local-setup-kind manifests kustomize generate
-	./utils/local-deployment/local-setup.sh
-
-# Deploys all services and manifests required by kuadrant to run
-# kuadrant is not deployed
-.PHONY: local-env-setup
-local-env-setup: local-cleanup local-setup-kind deploy-kuadrant-deps generate install
-
-.PHONY: deploy-kuadrant-deps
-deploy-kuadrant-deps:
-	./utils/local-deployment/deploy-kuadrant-deps.sh
-
-KIND_CLUSTER_NAME = kuadrant-local
-
-.PHONY: local-setup-kind
-local-setup-kind: kind
-	$(KIND) create cluster --name $(KIND_CLUSTER_NAME) --config utils/local-deployment/kind-cluster.yaml
-
-.PHONY: local-cleanup
-local-cleanup: kind
-	$(KIND) delete cluster --name $(KIND_CLUSTER_NAME)
 
 .PHONY: bundle-push
 bundle-push: ## Push the bundle image.
@@ -251,6 +226,63 @@ catalog-build: opm ## Build a catalog image.
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
+##@ Misc
+
+## Miscellaneous Custom targets
+
+KUADRANT_NAMESPACE=kuadrant-system
+
+KIND = $(shell pwd)/bin/kind
+kind: ## Download kind locally if necessary.
+	$(call go-get-tool,$(KIND),sigs.k8s.io/kind@v0.11.1)
+
+# Download istioctl.
+ISTIOCTL = $(shell pwd)/bin/istioctl
+ISTIOCTLVERSION = 1.9.4
+istioctl:
+ifeq (,$(wildcard $(ISTIOCTL)))
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(ISTIOCTL)) ;\
+	curl -sSL https://raw.githubusercontent.com/istio/istio/master/release/downloadIstioCtl.sh | ISTIO_VERSION=$(ISTIOCTLVERSION) HOME=$(shell pwd)/bin/ sh - > /dev/null 2>&1;\
+	mv $(shell pwd)/bin/.istioctl/bin/istioctl $(ISTIOCTL) ;\
+	rm -r $(shell pwd)/bin/.istioctl ;\
+	chmod +x $(ISTIOCTL) ;\
+	}
+endif
+
+.PHONY: generate-istio-manifests
+generate-istio-manifests: istioctl ## Generates istio manifests with patches.
+	$(ISTIOCTL) manifest generate --set profile=minimal --set values.gateways.istio-ingressgateway.autoscaleEnabled=false --set values.pilot.autoscaleEnabled=false --set values.global.istioNamespace=$(KUADRANT_NAMESPACE) -f utils/local-deployment/patches/istio-externalProvider.yaml -o utils/local-deployment/istio-manifests
+
+.PHONY: istio-manifest-update-test
+istio-manifest-update-test: generate-istio-manifests
+	git diff --exit-code ./utils/local-deployment/istio-manifests
+	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./utils/local-deployment/istio-manifests)" ]
+
+.PHONY: local-setup
+local-setup: local-cleanup local-setup-kind manifests kustomize generate
+	./utils/local-deployment/local-setup.sh
+
+# Deploys all services and manifests required by kuadrant to run
+# kuadrant is not deployed
+.PHONY: local-env-setup
+local-env-setup: local-cleanup local-setup-kind deploy-kuadrant-deps generate install
+
+.PHONY: deploy-kuadrant-deps
+deploy-kuadrant-deps:
+	./utils/local-deployment/deploy-kuadrant-deps.sh
+
+KIND_CLUSTER_NAME = kuadrant-local
+
+.PHONY: local-setup-kind
+local-setup-kind: kind
+	$(KIND) create cluster --name $(KIND_CLUSTER_NAME) --config utils/local-deployment/kind-cluster.yaml
+
+.PHONY: local-cleanup
+local-cleanup: kind
+	$(KIND) delete cluster --name $(KIND_CLUSTER_NAME)
+
 .PHONY: manifests-update-test
 manifests-update-test: manifests
 	git diff --exit-code ./config
@@ -267,11 +299,10 @@ golangci-lint: $(GOLANGCI-LINT)
 run-lint: $(GOLANGCI-LINT)
 	$(GOLANGCI-LINT) run
 
-# Generates limitador manifests.
 LIMITADOR_OPERATOR_VERSION=v0.2.0
 LIMITADOR_OPERATOR_IMAGE=quay.io/3scale/limitador-operator:$(LIMITADOR_OPERATOR_VERSION)
 .PHONY: generate-limitador-operator-manifests
-generate-limitador-operator-manifests:
+generate-limitador-operator-manifests: # Generates limitador manifests.
 	$(eval TMP := $(shell mktemp -d))
 	cd $(TMP); git clone --depth 1 --branch $(LIMITADOR_OPERATOR_VERSION) https://github.com/kuadrant/limitador-operator.git
 	cd $(TMP)/limitador-operator; make kustomize

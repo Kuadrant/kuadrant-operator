@@ -236,20 +236,18 @@ KIND = $(shell pwd)/bin/kind
 kind: ## Download kind locally if necessary.
 	$(call go-get-tool,$(KIND),sigs.k8s.io/kind@v0.11.1)
 
-# Download istioctl.
-ISTIOCTL = $(shell pwd)/bin/istioctl
-ISTIOCTLVERSION = 1.9.4
-istioctl:
-ifeq (,$(wildcard $(ISTIOCTL)))
-	@{ \
-	set -e ;\
-	mkdir -p $(dir $(ISTIOCTL)) ;\
-	curl -sSL https://raw.githubusercontent.com/istio/istio/master/release/downloadIstioCtl.sh | ISTIO_VERSION=$(ISTIOCTLVERSION) HOME=$(shell pwd)/bin/ sh - > /dev/null 2>&1;\
-	mv $(shell pwd)/bin/.istioctl/bin/istioctl $(ISTIOCTL) ;\
-	rm -r $(shell pwd)/bin/.istioctl ;\
-	chmod +x $(ISTIOCTL) ;\
-	}
-endif
+# istioctl tool
+ISTIOCTL=$(PROJECT_PATH)/bin/istioctl
+ISTIOVERSION = 1.12.1
+$(ISTIOCTL):
+	mkdir -p $(PROJECT_PATH)/bin
+	$(eval TMP := $(shell mktemp -d))
+	cd $(TMP); curl -sSL https://istio.io/downloadIstio | ISTIO_VERSION=$(ISTIOVERSION) sh -
+	cp $(TMP)/istio-$(ISTIOVERSION)/bin/istioctl ${ISTIOCTL}
+	-rm -rf $(TMP)
+
+.PHONY: istioctl
+istioctl: $(ISTIOCTL)
 
 .PHONY: generate-istio-manifests
 generate-istio-manifests: istioctl ## Generates istio manifests with patches.

@@ -30,6 +30,7 @@ kubectl apply -f utils/local-deployment/istio-manifests/Base/Pilot/IngressGatewa
 kubectl apply -n "${KUADRANT_NAMESPACE}" -f utils/local-deployment/istio-manifests/default-gateway.yaml
 
 echo "Deploying Authorino to the kuadrant-system namespace"
+kubectl apply -f utils/local-deployment/authorino-operator.yaml
 kubectl apply -n "${KUADRANT_NAMESPACE}" -f utils/local-deployment/authorino.yaml
 
 echo "Deploying Limitador Operator to the kuadrant-system namespace"

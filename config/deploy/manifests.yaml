@@ -388,7 +388,7 @@ metadata:
   name: kuadrant-manager-role
 rules:
 - apiGroups:
-  - authorino.3scale.net
+  - authorino.kuadrant.io
   resources:
   - authconfigs
   verbs:

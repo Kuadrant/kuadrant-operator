@@ -46,7 +46,7 @@ spec:
       serviceAccountName: kuadrant-gateway-service-account
       containers:
         - name: istio-proxy
-          image: "docker.io/istio/proxyv2:1.9.4"
+          image: "docker.io/istio/proxyv2:1.12.1"
           ports:
             - containerPort: 15021
               protocol: TCP
@@ -69,8 +69,6 @@ spec:
           - --proxyLogLevel=warning
           - --proxyComponentLogLevel=misc:error
           - --log_output_level=default:info
-          - --serviceCluster
-          - kuadrant-gateway
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -131,22 +129,16 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: spec.serviceAccountName
-          - name: CANONICAL_SERVICE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.labels['service.istio.io/canonical-name']
-          - name: CANONICAL_REVISION
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.labels['service.istio.io/canonical-revision']
           - name: ISTIO_META_WORKLOAD_NAME
             value: kuadrant-gateway
           - name: ISTIO_META_OWNER
             value: kubernetes://apis/apps/v1/namespaces/kuadrant-system/deployments/kuadrant-gateway
+          - name: ISTIO_META_MESH_ID
+            value: "cluster.local"
+          - name: TRUST_DOMAIN
+            value: "cluster.local"
           - name: ISTIO_META_UNPRIVILEGED_POD
             value: "true"
-          - name: ISTIO_META_ROUTER_MODE
-            value: standard
           - name: ISTIO_META_CLUSTER_ID
             value: "Kubernetes"
           volumeMounts:
@@ -182,16 +174,6 @@ spec:
             - path: "annotations"
               fieldRef:
                 fieldPath: metadata.annotations
-            - path: "cpu-limit"
-              resourceFieldRef:
-                containerName: istio-proxy
-                resource: limits.cpu
-                divisor: 1m
-            - path: "cpu-request"
-              resourceFieldRef:
-                containerName: istio-proxy
-                resource: requests.cpu
-                divisor: 1m
       - name: istio-envoy
         emptyDir: {}
       - name: istio-data

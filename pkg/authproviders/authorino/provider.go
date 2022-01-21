@@ -22,7 +22,7 @@ type Provider struct {
 	*reconcilers.BaseReconciler
 }
 
-// +kubebuilder:rbac:groups=authorino.3scale.net,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
 
 func New(baseReconciler *reconcilers.BaseReconciler) *Provider {
 	utilruntime.Must(authorino.AddToScheme(baseReconciler.Scheme()))

@@ -5,7 +5,7 @@ spec:
     extensionProviders:
       - name: "kuadrant-authorization"
         envoyExtAuthzGrpc:
-          service: "authorino-authorization.kuadrant-system.svc.cluster.local"
+          service: "authorino-authorino-authorization.kuadrant-system.svc.cluster.local"
           port: 50051
   components:
     ingressGateways:

@@ -19,9 +19,10 @@ kind-delete-cluster: ## Delete the "kuadrant-local" kind cluster.
 
 .PHONY: kind-create-kuadrant-cluster
 kind-create-kuadrant-cluster: export IMG := quay.io/kuadrant/kuadrant-operator:dev
-kind-create-kuadrant-cluster: kind-create-cluster ## Create a kind cluster with kuadrant deployed.
+kind-create-kuadrant-cluster: kind-create-cluster istio-install ## Create a kind cluster with kuadrant deployed.
 	$(MAKE) docker-build
 	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
 	$(MAKE) install
 	$(MAKE) deploy
 	kubectl -n kuadrant-system wait --timeout=300s --for=condition=Available deployments --all
+	$(MAKE) istio-install-with-patch

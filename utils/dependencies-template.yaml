@@ -1,0 +1,9 @@
+dependencies:
+  - type: olm.package
+    value:
+      packageName: authorino-operator
+      version: "%AUTHORINO_OPERATOR_BUNDLE_VERSION%"
+  - type: olm.package
+    value:
+      packageName: limitador-operator
+      version: "%LIMITADOR_OPERATOR_BUNDLE_VERSION%"

@@ -1,0 +1,4 @@
+resources:
+- github.com/Kuadrant/authorino-operator/config/default?ref=main
+# The authorino CRDs/Roles also need to be included, but should eventually be included by the operator kustomization instead
+- github.com/Kuadrant/authorino/install?ref=main

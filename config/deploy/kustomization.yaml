@@ -1,4 +1,4 @@
-namespace: kuadrant-operator-system
+namespace: kuadrant-system
 
 resources:
   - ../default

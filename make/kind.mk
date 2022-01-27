@@ -24,4 +24,4 @@ kind-create-kuadrant-cluster: kind-create-cluster ## Create a kind cluster with 
 	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
 	$(MAKE) install
 	$(MAKE) deploy
-	kubectl -n kuadrant-operator-system wait --timeout=300s --for=condition=Available deployments --all
+	kubectl -n kuadrant-system wait --timeout=300s --for=condition=Available deployments --all

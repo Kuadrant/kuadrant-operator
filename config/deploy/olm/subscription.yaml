@@ -4,6 +4,6 @@ metadata:
   name: kuadrant
 spec:
   source: kuadrant-operator-catalog
-  sourceNamespace: kuadrant-operator-system
+  sourceNamespace: kuadrant-system
   name: kuadrant-operator
   channel: "alpha"

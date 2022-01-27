@@ -1,5 +1,5 @@
 # Adds namespace to all resources.
-namespace: kuadrant-operator-system
+namespace: kuadrant-system
 
 resources:
 - namespace.yaml

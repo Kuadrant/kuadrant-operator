@@ -38,9 +38,9 @@ ORG ?= kuadrant
 IMAGE_TAG_BASE ?= $(REGISTRY)/$(ORG)/kuadrant-operator
 
 ifeq (0.0.0,$(VERSION))
-IMAGE_TAG = latest
+IMAGE_TAG ?= latest
 else
-IMAGE_TAG = v$(VERSION)
+IMAGE_TAG ?= v$(VERSION)
 endif
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
@@ -281,6 +281,10 @@ endif
 .PHONY: catalog-build
 catalog-build: opm ## Build a catalog image.
 	$(OPM) index add --container-tool docker --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
+
+.PHONY: catalog-generate
+catalog-generate: opm ## Generate a catalog/index Dockerfile.
+	$(OPM) index add --generate --container-tool docker --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
 
 # Push the catalog image.
 .PHONY: catalog-push

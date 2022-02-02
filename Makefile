@@ -176,6 +176,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/deploy | kubectl apply -f -
+	${MAKE} post-deploy-hacks
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/deploy | kubectl delete -f -
@@ -190,9 +191,19 @@ uninstall-olm:
 
 deploy-olm: ## Deploy controller to the K8s cluster specified in ~/.kube/config using OLM catalog image.
 	$(KUSTOMIZE) build config/deploy/olm | kubectl apply -f -
+	${MAKE} post-deploy-hacks
 
 undeploy-olm: ## Undeploy controller from the K8s cluster specified in ~/.kube/config using OLM catalog image.
 	$(KUSTOMIZE) build config/deploy/olm | kubectl delete -f -
+
+#This target is temporary to aid dev/test of the operator. Eventually it will be the responsibility of the
+# operator itself to create/configure these things as part of the reconciliation of a kuadrant CR.
+post-deploy-hacks:
+	# Wait for deployment to complete
+	timeout 60s bash -c 'until kubectl -n kuadrant-system get deployments/kuadrant-operator-controller-manager; do sleep 10; done;'
+	kubectl -n kuadrant-system wait --timeout=300s --for=condition=Available deployments --all
+	kubectl apply -f config/dependencies/istio/default-gateway.yaml -n kuadrant-system
+	kubectl apply -f config/dependencies/authorino/authorino.yaml -n kuadrant-system
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.

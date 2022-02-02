@@ -1,4 +1,4 @@
-namespace: kuadrant-operator-system
+namespace: kuadrant-system
 
 resources:
   - controller
@@ -6,6 +6,5 @@ resources:
   - limitador
 
 patchesStrategicMerge:
-  - controller/delete-ns.yaml
   - authorino/delete-ns.yaml
   - limitador/delete-ns.yaml

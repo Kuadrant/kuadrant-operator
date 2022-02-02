@@ -23,3 +23,7 @@ testbin/*
 *.swp
 *.swo
 *~
+
+# ./bin/opm index add --generate output
+database/index.db
+index.Dockerfile

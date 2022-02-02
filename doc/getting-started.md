@@ -52,7 +52,7 @@ On successful command return, you should see the following deployments and pods 
 ```bash
 ❯ kubectl get pods -n kuadrant-system
 NAME                                                     READY   STATUS    RESTARTS   AGE
-authorino-controller-manager-XXXXXXXXXXX-XXXX            2/2     Running   0          3m6s
+authorino-XXXXXXXXXXX-XXXX                               1/1     Running   0          2m33s
 istiod-XXXXXXXXXX-XXXXX                                  1/1     Running   0          3m11s
 kuadrant-controller-manager-XXXXXXXXXX-XXXX              2/2     Running   0          3m5s
 kuadrant-gateway-XXXXXXXXXX-XXXX                         1/1     Running   0          3m5s
@@ -62,12 +62,23 @@ limitador-operator-controller-manager-XXXXXXXXXX-XXXXX   2/2     Running   0    
 
 ❯ kubectl get deployments -n kuadrant-system
 NAME                                    READY   UP-TO-DATE   AVAILABLE   AGE
-authorino-controller-manager            1/1     1            1           4m51s
+authorino                               1/1     1            1           4m51s
 istiod                                  1/1     1            1           4m57s
 kuadrant-controller-manager             1/1     1            1           4m50s
 kuadrant-gateway                        1/1     1            1           4m51s
 limitador                               1/1     1            1           3m58s
 limitador-operator-controller-manager   1/1     1            1           4m51s
+
+
+❯ kubectl get pods -n authorino-operator
+NAME                                                     READY   STATUS    RESTARTS   AGE
+authorino-operator-controller-manager-XXXXXXXXXXX-XXXX   2/2     Running   0          2m36s
+
+
+❯ kubectl get deployments -n authorino-operator
+NAME                                    READY   UP-TO-DATE   AVAILABLE   AGE
+authorino-operator-controller-manager   1/1     1            1           2m36s
+
 ```
 
 ### Deploy the upstream Toy Store API service

@@ -128,3 +128,25 @@ jobs:
       - name: Run make verify-fmt
         run: |
           make verify-fmt
+
+  test-scripts:
+    name: Test Scripts
+    strategy:
+      matrix:
+        go-version: [ 1.16.x ]
+        platform: [ ubuntu-latest, macos-latest ]
+    runs-on: ${{ matrix.platform }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version }}
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: Run make operator-sdk
+        run: |
+          make operator-sdk

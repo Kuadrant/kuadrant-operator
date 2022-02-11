@@ -6,6 +6,7 @@ require (
 	github.com/Azure/go-autorest/autorest v0.11.19 // indirect
 	github.com/getkin/kin-openapi v0.63.0
 	github.com/go-logr/logr v0.4.0
+	github.com/gogo/protobuf v1.3.2
 	github.com/google/go-cmp v0.5.5
 	github.com/google/uuid v1.1.2
 	github.com/jarcoal/httpmock v1.0.8

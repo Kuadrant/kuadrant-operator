@@ -34,15 +34,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
-	networkingv1beta1 "github.com/kuadrant/kuadrant-controller/apis/networking/v1beta1"
-	"github.com/kuadrant/kuadrant-controller/controllers"
-	"github.com/kuadrant/kuadrant-controller/pkg/authproviders"
+	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
+	apimcontrollers "github.com/kuadrant/kuadrant-controller/controllers/apim"
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	"github.com/kuadrant/kuadrant-controller/pkg/ingressproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/log"
-	"github.com/kuadrant/kuadrant-controller/pkg/ratelimitproviders"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 	"github.com/kuadrant/kuadrant-controller/version"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -54,8 +54,11 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(networkingv1beta1.AddToScheme(scheme))
 	utilruntime.Must(corev1.AddToScheme(scheme))
+	utilruntime.Must(apimv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(istionetworkingv1alpha3.AddToScheme(scheme))
+	utilruntime.Must(istiosecurityv1beta1.AddToScheme(scheme))
+	utilruntime.Must(limitadorv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 
 	logger := log.NewLogger(
@@ -104,32 +107,45 @@ func main() {
 		os.Exit(1)
 	}
 
-	apiProductBaseReconciler := reconcilers.NewBaseReconciler(
+	apiBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("apiproduct"),
-		mgr.GetEventRecorderFor("APIProduct"),
+		log.Log.WithName("api"),
+		mgr.GetEventRecorderFor("API"),
 	)
 
-	serviceBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("service"),
-		mgr.GetEventRecorderFor("Service"),
-	)
-
-	if err = (&controllers.APIProductReconciler{
-		BaseReconciler:    apiProductBaseReconciler,
-		AuthProvider:      authproviders.GetAuthProvider(apiProductBaseReconciler),
-		IngressProvider:   ingressproviders.GetIngressProvider(apiProductBaseReconciler),
-		RateLimitProvider: ratelimitproviders.GetRateLimitProvider(apiProductBaseReconciler),
+	if err = (&apimcontrollers.APIReconciler{
+		BaseReconciler: apiBaseReconciler,
+		Scheme:         mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "APIProduct")
+		setupLog.Error(err, "unable to create controller", "controller", "API")
 		os.Exit(1)
 	}
 
-	if err = (&controllers.ServiceReconciler{
-		BaseReconciler: serviceBaseReconciler,
+	rateLimitPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy"),
+		mgr.GetEventRecorderFor("RateLimitPolicy"),
+	)
+
+	if err = (&apimcontrollers.RateLimitPolicyReconciler{
+		BaseReconciler: rateLimitPolicyBaseReconciler,
+		Scheme:         mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Service")
+		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicy")
+		os.Exit(1)
+	}
+
+	virtualServiceBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("virtualservice"),
+		mgr.GetEventRecorderFor("VirtualService"),
+	)
+
+	if err = (&apimcontrollers.VirtualServiceReconciler{
+		BaseReconciler: virtualServiceBaseReconciler,
+		Scheme:         mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "VirtualService")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

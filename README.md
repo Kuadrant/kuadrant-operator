@@ -46,50 +46,9 @@ The kuadrant controller acts on the following [CRDs](https://kubernetes.io/docs/
 
 | CRD | Description |
 | --- | --- |
-| [APIProduct](apis/networking/v1beta1/apiproduct_types.go) | Customer-facing APIs. APIProduct facilitates the creation of strong and simplified offerings for API consumers |
-| [API](apis/networking/v1beta1/api_types.go) | Internal APIs bundled in a product. Kuadrant API objects grant API providers the freedom to map their internal API organization structure to kuadrant |
+| [RateLimitPolicy](apis/apim/v1alpha1/ratelimitpolicy_types.go) | Enable access control on workloads based on HTTP rate limiting |
 
 For a detailed description of the CRDs above, refer to the [Architecture](doc/architecture.md) page.
-
-## List of features
-
-| Feature | Description | Stage |
-| --- | --- | --- |
-| [OpenAPI 3.x](https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.0.2.md) | OpenAPI driven configuration. The document can be read from a configmap or served from the upstream API service | *Ready* |
-| *Path Match* based routing | HTTP routing rules will be configured based on request path expressions. Accepted values are `Exact`, `Prefix` and `RegularExpression` | *Ready* |
-| [Service Discovery](doc/service-discovery.md) | kubernetes [annotations](https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/) and [labels](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/) for a seamless integration | *Ready* |
-| **AuthN** based on API key | Protect your service with a simple API key based authentication mechanism | *Ready* |
-| **AuthN** based on [OpenID Connect (OIDC)](https://openid.net/connect/) | Kuadrant can verify OIDC (JWTs) tokens to authenticate users | *Ready* |
-| Global Rate Limiting | Single global rate limit for all requests. Main use case for protecting infrastructure resources | *Ready* |
-| Rate Limiting Per Remote IP | Rate limit configuration per each remote IP address. Main use case for protecting infrastructure resources | *Ready* |
-| Authenticated Rate Limiting | Rate limit configuration per each authenticated client | *Ready* |
-| Server TLS | TLS termination for downstream connections | Planned |
-| Upstream TLS | Client certificates upstream connections | Planned |
-| mTLS | Mutual TLS termination for downstream connections | Planned |
-| [Gateway API](https://gateway-api.sigs.k8s.io/) | Implementation of kuadrant features on top of the Gateway API | Planned |
-| Monitoring and Alerting | Observability based on [Grafana](https://grafana.com/) and [Prometheus](https://prometheus.io/) | Planned |
-
-For a detailed description of the features above, refer to the [Architecture](doc/architecture.md) page.
-
-## Architecture
-
-The [Architecture](doc/architecture.md) section of the docs covers the details of protecting your APIs with Kuadrant.
-
-## [Getting started](doc/getting-started.md)
-
-## User Guides
-
-### [HTTP routing rules from OpenAPI stored in a configmap](doc/service-discovery-oas-configmap.md)
-
-### [HTTP routing rules from OpenAPI served by the service](doc/service-discovery-oas-service.md)
-
-### [HTTP routing rules with path matching](doc/service-discovery-path-match.md)
-
-### [AuthN based on API key](doc/authn-api-key.md)
-
-### [AuthN based on OpenID Connect](doc/authn-oidc.md)
-
-### [Rate limiting](doc/rate-limit.md)
 
 ## Contributing
 

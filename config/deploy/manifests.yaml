@@ -14,20 +14,20 @@ metadata:
   creationTimestamp: null
   labels:
     app: kuadrant
-  name: apiproducts.networking.kuadrant.io
+  name: apis.apim.kuadrant.io
 spec:
-  group: networking.kuadrant.io
+  group: apim.kuadrant.io
   names:
-    kind: APIProduct
-    listKind: APIProductList
-    plural: apiproducts
-    singular: apiproduct
+    kind: API
+    listKind: APIList
+    plural: apis
+    singular: api
   scope: Namespaced
   versions:
-  - name: v1beta1
+  - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: APIProduct is the Schema for the apiproducts API
+        description: API is the Schema for the apis API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -38,185 +38,39 @@ spec:
           metadata:
             type: object
           spec:
-            description: APIProductSpec defines the desired state of APIProduct
             properties:
-              APIs:
-                description: The list of kuadrant API to be protected
-                items:
-                  properties:
-                    name:
-                      description: Kuadrant API object name
-                      type: string
-                    namespace:
-                      description: Kuadrant API object namespace
-                      type: string
-                    prefix:
-                      description: Public prefix path to be added to all paths exposed by the API
-                      type: string
-                    tag:
-                      type: string
-                  required:
-                  - name
-                  - namespace
-                  type: object
-                minItems: 1
-                type: array
-              hosts:
-                description: The destination hosts to which traffic is being sent. Could be a DNS name with wildcard prefix or an IP address.  Depending on the platform, short-names can also be used instead of a FQDN (i.e. has no dots in the name). In such a scenario, the FQDN of the host would be derived based on the underlying platform.
-                items:
-                  type: string
-                type: array
-              rateLimit:
-                description: RateLimit configures global rate limit parameters
+              info:
                 properties:
-                  authenticated:
-                    description: AuthRateLimit configures the same rate limit parameters per each authenticated client
+                  description:
+                    type: string
+                  openAPIRef:
                     properties:
-                      maxValue:
-                        description: MaxValue represents the number of requests allowed per defined period of time.
-                        format: int32
-                        type: integer
-                      period:
-                        description: Period represents the period of time in seconds.
-                        format: int32
-                        type: integer
-                    required:
-                    - maxValue
-                    - period
+                      URL:
+                        type: string
+                      configMap:
+                        description: LocalObjectReference contains enough information to let you locate the referenced object inside the same namespace.
+                        properties:
+                          name:
+                            description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names TODO: Add other useful fields. apiVersion, kind, uid?'
+                            type: string
+                        type: object
                     type: object
-                  global:
-                    description: Global configures a single global rate limit for all requests.
-                    properties:
-                      maxValue:
-                        description: MaxValue represents the number of requests allowed per defined period of time.
-                        format: int32
-                        type: integer
-                      period:
-                        description: Period represents the period of time in seconds.
-                        format: int32
-                        type: integer
-                    required:
-                    - maxValue
-                    - period
-                    type: object
-                  perRemoteIP:
-                    description: PerRemoteIPRateLimit configures the same rate limit parameters per each remote address
-                    properties:
-                      maxValue:
-                        description: MaxValue represents the number of requests allowed per defined period of time.
-                        format: int32
-                        type: integer
-                      period:
-                        description: Period represents the period of time in seconds.
-                        format: int32
-                        type: integer
-                    required:
-                    - maxValue
-                    - period
-                    type: object
+                  title:
+                    type: string
+                  version:
+                    type: string
+                required:
+                - title
+                - version
                 type: object
-              securityScheme:
-                description: Configure authentication mechanisms
-                items:
-                  properties:
-                    apiKeyAuth:
-                      properties:
-                        credential_source:
-                          properties:
-                            labelSelectors:
-                              additionalProperties:
-                                type: string
-                              type: object
-                          required:
-                          - labelSelectors
-                          type: object
-                        location:
-                          type: string
-                        name:
-                          type: string
-                      required:
-                      - credential_source
-                      - location
-                      - name
-                      type: object
-                    name:
-                      type: string
-                    openIDConnectAuth:
-                      properties:
-                        url:
-                          type: string
-                      required:
-                      - url
-                      type: object
-                  required:
-                  - name
-                  type: object
-                type: array
             required:
-            - APIs
-            - hosts
+            - info
             type: object
-          status:
-            description: APIProductStatus defines the observed state of APIProduct
-            properties:
-              conditions:
-                description: 'Conditions represent the latest available observations of an object''s state Known .status.conditions.type are: "Ready"'
-                items:
-                  description: "Condition contains details for one aspect of the current state of this API Resource. --- This struct is intended for direct use as an array at the field path .status.conditions.  For example, type FooStatus struct{     // Represents the observations of a foo's current state.     // Known .status.conditions.type are: \"Available\", \"Progressing\", and \"Degraded\"     // +patchMergeKey=type     // +patchStrategy=merge     // +listType=map     // +listMapKey=type     Conditions []metav1.Condition `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"` \n     // other fields }"
-                  properties:
-                    lastTransitionTime:
-                      description: lastTransitionTime is the last time the condition transitioned from one status to another. This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
-                      format: date-time
-                      type: string
-                    message:
-                      description: message is a human readable message indicating details about the transition. This may be an empty string.
-                      maxLength: 32768
-                      type: string
-                    observedGeneration:
-                      description: observedGeneration represents the .metadata.generation that the condition was set based upon. For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date with respect to the current state of the instance.
-                      format: int64
-                      minimum: 0
-                      type: integer
-                    reason:
-                      description: reason contains a programmatic identifier indicating the reason for the condition's last transition. Producers of specific condition types may define expected values and meanings for this field, and whether the values are considered a guaranteed API. The value should be a CamelCase string. This field may not be empty.
-                      maxLength: 1024
-                      minLength: 1
-                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                      type: string
-                    status:
-                      description: status of the condition, one of True, False, Unknown.
-                      enum:
-                      - "True"
-                      - "False"
-                      - Unknown
-                      type: string
-                    type:
-                      description: type of condition in CamelCase or in foo.example.com/CamelCase. --- Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be useful (see .node.status.conditions), the ability to deconflict is important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
-                      maxLength: 316
-                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                      type: string
-                  required:
-                  - lastTransitionTime
-                  - message
-                  - reason
-                  - status
-                  - type
-                  type: object
-                type: array
-                x-kubernetes-list-map-keys:
-                - type
-                x-kubernetes-list-type: map
-              observedgen:
-                format: int64
-                type: integer
-            required:
-            - observedgen
-            type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}
 status:
   acceptedNames:
     kind: ""
@@ -232,20 +86,20 @@ metadata:
   creationTimestamp: null
   labels:
     app: kuadrant
-  name: apis.networking.kuadrant.io
+  name: ratelimitpolicies.apim.kuadrant.io
 spec:
-  group: networking.kuadrant.io
+  group: apim.kuadrant.io
   names:
-    kind: API
-    listKind: APIList
-    plural: apis
-    singular: api
+    kind: RateLimitPolicy
+    listKind: RateLimitPolicyList
+    plural: ratelimitpolicies
+    singular: ratelimitpolicy
   scope: Namespaced
   versions:
-  - name: v1beta1
+  - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: API is the Schema for the apis API
+        description: RateLimitPolicy is the Schema for the ratelimitpolicies API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
@@ -256,84 +110,115 @@ spec:
           metadata:
             type: object
           spec:
-            description: APISpec defines the desired state of API
+            description: RateLimitPolicySpec defines the desired state of RateLimitPolicy
             properties:
-              destination:
-                properties:
-                  schema:
-                    type: string
-                  serviceReference:
-                    description: ServiceReference holds a reference to Service.legacy.k8s.io
-                    properties:
-                      name:
-                        description: name is the name of the service. Required
+              actions:
+                description: these actions are used for all of the matching rules
+                items:
+                  properties:
+                    generic_key:
+                      properties:
+                        descriptor_key:
+                          type: string
+                        descriptor_value:
+                          type: string
+                      required:
+                      - descriptor_key
+                      - descriptor_value
+                      type: object
+                  required:
+                  - generic_key
+                  type: object
+                type: array
+              limits:
+                items:
+                  description: RateLimitSpec defines the desired state of RateLimit
+                  properties:
+                    conditions:
+                      items:
                         type: string
-                      namespace:
-                        description: namespace is the namespace of the service. Required
+                      type: array
+                    max_value:
+                      type: integer
+                    namespace:
+                      type: string
+                    seconds:
+                      type: integer
+                    variables:
+                      items:
                         type: string
-                      path:
-                        description: path is an optional URL path at which the webhook will be contacted.
-                        type: string
-                      port:
-                        description: port is an optional service port at which the webhook will be contacted. `port` should be a valid port number (1-65535, inclusive). Defaults to 443 for backward compatibility.
-                        format: int32
-                        type: integer
-                    required:
-                    - name
-                    - namespace
-                    type: object
-                required:
-                - serviceReference
-                type: object
-              mappings:
-                anyOf:
-                - required:
-                  - OAS
-                - required:
-                  - HTTPPathMatch
-                properties:
-                  HTTPPathMatch:
-                    description: Select a HTTP route by matching the HTTP request path.
-                    properties:
-                      type:
-                        default: Prefix
-                        description: "Type specifies how to match against the path Value. \n Support: Core (Exact, Prefix) \n Support: Custom (RegularExpression, ImplementationSpecific) \n Since RegularExpression PathType has custom conformance, implementations can support POSIX, PCRE or any other dialects of regular expressions. Please read the implementation's documentation to determine the supported dialect."
-                        enum:
-                        - Exact
-                        - Prefix
-                        - RegularExpression
-                        - ImplementationSpecific
-                        type: string
-                      value:
-                        default: /
-                        description: Value of the HTTP path to match against.
-                        type: string
-                    type: object
-                  OAS:
-                    description: Inline OAS
-                    type: string
-                type: object
-            required:
-            - destination
-            - mappings
-            type: object
-          status:
-            description: APIStatus defines the observed state of API
-            properties:
-              observedGeneration:
-                format: int64
-                type: integer
-              ready:
-                type: boolean
-            required:
-            - observedGeneration
-            - ready
+                      type: array
+                  required:
+                  - conditions
+                  - max_value
+                  - namespace
+                  - seconds
+                  - variables
+                  type: object
+                type: array
+              networkingRef:
+                items:
+                  properties:
+                    name:
+                      type: string
+                    type:
+                      enum:
+                      - HTTPRoute
+                      - VirtualService
+                      type: string
+                  required:
+                  - name
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                - name
+                x-kubernetes-list-type: map
+              routes:
+                description: route specific staging and actions
+                items:
+                  properties:
+                    actions:
+                      description: rule specific actions
+                      items:
+                        properties:
+                          generic_key:
+                            properties:
+                              descriptor_key:
+                                type: string
+                              descriptor_value:
+                                type: string
+                            required:
+                            - descriptor_key
+                            - descriptor_value
+                            type: object
+                        required:
+                        - generic_key
+                        type: object
+                      type: array
+                    name:
+                      description: name of the route present in the virutalservice
+                      type: string
+                    stage:
+                      description: 'Definfing phase at which rate limits will be applied. Valid values are: PREAUTH, POSTAUTH, BOTH'
+                      enum:
+                      - PREAUTH
+                      - POSTAUTH
+                      - BOTH
+                      type: string
+                  required:
+                  - name
+                  - stage
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
             type: object
         type: object
     served: true
     storage: true
-    subresources:
-      status: {}
 status:
   acceptedNames:
     kind: ""
@@ -388,9 +273,9 @@ metadata:
   name: kuadrant-manager-role
 rules:
 - apiGroups:
-  - authorino.kuadrant.io
+  - apim.kuadrant.io
   resources:
-  - authconfigs
+  - apis
   verbs:
   - create
   - delete
@@ -400,29 +285,45 @@ rules:
   - update
   - watch
 - apiGroups:
-  - ""
+  - apim.kuadrant.io
   resources:
-  - configmaps
-  - services
+  - apis/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - apim.kuadrant.io
+  resources:
+  - apis/status
   verbs:
   - get
-  - list
-  - watch
+  - patch
+  - update
 - apiGroups:
-  - ""
+  - apim.kuadrant.io
   resources:
-  - events
+  - ratelimitpolicies
   verbs:
   - create
-  - patch
-- apiGroups:
-  - ""
-  resources:
-  - services
-  verbs:
+  - delete
   - get
   - list
+  - patch
+  - update
   - watch
+- apiGroups:
+  - apim.kuadrant.io
+  resources:
+  - ratelimitpolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - apim.kuadrant.io
+  resources:
+  - ratelimitpolicies/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - limitador.kuadrant.io
   resources:
@@ -450,44 +351,21 @@ rules:
 - apiGroups:
   - networking.istio.io
   resources:
+  - gateways
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.istio.io
+  resources:
   - virtualservices
   verbs:
-  - create
-  - delete
   - get
   - list
   - patch
   - update
   - watch
-- apiGroups:
-  - networking.kuadrant.io
-  resources:
-  - apiproducts
-  - apis
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - networking.kuadrant.io
-  resources:
-  - apiproducts/finalizers
-  - apis/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - networking.kuadrant.io
-  resources:
-  - apiproducts/status
-  - apis/status
-  verbs:
-  - get
-  - patch
-  - update
 - apiGroups:
   - security.istio.io
   resources:

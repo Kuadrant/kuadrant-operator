@@ -7,9 +7,9 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - authorino.kuadrant.io
+  - apim.kuadrant.io
   resources:
-  - authconfigs
+  - apis
   verbs:
   - create
   - delete
@@ -19,29 +19,45 @@ rules:
   - update
   - watch
 - apiGroups:
-  - ""
+  - apim.kuadrant.io
   resources:
-  - configmaps
-  - services
+  - apis/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - apim.kuadrant.io
+  resources:
+  - apis/status
   verbs:
   - get
-  - list
-  - watch
+  - patch
+  - update
 - apiGroups:
-  - ""
+  - apim.kuadrant.io
   resources:
-  - events
+  - ratelimitpolicies
   verbs:
   - create
-  - patch
-- apiGroups:
-  - ""
-  resources:
-  - services
-  verbs:
+  - delete
   - get
   - list
+  - patch
+  - update
   - watch
+- apiGroups:
+  - apim.kuadrant.io
+  resources:
+  - ratelimitpolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - apim.kuadrant.io
+  resources:
+  - ratelimitpolicies/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - limitador.kuadrant.io
   resources:
@@ -69,44 +85,21 @@ rules:
 - apiGroups:
   - networking.istio.io
   resources:
+  - gateways
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.istio.io
+  resources:
   - virtualservices
   verbs:
-  - create
-  - delete
   - get
   - list
   - patch
   - update
   - watch
-- apiGroups:
-  - networking.kuadrant.io
-  resources:
-  - apiproducts
-  - apis
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - networking.kuadrant.io
-  resources:
-  - apiproducts/finalizers
-  - apis/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - networking.kuadrant.io
-  resources:
-  - apiproducts/status
-  - apis/status
-  verbs:
-  - get
-  - patch
-  - update
 - apiGroups:
   - security.istio.io
   resources:

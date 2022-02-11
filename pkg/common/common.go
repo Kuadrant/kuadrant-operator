@@ -17,13 +17,22 @@ limitations under the License.
 package common
 
 import (
+	"fmt"
 	"os"
+	"strings"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 //TODO: move the const to a proper place, or get it from config
 const (
 	KuadrantNamespace             = "kuadrant-system"
 	KuadrantAuthorizationProvider = "kuadrant-authorization"
+	LimitadorServiceGrpcPort      = 8081
+)
+
+var (
+	LimitadorServiceClusterHost = fmt.Sprintf("limitador.%s.svc.cluster.local", KuadrantNamespace)
 )
 
 func FetchEnv(key string, def string) string {
@@ -33,4 +42,23 @@ func FetchEnv(key string, def string) string {
 	}
 
 	return val
+}
+
+// NamespacedNameToObjectKey converts <namespace/name> format string to k8s object key.
+// It's common for K8s to reference an object using this format. For e.g. gateways in VirtualService.
+func NamespacedNameToObjectKey(namespacedName, defaultNamespace string) client.ObjectKey {
+	split := strings.Split(namespacedName, "/")
+	if len(split) == 2 {
+		return client.ObjectKey{Name: split[1], Namespace: split[0]}
+	}
+	return client.ObjectKey{Namespace: defaultNamespace, Name: split[0]}
+}
+
+func Contains(slice []string, target string) bool {
+	for idx := range slice {
+		if slice[idx] == target {
+			return true
+		}
+	}
+	return false
 }

@@ -1,0 +1,47 @@
+---
+apiVersion: apim.kuadrant.io/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: toystore
+spec:
+  networkingRef:
+    - type: VirtualService
+      name: toystore
+  routes:
+    - name: get-toy
+      rateLimits:
+        - stage: BOTH
+          actions:
+            - generic_key:
+                descriptor_key: get-toy
+                descriptor_value: "yes"
+            - generic_key:
+                descriptor_key: other-get-toy
+                descriptor_value: "yes"
+    - name: add-toy
+      rateLimits:
+        - stage: POSTAUTH
+          actions:
+            - generic_key:
+                descriptor_key: add-toy
+                descriptor_value: "yes"
+    - name: delete-toy
+      rateLimits:
+        - stage: PREAUTH
+          actions:
+            - generic_key:
+                descriptor_key: delete-toy
+                descriptor_value: "yes"
+  rateLimits:
+    - stage: PREAUTH
+      actions:
+        - generic_key:
+            descriptor_key: vhaction
+            descriptor_value: "yes"
+
+  limits:
+    - conditions: ["get-toy == yes"]
+      max_value: 2
+      namespace: preauth
+      seconds: 15
+      variables: []

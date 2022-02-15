@@ -1,3 +1,4 @@
+---
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
@@ -13,17 +14,21 @@ spec:
     - match:
         - name: get-toy
           uri:
-            exact: /getToy
+            exact: /toy
           method:
             exact: GET
         - name: add-toy
           uri:
-            exact: /admin/addToy
+            exact: /admin/toy
           method:
             exact: POST
+        - name: delete-toy
+          uri:
+            exact: /admin/toy
+          method:
+            exact: DELETE
       route:
         - destination:
             host: toystore.default.svc.cluster.local
             port:
               number: 80
-

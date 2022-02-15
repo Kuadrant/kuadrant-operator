@@ -29,8 +29,14 @@ type RLGenericKey struct {
 	DescriptorValue string `json:"descriptor_value"`
 }
 
+//TODO(eguzki): oneOf each kind
+//
+// https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-msg-config-route-v3-ratelimit-action
+
+// Action_Specifier defines the envoy rate limit actions
 type ActionSpecifier struct {
-	GenericKey RLGenericKey `json:"generic_key"`
+	// +optional
+	GenericKey *RLGenericKey `json:"generic_key,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=PREAUTH;POSTAUTH;BOTH
@@ -57,17 +63,21 @@ var RateLimitStageName = map[int32]string{
 var RateLimitStageValue = map[RateLimitStage]int32{
 	"PREAUTH":  0,
 	"POSTAUTH": 1,
-	"BOTH":     2,
+}
+
+type RateLimit struct {
+	// Definfing phase at which rate limits will be applied.
+	// Valid values are: PREAUTH, POSTAUTH, BOTH
+	Stage RateLimitStage `json:"stage"`
+	// +optional
+	Actions []*ActionSpecifier `json:"actions,omitempty"`
 }
 
 type Route struct {
 	// name of the route present in the virutalservice
 	Name string `json:"name"`
-	// Definfing phase at which rate limits will be applied.
-	// Valid values are: PREAUTH, POSTAUTH, BOTH
-	Stage RateLimitStage `json:"stage"`
-	// rule specific actions
-	Actions []*ActionSpecifier `json:"actions,omitempty"`
+	// +optional
+	RateLimits []*RateLimit `json:"rateLimits,omitempty"`
 }
 
 type NetworkingRef struct {
@@ -85,9 +95,11 @@ type RateLimitPolicySpec struct {
 	//+listType=map
 	//+listMapKey=name
 	Routes []Route `json:"routes,omitempty"`
-	// these actions are used for all of the matching rules
-	Actions []*ActionSpecifier                `json:"actions,omitempty"`
-	Limits  []limitadorv1alpha1.RateLimitSpec `json:"limits,omitempty"`
+
+	// RateLimits are used for all of the matching rules
+	// +optional
+	RateLimits []*RateLimit                      `json:"rateLimits,omitempty"`
+	Limits     []limitadorv1alpha1.RateLimitSpec `json:"limits,omitempty"`
 }
 
 //+kubebuilder:object:root=true

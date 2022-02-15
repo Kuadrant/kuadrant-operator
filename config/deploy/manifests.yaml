@@ -112,24 +112,6 @@ spec:
           spec:
             description: RateLimitPolicySpec defines the desired state of RateLimitPolicy
             properties:
-              actions:
-                description: these actions are used for all of the matching rules
-                items:
-                  properties:
-                    generic_key:
-                      properties:
-                        descriptor_key:
-                          type: string
-                        descriptor_value:
-                          type: string
-                      required:
-                      - descriptor_key
-                      - descriptor_value
-                      type: object
-                  required:
-                  - generic_key
-                  type: object
-                type: array
               limits:
                 items:
                   description: RateLimitSpec defines the desired state of RateLimit
@@ -175,13 +157,13 @@ spec:
                 - type
                 - name
                 x-kubernetes-list-type: map
-              routes:
-                description: route specific staging and actions
+              rateLimits:
+                description: RateLimits are used for all of the matching rules
                 items:
                   properties:
                     actions:
-                      description: rule specific actions
                       items:
+                        description: Action_Specifier defines the envoy rate limit actions
                         properties:
                           generic_key:
                             properties:
@@ -193,13 +175,8 @@ spec:
                             - descriptor_key
                             - descriptor_value
                             type: object
-                        required:
-                        - generic_key
                         type: object
                       type: array
-                    name:
-                      description: name of the route present in the virutalservice
-                      type: string
                     stage:
                       description: 'Definfing phase at which rate limits will be applied. Valid values are: PREAUTH, POSTAUTH, BOTH'
                       enum:
@@ -208,8 +185,48 @@ spec:
                       - BOTH
                       type: string
                   required:
-                  - name
                   - stage
+                  type: object
+                type: array
+              routes:
+                description: route specific staging and actions
+                items:
+                  properties:
+                    name:
+                      description: name of the route present in the virutalservice
+                      type: string
+                    rateLimits:
+                      items:
+                        properties:
+                          actions:
+                            items:
+                              description: Action_Specifier defines the envoy rate limit actions
+                              properties:
+                                generic_key:
+                                  properties:
+                                    descriptor_key:
+                                      type: string
+                                    descriptor_value:
+                                      type: string
+                                  required:
+                                  - descriptor_key
+                                  - descriptor_value
+                                  type: object
+                              type: object
+                            type: array
+                          stage:
+                            description: 'Definfing phase at which rate limits will be applied. Valid values are: PREAUTH, POSTAUTH, BOTH'
+                            enum:
+                            - PREAUTH
+                            - POSTAUTH
+                            - BOTH
+                            type: string
+                        required:
+                        - stage
+                        type: object
+                      type: array
+                  required:
+                  - name
                   type: object
                 type: array
                 x-kubernetes-list-map-keys:

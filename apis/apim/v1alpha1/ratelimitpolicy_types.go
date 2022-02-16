@@ -87,10 +87,6 @@ type NetworkingRef struct {
 
 // RateLimitPolicySpec defines the desired state of RateLimitPolicy
 type RateLimitPolicySpec struct {
-	//+listType=map
-	//+listMapKey=type
-	//+listMapKey=name
-	NetworkingRef []NetworkingRef `json:"networkingRef,omitempty"`
 	// route specific staging and actions
 	//+listType=map
 	//+listMapKey=name

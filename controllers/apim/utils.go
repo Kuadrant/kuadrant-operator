@@ -26,8 +26,9 @@ func rlFiltersPatchName(gatewayName string) string {
 }
 
 // ratelimitsPatchName returns the name of EnvoyFilter adding in ratelimits to a gateway.
-func ratelimitsPatchName(rlpName, gatewayName string) string {
-	return fmt.Sprintf("ratelimits-of-%s-in-%s", rlpName, gatewayName)
+func ratelimitsPatchName(gwName string, networkKey client.ObjectKey) string {
+	// TODO(rahulanand16nov): make it unique if VS and HR have same name.
+	return fmt.Sprintf("ratelimits-on-%s-using-%s-%s", gwName, networkKey.Namespace, networkKey.Name)
 }
 
 // getAuthPolicyName generates the name of an AuthorizationPolicy using VirtualService info.

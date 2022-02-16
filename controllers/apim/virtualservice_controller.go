@@ -11,9 +11,6 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	networkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	securityv1beta1 "istio.io/api/security/v1beta1"
@@ -27,7 +24,8 @@ import (
 )
 
 const (
-	KuadrantAuthProviderAnnotation = "kuadrant.io/auth-provider"
+	KuadrantAuthProviderAnnotation    = "kuadrant.io/auth-provider"
+	KuadrantRateLimitPolicyAnnotation = "kuadrant.io/ratelimitpolicy"
 )
 
 //+kubebuilder:rbac:groups=networking.istio.io,resources=virtualservices,verbs=get;list;watch;update;patch
@@ -86,7 +84,6 @@ func (r *VirtualServiceReconciler) Reconcile(eventCtx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 	logger.Info("successfully reconciled AuthorizationPolicy")
-
 	return ctrl.Result{}, nil
 }
 
@@ -144,15 +141,11 @@ func (r *VirtualServiceReconciler) reconcileAuthPolicy(ctx context.Context, logg
 		authPolicy := istiosecurityv1beta1.AuthorizationPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      getAuthPolicyName(gwKey.Name, vs.Name),
-				Namespace: vs.Namespace,
+				Namespace: gwKey.Namespace,
 			},
 			Spec: authPolicySpec,
 		}
 
-		if err := controllerutil.SetOwnerReference(vs, &authPolicy, r.Client().Scheme()); err != nil {
-			logger.Error(err, "failed to add owner ref to AuthorizationPolicy resource")
-			return err
-		}
 		err := r.ReconcileResource(ctx, &istiosecurityv1beta1.AuthorizationPolicy{}, &authPolicy, alwaysUpdateAuthPolicy)
 		if err != nil && !apierrors.IsAlreadyExists(err) {
 			logger.Error(err, "ReconcileResource failed to create/update AuthorizationPolicy resource")
@@ -177,30 +170,13 @@ func normalizeStringMatch(sm *networkingv1alpha3.StringMatch) string {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *VirtualServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	rlpMapper := &rateLimitPolicyMapper{
+		K8sClient: r.Client(),
+		Logger:    r.Logger(),
+	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&istionetworkingv1alpha3.VirtualService{}, builder.WithPredicates(virtualServicePredicate())).
+		For(&istionetworkingv1alpha3.VirtualService{}, builder.WithPredicates(routingPredicate(rlpMapper))).
 		Owns(&istiosecurityv1beta1.AuthorizationPolicy{}).
 		WithLogger(log.Log). // use base logger, the manager will add prefixes for watched sources
 		Complete(r)
-}
-
-func virtualServicePredicate() predicate.Predicate {
-	return predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			_, present := e.Object.GetAnnotations()[KuadrantAuthProviderAnnotation]
-			return present
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			if _, present := e.ObjectOld.GetAnnotations()[KuadrantAuthProviderAnnotation]; present {
-				return true
-			}
-			_, present := e.ObjectNew.GetAnnotations()[KuadrantAuthProviderAnnotation]
-			return present
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			// If the object had the Kuadrant label, we need to handle its deletion
-			_, present := e.Object.GetAnnotations()[KuadrantAuthProviderAnnotation]
-			return present
-		},
-	}
 }

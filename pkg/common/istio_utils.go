@@ -27,10 +27,6 @@ type EnvoyFilterFactory struct {
 }
 
 func (v *EnvoyFilterFactory) EnvoyFilter() *istionetworkingv1alpha3.EnvoyFilter {
-	if len(v.Labels) == 0 {
-		// default to kuadrant labels to avoid replication where it's already used.
-		v.Labels = map[string]string{"istio": "kuadrant-system"}
-	}
 	return &istionetworkingv1alpha3.EnvoyFilter{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "EnvoyFilter",

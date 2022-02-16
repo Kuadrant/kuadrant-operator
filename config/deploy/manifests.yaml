@@ -138,25 +138,6 @@ spec:
                   - variables
                   type: object
                 type: array
-              networkingRef:
-                items:
-                  properties:
-                    name:
-                      type: string
-                    type:
-                      enum:
-                      - HTTPRoute
-                      - VirtualService
-                      type: string
-                  required:
-                  - name
-                  - type
-                  type: object
-                type: array
-                x-kubernetes-list-map-keys:
-                - type
-                - name
-                x-kubernetes-list-type: map
               rateLimits:
                 description: RateLimits are used for all of the matching rules
                 items:

@@ -2,22 +2,22 @@ package apim
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/go-logr/logr"
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
 	istio "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	patchesFinalizer = "kuadrant.io/ratelimitpatches"
 
-	ownerRlpSeparator = ","
+	ParentRefsSeparator = ","
 
-	envoyFilterAnnotationOwnerRLPs = "kuadrant.io/ownerRateLimitPolicies"
+	EnvoyFilterParentRefsAnnotation = "kuadrant.io/parentRefs"
 )
 
 // finalizeEnvoyFilters makes sure orphan EnvoyFilter resources are not left when deleting the owner RateLimitPolicy.
@@ -26,74 +26,72 @@ func (r *RateLimitPolicyReconciler) finalizeEnvoyFilters(ctx context.Context, rl
 	logger.Info("Removing/Updating EnvoyFilter resources")
 	ownerRlp := client.ObjectKeyFromObject(rlp).String()
 
-	for _, networkingRef := range rlp.Spec.NetworkingRef {
-		switch networkingRef.Type {
-		case apimv1alpha1.NetworkingRefTypeHR:
-			logger.Info("HTTPRoute is not implemented yet") // TODO(rahulanand16nov)
-			continue
-		case apimv1alpha1.NetworkingRefTypeVS:
-			logger.Info("Removing/Updating EnvoyFilter resources using VirtualService")
-			vs := istio.VirtualService{}
-			vsKey := client.ObjectKey{Namespace: rlp.Namespace, Name: networkingRef.Name}
+	// TODO(rahulanand16nov): do the same for HTTPRoute
+	vsList := &istio.VirtualServiceList{}
+	if err := r.Client().List(ctx, vsList, &client.ListOptions{Namespace: rlp.Namespace}); err != nil {
+		logger.Error(err, "failed to list VirtualServices in RateLimitPolicy's namespace")
+		return err
+	}
 
-			if err := r.Client().Get(ctx, vsKey, &vs); err != nil {
-				logger.Error(err, "failed to get VirutalService")
+	for idx := range vsList.Items {
+		if val, present := vsList.Items[idx].Annotations[KuadrantRateLimitPolicyAnnotation]; !present || (val != rlp.Name) {
+			continue
+		}
+		vsKey := client.ObjectKeyFromObject(&vsList.Items[idx])
+		for _, gateway := range vsList.Items[idx].Spec.Gateways {
+			gwKey := common.NamespacedNameToObjectKey(gateway, vsList.Items[idx].Namespace)
+
+			filtersPatchkey := client.ObjectKey{
+				Namespace: gwKey.Namespace,
+				Name:      rlFiltersPatchName(gwKey.Name),
+			}
+			filtersPatch := &istio.EnvoyFilter{}
+			if err := r.Client().Get(ctx, filtersPatchkey, filtersPatch); err != nil {
+				if !apierrors.IsNotFound(err) {
+					logger.Error(err, "failed to get ratelimits filters patch")
+					return err
+				}
+				logger.V(1).Info("filters patch not found", "object key", filtersPatchkey.String())
+			}
+			if err := r.removeParentRefEntry(ctx, filtersPatch, ownerRlp); err != nil {
+				logger.Error(err, "failed to remove parentRef on filters patch")
 				return err
 			}
 
-			for _, gateway := range vs.Spec.Gateways {
-				gwKey := common.NamespacedNameToObjectKey(gateway, vs.Namespace)
+			logger.Info("successfully removed parentRef entry on the filters patch")
 
-				filtersPatchkey := client.ObjectKey{
-					Namespace: gwKey.Namespace,
-					Name:      rlFiltersPatchName(gwKey.Name),
-				}
-				filtersPatch := &istio.EnvoyFilter{}
-				if err := r.Client().Get(ctx, filtersPatchkey, filtersPatch); err != nil {
-					logger.Error(err, "failed to fetch ratelimit filters patch")
-					return err
-				}
-
-				if err := removeOwnerRlpEntry(ctx, r.Client(), filtersPatch, ownerRlp); err != nil {
-					logger.Error(err, "failed to remove ownerRLP tag on filters patch")
-					return err
-				}
-
-				logger.Info("successfully removed ownerRLP entry on the filters patch")
-
-				ratelimitsPatchKey := client.ObjectKey{
-					Namespace: gwKey.Namespace,
-					Name:      ratelimitsPatchName(rlp.Name, gwKey.Name),
-				}
-				ratelimitsPatch := &istio.EnvoyFilter{}
-				if err := r.Client().Get(ctx, ratelimitsPatchKey, ratelimitsPatch); err != nil {
-					logger.Error(err, "failed to fetch ratelimits patch")
-					return err
-				}
-
-				if err := removeOwnerRlpEntry(ctx, r.Client(), ratelimitsPatch, ownerRlp); err != nil {
-					logger.Error(err, "failed to remove ownerRLP tag on ratelimits patch")
-					return err
-				}
-				logger.Info("successfully removed ownerRLP tag on ratelimits patch")
+			ratelimitsPatchKey := client.ObjectKey{
+				Namespace: gwKey.Namespace,
+				Name:      ratelimitsPatchName(gwKey.Name, vsKey),
 			}
-		default:
-			return fmt.Errorf(InvalidNetworkingRefTypeErr)
+			ratelimitsPatch := &istio.EnvoyFilter{}
+			if err := r.Client().Get(ctx, ratelimitsPatchKey, ratelimitsPatch); err != nil {
+				if apierrors.IsNotFound(err) {
+					logger.Error(err, "failed to get ratelimits patch")
+					return err
+				}
+				logger.V(1).Info("ratelimits patch not found", "object key", ratelimitsPatchKey.String())
+			}
+			if err := r.removeParentRefEntry(ctx, ratelimitsPatch, ownerRlp); err != nil {
+				logger.Error(err, "failed to remove remove parentRef entry on ratelimits patch")
+				return err
+			}
+			logger.Info("successfully removed parentRef tag on ratelimits patch")
 		}
 	}
 	return nil
 }
 
-func removeOwnerRlpEntry(ctx context.Context, client client.Client, patch *istio.EnvoyFilter, owner string) error {
+func (r *RateLimitPolicyReconciler) removeParentRefEntry(ctx context.Context, patch *istio.EnvoyFilter, owner string) error {
 	logger := logr.FromContext(ctx)
-	logger.Info("removing ownerRLP entry from EnvoyFilter", "EnvoyFilter", patch.Name)
+	logger.Info("Removing parentRef entry from EnvoyFilter", "EnvoyFilter", patch.Name)
 
 	// find the annotation
-	ownerRlpsVal, present := patch.Annotations[envoyFilterAnnotationOwnerRLPs]
+	ownerRlpsVal, present := patch.Annotations[EnvoyFilterParentRefsAnnotation]
 	if !present {
-		logger.V(1).Info("Deleting the patch since ownerRLP annotation was not present to avoid orphans")
+		logger.V(1).Info("Deleting the patch since parentRef annotation was not present to avoid orphans")
 		// if it's not deleted then the patch will remain as an orphan once all the rlps are removed.
-		if err := client.Delete(ctx, patch); err != nil {
+		if err := r.Client().Delete(ctx, patch); err != nil {
 			logger.Error(err, "failed to delete the patch")
 			return err
 		}
@@ -101,7 +99,7 @@ func removeOwnerRlpEntry(ctx context.Context, client client.Client, patch *istio
 	}
 
 	// split into array of RateLimitPolicy names
-	ownerRlps := strings.Split(ownerRlpsVal, ownerRlpSeparator)
+	ownerRlps := strings.Split(ownerRlpsVal, ParentRefsSeparator)
 
 	// remove the target owner
 	finalOwnerRlps := []string{}
@@ -113,18 +111,48 @@ func removeOwnerRlpEntry(ctx context.Context, client client.Client, patch *istio
 	}
 
 	if len(finalOwnerRlps) == 0 {
-		logger.V(1).Info("Deleting filters patch because 0 ownerRLP entries found on it")
-		if err := client.Delete(ctx, patch); err != nil {
+		logger.V(1).Info("Deleting filters patch because 0 parentRef entries found on it")
+		if err := r.Client().Delete(ctx, patch); err != nil {
 			logger.Error(err, "failed to delete the patch")
 			return err
 		}
 	} else {
-		finalOwnerRlpsVal := strings.Join(finalOwnerRlps, ownerRlpSeparator)
-		patch.Annotations[envoyFilterAnnotationOwnerRLPs] = finalOwnerRlpsVal
-		if err := client.Update(ctx, patch); err != nil {
+		finalOwnerRlpsVal := strings.Join(finalOwnerRlps, ParentRefsSeparator)
+		patch.Annotations[EnvoyFilterParentRefsAnnotation] = finalOwnerRlpsVal
+		if err := r.Client().Update(ctx, patch); err != nil {
 			logger.Error(err, "failed to update the patch")
 			return err
 		}
 	}
+	return nil
+}
+
+func (r *RateLimitPolicyReconciler) addParentRefEntry(ctx context.Context, patch *istio.EnvoyFilter, owner string) error {
+	logger := logr.FromContext(ctx)
+	logger.Info("Adding parentRef entry to EnvoyFilter", "EnvoyFilter", patch.Name)
+
+	// make sure annotation map is initialized
+	patchOwnerList := []string{}
+	if patch.Annotations == nil {
+		patch.Annotations = make(map[string]string)
+	}
+
+	if ogOwnerRlps, present := patch.Annotations[EnvoyFilterParentRefsAnnotation]; present {
+		patchOwnerList = strings.Split(ogOwnerRlps, ParentRefsSeparator)
+	}
+
+	// add the owner name if not present already
+	if !common.Contains(patchOwnerList, owner) {
+		patchOwnerList = append(patchOwnerList, owner)
+	}
+	finalOwnerVal := strings.Join(patchOwnerList, ParentRefsSeparator)
+
+	patch.Annotations[EnvoyFilterParentRefsAnnotation] = finalOwnerVal
+	if err := r.ReconcileResource(ctx, &istio.EnvoyFilter{}, patch, alwaysUpdateEnvoyPatches); err != nil {
+		logger.Error(err, "failed to create/update EnvoyFilter that patches-in ratelimit filters")
+		return err
+	}
+
+	logger.Info("Successfully added parentRef entry to the EnvoyFilter")
 	return nil
 }

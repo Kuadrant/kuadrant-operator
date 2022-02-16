@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/gogo/protobuf/types"
@@ -43,8 +42,6 @@ const (
 	EnvoysHTTPConnectionManagerName = "envoy.filters.network.http_connection_manager"
 
 	VSAnnotationRateLimitPolicy = "kuadrant.io/ratelimitpolicy"
-
-	InvalidNetworkingRefTypeErr = "unknown networking reference type"
 )
 
 // RateLimitPolicyReconciler reconciles a RateLimitPolicy object
@@ -108,61 +105,128 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 		return ctrl.Result{}, err
 	}
 
-	for _, networkingRef := range rlp.Spec.NetworkingRef {
-		switch networkingRef.Type {
-		case apimv1alpha1.NetworkingRefTypeHR:
-			logger.Info("HTTPRoute is not implemented yet") // TODO(rahulanand16nov)
-			return ctrl.Result{}, nil
-		case apimv1alpha1.NetworkingRefTypeVS:
-			vsNamespacedName := client.ObjectKey{
-				Namespace: rlp.Namespace, // VirtualService lookup is limited to RLP's namespace
-				Name:      networkingRef.Name,
-			}
+	// Operation specific annotations must be removed if they were present
+	updateRequired := false
+	// check for delete operation for virtualservice
+	if vsName, present := rlp.Annotations[KuadrantDeleteVSAnnotation]; present {
+		vsNamespacedName := client.ObjectKey{
+			Namespace: rlp.Namespace, // VirtualService lookup is limited to RLP's namespace
+			Name:      vsName,
+		}
+		vsKey := vsNamespacedName.String()
 
-			var vs istio.VirtualService
-			if err := r.Client().Get(ctx, vsNamespacedName, &vs); err != nil {
-				if apierrors.IsNotFound(err) {
-					logger.Info("no VirtualService found", "lookup name", vsNamespacedName.String())
-					return ctrl.Result{}, nil
-				}
-				logger.Error(err, "failed to get VirutalService")
-				return ctrl.Result{}, err
+		var vs istio.VirtualService
+		if err := r.Client().Get(ctx, vsNamespacedName, &vs); err != nil {
+			if apierrors.IsNotFound(err) {
+				logger.Info("no VirtualService found", "lookup name", vsNamespacedName.String())
+				return ctrl.Result{}, nil
 			}
-
-			if err := r.reconcileWithVirtualService(ctx, &vs, &rlp); err != nil {
-				logger.Error(err, "failed to reconcile with VirtualService")
-				return ctrl.Result{}, err
-			}
-		default:
-			err := fmt.Errorf(InvalidNetworkingRefTypeErr)
-			logger.Error(err, "networking reconciliation failed")
+			logger.Error(err, "failed to get VirutalService")
 			return ctrl.Result{}, err
 		}
+
+		if err := r.detachFromNetwork(ctx, vs.Spec.Gateways, vsKey, &rlp); err != nil {
+			logger.Error(err, "failed to detach RateLimitPolicy from VirtualService")
+			return ctrl.Result{}, err
+		}
+
+		delete(rlp.Annotations, KuadrantDeleteVSAnnotation)
+		updateRequired = true
 	}
+
+	// check for add operation for virtualservice
+	if vsName, present := rlp.Annotations[KuadrantAddVSAnnotation]; present {
+		vsNamespacedName := client.ObjectKey{
+			Namespace: rlp.Namespace,
+			Name:      vsName,
+		}
+		vsKey := vsNamespacedName.String()
+
+		var vs istio.VirtualService
+		if err := r.Client().Get(ctx, vsNamespacedName, &vs); err != nil {
+			if apierrors.IsNotFound(err) {
+				logger.Info("no VirtualService found", "lookup name", vsNamespacedName.String())
+				return ctrl.Result{}, nil
+			}
+			logger.Error(err, "failed to get VirutalService")
+			return ctrl.Result{}, err
+		}
+
+		if err := r.attachToNetwork(ctx, vs.Spec.Gateways, vs.Spec.Hosts, vsKey, &rlp); err != nil {
+			logger.Error(err, "failed to attach RateLimitPolicy to VirtualService")
+			return ctrl.Result{}, err
+		}
+
+		delete(rlp.Annotations, KuadrantAddVSAnnotation)
+		updateRequired = true
+	}
+
+	if updateRequired {
+		if err := r.Client().Update(ctx, &rlp); err != nil {
+			logger.Error(err, "failed to remove operation specific annotations from RateLimitPolicy")
+			return ctrl.Result{}, err
+		}
+		logger.Info("successfully removed operation specific annotations from RateLimitPolicy")
+	}
+
+	// TODO(rahulanand16nov): do the same as above for HTTPRoute
+	// TODO(rahulanand16nov): Status block should be used to store networking objects that referenced this RLP to prevent
+	// heavy calls to kube api for every reconciliation loop. Note, this should be done after add/delete operations.
+	logger.Info("successfully reconciled RateLimitPolicy")
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileWithVirtualService(ctx context.Context, vs *istio.VirtualService, rlp *apimv1alpha1.RateLimitPolicy) error {
-	logger := r.Logger()
-	rlpKey := client.ObjectKeyFromObject(rlp)
+func (r *RateLimitPolicyReconciler) detachFromNetwork(ctx context.Context, gateways []string, owner string, rlp *apimv1alpha1.RateLimitPolicy) error {
+	logger := logr.FromContext(ctx)
+	ownerKey := common.NamespacedNameToObjectKey(owner, rlp.Namespace)
+	logger.Info("Detaching RateLimitPolicy from a network")
 
-	_, ok := vs.Annotations[VSAnnotationRateLimitPolicy]
-	if !ok {
-		vs.Annotations[VSAnnotationRateLimitPolicy] = rlpKey.String()
-		if err := r.Client().Update(ctx, vs); err != nil {
-			logger.Error(err, "failed to add RateLimitPolicy annotation to VirtualService")
+	for _, gw := range gateways {
+		gwKey := common.NamespacedNameToObjectKey(gw, rlp.Namespace)
+
+		// fetch the filters patch
+		filtersPatchKey := client.ObjectKey{Namespace: gwKey.Namespace, Name: rlFiltersPatchName(gwKey.Name)}
+		filtersPatch := &istio.EnvoyFilter{}
+		if err := r.Client().Get(ctx, filtersPatchKey, filtersPatch); err != nil {
+			logger.Error(err, "failed to get ratelimit filters patch")
 			return err
 		}
-		logger.V(1).Info("successfully added RateLimitPolicy annotation to VirtualService")
+
+		// remove the parentRef entry on filters patch
+		if err := r.removeParentRefEntry(ctx, filtersPatch, owner); err != nil {
+			logger.Error(err, "failed to remove parentRef entry on the ratelimit filters patch")
+			return err
+		}
+		logger.Info("successfully deleted/updated ratelimit filters patch")
+
+		// fetch the ratelimits patch
+		ratelimitsPatchKey := client.ObjectKey{Namespace: gwKey.Namespace, Name: ratelimitsPatchName(gwKey.Name, ownerKey)}
+		ratelimitsPatch := &istio.EnvoyFilter{}
+		if err := r.Client().Get(ctx, ratelimitsPatchKey, ratelimitsPatch); err != nil {
+			logger.Error(err, "failed to get ratelimits patch")
+			return err
+		}
+
+		// remove the parentRef entry on ratelimits patch
+		if err := r.removeParentRefEntry(ctx, ratelimitsPatch, owner); err != nil {
+			logger.Error(err, "failed to remove parentRef entry on the ratelimits patch")
+			return err
+		}
+		logger.Info("successfully deleted/updated ratelimit filters patch")
 	}
 
-	// TODO(rahulanand16nov): store context of virtualservice in RLP's status block and manage envoy patches.
+	logger.Info("successfully detached RateLimitPolicy from specified gateways and hosts")
+	return nil
+}
 
-	// create/update EnvoyFilter patches for each gateway
-	for _, gw := range vs.Spec.Gateways {
-		gwKey := common.NamespacedNameToObjectKey(gw, vs.Namespace) // Istio defaults to VirtualService's namespace
+func (r *RateLimitPolicyReconciler) attachToNetwork(ctx context.Context, gateways, hosts []string, owner string, rlp *apimv1alpha1.RateLimitPolicy) error {
+	logger := logr.FromContext(ctx)
+	ownerKey := common.NamespacedNameToObjectKey(owner, rlp.Namespace)
+	logger.Info("Attaching RateLimitPolicy to a network")
+
+	for _, gw := range gateways {
+		gwKey := common.NamespacedNameToObjectKey(gw, rlp.Namespace)
 		gwLabels := gatewayLabels(ctx, r.Client(), gwKey)
-		owner := rlpKey.String()
 
 		// create/update ratelimit filters patch
 		// fetch already existing filters patch or create a new one
@@ -180,64 +244,31 @@ func (r *RateLimitPolicyReconciler) reconcileWithVirtualService(ctx context.Cont
 			}
 		}
 
-		// make sure annotation map is initialized
-		filtersPatchOwnerList := []string{}
-		if filtersPatch.Annotations == nil {
-			filtersPatch.Annotations = make(map[string]string)
-		}
-
-		if ogOwnerRlps, present := filtersPatch.Annotations[envoyFilterAnnotationOwnerRLPs]; present {
-			filtersPatchOwnerList = strings.Split(ogOwnerRlps, ownerRlpSeparator)
-		}
-
-		// add the owner name if not present already
-		if !common.Contains(filtersPatchOwnerList, owner) {
-			filtersPatchOwnerList = append(filtersPatchOwnerList, owner)
-		}
-		finalOwnerVal := strings.Join(filtersPatchOwnerList, ownerRlpSeparator)
-
-		filtersPatch.Annotations[envoyFilterAnnotationOwnerRLPs] = finalOwnerVal
-		if err := r.ReconcileResource(ctx, &istio.EnvoyFilter{}, filtersPatch, alwaysUpdateEnvoyPatches); err != nil {
-			logger.Error(err, "failed to create/update EnvoyFilter that patches-in ratelimit filters")
+		if err := r.addParentRefEntry(ctx, filtersPatch, owner); err != nil {
+			logger.Error(err, "failed to add ownerRLP entry to the ratelimit filters patch")
 			return err
 		}
 		logger.Info("successfully created/updated ratelimit filters patch", "gateway", gwKey.String())
 
 		// create/update ratelimits patch
-		ratelimitsPatchKey := client.ObjectKey{Namespace: gwKey.Namespace, Name: ratelimitsPatchName(rlp.Name, gwKey.Name)}
+		ratelimitsPatchKey := client.ObjectKey{Namespace: gwKey.Namespace, Name: ratelimitsPatchName(gwKey.Name, ownerKey)}
 		ratelimitsEnvoyFilter := &istio.EnvoyFilter{}
 		if err := r.Client().Get(ctx, ratelimitsPatchKey, ratelimitsEnvoyFilter); err != nil {
 			if !apierrors.IsNotFound(err) {
 				logger.Error(err, "failed to get ratelimits patch")
 				return err
 			}
-			ratelimitsEnvoyFilter = desiredRatelimitsEnvoyFilter(rlp, vs.Spec.Hosts, gwKey, gwLabels)
+			ratelimitsEnvoyFilter = desiredRatelimitsEnvoyFilter(rlp, hosts, gwKey, ownerKey, gwLabels)
 		}
 
-		ratelimitsPatchOwnerList := []string{}
-		if ratelimitsEnvoyFilter.Annotations == nil {
-			ratelimitsEnvoyFilter.Annotations = make(map[string]string)
-		}
-
-		if ogOwnerRlps, present := ratelimitsEnvoyFilter.Annotations[envoyFilterAnnotationOwnerRLPs]; present {
-			ratelimitsPatchOwnerList = strings.Split(ogOwnerRlps, ownerRlpSeparator)
-		}
-
-		// add the owner name if not present already
-		if !common.Contains(ratelimitsPatchOwnerList, owner) {
-			ratelimitsPatchOwnerList = append(ratelimitsPatchOwnerList, owner)
-		}
-		finalOwnerVal = strings.Join(ratelimitsPatchOwnerList, ownerRlpSeparator)
-
-		ratelimitsEnvoyFilter.Annotations[envoyFilterAnnotationOwnerRLPs] = finalOwnerVal
+		// Note(rahulanand16nov): ratelimits patch don't require parentRef because they are unique per VirtualService
 		if err := r.ReconcileResource(ctx, &istio.EnvoyFilter{}, ratelimitsEnvoyFilter, alwaysUpdateEnvoyPatches); err != nil {
-			logger.Error(err, "failed to create/update EnvoyFilter that patches-in ratelimits")
+			logger.Error(err, "failed to reconcile ratelimits patch")
 			return err
 		}
 		logger.Info("successfully created/updated ratelimits patch", "gateway", gwKey.String())
 	}
-
-	logger.Info("successfully reconciled RateLimitPolicy using attached VirtualService")
+	logger.Info("successfully attached RateLimitPolicy to specified gateways and hosts")
 	return nil
 }
 
@@ -351,8 +382,10 @@ func ratelimitFiltersPatch(gwKey client.ObjectKey, gwLabels map[string]string) (
 	return factory.EnvoyFilter(), nil
 }
 
-func desiredRatelimitsEnvoyFilter(rlp *apimv1alpha1.RateLimitPolicy, vHostNames []string, gwKey client.ObjectKey, gwLabels map[string]string) *istio.EnvoyFilter {
+func desiredRatelimitsEnvoyFilter(rlp *apimv1alpha1.RateLimitPolicy, vHostNames []string, gwKey, networkingKey client.ObjectKey, gwLabels map[string]string) *istio.EnvoyFilter {
 	patches := make([]*networkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, 0)
+
+	// route-level patches
 	for _, host := range vHostNames {
 		// TODO(eguzki): The VirtualHost name is generated by envoy from the
 		// Virtualservice domain + gateway port information
@@ -368,7 +401,7 @@ func desiredRatelimitsEnvoyFilter(rlp *apimv1alpha1.RateLimitPolicy, vHostNames 
 	}
 
 	factory := common.EnvoyFilterFactory{
-		ObjectName: ratelimitsPatchName(rlp.Name, gwKey.Name),
+		ObjectName: ratelimitsPatchName(gwKey.Name, networkingKey),
 		Namespace:  gwKey.Namespace,
 		Patches:    patches,
 		Labels:     gwLabels,

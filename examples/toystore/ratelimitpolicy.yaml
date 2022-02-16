@@ -41,7 +41,7 @@ spec:
       namespace: preauth
       seconds: 15
       variables: []
-    - condtitions: ["vhaction == yes"]
+    - conditions: ["vhaction == yes"]
       max_value: 4
       namespace: preauth
       seconds: 15

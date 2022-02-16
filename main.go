@@ -107,20 +107,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	apiBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("api"),
-		mgr.GetEventRecorderFor("API"),
-	)
-
-	if err = (&apimcontrollers.APIReconciler{
-		BaseReconciler: apiBaseReconciler,
-		Scheme:         mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "API")
-		os.Exit(1)
-	}
-
 	rateLimitPolicyBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("ratelimitpolicy"),

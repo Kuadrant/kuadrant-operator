@@ -19,7 +19,6 @@ package apim
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/gogo/protobuf/types"
@@ -82,13 +81,17 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	}
 
 	if rlp.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(&rlp, patchesFinalizer) {
-		logger.Info("Removing finalizers")
+		logger.V(1).Info("Handling removal of ratelimitpolicy object")
 		if err := r.finalizeEnvoyFilters(ctx, &rlp); err != nil {
 			logger.Error(err, "failed to remove ownerRlp entry from filters patch")
 			return ctrl.Result{}, err
 		}
+		if err := r.deleteRateLimits(ctx, &rlp); err != nil {
+			logger.Error(err, "failed to delete RateLimt objects")
+			return ctrl.Result{}, err
+		}
 		controllerutil.RemoveFinalizer(&rlp, patchesFinalizer)
-		if err := r.BaseReconciler.UpdateResource(ctx, &rlp); client.IgnoreNotFound(err) != nil {
+		if err := r.UpdateResource(ctx, &rlp); client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -96,7 +99,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 
 	if !controllerutil.ContainsFinalizer(&rlp, patchesFinalizer) {
 		controllerutil.AddFinalizer(&rlp, patchesFinalizer)
-		if err := r.BaseReconciler.UpdateResource(ctx, &rlp); client.IgnoreNotFound(err) != nil {
+		if err := r.UpdateResource(ctx, &rlp); client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{Requeue: true}, err
 		}
 	}
@@ -530,14 +533,17 @@ func virtualHostRateLimitsPatch(vHostName string, rateLimits []*apimv1alpha1.Rat
 }
 
 func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
-	logger := r.Logger()
+	logger := logr.FromContext(ctx)
+	rlpKey := client.ObjectKeyFromObject(rlp)
 
 	// create the RateLimit resource
 	for i, rlSpec := range rlp.Spec.Limits {
 		ratelimitfactory := common.RateLimitFactory{
 			Key: client.ObjectKey{
-				Name:      fmt.Sprintf("%s-limit-%d", rlp.Name, i+1),
-				Namespace: rlp.Namespace,
+				Name: limitadorRatelimitsName(rlpKey, i+1),
+				// Currently, Limitador Operator (v0.2.0) will configure limitador services with
+				// RateLimit CRs created in the same namespace.
+				Namespace: common.KuadrantNamespace,
 			},
 			Conditions: rlSpec.Conditions,
 			MaxValue:   rlSpec.MaxValue,
@@ -547,11 +553,7 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ap
 		}
 
 		ratelimit := ratelimitfactory.RateLimit()
-		if err := controllerutil.SetOwnerReference(rlp, ratelimit, r.Client().Scheme()); err != nil {
-			logger.Error(err, "failed to add owner ref to RateLimit resource")
-			return err
-		}
-		err := r.BaseReconciler.ReconcileResource(ctx, &v1alpha1.RateLimit{}, ratelimit, alwaysUpdateRateLimit)
+		err := r.ReconcileResource(ctx, &v1alpha1.RateLimit{}, ratelimit, alwaysUpdateRateLimit)
 		if err != nil && !apierrors.IsAlreadyExists(err) {
 			logger.Error(err, "ReconcileResource failed to create/update RateLimit resource")
 			return err

@@ -156,3 +156,28 @@ func (r *RateLimitPolicyReconciler) addParentRefEntry(ctx context.Context, patch
 	logger.Info("Successfully added parentRef entry to the EnvoyFilter")
 	return nil
 }
+
+func (r *RateLimitPolicyReconciler) deleteRateLimits(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+	logger := logr.FromContext(ctx)
+	rlpKey := client.ObjectKeyFromObject(rlp)
+	for i := range rlp.Spec.Limits {
+		ratelimitfactory := common.RateLimitFactory{
+			Key: client.ObjectKey{
+				Name: limitadorRatelimitsName(rlpKey, i+1),
+				// Currently, Limitador Operator (v0.2.0) will configure limitador services with
+				// RateLimit CRs created in the same namespace.
+				Namespace: common.KuadrantNamespace,
+			},
+			// rest of the parameters empty
+		}
+
+		rateLimit := ratelimitfactory.RateLimit()
+		err := r.DeleteResource(ctx, rateLimit)
+		logger.V(1).Info("Removing rate limit", "ratelimit", client.ObjectKeyFromObject(rateLimit), "error", err)
+		if err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+
+	return nil
+}

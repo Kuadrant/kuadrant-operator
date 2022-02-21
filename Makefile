@@ -260,7 +260,7 @@ istio-manifest-update-test: generate-istio-manifests
 
 .PHONY: local-setup
 local-setup: local-cleanup local-setup-kind manifests kustomize generate
-	./utils/local-deployment/local-setup.sh
+	export PATH=$(PROJECT_PATH)/bin:$$PATH;	./utils/local-deployment/local-setup.sh
 
 # Deploys all services and manifests required by kuadrant to run
 # kuadrant is not deployed

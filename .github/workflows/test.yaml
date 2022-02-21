@@ -7,6 +7,9 @@ on:
   pull_request:
     branches: [ 'main', 'master' ]
 
+  schedule:
+    - cron: "15 1 * * *"
+
 env:
   TEST_IMG: quay.io/kuadrant/kuadrant-operator:${{ github.sha }}
 

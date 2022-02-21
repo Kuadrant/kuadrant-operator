@@ -7,7 +7,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -55,22 +54,12 @@ func (r *VirtualServiceReconciler) Reconcile(eventCtx context.Context, req ctrl.
 	if !present {
 		for _, gateway := range virtualService.Spec.Gateways {
 			gwKey := common.NamespacedNameToObjectKey(gateway, virtualService.Namespace)
-			authObjKey := types.NamespacedName{
-				Name:      getAuthPolicyName(gwKey.Name, virtualService.Name),
-				Namespace: gwKey.Namespace,
-			}
-
-			authPolicy := istiosecurityv1beta1.AuthorizationPolicy{}
-			if err := r.Client().Get(context.Background(), authObjKey, &authPolicy); err != nil {
-				// no annotation but authpolicy exist means annotation was removed.
-				if !apierrors.IsNotFound(err) {
-					logger.Error(err, "failed to check AuthorizationPolicy existence")
-				}
-				return ctrl.Result{}, nil // this virtualservice is not protected.
-			}
-
-			// Orphan AuthorizationPolicy exists
-			if err := r.Client().Delete(context.Background(), &authPolicy); err != nil {
+			authPolicy := &istiosecurityv1beta1.AuthorizationPolicy{}
+			authPolicy.SetName(getAuthPolicyName(gwKey.Name, virtualService.Name))
+			authPolicy.SetNamespace(gwKey.Namespace)
+			common.TagObjectToDelete(authPolicy)
+			err := r.ReconcileResource(ctx, &istiosecurityv1beta1.AuthorizationPolicy{}, authPolicy, nil)
+			if err != nil {
 				logger.Error(err, "failed to delete orphan authorizationpolicy")
 				return ctrl.Result{}, err
 			}

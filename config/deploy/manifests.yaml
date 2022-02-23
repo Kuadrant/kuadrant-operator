@@ -318,38 +318,6 @@ rules:
   - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app: kuadrant
-  name: kuadrant-metrics-reader
-rules:
-- nonResourceURLs:
-  - /metrics
-  verbs:
-  - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  labels:
-    app: kuadrant
-  name: kuadrant-proxy-role
-rules:
-- apiGroups:
-  - authentication.k8s.io
-  resources:
-  - tokenreviews
-  verbs:
-  - create
-- apiGroups:
-  - authorization.k8s.io
-  resources:
-  - subjectaccessreviews
-  verbs:
-  - create
----
-apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
@@ -380,21 +348,6 @@ subjects:
   name: kuadrant-controller-manager
   namespace: kuadrant-system
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  labels:
-    app: kuadrant
-  name: kuadrant-proxy-rolebinding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: kuadrant-proxy-role
-subjects:
-- kind: ServiceAccount
-  name: kuadrant-controller-manager
-  namespace: kuadrant-system
----
 apiVersion: v1
 data:
   controller_manager_config.yaml: |
@@ -403,7 +356,7 @@ data:
     health:
       healthProbeBindAddress: :8081
     metrics:
-      bindAddress: 127.0.0.1:8080
+      bindAddress: :8080
     webhook:
       port: 9443
     leaderElection:
@@ -426,9 +379,9 @@ metadata:
   namespace: kuadrant-system
 spec:
   ports:
-  - name: https
-    port: 8443
-    targetPort: https
+  - name: metrics
+    port: 8080
+    targetPort: metrics
   selector:
     app: kuadrant
     control-plane: controller-manager
@@ -466,6 +419,9 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: manager
+        ports:
+        - containerPort: 8080
+          name: metrics
         readinessProbe:
           httpGet:
             path: /readyz
@@ -485,16 +441,6 @@ spec:
         - mountPath: /controller_manager_config.yaml
           name: manager-config
           subPath: controller_manager_config.yaml
-      - args:
-        - --secure-listen-address=0.0.0.0:8443
-        - --upstream=http://127.0.0.1:8080/
-        - --logtostderr=true
-        - --v=10
-        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
-        name: kube-rbac-proxy
-        ports:
-        - containerPort: 8443
-          name: https
       securityContext:
         runAsNonRoot: true
       serviceAccountName: kuadrant-controller-manager

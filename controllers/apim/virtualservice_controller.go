@@ -22,15 +22,12 @@ import (
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
 
-const (
-	KuadrantAuthProviderAnnotation    = "kuadrant.io/auth-provider"
-	KuadrantRateLimitPolicyAnnotation = "kuadrant.io/ratelimitpolicy"
-)
+const VirtualServiceNamePrefix = "vs"
 
 //+kubebuilder:rbac:groups=networking.istio.io,resources=virtualservices,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=security.istio.io,resources=authorizationpolicies,verbs=get;list;watch;create;update;patch;delete
 
-// VirtualServiceReconciler reconciles Istio's AuthorizationPolicy object
+// VirtualServiceReconciler reconciles Istio's VirtualService object
 type VirtualServiceReconciler struct {
 	*reconcilers.BaseReconciler
 	Scheme *runtime.Scheme
@@ -49,13 +46,14 @@ func (r *VirtualServiceReconciler) Reconcile(eventCtx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
+	// TODO(rahulanand16nov): handle VirtualService deletion for AuthPolicy
 	// check if this virtualservice is to be protected or not.
 	_, present := virtualService.GetAnnotations()[KuadrantAuthProviderAnnotation]
 	if !present {
 		for _, gateway := range virtualService.Spec.Gateways {
 			gwKey := common.NamespacedNameToObjectKey(gateway, virtualService.Namespace)
 			authPolicy := &istiosecurityv1beta1.AuthorizationPolicy{}
-			authPolicy.SetName(getAuthPolicyName(gwKey.Name, virtualService.Name))
+			authPolicy.SetName(getAuthPolicyName(gwKey.Name, VirtualServiceNamePrefix, virtualService.Name))
 			authPolicy.SetNamespace(gwKey.Namespace)
 			common.TagObjectToDelete(authPolicy)
 			err := r.ReconcileResource(ctx, &istiosecurityv1beta1.AuthorizationPolicy{}, authPolicy, nil)
@@ -82,6 +80,7 @@ func (r *VirtualServiceReconciler) reconcileAuthPolicy(ctx context.Context, logg
 	// annotation presence is already checked.
 	providerName := vs.GetAnnotations()[KuadrantAuthProviderAnnotation]
 
+	// TODO(rahulanand16nov): update following to match HTTPRoute controller
 	// fill out the rules
 	authToRules := []*securityv1beta1.Rule_To{}
 	for _, httpRoute := range vs.Spec.Http {
@@ -129,7 +128,7 @@ func (r *VirtualServiceReconciler) reconcileAuthPolicy(ctx context.Context, logg
 
 		authPolicy := istiosecurityv1beta1.AuthorizationPolicy{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      getAuthPolicyName(gwKey.Name, vs.Name),
+				Name:      getAuthPolicyName(gwKey.Name, VirtualServiceNamePrefix, vs.Name),
 				Namespace: gwKey.Namespace,
 			},
 			Spec: authPolicySpec,

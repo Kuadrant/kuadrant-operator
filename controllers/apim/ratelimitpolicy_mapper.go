@@ -21,8 +21,8 @@ const (
 	KuadrantDeleteHRAnnotation = "kuadrant.io/delete-httproute"
 )
 
-// routingPredicate is used by routing objects' controllers to filter for
-// Kuadrant annotations signaling API protection.
+// TODO(rahulanand16nov): separate auth and ratelimit (single responsibility principle)
+// routingPredicate is used by routing objects' controllers to filter for Kuadrant annotations signaling API protection.
 func routingPredicate(m *rateLimitPolicyMapper) predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {

@@ -143,7 +143,6 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/default | kubectl delete -f -
 
-
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
 	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.7.0)
@@ -257,6 +256,17 @@ generate-istio-manifests: istioctl ## Generates istio manifests with patches.
 istio-manifest-update-test: generate-istio-manifests
 	git diff --exit-code ./utils/local-deployment/istio-manifests
 	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./utils/local-deployment/istio-manifests)" ]
+
+
+.PHONY: generate-gwapi-manifests
+generate-gwapi-manifests:
+	mkdir -p $(PROJECT_DIR)/utils/local-deployment/gatewayapi-manifests
+	kubectl kustomize "github.com/kubernetes-sigs/gateway-api/config/crd?ref=v0.4.0" \
+	> $(PROJECT_DIR)/utils/local-deployment/gatewayapi-manifests/Base.yaml
+
+gwapi-manifests-update-test:
+	git diff --exit-code $(PROJECT_DIR)/utils/local-deployment/gatewayapi-manifests
+	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./utils/local-deployment/gatewayapi-manifests)" ]
 
 .PHONY: local-setup
 local-setup: local-cleanup local-setup-kind manifests kustomize generate

@@ -43,6 +43,7 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -59,6 +60,8 @@ func init() {
 	utilruntime.Must(istionetworkingv1alpha3.AddToScheme(scheme))
 	utilruntime.Must(istiosecurityv1beta1.AddToScheme(scheme))
 	utilruntime.Must(limitadorv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(gatewayapiv1alpha2.AddToScheme(scheme))
+
 	// +kubebuilder:scaffold:scheme
 
 	logger := log.NewLogger(
@@ -132,6 +135,20 @@ func main() {
 		Scheme:         mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "VirtualService")
+		os.Exit(1)
+	}
+
+	httpRouteBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("httproute"),
+		mgr.GetEventRecorderFor("HTTPRoute"),
+	)
+
+	if err = (&apimcontrollers.HTTPRouteReconciler{
+		BaseReconciler: httpRouteBaseReconciler,
+		Scheme:         mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "HTTPRoute")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

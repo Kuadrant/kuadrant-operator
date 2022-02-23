@@ -188,6 +188,8 @@ data:
         port: 50051
         service: authorino-authorino-authorization.kuadrant-system.svc.cluster.local
       name: kuadrant-authorization
+    ingressSelector: kuadrant-system
+    ingressService: kuadrant-gateway
     rootNamespace: kuadrant-system
     trustDomain: cluster.local
 ---

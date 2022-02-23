@@ -11,6 +11,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	KuadrantAuthProviderAnnotation    = "kuadrant.io/auth-provider"
+	KuadrantRateLimitPolicyAnnotation = "kuadrant.io/ratelimitpolicy"
+)
+
 // gatewayLabels fetches labels of an Istio gateway identified using the given ObjectKey.
 func gatewayLabels(ctx context.Context, client client.Client, gwKey client.ObjectKey) map[string]string {
 	gateway := &istio.Gateway{}
@@ -37,8 +42,8 @@ func limitadorRatelimitsName(objKey client.ObjectKey, idx int) string {
 }
 
 // getAuthPolicyName generates the name of an AuthorizationPolicy using VirtualService info.
-func getAuthPolicyName(gwName, vsName string) string {
-	return fmt.Sprintf("on-%s-using-%s", gwName, vsName)
+func getAuthPolicyName(gwName, networkingPrefix, networkingName string) string {
+	return fmt.Sprintf("on-%s-using-%s-%s", gwName, networkingPrefix, networkingName)
 }
 
 func alwaysUpdateEnvoyPatches(existingObj, desiredObj client.Object) (bool, error) {

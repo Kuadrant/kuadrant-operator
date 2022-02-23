@@ -1,4 +1,4 @@
-package common
+package istio
 
 import (
 	"encoding/json"
@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
+	"github.com/kuadrant/kuadrant-controller/pkg/common"
 )
 
 type HTTPFilterStage uint32
@@ -65,8 +66,8 @@ func LimitadorClusterEnvoyPatch() *istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjec
 								"endpoint": map[string]interface{}{
 									"address": map[string]interface{}{
 										"socket_address": map[string]interface{}{
-											"address":    LimitadorServiceClusterHost,
-											"port_value": LimitadorServiceGrpcPort,
+											"address":    common.LimitadorServiceClusterHost,
+											"port_value": common.LimitadorServiceGrpcPort,
 										},
 									},
 								},
@@ -91,7 +92,7 @@ func LimitadorClusterEnvoyPatch() *istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjec
 		Match: &istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch{
 			ObjectTypes: &istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch_Cluster{
 				Cluster: &istioapiv1alpha3.EnvoyFilter_ClusterMatch{
-					Service: LimitadorServiceClusterHost,
+					Service: common.LimitadorServiceClusterHost,
 				},
 			},
 		},

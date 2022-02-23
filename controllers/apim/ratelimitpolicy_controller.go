@@ -33,6 +33,7 @@ import (
 
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	kuadrantistioutils "github.com/kuadrant/kuadrant-controller/pkg/istio"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
 
@@ -97,6 +98,12 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
+	// Ignore deleted resources, this can happen when foregroundDeletion is enabled
+	// https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/#foreground-cascading-deletion
+	if rlp.GetDeletionTimestamp() != nil {
+		return ctrl.Result{}, nil
+	}
+
 	if !controllerutil.ContainsFinalizer(&rlp, patchesFinalizer) {
 		controllerutil.AddFinalizer(&rlp, patchesFinalizer)
 		if err := r.UpdateResource(ctx, &rlp); client.IgnoreNotFound(err) != nil {
@@ -119,17 +126,23 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 		vsKey := vsNamespacedName.String()
 
 		var vs istio.VirtualService
+		// TODO(eastizle): if VirtualService has been deleted,
+		// the Get operation returns NotFound and annotation is not deleted
 		if err := r.Client().Get(ctx, vsNamespacedName, &vs); err != nil {
 			if apierrors.IsNotFound(err) {
 				logger.Info("no VirtualService found", "lookup name", vsNamespacedName.String())
 				return ctrl.Result{}, nil
 			}
-			logger.Error(err, "failed to get VirutalService")
+			logger.Error(err, "failed to get VirtualService")
 			return ctrl.Result{}, err
 		}
 
 		if err := r.detachFromNetwork(ctx, vs.Spec.Gateways, vsKey, &rlp); err != nil {
 			logger.Error(err, "failed to detach RateLimitPolicy from VirtualService")
+			return ctrl.Result{}, err
+		}
+
+		if err := r.detachVSFromStatus(ctx, &vs, &rlp); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -160,6 +173,10 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 			return ctrl.Result{}, err
 		}
 
+		if err := r.attachVSToStatus(ctx, &vs, &rlp); err != nil {
+			return ctrl.Result{}, err
+		}
+
 		delete(rlp.Annotations, KuadrantAddVSAnnotation)
 		updateRequired = true
 	}
@@ -173,8 +190,6 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	}
 
 	// TODO(rahulanand16nov): do the same as above for HTTPRoute
-	// TODO(rahulanand16nov): Status block should be used to store networking objects that referenced this RLP to prevent
-	// heavy calls to kube api for every reconciliation loop. Note, this should be done after add/delete operations.
 	logger.Info("successfully reconciled RateLimitPolicy")
 	return ctrl.Result{}, nil
 }
@@ -190,6 +205,7 @@ func (r *RateLimitPolicyReconciler) detachFromNetwork(ctx context.Context, gatew
 		// fetch the filters patch
 		filtersPatchKey := client.ObjectKey{Namespace: gwKey.Namespace, Name: rlFiltersPatchName(gwKey.Name)}
 		filtersPatch := &istio.EnvoyFilter{}
+		// TODO(eastizle): if not found, do not return error. It has already been deleted.
 		if err := r.Client().Get(ctx, filtersPatchKey, filtersPatch); err != nil {
 			logger.Error(err, "failed to get ratelimit filters patch")
 			return err
@@ -205,6 +221,7 @@ func (r *RateLimitPolicyReconciler) detachFromNetwork(ctx context.Context, gatew
 		// fetch the ratelimits patch
 		ratelimitsPatchKey := client.ObjectKey{Namespace: gwKey.Namespace, Name: ratelimitsPatchName(gwKey.Name, ownerKey)}
 		ratelimitsPatch := &istio.EnvoyFilter{}
+		// TODO(eastizle): if not found, do not return error. It has already been deleted.
 		if err := r.Client().Get(ctx, ratelimitsPatchKey, ratelimitsPatch); err != nil {
 			logger.Error(err, "failed to get ratelimits patch")
 			return err
@@ -288,7 +305,7 @@ func ratelimitFiltersPatch(gwKey client.ObjectKey, gwLabels map[string]string) (
 			"typed_config": map[string]interface{}{
 				"@type":             "type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit",
 				"domain":            "preauth",
-				"stage":             common.PreAuthStage,
+				"stage":             kuadrantistioutils.PreAuthStage,
 				"failure_mode_deny": true,
 				// If not specified, returns success immediately (can be useful for us)
 				"rate_limit_service": map[string]interface{}{
@@ -296,7 +313,7 @@ func ratelimitFiltersPatch(gwKey client.ObjectKey, gwLabels map[string]string) (
 					"grpc_service": map[string]interface{}{
 						"timeout": "3s",
 						"envoy_grpc": map[string]string{
-							"cluster_name": common.PatchedLimitadorClusterName,
+							"cluster_name": kuadrantistioutils.PatchedLimitadorClusterName,
 						},
 					},
 				},
@@ -326,7 +343,7 @@ func ratelimitFiltersPatch(gwKey client.ObjectKey, gwLabels map[string]string) (
 	// update stage for postauth filter
 	postPatch.Value.Fields["typed_config"].GetStructValue().Fields["stage"] = &types.Value{
 		Kind: &types.Value_NumberValue{
-			NumberValue: float64(common.PostAuthStage),
+			NumberValue: float64(kuadrantistioutils.PostAuthStage),
 		},
 	}
 	// update operation for postauth filter
@@ -369,9 +386,9 @@ func ratelimitFiltersPatch(gwKey client.ObjectKey, gwLabels map[string]string) (
 	}
 
 	// Eventually, this should be dropped since it's a temp-fix for Kuadrant/limitador#53
-	clusterPatch := common.LimitadorClusterEnvoyPatch()
+	clusterPatch := kuadrantistioutils.LimitadorClusterEnvoyPatch()
 
-	factory := common.EnvoyFilterFactory{
+	factory := kuadrantistioutils.EnvoyFilterFactory{
 		ObjectName: rlFiltersPatchName(gwKey.Name),
 		Namespace:  gwKey.Namespace,
 		Patches: []*networkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch{
@@ -403,7 +420,7 @@ func desiredRatelimitsEnvoyFilter(rlp *apimv1alpha1.RateLimitPolicy, vHostNames 
 		}
 	}
 
-	factory := common.EnvoyFilterFactory{
+	factory := kuadrantistioutils.EnvoyFilterFactory{
 		ObjectName: ratelimitsPatchName(gwKey.Name, networkingKey),
 		Namespace:  gwKey.Namespace,
 		Patches:    patches,
@@ -442,7 +459,7 @@ func routeRateLimitsPatch(vHostName string, routeName string, rateLimits []*apim
 		"operation": "MERGE",
 		"value": map[string]interface{}{
 			"route": map[string]interface{}{
-				"rate_limits": common.EnvoyFilterRatelimitsUnstructured(rateLimits),
+				"rate_limits": kuadrantistioutils.EnvoyFilterRatelimitsUnstructured(rateLimits),
 			},
 		},
 	}
@@ -503,7 +520,7 @@ func virtualHostRateLimitsPatch(vHostName string, rateLimits []*apimv1alpha1.Rat
 	patchUnstructured := map[string]interface{}{
 		"operation": "MERGE",
 		"value": map[string]interface{}{
-			"rate_limits": common.EnvoyFilterRatelimitsUnstructured(rateLimits),
+			"rate_limits": kuadrantistioutils.EnvoyFilterRatelimitsUnstructured(rateLimits),
 			"typed_per_filter_config": map[string]interface{}{
 				// Note the following name is different from what we have given to our pre/post-auth
 				// ratelimit filters. It's because you refer to the type of filter and not the name field
@@ -567,6 +584,26 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ap
 		}
 	}
 	logger.Info("successfully created/updated RateLimit resources")
+	return nil
+}
+
+func (r *RateLimitPolicyReconciler) attachVSToStatus(ctx context.Context, vs *istio.VirtualService, rlp *apimv1alpha1.RateLimitPolicy) error {
+	if updated := rlp.Status.AddVirtualService(vs); updated {
+		logger := logr.FromContext(ctx)
+		err := r.Client().Status().Update(ctx, rlp)
+		logger.V(1).Info("adding VS to status", "virtualservice", vs.Name, "error", err)
+		return err
+	}
+	return nil
+}
+
+func (r *RateLimitPolicyReconciler) detachVSFromStatus(ctx context.Context, vs *istio.VirtualService, rlp *apimv1alpha1.RateLimitPolicy) error {
+	if updated := rlp.Status.DeleteVirtualService(vs); updated {
+		logger := logr.FromContext(ctx)
+		err := r.Client().Status().Update(ctx, rlp)
+		logger.V(1).Info("deleting VS from status", "virtualservice", vs.Name, "error", err)
+		return err
+	}
 	return nil
 }
 

@@ -165,7 +165,6 @@ func (r *VirtualServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&istionetworkingv1alpha3.VirtualService{}, builder.WithPredicates(routingPredicate(rlpMapper))).
-		Owns(&istiosecurityv1beta1.AuthorizationPolicy{}).
 		WithLogger(log.Log). // use base logger, the manager will add prefixes for watched sources
 		Complete(r)
 }

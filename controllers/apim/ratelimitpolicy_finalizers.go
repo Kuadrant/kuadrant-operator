@@ -27,19 +27,11 @@ func (r *RateLimitPolicyReconciler) finalizeEnvoyFilters(ctx context.Context, rl
 	ownerRlp := client.ObjectKeyFromObject(rlp).String()
 
 	// TODO(rahulanand16nov): do the same for HTTPRoute
-	vsList := &istio.VirtualServiceList{}
-	if err := r.Client().List(ctx, vsList, &client.ListOptions{Namespace: rlp.Namespace}); err != nil {
-		logger.Error(err, "failed to list VirtualServices in RateLimitPolicy's namespace")
-		return err
-	}
-
-	for idx := range vsList.Items {
-		if val, present := vsList.Items[idx].Annotations[KuadrantRateLimitPolicyAnnotation]; !present || (val != rlp.Name) {
-			continue
-		}
-		vsKey := client.ObjectKeyFromObject(&vsList.Items[idx])
-		for _, gateway := range vsList.Items[idx].Spec.Gateways {
-			gwKey := common.NamespacedNameToObjectKey(gateway, vsList.Items[idx].Namespace)
+	for idx := range rlp.Status.VirtualServices {
+		vs := &rlp.Status.VirtualServices[idx]
+		vsKey := client.ObjectKey{Namespace: rlp.Namespace, Name: vs.Name}
+		for _, gw := range vs.Gateways {
+			gwKey := client.ObjectKey{Namespace: gw.Namespace, Name: gw.Name}
 
 			filtersPatchkey := client.ObjectKey{
 				Namespace: gwKey.Namespace,
@@ -53,6 +45,8 @@ func (r *RateLimitPolicyReconciler) finalizeEnvoyFilters(ctx context.Context, rl
 				}
 				logger.V(1).Info("filters patch not found", "object key", filtersPatchkey.String())
 			}
+			// TODO(eastizle): if the patch was not found, the patch name is empty, returning error
+			// TODO(eastizle): The ownerRef added was VS name/NS. Now removing with RLP name/NS
 			if err := r.removeParentRefEntry(ctx, filtersPatch, ownerRlp); err != nil {
 				logger.Error(err, "failed to remove parentRef on filters patch")
 				return err
@@ -66,12 +60,14 @@ func (r *RateLimitPolicyReconciler) finalizeEnvoyFilters(ctx context.Context, rl
 			}
 			ratelimitsPatch := &istio.EnvoyFilter{}
 			if err := r.Client().Get(ctx, ratelimitsPatchKey, ratelimitsPatch); err != nil {
-				if apierrors.IsNotFound(err) {
+				if !apierrors.IsNotFound(err) {
 					logger.Error(err, "failed to get ratelimits patch")
 					return err
 				}
 				logger.V(1).Info("ratelimits patch not found", "object key", ratelimitsPatchKey.String())
 			}
+			// TODO(eastizle): if the patch was not found, the patch name is empty, returning error
+			// TODO(eastizle): ratelimitspatch require parentRef? They are unique per VS
 			if err := r.removeParentRefEntry(ctx, ratelimitsPatch, ownerRlp); err != nil {
 				logger.Error(err, "failed to remove remove parentRef entry on ratelimits patch")
 				return err

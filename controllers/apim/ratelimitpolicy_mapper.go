@@ -13,6 +13,8 @@ import (
 )
 
 const (
+	// TODO(eastizle): KuadrantAddVSAnnotation annotation does not support multiple VirtualServices having reference to the same RateLimitPolicy
+	// The annotation key is fixed, the RLP name is in the value
 	KuadrantAddVSAnnotation    = "kuadrant.io/add-virtualservice"
 	KuadrantDeleteVSAnnotation = "kuadrant.io/delete-virtualservice"
 	KuadrantAddHRAnnotation    = "kuadrant.io/add-httproute"

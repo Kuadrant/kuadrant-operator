@@ -142,9 +142,38 @@ spec:
                 - name
                 x-kubernetes-list-type: map
             type: object
+          status:
+            description: RateLimitPolicyStatus defines the observed state of RateLimitPolicy
+            properties:
+              virtualservices:
+                description: VirtualServices represents the current VirtualService
+                  objects with reference to this ratelimitpolicy object
+                items:
+                  properties:
+                    gateways:
+                      items:
+                        properties:
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                        required:
+                        - name
+                        - namespace
+                        type: object
+                      type: array
+                    name:
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+            type: object
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}
 status:
   acceptedNames:
     kind: ""

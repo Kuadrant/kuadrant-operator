@@ -39,10 +39,15 @@ spec:
     - conditions: ["get-toy == yes"]
       max_value: 2
       namespace: preauth
-      seconds: 15
+      seconds: 30
       variables: []
-    - condtitions: ["vhaction == yes"]
-      max_value: 4
+    - conditions: ["add-toy == yes"]
+      max_value: 2
+      namespace: postauth
+      seconds: 30
+      variables: []
+    - conditions: ["vhaction == yes"]
+      max_value: 6
       namespace: preauth
-      seconds: 15
+      seconds: 30
       variables: []

@@ -72,7 +72,16 @@ spec:
                   properties:
                     actions:
                       items:
-                        description: Action_Specifier defines the envoy rate limit actions
+                        description: Action_Specifier defines one envoy rate limit action
+                        oneOf:
+                        - required:
+                          - generic_key
+                        - required:
+                          - metadata
+                        - required:
+                          - remote_address
+                        - required:
+                          - request_headers
                         properties:
                           generic_key:
                             properties:
@@ -81,8 +90,56 @@ spec:
                               descriptor_value:
                                 type: string
                             required:
-                            - descriptor_key
                             - descriptor_value
+                            type: object
+                          metadata:
+                            properties:
+                              default_value:
+                                type: string
+                              descriptor_key:
+                                type: string
+                              metadata_key:
+                                properties:
+                                  key:
+                                    type: string
+                                  path:
+                                    items:
+                                      properties:
+                                        key:
+                                          type: string
+                                      required:
+                                      - key
+                                      type: object
+                                    type: array
+                                required:
+                                - key
+                                - path
+                                type: object
+                              source:
+                                description: MetadataSource https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-enum-config-route-v3-ratelimit-action-metadata-source
+                                enum:
+                                - DYNAMIC
+                                - ROUTE_ENTRY
+                                type: string
+                            required:
+                            - descriptor_key
+                            - metadata_key
+                            type: object
+                          remote_address:
+                            description: RemoteAddressSpec no need to specify descriptor entry is populated using the trusted address from [x-forwarded-for](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_conn_man/headers#config-http-conn-man-headers-x-forwarded-for)
+                            type: object
+                          request_headers:
+                            description: RequestHeadersSpec Rate limit on request headers.
+                            properties:
+                              descriptor_key:
+                                type: string
+                              header_name:
+                                type: string
+                              skip_if_absent:
+                                type: boolean
+                            required:
+                            - descriptor_key
+                            - header_name
                             type: object
                         type: object
                       type: array
@@ -109,7 +166,16 @@ spec:
                         properties:
                           actions:
                             items:
-                              description: Action_Specifier defines the envoy rate limit actions
+                              description: Action_Specifier defines one envoy rate limit action
+                              oneOf:
+                              - required:
+                                - generic_key
+                              - required:
+                                - metadata
+                              - required:
+                                - remote_address
+                              - required:
+                                - request_headers
                               properties:
                                 generic_key:
                                   properties:
@@ -118,8 +184,56 @@ spec:
                                     descriptor_value:
                                       type: string
                                   required:
-                                  - descriptor_key
                                   - descriptor_value
+                                  type: object
+                                metadata:
+                                  properties:
+                                    default_value:
+                                      type: string
+                                    descriptor_key:
+                                      type: string
+                                    metadata_key:
+                                      properties:
+                                        key:
+                                          type: string
+                                        path:
+                                          items:
+                                            properties:
+                                              key:
+                                                type: string
+                                            required:
+                                            - key
+                                            type: object
+                                          type: array
+                                      required:
+                                      - key
+                                      - path
+                                      type: object
+                                    source:
+                                      description: MetadataSource https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-enum-config-route-v3-ratelimit-action-metadata-source
+                                      enum:
+                                      - DYNAMIC
+                                      - ROUTE_ENTRY
+                                      type: string
+                                  required:
+                                  - descriptor_key
+                                  - metadata_key
+                                  type: object
+                                remote_address:
+                                  description: RemoteAddressSpec no need to specify descriptor entry is populated using the trusted address from [x-forwarded-for](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_conn_man/headers#config-http-conn-man-headers-x-forwarded-for)
+                                  type: object
+                                request_headers:
+                                  description: RequestHeadersSpec Rate limit on request headers.
+                                  properties:
+                                    descriptor_key:
+                                      type: string
+                                    header_name:
+                                      type: string
+                                    skip_if_absent:
+                                      type: boolean
+                                  required:
+                                  - descriptor_key
+                                  - header_name
                                   type: object
                               type: object
                             type: array

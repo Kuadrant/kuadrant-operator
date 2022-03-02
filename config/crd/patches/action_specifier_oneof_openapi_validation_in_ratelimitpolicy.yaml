@@ -1,0 +1,15 @@
+---
+- op: add
+  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/rateLimits/items/properties/actions/items/oneOf
+  value:
+    - required: ["generic_key"]
+    - required: ["metadata"]
+    - required: ["remote_address"]
+    - required: ["request_headers"]
+- op: add
+  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/routes/items/properties/rateLimits/items/properties/actions/items/oneOf
+  value:
+    - required: ["generic_key"]
+    - required: ["metadata"]
+    - required: ["remote_address"]
+    - required: ["request_headers"]

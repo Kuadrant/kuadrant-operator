@@ -27,19 +27,58 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-type RLGenericKey struct {
-	DescriptorKey   string `json:"descriptor_key"`
+// MetadataSource https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-enum-config-route-v3-ratelimit-action-metadata-source
+// +kubebuilder:validation:Enum=DYNAMIC;ROUTE_ENTRY
+type MetadataSource string
+
+type GenericKeySpec struct {
 	DescriptorValue string `json:"descriptor_value"`
+	// +optional
+	DescriptorKey *string `json:"descriptor_key,omitempty"`
 }
 
-//TODO(eguzki): oneOf each kind
-//
-// https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-msg-config-route-v3-ratelimit-action
+type MetadataPathSegment struct {
+	Key string `json:"key"`
+}
 
-// Action_Specifier defines the envoy rate limit actions
+type MetadataKeySpec struct {
+	Key  string                `json:"key"`
+	Path []MetadataPathSegment `json:"path"`
+}
+
+type MetadataSpec struct {
+	DescriptorKey string          `json:"descriptor_key"`
+	MetadataKey   MetadataKeySpec `json:"metadata_key"`
+	// +optional
+	DefaultValue *string `json:"default_value,omitempty"`
+	// +optional
+	Source *MetadataSource `json:"source,omitempty"`
+}
+
+// RemoteAddressSpec no need to specify
+// descriptor entry is populated using the trusted address from
+// [x-forwarded-for](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_conn_man/headers#config-http-conn-man-headers-x-forwarded-for)
+type RemoteAddressSpec struct {
+}
+
+// RequestHeadersSpec Rate limit on request headers.
+type RequestHeadersSpec struct {
+	HeaderName    string `json:"header_name"`
+	DescriptorKey string `json:"descriptor_key"`
+	// +optional
+	SkipIfAbsent *bool `json:"skip_if_absent,omitempty"`
+}
+
+// Action_Specifier defines one envoy rate limit action
 type ActionSpecifier struct {
 	// +optional
-	GenericKey *RLGenericKey `json:"generic_key,omitempty"`
+	GenericKey *GenericKeySpec `json:"generic_key,omitempty"`
+	// +optional
+	Metadata *MetadataSpec `json:"metadata,omitempty"`
+	// +optional
+	RemoteAddress *RemoteAddressSpec `json:"remote_address,omitempty"`
+	// +optional
+	RequestHeaders *RequestHeadersSpec `json:"request_headers,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=PREAUTH;POSTAUTH;BOTH
@@ -56,12 +95,6 @@ const (
 	NetworkingRefTypeHR NetworkingRefType = "HTTPRoute"
 	NetworkingRefTypeVS NetworkingRefType = "VirtualService"
 )
-
-var RateLimitStageName = map[int32]string{
-	0: "PREAUTH",
-	1: "POSTAUTH",
-	2: "BOTH",
-}
 
 var RateLimitStageValue = map[RateLimitStage]int32{
 	"PREAUTH":  0,

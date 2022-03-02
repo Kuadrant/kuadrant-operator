@@ -11,24 +11,36 @@ spec:
   gateways:
     - kuadrant-system/kuadrant-gateway
   http:
-    - match:
-        - name: get-toy
-          uri:
+    - name: get-toy
+      match:
+        - uri:
             exact: /toy
           method:
             exact: GET
-        - name: add-toy
-          uri:
+      route:
+        - destination:
+            host: toystore.default.svc
+            port:
+              number: 80
+    - name: add-toy
+      match:
+        - uri:
             exact: /admin/toy
           method:
             exact: POST
-        - name: delete-toy
-          uri:
+      route:
+        - destination:
+            host: toystore.default.svc
+            port:
+              number: 80
+    - name: delete-toy
+      match:
+        - uri:
             exact: /admin/toy
           method:
             exact: DELETE
       route:
         - destination:
-            host: toystore.default.svc.cluster.local
+            host: toystore.default.svc
             port:
               number: 80

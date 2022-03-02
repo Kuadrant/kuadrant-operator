@@ -13,7 +13,7 @@ spec:
     - matches:
         - path:
             type: PathPrefix
-            value: "toy"
+            value: "/toy"
           method: GET
         - path:
             type: Exact

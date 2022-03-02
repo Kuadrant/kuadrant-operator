@@ -480,7 +480,7 @@ func routeRateLimitsPatch(vHostName string, routeName string, rateLimits []*apim
 					Vhost: &networkingv1alpha3.EnvoyFilter_RouteConfigurationMatch_VirtualHostMatch{
 						Name: vHostName,
 						Route: &networkingv1alpha3.EnvoyFilter_RouteConfigurationMatch_RouteMatch{
-							Name: "." + routeName, // Istio adds '.' infront of names
+							Name: routeName,
 						},
 					},
 				},

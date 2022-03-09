@@ -8,16 +8,7 @@
 
 * [Overview](#overview)
 * [CustomResourceDefinitions](#customresourcedefinitions)
-* [List of features](#list-of-features)
-* [Architecture](#architecture)
-* [<a href="doc/getting-started.md">Getting started</a>](#getting-started)
-* [User Guides](#user-guides)
-   * [<a href="doc/service-discovery-oas-configmap.md">HTTP routing rules from OpenAPI stored in a configmap</a>](#http-routing-rules-from-openapi-stored-in-a-configmap)
-   * [<a href="doc/service-discovery-oas-service.md">HTTP routing rules from OpenAPI served by the service</a>](#http-routing-rules-from-openapi-served-by-the-service)
-   * [<a href="doc/service-discovery-path-match.md">HTTP routing rules with path matching</a>](#http-routing-rules-with-path-matching)
-   * [<a href="doc/authn-api-key.md">AuthN based on API key</a>](#authn-based-on-api-key)
-   * [<a href="doc/authn-oidc.md">AuthN based on OpenID Connect</a>](#authn-based-on-openid-connect)
-   * [<a href="doc/rate-limit.md">Rate limiting</a>](#rate-limiting)
+* [Getting started](#getting-started)
 * [Contributing](#contributing)
 * [Licensing](#licensing)
 
@@ -49,6 +40,138 @@ The kuadrant controller acts on the following [CRDs](https://kubernetes.io/docs/
 | [RateLimitPolicy](apis/apim/v1alpha1/ratelimitpolicy_types.go) | Enable access control on workloads based on HTTP rate limiting |
 
 For a detailed description of the CRDs above, refer to the [Architecture](doc/architecture.md) page.
+
+## Getting started
+
+1.- Clone Kuadrant controller and checkout main
+
+```
+git clone https://github.com/Kuadrant/kuadrant-controller
+```
+
+2.- Create local cluster and deploy kuadrant
+
+```
+make local-setup
+```
+
+3.- Deploy example deployment
+
+```
+kubectl apply -f examples/toystore/toystore.yaml
+```
+
+4.- Create VirtualService to configure routing for our example deployment
+
+```
+kubectl apply -f examples/toystore/virtualService.yaml
+```
+
+Verify that we can reach our example deployment
+
+```
+curl -v -H 'Host: api.toystore.com' http://localhost:9080/toy
+```
+
+5.- Create RateLimitPolicy for ratelimiting
+
+```
+kubectl apply -f examples/toystore/ratelimitpolicy.yaml
+```
+
+6.- Annotate VirtualService with RateLimitPolicy name to trigger EnvoyFilters creation.
+
+```
+kubectl annotate virtualservice/toystore kuadrant.io/ratelimitpolicy=toystore
+```
+
+To verify creation:
+
+```
+kubectl get envoyfilter -A
+NAMESPACE         NAME                                                    AGE
+kuadrant-system   kuadrant-gateway-ratelimit-filters                      9s
+kuadrant-system   ratelimits-on-kuadrant-gateway-using-default-toystore   9s
+```
+
+```
+kubectl get ratelimit -A
+NAMESPACE         NAME                     AGE
+kuadrant-system   rlp-default-toystore-1   49s
+kuadrant-system   rlp-default-toystore-2   49s
+kuadrant-system   rlp-default-toystore-3   49s
+kuadrant-system   rlp-default-toystore-4   49s
+```
+
+7.- Verify unauthenticated rate limit
+
+Only 2 requests every 30 secs on `GET /toy` operation allowed.
+
+```
+curl -v -H 'Host: api.toystore.com' http://localhost:9080/toy
+```
+
+8.- Add authentication
+
+Create AuthConfig for Authorino external authz provider
+
+```
+kubectl apply -f examples/toystore/authconfig.yaml
+```
+
+Create secret with API key for user `bob`
+
+```
+kubectl apply -f examples/toystore/bob-api-key-secret.yaml
+```
+
+Create secret with API key for user `alice`
+
+```
+kubectl apply -f examples/toystore/alice-api-key-secret.yaml
+```
+
+Annotate VirutalService with Kuadrant auth provider to create AuthorizationPolicy
+
+```
+kubectl annotate virtualservice/toystore kuadrant.io/auth-provider=kuadrant-authorization
+```
+
+To verify creation:
+
+```
+kubectl get authorizationpolicy -A
+NAMESPACE         NAME                                 AGE
+kuadrant-system   on-kuadrant-gateway-using-toystore   7s
+```
+
+9.- Verify authentication
+
+Should return `401 Unauthorized`
+
+```
+curl -v -H 'Host: api.toystore.com' -X POST http://localhost:9080/admin/toy
+```
+
+Should return `200 OK`
+
+```
+curl -v -H 'Host: api.toystore.com' -H 'Authorization: APIKEY ALICEKEYFORDEMO' -X POST http://localhost:9080/admin/toy
+```
+
+10.- Verify authenticated rate limit per user
+
+4 times and should be rate limited
+
+```
+curl -v -H 'Host: api.toystore.com' -H 'Authorization: APIKEY ALICEKEYFORDEMO' -X POST http://localhost:9080/admin/toy
+```
+
+2 times and should be rate limited
+
+```
+curl -v -H 'Host: api.toystore.com' -H 'Authorization: APIKEY BOBKEYFORDEMO' -X POST http://localhost:9080/admin/toy
+```
 
 ## Contributing
 

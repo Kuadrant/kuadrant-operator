@@ -12,19 +12,16 @@ spec:
             - generic_key:
                 descriptor_key: get-toy
                 descriptor_value: "yes"
-            - generic_key:
-                descriptor_key: other-get-toy
-                descriptor_value: "yes"
     - name: add-toy
       rateLimits:
-        - stage: POSTAUTH
+        - stage: BOTH
           actions:
             - generic_key:
                 descriptor_key: add-toy
                 descriptor_value: "yes"
     - name: delete-toy
       rateLimits:
-        - stage: PREAUTH
+        - stage: BOTH
           actions:
             - generic_key:
                 descriptor_key: delete-toy
@@ -42,25 +39,34 @@ spec:
     - stage: POSTAUTH
       actions:
         - metadata:
-            descriptor_key: "user_id"
+            descriptor_key: "user-id"
             metadata_key:
               key: "envoy.filters.http.ext_authz"
               path:
                 - key: "ext_auth_data"
-                - key: "user_id"
+                - key: "user-id"
   limits:
     - conditions: ["get-toy == yes"]
       max_value: 2
       namespace: preauth
       seconds: 30
       variables: []
-    - conditions: ["add-toy == yes"]
+    - conditions:
+      - "add-toy == yes"
+      - "user-id == bob"
       max_value: 2
       namespace: postauth
       seconds: 30
       variables: []
+    - conditions:
+      - "add-toy == yes"
+      - "user-id == alice"
+      max_value: 4
+      namespace: postauth
+      seconds: 30
+      variables: []
     - conditions: ["vhaction == yes"]
-      max_value: 6
+      max_value: 20
       namespace: preauth
       seconds: 30
       variables: []

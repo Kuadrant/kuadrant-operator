@@ -92,6 +92,9 @@ func (m *rateLimitPolicyMapper) SignalCreate(obj client.Object) error {
 	}
 
 	// signal addition by adding 'add' annotation
+	if rlp.Annotations == nil {
+		rlp.Annotations = make(map[string]string)
+	}
 	rlp.Annotations[addAnnotation] = obj.GetName()
 	err := m.K8sClient.Update(context.Background(), rlp)
 	return err
@@ -116,6 +119,9 @@ func (m *rateLimitPolicyMapper) SignalDelete(obj client.Object) error {
 	}
 
 	// signal deletion by adding 'delete' annotation
+	if rlp.Annotations == nil {
+		rlp.Annotations = make(map[string]string)
+	}
 	rlp.Annotations[deleteAnnotation] = obj.GetName()
 	err := m.K8sClient.Update(context.Background(), rlp)
 	return err

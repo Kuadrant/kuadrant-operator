@@ -19,7 +19,7 @@ spec:
             exact: GET
       route:
         - destination:
-            host: toystore.default.svc
+            host: toystore.default.svc.cluster.local
             port:
               number: 80
     - name: add-toy
@@ -30,7 +30,7 @@ spec:
             exact: POST
       route:
         - destination:
-            host: toystore.default.svc
+            host: toystore.default.svc.cluster.local
             port:
               number: 80
     - name: delete-toy
@@ -41,6 +41,6 @@ spec:
             exact: DELETE
       route:
         - destination:
-            host: toystore.default.svc
+            host: toystore.default.svc.cluster.local
             port:
               number: 80

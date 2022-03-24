@@ -17,10 +17,13 @@ limitations under the License.
 package common
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -86,4 +89,28 @@ func IsOwnedBy(owned, owner client.Object) bool {
 	}
 
 	return false
+}
+
+// GetServicePortNumber returns the port number from the referenced key and port info
+// the port info can be named port or already a number.
+func GetServicePortNumber(ctx context.Context, k8sClient client.Client, svcKey client.ObjectKey, svcPort string) (int32, error) {
+	// check if the port is a number already.
+	if num, err := strconv.ParseInt(svcPort, 10, 32); err == nil {
+		return int32(num), nil
+	}
+
+	// As the port is name, resolv the port from the service
+	svc := &corev1.Service{}
+	if err := k8sClient.Get(ctx, svcKey, svc); err != nil {
+		// the service must exist
+		return 0, err
+	}
+
+	for _, p := range svc.Spec.Ports {
+		if p.Name == svcPort {
+			return int32(p.TargetPort.IntValue()), nil
+		}
+	}
+
+	return 0, fmt.Errorf("service port %s was not found in %s", svcPort, svcKey.String())
 }

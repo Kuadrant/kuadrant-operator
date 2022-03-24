@@ -11,11 +11,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	KuadrantAuthProviderAnnotation    = "kuadrant.io/auth-provider"
-	KuadrantRateLimitPolicyAnnotation = "kuadrant.io/ratelimitpolicy"
-)
-
 // gatewayLabels fetches labels of an Istio gateway identified using the given ObjectKey.
 func gatewayLabels(ctx context.Context, client client.Client, gwKey client.ObjectKey) map[string]string {
 	gateway := &istio.Gateway{}

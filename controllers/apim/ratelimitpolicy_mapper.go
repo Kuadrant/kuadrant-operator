@@ -4,12 +4,14 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
+	"github.com/kuadrant/kuadrant-controller/pkg/mappers"
 )
 
 const (
@@ -26,7 +28,7 @@ const (
 func routingPredicate(m *rateLimitPolicyMapper) predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			if _, toRateLimit := e.Object.GetAnnotations()[KuadrantRateLimitPolicyAnnotation]; toRateLimit {
+			if _, toRateLimit := e.Object.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]; toRateLimit {
 				if err := m.SignalCreate(e.Object); err != nil {
 					m.Logger.Error(err, "failed to signal create event to referenced RateLimitPolicy")
 					// lets still try for auth annotation
@@ -35,32 +37,32 @@ func routingPredicate(m *rateLimitPolicyMapper) predicate.Predicate {
 
 			// only create reconcile request for routing objects' controllers when auth
 			// annotation is present.
-			_, toProtect := e.Object.GetAnnotations()[KuadrantAuthProviderAnnotation]
+			_, toProtect := e.Object.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
 			return toProtect
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			_, toRateLimitOld := e.ObjectOld.GetAnnotations()[KuadrantRateLimitPolicyAnnotation]
-			_, toRateLimitNew := e.ObjectNew.GetAnnotations()[KuadrantRateLimitPolicyAnnotation]
+			_, toRateLimitOld := e.ObjectOld.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]
+			_, toRateLimitNew := e.ObjectNew.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]
 			if toRateLimitNew || toRateLimitOld {
 				if err := m.SignalUpdate(e.ObjectOld, e.ObjectNew); err != nil {
 					m.Logger.Error(err, "failed to signal update event to referenced RateLimitPolicy")
 				}
 			}
 
-			_, toProtectOld := e.ObjectOld.GetAnnotations()[KuadrantAuthProviderAnnotation]
-			_, toProtectNew := e.ObjectNew.GetAnnotations()[KuadrantAuthProviderAnnotation]
+			_, toProtectOld := e.ObjectOld.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
+			_, toProtectNew := e.ObjectNew.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
 			return toProtectOld || toProtectNew
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			// If the object had the Kuadrant label, we need to handle its deletion
-			_, toRateLimit := e.Object.GetAnnotations()[KuadrantRateLimitPolicyAnnotation]
+			_, toRateLimit := e.Object.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]
 			if toRateLimit {
 				if err := m.SignalDelete(e.Object); err != nil {
 					m.Logger.Error(err, "failed to signal delete event to referenced RateLimitPolicy")
 				}
 			}
 
-			_, toProtect := e.Object.GetAnnotations()[KuadrantAuthProviderAnnotation]
+			_, toProtect := e.Object.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
 			return toProtect
 		},
 	}
@@ -78,7 +80,7 @@ func (m *rateLimitPolicyMapper) SignalCreate(obj client.Object) error {
 	if obj.GetObjectKind().GroupVersionKind().Kind == "HTTPRoute" {
 		addAnnotation = KuadrantAddHRAnnotation
 	}
-	rlpName := obj.GetAnnotations()[KuadrantRateLimitPolicyAnnotation]
+	rlpName := obj.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]
 	m.Logger.Info("Signaling create event to RateLimitPolicy", "RateLimitPolicy", rlpName)
 	rlpKey := types.NamespacedName{
 		Name:      rlpName,
@@ -105,7 +107,7 @@ func (m *rateLimitPolicyMapper) SignalDelete(obj client.Object) error {
 	if obj.GetObjectKind().GroupVersionKind().Kind == "HTTPRoute" {
 		deleteAnnotation = KuadrantAddHRAnnotation
 	}
-	rlpName := obj.GetAnnotations()[KuadrantRateLimitPolicyAnnotation]
+	rlpName := obj.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]
 	m.Logger.Info("Signaling delete event to RateLimitPolicy", "RateLimitPolicy", rlpName)
 	rlpKey := types.NamespacedName{
 		Name:      rlpName,
@@ -130,8 +132,8 @@ func (m *rateLimitPolicyMapper) SignalDelete(obj client.Object) error {
 // SignalUpdate is used when either old or new object had/has the ratelimit annotaiton
 func (m *rateLimitPolicyMapper) SignalUpdate(oldObj, newObj client.Object) error {
 	m.Logger.Info("Signaling update event to RateLimitPolicy")
-	oldRlpName, toRateLimitOld := oldObj.GetAnnotations()[KuadrantRateLimitPolicyAnnotation]
-	newRlpName, toRateLimitNew := newObj.GetAnnotations()[KuadrantRateLimitPolicyAnnotation]
+	oldRlpName, toRateLimitOld := oldObj.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]
+	newRlpName, toRateLimitNew := newObj.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]
 
 	// case when rlp name is added (same as create event)
 	if !toRateLimitOld && toRateLimitNew {

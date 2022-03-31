@@ -19,6 +19,10 @@ spec:
             type: Exact
             value: "/admin/toy"
           method: POST
+        - path:
+            type: Exact
+            value: "/admin/toy"
+          method: DELETE
       backendRefs:
         - name: toystore
           port: 80

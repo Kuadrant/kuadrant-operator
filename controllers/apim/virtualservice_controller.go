@@ -11,7 +11,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 
-	networkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	securityv1beta1 "istio.io/api/security/v1beta1"
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -47,6 +46,15 @@ func (r *VirtualServiceReconciler) Reconcile(eventCtx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
+	// check if we have to send any signal to the RateLimitPolicy
+	_, toAttach := virtualService.GetAnnotations()[KuadrantAttachNetwork]
+	_, toDetach := virtualService.GetAnnotations()[KuadrantDetachNetwork]
+	if toAttach || toDetach {
+		if err := SendSignal(ctx, r.Client(), &virtualService); err != nil {
+			logger.Error(err, "failed to send signal to RateLimitPolicy")
+			return ctrl.Result{}, err
+		}
+	}
 	// TODO(rahulanand16nov): handle VirtualService deletion for AuthPolicy
 	// check if this virtualservice is to be protected or not.
 	_, present := virtualService.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
@@ -146,25 +154,10 @@ func (r *VirtualServiceReconciler) reconcileAuthPolicy(ctx context.Context, logg
 	return nil
 }
 
-func normalizeStringMatch(sm *networkingv1alpha3.StringMatch) string {
-	if prefix := sm.GetPrefix(); prefix != "" {
-		return prefix + "*"
-	}
-	if exact := sm.GetExact(); exact != "" {
-		return exact
-	}
-	// Regex string match is not supported because authpolicy doesn't as well.
-	return ""
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *VirtualServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	rlpMapper := &rateLimitPolicyMapper{
-		K8sClient: r.Client(),
-		Logger:    r.Logger(),
-	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&istionetworkingv1alpha3.VirtualService{}, builder.WithPredicates(routingPredicate(rlpMapper))).
+		For(&istionetworkingv1alpha3.VirtualService{}, builder.WithPredicates(RoutingPredicate())).
 		WithLogger(log.Log). // use base logger, the manager will add prefixes for watched sources
 		Complete(r)
 }

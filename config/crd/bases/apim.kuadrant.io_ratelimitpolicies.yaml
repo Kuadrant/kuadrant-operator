@@ -36,6 +36,8 @@ spec:
           spec:
             description: RateLimitPolicySpec defines the desired state of RateLimitPolicy
             properties:
+              domain:
+                type: string
               limits:
                 items:
                   description: RateLimitSpec defines the desired state of RateLimit
@@ -63,7 +65,6 @@ spec:
                   type: object
                 type: array
               rateLimits:
-                description: RateLimits are used for all of the matching rules
                 items:
                   properties:
                     actions:
@@ -145,13 +146,31 @@ spec:
                   - stage
                   type: object
                 type: array
-              routes:
-                description: route specific staging and actions
+              rules:
                 items:
                   properties:
                     name:
-                      description: name of the route present in the virutalservice
+                      description: Name supports regex for fetching operations from
+                        routing resources For VirtualService, if route name matches,
+                        all the match requests are converted to operations internally.
+                        But specific match request names are also supported.
                       type: string
+                    operations:
+                      description: Operation specifies the operations of a request
+                      items:
+                        description: Each operation type has OR semantics and overall
+                          AND semantics for a match.
+                        properties:
+                          methods:
+                            items:
+                              type: string
+                            type: array
+                          paths:
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      type: array
                     rateLimits:
                       items:
                         properties:
@@ -235,17 +254,27 @@ spec:
                         - stage
                         type: object
                       type: array
-                  required:
-                  - name
                   type: object
                 type: array
-                x-kubernetes-list-map-keys:
-                - name
-                x-kubernetes-list-type: map
+            required:
+            - domain
             type: object
           status:
             description: RateLimitPolicyStatus defines the observed state of RateLimitPolicy
             properties:
+              httproutes:
+                items:
+                  properties:
+                    gateways:
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
               virtualservices:
                 description: VirtualServices represents the current VirtualService
                   objects with reference to this ratelimitpolicy object
@@ -253,15 +282,7 @@ spec:
                   properties:
                     gateways:
                       items:
-                        properties:
-                          name:
-                            type: string
-                          namespace:
-                            type: string
-                        required:
-                        - name
-                        - namespace
-                        type: object
+                        type: string
                       type: array
                     name:
                       type: string

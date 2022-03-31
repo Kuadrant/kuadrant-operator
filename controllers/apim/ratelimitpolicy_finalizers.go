@@ -31,7 +31,7 @@ func (r *RateLimitPolicyReconciler) finalizeEnvoyFilters(ctx context.Context, rl
 		vs := &rlp.Status.VirtualServices[idx]
 		vsKey := client.ObjectKey{Namespace: rlp.Namespace, Name: vs.Name}
 		for _, gw := range vs.Gateways {
-			gwKey := client.ObjectKey{Namespace: gw.Namespace, Name: gw.Name}
+			gwKey := common.NamespacedNameToObjectKey(gw, vsKey.Namespace)
 
 			filtersPatchkey := client.ObjectKey{
 				Namespace: gwKey.Namespace,

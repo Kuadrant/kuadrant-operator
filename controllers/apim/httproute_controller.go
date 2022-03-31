@@ -43,6 +43,16 @@ func (r *HTTPRouteReconciler) Reconcile(eventCtx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
+	// check if we have to send any signal to the RateLimitPolicy
+	_, toAttach := httproute.GetAnnotations()[KuadrantAttachNetwork]
+	_, toDetach := httproute.GetAnnotations()[KuadrantDetachNetwork]
+	if toAttach || toDetach {
+		if err := SendSignal(ctx, r.Client(), &httproute); err != nil {
+			logger.Error(err, "failed to send signal to RateLimitPolicy")
+			return ctrl.Result{}, err
+		}
+	}
+
 	// TODO(rahulanand16nov): handle HTTPRoute deletion for AuthPolicy
 	// check if this httproute has to be protected or not.
 	_, present := httproute.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
@@ -93,10 +103,7 @@ func (r *HTTPRouteReconciler) reconcileAuthPolicy(ctx context.Context, logger lo
 	providerName := hr.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
 
 	// pre-convert hostnames to string slice
-	hosts := []string{}
-	for idx := range hr.Spec.Hostnames {
-		hosts = append(hosts, string(hr.Spec.Hostnames[idx]))
-	}
+	hosts := HostnamesToStrings(hr.Spec.Hostnames)
 
 	// generate rules
 	rules := []*securityv1beta1.Rule{}
@@ -193,12 +200,16 @@ func (r *HTTPRouteReconciler) reconcileAuthPolicy(ctx context.Context, logger lo
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *HTTPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	rlpMapper := &rateLimitPolicyMapper{
-		K8sClient: r.Client(),
-		Logger:    r.Logger(),
-	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayapi_v1alpha2.HTTPRoute{}, builder.WithPredicates(routingPredicate(rlpMapper))).
+		For(&gatewayapi_v1alpha2.HTTPRoute{}, builder.WithPredicates(RoutingPredicate())).
 		WithLogger(log.Log). // use base logger, the manager will add prefixes for watched sources
 		Complete(r)
+}
+
+func HostnamesToStrings(hostnames []gatewayapi_v1alpha2.Hostname) []string {
+	hosts := []string{}
+	for idx := range hostnames {
+		hosts = append(hosts, string(hostnames[idx]))
+	}
+	return hosts
 }

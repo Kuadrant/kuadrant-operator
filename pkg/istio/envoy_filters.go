@@ -18,6 +18,7 @@ const (
 	PostAuthStage
 
 	PatchedLimitadorClusterName = "rate-limit-cluster"
+	PatchedWasmClusterName      = "remote-wasm-cluster"
 )
 
 type EnvoyFilterFactory struct {
@@ -95,6 +96,59 @@ func LimitadorClusterEnvoyPatch() *istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjec
 					Service: common.LimitadorServiceClusterHost,
 				},
 			},
+		},
+		Patch: patch,
+	}
+}
+
+func WasmClusterEnvoyPatch() *istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch {
+	patchUnstructured := map[string]interface{}{
+		"operation": "ADD",
+		"value": map[string]interface{}{
+			"name":            PatchedWasmClusterName,
+			"type":            "STRICT_DNS",
+			"connect_timeout": "1s",
+			"load_assignment": map[string]interface{}{
+				"cluster_name": PatchedWasmClusterName,
+				"endpoints": []map[string]interface{}{
+					{
+						"lb_endpoints": []map[string]interface{}{
+							{
+								"endpoint": map[string]interface{}{
+									"address": map[string]interface{}{
+										"socket_address": map[string]interface{}{
+											"address":    "raw.githubusercontent.com",
+											"port_value": 443,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			"dns_lookup_family": "V4_ONLY",
+			"transport_socket": map[string]interface{}{
+				"name": "envoy.transport_sockets.tls",
+				"typed_config": map[string]interface{}{
+					"@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext",
+					"sni":   "raw.githubusercontent.com",
+				},
+			},
+		},
+	}
+
+	patchRaw, _ := json.Marshal(patchUnstructured)
+
+	patch := &istioapiv1alpha3.EnvoyFilter_Patch{}
+	err := patch.UnmarshalJSON(patchRaw)
+	if err != nil {
+		panic(err)
+	}
+	return &istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch{
+		ApplyTo: istioapiv1alpha3.EnvoyFilter_CLUSTER,
+		Match: &istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch{
+			Context: istioapiv1alpha3.EnvoyFilter_GATEWAY,
 		},
 		Patch: patch,
 	}

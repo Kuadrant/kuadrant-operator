@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kuadrant/limitador-operator/api/v1alpha1"
+	networkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istio "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 
@@ -84,4 +85,15 @@ func alwaysUpdateRateLimit(existingObj, desiredObj client.Object) (bool, error) 
 	existing.Spec = desired.Spec
 	existing.Annotations = desired.Annotations
 	return true, nil
+}
+
+func normalizeStringMatch(sm *networkingv1alpha3.StringMatch) string {
+	if prefix := sm.GetPrefix(); prefix != "" {
+		return prefix + "*"
+	}
+	if exact := sm.GetExact(); exact != "" {
+		return exact
+	}
+	// Regex string match is not supported because authpolicy doesn't as well.
+	return ""
 }

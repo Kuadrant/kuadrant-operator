@@ -22,19 +22,12 @@ spec:
             host: toystore.default.svc.cluster.local
             port:
               number: 80
-    - name: add-toy
+    - name: admin-toy
       match:
         - uri:
             exact: /admin/toy
           method:
             exact: POST
-      route:
-        - destination:
-            host: toystore.default.svc.cluster.local
-            port:
-              number: 80
-    - name: delete-toy
-      match:
         - uri:
             exact: /admin/toy
           method:

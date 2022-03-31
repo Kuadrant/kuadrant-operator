@@ -29,6 +29,9 @@ const (
 	KuadrantNamespace             = "kuadrant-system"
 	KuadrantAuthorizationProvider = "kuadrant-authorization"
 	LimitadorServiceGrpcPort      = 8081
+
+	HTTPRouteKind      = "HTTPRoute"
+	VirtualServiceKind = "VirtualService"
 )
 
 var (

@@ -4,27 +4,26 @@ kind: RateLimitPolicy
 metadata:
   name: toystore
 spec:
-  routes:
-    - name: get-toy
+  rules:
+    - operations:
+        - paths: ["/toy"]
+          methods: ["GET"]
+          hosts: ["*.toystore.com"]
       rateLimits:
         - stage: BOTH
           actions:
             - generic_key:
                 descriptor_key: get-toy
                 descriptor_value: "yes"
-    - name: add-toy
+    - operations:
+        - paths: ["/admin/toy"]
+          methods: ["POST", "DELETE"]
+          hosts: ["*.toystore.com"]
       rateLimits:
-        - stage: BOTH
+        - stage: POSTAUTH
           actions:
             - generic_key:
-                descriptor_key: add-toy
-                descriptor_value: "yes"
-    - name: delete-toy
-      rateLimits:
-        - stage: BOTH
-          actions:
-            - generic_key:
-                descriptor_key: delete-toy
+                descriptor_key: admin
                 descriptor_value: "yes"
   rateLimits:
     - stage: PREAUTH
@@ -32,41 +31,20 @@ spec:
         - generic_key:
             descriptor_key: vhaction
             descriptor_value: "yes"
-        - request_headers:
-            descriptor_key: "path"
-            header_name: ":path"
-        - remote_address: {}
-    - stage: POSTAUTH
-      actions:
-        - metadata:
-            descriptor_key: "user-id"
-            metadata_key:
-              key: "envoy.filters.http.ext_authz"
-              path:
-                - key: "ext_auth_data"
-                - key: "user-id"
+  domain: toystore-app
   limits:
     - conditions: ["get-toy == yes"]
       max_value: 2
-      namespace: preauth
+      namespace: toystore-app
       seconds: 30
       variables: []
-    - conditions:
-      - "add-toy == yes"
-      - "user-id == bob"
+    - conditions: ["admin == yes"]
       max_value: 2
-      namespace: postauth
-      seconds: 30
-      variables: []
-    - conditions:
-      - "add-toy == yes"
-      - "user-id == alice"
-      max_value: 4
-      namespace: postauth
+      namespace: toystore-app
       seconds: 30
       variables: []
     - conditions: ["vhaction == yes"]
-      max_value: 20
-      namespace: preauth
+      max_value: 6
+      namespace: toystore-app
       seconds: 30
       variables: []

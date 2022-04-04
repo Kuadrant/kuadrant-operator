@@ -9,7 +9,6 @@
 * [Overview](#overview)
 * [CustomResourceDefinitions](#customresourcedefinitions)
 * [Getting started](#getting-started)
-* [Openshift Routes](/doc/openshift-routes.md)
 * [Contributing](#contributing)
 * [Licensing](#licensing)
 

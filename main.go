@@ -29,7 +29,6 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
-	routev1 "github.com/openshift/api/route/v1"
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -40,7 +39,6 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/controllers"
 	apimcontrollers "github.com/kuadrant/kuadrant-controller/controllers/apim"
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
 	"github.com/kuadrant/kuadrant-controller/pkg/log"
@@ -63,7 +61,6 @@ func init() {
 	utilruntime.Must(istiosecurityv1beta1.AddToScheme(scheme))
 	utilruntime.Must(limitadorv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(gatewayapiv1alpha2.AddToScheme(scheme))
-	utilruntime.Must(routev1.AddToScheme(scheme))
 
 	// +kubebuilder:scaffold:scheme
 
@@ -155,19 +152,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	routeBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("route"),
-		mgr.GetEventRecorderFor("Route"),
-	)
-
-	if err = (&controllers.RouteReconciler{
-		BaseReconciler: routeBaseReconciler,
-		Scheme:         mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Route")
-		os.Exit(1)
-	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

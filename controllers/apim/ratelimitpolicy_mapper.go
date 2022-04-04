@@ -10,7 +10,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/mappers"
 )
 
 const (
@@ -32,33 +31,33 @@ const (
 func RoutingPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			if rlpName, toRateLimit := e.Object.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]; toRateLimit {
+			if rlpName, toRateLimit := e.Object.GetAnnotations()[common.KuadrantRateLimitPolicyAnnotation]; toRateLimit {
 				SignalAttach(e.Object, rlpName)
 				return true
 			}
-			_, toProtect := e.Object.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
+			_, toProtect := e.Object.GetAnnotations()[common.KuadrantAuthProviderAnnotation]
 			return toProtect
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			_, toRateLimitOld := e.ObjectOld.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]
-			_, toRateLimitNew := e.ObjectNew.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]
+			_, toRateLimitOld := e.ObjectOld.GetAnnotations()[common.KuadrantRateLimitPolicyAnnotation]
+			_, toRateLimitNew := e.ObjectNew.GetAnnotations()[common.KuadrantRateLimitPolicyAnnotation]
 			if toRateLimitNew || toRateLimitOld {
 				SignalUpdate(e.ObjectOld, e.ObjectNew)
 				return true
 			}
 
-			_, toProtectOld := e.ObjectOld.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
-			_, toProtectNew := e.ObjectNew.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
+			_, toProtectOld := e.ObjectOld.GetAnnotations()[common.KuadrantAuthProviderAnnotation]
+			_, toProtectNew := e.ObjectNew.GetAnnotations()[common.KuadrantAuthProviderAnnotation]
 			return toProtectOld || toProtectNew
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			// If the object had the Kuadrant label, we need to handle its deletion
-			if rlpName, toRateLimit := e.Object.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]; toRateLimit {
+			if rlpName, toRateLimit := e.Object.GetAnnotations()[common.KuadrantRateLimitPolicyAnnotation]; toRateLimit {
 				SignalDetach(e.Object, rlpName)
 				return true
 			}
 
-			_, toProtect := e.Object.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
+			_, toProtect := e.Object.GetAnnotations()[common.KuadrantAuthProviderAnnotation]
 			return toProtect
 		},
 	}
@@ -79,8 +78,8 @@ func SignalDetach(obj client.Object, rlpToDetach string) {
 }
 
 func SignalUpdate(oldObj, newObj client.Object) {
-	oldRlpName, toRateLimitOld := oldObj.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]
-	newRlpName, toRateLimitNew := newObj.GetAnnotations()[mappers.KuadrantRateLimitPolicyAnnotation]
+	oldRlpName, toRateLimitOld := oldObj.GetAnnotations()[common.KuadrantRateLimitPolicyAnnotation]
+	newRlpName, toRateLimitNew := newObj.GetAnnotations()[common.KuadrantRateLimitPolicyAnnotation]
 
 	// case when rlp name is added (same as create event)
 	if !toRateLimitOld && toRateLimitNew {

@@ -18,7 +18,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
 	"github.com/kuadrant/kuadrant-controller/pkg/log"
-	"github.com/kuadrant/kuadrant-controller/pkg/mappers"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
 
@@ -57,7 +56,7 @@ func (r *VirtualServiceReconciler) Reconcile(eventCtx context.Context, req ctrl.
 	}
 	// TODO(rahulanand16nov): handle VirtualService deletion for AuthPolicy
 	// check if this virtualservice is to be protected or not.
-	_, present := virtualService.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
+	_, present := virtualService.GetAnnotations()[common.KuadrantAuthProviderAnnotation]
 	if !present {
 		for _, gateway := range virtualService.Spec.Gateways {
 			gwKey := common.NamespacedNameToObjectKey(gateway, virtualService.Namespace)
@@ -87,7 +86,7 @@ func (r *VirtualServiceReconciler) reconcileAuthPolicy(ctx context.Context, logg
 	logger.Info("Reconciling AuthorizationPolicy")
 
 	// annotation presence is already checked.
-	providerName := vs.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
+	providerName := vs.GetAnnotations()[common.KuadrantAuthProviderAnnotation]
 
 	// TODO(rahulanand16nov): update following to match HTTPRoute controller
 	// fill out the rules

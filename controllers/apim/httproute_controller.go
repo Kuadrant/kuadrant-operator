@@ -15,8 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	"github.com/kuadrant/kuadrant-controller/pkg/common"
 	"github.com/kuadrant/kuadrant-controller/pkg/log"
-	"github.com/kuadrant/kuadrant-controller/pkg/mappers"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
 
@@ -55,7 +55,7 @@ func (r *HTTPRouteReconciler) Reconcile(eventCtx context.Context, req ctrl.Reque
 
 	// TODO(rahulanand16nov): handle HTTPRoute deletion for AuthPolicy
 	// check if this httproute has to be protected or not.
-	_, present := httproute.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
+	_, present := httproute.GetAnnotations()[common.KuadrantAuthProviderAnnotation]
 	if !present {
 		for _, parentRef := range httproute.Spec.ParentRefs {
 			gwNamespace := httproute.Namespace // consider gateway local if namespace is not given
@@ -100,7 +100,7 @@ func (r *HTTPRouteReconciler) reconcileAuthPolicy(ctx context.Context, logger lo
 	logger.Info("Reconciling AuthorizationPolicy")
 
 	// annotation presence is already checked.
-	providerName := hr.GetAnnotations()[mappers.KuadrantAuthProviderAnnotation]
+	providerName := hr.GetAnnotations()[common.KuadrantAuthProviderAnnotation]
 
 	// pre-convert hostnames to string slice
 	hosts := HostnamesToStrings(hr.Spec.Hostnames)

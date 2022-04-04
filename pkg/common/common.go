@@ -32,6 +32,10 @@ const (
 
 	HTTPRouteKind      = "HTTPRoute"
 	VirtualServiceKind = "VirtualService"
+
+	KuadrantManagedLabel              = "kuadrant.io/managed"
+	KuadrantRateLimitPolicyAnnotation = "kuadrant.io/ratelimitpolicy"
+	KuadrantAuthProviderAnnotation    = "kuadrant.io/auth-provider"
 )
 
 var (

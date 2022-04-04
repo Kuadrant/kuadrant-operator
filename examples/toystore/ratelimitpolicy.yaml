@@ -8,7 +8,6 @@ spec:
     - operations:
         - paths: ["/toy"]
           methods: ["GET"]
-          hosts: ["*.toystore.com"]
       rateLimits:
         - stage: BOTH
           actions:
@@ -18,7 +17,6 @@ spec:
     - operations:
         - paths: ["/admin/toy"]
           methods: ["POST", "DELETE"]
-          hosts: ["*.toystore.com"]
       rateLimits:
         - stage: POSTAUTH
           actions:

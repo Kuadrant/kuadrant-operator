@@ -380,7 +380,7 @@ func updateEnvoyFilter(ctx context.Context, existingObj *istio.EnvoyFilter, rlp 
 											"cluster": kuadrantistioutils.PatchedWasmClusterName,
 											"timeout": "10s",
 										},
-										"sha256": "335a05fbb0fcd4e68856c9c48aac2d8f4d07d7cf3f2f49a8be35c69b384daf9d",
+										"sha256": "de54c4d2ce405425515e14e1cc45285acf632c490de1f5f55c00e2acb832c89e",
 										"retry_policy": map[string]interface{}{
 											"num_retries": 10,
 										},

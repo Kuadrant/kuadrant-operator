@@ -1,9 +1,0 @@
-apiVersion: apim.kuadrant.io/v1alpha1
-kind: API
-metadata:
-  name: api-sample
-  namespace: kuadrant-system
-spec:
-  info:
-    version: "1.0"
-    title: toystore-api

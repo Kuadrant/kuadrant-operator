@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
 - bases/apim.kuadrant.io_ratelimitpolicies.yaml
+- bases/apim.kuadrant.io_authpolicies.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:

@@ -1,0 +1,18 @@
+---
+apiVersion: apim.kuadrant.io/v1alpha1
+kind: AuthPolicy
+metadata:
+  name: toystore
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
+  rules:
+  - to:
+    - operation:
+        methods: ["GET"]
+        paths: ["/toy"]
+  action: CUSTOM
+  provider:
+    name: kuadrant-authorization

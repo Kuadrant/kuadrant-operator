@@ -124,17 +124,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	virtualServiceBaseReconciler := reconcilers.NewBaseReconciler(
+	authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("virtualservice"),
-		mgr.GetEventRecorderFor("VirtualService"),
+		log.Log.WithName("authpolicy"),
+		mgr.GetEventRecorderFor("AuthPolicy"),
 	)
 
-	if err = (&apimcontrollers.VirtualServiceReconciler{
-		BaseReconciler: virtualServiceBaseReconciler,
+	if err = (&apimcontrollers.AuthPolicyReconciler{
+		BaseReconciler: authPolicyBaseReconciler,
 		Scheme:         mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "VirtualService")
+		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicy")
 		os.Exit(1)
 	}
 

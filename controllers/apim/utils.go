@@ -38,8 +38,8 @@ func limitadorRatelimitsName(objKey client.ObjectKey, idx int) string {
 }
 
 // getAuthPolicyName generates the name of an AuthorizationPolicy using VirtualService info.
-func getAuthPolicyName(gwName, networkingPrefix, networkingName string) string {
-	return fmt.Sprintf("on-%s-using-%s-%s", gwName, networkingPrefix, networkingName)
+func getAuthPolicyName(gwName, networkingName string) string {
+	return fmt.Sprintf("on-%s-using-hr-%s", gwName, networkingName)
 }
 
 func alwaysUpdateEnvoyPatches(existingObj, desiredObj client.Object) (bool, error) {

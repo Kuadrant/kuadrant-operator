@@ -34,8 +34,9 @@ const (
 	VirtualServiceKind = "VirtualService"
 
 	KuadrantManagedLabel              = "kuadrant.io/managed"
-	KuadrantRateLimitPolicyAnnotation = "kuadrant.io/ratelimitpolicy"
 	KuadrantAuthProviderAnnotation    = "kuadrant.io/auth-provider"
+	KuadrantRateLimitPolicyAnnotation = "kuadrant.io/ratelimitpolicy"
+	RateLimitPolicyBackRefAnnotation  = "kuadrant.io/ratelimitpolicy-backref"
 )
 
 var (

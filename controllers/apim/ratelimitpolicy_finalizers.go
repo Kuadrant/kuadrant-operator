@@ -2,154 +2,128 @@ package apim
 
 import (
 	"context"
-	"strings"
+	"encoding/json"
+	"fmt"
 
 	"github.com/go-logr/logr"
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	istio "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	protobuftypes "github.com/gogo/protobuf/types"
+	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
+	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	kuadrantistioutils "github.com/kuadrant/kuadrant-controller/pkg/istio"
 )
 
 const (
-	patchesFinalizer = "kuadrant.io/ratelimitpatches"
-
-	ParentRefsSeparator = ","
-
-	EnvoyFilterParentRefsAnnotation = "kuadrant.io/parentRefs"
+	// RateLimitPolicy finalizer
+	rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
 )
 
-// finalizeEnvoyFilters makes sure orphan EnvoyFilter resources are not left when deleting the owner RateLimitPolicy.
-func (r *RateLimitPolicyReconciler) finalizeEnvoyFilters(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+// finalizeWASMEnvoyFilters removes the configuration of this RLP from each gateway's EnvoyFilter.
+func (r *RateLimitPolicyReconciler) finalizeWASMEnvoyFilters(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
 	logger := logr.FromContext(ctx)
-	logger.Info("Removing/Updating EnvoyFilter resources")
-	ownerRlp := client.ObjectKeyFromObject(rlp).String()
 
-	// TODO(rahulanand16nov): do the same for HTTPRoute
-	for idx := range rlp.Status.VirtualServices {
-		vs := &rlp.Status.VirtualServices[idx]
-		vsKey := client.ObjectKey{Namespace: rlp.Namespace, Name: vs.Name}
-		for _, gw := range vs.Gateways {
-			gwKey := common.NamespacedNameToObjectKey(gw, vsKey.Namespace)
-
-			filtersPatchkey := client.ObjectKey{
-				Namespace: gwKey.Namespace,
-				Name:      rlFiltersPatchName(gwKey.Name),
-			}
-			filtersPatch := &istio.EnvoyFilter{}
-			if err := r.Client().Get(ctx, filtersPatchkey, filtersPatch); err != nil {
-				if !apierrors.IsNotFound(err) {
-					logger.Error(err, "failed to get ratelimits filters patch")
-					return err
-				}
-				logger.V(1).Info("filters patch not found", "object key", filtersPatchkey.String())
-			}
-			// TODO(eastizle): if the patch was not found, the patch name is empty, returning error
-			// TODO(eastizle): The ownerRef added was VS name/NS. Now removing with RLP name/NS
-			if err := r.removeParentRefEntry(ctx, filtersPatch, ownerRlp); err != nil {
-				logger.Error(err, "failed to remove parentRef on filters patch")
-				return err
-			}
-
-			logger.Info("successfully removed parentRef entry on the filters patch")
-
-			ratelimitsPatchKey := client.ObjectKey{
-				Namespace: gwKey.Namespace,
-				Name:      ratelimitsPatchName(gwKey.Name, vsKey),
-			}
-			ratelimitsPatch := &istio.EnvoyFilter{}
-			if err := r.Client().Get(ctx, ratelimitsPatchKey, ratelimitsPatch); err != nil {
-				if !apierrors.IsNotFound(err) {
-					logger.Error(err, "failed to get ratelimits patch")
-					return err
-				}
-				logger.V(1).Info("ratelimits patch not found", "object key", ratelimitsPatchKey.String())
-			}
-			// TODO(eastizle): if the patch was not found, the patch name is empty, returning error
-			// TODO(eastizle): ratelimitspatch require parentRef? They are unique per VS
-			if err := r.removeParentRefEntry(ctx, ratelimitsPatch, ownerRlp); err != nil {
-				logger.Error(err, "failed to remove remove parentRef entry on ratelimits patch")
-				return err
-			}
-			logger.Info("successfully removed parentRef tag on ratelimits patch")
+	httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("targetRef HTTPRoute not found")
+			return nil
 		}
-	}
-	return nil
-}
-
-func (r *RateLimitPolicyReconciler) removeParentRefEntry(ctx context.Context, patch *istio.EnvoyFilter, owner string) error {
-	logger := logr.FromContext(ctx)
-	logger.Info("Removing parentRef entry from EnvoyFilter", "EnvoyFilter", patch.Name)
-
-	// find the annotation
-	ownerRlpsVal, present := patch.Annotations[EnvoyFilterParentRefsAnnotation]
-	if !present {
-		logger.V(1).Info("Deleting the patch since parentRef annotation was not present to avoid orphans")
-		// if it's not deleted then the patch will remain as an orphan once all the rlps are removed.
-		if err := r.Client().Delete(ctx, patch); err != nil {
-			logger.Error(err, "failed to delete the patch")
-			return err
-		}
-		return nil
-	}
-
-	// split into array of RateLimitPolicy names
-	ownerRlps := strings.Split(ownerRlpsVal, ParentRefsSeparator)
-
-	// remove the target owner
-	finalOwnerRlps := []string{}
-	for idx := range ownerRlps {
-		if ownerRlps[idx] == owner {
-			continue
-		}
-		finalOwnerRlps = append(finalOwnerRlps, ownerRlps[idx])
-	}
-
-	if len(finalOwnerRlps) == 0 {
-		logger.V(1).Info("Deleting filters patch because 0 parentRef entries found on it")
-		if err := r.Client().Delete(ctx, patch); err != nil {
-			logger.Error(err, "failed to delete the patch")
-			return err
-		}
-	} else {
-		finalOwnerRlpsVal := strings.Join(finalOwnerRlps, ParentRefsSeparator)
-		patch.Annotations[EnvoyFilterParentRefsAnnotation] = finalOwnerRlpsVal
-		if err := r.Client().Update(ctx, patch); err != nil {
-			logger.Error(err, "failed to update the patch")
-			return err
-		}
-	}
-	return nil
-}
-
-func (r *RateLimitPolicyReconciler) addParentRefEntry(ctx context.Context, patch *istio.EnvoyFilter, owner string) error {
-	logger := logr.FromContext(ctx)
-	logger.Info("Adding parentRef entry to EnvoyFilter", "EnvoyFilter", patch.Name)
-
-	// make sure annotation map is initialized
-	patchOwnerList := []string{}
-	if patch.Annotations == nil {
-		patch.Annotations = make(map[string]string)
-	}
-
-	if ogOwnerRlps, present := patch.Annotations[EnvoyFilterParentRefsAnnotation]; present {
-		patchOwnerList = strings.Split(ogOwnerRlps, ParentRefsSeparator)
-	}
-
-	// add the owner name if not present already
-	if !common.Contains(patchOwnerList, owner) {
-		patchOwnerList = append(patchOwnerList, owner)
-	}
-	finalOwnerVal := strings.Join(patchOwnerList, ParentRefsSeparator)
-
-	patch.Annotations[EnvoyFilterParentRefsAnnotation] = finalOwnerVal
-	if err := r.ReconcileResource(ctx, &istio.EnvoyFilter{}, patch, alwaysUpdateEnvoyPatches); err != nil {
-		logger.Error(err, "failed to create/update EnvoyFilter that patches-in ratelimit filters")
 		return err
 	}
 
-	logger.Info("Successfully added parentRef entry to the EnvoyFilter")
+	for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
+		gwKey := client.ObjectKey{Name: string(parentRef.Name), Namespace: httpRoute.Namespace}
+		if parentRef.Namespace != nil {
+			gwKey.Namespace = string(*parentRef.Namespace)
+		}
+		gateway := &gatewayapiv1alpha2.Gateway{}
+		err := r.Client().Get(ctx, gwKey, gateway)
+		logger.V(1).Info("finalizeWASMEnvoyFilters: get Gateway", "gateway", gwKey, "err", err)
+		if apierrors.IsNotFound(err) {
+			logger.Info("parentRef Gateway not found", "parentRef", gwKey)
+			continue
+		}
+		if err != nil {
+			return err
+		}
+
+		desiredEF, err := kuadrantistioutils.WASMEnvoyFilter(rlp, gwKey, gateway.GetLabels(), httpRoute.Spec.Hostnames)
+		if err != nil {
+			return err
+		}
+
+		envoyFilter := &istionetworkingv1alpha3.EnvoyFilter{}
+		err = r.Client().Get(ctx, client.ObjectKeyFromObject(desiredEF), envoyFilter)
+		logger.V(1).Info("finalizeWASMEnvoyFilters: get EnvoyFilter", "envoyFilter", client.ObjectKeyFromObject(desiredEF), "err", err)
+		if apierrors.IsNotFound(err) {
+			logger.Info("finalizeWASMEnvoyFilters: envoyfilter not found", "envoyfilter", client.ObjectKeyFromObject(desiredEF))
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		err = r.finalizeSingleWASMEnvoyFilter(ctx, rlp, envoyFilter)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// finalizeSingleWASMEnvoyFilter removes the configuration of this RLP
+// If the envoyfilter ends up with empty conf, the resource will be removed.
+func (r *RateLimitPolicyReconciler) finalizeSingleWASMEnvoyFilter(
+	ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy, envoyFilter *istionetworkingv1alpha3.EnvoyFilter,
+) error {
+	// first patch is PRE
+	// second patch is POST
+	configEmpty := []bool{false, false}
+	updateObject := false
+	for idx := 0; idx < 2; idx++ {
+		patch := envoyFilter.Spec.ConfigPatches[idx]
+		pluginConfigFields := patch.Patch.Value.Fields["typed_config"].
+			GetStructValue().Fields["value"].GetStructValue().Fields["config"].GetStructValue().
+			Fields["configuration"].GetStructValue().Fields
+		pluginConfigStr := pluginConfigFields["value"].GetStringValue()
+		pluginConfig := &kuadrantistioutils.PluginConfig{}
+		if err := json.Unmarshal([]byte(pluginConfigStr), pluginConfig); err != nil {
+			return fmt.Errorf("finalizeSingleWASMEnvoyFilter: failed to unmarshal plugin config: %w", err)
+		}
+
+		pluginKey := client.ObjectKeyFromObject(rlp).String()
+		if _, ok := pluginConfig.PluginPolicies[pluginKey]; ok {
+			delete(pluginConfig.PluginPolicies, pluginKey)
+			updateObject = true
+			newPluginConfigSerialized, err := json.Marshal(pluginConfig)
+			if err != nil {
+				return fmt.Errorf("finalizeSingleWASMEnvoyFilter: failed to marshall new plugin config into json: %w", err)
+			}
+			// Update existing envoyfilter patch value
+			pluginConfigFields["value"] = &protobuftypes.Value{
+				Kind: &protobuftypes.Value_StringValue{
+					StringValue: string(newPluginConfigSerialized),
+				},
+			}
+		}
+		configEmpty[idx] = len(pluginConfig.PluginPolicies) == 0
+	}
+
+	allConfigEmpty := true
+	for idx := range configEmpty {
+		allConfigEmpty = allConfigEmpty && configEmpty[idx]
+	}
+
+	if allConfigEmpty {
+		return r.DeleteResource(ctx, envoyFilter)
+	} else if updateObject {
+		return r.UpdateResource(ctx, envoyFilter)
+	}
+
 	return nil
 }
 
@@ -175,5 +149,34 @@ func (r *RateLimitPolicyReconciler) deleteRateLimits(ctx context.Context, rlp *a
 		}
 	}
 
+	return nil
+}
+
+func (r *RateLimitPolicyReconciler) deleteNetworkResourceBackReference(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+	logger := logr.FromContext(ctx)
+	httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("targetRef HTTPRoute not found")
+			return nil
+		}
+		return err
+	}
+
+	// Reconcile the back reference:
+	httpRouteAnnotations := httpRoute.GetAnnotations()
+	if httpRouteAnnotations == nil {
+		httpRouteAnnotations = map[string]string{}
+	}
+
+	if _, ok := httpRouteAnnotations[common.RateLimitPolicyBackRefAnnotation]; ok {
+		delete(httpRouteAnnotations, common.RateLimitPolicyBackRefAnnotation)
+		httpRoute.SetAnnotations(httpRouteAnnotations)
+		err := r.UpdateResource(ctx, httpRoute)
+		logger.V(1).Info("deleteNetworkResourceBackReference: update HTTPRoute", "httpRoute", client.ObjectKeyFromObject(httpRoute), "err", err)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }

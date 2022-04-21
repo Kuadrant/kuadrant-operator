@@ -18,20 +18,18 @@ package apim
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"regexp"
 
 	"github.com/go-logr/logr"
-	"github.com/gogo/protobuf/types"
 	"github.com/kuadrant/limitador-operator/api/v1alpha1"
-	networkingv1alpha3 "istio.io/api/networking/v1alpha3"
-	istio "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
@@ -40,27 +38,10 @@ import (
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 )
 
-const (
-	EnvoysHTTPPortNumber            = 8080
-	EnvoysHTTPConnectionManagerName = "envoy.filters.network.http_connection_manager"
-
-	VSAnnotationRateLimitPolicy = "kuadrant.io/ratelimitpolicy"
-)
-
 // RateLimitPolicyReconciler reconciles a RateLimitPolicy object
 type RateLimitPolicyReconciler struct {
 	*reconcilers.BaseReconciler
 	Scheme *runtime.Scheme
-}
-
-// SignalingNetwork contains the relevant information about the signaling routing resource.
-type SignalingNetwork struct {
-	// Routing resource sending the signal
-	NetworkName string
-	// Routing resource kind (VirtualService/HTTPRoute)
-	NetworkKind string
-	// Gateways attached to the routing resource
-	Gateways []string
 }
 
 //+kubebuilder:rbac:groups=apim.kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -84,8 +65,8 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	logger.Info("Reconciling RateLimitPolicy")
 	ctx := logr.NewContext(eventCtx, logger)
 
-	var rlp apimv1alpha1.RateLimitPolicy
-	if err := r.Client().Get(ctx, req.NamespacedName, &rlp); err != nil {
+	rlp := &apimv1alpha1.RateLimitPolicy{}
+	if err := r.Client().Get(ctx, req.NamespacedName, rlp); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("no RateLimitPolicy found")
 			return ctrl.Result{}, nil
@@ -94,18 +75,22 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 		return ctrl.Result{}, err
 	}
 
-	if rlp.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(&rlp, patchesFinalizer) {
+	if rlp.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(rlp, rateLimitPolicyFinalizer) {
 		logger.V(1).Info("Handling removal of ratelimitpolicy object")
-		if err := r.finalizeEnvoyFilters(ctx, &rlp); err != nil {
-			logger.Error(err, "failed to remove ownerRlp entry from filters patch")
+		if err := r.finalizeWASMEnvoyFilters(ctx, rlp); err != nil {
 			return ctrl.Result{}, err
 		}
-		if err := r.deleteRateLimits(ctx, &rlp); err != nil {
-			logger.Error(err, "failed to delete RateLimt objects")
+		if err := r.deleteRateLimits(ctx, rlp); err != nil {
 			return ctrl.Result{}, err
 		}
-		controllerutil.RemoveFinalizer(&rlp, patchesFinalizer)
-		if err := r.UpdateResource(ctx, &rlp); client.IgnoreNotFound(err) != nil {
+
+		if err := r.deleteNetworkResourceBackReference(ctx, rlp); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		logger.Info("removing finalizer")
+		controllerutil.RemoveFinalizer(rlp, rateLimitPolicyFinalizer)
+		if err := r.UpdateResource(ctx, rlp); client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -117,393 +102,62 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 		return ctrl.Result{}, nil
 	}
 
-	if !controllerutil.ContainsFinalizer(&rlp, patchesFinalizer) {
-		controllerutil.AddFinalizer(&rlp, patchesFinalizer)
-		if err := r.UpdateResource(ctx, &rlp); client.IgnoreNotFound(err) != nil {
+	if !controllerutil.ContainsFinalizer(rlp, rateLimitPolicyFinalizer) {
+		controllerutil.AddFinalizer(rlp, rateLimitPolicyFinalizer)
+		if err := r.UpdateResource(ctx, rlp); client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{Requeue: true}, err
 		}
 	}
 
-	if err := r.reconcileLimits(ctx, &rlp); err != nil {
-		return ctrl.Result{}, err
+	specResult, specErr := r.reconcileSpec(ctx, rlp)
+	if specErr == nil && specResult.Requeue {
+		logger.V(1).Info("Reconciling spec not finished. Requeueing.")
+		return specResult, nil
 	}
 
-	// Operation specific annotations must be removed if they are present.
-	updateRequired := false
-	var delNetwork *SignalingNetwork
-	var addNetwork *SignalingNetwork
+	statusResult, statusErr := r.reconcileStatus(ctx, rlp, specErr)
 
-	// check for delete operation from virtualservice
-	if signalingVSName, present := rlp.Annotations[KuadrantDeleteVSAnnotation]; present {
-		delNetwork = &SignalingNetwork{
-			NetworkName: signalingVSName,
-			NetworkKind: common.VirtualServiceKind,
-			Gateways:    rlp.Status.GetGateways(common.VirtualServiceKind, signalingVSName),
-		}
+	if specErr != nil {
+		return ctrl.Result{}, specErr
 	}
 
-	// check for delete operation for httproute
-	if signalingHRName, present := rlp.Annotations[KuadrantDeleteHRAnnotation]; present {
-		delNetwork = &SignalingNetwork{
-			NetworkName: signalingHRName,
-			NetworkKind: common.HTTPRouteKind,
-			Gateways:    rlp.Status.GetGateways(common.HTTPRouteKind, signalingHRName),
-		}
+	if statusErr != nil {
+		return ctrl.Result{}, statusErr
 	}
 
-	if delNetwork != nil {
-		networkObjKey := client.ObjectKey{Namespace: rlp.Namespace, Name: delNetwork.NetworkName}
-		if err := r.detachFromNetwork(ctx, delNetwork.Gateways, networkObjKey.String(), &rlp); err != nil {
-			logger.Error(err, "failed to detach RateLimitPolicy from routing resource")
-			return ctrl.Result{}, err
-		}
-
-		if err := r.detachNetworkFromStatus(ctx, delNetwork, &rlp); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		delete(rlp.Annotations, KuadrantDeleteVSAnnotation)
-		delete(rlp.Annotations, KuadrantDeleteHRAnnotation)
-		updateRequired = true
+	if statusResult.Requeue {
+		logger.V(1).Info("Reconciling status not finished. Requeueing.")
+		return statusResult, nil
 	}
 
-	// check for add operation for virtualservice
-	if vsName, present := rlp.Annotations[KuadrantAddVSAnnotation]; present {
-		vsKey := client.ObjectKey{
-			Namespace: rlp.Namespace,
-			Name:      vsName,
-		}
-
-		var vs istio.VirtualService
-		if err := r.Client().Get(ctx, vsKey, &vs); err != nil {
-			if apierrors.IsNotFound(err) {
-				logger.Info("no VirtualService found", "virtualservice", vsKey.String())
-				return ctrl.Result{}, nil
-			}
-			logger.Error(err, "failed to get VirutalService")
-			return ctrl.Result{}, err
-		}
-
-		fetchOperationsFromVS(&vs.Spec, &rlp.Spec)
-
-		addNetwork = &SignalingNetwork{
-			Gateways:    vs.Spec.Gateways,
-			NetworkName: vsName,
-			NetworkKind: common.VirtualServiceKind,
-		}
-	}
-
-	// check for add operation for httproute
-	if hrName, present := rlp.Annotations[KuadrantAddHRAnnotation]; present {
-		hrKey := client.ObjectKey{
-			Namespace: rlp.Namespace,
-			Name:      hrName,
-		}
-
-		var hr gatewayapiv1alpha2.HTTPRoute
-		if err := r.Client().Get(ctx, hrKey, &hr); err != nil {
-			if apierrors.IsNotFound(err) {
-				logger.Info("no HTTPRoute found", "httproute", hrKey.String())
-				return ctrl.Result{}, nil
-			}
-			logger.Error(err, "failed to get HTTPRoute")
-			return ctrl.Result{}, err
-		}
-
-		// For Kuadrant, gateway obj will always be present in the system namespace
-		var gws []string
-		for _, parentRef := range hr.Spec.CommonRouteSpec.ParentRefs { //fix
-			gws = append(gws, fmt.Sprintf("%s/%s", common.KuadrantNamespace, parentRef.Name))
-		}
-		addNetwork = &SignalingNetwork{
-			Gateways:    gws,
-			NetworkName: hrName,
-			NetworkKind: common.HTTPRouteKind,
-		}
-	}
-
-	if addNetwork != nil {
-		networkObjKey := client.ObjectKey{Namespace: rlp.Namespace, Name: addNetwork.NetworkName}
-		if err := r.attachToNetwork(ctx, addNetwork.Gateways, networkObjKey.String(), &rlp); err != nil {
-			logger.Error(err, "failed to attach RateLimitPolicy to routing resource")
-			return ctrl.Result{}, err
-		}
-
-		if err := r.attachNetworkToStatus(ctx, addNetwork, &rlp); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		delete(rlp.Annotations, KuadrantAddVSAnnotation)
-		delete(rlp.Annotations, KuadrantAddHRAnnotation)
-		updateRequired = true
-	}
-
-	if updateRequired {
-		if err := r.Client().Update(ctx, &rlp); err != nil {
-			logger.Error(err, "failed to remove operation specific annotations from RateLimitPolicy")
-			return ctrl.Result{}, err
-		}
-		logger.Info("successfully removed operation specific annotations from RateLimitPolicy")
-	}
-
-	// TODO(rahulanand16nov): do the same as above for HTTPRoute
 	logger.Info("successfully reconciled RateLimitPolicy")
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyReconciler) detachFromNetwork(ctx context.Context, gateways []string, owner string, rlp *apimv1alpha1.RateLimitPolicy) error {
-	logger := logr.FromContext(ctx)
-	logger.Info("Detaching RateLimitPolicy from a network")
-
-	for _, gw := range gateways {
-		gwKey := common.NamespacedNameToObjectKey(gw, rlp.Namespace)
-
-		// fetch the filters patch
-		wasmEnvoyFilterKey := client.ObjectKey{Namespace: gwKey.Namespace, Name: rlFiltersPatchName(gwKey.Name)}
-		wasmEnvoyFilter := &istio.EnvoyFilter{}
-		if err := r.Client().Get(ctx, wasmEnvoyFilterKey, wasmEnvoyFilter); err != nil {
-			if !apierrors.IsNotFound(err) {
-				logger.Error(err, "failed to get ratelimit filters patch")
-				return err
-			}
-			return nil
-		}
-
-		// remove the parentRef entry on filters patch
-		if err := r.removeParentRefEntry(ctx, wasmEnvoyFilter, owner); err != nil {
-			logger.Error(err, "failed to remove parentRef entry on the ratelimit filters patch")
-			return err
-		}
-		logger.Info("successfully deleted/updated ratelimit filters patch")
+func (r *RateLimitPolicyReconciler) reconcileSpec(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) (ctrl.Result, error) {
+	err := rlp.Validate()
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
-	logger.Info("successfully detached RateLimitPolicy from specified gateways and hosts")
-	return nil
-}
-
-func (r *RateLimitPolicyReconciler) attachToNetwork(ctx context.Context, gateways []string, owner string, rlp *apimv1alpha1.RateLimitPolicy) error {
-	logger := logr.FromContext(ctx)
-	logger.Info("Attaching RateLimitPolicy to a network")
-
-	for _, gw := range gateways {
-		gwKey := common.NamespacedNameToObjectKey(gw, rlp.Namespace)
-		gwLabels := gatewayLabels(ctx, r.Client(), gwKey)
-
-		// create/update ratelimit filters patch
-		// fetch already existing filters patch or create a new one
-		wasmEnvoyFilterKey := client.ObjectKey{Namespace: gwKey.Namespace, Name: rlFiltersPatchName(gwKey.Name)}
-		wasmEnvoyFilter := &istio.EnvoyFilter{}
-		if err := r.Client().Get(ctx, wasmEnvoyFilterKey, wasmEnvoyFilter); err != nil {
-			if !apierrors.IsNotFound(err) {
-				logger.Error(err, "failed to get ratelimit filters patch")
-				return err
-			}
-		}
-
-		if err := updateEnvoyFilter(ctx, wasmEnvoyFilter, rlp, gwKey, gwLabels); err != nil {
-			logger.Error(err, "failed to create/update EnvoyFilter containing wasm filters")
-			return err
-		}
-
-		if err := r.addParentRefEntry(ctx, wasmEnvoyFilter, owner); err != nil {
-			logger.Error(err, "failed to add ownerRLP entry to the ratelimit filters patch")
-			return err
-		}
-
-		logger.Info("successfully created/updated ratelimit filters patch", "gateway", gwKey.String())
-	}
-	logger.Info("successfully attached RateLimitPolicy to specified gateways and hosts")
-	return nil
-}
-
-// updateEnvoyFilter returns an EnvoyFilter resource that patches in order:
-// - Pre-Authorization ratelimit wasm filter
-// - Post-Authorization ratelimit wasm filter
-// - Limitador cluster (tmp-fix)
-// - Wasm cluster
-func updateEnvoyFilter(ctx context.Context, existingObj *istio.EnvoyFilter, rlp *apimv1alpha1.RateLimitPolicy, gwKey client.ObjectKey, gwLabels map[string]string) error {
-	logger := logr.FromContext(ctx)
-
-	rlpKey := client.ObjectKeyFromObject(rlp)
-
-	preAuthPluginPolicy := kuadrantistioutils.PluginPolicyFromRateLimitPolicy(rlp, apimv1alpha1.RateLimitStagePREAUTH)
-	postAuthPluginPolicy := kuadrantistioutils.PluginPolicyFromRateLimitPolicy(rlp, apimv1alpha1.RateLimitStagePOSTAUTH)
-
-	finalPatches := []*networkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch{}
-
-	// first time creating the EnvoyFilter i.e. wasm filters.
-	// newly initialised object should have name field as empty string.
-	if len(existingObj.Name) == 0 {
-		logger.Info("Initialising EnvoyFilter")
-
-		preAuthPluginConfig := kuadrantistioutils.PluginConfig{
-			FailureModeDeny: true,
-			PluginPolicies: map[string]kuadrantistioutils.PluginPolicy{
-				rlpKey.String(): *preAuthPluginPolicy,
-			},
-		}
-		preAuthJSON, err := json.Marshal(preAuthPluginConfig)
-		if err != nil {
-			return fmt.Errorf("failed to marshall preauth plugin config into json")
-		}
-
-		postAuthPluginConfig := kuadrantistioutils.PluginConfig{
-			FailureModeDeny: true,
-			PluginPolicies: map[string]kuadrantistioutils.PluginPolicy{
-				rlpKey.String(): *postAuthPluginPolicy,
-			},
-		}
-		postAuthJSON, err := json.Marshal(postAuthPluginConfig)
-		if err != nil {
-			return fmt.Errorf("failed to marshall preauth plugin config into json")
-		}
-
-		patchUnstructured := map[string]interface{}{
-			"operation": "INSERT_FIRST", // preauth should be the first filter in the chain
-			"value": map[string]interface{}{
-				"name": "envoy.filters.http.preauth.wasm",
-				"typed_config": map[string]interface{}{
-					"@type":   "type.googleapis.com/udpa.type.v1.TypedStruct",
-					"typeUrl": "type.googleapis.com/envoy.extensions.filters.http.wasm.v3.Wasm",
-					"value": map[string]interface{}{
-						"config": map[string]interface{}{
-							"configuration": map[string]interface{}{
-								"@type": "type.googleapis.com/google.protobuf.StringValue",
-								"value": string(preAuthJSON),
-							},
-							"name": "preauth-wasm",
-							"vm_config": map[string]interface{}{
-								"code": map[string]interface{}{
-									"remote": map[string]interface{}{
-										"http_uri": map[string]interface{}{
-											"uri":     "https://raw.githubusercontent.com/rahulanand16nov/wasm-shim/new-api/deploy/wasm_shim.wasm",
-											"cluster": kuadrantistioutils.PatchedWasmClusterName,
-											"timeout": "10s",
-										},
-										"sha256": "de54c4d2ce405425515e14e1cc45285acf632c490de1f5f55c00e2acb832c89e",
-										"retry_policy": map[string]interface{}{
-											"num_retries": 10,
-										},
-									},
-								},
-								"allow_precompiled": true,
-								"runtime":           "envoy.wasm.runtime.v8",
-							},
-						},
-					},
-				},
-			},
-		}
-
-		patchRaw, _ := json.Marshal(patchUnstructured)
-		prePatch := networkingv1alpha3.EnvoyFilter_Patch{}
-		if err := prePatch.UnmarshalJSON(patchRaw); err != nil {
-			return err
-		}
-
-		postPatch := prePatch.DeepCopy()
-
-		// update filter name
-		postPatch.Value.Fields["name"] = &types.Value{
-			Kind: &types.Value_StringValue{
-				StringValue: "envoy.filters.http.postauth.wasm",
-			},
-		}
-
-		// update operation for postauth filter
-		postPatch.Operation = networkingv1alpha3.EnvoyFilter_Patch_INSERT_BEFORE
-
-		pluginConfig := postPatch.Value.Fields["typed_config"].GetStructValue().Fields["value"].GetStructValue().Fields["config"]
-
-		// update plugin config for postauth filter
-		pluginConfig.GetStructValue().Fields["configuration"].GetStructValue().Fields["value"] = &types.Value{
-			Kind: &types.Value_StringValue{
-				StringValue: string(postAuthJSON),
-			},
-		}
-
-		// update plugin name
-		pluginConfig.GetStructValue().Fields["name"] = &types.Value{
-			Kind: &types.Value_StringValue{
-				StringValue: "postauth-wasm",
-			},
-		}
-
-		preAuthFilterPatch := &networkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch{
-			ApplyTo: networkingv1alpha3.EnvoyFilter_HTTP_FILTER,
-			Match: &networkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch{
-				Context: networkingv1alpha3.EnvoyFilter_GATEWAY,
-				ObjectTypes: &networkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch_Listener{
-					Listener: &networkingv1alpha3.EnvoyFilter_ListenerMatch{
-						PortNumber: EnvoysHTTPPortNumber, // Kuadrant-gateway listens on this port by default
-						FilterChain: &networkingv1alpha3.EnvoyFilter_ListenerMatch_FilterChainMatch{
-							Filter: &networkingv1alpha3.EnvoyFilter_ListenerMatch_FilterMatch{
-								Name: EnvoysHTTPConnectionManagerName,
-							},
-						},
-					},
-				},
-			},
-			Patch: &prePatch,
-		}
-
-		postAuthFilterPatch := preAuthFilterPatch.DeepCopy()
-		postAuthFilterPatch.Patch = postPatch
-
-		// postauth filter should be injected just before the router filter
-		postAuthFilterPatch.Match.ObjectTypes = &networkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch_Listener{
-			Listener: &networkingv1alpha3.EnvoyFilter_ListenerMatch{
-				PortNumber: EnvoysHTTPPortNumber,
-				FilterChain: &networkingv1alpha3.EnvoyFilter_ListenerMatch_FilterChainMatch{
-					Filter: &networkingv1alpha3.EnvoyFilter_ListenerMatch_FilterMatch{
-						Name: EnvoysHTTPConnectionManagerName,
-						SubFilter: &networkingv1alpha3.EnvoyFilter_ListenerMatch_SubFilterMatch{
-							Name: "envoy.filters.http.router",
-						},
-					},
-				},
-			},
-		}
-
-		// since it's the first time, add the Limitador and Wasm cluster into the patches
-		finalPatches = append(finalPatches, preAuthFilterPatch, postAuthFilterPatch,
-			kuadrantistioutils.LimitadorClusterEnvoyPatch(), kuadrantistioutils.WasmClusterEnvoyPatch())
-	} else {
-		logger.Info("Updating EnvoyFilter")
-
-		// use the old patches but update the wasm plugin configs
-		finalPatches = append(finalPatches, existingObj.Spec.ConfigPatches...)
-		for stage := 0; stage < 2; stage++ {
-			patchValue := finalPatches[stage].Patch.Value
-			pluginConfig := patchValue.Fields["typed_config"].GetStructValue().Fields["value"].GetStructValue().Fields["config"]
-			pluginConfigString := pluginConfig.GetStructValue().Fields["configuration"].GetStructValue().Fields["value"].GetStringValue()
-
-			parsedPluginConfig := &kuadrantistioutils.PluginConfig{}
-			if err := json.Unmarshal([]byte(pluginConfigString), parsedPluginConfig); err != nil {
-				return fmt.Errorf("failed to unmarshall existing plugin config")
-			}
-
-			if parsedPluginConfig.PluginPolicies == nil {
-				parsedPluginConfig.PluginPolicies = make(map[string]kuadrantistioutils.PluginPolicy)
-			}
-			parsedPluginConfig.PluginPolicies[rlpKey.String()] = *preAuthPluginPolicy
-			if stage == 1 {
-				parsedPluginConfig.PluginPolicies[rlpKey.String()] = *postAuthPluginPolicy
-			}
-		}
+	err = r.reconcileNetworkResourceBackReference(ctx, rlp)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
-	factory := kuadrantistioutils.EnvoyFilterFactory{
-		ObjectName: rlFiltersPatchName(gwKey.Name),
-		Namespace:  gwKey.Namespace,
-		Patches:    finalPatches,
-		Labels:     gwLabels,
+	if err := r.reconcileLimits(ctx, rlp); err != nil {
+		return ctrl.Result{}, err
 	}
 
-	*existingObj = *factory.EnvoyFilter()
+	if err := r.reconcileWASMEnvoyFilters(ctx, rlp); err != nil {
+		return ctrl.Result{}, err
+	}
 
-	logger.Info("successfully created/updated EnvoyFilter")
-	return nil
+	if err := r.cleanUpOrphanWASMEnvoyFilters(ctx, rlp); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
 }
 
 func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
@@ -537,60 +191,180 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ap
 	return nil
 }
 
-// fetchOperationsFromVS captures match rules from VirtualService and fill into RateLimitPolicy
-func fetchOperationsFromVS(vs *networkingv1alpha3.VirtualService, rlp *apimv1alpha1.RateLimitPolicySpec) {
-	for _, rule := range rlp.Rules {
-		if len(rule.Name) > 0 {
-			for _, httpRoute := range vs.Http {
-				routeMatched, _ := regexp.MatchString(rule.Name, httpRoute.Name)
+func (r *RateLimitPolicyReconciler) reconcileNetworkResourceBackReference(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+	logger := logr.FromContext(ctx)
+	httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
+	if err != nil {
+		// The object should also exist
+		return err
+	}
 
-				for _, httpMatchReq := range httpRoute.Match {
-					reqMatched, _ := regexp.MatchString(rule.Name, httpMatchReq.Name)
+	// Reconcile the back reference:
+	httpRouteAnnotations := httpRoute.GetAnnotations()
+	if httpRouteAnnotations == nil {
+		httpRouteAnnotations = map[string]string{}
+	}
 
-					if routeMatched || reqMatched {
-						operation := apimv1alpha1.Operation{}
-
-						if normalizedURI := normalizeStringMatch(httpMatchReq.Uri); normalizedURI != "" {
-							operation.Paths = append(operation.Paths, normalizedURI)
-						}
-
-						if normalizedMethod := normalizeStringMatch(httpMatchReq.Method); normalizedMethod != "" {
-							operation.Methods = append(operation.Methods, normalizedMethod)
-						}
-
-						rule.Operations = append(rule.Operations, &operation)
-					}
-				}
-			}
+	rlpKey := client.ObjectKeyFromObject(rlp)
+	val, ok := httpRouteAnnotations[common.RateLimitPolicyBackRefAnnotation]
+	if ok {
+		if val != rlpKey.String() {
+			return fmt.Errorf("the target HTTPRoute {%s} is already referenced by ratelimitpolicy %s", client.ObjectKeyFromObject(httpRoute), rlpKey.String())
+		}
+	} else {
+		httpRouteAnnotations[common.RateLimitPolicyBackRefAnnotation] = rlpKey.String()
+		httpRoute.SetAnnotations(httpRouteAnnotations)
+		err := r.UpdateResource(ctx, httpRoute)
+		logger.V(1).Info("reconcileNetworkResourceBackReference: update HTTPRoute", "httpRoute", client.ObjectKeyFromObject(httpRoute), "err", err)
+		if err != nil {
+			return err
 		}
 	}
+
+	return nil
 }
 
-func (r *RateLimitPolicyReconciler) attachNetworkToStatus(ctx context.Context, network *SignalingNetwork, rlp *apimv1alpha1.RateLimitPolicy) error {
+// Finds gateways with envoyFilters with rate limit configuration from the current RLP
+// Delete RL conf from the current RLP from gateways not referenced by the current RLP
+// Cleans up RL conf when:
+// - HTTPRoute updates parentRefs (gateways)
+// - RLP updates targetRef to another HTTPRoute
+func (r *RateLimitPolicyReconciler) cleanUpOrphanWASMEnvoyFilters(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
 	logger := logr.FromContext(ctx)
-	networkKind := network.NetworkKind
-	networkName := network.NetworkName
 
-	logger.V(1).Info("attaching network to status", "network kind", networkKind, "network name", networkName)
-	rlp.Status.AddEntry(networkKind, networkName, network.Gateways)
+	currentGatewayRefs, err := r.gatewayRefList(ctx, rlp)
+	if err != nil {
+		return err
+	}
 
-	return r.Client().Status().Update(ctx, rlp)
+	gwList := &gatewayapiv1alpha2.GatewayList{}
+	err = r.Client().List(ctx, gwList)
+	if err != nil {
+		return err
+	}
+
+	gwKeyList := make([]client.ObjectKey, 0)
+	for idx := range gwList.Items {
+		gwKeyList = append(gwKeyList, client.ObjectKeyFromObject(&gwList.Items[idx]))
+	}
+
+	notReferencedGatewayKeys := common.ObjectKeyListDifference(gwKeyList, currentGatewayRefs)
+
+	for _, gwKey := range notReferencedGatewayKeys {
+		wasmKey := kuadrantistioutils.WASMEnvoyFilterKey(gwKey)
+
+		envoyFilter := &istionetworkingv1alpha3.EnvoyFilter{}
+		err = r.Client().Get(ctx, wasmKey, envoyFilter)
+		logger.V(1).Info("cleanUpOrphanWASMEnvoyFilters: get EnvoyFilter", "envoyFilter", wasmKey, "err", err)
+		if apierrors.IsNotFound(err) {
+			logger.V(1).Info("cleanUpOrphanWASMEnvoyFilters: envoyfilter not found. Nothing to do", "envoyfilter", wasmKey)
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		err = r.finalizeSingleWASMEnvoyFilter(ctx, rlp, envoyFilter)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
-func (r *RateLimitPolicyReconciler) detachNetworkFromStatus(ctx context.Context, network *SignalingNetwork, rlp *apimv1alpha1.RateLimitPolicy) error {
+func (r *RateLimitPolicyReconciler) reconcileWASMEnvoyFilters(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
 	logger := logr.FromContext(ctx)
-	networkKind := network.NetworkKind
-	networkName := network.NetworkName
 
-	logger.V(1).Info("detaching network from status", "network kind", networkKind, "network name", networkName)
-	rlp.Status.DeleteEntry(networkKind, networkName)
+	httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
+	if err != nil {
+		// The object should also exist
+		return err
+	}
 
-	return r.Client().Status().Update(ctx, rlp)
+	currentGatewayRefs, err := r.gatewayRefList(ctx, rlp)
+	if err != nil {
+		return err
+	}
+
+	for idx := range currentGatewayRefs {
+		gwKey := currentGatewayRefs[idx]
+		gateway := &gatewayapiv1alpha2.Gateway{}
+		err := r.Client().Get(ctx, gwKey, gateway)
+		logger.V(1).Info("reconcileWASMEnvoyFilters: get Gateway", "gateway", gwKey, "err", err)
+		if err != nil {
+			// gateway needs to exist
+			return err
+		}
+
+		// Reconcile one EnvoyFilter per gateway
+		// Gateway API Gateway resource labels will be copied to the deployment in the automated deployment
+		// For the manual deployment, the Gateway resource labels must match deployment/pod labels or envoyfilters selector will not match
+		// https://istio.io/latest/docs/tasks/traffic-management/ingress/gateway-api/#automated-deployment
+		ef, err := kuadrantistioutils.WASMEnvoyFilter(rlp, gwKey, gateway.GetLabels(), httpRoute.Spec.Hostnames)
+		if err != nil {
+			return err
+		}
+
+		err = r.ReconcileResource(ctx, &istionetworkingv1alpha3.EnvoyFilter{}, ef, kuadrantistioutils.WASMEnvoyFilterPluginMutator)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *RateLimitPolicyReconciler) fetchHTTPRoute(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) (*gatewayapiv1alpha2.HTTPRoute, error) {
+	logger := logr.FromContext(ctx)
+
+	tmpNS := rlp.Namespace
+	if rlp.Spec.TargetRef.Namespace != nil {
+		tmpNS = string(*rlp.Spec.TargetRef.Namespace)
+	}
+
+	key := client.ObjectKey{
+		Name:      string(rlp.Spec.TargetRef.Name),
+		Namespace: tmpNS,
+	}
+
+	httpRoute := &gatewayapiv1alpha2.HTTPRoute{}
+	err := r.Client().Get(ctx, key, httpRoute)
+	logger.V(1).Info("fetchHTTPRoute", "httpRoute", key, "err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	return httpRoute, nil
+}
+
+func (r *RateLimitPolicyReconciler) gatewayRefList(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) ([]client.ObjectKey, error) {
+	httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
+	if err != nil {
+		// The object should also exist
+		return nil, err
+	}
+
+	gwKeys := make([]client.ObjectKey, 0)
+	for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
+		gwKey := client.ObjectKey{Name: string(parentRef.Name), Namespace: httpRoute.Namespace}
+		if parentRef.Namespace != nil {
+			gwKey.Namespace = string(*parentRef.Namespace)
+		}
+		gwKeys = append(gwKeys, gwKey)
+	}
+
+	return gwKeys, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	HTTPRouteEventMapper := &HTTPRouteEventMapper{
+		Logger: r.Logger().WithName("httpRouteHandler"),
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&apimv1alpha1.RateLimitPolicy{}).
+		Watches(
+			&source.Kind{Type: &gatewayapiv1alpha2.HTTPRoute{}},
+			handler.EnqueueRequestsFromMapFunc(HTTPRouteEventMapper.Map),
+		).
 		Complete(r)
 }

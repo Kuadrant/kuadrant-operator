@@ -10,7 +10,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -23,6 +22,7 @@ import (
 const HTTPRouteNamePrefix = "hr"
 
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch
 
 // HTTPRouteReconciler reconciles Gateway API's HTTPRoute object
 type HTTPRouteReconciler struct {
@@ -53,23 +53,13 @@ func (r *HTTPRouteReconciler) Reconcile(eventCtx context.Context, req ctrl.Reque
 				gwNamespace = string(*parentRef.Namespace)
 			}
 			gwName := string(parentRef.Name)
-			authObjKey := types.NamespacedName{
-				// Prefix is added to differentiate between routing objects
-				Name:      getAuthPolicyName(gwName, httproute.Name),
-				Namespace: gwNamespace,
-			}
 
-			authPolicy := istiosecurityv1beta1.AuthorizationPolicy{}
-			if err := r.Client().Get(context.Background(), authObjKey, &authPolicy); err != nil {
-				// no annotation but authpolicy exist means annotation was removed.
-				if !apierrors.IsNotFound(err) {
-					logger.Error(err, "failed to check AuthorizationPolicy existence")
-				}
-				return ctrl.Result{}, nil // this httproute is not protected.
-			}
-
-			// Orphan AuthorizationPolicy exists
-			if err := r.Client().Delete(context.Background(), &authPolicy); err != nil {
+			authPolicy := &istiosecurityv1beta1.AuthorizationPolicy{}
+			authPolicy.SetName(getAuthPolicyName(gwName, httproute.Name))
+			authPolicy.SetNamespace(gwNamespace)
+			common.TagObjectToDelete(authPolicy)
+			err := r.ReconcileResource(ctx, &istiosecurityv1beta1.AuthorizationPolicy{}, authPolicy, nil)
+			if err != nil {
 				logger.Error(err, "failed to delete orphan authorizationpolicy")
 				return ctrl.Result{}, err
 			}

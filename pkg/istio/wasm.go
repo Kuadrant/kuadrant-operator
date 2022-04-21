@@ -1,7 +1,10 @@
 package istio
 
 import (
+	"reflect"
+
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 // wasm-shim API structs
@@ -11,6 +14,7 @@ type Rule struct {
 }
 
 type PluginPolicy struct {
+	Hosts           []string                        `json:"hosts,omitempty"`
 	Rules           []*Rule                         `json:"rules"`
 	GlobalActions   []*apimv1alpha1.ActionSpecifier `json:"global_actions,omitempty"`
 	UpstreamCluster string                          `json:"upstream_cluster"`
@@ -22,8 +26,14 @@ type PluginConfig struct {
 	PluginPolicies  map[string]PluginPolicy `json:"ratelimitpolicies"`
 }
 
-func PluginPolicyFromRateLimitPolicy(rlp *apimv1alpha1.RateLimitPolicy, pluginStage apimv1alpha1.RateLimitStage) *PluginPolicy {
-	pluginPolicy := &PluginPolicy{}
+func PluginPolicyFromRateLimitPolicy(rlp *apimv1alpha1.RateLimitPolicy, pluginStage apimv1alpha1.RateLimitStage, hosts []gatewayapiv1alpha2.Hostname) *PluginPolicy {
+	pluginPolicy := &PluginPolicy{
+		Hosts: []string{},
+	}
+
+	for _, host := range hosts {
+		pluginPolicy.Hosts = append(pluginPolicy.Hosts, string(host))
+	}
 
 	// Filter through global ratelimits
 	for _, ratelimit := range rlp.Spec.RateLimits {
@@ -41,7 +51,7 @@ func PluginPolicyFromRateLimitPolicy(rlp *apimv1alpha1.RateLimitPolicy, pluginSt
 			}
 		}
 
-		if len(rlpRule.Operations) > 0 {
+		if len(rlpRule.Operations) > 0 && len(actions) > 0 {
 			pluginRule := &Rule{
 				Operations: rlpRule.Operations,
 				Actions:    actions,
@@ -55,4 +65,18 @@ func PluginPolicyFromRateLimitPolicy(rlp *apimv1alpha1.RateLimitPolicy, pluginSt
 
 	pluginPolicy.UpstreamCluster = PatchedLimitadorClusterName
 	return pluginPolicy
+}
+
+func MergeMapStringPluginPolicy(modified *bool, existing *map[string]PluginPolicy, desired map[string]PluginPolicy) {
+	if *existing == nil {
+		*existing = map[string]PluginPolicy{}
+	}
+
+	for desiredKey, desiredPluginPolicy := range desired {
+		existingPluginPolicy, ok := (*existing)[desiredKey]
+		if !ok || !reflect.DeepEqual(existingPluginPolicy, desiredPluginPolicy) {
+			(*existing)[desiredKey] = desiredPluginPolicy
+			*modified = true
+		}
+	}
 }

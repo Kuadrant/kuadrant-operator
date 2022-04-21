@@ -55,16 +55,47 @@ git clone https://github.com/Kuadrant/kuadrant-controller
 make local-setup
 ```
 
-3.- Deploy example deployment
+3.- Deploy toystore example deployment
 
 ```
 kubectl apply -f examples/toystore/toystore.yaml
 ```
 
-4.- Create VirtualService to configure routing for our example deployment
+4.- Create HTTPRoute to configure routing to the toystore service
 
 ```
-kubectl apply -f examples/toystore/virtualService.yaml
+kubectl apply -f - <<EOF
+---
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: HTTPRoute
+metadata:
+  name: toystore
+  labels:
+    app: toystore
+spec:
+  parentRefs:
+    - name: kuadrant-gwapi-gateway
+      namespace: kuadrant-system
+  hostnames: ["*.toystore.com"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "/toy"
+          method: GET
+        - path:
+            type: Exact
+            value: "/admin/toy"
+          method: POST
+        - path:
+            type: Exact
+            value: "/admin/toy"
+          method: DELETE
+      backendRefs:
+        - name: toystore
+          port: 80
+
+EOF
 ```
 
 Verify that we can reach our example deployment
@@ -76,23 +107,72 @@ curl -v -H 'Host: api.toystore.com' http://localhost:9080/toy
 5.- Create RateLimitPolicy for ratelimiting
 
 ```
-kubectl apply -f examples/toystore/ratelimitpolicy.yaml
+kubectl apply -f - <<EOF
+---
+apiVersion: apim.kuadrant.io/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: toystore
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
+  rules:
+    - operations:
+        - paths: ["/toy"]
+          methods: ["GET"]
+      rateLimits:
+        - stage: PREAUTH
+          actions:
+            - generic_key:
+                descriptor_key: get-toy
+                descriptor_value: "yes"
+    - operations:
+        - paths: ["/admin/toy"]
+          methods: ["POST", "DELETE"]
+      rateLimits:
+        - stage: POSTAUTH
+          actions:
+            - generic_key:
+                descriptor_key: admin
+                descriptor_value: "yes"
+  rateLimits:
+    - stage: BOTH
+      actions:
+        - generic_key:
+            descriptor_key: vhaction
+            descriptor_value: "yes"
+  domain: toystore-app
+  limits:
+    - conditions: ["get-toy == yes"]
+      max_value: 2
+      namespace: toystore-app
+      seconds: 30
+      variables: []
+    - conditions:
+      - "admin == yes"
+      max_value: 2
+      namespace: toystore-app
+      seconds: 30
+      variables: []
+    - conditions: ["vhaction == yes"]
+      max_value: 6
+      namespace: toystore-app
+      seconds: 30
+      variables: []
+EOF
 ```
 
-6.- Annotate VirtualService with RateLimitPolicy name to trigger EnvoyFilters creation.
-
-```
-kubectl annotate virtualservice/toystore kuadrant.io/ratelimitpolicy=toystore
-```
-
-To verify creation:
+To verify wasm envoyfilter has been created:
 
 ```
 kubectl get envoyfilter -A
-NAMESPACE         NAME                                                    AGE
-kuadrant-system   kuadrant-gateway-ratelimit-filters                      9s
-kuadrant-system   ratelimits-on-kuadrant-gateway-using-default-toystore   9s
+NAMESPACE         NAME                                              AGE
+kuadrant-system   kuadrant-kuadrant-gwapi-gateway-wasm-ratelimits   3m4s
 ```
+
+To verify Limitador's RateLimit resources have been created:
 
 ```
 kubectl get ratelimit -A
@@ -100,10 +180,9 @@ NAMESPACE         NAME                     AGE
 kuadrant-system   rlp-default-toystore-1   49s
 kuadrant-system   rlp-default-toystore-2   49s
 kuadrant-system   rlp-default-toystore-3   49s
-kuadrant-system   rlp-default-toystore-4   49s
 ```
 
-7.- Verify unauthenticated rate limit
+6.- Verify unauthenticated rate limit
 
 Only 2 requests every 30 secs on `GET /toy` operation allowed.
 
@@ -116,7 +195,26 @@ curl -v -H 'Host: api.toystore.com' http://localhost:9080/toy
 Create AuthConfig for Authorino external authz provider
 
 ```
-kubectl apply -f examples/toystore/authconfig.yaml
+kubectl apply -f - <<EOF
+---
+apiVersion: authorino.kuadrant.io/v1beta1
+kind: AuthConfig
+metadata:
+  creationTimestamp: null
+  name: toystore
+spec:
+  hosts:
+    - api.toystore.com
+  identity:
+    - apiKey:
+        labelSelectors:
+          app: toystore
+          authorino.kuadrant.io/managed-by: authorino
+      credentials:
+        in: authorization_header
+        keySelector: APIKEY
+      name: apikey
+EOF
 ```
 
 Create secret with API key for user `bob`
@@ -131,18 +229,18 @@ Create secret with API key for user `alice`
 kubectl apply -f examples/toystore/alice-api-key-secret.yaml
 ```
 
-Annotate VirutalService with Kuadrant auth provider to create AuthorizationPolicy
+Annotate HTTPRoute with Kuadrant auth provider to create AuthorizationPolicy
 
 ```
-kubectl annotate virtualservice/toystore kuadrant.io/auth-provider=kuadrant-authorization
+kubectl annotate httproute/toystore kuadrant.io/auth-provider=kuadrant-authorization
 ```
 
 To verify creation:
 
 ```
 kubectl get authorizationpolicy -A
-NAMESPACE         NAME                                 AGE
-kuadrant-system   on-kuadrant-gateway-using-toystore   7s
+NAMESPACE         NAME                                          AGE
+kuadrant-system   on-kuadrant-gwapi-gateway-using-hr-toystore   3m36s
 ```
 
 9.- Verify authentication
@@ -157,20 +255,6 @@ Should return `200 OK`
 
 ```
 curl -v -H 'Host: api.toystore.com' -H 'Authorization: APIKEY ALICEKEYFORDEMO' -X POST http://localhost:9080/admin/toy
-```
-
-10.- Verify authenticated rate limit per user
-
-4 times and should be rate limited
-
-```
-curl -v -H 'Host: api.toystore.com' -H 'Authorization: APIKEY ALICEKEYFORDEMO' -X POST http://localhost:9080/admin/toy
-```
-
-2 times and should be rate limited
-
-```
-curl -v -H 'Host: api.toystore.com' -H 'Authorization: APIKEY BOBKEYFORDEMO' -X POST http://localhost:9080/admin/toy
 ```
 
 ## Contributing

@@ -4,12 +4,16 @@ kind: RateLimitPolicy
 metadata:
   name: toystore
 spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
   rules:
     - operations:
         - paths: ["/toy"]
           methods: ["GET"]
       rateLimits:
-        - stage: BOTH
+        - stage: PREAUTH
           actions:
             - generic_key:
                 descriptor_key: get-toy
@@ -24,7 +28,7 @@ spec:
                 descriptor_key: admin
                 descriptor_value: "yes"
   rateLimits:
-    - stage: PREAUTH
+    - stage: BOTH
       actions:
         - generic_key:
             descriptor_key: vhaction
@@ -36,8 +40,17 @@ spec:
       namespace: toystore-app
       seconds: 30
       variables: []
-    - conditions: ["admin == yes"]
+    - conditions:
+      - "admin == yes"
+      - "user-id == bob"
       max_value: 2
+      namespace: toystore-app
+      seconds: 30
+      variables: []
+    - conditions:
+      - "addmin == yes"
+      - "user-id == alice"
+      max_value: 4
       namespace: toystore-app
       seconds: 30
       variables: []

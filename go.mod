@@ -6,11 +6,10 @@ require (
 	github.com/Azure/go-autorest/autorest v0.11.19 // indirect
 	github.com/go-logr/logr v0.4.0
 	github.com/gogo/protobuf v1.3.2
+	github.com/google/go-cmp v0.5.6
 	github.com/kuadrant/limitador-operator v0.2.0
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.15.0
-	// github.com/openshift/api@release-4.9 branch
-	github.com/openshift/api v0.0.0-20211028023115-7224b732cc14
 	go.uber.org/zap v1.19.0
 	gotest.tools v2.2.0+incompatible
 	istio.io/api v0.0.0-20210219142745-68975986cccb

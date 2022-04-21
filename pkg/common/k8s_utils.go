@@ -114,3 +114,20 @@ func GetServicePortNumber(ctx context.Context, k8sClient client.Client, svcKey c
 
 	return 0, fmt.Errorf("service port %s was not found in %s", svcPort, svcKey.String())
 }
+
+// ObjectKeyListDifference computest a - b
+func ObjectKeyListDifference(a, b []client.ObjectKey) []client.ObjectKey {
+	target := map[client.ObjectKey]bool{}
+	for _, x := range b {
+		target[x] = true
+	}
+
+	result := make([]client.ObjectKey, 0)
+	for _, x := range a {
+		if _, ok := target[x]; !ok {
+			result = append(result, x)
+		}
+	}
+
+	return result
+}

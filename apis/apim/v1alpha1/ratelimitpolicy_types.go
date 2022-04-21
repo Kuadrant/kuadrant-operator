@@ -17,9 +17,15 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	"fmt"
+
+	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/kuadrant-controller/pkg/common"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -122,85 +128,49 @@ type Rule struct {
 
 // RateLimitPolicySpec defines the desired state of RateLimitPolicy
 type RateLimitPolicySpec struct {
+	// TargetRef identifies an API object to apply policy to.
+	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
+	// +optional
 	Rules []*Rule `json:"rules,omitempty"`
 	// +optional
-	RateLimits []*RateLimit                      `json:"rateLimits,omitempty"`
-	Domain     string                            `json:"domain"`
-	Limits     []limitadorv1alpha1.RateLimitSpec `json:"limits,omitempty"`
-}
-
-type RoutingResourceStatusEntry struct {
-	Name string `json:"name"`
-
+	RateLimits []*RateLimit `json:"rateLimits,omitempty"`
+	Domain     string       `json:"domain"`
 	// +optional
-	Gateways []string `json:"gateways,omitempty"`
+	Limits []limitadorv1alpha1.RateLimitSpec `json:"limits,omitempty"`
 }
 
 // RateLimitPolicyStatus defines the observed state of RateLimitPolicy
 type RateLimitPolicyStatus struct {
-	// VirtualServices represents the current VirtualService objects with reference to this ratelimitpolicy object
+	// ObservedGeneration reflects the generation of the most recently observed spec.
 	// +optional
-	VirtualServices []RoutingResourceStatusEntry `json:"virtualservices,omitempty"`
-	HTTPRoutes      []RoutingResourceStatusEntry `json:"httproutes,omitempty"`
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Represents the observations of a foo's current state.
+	// Known .status.conditions.type are: "Available"
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-// AddEntry adds a new or update the existing entry in the status block.
-func (r *RateLimitPolicyStatus) AddEntry(networkKind, networkName string, gateways []string) {
-	if len(gateways) == 0 {
-		return // without gateways it's same as doing nothing
+func (r *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr.Logger) bool {
+	if r.ObservedGeneration != other.ObservedGeneration {
+		diff := cmp.Diff(r.ObservedGeneration, other.ObservedGeneration)
+		logger.V(1).Info("ObservedGeneration not equal", "difference", diff)
+		return false
 	}
 
-	entry := RoutingResourceStatusEntry{
-		Name:     networkName,
-		Gateways: gateways,
+	// Marshalling sorts by condition type
+	currentMarshaledJSON, _ := common.ConditionMarshal(r.Conditions)
+	otherMarshaledJSON, _ := common.ConditionMarshal(other.Conditions)
+	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
+		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
+		logger.V(1).Info("Conditions not equal", "difference", diff)
+		return false
 	}
 
-	if networkKind == common.VirtualServiceKind {
-		r.VirtualServices = append(r.VirtualServices, entry)
-	} else {
-		r.HTTPRoutes = append(r.HTTPRoutes, entry)
-	}
-}
-
-// DeleteEntry removes the existing entry in the status block.
-func (r *RateLimitPolicyStatus) DeleteEntry(networkKind, networkName string) {
-	if networkKind == common.VirtualServiceKind {
-		for idx := range r.VirtualServices {
-			if r.VirtualServices[idx].Name == networkName {
-				// remove the element at idx
-				r.VirtualServices = append(r.VirtualServices[:idx], r.VirtualServices[idx+1:]...)
-				break
-			}
-		}
-	} else {
-		for idx := range r.HTTPRoutes {
-			if r.HTTPRoutes[idx].Name == networkName {
-				r.HTTPRoutes = append(r.HTTPRoutes[:idx], r.HTTPRoutes[idx+1:]...)
-				break
-			}
-		}
-	}
-}
-
-func (r *RateLimitPolicyStatus) GetGateways(networkKind, networkName string) []string {
-	var results []string
-	if networkKind == common.VirtualServiceKind {
-		for idx := range r.VirtualServices {
-			if r.VirtualServices[idx].Name == networkName {
-				gws := r.VirtualServices[idx].Gateways
-				results = append(results, gws...)
-			}
-		}
-	} else {
-		for idx := range r.HTTPRoutes {
-			if r.HTTPRoutes[idx].Name == networkName {
-				gws := r.HTTPRoutes[idx].Gateways
-				results = append(results, gws...)
-			}
-		}
-	}
-
-	return results
+	return true
 }
 
 //+kubebuilder:object:root=true
@@ -213,6 +183,22 @@ type RateLimitPolicy struct {
 
 	Spec   RateLimitPolicySpec   `json:"spec,omitempty"`
 	Status RateLimitPolicyStatus `json:"status,omitempty"`
+}
+
+func (r *RateLimitPolicy) Validate() error {
+	if r.Spec.TargetRef.Group != gatewayapiv1alpha2.Group("gateway.networking.k8s.io") {
+		return fmt.Errorf("invalid targetRef.Group %s. The only supported group is gateway.networking.k8s.io", r.Spec.TargetRef.Group)
+	}
+
+	if r.Spec.TargetRef.Kind != gatewayapiv1alpha2.Kind("HTTPRoute") {
+		return fmt.Errorf("invalid targetRef.Kind %s. The only supported kind is HTTPRoute", r.Spec.TargetRef.Kind)
+	}
+
+	if r.Spec.TargetRef.Namespace != nil && string(*r.Spec.TargetRef.Namespace) != r.Namespace {
+		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *r.Spec.TargetRef.Namespace)
+	}
+
+	return nil
 }
 
 //+kubebuilder:object:root=true

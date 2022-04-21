@@ -4,7 +4,7 @@ kind: Gateway
 metadata:
   labels:
     istio: kuadrant-system
-  name: kuadrant-gwapi-gateway
+  name: other-gwapi-gateway
   namespace: kuadrant-system
 spec:
   gatewayClassName: istio
@@ -15,6 +15,3 @@ spec:
     allowedRoutes:
       namespaces:
         from: All
-  addresses:
-  - value: kuadrant-gateway.kuadrant-system.svc.cluster.local
-    type: Hostname

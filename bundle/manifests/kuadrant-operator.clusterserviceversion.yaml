@@ -22,6 +22,9 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - kind: AuthPolicy
+      name: authpolicies.apim.kuadrant.io
+      version: v1alpha1
     - description: Kuadrant is the Schema for the kuadrants API
       displayName: Kuadrant
       kind: Kuadrant
@@ -39,6 +42,24 @@ spec:
     spec:
       clusterPermissions:
       - rules:
+        - apiGroups:
+          - apim.kuadrant.io
+          resources:
+          - authpolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apim.kuadrant.io
+          resources:
+          - authpolicies/finalizers
+          verbs:
+          - update
         - apiGroups:
           - apim.kuadrant.io
           resources:
@@ -65,6 +86,14 @@ spec:
           - get
           - patch
           - update
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - gateways
+          verbs:
+          - get
+          - list
+          - watch
         - apiGroups:
           - gateway.networking.k8s.io
           resources:
@@ -106,16 +135,6 @@ spec:
           verbs:
           - get
           - list
-          - watch
-        - apiGroups:
-          - networking.istio.io
-          resources:
-          - virtualservices
-          verbs:
-          - get
-          - list
-          - patch
-          - update
           - watch
         - apiGroups:
           - security.istio.io

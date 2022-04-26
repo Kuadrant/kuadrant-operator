@@ -8,11 +8,17 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
-  rules:
-  - to:
-    - operation:
-        methods: ["GET"]
-        paths: ["/toy"]
-  action: CUSTOM
-  provider:
-    name: kuadrant-authorization
+  policy:
+  - action: CUSTOM
+    rules:
+    - to:
+      - operation:
+          methods: ["GET"]
+          paths: ["/toy"]
+    provider: kuadrant-authorization
+  - action: DENY
+    rules:
+    - to:
+      - operation:
+          methods: ["DELETE"]
+          paths: ["/deleteAll"]

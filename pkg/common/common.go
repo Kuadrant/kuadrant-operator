@@ -37,6 +37,7 @@ const (
 	KuadrantAuthProviderAnnotation    = "kuadrant.io/auth-provider"
 	KuadrantRateLimitPolicyAnnotation = "kuadrant.io/ratelimitpolicy"
 	RateLimitPolicyBackRefAnnotation  = "kuadrant.io/ratelimitpolicy-backref"
+	AuthPolicyBackRefAnnotation       = "kuadrant.io/authpolicy-backref"
 )
 
 var (

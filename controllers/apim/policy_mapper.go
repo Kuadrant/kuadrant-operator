@@ -28,13 +28,12 @@ func RoutingPredicate() predicate.Predicate {
 	}
 }
 
-// HTTPRouteEventMapper is an EventHandler that maps HTTPRoute object events
-// to RateLimitPolicy events.
+// HTTPRouteEventMapper is an EventHandler that maps HTTPRoute object events to Policy events.
 type HTTPRouteEventMapper struct {
 	Logger logr.Logger
 }
 
-func (h *HTTPRouteEventMapper) Map(obj client.Object) []reconcile.Request {
+func (h *HTTPRouteEventMapper) MapToRateLimitPolicy(obj client.Object) []reconcile.Request {
 	httpRouteAnnotations := obj.GetAnnotations()
 	if httpRouteAnnotations == nil {
 		httpRouteAnnotations = map[string]string{}
@@ -52,6 +51,30 @@ func (h *HTTPRouteEventMapper) Map(obj client.Object) []reconcile.Request {
 	requests := []reconcile.Request{
 		{
 			NamespacedName: rlpKey,
+		},
+	}
+
+	return requests
+}
+
+func (h *HTTPRouteEventMapper) MapToAuthPolicy(obj client.Object) []reconcile.Request {
+	httpRouteAnnotations := obj.GetAnnotations()
+	if httpRouteAnnotations == nil {
+		httpRouteAnnotations = map[string]string{}
+	}
+
+	apRef, present := httpRouteAnnotations[common.AuthPolicyBackRefAnnotation]
+	if !present {
+		return []reconcile.Request{}
+	}
+
+	apKey := common.NamespacedNameToObjectKey(apRef, obj.GetNamespace())
+
+	h.Logger.V(1).Info("Processing object", "key", client.ObjectKeyFromObject(obj), "AuthPolicy", apKey)
+
+	requests := []reconcile.Request{
+		{
+			NamespacedName: apKey,
 		},
 	}
 

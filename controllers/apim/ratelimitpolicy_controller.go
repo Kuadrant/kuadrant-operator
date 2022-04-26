@@ -364,7 +364,7 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&apimv1alpha1.RateLimitPolicy{}).
 		Watches(
 			&source.Kind{Type: &gatewayapiv1alpha2.HTTPRoute{}},
-			handler.EnqueueRequestsFromMapFunc(HTTPRouteEventMapper.Map),
+			handler.EnqueueRequestsFromMapFunc(HTTPRouteEventMapper.MapToRateLimitPolicy),
 		).
 		Complete(r)
 }

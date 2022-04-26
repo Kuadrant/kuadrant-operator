@@ -55,7 +55,7 @@ func (r *HTTPRouteReconciler) Reconcile(eventCtx context.Context, req ctrl.Reque
 			gwName := string(parentRef.Name)
 
 			authPolicy := &istiosecurityv1beta1.AuthorizationPolicy{}
-			authPolicy.SetName(getAuthPolicyName(gwName, httproute.Name))
+			authPolicy.SetName(getAuthPolicyName(gwName, httproute.Name, "")) // TODO(rahul): need to do something about this controller
 			authPolicy.SetNamespace(gwNamespace)
 			common.TagObjectToDelete(authPolicy)
 			err := r.ReconcileResource(ctx, &istiosecurityv1beta1.AuthorizationPolicy{}, authPolicy, nil)
@@ -161,7 +161,7 @@ func (r *HTTPRouteReconciler) reconcileAuthPolicy(ctx context.Context, logger lo
 
 		authPolicy := istiosecurityv1beta1.AuthorizationPolicy{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      getAuthPolicyName(gwName, hr.Name),
+				Name:      getAuthPolicyName(gwName, hr.Name, ""),
 				Namespace: gwNamespace,
 			},
 			Spec: authPolicySpec,

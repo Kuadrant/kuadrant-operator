@@ -18,12 +18,15 @@ package apim
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -136,6 +139,11 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 
 func (r *RateLimitPolicyReconciler) reconcileSpec(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) (ctrl.Result, error) {
 	err := rlp.Validate()
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	err = r.validateHTTPRoute(ctx, rlp)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -353,6 +361,38 @@ func (r *RateLimitPolicyReconciler) gatewayRefList(ctx context.Context, rlp *api
 	}
 
 	return gwKeys, nil
+}
+
+func (r *RateLimitPolicyReconciler) validateHTTPRoute(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+	httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
+	if err != nil {
+		// The object should exist
+		return err
+	}
+
+	// Check HTTProute parents (gateways) in the status object
+	// if any of the current parent gateways reports not "Admitted", return error
+	for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
+		routeParentStatus := func(pRef gatewayapiv1alpha2.ParentRef) *gatewayapiv1alpha2.RouteParentStatus {
+			for idx := range httpRoute.Status.RouteStatus.Parents {
+				if reflect.DeepEqual(pRef, httpRoute.Status.RouteStatus.Parents[idx].ParentRef) {
+					return &httpRoute.Status.RouteStatus.Parents[idx]
+				}
+			}
+
+			return nil
+		}(parentRef)
+
+		if routeParentStatus == nil {
+			continue
+		}
+
+		if meta.IsStatusConditionFalse(routeParentStatus.Conditions, "Accepted") {
+			return errors.New("httproute not accepted")
+		}
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

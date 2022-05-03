@@ -34,225 +34,242 @@ spec:
             type: object
           spec:
             properties:
-              action:
-                description: The action to take if the request is matches with the
-                  rules.
-                enum:
-                - ALLOW
-                - CUSTOM
-                - DENY
-                - AUDIT
-                type: string
-              provider:
-                description: Specifies detailed configuration of the CUSTOM action.
-                  Must be used only with CUSTOM action.
-                properties:
-                  name:
-                    description: Specifies the name of the extension provider. The
-                      list of available providers is defined in the MeshConfig. Note,
-                      currently at most 1 extension provider is allowed per workload.
-                      Different workloads can use different extension provider.
-                    type: string
-                type: object
-              rules:
-                description: A list of rules to match the request. A match occurs
-                  when at least one rule matches the request.
+              policy:
+                description: Policy per action type but also per provider if using
+                  custom type.
                 items:
-                  description: "Rule matches requests from a list of sources that
-                    perform a list of operations subject to a list of conditions.
-                    A match occurs when at least one source, operation and condition
-                    matches the request. An empty rule is always matched. \n Any string
-                    field in the rule supports Exact, Prefix, Suffix and Presence
-                    match: \n - Exact match: \"abc\" will match on value \"abc\".
-                    - Prefix match: \"abc*\" will match on value \"abc\" and \"abcd\".
-                    - Suffix match: \"*abc\" will match on value \"abc\" and \"xabc\".
-                    - Presence match: \"*\" will match when value is not empty."
                   properties:
-                    from:
-                      description: "Optional. from specifies the source of a request.
-                        \n If not set, any source is allowed."
+                    action:
+                      description: The action to take if the request is matches with
+                        the rules.
+                      enum:
+                      - ALLOW
+                      - CUSTOM
+                      - DENY
+                      - AUDIT
+                      type: string
+                    provider:
+                      default: ""
+                      description: Specifies detailed configuration of the CUSTOM
+                        action. Must be used only with CUSTOM action.
+                      type: string
+                    rules:
+                      description: A list of rules to match the request. A match occurs
+                        when at least one rule matches the request.
                       items:
-                        description: From includes a list or sources.
+                        description: "Rule matches requests from a list of sources
+                          that perform a list of operations subject to a list of conditions.
+                          A match occurs when at least one source, operation and condition
+                          matches the request. An empty rule is always matched. \n
+                          Any string field in the rule supports Exact, Prefix, Suffix
+                          and Presence match: \n - Exact match: \"abc\" will match
+                          on value \"abc\". - Prefix match: \"abc*\" will match on
+                          value \"abc\" and \"abcd\". - Suffix match: \"*abc\" will
+                          match on value \"abc\" and \"xabc\". - Presence match: \"*\"
+                          will match when value is not empty."
                         properties:
-                          source:
-                            description: Source specifies the source of a request.
-                            properties:
-                              ip_blocks:
-                                description: "Optional. A list of IP blocks, which
-                                  matches to the \"source.ip\" attribute. Populated
-                                  from the source address of the IP packet. Single
-                                  IP (e.g. \"1.2.3.4\") and CIDR (e.g. \"1.2.3.0/24\")
-                                  are supported. \n If not set, any IP is allowed."
-                                items:
-                                  type: string
-                                type: array
-                              namespaces:
-                                description: "Optional. A list of namespaces, which
-                                  matches to the \"source.namespace\" attribute. This
-                                  field requires mTLS enabled. \n If not set, any
-                                  namespace is allowed."
-                                items:
-                                  type: string
-                                type: array
-                              not_ip_blocks:
-                                description: Optional. A list of negative match of
-                                  IP blocks.
-                                items:
-                                  type: string
-                                type: array
-                              not_namespaces:
-                                description: Optional. A list of negative match of
-                                  namespaces.
-                                items:
-                                  type: string
-                                type: array
-                              not_principals:
-                                description: Optional. A list of negative match of
-                                  source peer identities.
-                                items:
-                                  type: string
-                                type: array
-                              not_remote_ip_blocks:
-                                description: Optional. A list of negative match of
-                                  remote IP blocks.
-                                items:
-                                  type: string
-                                type: array
-                              not_request_principals:
-                                description: Optional. A list of negative match of
-                                  request identities.
-                                items:
-                                  type: string
-                                type: array
-                              principals:
-                                description: "Optional. A list of source peer identities
-                                  (i.e. service account), which matches to the \"source.principal\"
-                                  attribute. This field requires mTLS enabled. \n
-                                  If not set, any principal is allowed."
-                                items:
-                                  type: string
-                                type: array
-                              remote_ip_blocks:
-                                description: "Optional. A list of IP blocks, which
-                                  matches to the \"remote.ip\" attribute. Populated
-                                  from X-Forwarded-For header or proxy protocol. To
-                                  make use of this field, you must configure the numTrustedProxies
-                                  field of the gatewayTopology under the meshConfig
-                                  when you install Istio or using an annotation on
-                                  the ingress gateway.  See the documentation here:
-                                  [Configuring Gateway Network Topology](https://istio.io/latest/docs/ops/configuration/traffic-management/network-topologies/).
-                                  Single IP (e.g. \"1.2.3.4\") and CIDR (e.g. \"1.2.3.0/24\")
-                                  are supported. \n If not set, any IP is allowed."
-                                items:
-                                  type: string
-                                type: array
-                              request_principals:
-                                description: "Optional. A list of request identities
-                                  (i.e. \"iss/sub\" claims), which matches to the
-                                  \"request.auth.principal\" attribute. \n If not
-                                  set, any request principal is allowed."
-                                items:
-                                  type: string
-                                type: array
-                            type: object
-                        type: object
-                      type: array
-                    to:
-                      description: "Optional. to specifies the operation of a request.
-                        \n If not set, any operation is allowed."
-                      items:
-                        description: To includes a list or operations.
-                        properties:
-                          operation:
-                            description: Operation specifies the operation of a request.
-                            properties:
-                              hosts:
-                                description: "Optional. A list of hosts, which matches
-                                  to the \"request.host\" attribute. \n If not set,
-                                  any host is allowed. Must be used only with HTTP."
-                                items:
-                                  type: string
-                                type: array
-                              methods:
-                                description: "Optional. A list of methods, which matches
-                                  to the \"request.method\" attribute. For gRPC service,
-                                  this will always be \"POST\". \n If not set, any
-                                  method is allowed. Must be used only with HTTP."
-                                items:
-                                  type: string
-                                type: array
-                              not_hosts:
-                                description: Optional. A list of negative match of
-                                  hosts.
-                                items:
-                                  type: string
-                                type: array
-                              not_methods:
-                                description: Optional. A list of negative match of
-                                  methods.
-                                items:
-                                  type: string
-                                type: array
-                              not_paths:
-                                description: Optional. A list of negative match of
-                                  paths.
-                                items:
-                                  type: string
-                                type: array
-                              not_ports:
-                                description: Optional. A list of negative match of
-                                  ports.
-                                items:
-                                  type: string
-                                type: array
-                              paths:
-                                description: "Optional. A list of paths, which matches
-                                  to the \"request.url_path\" attribute. For gRPC
-                                  service, this will be the fully-qualified name in
-                                  the form of \"/package.service/method\". \n If not
-                                  set, any path is allowed. Must be used only with
-                                  HTTP."
-                                items:
-                                  type: string
-                                type: array
-                              ports:
-                                description: "Optional. A list of ports, which matches
-                                  to the \"destination.port\" attribute. \n If not
-                                  set, any port is allowed."
-                                items:
-                                  type: string
-                                type: array
-                            type: object
-                        type: object
-                      type: array
-                    when:
-                      description: "Optional. when specifies a list of additional
-                        conditions of a request. \n If not set, any condition is allowed."
-                      items:
-                        description: Condition specifies additional required attributes.
-                        properties:
-                          key:
-                            description: The name of an Istio attribute. See the [full
-                              list of supported attributes](https://istio.io/docs/reference/config/security/conditions/).
-                            type: string
-                          not_values:
-                            description: 'Optional. A list of negative match of values
-                              for the attribute. Note: at least one of values or not_values
-                              must be set.'
+                          from:
+                            description: "Optional. from specifies the source of a
+                              request. \n If not set, any source is allowed."
                             items:
-                              type: string
+                              description: From includes a list or sources.
+                              properties:
+                                source:
+                                  description: Source specifies the source of a request.
+                                  properties:
+                                    ip_blocks:
+                                      description: "Optional. A list of IP blocks,
+                                        which matches to the \"source.ip\" attribute.
+                                        Populated from the source address of the IP
+                                        packet. Single IP (e.g. \"1.2.3.4\") and CIDR
+                                        (e.g. \"1.2.3.0/24\") are supported. \n If
+                                        not set, any IP is allowed."
+                                      items:
+                                        type: string
+                                      type: array
+                                    namespaces:
+                                      description: "Optional. A list of namespaces,
+                                        which matches to the \"source.namespace\"
+                                        attribute. This field requires mTLS enabled.
+                                        \n If not set, any namespace is allowed."
+                                      items:
+                                        type: string
+                                      type: array
+                                    not_ip_blocks:
+                                      description: Optional. A list of negative match
+                                        of IP blocks.
+                                      items:
+                                        type: string
+                                      type: array
+                                    not_namespaces:
+                                      description: Optional. A list of negative match
+                                        of namespaces.
+                                      items:
+                                        type: string
+                                      type: array
+                                    not_principals:
+                                      description: Optional. A list of negative match
+                                        of source peer identities.
+                                      items:
+                                        type: string
+                                      type: array
+                                    not_remote_ip_blocks:
+                                      description: Optional. A list of negative match
+                                        of remote IP blocks.
+                                      items:
+                                        type: string
+                                      type: array
+                                    not_request_principals:
+                                      description: Optional. A list of negative match
+                                        of request identities.
+                                      items:
+                                        type: string
+                                      type: array
+                                    principals:
+                                      description: "Optional. A list of source peer
+                                        identities (i.e. service account), which matches
+                                        to the \"source.principal\" attribute. This
+                                        field requires mTLS enabled. \n If not set,
+                                        any principal is allowed."
+                                      items:
+                                        type: string
+                                      type: array
+                                    remote_ip_blocks:
+                                      description: "Optional. A list of IP blocks,
+                                        which matches to the \"remote.ip\" attribute.
+                                        Populated from X-Forwarded-For header or proxy
+                                        protocol. To make use of this field, you must
+                                        configure the numTrustedProxies field of the
+                                        gatewayTopology under the meshConfig when
+                                        you install Istio or using an annotation on
+                                        the ingress gateway.  See the documentation
+                                        here: [Configuring Gateway Network Topology](https://istio.io/latest/docs/ops/configuration/traffic-management/network-topologies/).
+                                        Single IP (e.g. \"1.2.3.4\") and CIDR (e.g.
+                                        \"1.2.3.0/24\") are supported. \n If not set,
+                                        any IP is allowed."
+                                      items:
+                                        type: string
+                                      type: array
+                                    request_principals:
+                                      description: "Optional. A list of request identities
+                                        (i.e. \"iss/sub\" claims), which matches to
+                                        the \"request.auth.principal\" attribute.
+                                        \n If not set, any request principal is allowed."
+                                      items:
+                                        type: string
+                                      type: array
+                                  type: object
+                              type: object
                             type: array
-                          values:
-                            description: 'Optional. A list of allowed values for the
-                              attribute. Note: at least one of values or not_values
-                              must be set.'
+                          to:
+                            description: "Optional. to specifies the operation of
+                              a request. \n If not set, any operation is allowed."
                             items:
-                              type: string
+                              description: To includes a list or operations.
+                              properties:
+                                operation:
+                                  description: Operation specifies the operation of
+                                    a request.
+                                  properties:
+                                    hosts:
+                                      description: "Optional. A list of hosts, which
+                                        matches to the \"request.host\" attribute.
+                                        \n If not set, any host is allowed. Must be
+                                        used only with HTTP."
+                                      items:
+                                        type: string
+                                      type: array
+                                    methods:
+                                      description: "Optional. A list of methods, which
+                                        matches to the \"request.method\" attribute.
+                                        For gRPC service, this will always be \"POST\".
+                                        \n If not set, any method is allowed. Must
+                                        be used only with HTTP."
+                                      items:
+                                        type: string
+                                      type: array
+                                    not_hosts:
+                                      description: Optional. A list of negative match
+                                        of hosts.
+                                      items:
+                                        type: string
+                                      type: array
+                                    not_methods:
+                                      description: Optional. A list of negative match
+                                        of methods.
+                                      items:
+                                        type: string
+                                      type: array
+                                    not_paths:
+                                      description: Optional. A list of negative match
+                                        of paths.
+                                      items:
+                                        type: string
+                                      type: array
+                                    not_ports:
+                                      description: Optional. A list of negative match
+                                        of ports.
+                                      items:
+                                        type: string
+                                      type: array
+                                    paths:
+                                      description: "Optional. A list of paths, which
+                                        matches to the \"request.url_path\" attribute.
+                                        For gRPC service, this will be the fully-qualified
+                                        name in the form of \"/package.service/method\".
+                                        \n If not set, any path is allowed. Must be
+                                        used only with HTTP."
+                                      items:
+                                        type: string
+                                      type: array
+                                    ports:
+                                      description: "Optional. A list of ports, which
+                                        matches to the \"destination.port\" attribute.
+                                        \n If not set, any port is allowed."
+                                      items:
+                                        type: string
+                                      type: array
+                                  type: object
+                              type: object
+                            type: array
+                          when:
+                            description: "Optional. when specifies a list of additional
+                              conditions of a request. \n If not set, any condition
+                              is allowed."
+                            items:
+                              description: Condition specifies additional required
+                                attributes.
+                              properties:
+                                key:
+                                  description: The name of an Istio attribute. See
+                                    the [full list of supported attributes](https://istio.io/docs/reference/config/security/conditions/).
+                                  type: string
+                                not_values:
+                                  description: 'Optional. A list of negative match
+                                    of values for the attribute. Note: at least one
+                                    of values or not_values must be set.'
+                                  items:
+                                    type: string
+                                  type: array
+                                values:
+                                  description: 'Optional. A list of allowed values
+                                    for the attribute. Note: at least one of values
+                                    or not_values must be set.'
+                                  items:
+                                    type: string
+                                  type: array
+                              type: object
                             type: array
                         type: object
                       type: array
+                  required:
+                  - action
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - action
+                - provider
+                x-kubernetes-list-type: map
               targetRef:
                 description: TargetRef identifies an API object to apply policy to.
                 properties:

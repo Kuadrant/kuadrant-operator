@@ -14,7 +14,7 @@ ISTIO_INSTALL_OPTIONS ?= --set profile=default \
 ISTIOCTL=$(shell pwd)/bin/istioctl
 ISTIOVERSION = 1.12.1
 $(ISTIOCTL):
-	mkdir -p $(PROJECT_PATH)/bin
+	mkdir -p $(shell pwd)/bin
 	$(eval TMP := $(shell mktemp -d))
 	cd $(TMP); curl -sSL https://istio.io/downloadIstio | ISTIO_VERSION=$(ISTIOVERSION) sh -
 	cp $(TMP)/istio-$(ISTIOVERSION)/bin/istioctl ${ISTIOCTL}

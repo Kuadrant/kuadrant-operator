@@ -7,7 +7,6 @@ metadata:
 spec:
   profile: default
   namespace: istio-system
-  tag: 1.12.1
   components:
     base:
       enabled: true

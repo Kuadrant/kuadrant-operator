@@ -17,7 +17,11 @@ limitations under the License.
 package v1beta1
 
 import (
+	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -29,8 +33,36 @@ type KuadrantSpec struct {
 
 // KuadrantStatus defines the observed state of Kuadrant
 type KuadrantStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// ObservedGeneration reflects the generation of the most recently observed spec.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Represents the observations of a foo's current state.
+	// Known .status.conditions.type are: "Available"
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+}
+
+func (r *KuadrantStatus) Equals(other *KuadrantStatus, logger logr.Logger) bool {
+	if r.ObservedGeneration != other.ObservedGeneration {
+		diff := cmp.Diff(r.ObservedGeneration, other.ObservedGeneration)
+		logger.V(1).Info("ObservedGeneration not equal", "difference", diff)
+		return false
+	}
+
+	// Marshalling sorts by condition type
+	currentMarshaledJSON, _ := common.ConditionMarshal(r.Conditions)
+	otherMarshaledJSON, _ := common.ConditionMarshal(other.Conditions)
+	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
+		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
+		logger.V(1).Info("Conditions not equal", "difference", diff)
+		return false
+	}
+
+	return true
 }
 
 //+kubebuilder:object:root=true

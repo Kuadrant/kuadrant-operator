@@ -13,4 +13,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: quay.io/kuadrant/kuadrant-operator
-  newTag: dev
+  newTag: latest

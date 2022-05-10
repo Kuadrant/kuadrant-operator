@@ -18,8 +18,11 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"github.com/go-logr/logr"
+	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -27,11 +30,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
 const (
 	kuadrantFinalizer = "kuadrant.kuadrant.io/finalizer"
+	extAuthorizerName = "kuadrant-authorization"
 )
 
 // KuadrantReconciler reconciles a Kuadrant object
@@ -43,6 +48,7 @@ type KuadrantReconciler struct {
 //+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=kuadrants,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=kuadrants/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=kuadrants/finalizers,verbs=update
+//+kubebuilder:rbac:groups=install.istio.io/v1alpha1,resources=istiooperators,verbs=get;list;watch;create;update;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -61,6 +67,14 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 		}
 		logger.Error(err, "failed to get kuadrant object")
 		return ctrl.Result{}, err
+	}
+
+	if logger.V(1).Enabled() {
+		jsonData, err := json.MarshalIndent(kObj, "", "  ")
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		logger.V(1).Info(string(jsonData))
 	}
 
 	if kObj.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(kObj, kuadrantFinalizer) {
@@ -117,13 +131,163 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 }
 
 func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) error {
-	// TODO
+	logger := logr.FromContext(ctx)
+	iop := &iopv1alpha1.IstioOperator{}
+
+	iopKey := client.ObjectKey{Name: iopName(), Namespace: iopNamespace()}
+	if err := r.Get(ctx, iopKey, iop); err != nil {
+		// It should exists, NotFound also considered as error
+		logger.Error(err, "failed to get istiooperator object", "key", iopKey)
+		return err
+	}
+
+	if !hasKuadrantAuthorizer(iop) {
+		return nil
+	}
+
+	obj, ok := iop.Spec.MeshConfig["extensionProviders"]
+	if !ok || obj == nil {
+		obj = make([]interface{}, 0)
+	}
+
+	extensionProviders, ok := obj.([]interface{})
+	if !ok {
+		return fmt.Errorf("istiooperator MeshConfig[extensionProviders] type assertion failed: %T", obj)
+	}
+
+	for idx := range extensionProviders {
+		extensionProvider, ok := extensionProviders[idx].(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("istiooperator MeshConfig[extensionProviders][idx] type assertion failed: %T", extensionProviders[idx])
+		}
+		name, ok := extensionProvider["name"]
+		if !ok {
+			continue
+		}
+		if name == extAuthorizerName {
+			// deletes the element in the array
+			extensionProviders = append(extensionProviders[:idx], extensionProviders[idx+1:]...)
+			iop.Spec.MeshConfig["extensionProviders"] = extensionProviders
+			break
+		}
+	}
+
+	logger.Info("remove external authorizer from meshconfig")
+	if err := r.Update(ctx, iop); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context) error {
+	logger := logr.FromContext(ctx)
+	iop := &iopv1alpha1.IstioOperator{}
+
+	iopKey := client.ObjectKey{Name: iopName(), Namespace: iopNamespace()}
+	if err := r.Get(ctx, iopKey, iop); err != nil {
+		// It should exists, NotFound also considered as error
+		logger.Error(err, "failed to get istiooperator object", "key", iopKey)
+		return err
+	}
+
+	if hasKuadrantAuthorizer(iop) {
+		return nil
+	}
+
+	//meshConfig:
+	//    extensionProviders:
+	//      - envoyExtAuthzGrpc:
+	//          port: POST
+	//          service: AUTHORINO SERVICE
+	//        name: kuadrant-authorization
+
+	if iop.Spec.MeshConfig == nil {
+		iop.Spec.MeshConfig = make(map[string]interface{})
+	}
+
+	obj, ok := iop.Spec.MeshConfig["extensionProviders"]
+	if !ok || obj == nil {
+		obj = make([]interface{}, 0)
+	}
+
+	extensionProviders, ok := obj.([]interface{})
+	if !ok {
+		return fmt.Errorf("istiooperator extensionprovider type assertion failed: %T", obj)
+	}
+
+	envoyExtAuthzGrpc := make(map[string]interface{})
+	envoyExtAuthzGrpc["port"] = 50051
+	envoyExtAuthzGrpc["service"] = "authorino-authorino-authorization.kuadrant-system.svc.cluster.local"
+
+	kuadrantExtensionProvider := make(map[string]interface{})
+	kuadrantExtensionProvider["name"] = extAuthorizerName
+	kuadrantExtensionProvider["envoyExtAuthzGrpc"] = envoyExtAuthzGrpc
+
+	iop.Spec.MeshConfig["extensionProviders"] = append(extensionProviders, kuadrantExtensionProvider)
+	logger.Info("adding external authorizer to meshconfig")
+	if err := r.Update(ctx, iop); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (ctrl.Result, error) {
-	// TODO
+	if err := r.registerExternalAuthorizer(ctx); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
+}
+
+func iopName() string {
+	return common.FetchEnv("ISTIOOPERATOR_NAME", "istiocontrolplane")
+}
+
+func iopNamespace() string {
+	return common.FetchEnv("ISTIOOPERATOR_NAMESPACE", "istio-system")
+}
+
+func hasKuadrantAuthorizer(iop *iopv1alpha1.IstioOperator) bool {
+	if iop == nil {
+		return false
+	}
+
+	// IstioOperator
+	//
+	//meshConfig:
+	//    extensionProviders:
+	//      - envoyExtAuthzGrpc:
+	//          port: POST
+	//          service: AUTHORINO SERVICE
+	//        name: kuadrant-authorization
+
+	extensionProvidersObj, ok := iop.Spec.MeshConfig["extensionProviders"]
+	if !ok || extensionProvidersObj == nil {
+		return false
+	}
+
+	extensionProvidersList, ok := extensionProvidersObj.([]interface{})
+	if !ok {
+		return false
+	}
+
+	for idx := range extensionProvidersList {
+		extensionProvider, ok := extensionProvidersList[idx].(map[string]interface{})
+		if !ok {
+			return false
+		}
+		name, ok := extensionProvider["name"]
+		if !ok {
+			continue
+		}
+		if name == extAuthorizerName {
+			return true
+		}
+	}
+
+	return false
 }
 
 // SetupWithManager sets up the controller with the Manager.

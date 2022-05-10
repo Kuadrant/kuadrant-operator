@@ -161,6 +161,8 @@ test: clean-cov manifests generate fmt vet envtest ## Run tests.
 build: generate fmt vet ## Build manager binary.
 	go build -o bin/manager main.go
 
+run: export LOG_LEVEL = debug
+run: export LOG_MODE = development
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 

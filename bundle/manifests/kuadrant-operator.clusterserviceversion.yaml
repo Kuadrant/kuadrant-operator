@@ -151,7 +151,7 @@ spec:
         serviceAccountName: kuadrant-controller-manager
       - rules:
         - apiGroups:
-          - install.istio.io/v1alpha1
+          - install.istio.io
           resources:
           - istiooperators
           verbs:

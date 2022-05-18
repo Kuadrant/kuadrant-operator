@@ -9,6 +9,8 @@ require (
 	github.com/onsi/gomega v1.16.0
 	go.uber.org/zap v1.19.1
 	gotest.tools v2.2.0+incompatible
+	// go get istio.io/api@1.12.6
+	istio.io/api v0.0.0-20220304035241-8c47cbbea144
 	// go get istio.io/istio/operator/pkg/apis/istio/v1alpha1@1.12.6
 	istio.io/istio v0.0.0-20220328194112-a0c7a3355331
 	k8s.io/apimachinery v0.22.2

@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	istioapiv1alpha1 "istio.io/api/operator/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -202,6 +203,10 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context) err
 	//          service: AUTHORINO SERVICE
 	//        name: kuadrant-authorization
 
+	if iop.Spec == nil {
+		iop.Spec = &istioapiv1alpha1.IstioOperatorSpec{}
+	}
+
 	if iop.Spec.MeshConfig == nil {
 		iop.Spec.MeshConfig = make(map[string]interface{})
 	}
@@ -250,7 +255,7 @@ func iopNamespace() string {
 }
 
 func hasKuadrantAuthorizer(iop *iopv1alpha1.IstioOperator) bool {
-	if iop == nil {
+	if iop == nil || iop.Spec == nil {
 		return false
 	}
 

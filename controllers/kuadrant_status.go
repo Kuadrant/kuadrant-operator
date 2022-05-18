@@ -71,7 +71,7 @@ func (r *KuadrantReconciler) readyCondition(specErr error) *metav1.Condition {
 	cond := &metav1.Condition{
 		Type:    ReadyConditionType,
 		Status:  metav1.ConditionTrue,
-		Reason:  "KReady",
+		Reason:  "Ready",
 		Message: "Kuadrant is ready",
 	}
 

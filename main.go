@@ -18,37 +18,63 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
+	"runtime"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	"k8s.io/apimachinery/pkg/runtime"
+	istioapis "istio.io/istio/operator/pkg/apis"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/controllers"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	//+kubebuilder:scaffold:imports
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	scheme   = k8sruntime.NewScheme()
+	logLevel = common.FetchEnv("LOG_LEVEL", "info")
+	logMode  = common.FetchEnv("LOG_MODE", "production")
 )
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(istioapis.AddToScheme(scheme))
 
 	utilruntime.Must(kuadrantv1beta1.AddToScheme(scheme))
+
 	//+kubebuilder:scaffold:scheme
+
+	logger := log.NewLogger(
+		log.SetLevel(log.ToLevel(logLevel)),
+		log.SetMode(log.ToMode(logMode)),
+		log.WriteTo(os.Stdout),
+	).WithName("kuadrant-operator")
+	log.SetLogger(logger)
+}
+
+func printControllerMetaInfo() {
+	setupLog := log.Log
+
+	setupLog.Info(fmt.Sprintf("go version: %s", runtime.Version()))
+	setupLog.Info(fmt.Sprintf("go os/arch: %s/%s", runtime.GOOS, runtime.GOARCH))
+	setupLog.Info("base logger", "log level", logLevel, "log mode", logMode)
 }
 
 func main() {
+	printControllerMetaInfo()
+
+	setupLog := log.Log
+
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
@@ -57,13 +83,7 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
-
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,

@@ -10,7 +10,7 @@ metadata:
           "metadata": {
             "name": "kuadrant-sample"
           },
-          "spec": null
+          "spec": {}
         }
       ]
     capabilities: Basic Install
@@ -150,6 +150,17 @@ spec:
           - watch
         serviceAccountName: kuadrant-controller-manager
       - rules:
+        - apiGroups:
+          - install.istio.io
+          resources:
+          - istiooperators
+          verbs:
+          - create
+          - get
+          - list
+          - patch
+          - update
+          - watch
         - apiGroups:
           - kuadrant.kuadrant.io
           resources:

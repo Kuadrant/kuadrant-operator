@@ -7,6 +7,17 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - install.istio.io
+  resources:
+  - istiooperators
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - kuadrant.kuadrant.io
   resources:
   - kuadrants

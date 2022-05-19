@@ -79,9 +79,6 @@ jobs:
       - name: Wait for deployment
         run: |
           kubectl -n kuadrant-system wait --timeout=300s --for=condition=Available deployments --all
-      - name: Run make istio-install-with-patch
-        run: |
-          make istio-install-with-patch
       # Note: This doesn't run any actual tests yet!
       - name: Run make undeploy
         run: |

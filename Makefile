@@ -148,14 +148,21 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+.PHONY: clean-cov
+clean-cov: ## Remove coverage report
+	rm -rf cover.out
+
+.PHONY: test
+test: clean-cov manifests generate fmt vet envtest ## Run tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out -v -timeout 0
 
 ##@ Build
 
 build: generate fmt vet ## Build manager binary.
 	go build -o bin/manager main.go
 
+run: export LOG_LEVEL = debug
+run: export LOG_MODE = development
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 

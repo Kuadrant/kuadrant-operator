@@ -4,6 +4,7 @@ resources:
   - controller
   - authorino
   - limitador
+  - gateway-api
 
 patchesStrategicMerge:
   - authorino/delete-ns.yaml

@@ -23,6 +23,7 @@ testbin/*
 *.swp
 *.swo
 *~
+kuadrant-operator
 
 # ./bin/opm index add --generate output
 database/index.db

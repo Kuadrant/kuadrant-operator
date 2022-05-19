@@ -25,4 +25,3 @@ kind-create-kuadrant-cluster: kind-create-cluster istio-install ## Create a kind
 	$(MAKE) install
 	$(MAKE) deploy
 	kubectl -n kuadrant-system wait --timeout=300s --for=condition=Available deployments --all
-	$(MAKE) istio-install-with-patch

@@ -43,3 +43,15 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - limitador.kuadrant.io
+  resources:
+  - limitadors
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch

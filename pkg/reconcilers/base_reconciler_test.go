@@ -37,8 +37,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	"github.com/kuadrant/kuadrant-controller/pkg/log"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
 func TestMain(m *testing.M) {

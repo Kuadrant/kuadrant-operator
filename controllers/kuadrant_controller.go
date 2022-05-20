@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -33,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/kuadrantcontrollermanifests"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
@@ -251,6 +253,10 @@ func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1
 		return ctrl.Result{}, err
 	}
 
+	if err := r.reconcileKuadrantController(ctx, kObj); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -322,6 +328,49 @@ func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadr
 	}
 
 	return r.ReconcileResource(ctx, &limitadorv1alpha1.Limitador{}, limitador, reconcilers.CreateOnlyMutator)
+}
+
+func (r *KuadrantReconciler) reconcileKuadrantController(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+	logger := logr.FromContext(ctx)
+	kuadrantControllerVersion, err := common.KuadrantControllerImage(ctx, r.Scheme)
+	if err != nil {
+		return err
+	}
+	logger.Info("Deploying kuadrant controller", "version", kuadrantControllerVersion)
+
+	data, err := kuadrantcontrollermanifests.Content()
+	if err != nil {
+		return err
+	}
+
+	return common.DecodeFile(ctx, data, r.Scheme, r.createOnlyInKuadrantNSCb(ctx, kObj))
+}
+
+func (r *KuadrantReconciler) createOnlyInKuadrantNSCb(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) common.DecodeCallback {
+	return func(obj runtime.Object) error {
+		logger := logr.FromContext(ctx)
+		k8sObj, ok := obj.(client.Object)
+		if !ok {
+			return errors.New("runtime.Object could not be type asserted to client.Object")
+		}
+
+		// Create in Kuadrant CR's namespace
+		k8sObj.SetNamespace(kObj.Namespace)
+
+		k8sObjKind := k8sObj.DeepCopyObject().GetObjectKind()
+
+		err := r.Client().Create(ctx, k8sObj)
+		logger.V(1).Info("create resource", "GKV", k8sObjKind.GroupVersionKind(), "name", k8sObj.GetName(), "error", err)
+		if err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				// Omit error
+				logger.Info("Already exists", "GKV", k8sObjKind.GroupVersionKind(), "name", k8sObj.GetName())
+			} else {
+				return err
+			}
+		}
+		return nil
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.

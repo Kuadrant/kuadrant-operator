@@ -14,6 +14,8 @@ require (
 	istio.io/api v0.0.0-20220304035241-8c47cbbea144
 	// go get istio.io/istio/operator/pkg/apis/istio/v1alpha1@1.12.6
 	istio.io/istio v0.0.0-20220328194112-a0c7a3355331
+	k8s.io/api v0.22.2
+	k8s.io/apiextensions-apiserver v0.22.2
 	k8s.io/apimachinery v0.22.2
 	k8s.io/client-go v0.22.2
 	k8s.io/klog/v2 v2.10.0

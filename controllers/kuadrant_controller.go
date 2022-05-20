@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istioapiv1alpha1 "istio.io/api/operator/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
@@ -257,6 +258,10 @@ func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1
 		return ctrl.Result{}, err
 	}
 
+	if err := r.reconcileAuthorino(ctx, kObj); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -371,6 +376,40 @@ func (r *KuadrantReconciler) createOnlyInKuadrantNSCb(ctx context.Context, kObj 
 		}
 		return nil
 	}
+}
+
+func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+	tmpFalse := false
+	authorino := &authorinov1beta1.Authorino{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Authorino",
+			APIVersion: "operator.authorino.kuadrant.io/v1beta1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "authorino",
+			Namespace: kObj.Namespace,
+		},
+		Spec: authorinov1beta1.AuthorinoSpec{
+			ClusterWide: true,
+			Listener: authorinov1beta1.Listener{
+				Tls: authorinov1beta1.Tls{
+					Enabled: &tmpFalse,
+				},
+			},
+			OIDCServer: authorinov1beta1.OIDCServer{
+				Tls: authorinov1beta1.Tls{
+					Enabled: &tmpFalse,
+				},
+			},
+		},
+	}
+
+	err := r.SetOwnerReference(kObj, authorino)
+	if err != nil {
+		return err
+	}
+
+	return r.ReconcileResource(ctx, &authorinov1beta1.Authorino{}, authorino, reconcilers.CreateOnlyMutator)
 }
 
 // SetupWithManager sets up the controller with the Manager.

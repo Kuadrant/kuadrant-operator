@@ -37,6 +37,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
+	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -98,9 +99,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("kuadrant"),
+		mgr.GetEventRecorderFor("Kuadrant"),
+	)
+
 	if err = (&controllers.KuadrantReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		BaseReconciler: kuadrantBaseReconciler,
+		Scheme:         mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Kuadrant")
 		os.Exit(1)

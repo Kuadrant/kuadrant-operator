@@ -22,9 +22,11 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istioapiv1alpha1 "istio.io/api/operator/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,6 +35,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
+	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
 const (
@@ -42,7 +45,7 @@ const (
 
 // KuadrantReconciler reconciles a Kuadrant object
 type KuadrantReconciler struct {
-	client.Client
+	*reconcilers.BaseReconciler
 	Scheme *runtime.Scheme
 }
 
@@ -50,6 +53,7 @@ type KuadrantReconciler struct {
 //+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=kuadrants/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=kuadrants/finalizers,verbs=update
 //+kubebuilder:rbac:groups=install.istio.io,resources=istiooperators,verbs=get;list;watch;create;update;patch
+//+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;delete;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -61,7 +65,7 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 	ctx := logr.NewContext(eventCtx, logger)
 
 	kObj := &kuadrantv1beta1.Kuadrant{}
-	if err := r.Get(ctx, req.NamespacedName, kObj); err != nil {
+	if err := r.Client().Get(ctx, req.NamespacedName, kObj); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("no kuadrant object found")
 			return ctrl.Result{}, nil
@@ -87,7 +91,7 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 
 		logger.Info("removing finalizer")
 		controllerutil.RemoveFinalizer(kObj, kuadrantFinalizer)
-		if err := r.Update(ctx, kObj); client.IgnoreNotFound(err) != nil {
+		if err := r.Client().Update(ctx, kObj); client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{}, nil
@@ -101,7 +105,7 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 
 	if !controllerutil.ContainsFinalizer(kObj, kuadrantFinalizer) {
 		controllerutil.AddFinalizer(kObj, kuadrantFinalizer)
-		if err := r.Update(ctx, kObj); client.IgnoreNotFound(err) != nil {
+		if err := r.Client().Update(ctx, kObj); client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{Requeue: true}, err
 		}
 	}
@@ -136,7 +140,7 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) e
 	iop := &iopv1alpha1.IstioOperator{}
 
 	iopKey := client.ObjectKey{Name: iopName(), Namespace: iopNamespace()}
-	if err := r.Get(ctx, iopKey, iop); err != nil {
+	if err := r.Client().Get(ctx, iopKey, iop); err != nil {
 		// It should exists, NotFound also considered as error
 		logger.Error(err, "failed to get istiooperator object", "key", iopKey)
 		return err
@@ -174,7 +178,7 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) e
 	}
 
 	logger.Info("remove external authorizer from meshconfig")
-	if err := r.Update(ctx, iop); err != nil {
+	if err := r.Client().Update(ctx, iop); err != nil {
 		return err
 	}
 
@@ -186,7 +190,7 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context) err
 	iop := &iopv1alpha1.IstioOperator{}
 
 	iopKey := client.ObjectKey{Name: iopName(), Namespace: iopNamespace()}
-	if err := r.Get(ctx, iopKey, iop); err != nil {
+	if err := r.Client().Get(ctx, iopKey, iop); err != nil {
 		// It should exists, NotFound also considered as error
 		logger.Error(err, "failed to get istiooperator object", "key", iopKey)
 		return err
@@ -231,7 +235,7 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context) err
 
 	iop.Spec.MeshConfig["extensionProviders"] = append(extensionProviders, kuadrantExtensionProvider)
 	logger.Info("adding external authorizer to meshconfig")
-	if err := r.Update(ctx, iop); err != nil {
+	if err := r.Client().Update(ctx, iop); err != nil {
 		return err
 	}
 
@@ -240,6 +244,10 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context) err
 
 func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (ctrl.Result, error) {
 	if err := r.registerExternalAuthorizer(ctx); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.reconcileLimitador(ctx, kObj); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -293,6 +301,27 @@ func hasKuadrantAuthorizer(iop *iopv1alpha1.IstioOperator) bool {
 	}
 
 	return false
+}
+
+func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+	limitador := &limitadorv1alpha1.Limitador{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Limitador",
+			APIVersion: "limitador.kuadrant.io/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "limitador",
+			Namespace: kObj.Namespace,
+		},
+		Spec: limitadorv1alpha1.LimitadorSpec{},
+	}
+
+	err := r.SetOwnerReference(kObj, limitador)
+	if err != nil {
+		return err
+	}
+
+	return r.ReconcileResource(ctx, &limitadorv1alpha1.Limitador{}, limitador, reconcilers.CreateOnlyMutator)
 }
 
 // SetupWithManager sets up the controller with the Manager.

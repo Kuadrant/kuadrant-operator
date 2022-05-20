@@ -41,7 +41,7 @@ func (r *KuadrantReconciler) reconcileStatus(ctx context.Context, kObj *kuadrant
 	logger.V(1).Info("Updating Status", "sequence no:", fmt.Sprintf("sequence No: %v->%v", kObj.Status.ObservedGeneration, newStatus.ObservedGeneration))
 
 	kObj.Status = *newStatus
-	updateErr := r.Status().Update(ctx, kObj)
+	updateErr := r.Client().Status().Update(ctx, kObj)
 	if updateErr != nil {
 		// Ignore conflicts, resource might just be outdated.
 		if errors.IsConflict(updateErr) {

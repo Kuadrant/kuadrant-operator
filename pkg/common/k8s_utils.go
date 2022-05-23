@@ -19,6 +19,7 @@ package common
 import (
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -84,4 +85,14 @@ func ObjectKeyListDifference(a, b []client.ObjectKey) []client.ObjectKey {
 	}
 
 	return result
+}
+
+func FindDeploymentStatusCondition(conditions []appsv1.DeploymentCondition, conditionType string) *appsv1.DeploymentCondition {
+	for i := range conditions {
+		if conditions[i].Type == appsv1.DeploymentConditionType(conditionType) {
+			return &conditions[i]
+		}
+	}
+
+	return nil
 }

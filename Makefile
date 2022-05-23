@@ -162,7 +162,7 @@ build: generate fmt vet ## Build manager binary.
 
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
-run: manifests generate fmt vet ## Run a controller from your host.
+run: generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
 docker-build: ## Build docker image with the manager.

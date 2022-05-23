@@ -36,7 +36,7 @@ func (r *KuadrantReconciler) reconcileStatus(ctx context.Context, kObj *kuadrant
 	if equalStatus && kObj.Generation == kObj.Status.ObservedGeneration {
 		// Steady state
 		logger.V(1).Info("Status was not updated")
-		return reconcile.Result{Requeue: meta.IsStatusConditionFalse(kObj.Status.Conditions, "Ready")}, nil
+		return reconcile.Result{}, nil
 	}
 
 	// Save the generation number we acted on, otherwise we might wrongfully indicate

@@ -27,6 +27,7 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istioapiv1alpha1 "istio.io/api/operator/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -380,10 +381,14 @@ func (r *KuadrantReconciler) createOnlyInKuadrantNSCb(ctx context.Context, kObj 
 
 		// Create in Kuadrant CR's namespace
 		k8sObj.SetNamespace(kObj.Namespace)
+		err := r.SetOwnerReference(kObj, k8sObj)
+		if err != nil {
+			return err
+		}
 
 		k8sObjKind := k8sObj.DeepCopyObject().GetObjectKind()
 
-		err := r.Client().Create(ctx, k8sObj)
+		err = r.Client().Create(ctx, k8sObj)
 		logger.V(1).Info("create resource", "GKV", k8sObjKind.GroupVersionKind(), "name", k8sObj.GetName(), "error", err)
 		if err != nil {
 			if apierrors.IsAlreadyExists(err) {
@@ -435,5 +440,8 @@ func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadr
 func (r *KuadrantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta1.Kuadrant{}).
+		Owns(&appsv1.Deployment{}).
+		Owns(&limitadorv1alpha1.Limitador{}).
+		Owns(&authorinov1beta1.Authorino{}).
 		Complete(r)
 }

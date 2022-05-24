@@ -14,7 +14,7 @@ kind-create-cluster: kind ## Create the "kuadrant-local" kind cluster.
 	$(KIND) create cluster --name $(KIND_CLUSTER_NAME)
 
 .PHONY: kind-delete-cluster
-kind-delete-cluster: ## Delete the "kuadrant-local" kind cluster.
+kind-delete-cluster: kind ## Delete the "kuadrant-local" kind cluster.
 	- $(KIND) delete cluster --name $(KIND_CLUSTER_NAME)
 
 .PHONY: kind-create-kuadrant-cluster

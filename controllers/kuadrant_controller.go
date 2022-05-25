@@ -208,7 +208,7 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) e
 	return nil
 }
 
-func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context) error {
+func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	logger := logr.FromContext(ctx)
 	iop := &iopv1alpha1.IstioOperator{}
 
@@ -250,7 +250,7 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context) err
 
 	envoyExtAuthzGrpc := make(map[string]interface{})
 	envoyExtAuthzGrpc["port"] = 50051
-	envoyExtAuthzGrpc["service"] = "authorino-authorino-authorization.kuadrant-system.svc.cluster.local"
+	envoyExtAuthzGrpc["service"] = fmt.Sprintf("authorino-authorino-authorization.%s.svc.cluster.local", kObj.Namespace)
 
 	kuadrantExtensionProvider := make(map[string]interface{})
 	kuadrantExtensionProvider["name"] = extAuthorizerName
@@ -266,7 +266,7 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context) err
 }
 
 func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (ctrl.Result, error) {
-	if err := r.registerExternalAuthorizer(ctx); err != nil {
+	if err := r.registerExternalAuthorizer(ctx, kObj); err != nil {
 		return ctrl.Result{}, err
 	}
 

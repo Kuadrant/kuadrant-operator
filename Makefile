@@ -1,3 +1,6 @@
+MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+PROJECT_PATH := $(patsubst %/,%,$(dir $(MKFILE_PATH)))
+
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
@@ -125,13 +128,9 @@ manifests: controller-gen dependencies-manifests ## Generate WebhookConfiguratio
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: dependencies-manifests
-dependencies-manifests: export KUADRANT_CONTROLLER_GITREF := $(KUADRANT_CONTROLLER_GITREF)
 dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
 dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
 dependencies-manifests: ## Update kuadrant dependencies manifests.
-	envsubst \
-        < config/dependencies/controller/kustomization.template.yaml \
-        > config/dependencies/controller/kustomization.yaml
 	envsubst \
         < config/dependencies/authorino/kustomization.template.yaml \
         > config/dependencies/authorino/kustomization.yaml
@@ -163,7 +162,7 @@ build: generate fmt vet ## Build manager binary.
 
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
-run: manifests generate fmt vet ## Run a controller from your host.
+run: generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
 docker-build: ## Build docker image with the manager.
@@ -183,7 +182,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/deploy | kubectl apply -f -
-	${MAKE} post-deploy-hacks
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMAGE_TAG_BASE}:latest
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/deploy | kubectl delete -f -
@@ -198,19 +197,9 @@ uninstall-olm:
 
 deploy-olm: ## Deploy controller to the K8s cluster specified in ~/.kube/config using OLM catalog image.
 	$(KUSTOMIZE) build config/deploy/olm | kubectl apply -f -
-	${MAKE} post-deploy-hacks
 
 undeploy-olm: ## Undeploy controller from the K8s cluster specified in ~/.kube/config using OLM catalog image.
 	$(KUSTOMIZE) build config/deploy/olm | kubectl delete -f -
-
-#This target is temporary to aid dev/test of the operator. Eventually it will be the responsibility of the
-# operator itself to create/configure these things as part of the reconciliation of a kuadrant CR.
-post-deploy-hacks:
-	# Wait for deployment to complete
-	timeout 60s bash -c 'until kubectl -n kuadrant-system get deployments/kuadrant-operator-controller-manager; do sleep 10; done;'
-	kubectl -n kuadrant-system wait --timeout=300s --for=condition=Available deployments --all
-	kubectl apply -f config/dependencies/istio/default-gateway.yaml -n kuadrant-system
-	kubectl apply -f config/dependencies/authorino/authorino.yaml -n kuadrant-system
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.

@@ -26,7 +26,10 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istioapis "istio.io/istio/operator/pkg/apis"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -37,6 +40,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
+	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -48,8 +52,10 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(limitadorv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(authorinov1beta1.AddToScheme(scheme))
+	utilruntime.Must(apiextv1.AddToScheme(scheme))
 	utilruntime.Must(istioapis.AddToScheme(scheme))
-
 	utilruntime.Must(kuadrantv1beta1.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
@@ -98,9 +104,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("kuadrant"),
+		mgr.GetEventRecorderFor("Kuadrant"),
+	)
+
 	if err = (&controllers.KuadrantReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		BaseReconciler: kuadrantBaseReconciler,
+		Scheme:         mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Kuadrant")
 		os.Exit(1)

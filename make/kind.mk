@@ -14,12 +14,17 @@ kind-create-cluster: kind ## Create the "kuadrant-local" kind cluster.
 	$(KIND) create cluster --name $(KIND_CLUSTER_NAME)
 
 .PHONY: kind-delete-cluster
-kind-delete-cluster: ## Delete the "kuadrant-local" kind cluster.
-	$(KIND) delete cluster --name $(KIND_CLUSTER_NAME)
+kind-delete-cluster: kind ## Delete the "kuadrant-local" kind cluster.
+	- $(KIND) delete cluster --name $(KIND_CLUSTER_NAME)
 
 .PHONY: kind-create-kuadrant-cluster
 kind-create-kuadrant-cluster: export IMG := quay.io/kuadrant/kuadrant-operator:dev
-kind-create-kuadrant-cluster: kind-create-cluster istio-install ## Create a kind cluster with kuadrant deployed.
+kind-create-kuadrant-cluster: ## Create a kind cluster with kuadrant deployed.
+	$(MAKE) kind-delete-cluster
+	$(MAKE) kind-create-cluster
+	$(MAKE) gateway-api-install
+	$(MAKE) istio-install
+	$(MAKE) deploy-gateway
 	$(MAKE) docker-build
 	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
 	$(MAKE) install

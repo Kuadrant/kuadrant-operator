@@ -1,5 +1,0 @@
-resources:
-- github.com/Kuadrant/kuadrant-controller/config/default?ref=${KUADRANT_CONTROLLER_GITREF}
-
-patchesStrategicMerge:
-  - delete-ns.yaml

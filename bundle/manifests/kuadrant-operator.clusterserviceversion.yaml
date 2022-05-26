@@ -22,17 +22,11 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - kind: AuthPolicy
-      name: authpolicies.apim.kuadrant.io
-      version: v1alpha1
     - description: Kuadrant is the Schema for the kuadrants API
       displayName: Kuadrant
       kind: Kuadrant
       name: kuadrants.kuadrant.kuadrant.io
       version: v1beta1
-    - kind: RateLimitPolicy
-      name: ratelimitpolicies.apim.kuadrant.io
-      version: v1alpha1
   description: Kuadrant Operator
   displayName: Kuadrant
   icon:
@@ -43,9 +37,41 @@ spec:
       clusterPermissions:
       - rules:
         - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        - apiGroups:
+          - ""
+          resources:
+          - leases
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - apiextensions.k8s.io
+          resources:
+          - customresourcedefinitions
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - apim.kuadrant.io
           resources:
           - authpolicies
+          - ratelimitpolicies
           verbs:
           - create
           - delete
@@ -63,15 +89,11 @@ spec:
         - apiGroups:
           - apim.kuadrant.io
           resources:
-          - ratelimitpolicies
+          - authpolicies/status
           verbs:
-          - create
-          - delete
           - get
-          - list
           - patch
           - update
-          - watch
         - apiGroups:
           - apim.kuadrant.io
           resources:
@@ -86,6 +108,45 @@ spec:
           - get
           - patch
           - update
+        - apiGroups:
+          - apps
+          resources:
+          - deployments
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - configmaps
+          - leases
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          - serviceaccounts
+          - services
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
         - apiGroups:
           - gateway.networking.k8s.io
           resources:
@@ -104,52 +165,6 @@ spec:
           - patch
           - update
           - watch
-        - apiGroups:
-          - limitador.kuadrant.io
-          resources:
-          - ratelimits
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - networking.istio.io
-          resources:
-          - envoyfilters
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - networking.istio.io
-          resources:
-          - gateways
-          verbs:
-          - get
-          - list
-          - watch
-        - apiGroups:
-          - security.istio.io
-          resources:
-          - authorizationpolicies
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        serviceAccountName: kuadrant-controller-manager
-      - rules:
         - apiGroups:
           - install.istio.io
           resources:
@@ -188,6 +203,89 @@ spec:
           - patch
           - update
         - apiGroups:
+          - limitador.kuadrant.io
+          resources:
+          - limitadors
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - limitador.kuadrant.io
+          resources:
+          - ratelimits
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - networking.istio.io
+          resources:
+          - envoyfilters
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - networking.istio.io
+          resources:
+          - gateways
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - operator.authorino.kuadrant.io
+          resources:
+          - authorinos
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - rbac.authorization.k8s.io
+          resources:
+          - clusterrolebindings
+          - clusterroles
+          - rolebindings
+          - roles
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - security.istio.io
+          resources:
+          - authorizationpolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - authentication.k8s.io
           resources:
           - tokenreviews
@@ -201,63 +299,6 @@ spec:
           - create
         serviceAccountName: kuadrant-operator-controller-manager
       deployments:
-      - name: kuadrant-controller-manager
-        spec:
-          replicas: 1
-          selector:
-            matchLabels:
-              app: kuadrant
-              control-plane: controller-manager
-          strategy: {}
-          template:
-            metadata:
-              labels:
-                app: kuadrant
-                control-plane: controller-manager
-            spec:
-              containers:
-              - args:
-                - --config=controller_manager_config.yaml
-                command:
-                - /manager
-                image: quay.io/kuadrant/kuadrant-controller:latest
-                livenessProbe:
-                  httpGet:
-                    path: /healthz
-                    port: 8081
-                  initialDelaySeconds: 15
-                  periodSeconds: 20
-                name: manager
-                ports:
-                - containerPort: 8080
-                  name: metrics
-                readinessProbe:
-                  httpGet:
-                    path: /readyz
-                    port: 8081
-                  initialDelaySeconds: 5
-                  periodSeconds: 10
-                resources:
-                  limits:
-                    cpu: 100m
-                    memory: 30Mi
-                  requests:
-                    cpu: 100m
-                    memory: 20Mi
-                securityContext:
-                  allowPrivilegeEscalation: false
-                volumeMounts:
-                - mountPath: /controller_manager_config.yaml
-                  name: manager-config
-                  subPath: controller_manager_config.yaml
-              securityContext:
-                runAsNonRoot: true
-              serviceAccountName: kuadrant-controller-manager
-              terminationGracePeriodSeconds: 10
-              volumes:
-              - configMap:
-                  name: kuadrant-manager-config
-                name: manager-config
       - name: kuadrant-operator-controller-manager
         spec:
           replicas: 1
@@ -317,29 +358,6 @@ spec:
               serviceAccountName: kuadrant-operator-controller-manager
               terminationGracePeriodSeconds: 10
       permissions:
-      - rules:
-        - apiGroups:
-          - ""
-          - coordination.k8s.io
-          resources:
-          - configmaps
-          - leases
-          verbs:
-          - get
-          - list
-          - watch
-          - create
-          - update
-          - patch
-          - delete
-        - apiGroups:
-          - ""
-          resources:
-          - events
-          verbs:
-          - create
-          - patch
-        serviceAccountName: kuadrant-controller-manager
       - rules:
         - apiGroups:
           - ""

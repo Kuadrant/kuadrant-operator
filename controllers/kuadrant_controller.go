@@ -21,13 +21,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istioapiv1alpha1 "istio.io/api/operator/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -43,8 +43,14 @@ import (
 )
 
 const (
-	kuadrantFinalizer = "kuadrant.kuadrant.io/finalizer"
-	extAuthorizerName = "kuadrant-authorization"
+	kuadrantFinalizer     = "kuadrant.kuadrant.io/finalizer"
+	extAuthorizerName     = "kuadrant-authorization"
+	envLimitadorNamespace = "LIMITADOR_NAMESPACE"
+	envLimitadorName      = "LIMITADOR_NAME"
+)
+
+var (
+	limitadorName = common.FetchEnv(envLimitadorName, "limitador")
 )
 
 // KuadrantReconciler reconciles a Kuadrant object
@@ -344,7 +350,7 @@ func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadr
 			APIVersion: "limitador.kuadrant.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "limitador",
+			Name:      limitadorName,
 			Namespace: kObj.Namespace,
 		},
 		Spec: limitadorv1alpha1.LimitadorSpec{},
@@ -389,14 +395,28 @@ func (r *KuadrantReconciler) createOnlyInKuadrantNSCb(ctx context.Context, kObj 
 			return err
 		}
 
-		k8sObjKind := k8sObj.DeepCopyObject().GetObjectKind()
+		var newObj client.Object
+		newObj = k8sObj
 
-		err = r.Client().Create(ctx, k8sObj)
-		logger.V(1).Info("create resource", "GKV", k8sObjKind.GroupVersionKind(), "name", k8sObj.GetName(), "error", err)
+		switch obj := k8sObj.(type) {
+		case *appsv1.Deployment: // If it's a Deployment obj, it adds the required env vars
+			obj.Spec.Template.Spec.Containers[0].Env = append(
+				obj.Spec.Template.Spec.Containers[0].Env,
+				v1.EnvVar{Name: envLimitadorNamespace, Value: kObj.Namespace},
+				v1.EnvVar{Name: envLimitadorName, Value: limitadorName},
+			)
+			newObj = obj
+		default:
+		}
+		newObjCloned := newObj.DeepCopyObject()
+		err = r.Client().Create(ctx, newObj)
+
+		k8sObjKind := newObjCloned.GetObjectKind()
+		logger.V(1).Info("create resource", "GKV", k8sObjKind.GroupVersionKind(), "name", newObj.GetName(), "error", err)
 		if err != nil {
 			if apierrors.IsAlreadyExists(err) {
 				// Omit error
-				logger.Info("Already exists", "GKV", k8sObjKind.GroupVersionKind(), "name", k8sObj.GetName())
+				logger.Info("Already exists", "GKV", k8sObjKind.GroupVersionKind(), "name", newObj.GetName())
 			} else {
 				return err
 			}

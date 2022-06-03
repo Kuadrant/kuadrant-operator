@@ -29,6 +29,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	istioextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
@@ -61,6 +62,7 @@ func init() {
 	utilruntime.Must(istiosecurityv1beta1.AddToScheme(scheme))
 	utilruntime.Must(limitadorv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(gatewayapiv1alpha2.AddToScheme(scheme))
+	utilruntime.Must(istioextensionv1alpha1.AddToScheme(scheme))
 
 	// +kubebuilder:scaffold:scheme
 

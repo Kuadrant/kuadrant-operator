@@ -6,9 +6,24 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	securityv1beta1 "istio.io/api/security/v1beta1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
+
+type OperationWrapper struct {
+	Hosts      []string `json:"hosts,omitempty"`
+	NotHosts   []string `json:"not_hosts,omitempty"`
+	Ports      []string `json:"ports,omitempty"`
+	NotPorts   []string `json:"not_ports,omitempty"`
+	Methods    []string `json:"methods,omitempty"`
+	NotMethods []string `json:"not_methods,omitempty"`
+	Paths      []string `json:"paths,omitempty"`
+	NotPaths   []string `json:"not_paths,omitempty"`
+}
+
+// TODO(rahul): remove the following wrappers once https://github.com/istio/api/issues/2352 is fixed.
+type RuleWrapper struct {
+	Operations []*OperationWrapper `json:"from,omitempty"`
+}
 
 // +kubebuilder:validation:Enum=ALLOW;CUSTOM;DENY;AUDIT
 type AuthPolicyAction string
@@ -18,7 +33,7 @@ type AuthPolicyConfig struct {
 	Action AuthPolicyAction `json:"action"`
 
 	// A list of rules to match the request. A match occurs when at least one rule matches the request.
-	Rules []securityv1beta1.Rule `json:"rules,omitempty"`
+	Rules []*RuleWrapper `json:"rules,omitempty"`
 
 	// +kubebuilder:default=""
 	// Specifies detailed configuration of the CUSTOM action. Must be used only with CUSTOM action.

@@ -22,5 +22,6 @@ vendor
 *.swp
 *.swo
 *~
+.vscode/*
 
 kuadrant-controller

@@ -86,7 +86,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 
 // IstioAuthPolicy generates Istio's AuthorizationPolicy using Kuadrant's AuthPolicy
 func (r *AuthPolicyReconciler) reconcileAuthPolicy(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 
 	if err := ap.Validate(); err != nil {
 		return err
@@ -120,13 +120,30 @@ func (r *AuthPolicyReconciler) reconcileAuthPolicy(ctx context.Context, ap *apim
 			// convert []Rule  to []*Rule
 			rulePtrSlice := []*secv1beta1types.Rule{}
 			for idx := range policyConfig.Rules {
-				// TODO(rahulanand16nov): Do the check and append instead of force hostname from httproute
-				for _, toRule := range policyConfig.Rules[idx].To {
-					if toRule.Operation != nil {
-						toRule.Operation.Hosts = HostnamesToStrings(httpRoute.Spec.Hostnames)
-					}
+				rule := &secv1beta1types.Rule{
+					To: []*secv1beta1types.Rule_To{},
 				}
-				rulePtrSlice = append(rulePtrSlice, &policyConfig.Rules[idx])
+				// TODO(rahulanand16nov): Do the check and append instead of force hostname from httproute
+				for _, operation := range policyConfig.Rules[idx].Operations {
+					if operation != nil {
+						operation.Hosts = HostnamesToStrings(httpRoute.Spec.Hostnames)
+					}
+					// TODO(rahul): we'll revert back to using the structs directly once
+					// https://github.com/kubernetes-sigs/controller-tools/pull/584 is present in a release.
+					toRule := &secv1beta1types.Rule_To{
+						Operation: &secv1beta1types.Operation{
+							NotHosts:   operation.NotHosts,
+							Ports:      operation.Ports,
+							NotPorts:   operation.NotPorts,
+							Methods:    operation.Methods,
+							NotMethods: operation.NotMethods,
+							Paths:      operation.Paths,
+							NotPaths:   operation.NotPaths,
+						},
+					}
+					rule.To = append(rule.To, toRule)
+				}
+				rulePtrSlice = append(rulePtrSlice, rule)
 			}
 
 			actionInt := secv1beta1types.AuthorizationPolicy_Action_value[string(policyConfig.Action)]
@@ -166,7 +183,7 @@ func (r *AuthPolicyReconciler) reconcileAuthPolicy(ctx context.Context, ap *apim
 }
 
 func (r *AuthPolicyReconciler) reconcileNetworkResourceBackReference(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	httpRoute, err := r.fetchHTTPRoute(ctx, ap)
 	if err != nil {
 		// The object should also exist
@@ -199,7 +216,7 @@ func (r *AuthPolicyReconciler) reconcileNetworkResourceBackReference(ctx context
 }
 
 func (r *AuthPolicyReconciler) removeIstioAuthPolicy(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	logger.Info("Removing Istio's AuthorizationPolicy")
 
 	httpRoute, err := r.fetchHTTPRoute(ctx, ap)
@@ -243,7 +260,7 @@ func (r *AuthPolicyReconciler) removeIstioAuthPolicy(ctx context.Context, ap *ap
 
 // fetchHTTPRoute fetches the HTTPRoute described in targetRef *within* AuthPolicy's namespace.
 func (r *AuthPolicyReconciler) fetchHTTPRoute(ctx context.Context, ap *apimv1alpha1.AuthPolicy) (*gatewayapiv1alpha2.HTTPRoute, error) {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	key := client.ObjectKey{
 		Name:      string(ap.Spec.TargetRef.Name),
 		Namespace: ap.Namespace,

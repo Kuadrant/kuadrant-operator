@@ -7,6 +7,8 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
+const PatchedLimitadorClusterName = "rate-limit-cluster"
+
 // wasm-shim API structs
 type Rule struct {
 	Operations []*apimv1alpha1.Operation       `json:"operations"`

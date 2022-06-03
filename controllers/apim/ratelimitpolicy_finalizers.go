@@ -3,11 +3,9 @@ package apim
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/go-logr/logr"
-	protobuftypes "github.com/gogo/protobuf/types"
-	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	istioextensionv1alpha3 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -22,9 +20,9 @@ const (
 	rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
 )
 
-// finalizeWASMEnvoyFilters removes the configuration of this RLP from each gateway's EnvoyFilter.
-func (r *RateLimitPolicyReconciler) finalizeWASMEnvoyFilters(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
-	logger := logr.FromContext(ctx)
+// finalizeWASMPlugins removes the configuration of this RLP from each gateway's WASMPlugins.
+func (r *RateLimitPolicyReconciler) finalizeWASMPlugins(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+	logger, _ := logr.FromContext(ctx)
 
 	httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
 	if err != nil {
@@ -42,7 +40,7 @@ func (r *RateLimitPolicyReconciler) finalizeWASMEnvoyFilters(ctx context.Context
 		}
 		gateway := &gatewayapiv1alpha2.Gateway{}
 		err := r.Client().Get(ctx, gwKey, gateway)
-		logger.V(1).Info("finalizeWASMEnvoyFilters: get Gateway", "gateway", gwKey, "err", err)
+		logger.V(1).Info("finalizeWASMPlugins: get Gateway", "gateway", gwKey, "err", err)
 		if apierrors.IsNotFound(err) {
 			logger.Info("parentRef Gateway not found", "parentRef", gwKey)
 			continue
@@ -51,84 +49,73 @@ func (r *RateLimitPolicyReconciler) finalizeWASMEnvoyFilters(ctx context.Context
 			return err
 		}
 
-		desiredEF, err := kuadrantistioutils.WASMEnvoyFilter(rlp, gwKey, gateway.GetLabels(), httpRoute.Spec.Hostnames)
+		desiredWPs, err := kuadrantistioutils.WasmPlugins(rlp, gwKey, gateway.GetLabels(), httpRoute.Spec.Hostnames)
 		if err != nil {
 			return err
 		}
 
-		envoyFilter := &istionetworkingv1alpha3.EnvoyFilter{}
-		err = r.Client().Get(ctx, client.ObjectKeyFromObject(desiredEF), envoyFilter)
-		logger.V(1).Info("finalizeWASMEnvoyFilters: get EnvoyFilter", "envoyFilter", client.ObjectKeyFromObject(desiredEF), "err", err)
-		if apierrors.IsNotFound(err) {
-			logger.Info("finalizeWASMEnvoyFilters: envoyfilter not found", "envoyfilter", client.ObjectKeyFromObject(desiredEF))
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		err = r.finalizeSingleWASMEnvoyFilter(ctx, rlp, envoyFilter)
-		if err != nil {
-			return err
+		for _, desiredWP := range desiredWPs {
+			wasmPlugin := &istioextensionv1alpha3.WasmPlugin{}
+			err = r.Client().Get(ctx, client.ObjectKeyFromObject(desiredWP), wasmPlugin)
+			logger.V(1).Info("finalizeWASMPlugins: get WasmPlugin", "wasmplugin", client.ObjectKeyFromObject(desiredWP), "err", err)
+			if apierrors.IsNotFound(err) {
+				logger.Info("finalizeWASMPlugins: wasmplugin not found", "wasmplguin", client.ObjectKeyFromObject(desiredWP))
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			err = r.finalizeSingleWASMPlugins(ctx, rlp, wasmPlugin)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-// finalizeSingleWASMEnvoyFilter removes the configuration of this RLP
-// If the envoyfilter ends up with empty conf, the resource will be removed.
-func (r *RateLimitPolicyReconciler) finalizeSingleWASMEnvoyFilter(
-	ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy, envoyFilter *istionetworkingv1alpha3.EnvoyFilter,
+// finalizeSingleWASMPlugins removes the configuration of this RLP
+// If the WASMPlugin ends up with empty conf, the resource will be removed.
+func (r *RateLimitPolicyReconciler) finalizeSingleWASMPlugins(
+	ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy, wasmPlugin *istioextensionv1alpha3.WasmPlugin,
 ) error {
-	// first patch is PRE
-	// second patch is POST
-	configEmpty := []bool{false, false}
 	updateObject := false
-	for idx := 0; idx < 2; idx++ {
-		patch := envoyFilter.Spec.ConfigPatches[idx]
-		pluginConfigFields := patch.Patch.Value.Fields["typed_config"].
-			GetStructValue().Fields["value"].GetStructValue().Fields["config"].GetStructValue().
-			Fields["configuration"].GetStructValue().Fields
-		pluginConfigStr := pluginConfigFields["value"].GetStringValue()
-		pluginConfig := &kuadrantistioutils.PluginConfig{}
-		if err := json.Unmarshal([]byte(pluginConfigStr), pluginConfig); err != nil {
-			return fmt.Errorf("finalizeSingleWASMEnvoyFilter: failed to unmarshal plugin config: %w", err)
-		}
-
-		pluginKey := client.ObjectKeyFromObject(rlp).String()
-		if _, ok := pluginConfig.PluginPolicies[pluginKey]; ok {
-			delete(pluginConfig.PluginPolicies, pluginKey)
-			updateObject = true
-			newPluginConfigSerialized, err := json.Marshal(pluginConfig)
-			if err != nil {
-				return fmt.Errorf("finalizeSingleWASMEnvoyFilter: failed to marshall new plugin config into json: %w", err)
-			}
-			// Update existing envoyfilter patch value
-			pluginConfigFields["value"] = &protobuftypes.Value{
-				Kind: &protobuftypes.Value_StringValue{
-					StringValue: string(newPluginConfigSerialized),
-				},
-			}
-		}
-		configEmpty[idx] = len(pluginConfig.PluginPolicies) == 0
+	configEmpty := false
+	// Deserialize config into PluginConfig struct
+	configJSON, err := wasmPlugin.Spec.PluginConfig.MarshalJSON()
+	if err != nil {
+		return err
+	}
+	pluginConfig := &kuadrantistioutils.PluginConfig{}
+	if err := json.Unmarshal(configJSON, pluginConfig); err != nil {
+		return err
 	}
 
-	allConfigEmpty := true
-	for idx := range configEmpty {
-		allConfigEmpty = allConfigEmpty && configEmpty[idx]
+	pluginKey := client.ObjectKeyFromObject(rlp).String()
+	if _, ok := pluginConfig.PluginPolicies[pluginKey]; ok {
+		delete(pluginConfig.PluginPolicies, pluginKey)
+		updateObject = true
+		finalPluginConfig, err := kuadrantistioutils.PluginConfigToWasmPluginStruct(pluginConfig)
+		if err != nil {
+			return err
+		}
+		wasmPlugin.Spec.PluginConfig = finalPluginConfig
+
+		configEmpty = len(pluginConfig.PluginPolicies) == 0
 	}
 
-	if allConfigEmpty {
-		return r.DeleteResource(ctx, envoyFilter)
+	if configEmpty {
+		return r.DeleteResource(ctx, wasmPlugin)
 	} else if updateObject {
-		return r.UpdateResource(ctx, envoyFilter)
+		return r.UpdateResource(ctx, wasmPlugin)
 	}
 
 	return nil
 }
 
 func (r *RateLimitPolicyReconciler) deleteRateLimits(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	rlpKey := client.ObjectKeyFromObject(rlp)
 	for i := range rlp.Spec.Limits {
 		ratelimitfactory := common.RateLimitFactory{
@@ -153,7 +140,7 @@ func (r *RateLimitPolicyReconciler) deleteRateLimits(ctx context.Context, rlp *a
 }
 
 func (r *RateLimitPolicyReconciler) deleteNetworkResourceBackReference(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
 	if err != nil {
 		if apierrors.IsNotFound(err) {

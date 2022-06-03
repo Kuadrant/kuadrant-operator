@@ -24,7 +24,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/limitador-operator/api/v1alpha1"
-	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	istioextensionv1alpha3 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -51,7 +51,7 @@ type RateLimitPolicyReconciler struct {
 //+kubebuilder:rbac:groups=apim.kuadrant.io,resources=ratelimitpolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=apim.kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
 //+kubebuilder:rbac:groups=networking.istio.io,resources=gateways,verbs=get;list;watch
-//+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;delete;update;patch
+//+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=get;list;watch;create;delete;update;patch
 //+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=ratelimits,verbs=get;list;watch;create;update;delete;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -80,7 +80,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 
 	if rlp.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(rlp, rateLimitPolicyFinalizer) {
 		logger.V(1).Info("Handling removal of ratelimitpolicy object")
-		if err := r.finalizeWASMEnvoyFilters(ctx, rlp); err != nil {
+		if err := r.finalizeWASMPlugins(ctx, rlp); err != nil {
 			return ctrl.Result{}, err
 		}
 		if err := r.deleteRateLimits(ctx, rlp); err != nil {
@@ -157,11 +157,11 @@ func (r *RateLimitPolicyReconciler) reconcileSpec(ctx context.Context, rlp *apim
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileWASMEnvoyFilters(ctx, rlp); err != nil {
+	if err := r.reconcileWASMPlugins(ctx, rlp); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if err := r.cleanUpOrphanWASMEnvoyFilters(ctx, rlp); err != nil {
+	if err := r.cleanUpOrphanWASMPlugins(ctx, rlp); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -169,7 +169,7 @@ func (r *RateLimitPolicyReconciler) reconcileSpec(ctx context.Context, rlp *apim
 }
 
 func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	rlpKey := client.ObjectKeyFromObject(rlp)
 
 	// create the RateLimit resource
@@ -200,7 +200,7 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ap
 }
 
 func (r *RateLimitPolicyReconciler) reconcileNetworkResourceBackReference(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
 	if err != nil {
 		// The object should also exist
@@ -232,19 +232,20 @@ func (r *RateLimitPolicyReconciler) reconcileNetworkResourceBackReference(ctx co
 	return nil
 }
 
-// Finds gateways with envoyFilters with rate limit configuration from the current RLP
+// Finds gateways with WASMPLugins with rate limit configuration from the current RLP
 // Delete RL conf from the current RLP from gateways not referenced by the current RLP
 // Cleans up RL conf when:
 // - HTTPRoute updates parentRefs (gateways)
 // - RLP updates targetRef to another HTTPRoute
-func (r *RateLimitPolicyReconciler) cleanUpOrphanWASMEnvoyFilters(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
-	logger := logr.FromContext(ctx)
+func (r *RateLimitPolicyReconciler) cleanUpOrphanWASMPlugins(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+	logger, _ := logr.FromContext(ctx)
 
 	currentGatewayRefs, err := r.gatewayRefList(ctx, rlp)
 	if err != nil {
 		return err
 	}
 
+	// TODO(rahulanand16nov): maybe think about optimizing it with a label later
 	gwList := &gatewayapiv1alpha2.GatewayList{}
 	err = r.Client().List(ctx, gwList)
 	if err != nil {
@@ -258,30 +259,33 @@ func (r *RateLimitPolicyReconciler) cleanUpOrphanWASMEnvoyFilters(ctx context.Co
 
 	notReferencedGatewayKeys := common.ObjectKeyListDifference(gwKeyList, currentGatewayRefs)
 
+	RateLimitStages := []apimv1alpha1.RateLimitStage{apimv1alpha1.RateLimitStagePREAUTH, apimv1alpha1.RateLimitStagePOSTAUTH}
 	for _, gwKey := range notReferencedGatewayKeys {
-		wasmKey := kuadrantistioutils.WASMEnvoyFilterKey(gwKey)
+		for _, stage := range RateLimitStages {
+			wasmKey := kuadrantistioutils.WASMPluginKey(gwKey, stage)
 
-		envoyFilter := &istionetworkingv1alpha3.EnvoyFilter{}
-		err = r.Client().Get(ctx, wasmKey, envoyFilter)
-		logger.V(1).Info("cleanUpOrphanWASMEnvoyFilters: get EnvoyFilter", "envoyFilter", wasmKey, "err", err)
-		if apierrors.IsNotFound(err) {
-			logger.V(1).Info("cleanUpOrphanWASMEnvoyFilters: envoyfilter not found. Nothing to do", "envoyfilter", wasmKey)
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		err = r.finalizeSingleWASMEnvoyFilter(ctx, rlp, envoyFilter)
-		if err != nil {
-			return err
+			wasmplugin := &istioextensionv1alpha3.WasmPlugin{}
+			err = r.Client().Get(ctx, wasmKey, wasmplugin)
+			logger.V(1).Info("cleanUpOrphanWASMPlugins: get WasmPlugin", "wasmplugin", wasmKey, "err", err)
+			if apierrors.IsNotFound(err) {
+				logger.V(1).Info("cleanUpOrphanWASMPlugins: wasmplugin not found. Nothing to do", "wasmplugin", wasmKey)
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			err = r.finalizeSingleWASMPlugins(ctx, rlp, wasmplugin)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileWASMEnvoyFilters(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
-	logger := logr.FromContext(ctx)
+func (r *RateLimitPolicyReconciler) reconcileWASMPlugins(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+	logger, _ := logr.FromContext(ctx)
 
 	httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
 	if err != nil {
@@ -298,31 +302,33 @@ func (r *RateLimitPolicyReconciler) reconcileWASMEnvoyFilters(ctx context.Contex
 		gwKey := currentGatewayRefs[idx]
 		gateway := &gatewayapiv1alpha2.Gateway{}
 		err := r.Client().Get(ctx, gwKey, gateway)
-		logger.V(1).Info("reconcileWASMEnvoyFilters: get Gateway", "gateway", gwKey, "err", err)
+		logger.V(1).Info("reconcileWASMPlugins: get Gateway", "gateway", gwKey, "err", err)
 		if err != nil {
 			// gateway needs to exist
 			return err
 		}
 
-		// Reconcile one EnvoyFilter per gateway
+		// Reconcile two WasmPlugins per gateway
 		// Gateway API Gateway resource labels will be copied to the deployment in the automated deployment
-		// For the manual deployment, the Gateway resource labels must match deployment/pod labels or envoyfilters selector will not match
+		// For the manual deployment, the Gateway resource labels must match deployment/pod labels or WASMPlugins selector will not match
 		// https://istio.io/latest/docs/tasks/traffic-management/ingress/gateway-api/#automated-deployment
-		ef, err := kuadrantistioutils.WASMEnvoyFilter(rlp, gwKey, gateway.GetLabels(), httpRoute.Spec.Hostnames)
+		wps, err := kuadrantistioutils.WasmPlugins(rlp, gwKey, gateway.GetLabels(), httpRoute.Spec.Hostnames)
 		if err != nil {
 			return err
 		}
 
-		err = r.ReconcileResource(ctx, &istionetworkingv1alpha3.EnvoyFilter{}, ef, kuadrantistioutils.WASMEnvoyFilterPluginMutator)
-		if err != nil {
-			return err
+		for _, wp := range wps {
+			err = r.ReconcileResource(ctx, &istioextensionv1alpha3.WasmPlugin{}, wp, kuadrantistioutils.WASMPluginMutator)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
 func (r *RateLimitPolicyReconciler) fetchHTTPRoute(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) (*gatewayapiv1alpha2.HTTPRoute, error) {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 
 	tmpNS := rlp.Namespace
 	if rlp.Spec.TargetRef.Namespace != nil {

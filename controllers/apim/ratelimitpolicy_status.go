@@ -20,7 +20,7 @@ const (
 )
 
 func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy, specErr error) (ctrl.Result, error) {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	newStatus := r.calculateStatus(rlp, specErr)
 
 	equalStatus := rlp.Status.Equals(newStatus, logger)

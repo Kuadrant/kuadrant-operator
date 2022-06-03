@@ -167,12 +167,13 @@ spec:
 EOF
 ```
 
-To verify wasm envoyfilter has been created:
+To verify wasm wasmplugin has been created:
 
 ```
-kubectl get envoyfilter -A
-NAMESPACE         NAME                                              AGE
-kuadrant-system   kuadrant-kuadrant-gwapi-gateway-wasm-ratelimits   3m4s
+kubectl get wasmplugin -A
+NAMESPACE         NAME                                            AGE
+kuadrant-system   kuadrant-kuadrant-gwapi-gateway-wasm-postauth   16s
+kuadrant-system   kuadrant-kuadrant-gwapi-gateway-wasm-preauth    16s
 ```
 
 To verify Limitador's RateLimit resources have been created:

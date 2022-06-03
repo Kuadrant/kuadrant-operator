@@ -33,7 +33,10 @@ func alwaysUpdateAuthPolicy(existingObj, desiredObj client.Object) (bool, error)
 		return false, fmt.Errorf("%T is not a *istiosecurityv1beta1.AuthorizationPolicy", desiredObj)
 	}
 
-	existing.Spec = desired.Spec
+	existing.Spec.Action = desired.Spec.Action
+	existing.Spec.ActionDetail = desired.Spec.ActionDetail
+	existing.Spec.Rules = desired.Spec.Rules
+	existing.Spec.Selector = desired.Spec.Selector
 	existing.Annotations = desired.Annotations
 	return true, nil
 }

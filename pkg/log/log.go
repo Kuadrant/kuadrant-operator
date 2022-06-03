@@ -32,7 +32,7 @@ import (
 
 var (
 	// Log is the base logger
-	Log logr.Logger = ctrllog.NullLogger{}
+	Log logr.Logger = logr.New(ctrllog.NullLogSink{})
 )
 
 // Level configures the verbosity of the logging.

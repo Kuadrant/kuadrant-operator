@@ -1,4 +1,3 @@
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -51,6 +50,18 @@ rules:
   - patch
   - update
 - apiGroups:
+  - extensions.istio.io
+  resources:
+  - wasmplugins
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - gateway.networking.k8s.io
   resources:
   - gateways
@@ -72,18 +83,6 @@ rules:
   - limitador.kuadrant.io
   resources:
   - ratelimits
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - networking.istio.io
-  resources:
-  - envoyfilters
   verbs:
   - create
   - delete

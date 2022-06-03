@@ -142,16 +142,6 @@ func (r *HTTPRouteReconciler) reconcileAuthPolicy(ctx context.Context, logger lo
 		rules = append(rules, rule)
 	}
 
-	authPolicySpec := securityv1beta1.AuthorizationPolicy{
-		Rules:  rules,
-		Action: securityv1beta1.AuthorizationPolicy_CUSTOM,
-		ActionDetail: &securityv1beta1.AuthorizationPolicy_Provider{
-			Provider: &securityv1beta1.AuthorizationPolicy_ExtensionProvider{
-				Name: providerName,
-			},
-		},
-	}
-
 	for _, parentRef := range hr.Spec.ParentRefs {
 		gwNamespace := hr.Namespace // consider gateway local if namespace is not given
 		if parentRef.Namespace != nil {
@@ -164,7 +154,15 @@ func (r *HTTPRouteReconciler) reconcileAuthPolicy(ctx context.Context, logger lo
 				Name:      getAuthPolicyName(gwName, hr.Name, "custom"),
 				Namespace: gwNamespace,
 			},
-			Spec: authPolicySpec,
+			Spec: securityv1beta1.AuthorizationPolicy{
+				Rules:  rules,
+				Action: securityv1beta1.AuthorizationPolicy_CUSTOM,
+				ActionDetail: &securityv1beta1.AuthorizationPolicy_Provider{
+					Provider: &securityv1beta1.AuthorizationPolicy_ExtensionProvider{
+						Name: providerName,
+					},
+				},
+			},
 		}
 
 		err := r.ReconcileResource(ctx, &istiosecurityv1beta1.AuthorizationPolicy{}, &authPolicy, alwaysUpdateAuthPolicy)

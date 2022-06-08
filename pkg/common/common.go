@@ -30,8 +30,7 @@ const (
 	KuadrantAuthorizationProvider = "kuadrant-authorization"
 	LimitadorServiceGrpcPort      = 8081
 
-	HTTPRouteKind      = "HTTPRoute"
-	VirtualServiceKind = "VirtualService"
+	HTTPRouteKind = "HTTPRoute"
 
 	KuadrantManagedLabel              = "kuadrant.io/managed"
 	KuadrantAuthProviderAnnotation    = "kuadrant.io/auth-provider"

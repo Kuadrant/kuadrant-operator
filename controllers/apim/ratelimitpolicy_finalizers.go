@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-logr/logr"
 	istioextensionv1alpha3 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
+	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -54,6 +55,7 @@ func (r *RateLimitPolicyReconciler) finalizeWASMPlugins(ctx context.Context, rlp
 			return err
 		}
 
+		wasmPluginDeleted := false
 		for _, desiredWP := range desiredWPs {
 			wasmPlugin := &istioextensionv1alpha3.WasmPlugin{}
 			err = r.Client().Get(ctx, client.ObjectKeyFromObject(desiredWP), wasmPlugin)
@@ -65,7 +67,23 @@ func (r *RateLimitPolicyReconciler) finalizeWASMPlugins(ctx context.Context, rlp
 			if err != nil {
 				return err
 			}
-			err = r.finalizeSingleWASMPlugins(ctx, rlp, wasmPlugin)
+			wasmPluginDeleted, err = r.finalizeSingleWASMPlugins(ctx, rlp, wasmPlugin)
+			if err != nil {
+				return err
+			}
+		}
+
+		// finalize pre-requisite of WasmPlugin i.e. EnvoyFilter adding the limitador cluster entry
+		if wasmPluginDeleted {
+			ef := &istionetworkingv1alpha3.EnvoyFilter{}
+			efKey := client.ObjectKey{Namespace: gwKey.Namespace, Name: kuadrantistioutils.LimitadorClusterEnvoyFilterName}
+			err := r.Client().Get(ctx, efKey, ef)
+			logger.V(1).Info("finalizeWASMPlugins: get EnvoyFilter", "envoyfilter", efKey, "err", err)
+			if apierrors.IsNotFound(err) {
+				logger.Info("finalizeWASMPlugins: envoyfilter not found", "envoyFilter", efKey)
+				continue
+			}
+			err = r.DeleteResource(ctx, ef)
 			if err != nil {
 				return err
 			}
@@ -76,20 +94,20 @@ func (r *RateLimitPolicyReconciler) finalizeWASMPlugins(ctx context.Context, rlp
 }
 
 // finalizeSingleWASMPlugins removes the configuration of this RLP
-// If the WASMPlugin ends up with empty conf, the resource will be removed.
+// If the WASMPlugin ends up with empty conf, the resource and its pre-requisite will be removed.
 func (r *RateLimitPolicyReconciler) finalizeSingleWASMPlugins(
 	ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy, wasmPlugin *istioextensionv1alpha3.WasmPlugin,
-) error {
+) (bool, error) {
 	updateObject := false
 	configEmpty := false
 	// Deserialize config into PluginConfig struct
 	configJSON, err := wasmPlugin.Spec.PluginConfig.MarshalJSON()
 	if err != nil {
-		return err
+		return false, err
 	}
 	pluginConfig := &kuadrantistioutils.PluginConfig{}
 	if err := json.Unmarshal(configJSON, pluginConfig); err != nil {
-		return err
+		return false, err
 	}
 
 	pluginKey := client.ObjectKeyFromObject(rlp).String()
@@ -98,7 +116,7 @@ func (r *RateLimitPolicyReconciler) finalizeSingleWASMPlugins(
 		updateObject = true
 		finalPluginConfig, err := kuadrantistioutils.PluginConfigToWasmPluginStruct(pluginConfig)
 		if err != nil {
-			return err
+			return false, err
 		}
 		wasmPlugin.Spec.PluginConfig = finalPluginConfig
 
@@ -106,12 +124,12 @@ func (r *RateLimitPolicyReconciler) finalizeSingleWASMPlugins(
 	}
 
 	if configEmpty {
-		return r.DeleteResource(ctx, wasmPlugin)
+		return true, r.DeleteResource(ctx, wasmPlugin)
 	} else if updateObject {
-		return r.UpdateResource(ctx, wasmPlugin)
+		return false, r.UpdateResource(ctx, wasmPlugin)
 	}
 
-	return nil
+	return false, nil
 }
 
 func (r *RateLimitPolicyReconciler) deleteRateLimits(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {

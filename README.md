@@ -167,8 +167,13 @@ spec:
 EOF
 ```
 
-To verify wasm wasmplugin has been created:
+To verify envoyfilter and wasmplugin has been created:
 
+```
+kubectl get envoyfilter -n kuadrant-system
+NAME                      AGE
+limitador-cluster-patch   19s
+```
 ```
 kubectl get wasmplugin -A
 NAMESPACE         NAME                                            AGE

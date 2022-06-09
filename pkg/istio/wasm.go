@@ -4,10 +4,11 @@ import (
 	"reflect"
 
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
+	"github.com/kuadrant/kuadrant-controller/pkg/common"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-const PatchedLimitadorClusterName = "rate-limit-cluster"
+var PatchedLimitadorClusterName = common.FetchEnv("RATE_LIMIT_CLUSTER", "rate-limit-cluster")
 
 // wasm-shim API structs
 type Rule struct {

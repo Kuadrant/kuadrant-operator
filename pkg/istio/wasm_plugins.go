@@ -7,6 +7,7 @@ import (
 
 	_struct "github.com/golang/protobuf/ptypes/struct"
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
+	"github.com/kuadrant/kuadrant-controller/pkg/common"
 	istioapiv1alpha1 "istio.io/api/extensions/v1alpha1"
 	"istio.io/api/type/v1beta1"
 	istioextensionv1alpha3 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
@@ -14,6 +15,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
+
+var shimURL = common.FetchEnv("SHIM_IMAGE", "oci://quay.io/rahanand/wasm-shim:latest")
 
 type WasmPluginFactory struct {
 	ObjectName string
@@ -37,7 +40,7 @@ func (v *WasmPluginFactory) WasmPlugin() *istioextensionv1alpha3.WasmPlugin {
 			Selector: &v1beta1.WorkloadSelector{
 				MatchLabels: v.Labels,
 			},
-			Url:          "oci://quay.io/rahanand/wasm-shim:latest", // TODO: take this from Environment.
+			Url:          shimURL, // TODO: take this from Environment.
 			PluginConfig: v.Config,
 			Phase:        v.Phase,
 		},

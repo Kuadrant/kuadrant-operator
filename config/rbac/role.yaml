@@ -50,6 +50,18 @@ rules:
   - patch
   - update
 - apiGroups:
+  - authorino.kuadrant.io
+  resources:
+  - authconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - extensions.istio.io
   resources:
   - wasmplugins

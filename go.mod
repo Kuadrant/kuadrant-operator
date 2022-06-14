@@ -4,9 +4,10 @@ go 1.16
 
 require (
 	github.com/Azure/go-autorest/autorest v0.11.19 // indirect
-	github.com/go-logr/logr v1.2.0
+	github.com/go-logr/logr v1.2.2
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.6
+	github.com/kuadrant/authorino v0.8.0
 	github.com/kuadrant/limitador-operator v0.2.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.17.0

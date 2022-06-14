@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
 	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
@@ -30,9 +31,12 @@ type AuthPolicyReconciler struct {
 
 const authPolicyFinalizer = "authpolicy.kuadrant.io/finalizer"
 
+var AuthProvider = common.FetchEnv("AUTH_PROVIDER", "kuadrant-authorization")
+
 //+kubebuilder:rbac:groups=apim.kuadrant.io,resources=authpolicies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apim.kuadrant.io,resources=authpolicies/finalizers,verbs=update
 //+kubebuilder:rbac:groups=security.istio.io,resources=authorizationpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := r.Logger().WithValues("AuthPolicy", req.NamespacedName)
@@ -55,6 +59,10 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 			logger.Error(err, "failed to remove Istio's AuthorizationPolicy")
 			return ctrl.Result{}, err
 		}
+
+		if err := r.removeAuthSchemes(ctx, &ap); err != nil {
+			return ctrl.Result{}, err
+		}
 		controllerutil.RemoveFinalizer(&ap, authPolicyFinalizer)
 		if err := r.UpdateResource(ctx, &ap); client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, err
@@ -75,8 +83,20 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 		}
 	}
 
-	if err := r.reconcileAuthPolicy(ctx, &ap); err != nil {
-		logger.Error(err, "failed to reconcile AuthPolicy")
+	if err := ap.Validate(); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.reconcileNetworkResourceBackReference(ctx, &ap); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.reconcileAuthRules(ctx, &ap); err != nil {
+		logger.Error(err, "failed to reconcile AuthRules")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.reconcileAuthSchemes(ctx, &ap); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -84,17 +104,32 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	return ctrl.Result{}, nil
 }
 
-// IstioAuthPolicy generates Istio's AuthorizationPolicy using Kuadrant's AuthPolicy
-func (r *AuthPolicyReconciler) reconcileAuthPolicy(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
+func (r *AuthPolicyReconciler) reconcileAuthSchemes(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
 	logger, _ := logr.FromContext(ctx)
 
-	if err := ap.Validate(); err != nil {
-		return err
+	apKey := client.ObjectKeyFromObject(ap)
+	for idx := range ap.Spec.AuthSchemes {
+		authConfig := &authorinov1beta1.AuthConfig{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      authConfigName(apKey, idx+1),
+				Namespace: common.KuadrantNamespace,
+			},
+			Spec: *ap.Spec.AuthSchemes[idx],
+		}
+
+		err := r.ReconcileResource(ctx, &authorinov1beta1.AuthConfig{}, authConfig, alwaysUpdateAuthConfig)
+		if err != nil && !apierrors.IsAlreadyExists(err) {
+			logger.Error(err, "ReconcileResource failed to create/update AuthConfig resource")
+			return err
+		}
 	}
 
-	if err := r.reconcileNetworkResourceBackReference(ctx, ap); err != nil {
-		return err
-	}
+	return nil
+}
+
+// reconcileAuthRules translates and reconciles `AuthRules` into an Istio AuthorizationPoilcy containing them.
+func (r *AuthPolicyReconciler) reconcileAuthRules(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
+	logger, _ := logr.FromContext(ctx)
 
 	httpRoute, err := r.fetchHTTPRoute(ctx, ap)
 	if err != nil {
@@ -105,10 +140,6 @@ func (r *AuthPolicyReconciler) reconcileAuthPolicy(ctx context.Context, ap *apim
 		return err
 	}
 
-	if err := TargetableRoute(httpRoute); err != nil {
-		return err
-	}
-
 	for _, parentRef := range httpRoute.Spec.ParentRefs {
 		gwNamespace := httpRoute.Namespace // consider gateway local if namespace is not given
 		if parentRef.Namespace != nil {
@@ -116,66 +147,44 @@ func (r *AuthPolicyReconciler) reconcileAuthPolicy(ctx context.Context, ap *apim
 		}
 		gwName := string(parentRef.Name)
 
-		for _, policyConfig := range ap.Spec.PolicyConfigs {
-			// convert []Rule  to []*Rule
-			rulePtrSlice := []*secv1beta1types.Rule{}
-			for idx := range policyConfig.Rules {
-				rule := &secv1beta1types.Rule{
-					To: []*secv1beta1types.Rule_To{},
-				}
-				// TODO(rahulanand16nov): Do the check and append instead of force hostname from httproute
-				for _, operation := range policyConfig.Rules[idx].Operations {
-					if operation != nil {
-						operation.Hosts = HostnamesToStrings(httpRoute.Spec.Hostnames)
-					}
-					// TODO(rahul): we'll revert back to using the structs directly once
-					// https://github.com/kubernetes-sigs/controller-tools/pull/584 is present in a release.
-					toRule := &secv1beta1types.Rule_To{
-						Operation: &secv1beta1types.Operation{
-							NotHosts:   operation.NotHosts,
-							Ports:      operation.Ports,
-							NotPorts:   operation.NotPorts,
-							Methods:    operation.Methods,
-							NotMethods: operation.NotMethods,
-							Paths:      operation.Paths,
-							NotPaths:   operation.NotPaths,
-						},
-					}
-					rule.To = append(rule.To, toRule)
-				}
-				rulePtrSlice = append(rulePtrSlice, rule)
-			}
-
-			actionInt := secv1beta1types.AuthorizationPolicy_Action_value[string(policyConfig.Action)]
-
-			authPolicy := secv1beta1resources.AuthorizationPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					// TODO(rahulanand16nov): take care of multiple custom action policies with different providers
-					Name:      getAuthPolicyName(gwName, httpRoute.Name, string(policyConfig.Action)),
-					Namespace: gwNamespace,
+		ToRules := []*secv1beta1types.Rule_To{}
+		for _, rule := range ap.Spec.AuthRules {
+			ToRules = append(ToRules, &secv1beta1types.Rule_To{
+				Operation: &secv1beta1types.Operation{
+					Hosts:   rule.Hosts, // TODO(rahul): enforce host constraint
+					Methods: rule.Methods,
+					Paths:   rule.Paths,
 				},
-				Spec: secv1beta1types.AuthorizationPolicy{
-					Action: secv1beta1types.AuthorizationPolicy_Action(actionInt),
-					Rules:  rulePtrSlice,
-					Selector: &v1beta1.WorkloadSelector{
-						MatchLabels: map[string]string{}, // TODO(rahulanand16nov): fetch from gateway
+			})
+		}
+
+		authPolicy := secv1beta1resources.AuthorizationPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      getAuthPolicyName(gwName, httpRoute.Name),
+				Namespace: gwNamespace,
+			},
+			Spec: secv1beta1types.AuthorizationPolicy{
+				Action: secv1beta1types.AuthorizationPolicy_CUSTOM,
+				Rules: []*secv1beta1types.Rule{
+					{
+						To: ToRules,
 					},
 				},
-			}
-
-			if string(policyConfig.Action) == "CUSTOM" {
-				authPolicy.Spec.ActionDetail = &secv1beta1types.AuthorizationPolicy_Provider{
+				Selector: &v1beta1.WorkloadSelector{
+					MatchLabels: map[string]string{}, // TODO(rahulanand16nov): fetch from gateway
+				},
+				ActionDetail: &secv1beta1types.AuthorizationPolicy_Provider{
 					Provider: &secv1beta1types.AuthorizationPolicy_ExtensionProvider{
-						Name: policyConfig.Provider,
+						Name: AuthProvider,
 					},
-				}
-			}
+				},
+			},
+		}
 
-			err := r.ReconcileResource(ctx, &secv1beta1resources.AuthorizationPolicy{}, &authPolicy, alwaysUpdateAuthPolicy)
-			if err != nil && !apierrors.IsAlreadyExists(err) {
-				logger.Error(err, "ReconcileResource failed to create/update AuthorizationPolicy resource")
-				return err
-			}
+		err := r.ReconcileResource(ctx, &secv1beta1resources.AuthorizationPolicy{}, &authPolicy, alwaysUpdateAuthPolicy)
+		if err != nil && !apierrors.IsAlreadyExists(err) {
+			logger.Error(err, "ReconcileResource failed to create/update AuthorizationPolicy resource")
+			return err
 		}
 	}
 
@@ -215,6 +224,27 @@ func (r *AuthPolicyReconciler) reconcileNetworkResourceBackReference(ctx context
 	return nil
 }
 
+func (r *AuthPolicyReconciler) removeAuthSchemes(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
+	logger, _ := logr.FromContext(ctx)
+	logger.Info("Removing Authorino's AuthConfig's")
+
+	apKey := client.ObjectKeyFromObject(ap)
+	for idx := range ap.Spec.AuthSchemes {
+		authConfig := &authorinov1beta1.AuthConfig{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      authConfigName(apKey, idx+1), // TODO(rahul): this won't handle decrease in no. of authschemes
+				Namespace: common.KuadrantNamespace,
+			},
+		}
+
+		if err := r.DeleteResource(ctx, authConfig); err != nil {
+			logger.Error(err, "failed to delete Authorino's AuthConfig")
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *AuthPolicyReconciler) removeIstioAuthPolicy(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("Removing Istio's AuthorizationPolicy")
@@ -235,22 +265,16 @@ func (r *AuthPolicyReconciler) removeIstioAuthPolicy(ctx context.Context, ap *ap
 		}
 		gwName := string(parentRef.Name)
 
-		for _, policyConfig := range ap.Spec.PolicyConfigs {
-			authPolicyKey := client.ObjectKey{
+		istioAuthPolicy := &secv1beta1resources.AuthorizationPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      getAuthPolicyName(gwName, httpRoute.Name),
 				Namespace: gwNamespace,
-				Name:      getAuthPolicyName(gwName, httpRoute.Name, string(policyConfig.Action)),
-			}
+			},
+		}
 
-			istioAuthPolicy := &secv1beta1resources.AuthorizationPolicy{}
-			if err := r.GetResource(ctx, authPolicyKey, istioAuthPolicy); err != nil {
-				logger.Error(err, "failed to fetch Istio's AuthorizationPolicy")
-				return err
-			}
-
-			if err := r.DeleteResource(ctx, istioAuthPolicy); err != nil {
-				logger.Error(err, "failed to delete Istio's AuthorizationPolicy")
-				return err
-			}
+		if err := r.DeleteResource(ctx, istioAuthPolicy); err != nil {
+			logger.Error(err, "failed to delete Istio's AuthorizationPolicy")
+			return err
 		}
 	}
 
@@ -270,6 +294,10 @@ func (r *AuthPolicyReconciler) fetchHTTPRoute(ctx context.Context, ap *apimv1alp
 	err := r.Client().Get(ctx, key, httpRoute)
 	logger.V(1).Info("fetchHTTPRoute", "httpRoute", key, "err", err)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := TargetableRoute(httpRoute); err != nil {
 		return nil, err
 	}
 

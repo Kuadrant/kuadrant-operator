@@ -1,54 +1,29 @@
 package v1alpha1
 
 import (
-	"errors"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
-
-type OperationWrapper struct {
-	Hosts      []string `json:"hosts,omitempty"`
-	NotHosts   []string `json:"not_hosts,omitempty"`
-	Ports      []string `json:"ports,omitempty"`
-	NotPorts   []string `json:"not_ports,omitempty"`
-	Methods    []string `json:"methods,omitempty"`
-	NotMethods []string `json:"not_methods,omitempty"`
-	Paths      []string `json:"paths,omitempty"`
-	NotPaths   []string `json:"not_paths,omitempty"`
-}
-
-// TODO(rahul): remove the following wrappers once https://github.com/istio/api/issues/2352 is fixed.
-type RuleWrapper struct {
-	Operations []*OperationWrapper `json:"from,omitempty"`
-}
-
-// +kubebuilder:validation:Enum=ALLOW;CUSTOM;DENY;AUDIT
-type AuthPolicyAction string
-
-type AuthPolicyConfig struct {
-	// The action to take if the request is matches with the rules.
-	Action AuthPolicyAction `json:"action"`
-
-	// A list of rules to match the request. A match occurs when at least one rule matches the request.
-	Rules []*RuleWrapper `json:"rules,omitempty"`
-
-	// +kubebuilder:default=""
-	// Specifies detailed configuration of the CUSTOM action. Must be used only with CUSTOM action.
-	Provider string `json:"provider,omitempty"`
-}
 
 type AuthPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
 
-	// +listType=map
-	// +listMapKey=action
-	// +listMapKey=provider
-	// Policy per action type but also per provider if using custom type.
-	PolicyConfigs []*AuthPolicyConfig `json:"policy,omitempty"`
+	// Rule describe the requests that will be routed to external authorization provider
+	AuthRules []*AuthRule `json:"rules,omitempty"`
+
+	// AuthSchemes are embedded Authorino's AuthConfigs
+	AuthSchemes []*authorinov1beta1.AuthConfigSpec `json:"authSchemes,omitempty"`
+}
+
+type AuthRule struct {
+	Hosts   []string `json:"hosts,omitempty"`
+	Methods []string `json:"methods,omitempty"`
+	Paths   []string `json:"paths,omitempty"`
 }
 
 //+kubebuilder:object:root=true
@@ -83,12 +58,6 @@ func (ap *AuthPolicy) Validate() error {
 
 	if ap.Spec.TargetRef.Namespace != nil && string(*ap.Spec.TargetRef.Namespace) != ap.Namespace {
 		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *ap.Spec.TargetRef.Namespace)
-	}
-
-	for _, policyConfig := range ap.Spec.PolicyConfigs {
-		if string(policyConfig.Action) != "CUSTOM" && len(policyConfig.Provider) > 0 {
-			return errors.New("provider field is only allowed with action type CUSTOM")
-		}
 	}
 	return nil
 }

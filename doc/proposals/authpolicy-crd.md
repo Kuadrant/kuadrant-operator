@@ -83,7 +83,15 @@ status:
 - `paths`: a path matches over request path like `/admin/`.
 - `methods`: a method matches over request method like `DELETE`.
 
-All the rules in a AuthPolicy are translated into list of [`Operations`](https://istio.io/latest/docs/reference/config/security/authorization-policy/#Operation) under a single [Istio's AuthorizationPolicy](https://istio.io/latest/docs/reference/config/security/authorization-policy/) with CUSTOM [action](https://istio.io/latest/docs/reference/config/security/authorization-policy/#AuthorizationPolicy-Action) type and [external authorization provider](https://istio.io/latest/docs/reference/config/security/authorization-policy/#AuthorizationPolicy-ExtensionProvider) as authorino.
+Fields in a rule object are ANDed together but inner fields follow OR semantics. For example,
+```
+hosts: ["*.toystore.com"]
+methods: ["GET", "POST"]
+paths: ["/admin"]
+```
+The above rule matches if the host matches`*.toystore.com` AND the method is `POST` OR `GET`; AND path is `/admin`
+
+Internally, All the rules in a AuthPolicy are translated into list of [`Operations`](https://istio.io/latest/docs/reference/config/security/authorization-policy/#Operation) under a single [Istio's AuthorizationPolicy](https://istio.io/latest/docs/reference/config/security/authorization-policy/) with CUSTOM [action](https://istio.io/latest/docs/reference/config/security/authorization-policy/#AuthorizationPolicy-Action) type and [external authorization provider](https://istio.io/latest/docs/reference/config/security/authorization-policy/#AuthorizationPolicy-ExtensionProvider) as authorino.
 
 ### AuthScheme object
 AuthScheme is embedded form of [Authorino's AuthConfig](https://github.com/Kuadrant/authorino/blob/main/docs/architecture.md#the-authorino-authconfig-custom-resource-definition-crd). Applying an AuthPolicy resource with at least one AuthScheme would create same number of AuthConfigs in the <ins>Gateway's namespace</ins>.

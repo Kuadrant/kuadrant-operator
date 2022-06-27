@@ -23,8 +23,11 @@ func authConfigName(objKey client.ObjectKey, idx int) string {
 	return fmt.Sprintf("ap-%s-%s-%d", objKey.Namespace, objKey.Name, idx)
 }
 
-// getAuthPolicyName generates the name of an AuthorizationPolicy using VirtualService info.
-func getAuthPolicyName(gwName, networkName string) string {
+// getAuthPolicyName generates the name of an AuthorizationPolicy.
+func getAuthPolicyName(gwName, networkName, networkKind string) string {
+	if networkKind == "Gateway" {
+		return fmt.Sprintf("on-%s", gwName) // Without this, IAP will be named: on-<gw.Name>-using-<gw.Name>;
+	}
 	return fmt.Sprintf("on-%s-using-%s", gwName, networkName)
 }
 
@@ -76,14 +79,43 @@ func alwaysUpdateAuthConfig(existingObj, desiredObj client.Object) (bool, error)
 	return true, nil
 }
 
-func TargetableRoute(httpRoute *gatewayapiv1alpha2.HTTPRoute) error {
-	for _, parent := range httpRoute.Status.Parents { // no parent mean policies will affect nothing.
-		if len(parent.Conditions) == 0 {
+func TargetableObject(obj client.Object) error {
+	httpRoute, isHTTPRoute := obj.(*gatewayapiv1alpha2.HTTPRoute)
+	if isHTTPRoute {
+		for _, parent := range httpRoute.Status.Parents { // no parent mean policies will affect nothing.
+			if len(parent.Conditions) == 0 {
+				return errors.New("unable to verify targetability: no condition found on status")
+			}
+			if meta.IsStatusConditionFalse(parent.Conditions, "Accepted") {
+				return errors.New("httproute rejected")
+			}
+		}
+	} else {
+		gateway, _ := obj.(*gatewayapiv1alpha2.Gateway)
+		if len(gateway.Status.Conditions) == 0 {
 			return errors.New("unable to verify targetability: no condition found on status")
 		}
-		if meta.IsStatusConditionFalse(parent.Conditions, "Accepted") {
-			return errors.New("httproute rejected")
+		if meta.IsStatusConditionFalse(gateway.Status.Conditions, "Ready") {
+			return errors.New("gateway not ready yet")
 		}
 	}
 	return nil
+}
+
+// TargetedGatewayKeys takes either HTTPRoute or Gateway object and return the list of gateways that are being referenced.
+func TargetedGatewayKeys(obj client.Object) []client.ObjectKey {
+	gwKeys := []client.ObjectKey{}
+	httpRoute, isHTTPRoute := obj.(*gatewayapiv1alpha2.HTTPRoute)
+	if isHTTPRoute {
+		for _, parentRef := range httpRoute.Spec.ParentRefs {
+			gwNamespace := httpRoute.Namespace // consider gateway local if namespace is not given
+			if parentRef.Namespace != nil {
+				gwNamespace = string(*parentRef.Namespace)
+			}
+			gwKeys = append(gwKeys, client.ObjectKey{Namespace: gwNamespace, Name: string(parentRef.Name)})
+		}
+	} else {
+		gwKeys = append(gwKeys, client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()})
+	}
+	return gwKeys
 }

@@ -52,8 +52,12 @@ func (ap *AuthPolicy) Validate() error {
 		return fmt.Errorf("invalid targetRef.Group %s. The only supported group is gateway.networking.k8s.io", ap.Spec.TargetRef.Group)
 	}
 
-	if ap.Spec.TargetRef.Kind != gatewayapiv1alpha2.Kind("HTTPRoute") {
-		return fmt.Errorf("invalid targetRef.Kind %s. The only supported kind is HTTPRoute", ap.Spec.TargetRef.Kind)
+	switch kind := ap.Spec.TargetRef.Kind; kind {
+	case
+		gatewayapiv1alpha2.Kind("HTTPRoute"),
+		gatewayapiv1alpha2.Kind("Gateway"):
+	default:
+		return fmt.Errorf("invalid targetRef.Kind %s. The only supported kinds are HTTPRoute and Gateway", kind)
 	}
 
 	if ap.Spec.TargetRef.Namespace != nil && string(*ap.Spec.TargetRef.Namespace) != ap.Namespace {

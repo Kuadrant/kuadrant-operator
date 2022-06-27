@@ -15,10 +15,44 @@ spec:
   authSchemes:
   - hosts: ["api.toystore.com"]
     identity:
-    - name: friends
+    - name: apikey
       apiKey:
         labelSelectors:
-          group: friends
+          app: toystore
       credentials:
         in: authorization_header
         keySelector: APIKEY
+    response:
+    - json:
+        properties:
+          - name: user-id
+            value: null
+            valueFrom:
+              authJSON: auth.identity.metadata.annotations.secret\.kuadrant\.io/user-id
+      name: rate-limit-apikey
+      wrapper: envoyDynamicMetadata
+      wrapperKey: ext_auth_data
+---
+apiVersion: apim.kuadrant.io/v1alpha1
+kind: AuthPolicy
+metadata:
+  name: toystore
+  namespace: kuadrant-system
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-gwapi-gateway
+  rules:
+  - hosts: ["*.toystore.com"]
+  authSchemes:
+  - hosts: ["api.toystore.com"]
+    identity:
+      - name: apikey
+        apiKey:
+          labelSelectors:
+            app: toystore
+            admin: "yes"
+        credentials:
+          in: authorization_header
+          keySelector: APIKEY

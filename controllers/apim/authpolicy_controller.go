@@ -131,22 +131,19 @@ func (r *AuthPolicyReconciler) reconcileAuthSchemes(ctx context.Context, ap *api
 func (r *AuthPolicyReconciler) reconcileAuthRules(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
 	logger, _ := logr.FromContext(ctx)
 
-	httpRoute, err := r.fetchHTTPRoute(ctx, ap)
+	targetObj, err := r.fetchTargetObject(ctx, ap)
+	targetObjectKind := string(ap.Spec.TargetRef.Kind)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("referenced HTTPRoute not found")
+			logger.Info("referenced %s not found", targetObjectKind)
 			return nil
 		}
 		return err
 	}
 
-	for _, parentRef := range httpRoute.Spec.ParentRefs {
-		gwNamespace := httpRoute.Namespace // consider gateway local if namespace is not given
-		if parentRef.Namespace != nil {
-			gwNamespace = string(*parentRef.Namespace)
-		}
-		gwName := string(parentRef.Name)
+	gwKeys := TargetedGatewayKeys(targetObj)
 
+	for _, gwKey := range gwKeys {
 		ToRules := []*secv1beta1types.Rule_To{}
 		for _, rule := range ap.Spec.AuthRules {
 			ToRules = append(ToRules, &secv1beta1types.Rule_To{
@@ -160,8 +157,8 @@ func (r *AuthPolicyReconciler) reconcileAuthRules(ctx context.Context, ap *apimv
 
 		authPolicy := secv1beta1resources.AuthorizationPolicy{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      getAuthPolicyName(gwName, httpRoute.Name),
-				Namespace: gwNamespace,
+				Name:      getAuthPolicyName(gwKey.Name, targetObj.GetName(), targetObjectKind),
+				Namespace: gwKey.Namespace,
 			},
 			Spec: secv1beta1types.AuthorizationPolicy{
 				Action: secv1beta1types.AuthorizationPolicy_CUSTOM,
@@ -193,29 +190,31 @@ func (r *AuthPolicyReconciler) reconcileAuthRules(ctx context.Context, ap *apimv
 
 func (r *AuthPolicyReconciler) reconcileNetworkResourceBackReference(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
 	logger, _ := logr.FromContext(ctx)
-	httpRoute, err := r.fetchHTTPRoute(ctx, ap)
+	targetObj, err := r.fetchTargetObject(ctx, ap)
 	if err != nil {
 		// The object should also exist
 		return err
 	}
 
+	targetObjKind := targetObj.GetObjectKind().GroupVersionKind().Kind
+
 	// Reconcile the back reference:
-	httpRouteAnnotations := httpRoute.GetAnnotations()
-	if httpRouteAnnotations == nil {
-		httpRouteAnnotations = map[string]string{}
+	targetObjAnnotations := targetObj.GetAnnotations()
+	if targetObjAnnotations == nil {
+		targetObjAnnotations = map[string]string{}
 	}
 
 	apKey := client.ObjectKeyFromObject(ap)
-	val, present := httpRouteAnnotations[common.AuthPolicyBackRefAnnotation]
+	val, present := targetObjAnnotations[common.AuthPolicyBackRefAnnotation]
 	if present {
 		if val != apKey.String() {
-			return fmt.Errorf("the target HTTPRoute {%s} is already referenced by authpolicy %s", client.ObjectKeyFromObject(httpRoute), apKey.String())
+			return fmt.Errorf("the target %s {%s} is already referenced by authpolicy %s", targetObjKind, client.ObjectKeyFromObject(targetObj).String(), apKey.String())
 		}
 	} else {
-		httpRouteAnnotations[common.AuthPolicyBackRefAnnotation] = apKey.String()
-		httpRoute.SetAnnotations(httpRouteAnnotations)
-		err := r.UpdateResource(ctx, httpRoute)
-		logger.V(1).Info("reconcileNetworkResourceBackReference: update HTTPRoute", "httpRoute", client.ObjectKeyFromObject(httpRoute), "err", err)
+		targetObjAnnotations[common.AuthPolicyBackRefAnnotation] = apKey.String()
+		targetObj.SetAnnotations(targetObjAnnotations)
+		err := r.UpdateResource(ctx, targetObj)
+		logger.V(1).Info(fmt.Sprintf("reconcileNetworkResourceBackReference: update %s", targetObjKind), targetObjKind, client.ObjectKeyFromObject(targetObj).String(), "err", err)
 		if err != nil {
 			return err
 		}
@@ -226,7 +225,7 @@ func (r *AuthPolicyReconciler) reconcileNetworkResourceBackReference(ctx context
 
 func (r *AuthPolicyReconciler) removeAuthSchemes(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
 	logger, _ := logr.FromContext(ctx)
-	logger.Info("Removing Authorino's AuthConfig's")
+	logger.Info("Removing Authorino's AuthConfigs")
 
 	apKey := client.ObjectKeyFromObject(ap)
 	for idx := range ap.Spec.AuthSchemes {
@@ -249,26 +248,23 @@ func (r *AuthPolicyReconciler) removeIstioAuthPolicy(ctx context.Context, ap *ap
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("Removing Istio's AuthorizationPolicy")
 
-	httpRoute, err := r.fetchHTTPRoute(ctx, ap)
+	targetObj, err := r.fetchTargetObject(ctx, ap)
+	targetObjectKind := string(ap.Spec.TargetRef.Kind)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("referenced HTTPRoute not found")
+			logger.Info("referenced %s not found", targetObjectKind)
 			return nil
 		}
 		return err
 	}
 
-	for _, parentRef := range httpRoute.Spec.ParentRefs {
-		gwNamespace := httpRoute.Namespace
-		if parentRef.Namespace != nil {
-			gwNamespace = string(*parentRef.Namespace)
-		}
-		gwName := string(parentRef.Name)
+	gwKeys := TargetedGatewayKeys(targetObj)
 
+	for _, gwKey := range gwKeys {
 		istioAuthPolicy := &secv1beta1resources.AuthorizationPolicy{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      getAuthPolicyName(gwName, httpRoute.Name),
-				Namespace: gwNamespace,
+				Name:      getAuthPolicyName(gwKey.Name, targetObj.GetName(), targetObjectKind),
+				Namespace: gwKey.Namespace,
 			},
 		}
 
@@ -283,25 +279,30 @@ func (r *AuthPolicyReconciler) removeIstioAuthPolicy(ctx context.Context, ap *ap
 }
 
 // fetchHTTPRoute fetches the HTTPRoute described in targetRef *within* AuthPolicy's namespace.
-func (r *AuthPolicyReconciler) fetchHTTPRoute(ctx context.Context, ap *apimv1alpha1.AuthPolicy) (*gatewayapiv1alpha2.HTTPRoute, error) {
+func (r *AuthPolicyReconciler) fetchTargetObject(ctx context.Context, ap *apimv1alpha1.AuthPolicy) (client.Object, error) {
 	logger, _ := logr.FromContext(ctx)
 	key := client.ObjectKey{
 		Name:      string(ap.Spec.TargetRef.Name),
 		Namespace: ap.Namespace,
 	}
 
-	httpRoute := &gatewayapiv1alpha2.HTTPRoute{}
-	err := r.Client().Get(ctx, key, httpRoute)
-	logger.V(1).Info("fetchHTTPRoute", "httpRoute", key, "err", err)
+	var targetObject client.Object
+	if ap.Spec.TargetRef.Kind == "HTTPRoute" {
+		targetObject = &gatewayapiv1alpha2.HTTPRoute{}
+	} else {
+		targetObject = &gatewayapiv1alpha2.Gateway{}
+	}
+	err := r.Client().Get(ctx, key, targetObject)
+	logger.V(1).Info("fetchTargetObject", string(ap.Spec.TargetRef.Kind), key, "err", err)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := TargetableRoute(httpRoute); err != nil {
+	if err := TargetableObject(targetObject); err != nil {
 		return nil, err
 	}
 
-	return httpRoute, nil
+	return targetObject, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -315,5 +316,7 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&source.Kind{Type: &gatewayapiv1alpha2.HTTPRoute{}},
 			handler.EnqueueRequestsFromMapFunc(HTTPRouteEventMapper.MapToAuthPolicy),
 		).
+		Watches(&source.Kind{Type: &gatewayapiv1alpha2.Gateway{}},
+			handler.EnqueueRequestsFromMapFunc(HTTPRouteEventMapper.MapToAuthPolicy)).
 		Complete(r)
 }

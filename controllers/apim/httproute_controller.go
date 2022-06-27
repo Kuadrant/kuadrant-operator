@@ -22,7 +22,7 @@ import (
 const HTTPRouteNamePrefix = "hr"
 
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;update;patch
-//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;update;patch
 
 // HTTPRouteReconciler reconciles Gateway API's HTTPRoute object
 type HTTPRouteReconciler struct {
@@ -55,7 +55,7 @@ func (r *HTTPRouteReconciler) Reconcile(eventCtx context.Context, req ctrl.Reque
 			gwName := string(parentRef.Name)
 
 			authPolicy := &istiosecurityv1beta1.AuthorizationPolicy{}
-			authPolicy.SetName(getAuthPolicyName(gwName, httproute.Name)) // TODO(rahul): need to do something about this controller
+			authPolicy.SetName(getAuthPolicyName(gwName, httproute.Name, "HTTPRoute")) // TODO(rahul): need to do something about this controller
 			authPolicy.SetNamespace(gwNamespace)
 			common.TagObjectToDelete(authPolicy)
 			err := r.ReconcileResource(ctx, &istiosecurityv1beta1.AuthorizationPolicy{}, authPolicy, nil)
@@ -151,7 +151,7 @@ func (r *HTTPRouteReconciler) reconcileAuthPolicy(ctx context.Context, logger lo
 
 		authPolicy := istiosecurityv1beta1.AuthorizationPolicy{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      getAuthPolicyName(gwName, hr.Name),
+				Name:      getAuthPolicyName(gwName, hr.Name, "HTTPRoute"),
 				Namespace: gwNamespace,
 			},
 			Spec: securityv1beta1.AuthorizationPolicy{

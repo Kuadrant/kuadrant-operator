@@ -19,8 +19,8 @@ func limitadorRatelimitsName(objKey client.ObjectKey, idx int) string {
 }
 
 // authConfigName returns the name of Authorino AuthConfig CR.
-func authConfigName(objKey client.ObjectKey, idx int) string {
-	return fmt.Sprintf("ap-%s-%s-%d", objKey.Namespace, objKey.Name, idx)
+func authConfigName(objKey client.ObjectKey) string {
+	return fmt.Sprintf("ap-%s-%s", objKey.Namespace, objKey.Name)
 }
 
 // getAuthPolicyName generates the name of an AuthorizationPolicy.

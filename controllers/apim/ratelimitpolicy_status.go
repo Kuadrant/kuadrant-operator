@@ -23,7 +23,7 @@ func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *ap
 	logger, _ := logr.FromContext(ctx)
 	newStatus := r.calculateStatus(rlp, specErr)
 
-	equalStatus := rlp.Status.Equals(newStatus, logger)
+	equalStatus := apimv1alpha1.StatusEquals(&rlp.Status, newStatus, logger)
 	logger.V(1).Info("Status", "status is different", !equalStatus)
 	logger.V(1).Info("Status", "generation is different", rlp.Generation != rlp.Status.ObservedGeneration)
 	if equalStatus && rlp.Generation == rlp.Status.ObservedGeneration {

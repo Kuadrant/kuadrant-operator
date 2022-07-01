@@ -17,7 +17,7 @@ type AuthPolicySpec struct {
 	AuthRules []*AuthRule `json:"rules,omitempty"`
 
 	// AuthSchemes are embedded Authorino's AuthConfigs
-	AuthSchemes []*authorinov1beta1.AuthConfigSpec `json:"authSchemes,omitempty"`
+	AuthScheme *authorinov1beta1.AuthConfigSpec `json:"authScheme,omitempty"`
 }
 
 type AuthRule struct {
@@ -26,12 +26,28 @@ type AuthRule struct {
 	Paths   []string `json:"paths,omitempty"`
 }
 
+type AuthPolicyStatus struct {
+	// ObservedGeneration reflects the generation of the most recently observed spec.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Represents the observations of a foo's current state.
+	// Known .status.conditions.type are: "Available"
+	// +patchMergeKey=type
+	// +patchStrategy=merge
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+}
+
 //+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
 type AuthPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec AuthPolicySpec `json:"spec,omitempty"`
+	Spec   AuthPolicySpec   `json:"spec,omitempty"`
+	Status AuthPolicyStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true

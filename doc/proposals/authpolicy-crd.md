@@ -27,22 +27,22 @@ spec:
     kind: HTTPRoute | Gateway
     name: toystore
   rules:
-      - hosts: ["*.toystore.com"]
-        methods: ["GET", "POST"]
-        paths: ["/admin"]
-  authSchemes: # Embedded AuthConfigs
-    - hosts: ["admin.toystore.com"]
-      identity:
-      - name: idp-users
-        oidc:
-          endpoint: https://my-idp.com/auth/realm
-      authorization:
-      - name: check-claim
-        json:
-          rules:
-          - selector: auth.identity.group
-            operator: eq
-            value: allowed-users
+    - hosts: ["*.toystore.com"]
+      methods: ["GET", "POST"]
+      paths: ["/admin"]
+  authScheme: # Embedded AuthConfigs
+    hosts: ["admin.toystore.com"]
+    identity:
+    - name: idp-users
+      oidc:
+        endpoint: https://my-idp.com/auth/realm
+    authorization:
+    - name: check-claim
+      json:
+        rules:
+        - selector: auth.identity.group
+          operator: eq
+          value: allowed-users
 status:
   conditions:
     - lastTransitionTime: "2022-06-06T11:03:04Z"
@@ -94,9 +94,9 @@ The above rule matches if the host matches`*.toystore.com` AND the method is `PO
 Internally, All the rules in a AuthPolicy are translated into list of [`Operations`](https://istio.io/latest/docs/reference/config/security/authorization-policy/#Operation) under a single [Istio's AuthorizationPolicy](https://istio.io/latest/docs/reference/config/security/authorization-policy/) with CUSTOM [action](https://istio.io/latest/docs/reference/config/security/authorization-policy/#AuthorizationPolicy-Action) type and [external authorization provider](https://istio.io/latest/docs/reference/config/security/authorization-policy/#AuthorizationPolicy-ExtensionProvider) as authorino.
 
 ### AuthScheme object
-AuthScheme is embedded form of [Authorino's AuthConfig](https://github.com/Kuadrant/authorino/blob/main/docs/architecture.md#the-authorino-authconfig-custom-resource-definition-crd). Applying an AuthPolicy resource with at least one AuthScheme would create same number of AuthConfigs in the <ins>Gateway's namespace</ins>.
+AuthScheme is embedded form of [Authorino's AuthConfig](https://github.com/Kuadrant/authorino/blob/main/docs/architecture.md#the-authorino-authconfig-custom-resource-definition-crd). Applying an AuthPolicy resource with AuthScheme defined, would create an AuthConfig in the <ins>Gateway's namespace</ins>.
 
-**Note**: Following the heirarchial constraints, `spec.AuthSchemes.Hosts` must match at least one `spec.Hosts` for AuthPolicy to be validated.
+**Note**: Following the heirarchial constraints, `spec.AuthScheme.Hosts` must match at least one `spec.Hosts` for AuthPolicy to be validated.
 
 The example AuthPolicy showed above will create the following AuthConfig:
 

@@ -35,6 +35,7 @@ var AuthProvider = common.FetchEnv("AUTH_PROVIDER", "kuadrant-authorization")
 
 //+kubebuilder:rbac:groups=apim.kuadrant.io,resources=authpolicies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apim.kuadrant.io,resources=authpolicies/finalizers,verbs=update
+//+kubebuilder:rbac:groups=apim.kuadrant.io,resources=authpolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=security.istio.io,resources=authorizationpolicies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
 
@@ -83,24 +84,48 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 		}
 	}
 
+	specResult, specErr := r.reconcileSpec(ctx, &ap)
+	if specErr == nil && specResult.Requeue {
+		logger.V(1).Info("Reconciling spec not finished. Requeueing.")
+		return specResult, nil
+	}
+
+	statusResult, statusErr := r.reconcileStatus(ctx, &ap, specErr)
+
+	if specErr != nil {
+		return ctrl.Result{}, specErr
+	}
+
+	if statusErr != nil {
+		return ctrl.Result{}, statusErr
+	}
+
+	if statusResult.Requeue {
+		logger.V(1).Info("Reconciling status not finished. Requeueing.")
+		return statusResult, nil
+	}
+
+	logger.Info("successfully reconciling AuthPolicy")
+	return ctrl.Result{}, nil
+}
+
+func (r *AuthPolicyReconciler) reconcileSpec(ctx context.Context, ap *apimv1alpha1.AuthPolicy) (ctrl.Result, error) {
 	if err := ap.Validate(); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileNetworkResourceBackReference(ctx, &ap); err != nil {
+	if err := r.reconcileNetworkResourceBackReference(ctx, ap); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileAuthRules(ctx, &ap); err != nil {
-		logger.Error(err, "failed to reconcile AuthRules")
+	if err := r.reconcileAuthRules(ctx, ap); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileAuthSchemes(ctx, &ap); err != nil {
+	if err := r.reconcileAuthSchemes(ctx, ap); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	logger.Info("completed reconciling AuthPolicy")
 	return ctrl.Result{}, nil
 }
 
@@ -108,20 +133,17 @@ func (r *AuthPolicyReconciler) reconcileAuthSchemes(ctx context.Context, ap *api
 	logger, _ := logr.FromContext(ctx)
 
 	apKey := client.ObjectKeyFromObject(ap)
-	for idx := range ap.Spec.AuthSchemes {
-		authConfig := &authorinov1beta1.AuthConfig{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      authConfigName(apKey, idx+1),
-				Namespace: common.KuadrantNamespace,
-			},
-			Spec: *ap.Spec.AuthSchemes[idx],
-		}
-
-		err := r.ReconcileResource(ctx, &authorinov1beta1.AuthConfig{}, authConfig, alwaysUpdateAuthConfig)
-		if err != nil && !apierrors.IsAlreadyExists(err) {
-			logger.Error(err, "ReconcileResource failed to create/update AuthConfig resource")
-			return err
-		}
+	authConfig := &authorinov1beta1.AuthConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      authConfigName(apKey),
+			Namespace: common.KuadrantNamespace,
+		},
+		Spec: *ap.Spec.AuthScheme,
+	}
+	err := r.ReconcileResource(ctx, &authorinov1beta1.AuthConfig{}, authConfig, alwaysUpdateAuthConfig)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		logger.Error(err, "ReconcileResource failed to create/update AuthConfig resource")
+		return err
 	}
 
 	return nil
@@ -228,18 +250,16 @@ func (r *AuthPolicyReconciler) removeAuthSchemes(ctx context.Context, ap *apimv1
 	logger.Info("Removing Authorino's AuthConfigs")
 
 	apKey := client.ObjectKeyFromObject(ap)
-	for idx := range ap.Spec.AuthSchemes {
-		authConfig := &authorinov1beta1.AuthConfig{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      authConfigName(apKey, idx+1), // TODO(rahul): this won't handle decrease in no. of authschemes
-				Namespace: common.KuadrantNamespace,
-			},
-		}
+	authConfig := &authorinov1beta1.AuthConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      authConfigName(apKey),
+			Namespace: common.KuadrantNamespace,
+		},
+	}
 
-		if err := r.DeleteResource(ctx, authConfig); err != nil {
-			logger.Error(err, "failed to delete Authorino's AuthConfig")
-			return err
-		}
+	if err := r.DeleteResource(ctx, authConfig); err != nil {
+		logger.Error(err, "failed to delete Authorino's AuthConfig")
+		return err
 	}
 	return nil
 }

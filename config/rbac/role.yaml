@@ -26,6 +26,14 @@ rules:
 - apiGroups:
   - apim.kuadrant.io
   resources:
+  - authpolicies/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - apim.kuadrant.io
+  resources:
   - ratelimitpolicies
   verbs:
   - create

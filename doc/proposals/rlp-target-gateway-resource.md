@@ -26,7 +26,13 @@ The goal of this document is to define:
 
 ## Envoy's Rate Limit Service Potocol
 
-Kuadrant's rate limit relies on the [Rate Limit Service (RLS)](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ratelimit/v3/rls.proto) protocol, hence the gateway generates, based on a set of [actions](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-msg-config-route-v3-ratelimit-action), a set of [descriptors](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/common/ratelimit/v3/ratelimit.proto#envoy-v3-api-msg-extensions-common-ratelimit-v3-ratelimitdescriptor) (one descriptor is a set of descriptor entries). Those descriptors are send to the external rate limit service provider. When multiple descriptors are provided, the external service provider will limit on ALL of them and return an OVER_LIMIT response if any of them are over limit.
+Kuadrant's rate limit relies on the [Rate Limit Service (RLS)](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ratelimit/v3/rls.proto)
+protocol, hence the gateway generates, based on a set of
+[actions](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-msg-config-route-v3-ratelimit-action),
+a set of [descriptors](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/common/ratelimit/v3/ratelimit.proto#envoy-v3-api-msg-extensions-common-ratelimit-v3-ratelimitdescriptor)
+(one descriptor is a set of descriptor entries). Those descriptors are send to the external rate limit service provider.
+When multiple descriptors are provided, the external service provider will limit on ALL of them and
+return an OVER_LIMIT response if any of them are over limit.
 
 ## Schema (CRD) of the RateLimitPolicy
 
@@ -42,14 +48,15 @@ spec:
     kind: HTTPRoute / Gateway
     name: myroute / mygateway
   rateLimits:
-    - operations:
+    - rules:
         - paths: ["/admin/*"]
           methods: ["GET"]
           hosts: ["example.com"]
-      actions:
-        - generic_key:
-            descriptor_key: admin
-            descriptor_value: "yes"
+      configurations:
+        - actions:
+          - generic_key:
+              descriptor_key: admin
+              descriptor_value: "yes"
       limits:
         - conditions: ["admin == yes"]
           max_value: 500
@@ -57,7 +64,44 @@ spec:
           variables: []
 ```
 
+`.spec.rateLimits` holds a list of rate limit configurations represented by the object `RateLimit`.
+Each `RateLimit` object represents a complete rate limit configuration. It contains three fields:
+
+* `rules` (optional): Rules allow matching `hosts` and/or `methods` and/or `paths`.
+Matching occurs when at least one rule applies against the incoming request.
+If rules are not set, it is equivalent to matching all the requests.
+
+* `configurations` (required): Specifies a set of rate limit configurations that could be applied.
+The rate limit configuration object is the equivalent of the
+[config.route.v3.RateLimit](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-msg-config-route-v3-ratelimit) envoy object.
+One configuration is, in turn, a list of [rate limit actions](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-msg-config-route-v3-ratelimit-action).
+Each action populates a descriptor entry. A vector of descriptor entries compose a descriptor.
+Each configuration produces, at most, one descriptor.
+Depending on the incoming request, one configuration may or may not produce a rate limit descriptor.
+These rate limiting configuration rules provide flexibility to produce multiple descriptors.
+For example, you may want to define one generic rate limit descriptor and another descriptor
+depending on some header.
+If the header does not exist, the second descriptor is not generated, but traffic keeps being rate
+limited based on the generic descriptor.
+
+```yaml
+configurations:
+  - actions:
+    - request_headers:
+        header_name: "X-MY-CUSTOM-HEADER"
+        descriptor_key: "custom-header"
+        skip_if_absent: true
+  - actions:
+    - generic_key:
+        descriptor_key: admin
+        descriptor_value: "1"
+```
+
+* `limits` (optional): configuration of the rate limiting service ([Limitador](https://github.com/Kuadrant/limitador)).
+Check out limitador documentation for more information about the fields of each `Limit` object.
+
 **Note:** No `namespace`/`domain` defined. Kuadrant controller will figure out.
+
 **Note:** There is no `PREAUTH`, `POSTAUTH` stage defined. Ratelimiting filter should be placed after authorization filter to enable authenticated rate limiting. In the future, `stage` can be implemented.
 
 ## Kuadrant-controller's behavior

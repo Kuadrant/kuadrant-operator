@@ -52,31 +52,40 @@ Check `toystore` HTTPRoute works
 curl -v -H 'Host: api.toystore.com' http://localhost:9080/toy
 ```
 
-Annotate HTTPRoute with Kuadrant auth provider to create AuthorizationPolicy
+Create AuthPolicy
 
 ```
-kubectl annotate httproute/toystore kuadrant.io/auth-provider=kuadrant-authorization
+kubectl apply -f - <<EOF
+---
+apiVersion: apim.kuadrant.io/v1alpha1
+kind: AuthPolicy
+metadata:
+  name: toystore
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
+  rules:
+  - hosts: ["*.toystore.com"]
+    paths: ["/toy*"]
+  authScheme:
+    hosts: ["api.toystore.com"]
+    identity:
+    - name: friends
+      apiKey:
+        labelSelectors:
+          app: toystore
+      credentials:
+        in: authorization_header
+        keySelector: APIKEY
+EOF
 ```
 
-Create Authorino's AuthConfig and API key secrets
+Create API key secrets for Authorino
 
 ```yaml
 kubectl apply -f -<<EOF
-apiVersion: authorino.kuadrant.io/v1beta1
-kind: AuthConfig
-metadata:
-  name: simple-api-protection
-spec:
-  hosts:
-  - api.toystore.com
-  identity:
-  - name: friends
-    apiKey:
-      labelSelectors:
-        api: toystore
-    credentials:
-      in: authorization_header
-      keySelector: APIKEY
 ---
 apiVersion: v1
 kind: Secret

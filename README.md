@@ -41,6 +41,8 @@ The kuadrant controller acts on the following [CRDs](https://kubernetes.io/docs/
 | CRD | Description |
 | --- | --- |
 | [RateLimitPolicy](apis/apim/v1alpha1/ratelimitpolicy_types.go) | Enable access control on workloads based on HTTP rate limiting |
+| [AuthPolicy](apis/apim/v1alpha1/authpolicy_types.go) | Enable AuthN and AuthZ based access control on workloads |
+
 
 For a detailed description of the CRDs above, refer to the [Architecture](doc/architecture.md) page.
 
@@ -201,28 +203,34 @@ curl -v -H 'Host: api.toystore.com' http://localhost:9080/toy
 
 8.- Add authentication
 
-Create AuthConfig for Authorino external authz provider
+Create AuthPolicy
 
 ```
 kubectl apply -f - <<EOF
 ---
-apiVersion: authorino.kuadrant.io/v1beta1
-kind: AuthConfig
+apiVersion: apim.kuadrant.io/v1alpha1
+kind: AuthPolicy
 metadata:
-  creationTimestamp: null
   name: toystore
 spec:
-  hosts:
-    - api.toystore.com
-  identity:
-    - apiKey:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
+  rules:
+  - hosts: ["*.toystore.com"]
+    methods: ["DELETE", "POST"]
+    paths: ["/admin*"]
+  authScheme:
+    hosts: ["api.toystore.com"]
+    identity:
+    - name: apikey
+      apiKey:
         labelSelectors:
           app: toystore
-          authorino.kuadrant.io/managed-by: authorino
       credentials:
         in: authorization_header
         keySelector: APIKEY
-      name: apikey
 EOF
 ```
 
@@ -238,18 +246,20 @@ Create secret with API key for user `alice`
 kubectl apply -f examples/toystore/alice-api-key-secret.yaml
 ```
 
-Annotate HTTPRoute with Kuadrant auth provider to create AuthorizationPolicy
-
-```
-kubectl annotate httproute/toystore kuadrant.io/auth-provider=kuadrant-authorization
-```
-
-To verify creation:
+To verify creation of Istio AuthorizationPolicy:
 
 ```
 kubectl get authorizationpolicy -A
 NAMESPACE         NAME                                          AGE
 kuadrant-system   on-kuadrant-gwapi-gateway-using-toystore-custom   81s
+```
+
+To verify creation of Authorino's AuthConfig:
+
+```
+kubectl get authconfig -A
+NAMESPACE         NAME                  READY
+kuadrant-system   ap-default-toystore   true
 ```
 
 9.- Verify authentication
@@ -260,11 +270,19 @@ Should return `401 Unauthorized`
 curl -v -H 'Host: api.toystore.com' -X POST http://localhost:9080/admin/toy
 ```
 
-Should return `200 OK`
+Should return `200 OK` for alice
 
 ```
 curl -v -H 'Host: api.toystore.com' -H 'Authorization: APIKEY ALICEKEYFORDEMO' -X POST http://localhost:9080/admin/toy
 ```
+
+Should return `200 OK` for bob
+
+```
+curl -v -H 'Host: api.toystore.com' -H 'Authorization: APIKEY BOBKEYFORDEMO' -X POST http://localhost:9080/admin/toy
+```
+
+10. Verify authenticated ratelimit by doing `200 OK` requests 2-3 times.
 
 ## Demos
 

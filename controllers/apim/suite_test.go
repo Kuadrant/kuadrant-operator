@@ -32,8 +32,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 
+	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
 	"github.com/kuadrant/kuadrant-controller/pkg/log"
+	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
+	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -66,11 +71,43 @@ var _ = BeforeSuite(func() {
 	err = apimv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = gatewayapiv1alpha2.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = authorinov1beta1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = istiosecurityv1beta1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	//+kubebuilder:scaffold:scheme
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: scheme.Scheme,
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("authpolicy"),
+		mgr.GetEventRecorderFor("AuthPolicy"),
+	)
+
+	err = (&AuthPolicyReconciler{
+		BaseReconciler: authPolicyBaseReconciler,
+		Scheme:         mgr.GetScheme(),
+	}).SetupWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
+	go func() {
+		defer GinkgoRecover()
+		err = mgr.Start(ctrl.SetupSignalHandler())
+		Expect(err).ToNot(HaveOccurred())
+	}()
 
 }, 60)
 

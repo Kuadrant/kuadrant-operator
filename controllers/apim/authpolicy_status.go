@@ -35,6 +35,7 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *apimv1al
 	isAuthConfigReady := authConfig.Status.Ready
 
 	newStatus := r.calculateStatus(ap, specErr, isAuthConfigReady)
+
 	equalStatus := apimv1alpha1.StatusEquals(&ap.Status, newStatus, logger)
 	logger.V(1).Info("Status", "status is different", !equalStatus)
 	logger.V(1).Info("Status", "generation is different", ap.Generation != ap.Status.ObservedGeneration)
@@ -43,8 +44,6 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *apimv1al
 		logger.V(1).Info("Status up-to-date. No changes required.")
 		return ctrl.Result{}, nil
 	}
-
-	newStatus.ObservedGeneration = ap.Generation
 
 	logger.V(1).Info("Updating Status", "sequence change:", fmt.Sprintf("%v->%v", ap.Status.ObservedGeneration, newStatus.ObservedGeneration))
 	ap.Status = *newStatus
@@ -63,7 +62,8 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *apimv1al
 
 func (r *AuthPolicyReconciler) calculateStatus(ap *apimv1alpha1.AuthPolicy, specErr error, authConfigReady bool) *apimv1alpha1.AuthPolicyStatus {
 	newStatus := &apimv1alpha1.AuthPolicyStatus{
-		Conditions: common.CopyConditions(ap.Status.Conditions),
+		Conditions:         common.CopyConditions(ap.Status.Conditions),
+		ObservedGeneration: ap.Generation,
 	}
 
 	targetObjectKind := string(ap.Spec.TargetRef.Kind)

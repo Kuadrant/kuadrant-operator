@@ -272,7 +272,7 @@ func (r *AuthPolicyReconciler) removeIstioAuthPolicy(ctx context.Context, ap *ap
 	targetObjectKind := string(ap.Spec.TargetRef.Kind)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("referenced %s not found", targetObjectKind)
+			logger.Info("referenced kind not found", "kind", targetObjectKind)
 			return nil
 		}
 		return err

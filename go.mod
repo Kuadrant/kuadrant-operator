@@ -7,6 +7,7 @@ require (
 	github.com/go-logr/logr v1.2.2
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.6
+	github.com/google/uuid v1.1.2
 	github.com/kuadrant/authorino v0.8.0
 	github.com/kuadrant/limitador-operator v0.2.0
 	github.com/onsi/ginkgo v1.16.5

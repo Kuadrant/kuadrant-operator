@@ -20,19 +20,23 @@ const APAvailableConditionType string = "Available"
 // reconcileStatus makes sure status block of AuthPolicy is up-to-date.
 func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *apimv1alpha1.AuthPolicy, specErr error) (ctrl.Result, error) {
 	logger, _ := logr.FromContext(ctx)
+	logger.V(1).Info("Reconciling AuthPolicy status", "spec error", specErr)
 
 	// fetch the AuthConfig and check if it's ready.
-	apKey := client.ObjectKeyFromObject(ap)
-	authConfigKey := client.ObjectKey{
-		Namespace: common.KuadrantNamespace,
-		Name:      authConfigName(apKey),
-	}
-	authConfig := &authorinov1beta1.AuthConfig{}
-	if err := r.GetResource(ctx, authConfigKey, authConfig); err != nil {
-		return ctrl.Result{}, err
-	}
+	isAuthConfigReady := true
+	if specErr == nil { // skip fetching authconfig if we already have a reconciliation error.
+		apKey := client.ObjectKeyFromObject(ap)
+		authConfigKey := client.ObjectKey{
+			Namespace: common.KuadrantNamespace,
+			Name:      authConfigName(apKey),
+		}
+		authConfig := &authorinov1beta1.AuthConfig{}
+		if err := r.GetResource(ctx, authConfigKey, authConfig); err != nil {
+			return ctrl.Result{}, err
+		}
 
-	isAuthConfigReady := authConfig.Status.Ready
+		isAuthConfigReady = authConfig.Status.Ready
+	}
 
 	newStatus := r.calculateStatus(ap, specErr, isAuthConfigReady)
 

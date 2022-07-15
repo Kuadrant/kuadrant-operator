@@ -9,7 +9,7 @@ require (
 	github.com/google/go-cmp v0.5.6
 	github.com/google/uuid v1.1.2
 	github.com/kuadrant/authorino v0.8.0
-	github.com/kuadrant/limitador-operator v0.2.0
+	github.com/kuadrant/limitador-operator v0.2.1-0.20220629132133-36d2728416d4
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.17.0
 	go.uber.org/zap v1.19.1

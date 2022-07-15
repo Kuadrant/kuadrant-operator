@@ -131,3 +131,24 @@ func ObjectKeyListDifference(a, b []client.ObjectKey) []client.ObjectKey {
 
 	return result
 }
+
+// ContainsObjectKey tells whether a contains x
+func ContainsObjectKey(a []client.ObjectKey, x client.ObjectKey) bool {
+	for _, n := range a {
+		if x == n {
+			return true
+		}
+	}
+	return false
+}
+
+// FindObjectKey returns the smallest index i at which x == a[i],
+// or len(a) if there is no such index.
+func FindObjectKey(a []client.ObjectKey, x client.ObjectKey) int {
+	for i, n := range a {
+		if x == n {
+			return i
+		}
+	}
+	return len(a)
+}

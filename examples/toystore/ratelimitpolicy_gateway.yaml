@@ -1,0 +1,33 @@
+---
+apiVersion: apim.kuadrant.io/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: toystore-gw
+  namespace: kuadrant-system
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-gwapi-gateway
+  rateLimits:
+    - rules:
+      - methods: ["POST"]
+      - methods: ["PUT"]
+      configurations:
+        - actions:
+            - generic_key:
+                descriptor_key: expensive-op
+                descriptor_value: "1"
+      limits:
+        - conditions: ["expensive-op == 1"]
+          maxValue: 2
+          seconds: 30
+          variables: []
+    - configurations:
+        - actions:
+            - remote_address: {}
+      limits:
+        - conditions: []
+          maxValue: 5
+          seconds: 30
+          variables: ["remote_address"]

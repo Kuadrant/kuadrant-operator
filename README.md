@@ -12,6 +12,7 @@
 * [Demos](#demos)
   * [Updating the RateLimitPolicy `targetRef` attribute](/doc/demo-rlp-update-targetref.md)
   * [Authenticated rate limiting](/doc/demo-rlp-authenticated.md)
+  * [RateLimitPolicy targeting a Gateway network resource](/doc/demo-rlp-target-gateway.md)
 * [Contributing](#contributing)
 * [Licensing](#licensing)
 

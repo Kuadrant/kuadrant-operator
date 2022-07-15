@@ -17,6 +17,7 @@ limitations under the License.
 package common
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -26,21 +27,16 @@ import (
 
 //TODO: move the const to a proper place, or get it from config
 const (
-	KuadrantNamespace             = "kuadrant-system"
-	KuadrantAuthorizationProvider = "kuadrant-authorization"
-	LimitadorServiceGrpcPort      = 8081
-
-	HTTPRouteKind = "HTTPRoute"
-
-	KuadrantManagedLabel              = "kuadrant.io/managed"
-	KuadrantAuthProviderAnnotation    = "kuadrant.io/auth-provider"
-	KuadrantRateLimitPolicyAnnotation = "kuadrant.io/ratelimitpolicy"
-	RateLimitPolicyBackRefAnnotation  = "kuadrant.io/ratelimitpolicy-backref"
-	AuthPolicyBackRefAnnotation       = "kuadrant.io/authpolicy-backref"
-)
-
-var (
-	LimitadorServiceClusterHost = fmt.Sprintf("limitador.%s.svc.cluster.local", KuadrantNamespace)
+	KuadrantNamespace                    = "kuadrant-system"
+	KuadrantAuthorizationProvider        = "kuadrant-authorization"
+	KuadrantRateLimitClusterName         = "kuadrant-rate-limiting-service"
+	LimitadorServiceGrpcPort             = 8081
+	HTTPRouteKind                        = "HTTPRoute"
+	KuadrantManagedLabel                 = "kuadrant.io/managed"
+	KuadrantAuthProviderAnnotation       = "kuadrant.io/auth-provider"
+	KuadrantRateLimitPolicyRefAnnotation = "kuadrant.io/ratelimitpolicies"
+	RateLimitPolicyBackRefAnnotation     = "kuadrant.io/ratelimitpolicy-direct-backref"
+	AuthPolicyBackRefAnnotation          = "kuadrant.io/authpolicy-backref"
 )
 
 func FetchEnv(key string, def string) string {
@@ -88,4 +84,26 @@ func MergeMapStringString(existing *map[string]string, desired map[string]string
 	}
 
 	return modified
+}
+
+// UnMarshallLimitNamespace parses limit namespace with format "gwNS/gwName#domain"
+func UnMarshallLimitNamespace(ns string) (client.ObjectKey, string, error) {
+	split := strings.Split(ns, "#")
+	if len(split) != 2 {
+		return client.ObjectKey{}, "", errors.New("failed to split on #")
+	}
+
+	domain := split[1]
+
+	gwSplit := strings.Split(split[0], "/")
+	if len(gwSplit) != 2 {
+		return client.ObjectKey{}, "", errors.New("failed to split on /")
+	}
+
+	return client.ObjectKey{Namespace: gwSplit[0], Name: gwSplit[1]}, domain, nil
+}
+
+// MarshallNamespace serializes limit namespace with format "gwNS/gwName#domain"
+func MarshallNamespace(gwKey client.ObjectKey, domain string) string {
+	return fmt.Sprintf("%s/%s#%s", gwKey.Namespace, gwKey.Name, domain)
 }

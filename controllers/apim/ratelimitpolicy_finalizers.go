@@ -2,18 +2,15 @@ package apim
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/go-logr/logr"
-	istioextensionv1alpha3 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
-	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	kuadrantistioutils "github.com/kuadrant/kuadrant-controller/pkg/istio"
+	"github.com/kuadrant/kuadrant-controller/pkg/rlptools"
 )
 
 const (
@@ -21,164 +18,116 @@ const (
 	rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
 )
 
-// finalizeWASMPlugins removes the configuration of this RLP from each gateway's WASMPlugins.
-func (r *RateLimitPolicyReconciler) finalizeWASMPlugins(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+func (r *RateLimitPolicyReconciler) finalizeRLP(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
 	logger, _ := logr.FromContext(ctx)
+	logger.V(1).Info("Handling removal of ratelimitpolicy object")
 
-	httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
+	gatewayDiffObj, err := r.computeFinalizeGatewayDiff(ctx, rlp)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			logger.Info("targetRef HTTPRoute not found")
-			return nil
-		}
+		return err
+	}
+	if gatewayDiffObj == nil {
+		logger.V(1).Info("finalizeRLP: gatewayDiffObj is nil")
+		return nil
+	}
+
+	if err := r.reconcileGatewayRLPReferences(ctx, rlp, gatewayDiffObj); err != nil {
 		return err
 	}
 
-	for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
-		gwKey := client.ObjectKey{Name: string(parentRef.Name), Namespace: httpRoute.Namespace}
-		if parentRef.Namespace != nil {
-			gwKey.Namespace = string(*parentRef.Namespace)
-		}
-		gateway := &gatewayapiv1alpha2.Gateway{}
-		err := r.Client().Get(ctx, gwKey, gateway)
-		logger.V(1).Info("finalizeWASMPlugins: get Gateway", "gateway", gwKey, "err", err)
-		if apierrors.IsNotFound(err) {
-			logger.Info("parentRef Gateway not found", "parentRef", gwKey)
-			continue
-		}
-		if err != nil {
-			return err
-		}
+	if err := r.reconcileWASMPluginConf(ctx, rlp, gatewayDiffObj); err != nil {
+		return err
+	}
 
-		desiredWPs, err := kuadrantistioutils.WasmPlugins(rlp, gwKey, gateway.GetLabels(), httpRoute.Spec.Hostnames)
-		if err != nil {
-			return err
-		}
+	if err := r.reconcileRateLimitingClusterEnvoyFilter(ctx, rlp, gatewayDiffObj); err != nil {
+		return err
+	}
 
-		wasmPluginDeleted := false
-		for _, desiredWP := range desiredWPs {
-			wasmPlugin := &istioextensionv1alpha3.WasmPlugin{}
-			err = r.Client().Get(ctx, client.ObjectKeyFromObject(desiredWP), wasmPlugin)
-			logger.V(1).Info("finalizeWASMPlugins: get WasmPlugin", "wasmplugin", client.ObjectKeyFromObject(desiredWP), "err", err)
-			if apierrors.IsNotFound(err) {
-				logger.Info("finalizeWASMPlugins: wasmplugin not found", "wasmplguin", client.ObjectKeyFromObject(desiredWP))
-				continue
-			}
-			if err != nil {
-				return err
-			}
-			wasmPluginDeleted, err = r.finalizeSingleWASMPlugins(ctx, rlp, wasmPlugin)
-			if err != nil {
-				return err
-			}
-		}
+	if err := r.reconcileLimits(ctx, rlp, gatewayDiffObj); err != nil {
+		return err
+	}
 
-		// finalize pre-requisite of WasmPlugin i.e. EnvoyFilter adding the limitador cluster entry
-		if wasmPluginDeleted {
-			ef := &istionetworkingv1alpha3.EnvoyFilter{}
-			efKey := client.ObjectKey{Namespace: gwKey.Namespace, Name: kuadrantistioutils.LimitadorClusterEnvoyFilterName}
-			err := r.Client().Get(ctx, efKey, ef)
-			logger.V(1).Info("finalizeWASMPlugins: get EnvoyFilter", "envoyfilter", efKey, "err", err)
-			if apierrors.IsNotFound(err) {
-				logger.Info("finalizeWASMPlugins: envoyfilter not found", "envoyFilter", efKey)
-				continue
-			}
-			err = r.DeleteResource(ctx, ef)
-			if err != nil {
-				return err
-			}
-		}
+	if err := r.deleteNetworkResourceBackReference(ctx, rlp); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-// finalizeSingleWASMPlugins removes the configuration of this RLP
-// If the WASMPlugin ends up with empty conf, the resource and its pre-requisite will be removed.
-func (r *RateLimitPolicyReconciler) finalizeSingleWASMPlugins(
-	ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy, wasmPlugin *istioextensionv1alpha3.WasmPlugin,
-) (bool, error) {
-	updateObject := false
-	configEmpty := false
-	// Deserialize config into PluginConfig struct
-	configJSON, err := wasmPlugin.Spec.PluginConfig.MarshalJSON()
-	if err != nil {
-		return false, err
-	}
-	pluginConfig := &kuadrantistioutils.PluginConfig{}
-	if err := json.Unmarshal(configJSON, pluginConfig); err != nil {
-		return false, err
-	}
-
-	pluginKey := client.ObjectKeyFromObject(rlp).String()
-	if _, ok := pluginConfig.PluginPolicies[pluginKey]; ok {
-		delete(pluginConfig.PluginPolicies, pluginKey)
-		updateObject = true
-		finalPluginConfig, err := kuadrantistioutils.PluginConfigToWasmPluginStruct(pluginConfig)
-		if err != nil {
-			return false, err
-		}
-		wasmPlugin.Spec.PluginConfig = finalPluginConfig
-
-		configEmpty = len(pluginConfig.PluginPolicies) == 0
-	}
-
-	if configEmpty {
-		return true, r.DeleteResource(ctx, wasmPlugin)
-	} else if updateObject {
-		return false, r.UpdateResource(ctx, wasmPlugin)
-	}
-
-	return false, nil
-}
-
-func (r *RateLimitPolicyReconciler) deleteRateLimits(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+func (r *RateLimitPolicyReconciler) computeFinalizeGatewayDiff(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) (*gatewayDiff, error) {
 	logger, _ := logr.FromContext(ctx)
-	rlpKey := client.ObjectKeyFromObject(rlp)
-	for i := range rlp.Spec.Limits {
-		ratelimitfactory := common.RateLimitFactory{
-			Key: client.ObjectKey{
-				Name: limitadorRatelimitsName(rlpKey, i+1),
-				// Currently, Limitador Operator (v0.2.0) will configure limitador services with
-				// RateLimit CRs created in the same namespace.
-				Namespace: common.KuadrantNamespace,
-			},
-			// rest of the parameters empty
-		}
 
-		rateLimit := ratelimitfactory.RateLimit()
-		err := r.DeleteResource(ctx, rateLimit)
-		logger.V(1).Info("Removing rate limit", "ratelimit", client.ObjectKeyFromObject(rateLimit), "error", err)
-		if err != nil && !apierrors.IsNotFound(err) {
-			return err
-		}
+	// Prepare gatewayDiff object only with LeftGateways list populated.
+	// Used for the common reconciliation methods of Limits, EnvoyFilters, WasmPlugins, etc...
+	gwDiff := &gatewayDiff{
+		NewGateways:  nil,
+		SameGateways: nil,
+		LeftGateways: nil,
 	}
 
-	return nil
+	rlpGwKeys, err := r.rlpGatewayKeys(ctx, rlp)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, gwKey := range rlpGwKeys {
+		gw := &gatewayapiv1alpha2.Gateway{}
+		err := r.Client().Get(ctx, gwKey, gw)
+		logger.V(1).Info("finalizeRLP", "fetch gateway", gwKey, "err", err)
+		if err != nil {
+			return nil, err
+		}
+		gwDiff.LeftGateways = append(gwDiff.LeftGateways, rlptools.GatewayWrapper{Gateway: gw})
+	}
+	logger.V(1).Info("finalizeRLP", "#left-gw", len(gwDiff.LeftGateways))
+
+	return gwDiff, nil
 }
 
 func (r *RateLimitPolicyReconciler) deleteNetworkResourceBackReference(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
 	logger, _ := logr.FromContext(ctx)
-	httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			logger.Info("targetRef HTTPRoute not found")
-			return nil
+
+	var netObj client.Object
+	var err error
+
+	if rlp.IsForGateway() {
+		netObj, err = r.fetchGateway(ctx, rlp)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				logger.Info("deleteNetworkResourceBackReference: targetRef Gateway not found")
+				return nil
+			}
+			return err
 		}
-		return err
+	} else if rlp.IsForHTTPRoute() {
+		netObj, err = r.fetchHTTPRoute(ctx, rlp)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				logger.Info("deleteNetworkResourceBackReference: targetRef HTTPRoute not found")
+				return nil
+			}
+			return err
+		}
+	} else {
+		logger.Info("deleteNetworkResourceBackReference: rlp targeting unknown network resource")
+		return nil
 	}
+
+	netObjKey := client.ObjectKeyFromObject(netObj)
+	netObjType := netObj.GetObjectKind().GroupVersionKind()
 
 	// Reconcile the back reference:
-	httpRouteAnnotations := httpRoute.GetAnnotations()
-	if httpRouteAnnotations == nil {
-		httpRouteAnnotations = map[string]string{}
+	objAnnotations := netObj.GetAnnotations()
+	if objAnnotations == nil {
+		objAnnotations = map[string]string{}
 	}
 
-	if _, ok := httpRouteAnnotations[common.RateLimitPolicyBackRefAnnotation]; ok {
-		delete(httpRouteAnnotations, common.RateLimitPolicyBackRefAnnotation)
-		httpRoute.SetAnnotations(httpRouteAnnotations)
-		err := r.UpdateResource(ctx, httpRoute)
-		logger.V(1).Info("deleteNetworkResourceBackReference: update HTTPRoute", "httpRoute", client.ObjectKeyFromObject(httpRoute), "err", err)
+	if _, ok := objAnnotations[common.RateLimitPolicyBackRefAnnotation]; ok {
+		delete(objAnnotations, common.RateLimitPolicyBackRefAnnotation)
+		netObj.SetAnnotations(objAnnotations)
+		err := r.UpdateResource(ctx, netObj)
+		logger.V(1).Info("deleteNetworkResourceBackReference: update network resource",
+			"type", netObjType, "name", netObjKey, "err", err)
 		if err != nil {
 			return err
 		}

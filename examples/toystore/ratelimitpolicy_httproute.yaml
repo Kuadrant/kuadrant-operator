@@ -1,0 +1,55 @@
+---
+apiVersion: apim.kuadrant.io/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: toystore-httproute
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
+  rateLimits:
+    - rules:
+      - paths: ["/toy"]
+        methods: ["GET"]
+      configurations:
+        - actions:
+            - generic_key:
+                descriptor_key: get-toy
+                descriptor_value: "yes"
+      limits:
+        - conditions: ["get-toy == yes"]
+          maxValue: 2
+          seconds: 30
+          variables: []
+    - rules:
+      - paths: ["/admin/toy"]
+        methods: ["POST", "DELETE"]
+      configurations:
+        - actions:
+            - generic_key:
+                descriptor_key: admin
+                descriptor_value: "yes"
+      limits:
+        - conditions:
+            - "admin == yes"
+            - "user-id == bob"
+          maxValue: 2
+          seconds: 30
+          variables: []
+        - conditions:
+            - "admin == yes"
+            - "user-id == alice"
+          maxValue: 4
+          seconds: 30
+          variables: []
+    - configurations:
+        - actions:
+            - generic_key:
+                descriptor_key: vhaction
+                descriptor_value: "yes"
+      limits:
+        - conditions: ["vhaction == yes"]
+          maxValue: 6
+          seconds: 30
+          variables: []

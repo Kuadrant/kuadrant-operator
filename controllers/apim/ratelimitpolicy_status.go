@@ -42,6 +42,7 @@ func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *ap
 
 	rlp.Status = *newStatus
 	updateErr := r.Client().Status().Update(ctx, rlp)
+	logger.V(1).Info("Updating Status", "err", updateErr)
 	if updateErr != nil {
 		// Ignore conflicts, resource might just be outdated.
 		if errors.IsConflict(updateErr) {
@@ -57,7 +58,8 @@ func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *ap
 func (r *RateLimitPolicyReconciler) calculateStatus(rlp *apimv1alpha1.RateLimitPolicy, specErr error) *apimv1alpha1.RateLimitPolicyStatus {
 	newStatus := &apimv1alpha1.RateLimitPolicyStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
-		Conditions: common.CopyConditions(rlp.Status.Conditions),
+		Conditions:         common.CopyConditions(rlp.Status.Conditions),
+		ObservedGeneration: rlp.Status.ObservedGeneration,
 	}
 
 	availableCond := r.availableCondition(specErr)

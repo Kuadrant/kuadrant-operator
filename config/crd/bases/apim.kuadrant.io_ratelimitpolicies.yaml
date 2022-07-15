@@ -35,145 +35,23 @@ spec:
           spec:
             description: RateLimitPolicySpec defines the desired state of RateLimitPolicy
             properties:
-              domain:
-                type: string
-              limits:
-                items:
-                  description: RateLimitSpec defines the desired state of RateLimit
-                  properties:
-                    conditions:
-                      items:
-                        type: string
-                      type: array
-                    max_value:
-                      type: integer
-                    namespace:
-                      type: string
-                    seconds:
-                      type: integer
-                    variables:
-                      items:
-                        type: string
-                      type: array
-                  required:
-                  - conditions
-                  - max_value
-                  - namespace
-                  - seconds
-                  - variables
-                  type: object
-                type: array
               rateLimits:
+                description: RateLimits holds the list of rate limit configurations
                 items:
+                  description: RateLimit represents a complete rate limit configuration
                   properties:
-                    actions:
+                    configurations:
+                      description: Configurations holds list of (action) configuration.
                       items:
-                        description: Action_Specifier defines one envoy rate limit
-                          action
-                        properties:
-                          generic_key:
-                            properties:
-                              descriptor_key:
-                                type: string
-                              descriptor_value:
-                                type: string
-                            required:
-                            - descriptor_value
-                            type: object
-                          metadata:
-                            properties:
-                              default_value:
-                                type: string
-                              descriptor_key:
-                                type: string
-                              metadata_key:
-                                properties:
-                                  key:
-                                    type: string
-                                  path:
-                                    items:
-                                      properties:
-                                        key:
-                                          type: string
-                                      required:
-                                      - key
-                                      type: object
-                                    type: array
-                                required:
-                                - key
-                                - path
-                                type: object
-                              source:
-                                description: MetadataSource https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-enum-config-route-v3-ratelimit-action-metadata-source
-                                enum:
-                                - DYNAMIC
-                                - ROUTE_ENTRY
-                                type: string
-                            required:
-                            - descriptor_key
-                            - metadata_key
-                            type: object
-                          remote_address:
-                            description: RemoteAddressSpec no need to specify descriptor
-                              entry is populated using the trusted address from [x-forwarded-for](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_conn_man/headers#config-http-conn-man-headers-x-forwarded-for)
-                            type: object
-                          request_headers:
-                            description: RequestHeadersSpec Rate limit on request
-                              headers.
-                            properties:
-                              descriptor_key:
-                                type: string
-                              header_name:
-                                type: string
-                              skip_if_absent:
-                                type: boolean
-                            required:
-                            - descriptor_key
-                            - header_name
-                            type: object
-                        type: object
-                      type: array
-                    stage:
-                      description: 'Definfing phase at which rate limits will be applied.
-                        Valid values are: PREAUTH, POSTAUTH, BOTH'
-                      enum:
-                      - PREAUTH
-                      - POSTAUTH
-                      - BOTH
-                      type: string
-                  required:
-                  - stage
-                  type: object
-                type: array
-              rules:
-                items:
-                  properties:
-                    name:
-                      description: Name supports regex for fetching operations from
-                        routing resources For VirtualService, if route name matches,
-                        all the match requests are converted to operations internally.
-                        But specific match request names are also supported.
-                      type: string
-                    operations:
-                      description: Operation specifies the operations of a request
-                      items:
-                        description: Each operation type has OR semantics and overall
-                          AND semantics for a match.
-                        properties:
-                          methods:
-                            items:
-                              type: string
-                            type: array
-                          paths:
-                            items:
-                              type: string
-                            type: array
-                        type: object
-                      type: array
-                    rateLimits:
-                      items:
+                        description: Configuration represents an action configuration.
+                          The equivalent of [config.route.v3.RateLimit](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-msg-config-route-v3-ratelimit)
+                          envoy object. Each action configuration produces, at most,
+                          one descriptor. Depending on the incoming request, one configuration
+                          may or may not produce a rate limit descriptor.
                         properties:
                           actions:
+                            description: Actions holds list of action specifiers.
+                              Each action specifier can only define one action type.
                             items:
                               description: Action_Specifier defines one envoy rate
                                 limit action
@@ -211,7 +89,6 @@ spec:
                                       - path
                                       type: object
                                     source:
-                                      description: MetadataSource https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-enum-config-route-v3-ratelimit-action-metadata-source
                                       enum:
                                       - DYNAMIC
                                       - ROUTE_ENTRY
@@ -241,18 +118,62 @@ spec:
                                   type: object
                               type: object
                             type: array
-                          stage:
-                            description: 'Definfing phase at which rate limits will
-                              be applied. Valid values are: PREAUTH, POSTAUTH, BOTH'
-                            enum:
-                            - PREAUTH
-                            - POSTAUTH
-                            - BOTH
-                            type: string
                         required:
-                        - stage
+                        - actions
                         type: object
                       type: array
+                    limits:
+                      description: Limits holds a list of Limitador limits
+                      items:
+                        description: Limit represents partially a Limitador limit.
+                        properties:
+                          conditions:
+                            items:
+                              type: string
+                            type: array
+                          maxValue:
+                            type: integer
+                          seconds:
+                            type: integer
+                          variables:
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - conditions
+                        - maxValue
+                        - seconds
+                        - variables
+                        type: object
+                      type: array
+                    rules:
+                      description: Rules represents the definition of the scope of
+                        the rate limit object Defines a list of conditions for which
+                        rate limit configuration will apply Matching occurs when at
+                        least one rule applies against the incoming request. If rules
+                        are not set, or empty, it is equivalent to matching all the
+                        requests.
+                      items:
+                        description: Rule defines a single condition for the rate
+                          limit configuration All defined fields within the rule must
+                          be met to have a rule match
+                        properties:
+                          hosts:
+                            items:
+                              type: string
+                            type: array
+                          methods:
+                            items:
+                              type: string
+                            type: array
+                          paths:
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      type: array
+                  required:
+                  - configurations
                   type: object
                 type: array
               targetRef:
@@ -289,7 +210,6 @@ spec:
                 - name
                 type: object
             required:
-            - domain
             - targetRef
             type: object
           status:

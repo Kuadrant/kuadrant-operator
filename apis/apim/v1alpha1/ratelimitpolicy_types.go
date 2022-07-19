@@ -39,8 +39,12 @@ type GenericKeySpec struct {
 	DescriptorKey *string `json:"descriptor_key,omitempty"`
 }
 
-type MetadataPathSegment struct {
+type MetadataPathSegmentKey struct {
 	Key string `json:"key"`
+}
+
+type MetadataPathSegment struct {
+	Segment MetadataPathSegmentKey `json:"segment"`
 }
 
 type MetadataKeySpec struct {
@@ -53,8 +57,8 @@ type MetadataSpec struct {
 	MetadataKey   MetadataKeySpec `json:"metadata_key"`
 	// +optional
 	DefaultValue *string `json:"default_value,omitempty"`
-	// +optional
-	Source *MetadataSource `json:"source,omitempty"`
+	// +kubebuilder:default=DYNAMIC
+	Source MetadataSource `json:"source,omitempty"`
 }
 
 // RemoteAddressSpec no need to specify

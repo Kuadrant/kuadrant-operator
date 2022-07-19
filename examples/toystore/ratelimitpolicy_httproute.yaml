@@ -30,6 +30,16 @@ spec:
             - generic_key:
                 descriptor_key: admin
                 descriptor_value: "yes"
+            - metadata:
+                descriptor_key: "user-id"
+                default_value: "no-user"
+                metadata_key:
+                  key: "envoy.filters.http.ext_authz"
+                  path:
+                    - segment:
+                        key: "ext_auth_data"
+                    - segment:
+                        key: "user-id"
       limits:
         - conditions:
             - "admin == yes"

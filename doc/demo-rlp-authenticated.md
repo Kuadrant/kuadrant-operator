@@ -52,6 +52,39 @@ Check `toystore` HTTPRoute works
 curl -v -H 'Host: api.toystore.com' http://localhost:9080/toy
 ```
 
+Create API key secrets for Authorino
+
+```yaml
+kubectl apply -f -<<EOF
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    secret.kuadrant.io/user-id: bob
+  name: bob-key
+  labels:
+    authorino.kuadrant.io/managed-by: authorino
+    app: toystore
+stringData:
+  api_key: IAMBOB
+type: Opaque
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  annotations:
+    secret.kuadrant.io/user-id: alice
+  name: alice-key
+  labels:
+    authorino.kuadrant.io/managed-by: authorino
+    app: toystore
+stringData:
+  api_key: IAMALICE
+type: Opaque
+EOF
+```
+
 Create AuthPolicy
 
 ```
@@ -79,41 +112,23 @@ spec:
       credentials:
         in: authorization_header
         keySelector: APIKEY
+    response:
+    - json:
+        properties:
+          - name: user-id
+            value: null
+            valueFrom:
+              authJSON: auth.identity.metadata.annotations.secret\.kuadrant\.io/user-id
+      name: rate-limit-apikey
+      wrapper: envoyDynamicMetadata
+      wrapperKey: ext_auth_data
 EOF
 ```
 
-Create API key secrets for Authorino
-
-```yaml
-kubectl apply -f -<<EOF
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: key-a
-  labels:
-    authorino.kuadrant.io/managed-by: authorino
-    api: toystore
-stringData:
-  api_key: KEY-A
-type: Opaque
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: key-b
-  labels:
-    authorino.kuadrant.io/managed-by: authorino
-    api: toystore
-stringData:
-  api_key: KEY-B
-type: Opaque
-EOF
-```
 Check `toystore` HTTPRoute requires API key
 
 ```
-curl -v -H 'Authorization: APIKEY KEY-A' -H 'Host: api.toystore.com' http://localhost:9080/toy
+curl -v -H 'Authorization: APIKEY IAMBOB' -H 'Host: api.toystore.com' http://localhost:9080/toy
 ```
 
 Add rate limit policy to protect per API key basis
@@ -132,28 +147,41 @@ spec:
     kind: HTTPRoute
     name: toystore
   rateLimits:
-    - stage: POSTAUTH
-      actions:
-        - request_headers:
-            descriptor_key: key
-            header_name: "Authorization"
-            skip_if_absent: true
-  domain: toystore-app
-  limits:
-    - conditions: []
-      max_value: 2
-      namespace: toystore-app
-      seconds: 30
-      variables: ["key"]
+    - rules:
+      - paths: ["/toy"]
+        methods: ["GET"]
+      configurations:
+        - actions:
+            - metadata:
+                descriptor_key: "user-id"
+                default_value: "no-user"
+                metadata_key:
+                  key: "envoy.filters.http.ext_authz"
+                  path:
+                    - segment:
+                        key: "ext_auth_data"
+                    - segment:
+                        key: "user-id"
+      limits:
+        - conditions:
+            - "user-id == bob"
+          maxValue: 2
+          seconds: 30
+          variables: []
+        - conditions:
+            - "user-id == alice"
+          maxValue: 4
+          seconds: 30
+          variables: []
 EOF
 ```
 
 Check the authenticated rate limit policy works: 2 requests every 30 secs.
 
 ```
-curl -v -H 'Authorization: APIKEY KEY-A' -H 'Host: api.toystore.com' http://localhost:9080/toy
+curl -v -H 'Authorization: APIKEY IAMBOB' -H 'Host: api.toystore.com' http://localhost:9080/toy
 ```
 
 ```
-curl -v -H 'Authorization: APIKEY KEY-B' -H 'Host: api.toystore.com' http://localhost:9080/toy
+curl -v -H 'Authorization: APIKEY IAMALICE' -H 'Host: api.toystore.com' http://localhost:9080/toy
 ```

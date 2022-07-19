@@ -70,6 +70,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - extensions.istio.io
+  resources:
+  - wasmplugins
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - gateway.networking.k8s.io
   resources:
   - gateways
@@ -84,6 +96,30 @@ rules:
   resources:
   - httproutes
   verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - limitador.kuadrant.io
+  resources:
+  - limitadors
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - networking.istio.io
+  resources:
+  - envoyfilters
+  verbs:
+  - create
+  - delete
   - get
   - list
   - patch

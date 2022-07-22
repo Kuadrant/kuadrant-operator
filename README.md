@@ -44,9 +44,6 @@ The kuadrant controller acts on the following [CRDs](https://kubernetes.io/docs/
 | [RateLimitPolicy](apis/apim/v1alpha1/ratelimitpolicy_types.go) | Enable access control on workloads based on HTTP rate limiting |
 | [AuthPolicy](apis/apim/v1alpha1/authpolicy_types.go) | Enable AuthN and AuthZ based access control on workloads |
 
-
-For a detailed description of the CRDs above, refer to the [Architecture](doc/architecture.md) page.
-
 ## Getting started
 
 1.- Clone Kuadrant controller and checkout main

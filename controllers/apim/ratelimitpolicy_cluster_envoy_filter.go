@@ -114,9 +114,10 @@ func (r *RateLimitPolicyReconciler) gatewayRateLimitingClusterEnvoyFilter(
 	if err != nil {
 		return nil, err
 	}
-
-	// TODO(eastizle): limitador service name and port should be in the status
-	configPatches, err := kuadrantistioutils.LimitadorClusterPatch("limitador", common.LimitadorServiceGrpcPort)
+	if !limitador.Status.Ready() {
+		return nil, fmt.Errorf("limitador Status not ready")
+	}
+	configPatches, err := kuadrantistioutils.LimitadorClusterPatch(limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC))
 	if err != nil {
 		return nil, err
 	}

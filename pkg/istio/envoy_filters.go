@@ -9,12 +9,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	"github.com/kuadrant/kuadrant-controller/pkg/rlptools"
 )
 
 // LimitadorClusterPatch returns an EnvoyFilter patch that adds a custom cluster entry to compensate for kuadrant/limitador#53.
 // Note: This should be removed once the mentioned issue is fixed but that will take some time.
-func LimitadorClusterPatch(limitadorSvc string, limitadorGRPCPort int) ([]*istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
+func LimitadorClusterPatch(limitadorSvcHost string, limitadorGRPCPort int) ([]*istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
 	// The patch defines the rate_limit_cluster, which provides the endpoint location of the external rate limit service.
 	patchUnstructured := map[string]interface{}{
 		"operation": "ADD",
@@ -33,7 +32,7 @@ func LimitadorClusterPatch(limitadorSvc string, limitadorGRPCPort int) ([]*istio
 								"endpoint": map[string]interface{}{
 									"address": map[string]interface{}{
 										"socket_address": map[string]interface{}{
-											"address":    rlptools.LimitadorServiceClusterHost(limitadorSvc),
+											"address":    limitadorSvcHost,
 											"port_value": limitadorGRPCPort,
 										},
 									},
@@ -60,7 +59,7 @@ func LimitadorClusterPatch(limitadorSvc string, limitadorGRPCPort int) ([]*istio
 			Match: &istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch{
 				ObjectTypes: &istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch_Cluster{
 					Cluster: &istioapiv1alpha3.EnvoyFilter_ClusterMatch{
-						Service: rlptools.LimitadorServiceClusterHost(limitadorSvc),
+						Service: limitadorSvcHost,
 					},
 				},
 			},

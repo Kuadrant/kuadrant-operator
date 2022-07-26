@@ -5,13 +5,15 @@ go 1.16
 require (
 	github.com/Azure/go-autorest/autorest v0.11.19 // indirect
 	github.com/go-logr/logr v1.2.2
+	github.com/go-openapi/validate v0.19.5 // indirect
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.6
 	github.com/google/uuid v1.1.2
 	github.com/kuadrant/authorino v0.8.0
-	github.com/kuadrant/limitador-operator v0.2.1-0.20220629132133-36d2728416d4
+	github.com/kuadrant/limitador-operator v0.2.1-0.20220722143013-6009e8dd4e19
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.17.0
+	github.com/ugorji/go v1.1.4 // indirect
 	go.uber.org/zap v1.19.1
 	gotest.tools v2.2.0+incompatible
 	istio.io/api v0.0.0-20220516175159-89828b1f4baa

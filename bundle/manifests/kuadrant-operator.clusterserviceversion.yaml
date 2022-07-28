@@ -14,7 +14,7 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    operators.operatorframework.io/builder: operator-sdk-v1.14.0+git
+    operators.operatorframework.io/builder: operator-sdk-v1.22.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
   name: kuadrant-operator.v0.0.0
   namespace: placeholder
@@ -299,7 +299,9 @@ spec:
           - create
         serviceAccountName: kuadrant-operator-controller-manager
       deployments:
-      - name: kuadrant-operator-controller-manager
+      - label:
+          control-plane: controller-manager
+        name: kuadrant-operator-controller-manager
         spec:
           replicas: 1
           selector:

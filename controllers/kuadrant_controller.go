@@ -77,6 +77,9 @@ type KuadrantReconciler struct {
 //+kubebuilder:rbac:groups="networking.istio.io",resources=gateways,verbs=get;list;watch
 //+kubebuilder:rbac:groups="security.istio.io",resources=authorizationpolicies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos,verbs=get;list;watch;create;update;delete;patch
+//+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;delete;patch
+//+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=get;list;watch;create;update;delete;patch
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;create;update;delete;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

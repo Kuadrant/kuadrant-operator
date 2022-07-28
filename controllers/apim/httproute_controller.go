@@ -23,6 +23,7 @@ const HTTPRouteNamePrefix = "hr"
 
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups="",resources=configmaps,verbs=create;get;list;watch;update;patch
 
 // HTTPRouteReconciler reconciles Gateway API's HTTPRoute object
 type HTTPRouteReconciler struct {

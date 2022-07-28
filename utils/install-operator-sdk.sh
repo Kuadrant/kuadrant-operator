@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Install a version of the operator sdk.
 # https://sdk.operatorframework.io/docs/installation/#install-from-github-release

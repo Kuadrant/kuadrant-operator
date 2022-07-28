@@ -28,6 +28,7 @@ import (
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -405,6 +406,25 @@ func (r *KuadrantReconciler) createOnlyInKuadrantNSCb(ctx context.Context, kObj 
 				v1.EnvVar{Name: envLimitadorNamespace, Value: kObj.Namespace},
 				v1.EnvVar{Name: envLimitadorName, Value: limitadorName},
 			)
+			newObj = obj
+		// TODO: DRY the following 2 case switches
+		case *rbacv1.RoleBinding:
+			if obj.Name == "kuadrant-leader-election-rolebinding" {
+				for i, subject := range obj.Subjects {
+					if subject.Name == "kuadrant-controller-manager" {
+						obj.Subjects[i].Namespace = kObj.Namespace
+					}
+				}
+			}
+			newObj = obj
+		case *rbacv1.ClusterRoleBinding:
+			if obj.Name == "kuadrant-manager-rolebinding" {
+				for i, subject := range obj.Subjects {
+					if subject.Name == "kuadrant-controller-manager" {
+						obj.Subjects[i].Namespace = kObj.Namespace
+					}
+				}
+			}
 			newObj = obj
 		default:
 		}

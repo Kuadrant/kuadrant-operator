@@ -1,26 +1,33 @@
-## RateLimitPolicy targeting a Gateway network resource
+## Gateway Rate Limit For Cluster Operators
 
-This demo shows how the kuadrant's control plane applies rate limit policy at
+This user guide shows how the kuadrant's control plane applies rate limit policy at
 [Gateway API's Gateway](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.Gateway)
 level.
 
-### Steps
+### Clone the project
 
-### Initial Setup
+```
+git clone https://github.com/Kuadrant/kuadrant-controller
+```
 
-Create local cluster and deploy kuadrant
+### Setup environment
+
+This step creates a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
+then it installs Istio, Kubernetes Gateway API and kuadrant.
 
 ```
 make local-setup
 ```
 
-Deploy toystore example deployment
+### Deploy toystore example deployment
 
 ```
 kubectl apply -f examples/toystore/toystore.yaml
 ```
 
-Create `toystore` HTTPRoute to configure routing to the toystore service
+### Create HTTPRoute to configure routing to the toystore service
+
+![](https://i.imgur.com/rdN8lo3.png)
 
 ```yaml
 kubectl apply -f - <<EOF
@@ -56,9 +63,7 @@ spec:
 EOF
 ```
 
-![](https://i.imgur.com/rdN8lo3.png)
-
-Check `toystore` HTTPRoute works and it is not rate limited.
+### Check `toystore` HTTPRoute works
 
 `GET /toy`: no rate limiting
 ```
@@ -68,6 +73,13 @@ while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host
 `POST /admin/toy`: no rate limiting
 ```
 while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host: api.toystore.com" -X POST http://localhost:9080/admin/toy | egrep --color "\b(429)\b|$"; sleep 1; done
+```
+
+**Note**: This only works out of the box on linux environments. If not on linux,
+you may need to forward ports
+
+```bash
+kubectl port-forward -n kuadrant-system service/kuadrant-gateway 9080:80
 ```
 
 ### Rate limiting `toystore` HTTPRoute traffic
@@ -196,7 +208,7 @@ spec:
 EOF
 ```
 
-Validating the rate limit policies (HTTPRoute and Gateway).
+### Validating the rate limit policies (HTTPRoute and Gateway).
 
 `GET /toy` @ **1** rps (expected to be rate limited @ **8** reqs / **10** secs (0.8 rps))
 ```
@@ -208,7 +220,7 @@ while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host
 while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host: api.toystore.com" -X POST http://localhost:9080/admin/toy | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
-Validating Gateway "Per Remote IP" policy
+### Validating Gateway "Per Remote IP" policy
 
 Stop all traffic.
 
@@ -216,40 +228,4 @@ Stop all traffic.
 
 ```
 while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H "Host: api.toystore.com" http://localhost:9080/free -: --write-out '%{http_code}\n' --silent --output /dev/null -H "Host: api.toystore.com" http://localhost:9080/free -: --write-out '%{http_code}\n' --silent --output /dev/null -H "Host: api.toystore.com" http://localhost:9080/free | egrep --color "\b(429)\b|$"; sleep 1; done
-```
-
-### Remove Gateway's rate limit policy
-
-![](https://i.imgur.com/2A9sXXs.png)
-
-```
-kubectl delete ratelimitpolicy kuadrant-gw -n kuadrant-system
-```
-
-`GET /toy` @ **1** rps (expected to be rate limited @ **8** reqs / **10** secs (0.8 rps))
-```
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host: api.toystore.com" http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
-```
-
-`POST /admin/toy` @ **1** rps (expected to be rate limited @ **5** reqs / **10** secs (0.5 rps))
-```
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host: api.toystore.com" -X POST http://localhost:9080/admin/toy | egrep --color "\b(429)\b|$"; sleep 1; done
-```
-
-### Remove HTTPRoute's rate limit policy
-
-![](https://i.imgur.com/rdN8lo3.png)
-
-```
-kubectl delete ratelimitpolicy toystore
-```
-
-`GET /toy`: no rate limiting
-```
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host: api.toystore.com" http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
-```
-
-`POST /admin/toy`: no rate limiting
-```
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host: api.toystore.com" -X POST http://localhost:9080/admin/toy | egrep --color "\b(429)\b|$"; sleep 1; done
 ```

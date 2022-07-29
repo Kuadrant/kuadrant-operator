@@ -4,17 +4,25 @@
 [![Testing](https://github.com/Kuadrant/kuadrant-controller/actions/workflows/testing.yaml/badge.svg)](https://github.com/Kuadrant/kuadrant-controller/actions/workflows/testing.yaml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0)
 
-## Table of contents
+<!--ts-->
+* [Kuadrant Controller](#kuadrant-controller)
+   * [Overview](#overview)
+   * [Architecture](#architecture)
+      * [Kuadrant components](#kuadrant-components)
+      * [Provided APIs](#provided-apis)
+   * [Getting started](#getting-started)
+      * [Pre-requisites](#pre-requisites)
+      * [If you are an <em>API Provider</em>](#if-you-are-an-api-provider)
+      * [If you are a <em>Cluster Operator</em>](#if-you-are-a-cluster-operator)
+   * [User guides](#user-guides)
+   * [<a href="/doc/rate-limiting.md">Kuadrant Rate Limiting</a>](#kuadrant-rate-limiting)
+   * [Contributing](#contributing)
+   * [Licensing](#licensing)
 
-* [Overview](#overview)
-* [CustomResourceDefinitions](#customresourcedefinitions)
-* [Getting started](#getting-started)
-* [Demos](#demos)
-  * [Updating the RateLimitPolicy `targetRef` attribute](/doc/demo-rlp-update-targetref.md)
-  * [Authenticated rate limiting](/doc/demo-rlp-authenticated.md)
-  * [RateLimitPolicy targeting a Gateway network resource](/doc/demo-rlp-target-gateway.md)
-* [Contributing](#contributing)
-* [Licensing](#licensing)
+<!-- Created by https://github.com/ekalinin/github-markdown-toc -->
+<!-- Added by: eguzki, at: vie 29 jul 2022 14:46:51 CEST -->
+
+<!--te-->
 
 ## Overview
 
@@ -24,280 +32,95 @@ of applications & services when it comes to rate limiting, authentication, autho
 
 Kuadrant aims to produce a set of loosely coupled functionalities built directly on top of Kubernetes.
 Furthermore it only strives to provide what Kubernetes doesn’t offer out of the box, i.e. Kuadrant won’t be designing a new Gateway/proxy,
-instead it will opt to connect with what’s there and what’s being developed (think Envoy, GatewayAPI).
+instead it will opt to connect with what’s there and what’s being developed (think Envoy, Istio, GatewayAPI).
 
 Kuadrant is a system of cloud-native k8s components that grows as users’ needs grow.
-* From simple protection of a Service (via **AuthN**) that is used by teammates working on the same cluster, or “sibling” services, up to **AuthN** of users using OIDC plus custom policies.
+* From simple protection of a Service (via **AuthN**) that is used by teammates working on the same cluster, or “sibling” services, up to **AuthZ** of users using OIDC plus custom policies.
 * From no rate-limiting to rate-limiting for global service protection on to rate-limiting by users/plans
 
-towards a full system that is more analogous to current API Management systems where business rules
-and plans define protections and Business/User related Analytics are available.
+## Architecture
 
-## CustomResourceDefinitions
+Kuadrant relies on [Istio](https://istio.io/) and the [Gateway API](https://gateway-api.sigs.k8s.io/)
+to operate the cluster (istio's) ingress gateway to provide API management with **authentication** (authN),
+**authorization** (authZ) and **rate limiting** capabilities.
 
-A core feature of the kuadrant controller is to monitor the Kubernetes API server for changes to
-specific objects and ensure the owned k8s components configuration match these objects.
-The kuadrant controller acts on the following [CRDs](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/):
+### Kuadrant components
 
 | CRD | Description |
 | --- | --- |
-| [RateLimitPolicy](apis/apim/v1alpha1/ratelimitpolicy_types.go) | Enable access control on workloads based on HTTP rate limiting |
-| [AuthPolicy](apis/apim/v1alpha1/authpolicy_types.go) | Enable AuthN and AuthZ based access control on workloads |
+| Control Plane | The control plane takes the customer desired configuration (declaratively as kubernetes custom resources) as input and ensures all components are configured to obey customer's desired behavior.<br> This repository contains the source code of the kuadrant control plane |
+| [Kuadrant Operator](https://github.com/Kuadrant/kuadrant-operator) | A Kubernetes Operator to manage the lifecycle of the kuadrant deployment |
+| [Authorino](https://github.com/Kuadrant/authorino) | The AuthN/AuthZ enforcer. As the [external istio authorizer](https://istio.io/latest/docs/tasks/security/authorization/authz-custom/) ([envoy external authorization](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_authz_filter) serving gRPC service) |
+| [Limitador](https://github.com/Kuadrant/limitador) | The external rate limiting service. It exposes a gRPC service implementing the [Envoy Rate Limit protocol (v3)](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ratelimit/v3/rls.proto) |
+| [Authorino Operator](https://github.com/Kuadrant/authorino-operator) | A Kubernetes Operator to manage Authorino instances |
+| [Limitador Operator](https://github.com/Kuadrant/limitador-operator) | A Kubernetes Operator to manage Limitador instances |
+
+### Provided APIs
+
+The kuadrant control plane owns the following [Custom Resource Definitions, CRDs](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/):
+
+| CRD | Description |
+| --- | --- |
+| RateLimitPolicy CRD [\[doc\]](/doc/rate-limiting.md) [[reference]](doc/ratelimitpolicy-reference.md) | Enable access control on workloads based on HTTP rate limiting |
+| [AuthPolicy CRD](apis/apim/v1alpha1/authpolicy_types.go) | Enable AuthN and AuthZ based access control on workloads |
+
+Additionally, kuadrant provides the following CRDs
+
+| CRD | Owner | Description |
+| --- | --- | --- |
+| [Kuadrant CRD](https://github.com/Kuadrant/kuadrant-operator/blob/main/api/v1beta1/kuadrant_types.go) | [Kuadrant Operator](https://github.com/Kuadrant/kuadrant-operator) | Represents an instance of kuadrant |
+| [Limitador CRD](doc/ratelimitpolicy-reference.md) | [Limitador Operator](https://github.com/Kuadrant/limitador-operator) | Represents an instance of Limitador |
+| [Authorino CRD](https://github.com/Kuadrant/authorino-operator#the-authorino-custom-resource-definition-crd) | [Authorino Operator](https://github.com/Kuadrant/authorino-operator) | Represents an instance of Authorino |
+| [AuthConfig CRD](https://github.com/Kuadrant/authorino/blob/main/docs/architecture.md#the-authorino-authconfig-custom-resource-definition-crd) | [Authorino](https://github.com/Kuadrant/authorino) | The desired authN and authZ protection for a service |
+
+![architecture](https://i.imgur.com/0vdUZ0l.png)
 
 ## Getting started
 
-1.- Clone Kuadrant controller and checkout main
+### Pre-requisites
 
-```
-git clone https://github.com/Kuadrant/kuadrant-controller
-```
+* Istio is installed in the cluster. Otherwise, refer to the
+[Istio getting started guide](https://istio.io/latest/docs/setup/getting-started/).
+* Kubernetes Gateway API is installed in the cluster. Otherwise,
+[configure Istio to expose a service using the Kubernetes Gateway API](https://istio.io/latest/docs/tasks/traffic-management/ingress/gateway-api/).
+* Kuadrant is installed in the cluster.
+Otherwise, refer to the [kuadrant operator](https://github.com/Kuadrant/kuadrant-operator)
+for installation.
 
-2.- Create local cluster and deploy kuadrant
+### If you are an *API Provider*
 
-```
-make local-setup
-```
+* Deploy the service/API to be protected ("Upstream")
+* Expose the service/API using the kubernetes Gateway API, ie
+[HTTPRoute](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.HTTPRoute) object.
+* Write and apply the Kuadrant's [RateLimitPolicy](/doc/rate-limiting.md) and/or
+[AuthPolicy](apis/apim/v1alpha1/authpolicy_types.go) custom resources targeting the HTTPRoute resource
+to have your API protected.
 
-3.- Deploy toystore example deployment
+### If you are a *Cluster Operator*
 
-```
-kubectl apply -f examples/toystore/toystore.yaml
-```
+* (Optionally) deploy istio ingress gateway using the
+[Gateway](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.Gateway) resource.
+* Write and apply the Kuadrant's [RateLimitPolicy](/doc/rate-limiting.md) and/or
+[AuthPolicy](apis/apim/v1alpha1/authpolicy_types.go) custom resources targeting the Gateway resource
+to have your gateway traffic protected.
 
-4.- Create HTTPRoute to configure routing to the toystore service
+## User guides
 
-```
-kubectl apply -f - <<EOF
----
-apiVersion: gateway.networking.k8s.io/v1alpha2
-kind: HTTPRoute
-metadata:
-  name: toystore
-  labels:
-    app: toystore
-spec:
-  parentRefs:
-    - name: kuadrant-gwapi-gateway
-      namespace: kuadrant-system
-  hostnames: ["*.toystore.com"]
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: "/toy"
-          method: GET
-        - path:
-            type: Exact
-            value: "/admin/toy"
-          method: POST
-        - path:
-            type: Exact
-            value: "/admin/toy"
-          method: DELETE
-      backendRefs:
-        - name: toystore
-          port: 80
+The user guides section of the docs gathers several use-cases as well as the instructions to implement them using kuadrant.
 
-EOF
-```
+* [Simple rate limiting for API owners](doc/user-guides/simple-rl-for-api-owners.md)
+* [Authenticated rate limiting for API owners](doc/user-guides/authenticated-rl-for-api-owners.md)
+* [Gateway rate limiting for cluster operators](doc/user-guides/gateway-rl-for-cluster-operators.md)
 
-Verify that we can reach our example deployment
-
-```
-curl -v -H 'Host: api.toystore.com' http://localhost:9080/toy
-```
-
-5.- Create RateLimitPolicy for ratelimiting
-
-```
-kubectl apply -f - <<EOF
----
-apiVersion: apim.kuadrant.io/v1alpha1
-kind: RateLimitPolicy
-metadata:
-  name: toystore
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: toystore
-  rules:
-    - operations:
-        - paths: ["/toy"]
-          methods: ["GET"]
-      rateLimits:
-        - stage: PREAUTH
-          actions:
-            - generic_key:
-                descriptor_key: get-toy
-                descriptor_value: "yes"
-    - operations:
-        - paths: ["/admin/toy"]
-          methods: ["POST", "DELETE"]
-      rateLimits:
-        - stage: POSTAUTH
-          actions:
-            - generic_key:
-                descriptor_key: admin
-                descriptor_value: "yes"
-  rateLimits:
-    - stage: BOTH
-      actions:
-        - generic_key:
-            descriptor_key: vhaction
-            descriptor_value: "yes"
-  domain: toystore-app
-  limits:
-    - conditions: ["get-toy == yes"]
-      max_value: 2
-      namespace: toystore-app
-      seconds: 30
-      variables: []
-    - conditions:
-      - "admin == yes"
-      max_value: 2
-      namespace: toystore-app
-      seconds: 30
-      variables: []
-    - conditions: ["vhaction == yes"]
-      max_value: 6
-      namespace: toystore-app
-      seconds: 30
-      variables: []
-EOF
-```
-
-To verify envoyfilter and wasmplugin has been created:
-
-```
-kubectl get envoyfilter -n kuadrant-system
-NAME                      AGE
-limitador-cluster-patch   19s
-```
-```
-kubectl get wasmplugin -A
-NAMESPACE         NAME                                            AGE
-kuadrant-system   kuadrant-kuadrant-gwapi-gateway-wasm-postauth   16s
-kuadrant-system   kuadrant-kuadrant-gwapi-gateway-wasm-preauth    16s
-```
-
-To verify Limitador's RateLimit resources have been created:
-
-```
-kubectl get ratelimit -A
-NAMESPACE         NAME                     AGE
-kuadrant-system   rlp-default-toystore-1   49s
-kuadrant-system   rlp-default-toystore-2   49s
-kuadrant-system   rlp-default-toystore-3   49s
-```
-
-6.- Verify unauthenticated rate limit
-
-Only 2 requests every 30 secs on `GET /toy` operation allowed.
-
-```
-curl -v -H 'Host: api.toystore.com' http://localhost:9080/toy
-```
-
-8.- Add authentication
-
-Create AuthPolicy
-
-```
-kubectl apply -f - <<EOF
----
-apiVersion: apim.kuadrant.io/v1alpha1
-kind: AuthPolicy
-metadata:
-  name: toystore
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: toystore
-  rules:
-  - hosts: ["*.toystore.com"]
-    methods: ["DELETE", "POST"]
-    paths: ["/admin*"]
-  authScheme:
-    hosts: ["api.toystore.com"]
-    identity:
-    - name: apikey
-      apiKey:
-        labelSelectors:
-          app: toystore
-      credentials:
-        in: authorization_header
-        keySelector: APIKEY
-EOF
-```
-
-Create secret with API key for user `bob`
-
-```
-kubectl apply -f examples/toystore/bob-api-key-secret.yaml
-```
-
-Create secret with API key for user `alice`
-
-```
-kubectl apply -f examples/toystore/alice-api-key-secret.yaml
-```
-
-To verify creation of Istio AuthorizationPolicy:
-
-```
-kubectl get authorizationpolicy -A
-NAMESPACE         NAME                                          AGE
-kuadrant-system   on-kuadrant-gwapi-gateway-using-toystore-custom   81s
-```
-
-To verify creation of Authorino's AuthConfig:
-
-```
-kubectl get authconfig -A
-NAMESPACE         NAME                  READY
-kuadrant-system   ap-default-toystore   true
-```
-
-9.- Verify authentication
-
-Should return `401 Unauthorized`
-
-```
-curl -v -H 'Host: api.toystore.com' -X POST http://localhost:9080/admin/toy
-```
-
-Should return `200 OK` for alice
-
-```
-curl -v -H 'Host: api.toystore.com' -H 'Authorization: APIKEY ALICEKEYFORDEMO' -X POST http://localhost:9080/admin/toy
-```
-
-Should return `200 OK` for bob
-
-```
-curl -v -H 'Host: api.toystore.com' -H 'Authorization: APIKEY BOBKEYFORDEMO' -X POST http://localhost:9080/admin/toy
-```
-
-10. Verify authenticated ratelimit by doing `200 OK` requests 2-3 times.
-
-## Demos
-
-### [Updating the RateLimitPolicy `targetRef` attribute](/doc/demo-rlp-update-targetref.md)
-
-This demo shows how the kuadrant's controller applies the rate limit policy to the new HTTPRoute
-object and cleans up rate limit configuration to the HTTPRoute object no longer referenced by the policy.
-
-### [Authenticated rate limiting](/doc/demo-rlp-authenticated.md)
-
-This demo shows how to configure rate limiting after authentication stage and rate limit configuration
-is per API key basis.
+## [Kuadrant Rate Limiting](/doc/rate-limiting.md)
 
 ## Contributing
 
 The [Development guide](doc/development.md) describes how to build the kuadrant controller and
 how to test your changes before submitting a patch or opening a PR.
+
+Join us on [kuadrant.slack.com](https://kuadrant.slack.com/)
+for live discussions about the roadmap and more.
 
 ## Licensing
 

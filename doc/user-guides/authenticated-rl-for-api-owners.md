@@ -1,23 +1,34 @@
-## Authenticated rate limiting
+## Authenticated Rate Limit For API Owners
 
-This demo shows how to configure rate limiting after authentication stage and rate limit configuration
-is per API key basis.
+This user guide shows how to configure authenticated rate limiting.
+Authenticated rate limiting allows to specify rate limiting configurations
+based on the traffic owners, i.e. ID of the user owning the request.
+Authentication method used will be the API key.
 
-### Steps
+### Clone the project
 
-Create local cluster and deploy kuadrant
+```
+git clone https://github.com/Kuadrant/kuadrant-controller
+```
+
+### Setup environment
+
+This step creates a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
+then it installs Istio, Kubernetes Gateway API and kuadrant.
 
 ```
 make local-setup
 ```
 
-Deploy toystore example deployment
+### Deploy toystore example deployment
 
 ```
 kubectl apply -f examples/toystore/toystore.yaml
 ```
 
-Create `toystore` HTTPRoute to configure routing to the toystore service
+### Create HTTPRoute to configure routing to the toystore service
+
+![](https://i.imgur.com/rdN8lo3.png)
 
 ```yaml
 kubectl apply -f - <<EOF
@@ -42,17 +53,25 @@ spec:
       backendRefs:
         - name: toystore
           port: 80
-
 EOF
 ```
 
-Check `toystore` HTTPRoute works
+### Check `toystore` HTTPRoute works
 
 ```
 curl -v -H 'Host: api.toystore.com' http://localhost:9080/toy
 ```
 
-Create API key secrets for Authorino
+It should return `200 OK`.
+
+**Note**: This only works out of the box on linux environments. If not on linux,
+you may need to forward ports
+
+```bash
+kubectl port-forward -n kuadrant-system service/kuadrant-gateway 9080:80
+```
+
+### Create API keys for user `Bob` and `Alice`
 
 ```yaml
 kubectl apply -f -<<EOF
@@ -85,9 +104,9 @@ type: Opaque
 EOF
 ```
 
-Create AuthPolicy
+### Create Kuadrant's `AuthPolicy` to configure API key based authentication
 
-```
+```yaml
 kubectl apply -f - <<EOF
 ---
 apiVersion: apim.kuadrant.io/v1alpha1
@@ -125,14 +144,14 @@ spec:
 EOF
 ```
 
-Check `toystore` HTTPRoute requires API key
+### Create RateLimitPolicy to rate limit per API key basis
 
-```
-curl -v -H 'Authorization: APIKEY IAMBOB' -H 'Host: api.toystore.com' http://localhost:9080/toy
-```
+![](https://i.imgur.com/2A9sXXs.png)
 
-Add rate limit policy to protect per API key basis
-
+| User | Rate Limits |
+| ------------- | -----: |
+| `Bob` | **2** reqs / **10** secs (0.2 rps) |
+| `Alice` | **5** reqs / **10** secs (0.5 rps) |
 
 ```yaml
 kubectl apply -f -<<EOF
@@ -147,40 +166,41 @@ spec:
     kind: HTTPRoute
     name: toystore
   rateLimits:
-    - rules:
-      - paths: ["/toy"]
-        methods: ["GET"]
-      configurations:
-        - actions:
-            - metadata:
-                descriptor_key: "user-id"
-                default_value: "no-user"
-                metadata_key:
-                  key: "envoy.filters.http.ext_authz"
-                  path:
-                    - segment:
-                        key: "ext_auth_data"
-                    - segment:
-                        key: "user-id"
-      limits:
-        - conditions:
-            - "user-id == bob"
-          maxValue: 2
-          seconds: 30
-          variables: []
-        - conditions:
-            - "user-id == alice"
-          maxValue: 4
-          seconds: 30
-          variables: []
+  - configurations:
+      - actions:
+          - metadata:
+              descriptor_key: "user-id"
+              default_value: "no-user"
+              metadata_key:
+                key: "envoy.filters.http.ext_authz"
+                path:
+                  - segment:
+                      key: "ext_auth_data"
+                  - segment:
+                      key: "user-id"
+    limits:
+      - conditions:
+          - "user-id == bob"
+        maxValue: 2
+        seconds: 10
+        variables: []
+      - conditions:
+          - "user-id == alice"
+        maxValue: 5
+        seconds: 10
+        variables: []
 EOF
 ```
 
-Check the authenticated rate limit policy works: 2 requests every 30 secs.
+### Validating the rate limit policy
+
+Only 2 requests every 10 allowed for Bob.
 
 ```
 curl -v -H 'Authorization: APIKEY IAMBOB' -H 'Host: api.toystore.com' http://localhost:9080/toy
 ```
+
+Only 5 requests every 10 allowed for Alice.
 
 ```
 curl -v -H 'Authorization: APIKEY IAMALICE' -H 'Host: api.toystore.com' http://localhost:9080/toy

@@ -75,6 +75,9 @@ func (r *RateLimitPolicyReconciler) computeFinalizeGatewayDiff(ctx context.Conte
 		err := r.Client().Get(ctx, gwKey, gw)
 		logger.V(1).Info("finalizeRLP", "fetch gateway", gwKey, "err", err)
 		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
 			return nil, err
 		}
 		gwDiff.LeftGateways = append(gwDiff.LeftGateways, rlptools.GatewayWrapper{Gateway: gw})

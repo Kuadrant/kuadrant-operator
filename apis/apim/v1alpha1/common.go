@@ -8,7 +8,7 @@ import (
 )
 
 // Interface to be implemented by Policy's status struct
-//+kubebuilder:object:generate=false
+// +kubebuilder:object:generate=false
 type PolicyStatus interface {
 	GetObservedGeneration() int64
 	GetConditions() []metav1.Condition

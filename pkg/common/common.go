@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-//TODO: move the const to a proper place, or get it from config
+// TODO: move the const to a proper place, or get it from config
 const (
 	KuadrantNamespace                    = "kuadrant-system"
 	KuadrantAuthorizationProvider        = "kuadrant-authorization"

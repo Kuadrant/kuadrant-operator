@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 // Package v1alpha1 contains API Schema definitions for the apim v1alpha1 API group
-//+kubebuilder:object:generate=true
-//+groupName=apim.kuadrant.io
+// +kubebuilder:object:generate=true
+// +groupName=apim.kuadrant.io
 package v1alpha1
 
 import (

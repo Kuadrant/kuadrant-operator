@@ -239,9 +239,14 @@ bundle-dependencies: ## Generate bundle dependencies file.
 	./utils/generate-dependencies-yaml.sh > bundle/metadata/dependencies.yaml
 
 .PHONY: bundle
+bundle: export IMAGE_TAG := $(IMAGE_TAG)
+bundle: export BUNDLE_VERSION := $(VERSION)
 bundle: manifests kustomize operator-sdk bundle-dependencies ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	envsubst \
+		< config/manifests/bases/kuadrant-operator.clusterserviceversion.template.yaml \
+		> config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
 	$(OPERATOR_SDK) bundle validate ./bundle
 

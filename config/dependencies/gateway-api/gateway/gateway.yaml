@@ -3,9 +3,8 @@ apiVersion: gateway.networking.k8s.io/v1alpha2
 kind: Gateway
 metadata:
   labels:
-    istio: kuadrant-system
-  name: other-gwapi-gateway
-  namespace: kuadrant-system
+    istio: ingressgateway
+  name: istio-ingressgateway
 spec:
   gatewayClassName: istio
   listeners:
@@ -15,3 +14,6 @@ spec:
     allowedRoutes:
       namespaces:
         from: All
+  addresses:
+  - value: istio-ingressgateway.istio-system.svc.cluster.local
+    type: Hostname

@@ -3,12 +3,12 @@ apiVersion: apim.kuadrant.io/v1alpha1
 kind: RateLimitPolicy
 metadata:
   name: toystore-gw
-  namespace: kuadrant-system
+  namespace: istio-system
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: kuadrant-gwapi-gateway
+    name: istio-ingressgateway
   rateLimits:
     - rules:
       - methods: ["POST"]

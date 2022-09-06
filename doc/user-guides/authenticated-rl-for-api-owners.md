@@ -41,8 +41,8 @@ metadata:
     app: toystore
 spec:
   parentRefs:
-    - name: kuadrant-gwapi-gateway
-      namespace: kuadrant-system
+    - name: istio-ingressgateway
+      namespace: istio-system
   hostnames: ["*.toystore.com"]
   rules:
     - matches:
@@ -126,15 +126,17 @@ spec:
     identity:
     - name: friends
       apiKey:
-        labelSelectors:
-          app: toystore
+        allNamespaces: true
+        selector:
+          matchLabels:
+            app: toystore
       credentials:
         in: authorization_header
         keySelector: APIKEY
     response:
     - json:
         properties:
-          - name: user-id
+          - name: userID
             value: null
             valueFrom:
               authJSON: auth.identity.metadata.annotations.secret\.kuadrant\.io/user-id
@@ -169,7 +171,7 @@ spec:
   - configurations:
       - actions:
           - metadata:
-              descriptor_key: "user-id"
+              descriptor_key: "userID"
               default_value: "no-user"
               metadata_key:
                 key: "envoy.filters.http.ext_authz"
@@ -177,15 +179,15 @@ spec:
                   - segment:
                       key: "ext_auth_data"
                   - segment:
-                      key: "user-id"
+                      key: "userID"
     limits:
       - conditions:
-          - "user-id == bob"
+          - "userID == bob"
         maxValue: 2
         seconds: 10
         variables: []
       - conditions:
-          - "user-id == alice"
+          - "userID == alice"
         maxValue: 5
         seconds: 10
         variables: []

@@ -7,8 +7,8 @@ metadata:
     app: carstore
 spec:
   parentRefs:
-    - name: kuadrant-gwapi-gateway
-      namespace: kuadrant-system
+    - name: istio-ingressgateway
+      namespace: istio-system
   hostnames: ["*.carstore.com"]
   rules:
     - matches:

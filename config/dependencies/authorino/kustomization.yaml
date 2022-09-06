@@ -1,0 +1,4 @@
+---
+resources:
+# config/deploy instead of config/default installs AuthConfig CRDs and Roles additionally
+- github.com/Kuadrant/authorino-operator/config/deploy?ref=main

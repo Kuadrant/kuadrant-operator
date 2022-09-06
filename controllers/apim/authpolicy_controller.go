@@ -315,7 +315,11 @@ func (r *AuthPolicyReconciler) removeAuthSchemes(ctx context.Context, ap *apimv1
 		},
 	}
 
-	if err := r.DeleteResource(ctx, authConfig); err != nil {
+	err := r.DeleteResource(ctx, authConfig)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
 		logger.Error(err, "failed to delete Authorino's AuthConfig")
 		return err
 	}

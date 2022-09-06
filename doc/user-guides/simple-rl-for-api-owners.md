@@ -38,8 +38,8 @@ metadata:
     app: toystore
 spec:
   parentRefs:
-    - name: kuadrant-gwapi-gateway
-      namespace: kuadrant-system
+    - name: istio-ingressgateway
+      namespace: istio-system
   hostnames: ["*.toystore.com"]
   rules:
     - matches:
@@ -120,5 +120,5 @@ curl -v -H 'Host: rate-limited.toystore.com' http://localhost:9080/toy
 Whereas `other.toystore.com` is not rate limited.
 
 ```
-curl -v -H 'Host: rate-limited.toystore.com' http://localhost:9080/toy
+curl -v -H 'Host: other.toystore.com' http://localhost:9080/toy
 ```

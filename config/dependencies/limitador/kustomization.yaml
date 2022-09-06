@@ -1,0 +1,3 @@
+---
+resources:
+- github.com/Kuadrant/limitador-operator/config/default?ref=main

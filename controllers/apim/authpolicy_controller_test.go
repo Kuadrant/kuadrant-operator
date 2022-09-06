@@ -24,7 +24,7 @@ import (
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-const GatewayName = "kuadrant-gwapi-gateway"
+const GatewayName = "istio-ingressgateway"
 
 var _ = Describe("AuthPolicy controller", func() {
 	var testNamespace string
@@ -88,7 +88,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				iap := &secv1beta1resources.AuthorizationPolicy{}
 				iapKey := types.NamespacedName{
 					Name:      getAuthPolicyName(GatewayName, string(authpolicies[idx].Spec.TargetRef.Name), string(authpolicies[idx].Spec.TargetRef.Kind)),
-					Namespace: common.KuadrantNamespace,
+					Namespace: "istio-system",
 				}
 				Eventually(func() bool {
 					err := k8sClient.Get(context.Background(), iapKey, iap)
@@ -181,8 +181,10 @@ func authPolicies(namespace string) []*apimv1alpha1.AuthPolicy {
 					{
 						Name: "apiKey",
 						APIKey: &v1beta1.Identity_APIKey{
-							LabelSelectors: map[string]string{
-								"app": "toystore",
+							Selector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app": "toystore",
+								},
 							},
 						},
 						Credentials: v1beta1.Credentials{
@@ -199,13 +201,13 @@ func authPolicies(namespace string) []*apimv1alpha1.AuthPolicy {
 
 	gatewayPolicy := routePolicy.DeepCopy()
 	gatewayPolicy.SetName("target-gateway")
-	gatewayPolicy.SetNamespace(common.KuadrantNamespace)
+	gatewayPolicy.SetNamespace("istio-system")
 	gatewayPolicy.Spec.TargetRef.Kind = "Gateway"
 	gatewayPolicy.Spec.TargetRef.Name = GatewayName
 	gatewayPolicy.Spec.AuthRules = []*apimv1alpha1.AuthRule{
 		{Hosts: []string{"*.toystore.com"}},
 	}
-	gatewayPolicy.Spec.AuthScheme.Identity[0].APIKey.LabelSelectors["admin"] = "yes"
+	gatewayPolicy.Spec.AuthScheme.Identity[0].APIKey.Selector.MatchLabels["admin"] = "yes"
 
 	return []*apimv1alpha1.AuthPolicy{routePolicy, gatewayPolicy}
 }

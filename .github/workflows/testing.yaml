@@ -14,11 +14,13 @@
 
 # This file is automagically synced here from github.com/knative-sandbox/.github
 # repo by knobots: https://github.com/knative-sandbox/knobots and will be overwritten.
-
+---
 name: Testing
-
-on: pull_request
-
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    branches: ['*']
 jobs:
   unittests:
     name: Run unit tests
@@ -34,7 +36,6 @@ jobs:
       - name: run tests
         run: |
           make test-unit
-
   integrationtests:
     name: Run integration tests
     runs-on: ubuntu-latest
@@ -58,13 +59,12 @@ jobs:
           kubectl cluster-info dump
       - name: Deploy Kuadrant deps
         run: |
-          make deploy-kuadrant-deps
+          make local-env-setup
       - name: run tests
         run: |
           make test-integration
-
-  verify-istio-manifest:
-    name: Verify istio manifests
+  verify-manifests:
+    name: Verify manifests
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go 1.17.x
@@ -74,12 +74,11 @@ jobs:
         id: go
       - name: Check out code
         uses: actions/checkout@v2
-      - name: run tests
+      - name: Run make verify-manifests
         run: |
-          make istio-manifest-update-test
-
-  verify-gateway-api-manifest:
-    name: Verify Gateway API manifests
+          make verify-manifests
+  verify-fmt:
+    name: Verify fmt
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go 1.17.x
@@ -89,21 +88,6 @@ jobs:
         id: go
       - name: Check out code
         uses: actions/checkout@v2
-      - name: run tests
+      - name: Run make verify-fmt
         run: |
-          make gwapi-manifests-update-test
-
-  verify-kuadrant-manifest:
-    name: Verify kuadrant manifests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set up Go 1.17.x
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.17.x
-        id: go
-      - name: Check out code
-        uses: actions/checkout@v2
-      - name: run tests
-        run: |
-          make manifests-update-test
+          make verify-fmt

@@ -696,18 +696,59 @@ spec:
                               default: false
                               description: Whether Authorino should look for API key
                                 secrets in all namespaces or only in the same namespace
-                                of the AuthConfig. Enabling this option in namespaced
+                                as the AuthConfig. Enabling this option in namespaced
                                 Authorino instances has no effect.
                               type: boolean
-                            labelSelectors:
-                              additionalProperties:
-                                type: string
-                              description: The map of label selectors used by Authorino
-                                to match secrets from the cluster storing valid credentials
+                            selector:
+                              description: Label selector used by Authorino to match
+                                secrets from the cluster storing valid credentials
                                 to authenticate to this service
+                              properties:
+                                matchExpressions:
+                                  description: matchExpressions is a list of label
+                                    selector requirements. The requirements are ANDed.
+                                  items:
+                                    description: A label selector requirement is a
+                                      selector that contains values, a key, and an
+                                      operator that relates the key and values.
+                                    properties:
+                                      key:
+                                        description: key is the label key that the
+                                          selector applies to.
+                                        type: string
+                                      operator:
+                                        description: operator represents a key's relationship
+                                          to a set of values. Valid operators are
+                                          In, NotIn, Exists and DoesNotExist.
+                                        type: string
+                                      values:
+                                        description: values is an array of string
+                                          values. If the operator is In or NotIn,
+                                          the values array must be non-empty. If the
+                                          operator is Exists or DoesNotExist, the
+                                          values array must be empty. This array is
+                                          replaced during a strategic merge patch.
+                                        items:
+                                          type: string
+                                        type: array
+                                    required:
+                                    - key
+                                    - operator
+                                    type: object
+                                  type: array
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  description: matchLabels is a map of {key,value}
+                                    pairs. A single {key,value} in the matchLabels
+                                    map is equivalent to an element of matchExpressions,
+                                    whose key field is "key", the operator is "In",
+                                    and the values array contains only "value". The
+                                    requirements are ANDed.
+                                  type: object
                               type: object
                           required:
-                          - labelSelectors
+                          - selector
                           type: object
                         cache:
                           description: Caching options for the identity resolved when
@@ -829,6 +870,67 @@ spec:
                           description: Whether this identity config should generate
                             individual observability metrics
                           type: boolean
+                        mtls:
+                          properties:
+                            allNamespaces:
+                              default: false
+                              description: Whether Authorino should look for TLS secrets
+                                in all namespaces or only in the same namespace as
+                                the AuthConfig. Enabling this option in namespaced
+                                Authorino instances has no effect.
+                              type: boolean
+                            selector:
+                              description: Label selector used by Authorino to match
+                                secrets from the cluster storing trusted CA certificates
+                                to validate clients trying to authenticate to this
+                                service
+                              properties:
+                                matchExpressions:
+                                  description: matchExpressions is a list of label
+                                    selector requirements. The requirements are ANDed.
+                                  items:
+                                    description: A label selector requirement is a
+                                      selector that contains values, a key, and an
+                                      operator that relates the key and values.
+                                    properties:
+                                      key:
+                                        description: key is the label key that the
+                                          selector applies to.
+                                        type: string
+                                      operator:
+                                        description: operator represents a key's relationship
+                                          to a set of values. Valid operators are
+                                          In, NotIn, Exists and DoesNotExist.
+                                        type: string
+                                      values:
+                                        description: values is an array of string
+                                          values. If the operator is In or NotIn,
+                                          the values array must be non-empty. If the
+                                          operator is Exists or DoesNotExist, the
+                                          values array must be empty. This array is
+                                          replaced during a strategic merge patch.
+                                        items:
+                                          type: string
+                                        type: array
+                                    required:
+                                    - key
+                                    - operator
+                                    type: object
+                                  type: array
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  description: matchLabels is a map of {key,value}
+                                    pairs. A single {key,value} in the matchLabels
+                                    map is equivalent to an element of matchExpressions,
+                                    whose key field is "key", the operator is "In",
+                                    and the values array contains only "value". The
+                                    requirements are ANDed.
+                                  type: object
+                              type: object
+                          required:
+                          - selector
+                          type: object
                         name:
                           description: The name of this identity source/authentication
                             mode. It usually identifies a source of identities or
@@ -879,6 +981,20 @@ spec:
                               type: integer
                           required:
                           - endpoint
+                          type: object
+                        plain:
+                          properties:
+                            authJSON:
+                              description: 'Selector to fetch a value from the authorization
+                                JSON. It can be any path pattern to fetch from the
+                                authorization JSON (e.g. ''context.request.http.host'')
+                                or a string template with variable placeholders that
+                                resolve to patterns (e.g. "Hello, {auth.identity.name}!").
+                                Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
+                                can be used. The following string modifiers are available:
+                                @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
+                                @case:upper|lower, and @base64:encode|decode.'
+                              type: string
                           type: object
                         priority:
                           default: 0
@@ -978,11 +1094,39 @@ spec:
                           description: Generic HTTP interface to obtain authorization
                             metadata from a HTTP service.
                           properties:
+                            body:
+                              description: Raw body of the HTTP request. Supersedes
+                                'bodyParameters'; use either one or the other. Use
+                                it with method=POST; for GET requests, set parameters
+                                as query string in the 'endpoint' (placeholders can
+                                be used).
+                              properties:
+                                value:
+                                  description: Static value
+                                  type: string
+                                valueFrom:
+                                  description: Dynamic value
+                                  properties:
+                                    authJSON:
+                                      description: 'Selector to fetch a value from
+                                        the authorization JSON. It can be any path
+                                        pattern to fetch from the authorization JSON
+                                        (e.g. ''context.request.http.host'') or a
+                                        string template with variable placeholders
+                                        that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
+                                        Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
+                                        can be used. The following string modifiers
+                                        are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
+                                        @case:upper|lower, and @base64:encode|decode.'
+                                      type: string
+                                  type: object
+                              type: object
                             bodyParameters:
                               description: Custom parameters to encode in the body
-                                of the HTTP request. Use it with method=POST; for
-                                GET requests, specify parameters using placeholders
-                                in the endpoint.
+                                of the HTTP request. Superseded by 'body'; use either
+                                one or the other. Use it with method=POST; for GET
+                                requests, set parameters as query string in the 'endpoint'
+                                (placeholders can be used).
                               items:
                                 properties:
                                   name:
@@ -1014,7 +1158,10 @@ spec:
                               type: array
                             contentType:
                               default: application/x-www-form-urlencoded
-                              description: Content-Type of the request body.
+                              description: Content-Type of the request body. Shapes
+                                how 'bodyParameters' are encoded. Use it with method=POST;
+                                for GET requests, Content-Type is automatically set
+                                to 'text/plain'.
                               enum:
                               - application/x-www-form-urlencoded
                               - application/json
@@ -1089,6 +1236,7 @@ spec:
                                 type: object
                               type: array
                             method:
+                              default: GET
                               description: 'HTTP verb used in the request to the service.
                                 Accepted values: GET (default), POST. When the request
                                 method is POST, the authorization JSON is passed in

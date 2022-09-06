@@ -35,7 +35,7 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *apimv1al
 			return ctrl.Result{}, err
 		}
 
-		isAuthConfigReady = authConfig.Status.Ready
+		isAuthConfigReady = authConfig.Status.Ready()
 	}
 
 	newStatus := r.calculateStatus(ap, specErr, isAuthConfigReady)

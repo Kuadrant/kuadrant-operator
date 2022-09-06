@@ -5,7 +5,6 @@ metadata:
   name: authorino
 spec:
   clusterWide: true
-  image: quay.io/3scale/authorino:v0.7.0
   listener:
     tls:
       enabled: false

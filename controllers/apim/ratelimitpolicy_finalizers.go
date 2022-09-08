@@ -43,7 +43,7 @@ func (r *RateLimitPolicyReconciler) finalizeRLP(ctx context.Context, rlp *apimv1
 		return err
 	}
 
-	if err := r.reconcileLimits(ctx, rlp, gatewayDiffObj); err != nil {
+	if err := r.reconcileLimits(ctx, rlp, gatewayDiffObj); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 
@@ -66,7 +66,7 @@ func (r *RateLimitPolicyReconciler) computeFinalizeGatewayDiff(ctx context.Conte
 	}
 
 	rlpGwKeys, err := r.rlpGatewayKeys(ctx, rlp)
-	if err != nil {
+	if err != nil && !apierrors.IsNotFound(err) {
 		return nil, err
 	}
 

@@ -3,6 +3,7 @@ package apim
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
@@ -30,12 +31,12 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ap
 	}
 
 	for _, sameGateway := range gwDiffObj.SameGateways {
-		gwLimits, err := r.gatewayLimits(ctx, sameGateway.RLPRefs())
+		logger.V(1).Info("reconcileLimits: same gateways", "rlpRefs", sameGateway.RLPRefs())
+
+		gwLimits, err := r.gatewayLimits(ctx, sameGateway, sameGateway.RLPRefs())
 		if err != nil {
 			return err
 		}
-
-		logger.V(1).Info("reconcileLimits: same gateways", "rlpRefs", sameGateway.RLPRefs())
 
 		// delete first to detect when limits have been deleted.
 		// For instance, gw A has 3 limits
@@ -48,12 +49,12 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ap
 
 	for _, newGateway := range gwDiffObj.NewGateways {
 		rlpRefs := append(newGateway.RLPRefs(), client.ObjectKeyFromObject(rlp))
-		gwLimits, err := r.gatewayLimits(ctx, rlpRefs)
+		logger.V(1).Info("reconcileLimits: new gateways", "rlpRefs", rlpRefs)
+
+		gwLimits, err := r.gatewayLimits(ctx, newGateway, rlpRefs)
 		if err != nil {
 			return err
 		}
-
-		logger.V(1).Info("reconcileLimits: new gateways", "rlpRefs", rlpRefs)
 
 		// The gw A had X limits from N RLPs
 		// now there there are N+1 RLPs
@@ -98,12 +99,14 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ap
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context, rlpRefs []client.ObjectKey) (rlptools.LimitsByDomain, error) {
+func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context,
+	gw rlptools.GatewayWrapper, rlpRefs []client.ObjectKey) (rlptools.LimitsByDomain, error) {
 	logger, _ := logr.FromContext(ctx)
+	logger.V(1).Info("gatewayLimits", "gwKey", gw.Key(), "rlpRefs", rlpRefs)
 
 	// Load all rate limit policies
 	routeRLPList := make([]*apimv1alpha1.RateLimitPolicy, 0)
-	gwRLPList := make([]*apimv1alpha1.RateLimitPolicy, 0)
+	var gwRLP *apimv1alpha1.RateLimitPolicy
 	for _, rlpKey := range rlpRefs {
 		rlp := &apimv1alpha1.RateLimitPolicy{}
 		err := r.Client().Get(ctx, rlpKey, rlp)
@@ -115,15 +118,27 @@ func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context, rlpRefs [
 		if rlp.IsForHTTPRoute() {
 			routeRLPList = append(routeRLPList, rlp)
 		} else if rlp.IsForGateway() {
-			gwRLPList = append(gwRLPList, rlp)
+			if gwRLP == nil {
+				gwRLP = rlp
+			} else {
+				return nil, fmt.Errorf("gatewayLimits: multiple gateway RLP found and only one expected. rlp keys: %v", rlpRefs)
+			}
 		}
 	}
 
 	limits := rlptools.LimitsByDomain{}
 
-	// iterate over HTTPRoute RLP's.
-	// Gateway level RLP's alone do not make sense.
-	// The request would be rejected by the router with 404
+	if gwRLP != nil {
+		if len(gw.Hostnames()) == 0 {
+			// wildcard domain
+			limits["*"] = append(limits["*"], gwRLP.FlattenLimits()...)
+		} else {
+			for _, gwHostname := range gw.Hostnames() {
+				limits[gwHostname] = append(limits[gwHostname], gwRLP.FlattenLimits()...)
+			}
+		}
+	}
+
 	for _, httpRouteRLP := range routeRLPList {
 		httpRoute, err := r.fetchHTTPRoute(ctx, httpRouteRLP)
 		if err != nil {
@@ -131,7 +146,7 @@ func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context, rlpRefs [
 		}
 
 		// gateways limits merged with the route level limits
-		mergedLimits := mergeLimits(httpRouteRLP, gwRLPList)
+		mergedLimits := mergeLimits(httpRouteRLP, gwRLP)
 		// routeLimits referenced by multiple hostnames
 		for _, hostname := range httpRoute.Spec.Hostnames {
 			limits[string(hostname)] = append(limits[string(hostname)], mergedLimits...)
@@ -142,22 +157,13 @@ func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context, rlpRefs [
 }
 
 // merged currently implemented with list append operation
-func mergeLimits(routeRLP *apimv1alpha1.RateLimitPolicy, gwRLPs []*apimv1alpha1.RateLimitPolicy) []apimv1alpha1.Limit {
-	limits := make([]apimv1alpha1.Limit, 0)
+func mergeLimits(routeRLP *apimv1alpha1.RateLimitPolicy, gwRLP *apimv1alpha1.RateLimitPolicy) []apimv1alpha1.Limit {
+	limits := routeRLP.FlattenLimits()
 
-	// add route level limits
-	// flatten Limit list from RateLimit list
-	for idx := range routeRLP.Spec.RateLimits {
-		limits = append(limits, routeRLP.Spec.RateLimits[idx].Limits...)
+	if gwRLP == nil {
+		return limits
 	}
 
 	// add gateway level limits
-	for _, gwRLP := range gwRLPs {
-		// flatten Limit list from RateLimit list
-		for idx := range gwRLP.Spec.RateLimits {
-			limits = append(limits, gwRLP.Spec.RateLimits[idx].Limits...)
-		}
-	}
-
-	return limits
+	return append(limits, gwRLP.FlattenLimits()...)
 }

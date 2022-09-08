@@ -25,15 +25,21 @@ type GatewayAction struct {
 	Rules []apimv1alpha1.Rule `json:"rules,omitempty"`
 }
 
-func GatewayActionFromRateLimit(rateLimit *apimv1alpha1.RateLimit) GatewayAction {
-	if rateLimit == nil {
-		return GatewayAction{}
+// GatewayActionsFromRateLimitPolicy return flatten list from GatewayAction from the RLP
+func GatewayActionsFromRateLimitPolicy(rlp *apimv1alpha1.RateLimitPolicy) []GatewayAction {
+	flattenActions := make([]GatewayAction, 0)
+	if rlp == nil {
+		return flattenActions
 	}
 
-	return GatewayAction{
-		Configurations: rateLimit.Configurations,
-		Rules:          rateLimit.Rules,
+	for idx := range rlp.Spec.RateLimits {
+		flattenActions = append(flattenActions, GatewayAction{
+			Configurations: rlp.Spec.RateLimits[idx].Configurations,
+			Rules:          rlp.Spec.RateLimits[idx].Rules,
+		})
 	}
+
+	return flattenActions
 }
 
 type RateLimitPolicy struct {

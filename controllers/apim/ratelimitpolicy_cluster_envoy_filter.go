@@ -70,21 +70,6 @@ func (r *RateLimitPolicyReconciler) gatewayRateLimitingClusterEnvoyFilter(
 	gwKey := client.ObjectKeyFromObject(gw)
 	logger.V(1).Info("gatewayRateLimitingClusterEnvoyFilter", "gwKey", gwKey, "rlpRefs", rlpRefs)
 
-	// Load all relevant rate limit policies
-	routeRLPList := make([]*apimv1alpha1.RateLimitPolicy, 0)
-	for _, rlpKey := range rlpRefs {
-		rlp := &apimv1alpha1.RateLimitPolicy{}
-		err := r.Client().Get(ctx, rlpKey, rlp)
-		logger.V(1).Info("gatewayRateLimitingClusterEnvoyFilter", "get rlp", rlpKey, "err", err)
-		if err != nil {
-			return nil, err
-		}
-
-		if rlp.IsForHTTPRoute() {
-			routeRLPList = append(routeRLPList, rlp)
-		}
-	}
-
 	ef := &istioclientnetworkingv1alpha3.EnvoyFilter{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "EnvoyFilter",
@@ -102,7 +87,7 @@ func (r *RateLimitPolicyReconciler) gatewayRateLimitingClusterEnvoyFilter(
 		},
 	}
 
-	if len(routeRLPList) < 1 {
+	if len(rlpRefs) < 1 {
 		common.TagObjectToDelete(ef)
 		return ef, nil
 	}

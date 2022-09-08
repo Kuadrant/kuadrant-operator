@@ -197,3 +197,19 @@ func (g GatewayWrapper) DeleteRLP(rlpKey client.ObjectKey) bool {
 
 	return false
 }
+
+// Hostnames builds a list of hostnames from the listeners.
+func (g GatewayWrapper) Hostnames() []string {
+	hostnames := make([]string, 0)
+	if g.Gateway == nil {
+		return hostnames
+	}
+
+	for idx := range g.Spec.Listeners {
+		if g.Spec.Listeners[idx].Hostname != nil {
+			hostnames = append(hostnames, string(*g.Spec.Listeners[idx].Hostname))
+		}
+	}
+
+	return hostnames
+}

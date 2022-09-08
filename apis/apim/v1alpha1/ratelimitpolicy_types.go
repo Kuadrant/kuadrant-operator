@@ -241,6 +241,17 @@ func (r *RateLimitPolicy) TargetKey() client.ObjectKey {
 	}
 }
 
+// FlattenLimits returns Limit list from RateLimit list
+func (r *RateLimitPolicy) FlattenLimits() []Limit {
+	flattenLimits := make([]Limit, 0)
+
+	for idx := range r.Spec.RateLimits {
+		flattenLimits = append(flattenLimits, r.Spec.RateLimits[idx].Limits...)
+	}
+
+	return flattenLimits
+}
+
 //+kubebuilder:object:root=true
 
 // RateLimitPolicyList contains a list of RateLimitPolicy

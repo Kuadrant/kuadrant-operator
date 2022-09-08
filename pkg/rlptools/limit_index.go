@@ -205,6 +205,32 @@ func (l *LimitIndex) Equals(other *LimitIndex) bool {
 	return true
 }
 
+// NewLimitadorIndex builds index to manage limits indexed by domain indexed by gateways
+// yaml representation would be:
+//
+//	 ---
+//	 gateway_key1:
+//	   domain_1:
+//		 - maxValue: X
+//		   seconds: Y
+//		   conditions: [ ... ]
+//		   variables: [ ... ]
+//	   domain_2:
+//		 - maxValue: X
+//		   seconds: Y
+//		   conditions: [ ... ]
+//		   variables: [ ... ]
+//	 gateway_key2:
+//	   domain_1:
+//		 - maxValue: X
+//		   seconds: Y
+//		   conditions: [ ... ]
+//		   variables: [ ... ]
+//	   domain_2:
+//		 - maxValue: X
+//		   seconds: Y
+//		   conditions: [ ... ]
+//		   variables: [ ... ]
 func NewLimitadorIndex(limitador *limitadorv1alpha1.Limitador, logger logr.Logger) *LimitIndex {
 	limitIdx := &LimitIndex{
 		logger:        logger,

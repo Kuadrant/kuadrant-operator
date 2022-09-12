@@ -195,7 +195,7 @@ envtest: ## Download envtest-setup locally if necessary.
 	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
 
 $(GOLANGCI-LINT):
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(PROJECT_PATH)/bin v1.46.1
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(PROJECT_PATH)/bin v1.49.0
 
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI-LINT) ## Download golangci-lint locally if necessary.

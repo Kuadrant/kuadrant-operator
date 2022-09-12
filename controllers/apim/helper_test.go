@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/ioutil"
+	"os"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/api/meta"
@@ -19,7 +19,7 @@ import (
 
 func ApplyResources(fileName string, k8sClient client.Client, ns string) error {
 	logf.Log.Info("ApplyResources", "Resource file", fileName)
-	data, err := ioutil.ReadFile(fileName)
+	data, err := os.ReadFile(fileName)
 	if err != nil {
 		return err
 	}
@@ -29,7 +29,7 @@ func ApplyResources(fileName string, k8sClient client.Client, ns string) error {
 
 	// the maximum size used to buffer a doc 5M
 	buf := make([]byte, 5*1024*1024)
-	docDecoder := yaml.NewDocumentDecoder(ioutil.NopCloser(bytes.NewReader(data)))
+	docDecoder := yaml.NewDocumentDecoder(io.NopCloser(bytes.NewReader(data)))
 
 	for {
 		n, err := docDecoder.Read(buf)

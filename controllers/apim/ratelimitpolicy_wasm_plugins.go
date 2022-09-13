@@ -10,6 +10,7 @@ import (
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
@@ -150,10 +151,10 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 	if gwRLP != nil {
 		if len(gw.Hostnames()) == 0 {
 			// wildcard domain
-			gatewayActions["*"] = append(gatewayActions["*"], rlptools.GatewayActionsFromRateLimitPolicy(gwRLP)...)
+			gatewayActions["*"] = append(gatewayActions["*"], rlptools.GatewayActionsFromRateLimitPolicy(gwRLP, nil)...)
 		} else {
 			for _, gwHostname := range gw.Hostnames() {
-				gatewayActions[gwHostname] = append(gatewayActions[gwHostname], rlptools.GatewayActionsFromRateLimitPolicy(gwRLP)...)
+				gatewayActions[gwHostname] = append(gatewayActions[gwHostname], rlptools.GatewayActionsFromRateLimitPolicy(gwRLP, nil)...)
 			}
 		}
 	}
@@ -165,7 +166,7 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 		}
 
 		// gateways limits merged with the route level limits
-		mergedGatewayActions := mergeGatewayActions(httpRouteRLP, gwRLP)
+		mergedGatewayActions := mergeGatewayActions(httpRouteRLP, gwRLP, httpRoute)
 		// routeLimits referenced by multiple hostnames
 		for _, hostname := range httpRoute.Spec.Hostnames {
 			gatewayActions[string(hostname)] = append(gatewayActions[string(hostname)], mergedGatewayActions...)
@@ -193,13 +194,13 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 }
 
 // merge operations currently implemented with list append operation
-func mergeGatewayActions(routeRLP *apimv1alpha1.RateLimitPolicy, gwRLP *apimv1alpha1.RateLimitPolicy) []rlptools.GatewayAction {
-	gatewayActions := rlptools.GatewayActionsFromRateLimitPolicy(routeRLP)
+func mergeGatewayActions(routeRLP *apimv1alpha1.RateLimitPolicy, gwRLP *apimv1alpha1.RateLimitPolicy, route *gatewayapiv1alpha2.HTTPRoute) []rlptools.GatewayAction {
+	gatewayActions := rlptools.GatewayActionsFromRateLimitPolicy(routeRLP, route)
 
 	if gwRLP == nil {
 		return gatewayActions
 	}
 
 	// add gateway level actions
-	return append(gatewayActions, rlptools.GatewayActionsFromRateLimitPolicy(gwRLP)...)
+	return append(gatewayActions, rlptools.GatewayActionsFromRateLimitPolicy(gwRLP, nil)...)
 }

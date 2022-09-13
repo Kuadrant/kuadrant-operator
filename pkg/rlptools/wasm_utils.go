@@ -9,6 +9,7 @@ import (
 	_struct "github.com/golang/protobuf/ptypes/struct"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
 	"github.com/kuadrant/kuadrant-controller/pkg/common"
@@ -26,16 +27,22 @@ type GatewayAction struct {
 }
 
 // GatewayActionsFromRateLimitPolicy return flatten list from GatewayAction from the RLP
-func GatewayActionsFromRateLimitPolicy(rlp *apimv1alpha1.RateLimitPolicy) []GatewayAction {
+func GatewayActionsFromRateLimitPolicy(rlp *apimv1alpha1.RateLimitPolicy, route *gatewayapiv1alpha2.HTTPRoute) []GatewayAction {
 	flattenActions := make([]GatewayAction, 0)
 	if rlp == nil {
 		return flattenActions
 	}
 
 	for idx := range rlp.Spec.RateLimits {
+		// if HTTPRoute is available, fill empty rules with defaults from the route
+		rules := rlp.Spec.RateLimits[idx].Rules
+		if route != nil && len(rules) == 0 {
+			rules = RulesFromHTTPRoute(route)
+		}
+
 		flattenActions = append(flattenActions, GatewayAction{
 			Configurations: rlp.Spec.RateLimits[idx].Configurations,
-			Rules:          rlp.Spec.RateLimits[idx].Rules,
+			Rules:          rules,
 		})
 	}
 

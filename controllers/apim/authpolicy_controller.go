@@ -145,14 +145,14 @@ func (r *AuthPolicyReconciler) enforceHierarchicalConstraints(ctx context.Contex
 
 	constrainingHosts := []string{}
 	if hr, isHR := targetObj.(*gatewayapiv1alpha2.HTTPRoute); isHR {
-		hostnames := HostnamesToStrings(hr.Spec.Hostnames)
-		for idx := range hostnames {
-			if len(hostnames[idx]) != 0 && hostnames[idx][0] == '*' {
+		for idx := range hr.Spec.Hostnames {
+			hostname := string(hr.Spec.Hostnames[idx])
+			if len(hostname) != 0 && hostname[0] == '*' {
 				// Follows https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io%2fv1alpha2.Hostname
-				trimmedHost := strings.Trim(hostnames[idx], "*")
+				trimmedHost := strings.Trim(hostname, "*")
 				constrainingHosts = append(constrainingHosts, trimmedHost)
 			} else {
-				constrainingHosts = append(constrainingHosts, hostnames[idx])
+				constrainingHosts = append(constrainingHosts, hostname)
 			}
 		}
 	}

@@ -142,20 +142,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpRouteBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("httproute"),
-		mgr.GetEventRecorderFor("HTTPRoute"),
-	)
-
-	if err = (&apimcontrollers.HTTPRouteReconciler{
-		BaseReconciler: httpRouteBaseReconciler,
-		Scheme:         mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "HTTPRoute")
-		os.Exit(1)
-	}
-
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

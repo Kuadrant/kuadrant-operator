@@ -23,17 +23,14 @@ import (
 	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 // TODO: move the const to a proper place, or get it from config
 const (
 	KuadrantNamespace                    = "kuadrant-system"
-	KuadrantAuthorizationProvider        = "kuadrant-authorization"
 	KuadrantRateLimitClusterName         = "kuadrant-rate-limiting-service"
-	LimitadorServiceGrpcPort             = 8081
 	HTTPRouteKind                        = "HTTPRoute"
-	KuadrantManagedLabel                 = "kuadrant.io/managed"
-	KuadrantAuthProviderAnnotation       = "kuadrant.io/auth-provider"
 	KuadrantRateLimitPolicyRefAnnotation = "kuadrant.io/ratelimitpolicies"
 	RateLimitPolicyBackRefAnnotation     = "kuadrant.io/ratelimitpolicy-direct-backref"
 	AuthPolicyBackRefAnnotation          = "kuadrant.io/authpolicy-backref"
@@ -106,4 +103,13 @@ func UnMarshallLimitNamespace(ns string) (client.ObjectKey, string, error) {
 // MarshallNamespace serializes limit namespace with format "gwNS/gwName#domain"
 func MarshallNamespace(gwKey client.ObjectKey, domain string) string {
 	return fmt.Sprintf("%s/%s#%s", gwKey.Namespace, gwKey.Name, domain)
+}
+
+// converts []gatewayapi_v1alpha2.Hostname to []string
+func HostnamesToStrings(hostnames []gatewayapiv1alpha2.Hostname) []string {
+	hosts := []string{}
+	for idx := range hostnames {
+		hosts = append(hosts, string(hostnames[idx]))
+	}
+	return hosts
 }

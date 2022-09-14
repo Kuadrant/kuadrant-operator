@@ -7,9 +7,6 @@ import (
 
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
 	secv1beta1types "istio.io/api/security/v1beta1"
 	"istio.io/api/type/v1beta1"
 	secv1beta1resources "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -22,6 +19,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
+	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
+	"github.com/kuadrant/kuadrant-controller/pkg/rlptools"
 )
 
 // AuthPolicyReconciler reconciles a AuthPolicy object
@@ -223,18 +225,36 @@ func (r *AuthPolicyReconciler) reconcileAuthRules(ctx context.Context, ap *apimv
 
 	gwKeys := TargetedGatewayKeys(targetObj)
 
-	for _, gwKey := range gwKeys {
-		ToRules := []*secv1beta1types.Rule_To{}
-		for _, rule := range ap.Spec.AuthRules {
-			ToRules = append(ToRules, &secv1beta1types.Rule_To{
-				Operation: &secv1beta1types.Operation{
-					Hosts:   rule.Hosts, // TODO(rahul): enforce host constraint
-					Methods: rule.Methods,
-					Paths:   rule.Paths,
-				},
-			})
-		}
+	toRules := []*secv1beta1types.Rule_To{}
+	for _, rule := range ap.Spec.AuthRules {
+		toRules = append(toRules, &secv1beta1types.Rule_To{
+			Operation: &secv1beta1types.Operation{
+				Hosts:   rule.Hosts,
+				Methods: rule.Methods,
+				Paths:   rule.Paths,
+			},
+		})
+	}
 
+	if len(toRules) == 0 {
+		switch route := targetObj.(type) {
+		case *gatewayapiv1alpha2.HTTPRoute:
+			// rules not set and targeting a HTTPRoute
+			// Compile rules from the route
+			rules := rlptools.RulesFromHTTPRoute(route)
+			for idx := range rules {
+				toRules = append(toRules, &secv1beta1types.Rule_To{
+					Operation: &secv1beta1types.Operation{
+						Hosts:   rules[idx].Hosts,
+						Methods: rules[idx].Methods,
+						Paths:   rules[idx].Paths,
+					},
+				})
+			}
+		}
+	}
+
+	for _, gwKey := range gwKeys {
 		authPolicy := secv1beta1resources.AuthorizationPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      getAuthPolicyName(gwKey.Name, targetObj.GetName(), targetObjectKind),
@@ -244,7 +264,7 @@ func (r *AuthPolicyReconciler) reconcileAuthRules(ctx context.Context, ap *apimv
 				Action: secv1beta1types.AuthorizationPolicy_CUSTOM,
 				Rules: []*secv1beta1types.Rule{
 					{
-						To: ToRules,
+						To: toRules,
 					},
 				},
 				Selector: &v1beta1.WorkloadSelector{

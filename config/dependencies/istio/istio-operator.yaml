@@ -18,8 +18,16 @@ spec:
     ingressGateways:
       - enabled: true
         name: istio-ingressgateway
+        k8s:
+          resources:
+            requests:
+              cpu: "0"
     pilot:
       enabled: true
+      k8s:
+        resources:
+          requests:
+            cpu: "0"
   values:
     pilot:
       autoscaleEnabled: false

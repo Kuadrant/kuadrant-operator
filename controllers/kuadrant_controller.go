@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
@@ -405,6 +406,8 @@ func (r *KuadrantReconciler) createOnlyInKuadrantNSCb(ctx context.Context, kObj 
 				obj.Spec.Template.Spec.Containers[0].Env,
 				v1.EnvVar{Name: envLimitadorNamespace, Value: kObj.Namespace},
 				v1.EnvVar{Name: envLimitadorName, Value: limitadorName},
+				// env var name taken from https://github.com/Kuadrant/kuadrant-controller/blob/4e9763bbabc8a7b5f7695aa4f53d9edc0c376ba3/pkg/rlptools/wasm_utils.go#L18
+				v1.EnvVar{Name: "WASM_FILTER_IMAGE", Value: common.GetWASMShimImageVersion()},
 			)
 			newObj = obj
 		// TODO: DRY the following 2 case switches

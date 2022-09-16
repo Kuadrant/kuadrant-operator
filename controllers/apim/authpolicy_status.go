@@ -40,7 +40,7 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *apimv1al
 
 	newStatus := r.calculateStatus(ap, specErr, isAuthConfigReady)
 
-	equalStatus := apimv1alpha1.StatusEquals(&ap.Status, newStatus, logger)
+	equalStatus := ap.Status.Equals(newStatus, logger)
 	logger.V(1).Info("Status", "status is different", !equalStatus)
 	logger.V(1).Info("Status", "generation is different", ap.Generation != ap.Status.ObservedGeneration)
 	logger.V(1).Info("Status", "AuthConfig is ready", isAuthConfigReady)

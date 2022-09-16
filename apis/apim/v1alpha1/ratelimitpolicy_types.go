@@ -18,7 +18,11 @@ package v1alpha1
 
 import (
 	"fmt"
+	"reflect"
 
+	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
+	"github.com/kuadrant/kuadrant-controller/pkg/common"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -161,6 +165,14 @@ type RateLimit struct {
 	Limits []Limit `json:"limits,omitempty"`
 }
 
+type GatewayRateLimits struct {
+	GatewayName string `json:"gatewayName"`
+
+	// RateLimits holds the list of rate limit configurations
+	// +optional
+	RateLimits []RateLimit `json:"rateLimits,omitempty"`
+}
+
 // RateLimitPolicySpec defines the desired state of RateLimitPolicy
 type RateLimitPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
@@ -183,6 +195,35 @@ type RateLimitPolicyStatus struct {
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+
+	// GatewaysRateLimits shows the rate limit configuration applied by policies at the gateway level
+	// this field is only meant for rate limit policies targeting a route
+	// +optional
+	GatewaysRateLimits []GatewayRateLimits `json:"gatewaysRateLimits,omitempty"`
+}
+
+func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr.Logger) bool {
+	if s.ObservedGeneration != other.ObservedGeneration {
+		diff := cmp.Diff(s.ObservedGeneration, other.ObservedGeneration)
+		logger.V(1).Info("ObservedGeneration not equal", "difference", diff)
+		return false
+	}
+
+	// Marshalling sorts by condition type
+	currentMarshaledJSON, _ := common.ConditionMarshal(s.Conditions)
+	otherMarshaledJSON, _ := common.ConditionMarshal(other.Conditions)
+	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
+		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
+		logger.V(1).Info("Conditions not equal", "difference", diff)
+		return false
+	}
+
+	// TODO(eastizle): reflect.DeepEqual does not work well with lists without order
+	if !reflect.DeepEqual(s.GatewaysRateLimits, other.GatewaysRateLimits) {
+		logger.V(1).Info("GatewaysRateLimits not equal")
+		return false
+	}
+	return true
 }
 
 //+kubebuilder:object:root=true

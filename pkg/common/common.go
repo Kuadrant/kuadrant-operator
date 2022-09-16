@@ -34,6 +34,7 @@ const (
 	KuadrantRateLimitPolicyRefAnnotation = "kuadrant.io/ratelimitpolicies"
 	RateLimitPolicyBackRefAnnotation     = "kuadrant.io/ratelimitpolicy-direct-backref"
 	AuthPolicyBackRefAnnotation          = "kuadrant.io/authpolicy-backref"
+	NamespaceSeparator                   = '/'
 )
 
 func FetchEnv(key string, def string) string {
@@ -92,17 +93,26 @@ func UnMarshallLimitNamespace(ns string) (client.ObjectKey, string, error) {
 
 	domain := split[1]
 
-	gwSplit := strings.Split(split[0], "/")
-	if len(gwSplit) != 2 {
-		return client.ObjectKey{}, "", errors.New("failed to split on /")
+	gwKey, err := UnMarshallObjectKey(split[0])
+	if err != nil {
+		return client.ObjectKey{}, "", err
 	}
 
-	return client.ObjectKey{Namespace: gwSplit[0], Name: gwSplit[1]}, domain, nil
+	return gwKey, domain, nil
 }
 
 // MarshallNamespace serializes limit namespace with format "gwNS/gwName#domain"
 func MarshallNamespace(gwKey client.ObjectKey, domain string) string {
 	return fmt.Sprintf("%s/%s#%s", gwKey.Namespace, gwKey.Name, domain)
+}
+
+func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
+	keySplit := strings.Split(keyStr, string(NamespaceSeparator))
+	if len(keySplit) < 2 {
+		return client.ObjectKey{}, fmt.Errorf("failed to split on %s: '%s'", string(NamespaceSeparator), keyStr)
+	}
+
+	return client.ObjectKey{Namespace: keySplit[0], Name: keySplit[1]}, nil
 }
 
 // converts []gatewayapi_v1alpha2.Hostname to []string

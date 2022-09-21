@@ -109,8 +109,9 @@ var _ = BeforeSuite(func() {
 	)
 
 	err = (&AuthPolicyReconciler{
-		BaseReconciler: authPolicyBaseReconciler,
-		Scheme:         mgr.GetScheme(),
+		TargetRefReconciler: reconcilers.TargetRefReconciler{
+			BaseReconciler: authPolicyBaseReconciler,
+		},
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -121,8 +122,9 @@ var _ = BeforeSuite(func() {
 	)
 
 	err = (&RateLimitPolicyReconciler{
-		BaseReconciler: rateLimitPolicyBaseReconciler,
-		Scheme:         mgr.GetScheme(),
+		TargetRefReconciler: reconcilers.TargetRefReconciler{
+			BaseReconciler: rateLimitPolicyBaseReconciler,
+		},
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 

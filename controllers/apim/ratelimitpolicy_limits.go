@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
+	"github.com/kuadrant/kuadrant-controller/pkg/common"
 	"github.com/kuadrant/kuadrant-controller/pkg/rlptools"
 )
 
@@ -115,9 +116,9 @@ func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context,
 			return nil, err
 		}
 
-		if rlp.IsForHTTPRoute() {
+		if common.IsTargetRefHTTPRoute(rlp.Spec.TargetRef) {
 			routeRLPList = append(routeRLPList, rlp)
-		} else if rlp.IsForGateway() {
+		} else if common.IsTargetRefGateway(rlp.Spec.TargetRef) {
 			if gwRLP == nil {
 				gwRLP = rlp
 			} else {
@@ -140,7 +141,7 @@ func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context,
 	}
 
 	for _, httpRouteRLP := range routeRLPList {
-		httpRoute, err := r.fetchHTTPRoute(ctx, httpRouteRLP)
+		httpRoute, err := r.FetchValidHTTPRoute(ctx, httpRouteRLP.TargetKey())
 		if err != nil {
 			return nil, err
 		}

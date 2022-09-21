@@ -19,14 +19,10 @@ package apim
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"reflect"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	meta "k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -42,8 +38,7 @@ import (
 
 // RateLimitPolicyReconciler reconciles a RateLimitPolicy object
 type RateLimitPolicyReconciler struct {
-	*reconcilers.BaseReconciler
-	Scheme *runtime.Scheme
+	reconcilers.TargetRefReconciler
 }
 
 //+kubebuilder:rbac:groups=apim.kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -145,7 +140,7 @@ func (r *RateLimitPolicyReconciler) reconcileSpec(ctx context.Context, rlp *apim
 		return ctrl.Result{}, err
 	}
 
-	err = r.validateHTTPRoute(ctx, rlp)
+	err = r.validateRuleHosts(ctx, rlp)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -201,26 +196,6 @@ func (r *RateLimitPolicyReconciler) reconcileGatewayDiffs(ctx context.Context, r
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) rlpGatewayKeys(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) ([]client.ObjectKey, error) {
-	gwKeys := make([]client.ObjectKey, 0)
-	if rlp.IsForHTTPRoute() {
-		httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
-		if err != nil {
-			return nil, err
-		}
-
-		gwKeys = r.gatewayRefListFromHTTPRoute(httpRoute)
-	} else if rlp.IsForGateway() {
-		gwKey := client.ObjectKey{Name: string(rlp.Spec.TargetRef.Name), Namespace: rlp.GetNamespace()}
-		if rlp.Spec.TargetRef.Namespace != nil {
-			gwKey.Namespace = string(*rlp.Spec.TargetRef.Namespace)
-		}
-		gwKeys = []client.ObjectKey{gwKey}
-	}
-
-	return gwKeys, nil
-}
-
 type gatewayDiff struct {
 	NewGateways  []rlptools.GatewayWrapper
 	SameGateways []rlptools.GatewayWrapper
@@ -234,7 +209,7 @@ type gatewayDiff struct {
 func (r *RateLimitPolicyReconciler) computeGatewayDiffs(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) (*gatewayDiff, error) {
 	logger, _ := logr.FromContext(ctx)
 
-	rlpGwKeys, err := r.rlpGatewayKeys(ctx, rlp)
+	gwKeys, err := r.TargetedGatewayKeys(ctx, rlp.Spec.TargetRef, rlp.Namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -247,9 +222,9 @@ func (r *RateLimitPolicyReconciler) computeGatewayDiffs(ctx context.Context, rlp
 	}
 
 	gwDiff := &gatewayDiff{
-		NewGateways:  rlptools.NewGateways(allGwList, client.ObjectKeyFromObject(rlp), rlpGwKeys),
-		SameGateways: rlptools.SameGateways(allGwList, client.ObjectKeyFromObject(rlp), rlpGwKeys),
-		LeftGateways: rlptools.LeftGateways(allGwList, client.ObjectKeyFromObject(rlp), rlpGwKeys),
+		NewGateways:  rlptools.NewGateways(allGwList, client.ObjectKeyFromObject(rlp), gwKeys),
+		SameGateways: rlptools.SameGateways(allGwList, client.ObjectKeyFromObject(rlp), gwKeys),
+		LeftGateways: rlptools.LeftGateways(allGwList, client.ObjectKeyFromObject(rlp), gwKeys),
 	}
 
 	logger.V(1).Info("computeGatewayDiffs",
@@ -261,55 +236,8 @@ func (r *RateLimitPolicyReconciler) computeGatewayDiffs(ctx context.Context, rlp
 }
 
 func (r *RateLimitPolicyReconciler) reconcileDirectBackReference(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
-	logger, _ := logr.FromContext(ctx)
-	var netObj client.Object
-	var err error
-
-	if rlp.IsForGateway() {
-		netObj, err = r.fetchGateway(ctx, rlp)
-		if err != nil {
-			// The object should also exist
-			return err
-		}
-	} else if rlp.IsForHTTPRoute() {
-		netObj, err = r.fetchHTTPRoute(ctx, rlp)
-		if err != nil {
-			// The object should also exist
-			return err
-		}
-	} else {
-		logger.Info("reconcileDirectBackReference: rlp targeting unknown network resource")
-		return nil
-	}
-
-	netObjKey := client.ObjectKeyFromObject(netObj)
-	netObjType := netObj.GetObjectKind().GroupVersionKind()
-
-	// Reconcile the back reference:
-	objAnnotations := netObj.GetAnnotations()
-	if objAnnotations == nil {
-		objAnnotations = map[string]string{}
-	}
-
-	rlpKey := client.ObjectKeyFromObject(rlp)
-	val, ok := objAnnotations[common.RateLimitPolicyBackRefAnnotation]
-	if ok {
-		if val != rlpKey.String() {
-			return fmt.Errorf("the %s target %s is already referenced by ratelimitpolicy %s",
-				netObjType, netObjKey, rlpKey.String())
-		}
-	} else {
-		objAnnotations[common.RateLimitPolicyBackRefAnnotation] = rlpKey.String()
-		netObj.SetAnnotations(objAnnotations)
-		err := r.UpdateResource(ctx, netObj)
-		logger.V(1).Info("reconcileDirectBackReference: update network resource",
-			"type", netObjType, "name", netObjKey, "err", err)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(rlp), rlp.Spec.TargetRef,
+		rlp.Namespace, common.RateLimitPolicyBackRefAnnotation)
 }
 
 func (r *RateLimitPolicyReconciler) reconcileGatewayRLPReferences(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
@@ -337,80 +265,21 @@ func (r *RateLimitPolicyReconciler) reconcileGatewayRLPReferences(ctx context.Co
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) fetchHTTPRoute(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) (*gatewayapiv1alpha2.HTTPRoute, error) {
-	logger, _ := logr.FromContext(ctx)
-
-	key := rlp.TargetKey()
-
-	httpRoute := &gatewayapiv1alpha2.HTTPRoute{}
-	err := r.Client().Get(ctx, key, httpRoute)
-	logger.V(1).Info("fetchHTTPRoute", "httpRoute", key, "err", err)
+func (r *RateLimitPolicyReconciler) validateRuleHosts(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+	targetHostnames, err := r.TargetHostnames(ctx, rlp.Spec.TargetRef, rlp.Namespace)
 	if err != nil {
-		return nil, err
-	}
-
-	return httpRoute, nil
-}
-
-func (r *RateLimitPolicyReconciler) fetchGateway(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) (*gatewayapiv1alpha2.Gateway, error) {
-	logger, _ := logr.FromContext(ctx)
-
-	key := rlp.TargetKey()
-
-	gw := &gatewayapiv1alpha2.Gateway{}
-	err := r.Client().Get(ctx, key, gw)
-	logger.V(1).Info("fetchGateway", "gateway", key, "err", err)
-	if err != nil {
-		return nil, err
-	}
-
-	return gw, nil
-}
-
-func (r *RateLimitPolicyReconciler) gatewayRefListFromHTTPRoute(httpRoute *gatewayapiv1alpha2.HTTPRoute) []client.ObjectKey {
-	gwKeys := make([]client.ObjectKey, 0)
-	for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
-		gwKey := client.ObjectKey{Name: string(parentRef.Name), Namespace: httpRoute.Namespace}
-		if parentRef.Namespace != nil {
-			gwKey.Namespace = string(*parentRef.Namespace)
-		}
-		gwKeys = append(gwKeys, gwKey)
-	}
-
-	return gwKeys
-}
-
-func (r *RateLimitPolicyReconciler) validateHTTPRoute(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
-	if !rlp.IsForHTTPRoute() {
-		return nil
-	}
-
-	httpRoute, err := r.fetchHTTPRoute(ctx, rlp)
-	if err != nil {
-		// The object should exist
 		return err
 	}
 
-	// Check HTTProute parents (gateways) in the status object
-	// if any of the current parent gateways reports not "Admitted", return error
-	for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
-		routeParentStatus := func(pRef gatewayapiv1alpha2.ParentRef) *gatewayapiv1alpha2.RouteParentStatus {
-			for idx := range httpRoute.Status.RouteStatus.Parents {
-				if reflect.DeepEqual(pRef, httpRoute.Status.RouteStatus.Parents[idx].ParentRef) {
-					return &httpRoute.Status.RouteStatus.Parents[idx]
-				}
-			}
-
-			return nil
-		}(parentRef)
-
-		if routeParentStatus == nil {
-			continue
+	ruleHosts := make([]string, 0)
+	for idx := range rlp.Spec.RateLimits {
+		for ruleIdx := range rlp.Spec.RateLimits[idx].Rules {
+			ruleHosts = append(ruleHosts, rlp.Spec.RateLimits[idx].Rules[ruleIdx].Hosts...)
 		}
+	}
 
-		if meta.IsStatusConditionFalse(routeParentStatus.Conditions, "Accepted") {
-			return errors.New("httproute not accepted")
-		}
+	if valid, invalidHost := common.ValidSubdomains(targetHostnames, ruleHosts); !valid {
+		return fmt.Errorf("rule host (%s) not valid", invalidHost)
 	}
 
 	return nil

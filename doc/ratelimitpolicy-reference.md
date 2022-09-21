@@ -62,7 +62,7 @@ Generated using [github-markdown-toc](https://github.com/ekalinin/github-markdow
 | --- | --- | --- | --- | --- |
 | `paths` | []string | No | null | list of paths. Request matches when one from the list matches |
 | `methods` | []string | No | null | list of methods to match. Request matches when one from the list matches |
-| `hosts` | []string | No | null | list of hostnames to match. Request matches when one from the list matches |
+| `hosts` | []string | No | null | list of hostnames to match. Wildcard hostnames are valid. Request matches when one from the list matches. Each defined hostname must be subset of one of the hostnames defined by the targeted network resource |
 
 #### Limit
 

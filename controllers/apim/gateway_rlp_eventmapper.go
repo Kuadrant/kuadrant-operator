@@ -11,6 +11,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
+	"github.com/kuadrant/kuadrant-controller/pkg/common"
 	"github.com/kuadrant/kuadrant-controller/pkg/rlptools"
 )
 
@@ -29,7 +30,7 @@ func (h *GatewayRateLimitPolicyEventMapper) MapRouteRateLimitPolicy(obj client.O
 	}
 
 	// filter out all RLP not targeting a gateway
-	if !rlp.IsForGateway() {
+	if !common.IsTargetRefGateway(rlp.Spec.TargetRef) {
 		return []reconcile.Request{}
 	}
 

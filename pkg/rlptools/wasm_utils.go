@@ -37,7 +37,7 @@ func GatewayActionsFromRateLimitPolicy(rlp *apimv1alpha1.RateLimitPolicy, route 
 		// if HTTPRoute is available, fill empty rules with defaults from the route
 		rules := rlp.Spec.RateLimits[idx].Rules
 		if route != nil && len(rules) == 0 {
-			rules = RulesFromHTTPRoute(route)
+			rules = HTTPRouteRulesToRLPRules(common.RulesFromHTTPRoute(route))
 		}
 
 		flattenActions = append(flattenActions, GatewayAction{
@@ -47,6 +47,20 @@ func GatewayActionsFromRateLimitPolicy(rlp *apimv1alpha1.RateLimitPolicy, route 
 	}
 
 	return flattenActions
+}
+
+func HTTPRouteRulesToRLPRules(httpRouteRules []common.HTTPRouteRule) []apimv1alpha1.Rule {
+	rlpRules := make([]apimv1alpha1.Rule, 0, len(httpRouteRules))
+	for idx := range httpRouteRules {
+		var tmp []string
+		rlpRules = append(rlpRules, apimv1alpha1.Rule{
+			// copy slice
+			Paths:   append(tmp, httpRouteRules[idx].Paths...),
+			Methods: append(tmp, httpRouteRules[idx].Methods...),
+			Hosts:   append(tmp, httpRouteRules[idx].Hosts...),
+		})
+	}
+	return rlpRules
 }
 
 type RateLimitPolicy struct {

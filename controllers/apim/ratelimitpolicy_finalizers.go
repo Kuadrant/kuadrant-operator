@@ -65,12 +65,12 @@ func (r *RateLimitPolicyReconciler) computeFinalizeGatewayDiff(ctx context.Conte
 		LeftGateways: nil,
 	}
 
-	rlpGwKeys, err := r.rlpGatewayKeys(ctx, rlp)
+	gwKeys, err := r.TargetedGatewayKeys(ctx, rlp.Spec.TargetRef, rlp.Namespace)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return nil, err
 	}
 
-	for _, gwKey := range rlpGwKeys {
+	for _, gwKey := range gwKeys {
 		gw := &gatewayapiv1alpha2.Gateway{}
 		err := r.Client().Get(ctx, gwKey, gw)
 		logger.V(1).Info("finalizeRLP", "fetch gateway", gwKey, "err", err)
@@ -88,52 +88,6 @@ func (r *RateLimitPolicyReconciler) computeFinalizeGatewayDiff(ctx context.Conte
 }
 
 func (r *RateLimitPolicyReconciler) deleteNetworkResourceBackReference(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
-	logger, _ := logr.FromContext(ctx)
-
-	var netObj client.Object
-	var err error
-
-	if rlp.IsForGateway() {
-		netObj, err = r.fetchGateway(ctx, rlp)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				logger.Info("deleteNetworkResourceBackReference: targetRef Gateway not found")
-				return nil
-			}
-			return err
-		}
-	} else if rlp.IsForHTTPRoute() {
-		netObj, err = r.fetchHTTPRoute(ctx, rlp)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				logger.Info("deleteNetworkResourceBackReference: targetRef HTTPRoute not found")
-				return nil
-			}
-			return err
-		}
-	} else {
-		logger.Info("deleteNetworkResourceBackReference: rlp targeting unknown network resource")
-		return nil
-	}
-
-	netObjKey := client.ObjectKeyFromObject(netObj)
-	netObjType := netObj.GetObjectKind().GroupVersionKind()
-
-	// Reconcile the back reference:
-	objAnnotations := netObj.GetAnnotations()
-	if objAnnotations == nil {
-		objAnnotations = map[string]string{}
-	}
-
-	if _, ok := objAnnotations[common.RateLimitPolicyBackRefAnnotation]; ok {
-		delete(objAnnotations, common.RateLimitPolicyBackRefAnnotation)
-		netObj.SetAnnotations(objAnnotations)
-		err := r.UpdateResource(ctx, netObj)
-		logger.V(1).Info("deleteNetworkResourceBackReference: update network resource",
-			"type", netObjType, "name", netObjKey, "err", err)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return r.DeleteTargetBackReference(ctx, client.ObjectKeyFromObject(rlp), rlp.Spec.TargetRef,
+		rlp.Namespace, common.RateLimitPolicyBackRefAnnotation)
 }

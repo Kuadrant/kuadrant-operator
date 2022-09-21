@@ -1,13 +1,10 @@
 package apim
 
 import (
-	"errors"
 	"fmt"
 
 	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
 	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
-	meta "k8s.io/apimachinery/pkg/api/meta"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -56,45 +53,4 @@ func alwaysUpdateAuthConfig(existingObj, desiredObj client.Object) (bool, error)
 	existing.Spec = desired.Spec
 	existing.Annotations = desired.Annotations
 	return true, nil
-}
-
-func TargetableObject(obj client.Object) error {
-	httpRoute, isHTTPRoute := obj.(*gatewayapiv1alpha2.HTTPRoute)
-	if isHTTPRoute {
-		for _, parent := range httpRoute.Status.Parents { // no parent mean policies will affect nothing.
-			if len(parent.Conditions) == 0 {
-				return errors.New("unable to verify targetability: no condition found on status")
-			}
-			if meta.IsStatusConditionFalse(parent.Conditions, "Accepted") {
-				return errors.New("httproute rejected")
-			}
-		}
-	} else {
-		gateway, _ := obj.(*gatewayapiv1alpha2.Gateway)
-		if len(gateway.Status.Conditions) == 0 {
-			return errors.New("unable to verify targetability: no condition found on status")
-		}
-		if meta.IsStatusConditionFalse(gateway.Status.Conditions, "Ready") {
-			return errors.New("gateway not ready yet")
-		}
-	}
-	return nil
-}
-
-// TargetedGatewayKeys takes either HTTPRoute or Gateway object and return the list of gateways that are being referenced.
-func TargetedGatewayKeys(obj client.Object) []client.ObjectKey {
-	gwKeys := []client.ObjectKey{}
-	httpRoute, isHTTPRoute := obj.(*gatewayapiv1alpha2.HTTPRoute)
-	if isHTTPRoute {
-		for _, parentRef := range httpRoute.Spec.ParentRefs {
-			gwNamespace := httpRoute.Namespace // consider gateway local if namespace is not given
-			if parentRef.Namespace != nil {
-				gwNamespace = string(*parentRef.Namespace)
-			}
-			gwKeys = append(gwKeys, client.ObjectKey{Namespace: gwNamespace, Name: string(parentRef.Name)})
-		}
-	} else {
-		gwKeys = append(gwKeys, client.ObjectKey{Namespace: obj.GetNamespace(), Name: obj.GetName()})
-	}
-	return gwKeys
 }

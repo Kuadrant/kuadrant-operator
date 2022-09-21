@@ -1,14 +1,12 @@
 //go:build unit
 
-package rlptools
+package common
 
 import (
 	"reflect"
 	"testing"
 
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
 )
 
 func TestRouteHostnames(t *testing.T) {
@@ -77,7 +75,7 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 	testCases := []struct {
 		name     string
 		route    *gatewayapiv1alpha2.HTTPRoute
-		expected []apimv1alpha1.Rule
+		expected []HTTPRouteRule
 	}{
 		{
 			"nil",
@@ -92,7 +90,7 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 					Hostnames: []gatewayapiv1alpha2.Hostname{"*.com"},
 				},
 			},
-			[]apimv1alpha1.Rule{{Hosts: []string{"*.com"}}},
+			[]HTTPRouteRule{{Hosts: []string{"*.com"}}},
 		},
 		{
 			"empty rules",
@@ -102,7 +100,7 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 					Hostnames: []gatewayapiv1alpha2.Hostname{"*.com"},
 				},
 			},
-			[]apimv1alpha1.Rule{{Hosts: []string{"*.com"}}},
+			[]HTTPRouteRule{{Hosts: []string{"*.com"}}},
 		},
 		{
 			"with method",
@@ -119,7 +117,7 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 					},
 				},
 			},
-			[]apimv1alpha1.Rule{{
+			[]HTTPRouteRule{{
 				Hosts:   []string{"*"},
 				Methods: []string{getMethod},
 			}},
@@ -139,7 +137,7 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 					},
 				},
 			},
-			[]apimv1alpha1.Rule{{
+			[]HTTPRouteRule{{
 				Hosts: []string{"*"},
 				Paths: []string{"/cats*"},
 			}},
@@ -159,7 +157,7 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 					},
 				},
 			},
-			[]apimv1alpha1.Rule{{
+			[]HTTPRouteRule{{
 				Hosts: []string{"*"},
 				Paths: []string{"/rabbits*"},
 			}},
@@ -185,7 +183,7 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 					Hostnames: []gatewayapiv1alpha2.Hostname{"*.com"},
 				},
 			},
-			[]apimv1alpha1.Rule{{Hosts: []string{"*.com"}}},
+			[]HTTPRouteRule{{Hosts: []string{"*.com"}}},
 		},
 		{
 			"basic",
@@ -210,7 +208,7 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 					},
 				},
 			},
-			[]apimv1alpha1.Rule{
+			[]HTTPRouteRule{
 				{
 					Hosts:   []string{"*.com"},
 					Methods: []string{"GET"},

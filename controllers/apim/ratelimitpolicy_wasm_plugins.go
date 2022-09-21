@@ -135,9 +135,9 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 			return nil, err
 		}
 
-		if rlp.IsForHTTPRoute() {
+		if common.IsTargetRefHTTPRoute(rlp.Spec.TargetRef) {
 			routeRLPList = append(routeRLPList, rlp)
-		} else if rlp.IsForGateway() {
+		} else if common.IsTargetRefGateway(rlp.Spec.TargetRef) {
 			if gwRLP == nil {
 				gwRLP = rlp
 			} else {
@@ -160,7 +160,7 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 	}
 
 	for _, httpRouteRLP := range routeRLPList {
-		httpRoute, err := r.fetchHTTPRoute(ctx, httpRouteRLP)
+		httpRoute, err := r.FetchValidHTTPRoute(ctx, httpRouteRLP.TargetKey())
 		if err != nil {
 			return nil, err
 		}

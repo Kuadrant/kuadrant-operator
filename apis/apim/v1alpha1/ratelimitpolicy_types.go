@@ -254,22 +254,6 @@ func (r *RateLimitPolicy) Validate() error {
 	return nil
 }
 
-func (r *RateLimitPolicy) IsForHTTPRoute() bool {
-	if err := r.Validate(); err != nil {
-		return false
-	}
-
-	return r.Spec.TargetRef.Kind == gatewayapiv1alpha2.Kind("HTTPRoute")
-}
-
-func (r *RateLimitPolicy) IsForGateway() bool {
-	if err := r.Validate(); err != nil {
-		return false
-	}
-
-	return r.Spec.TargetRef.Kind == gatewayapiv1alpha2.Kind("Gateway")
-}
-
 func (r *RateLimitPolicy) TargetKey() client.ObjectKey {
 	tmpNS := r.Namespace
 	if r.Spec.TargetRef.Namespace != nil {

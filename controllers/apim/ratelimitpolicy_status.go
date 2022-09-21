@@ -68,7 +68,7 @@ func (r *RateLimitPolicyReconciler) calculateStatus(ctx context.Context, rlp *ap
 	}
 
 	// Only makes sense for rlp's targeting a route
-	if rlp.IsForHTTPRoute() {
+	if common.IsTargetRefHTTPRoute(rlp.Spec.TargetRef) {
 		gwRateLimits, err := r.gatewaysRateLimits(ctx, rlp)
 		if err != nil {
 			return nil, err
@@ -104,7 +104,7 @@ func (r *RateLimitPolicyReconciler) availableCondition(specErr error) *metav1.Co
 // gateways where this rate limit policy adds configuration
 func (r *RateLimitPolicyReconciler) gatewaysRateLimits(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) ([]apimv1alpha1.GatewayRateLimits, error) {
 	logger, _ := logr.FromContext(ctx)
-	gwKeys, err := r.rlpGatewayKeys(ctx, rlp)
+	gwKeys, err := r.TargetedGatewayKeys(ctx, rlp.Spec.TargetRef, rlp.Namespace)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			gwKeys = make([]client.ObjectKey, 0)

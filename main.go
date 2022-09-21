@@ -121,8 +121,9 @@ func main() {
 	)
 
 	if err = (&apimcontrollers.RateLimitPolicyReconciler{
-		BaseReconciler: rateLimitPolicyBaseReconciler,
-		Scheme:         mgr.GetScheme(),
+		TargetRefReconciler: reconcilers.TargetRefReconciler{
+			BaseReconciler: rateLimitPolicyBaseReconciler,
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicy")
 		os.Exit(1)
@@ -135,8 +136,9 @@ func main() {
 	)
 
 	if err = (&apimcontrollers.AuthPolicyReconciler{
-		BaseReconciler: authPolicyBaseReconciler,
-		Scheme:         mgr.GetScheme(),
+		TargetRefReconciler: reconcilers.TargetRefReconciler{
+			BaseReconciler: authPolicyBaseReconciler,
+		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicy")
 		os.Exit(1)

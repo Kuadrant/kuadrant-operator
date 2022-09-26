@@ -1,0 +1,9 @@
+---
+namespace: kuadrant-system
+resources:
+  - kuadrant-namespace.yaml
+  - authorino
+  - limitador
+patchesStrategicMerge:
+  - authorino/delete-ns.yaml
+  - limitador/delete-ns.yaml

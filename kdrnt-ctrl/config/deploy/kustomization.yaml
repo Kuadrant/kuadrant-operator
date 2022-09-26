@@ -1,0 +1,5 @@
+---
+resources:
+  - ../default
+patchesStrategicMerge:
+  - devel_mode_patch.yaml

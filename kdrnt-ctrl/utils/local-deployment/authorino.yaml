@@ -1,0 +1,14 @@
+---
+apiVersion: operator.authorino.kuadrant.io/v1beta1
+kind: Authorino
+metadata:
+  name: authorino
+spec:
+  clusterWide: true
+  listener:
+    tls:
+      enabled: false
+  logLevel: debug
+  oidcServer:
+    tls:
+      enabled: false

@@ -46,6 +46,12 @@ else
 IMAGE_TAG ?= v$(VERSION)
 endif
 
+# kubebuilder-tools still doesn't support darwin/arm64. This is a workaround (https://github.com/kubernetes-sigs/controller-runtime/issues/1657)
+ARCH_PARAM =
+ifeq ($(shell uname -sm),Darwin arm64)
+	ARCH_PARAM = --arch=amd64
+endif
+
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
 BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:$(IMAGE_TAG)
@@ -153,7 +159,7 @@ clean-cov: ## Remove coverage report
 
 .PHONY: test
 test: clean-cov manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out -v -timeout 0
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out -v
 
 ##@ Build
 

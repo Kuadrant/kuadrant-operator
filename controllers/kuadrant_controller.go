@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"google.golang.org/protobuf/types/known/structpb"
+	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
 
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
@@ -168,7 +170,7 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 }
 
 func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	iop := &iopv1alpha1.IstioOperator{}
 
 	iopKey := client.ObjectKey{Name: iopName(), Namespace: iopNamespace()}
@@ -182,29 +184,24 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) e
 		return nil
 	}
 
-	obj, ok := iop.Spec.MeshConfig["extensionProviders"]
-	if !ok || obj == nil {
-		obj = make([]interface{}, 0)
+	meshConfig, err := meshConfigFromStruct(iop.Spec.MeshConfig)
+	if err != nil {
+		return err
 	}
 
-	extensionProviders, ok := obj.([]interface{})
-	if !ok {
-		return fmt.Errorf("istiooperator MeshConfig[extensionProviders] type assertion failed: %T", obj)
-	}
+	extensionProviders := extensionProvidersFromMeshConfig(meshConfig)
 
-	for idx := range extensionProviders {
-		extensionProvider, ok := extensionProviders[idx].(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("istiooperator MeshConfig[extensionProviders][idx] type assertion failed: %T", extensionProviders[idx])
-		}
-		name, ok := extensionProvider["name"]
-		if !ok {
-			continue
-		}
+	for idx, extensionProvider := range extensionProviders {
+		name := extensionProvider.Name
 		if name == extAuthorizerName {
 			// deletes the element in the array
 			extensionProviders = append(extensionProviders[:idx], extensionProviders[idx+1:]...)
-			iop.Spec.MeshConfig["extensionProviders"] = extensionProviders
+			meshConfig.ExtensionProviders = extensionProviders
+			meshConfigStruct, err := meshConfigToStruct(meshConfig)
+			if err != nil {
+				return err
+			}
+			iop.Spec.MeshConfig = meshConfigStruct
 			break
 		}
 	}
@@ -218,7 +215,7 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) e
 }
 
 func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	iop := &iopv1alpha1.IstioOperator{}
 
 	iopKey := client.ObjectKey{Name: iopName(), Namespace: iopNamespace()}
@@ -243,19 +240,12 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 		iop.Spec = &istioapiv1alpha1.IstioOperatorSpec{}
 	}
 
-	if iop.Spec.MeshConfig == nil {
-		iop.Spec.MeshConfig = make(map[string]interface{})
+	meshConfig, err := meshConfigFromStruct(iop.Spec.MeshConfig)
+	if err != nil {
+		return err
 	}
 
-	obj, ok := iop.Spec.MeshConfig["extensionProviders"]
-	if !ok || obj == nil {
-		obj = make([]interface{}, 0)
-	}
-
-	extensionProviders, ok := obj.([]interface{})
-	if !ok {
-		return fmt.Errorf("istiooperator extensionprovider type assertion failed: %T", obj)
-	}
+	extensionProviders := extensionProvidersFromMeshConfig(meshConfig)
 
 	envoyExtAuthzGrpc := make(map[string]interface{})
 	envoyExtAuthzGrpc["port"] = 50051
@@ -265,7 +255,12 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 	kuadrantExtensionProvider["name"] = extAuthorizerName
 	kuadrantExtensionProvider["envoyExtAuthzGrpc"] = envoyExtAuthzGrpc
 
-	iop.Spec.MeshConfig["extensionProviders"] = append(extensionProviders, kuadrantExtensionProvider)
+	meshConfig.ExtensionProviders = extensionProviders
+	meshConfigStruct, err := meshConfigToStruct(meshConfig)
+	if err != nil {
+		return err
+	}
+	iop.Spec.MeshConfig = meshConfigStruct
 	logger.Info("adding external authorizer to meshconfig")
 	if err := r.Client().Update(ctx, iop); err != nil {
 		return err
@@ -316,26 +311,17 @@ func hasKuadrantAuthorizer(iop *iopv1alpha1.IstioOperator) bool {
 	//          service: AUTHORINO SERVICE
 	//        name: kuadrant-authorization
 
-	extensionProvidersObj, ok := iop.Spec.MeshConfig["extensionProviders"]
-	if !ok || extensionProvidersObj == nil {
+	meshConfig, err := meshConfigFromStruct(iop.Spec.MeshConfig)
+	if err != nil {
+		return false
+	}
+	extensionProviders := meshConfig.ExtensionProviders
+	if len(extensionProviders) == 0 {
 		return false
 	}
 
-	extensionProvidersList, ok := extensionProvidersObj.([]interface{})
-	if !ok {
-		return false
-	}
-
-	for idx := range extensionProvidersList {
-		extensionProvider, ok := extensionProvidersList[idx].(map[string]interface{})
-		if !ok {
-			return false
-		}
-		name, ok := extensionProvider["name"]
-		if !ok {
-			continue
-		}
-		if name == extAuthorizerName {
+	for _, extensionProvider := range extensionProviders {
+		if extensionProvider.Name == extAuthorizerName {
 			return true
 		}
 	}
@@ -365,7 +351,7 @@ func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadr
 }
 
 func (r *KuadrantReconciler) reconcileKuadrantController(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	kuadrantControllerVersion, err := common.KuadrantControllerImage(ctx, r.Scheme)
 	if err != nil {
 		return err
@@ -382,7 +368,7 @@ func (r *KuadrantReconciler) reconcileKuadrantController(ctx context.Context, kO
 
 func (r *KuadrantReconciler) createOnlyInKuadrantNSCb(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) common.DecodeCallback {
 	return func(obj runtime.Object) error {
-		logger := logr.FromContext(ctx)
+		logger, _ := logr.FromContext(ctx)
 		k8sObj, ok := obj.(client.Object)
 		if !ok {
 			return errors.New("runtime.Object could not be type asserted to client.Object")
@@ -478,6 +464,43 @@ func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadr
 	}
 
 	return r.ReconcileResource(ctx, &authorinov1beta1.Authorino{}, authorino, reconcilers.CreateOnlyMutator)
+}
+
+func meshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshConfig, error) {
+	if structure == nil {
+		return &istiomeshv1alpha1.MeshConfig{}, nil
+	}
+	meshConfigJson, err := structure.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	meshConfig := &istiomeshv1alpha1.MeshConfig{}
+	if err = json.Unmarshal(meshConfigJson, meshConfig); err != nil {
+		return nil, err
+	}
+
+	return meshConfig, nil
+}
+
+func meshConfigToStruct(config *istiomeshv1alpha1.MeshConfig) (*structpb.Struct, error) {
+	configJson, err := json.Marshal(config)
+	if err != nil {
+		return nil, err
+	}
+	configStruct := &structpb.Struct{}
+
+	if err = configStruct.UnmarshalJSON(configJson); err != nil {
+		return nil, err
+	}
+	return configStruct, nil
+}
+
+func extensionProvidersFromMeshConfig(config *istiomeshv1alpha1.MeshConfig) (extensionProviders []*istiomeshv1alpha1.MeshConfig_ExtensionProvider) {
+	extensionProviders = config.ExtensionProviders
+	if len(extensionProviders) == 0 {
+		extensionProviders = make([]*istiomeshv1alpha1.MeshConfig_ExtensionProvider, 0)
+	}
+	return
 }
 
 // SetupWithManager sets up the controller with the Manager.

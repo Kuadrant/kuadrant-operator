@@ -15,7 +15,7 @@ import (
 type DecodeCallback = func(runtime.Object) error
 
 func DecodeFile(ctx context.Context, fileData []byte, scheme *runtime.Scheme, cb DecodeCallback) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	codec := serializer.NewCodecFactory(scheme)
 	decoder := codec.UniversalDeserializer()
 

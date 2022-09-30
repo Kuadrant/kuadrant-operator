@@ -24,7 +24,7 @@ const (
 )
 
 func (r *KuadrantReconciler) reconcileStatus(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant, specErr error) (ctrl.Result, error) {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	newStatus, err := r.calculateStatus(ctx, kObj, specErr)
 	if err != nil {
 		return reconcile.Result{}, err

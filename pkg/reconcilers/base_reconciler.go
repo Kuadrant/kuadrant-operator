@@ -97,8 +97,10 @@ func (b *BaseReconciler) EventRecorder() record.EventRecorder {
 // with the existing state inside the passed in callback MutateFn.
 //
 // obj: Object of the same type as the 'desired' object.
-//            Used to read the resource from the kubernetes cluster.
-//            Could be zero-valued initialized object.
+//
+//	Used to read the resource from the kubernetes cluster.
+//	Could be zero-valued initialized object.
+//
 // desired: Object representing the desired state
 //
 // It returns an error.
@@ -137,36 +139,36 @@ func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired cli
 }
 
 func (b *BaseReconciler) GetResource(ctx context.Context, objKey types.NamespacedName, obj client.Object) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	logger.Info("get object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", objKey.Name, "namespace", objKey.Namespace)
 	return b.Client().Get(ctx, objKey, obj)
 }
 
 func (b *BaseReconciler) CreateResource(ctx context.Context, obj client.Object) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	logger.Info("create object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
 	return b.Client().Create(ctx, obj)
 }
 
 func (b *BaseReconciler) UpdateResource(ctx context.Context, obj client.Object) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	logger.Info("update object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
 	return b.Client().Update(ctx, obj)
 }
 
 func (b *BaseReconciler) DeleteResource(ctx context.Context, obj client.Object, options ...client.DeleteOption) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	logger.Info("delete object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
 	return b.Client().Delete(ctx, obj, options...)
 }
 
 func (b *BaseReconciler) UpdateResourceStatus(ctx context.Context, obj client.Object) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	logger.Info("update object status", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
 	return b.Client().Status().Update(ctx, obj)
 }
 
-//SetOwnerReference sets owner as a Controller OwnerReference on owned
+// SetOwnerReference sets owner as a Controller OwnerReference on owned
 func (b *BaseReconciler) SetOwnerReference(owner, obj client.Object) error {
 	err := controllerutil.SetControllerReference(owner, obj, b.Scheme())
 	if err != nil {
@@ -179,7 +181,7 @@ func (b *BaseReconciler) SetOwnerReference(owner, obj client.Object) error {
 	return err
 }
 
-//EnsureOwnerReference sets owner as a Controller OwnerReference on owned
+// EnsureOwnerReference sets owner as a Controller OwnerReference on owned
 // returns boolean to notify when the object has been updated
 func (b *BaseReconciler) EnsureOwnerReference(owner, obj client.Object) (bool, error) {
 	changed := false

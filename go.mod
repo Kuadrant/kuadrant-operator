@@ -3,22 +3,24 @@ module github.com/kuadrant/kuadrant-operator
 go 1.16
 
 require (
-	github.com/go-logr/logr v0.4.0
-	github.com/google/go-cmp v0.5.6
+	github.com/go-logr/logr v1.2.3
+	github.com/google/go-cmp v0.5.9
+	github.com/kuadrant/authorino v0.10.0
 	github.com/kuadrant/authorino-operator v0.2.0
-	github.com/kuadrant/limitador-operator v0.2.0
-	github.com/onsi/ginkgo v1.16.4
-	github.com/onsi/gomega v1.16.0
-	go.uber.org/zap v1.19.1
+	github.com/kuadrant/limitador-operator v0.3.1-0.20220830090346-4f6d5794272b
+	github.com/onsi/ginkgo v1.16.5
+	github.com/onsi/gomega v1.20.2
+	go.uber.org/zap v1.22.0
+	google.golang.org/protobuf v1.28.1
 	gotest.tools v2.2.0+incompatible
-	// go get istio.io/api@1.12.6
-	istio.io/api v0.0.0-20220304035241-8c47cbbea144
-	// go get istio.io/istio/operator/pkg/apis/istio/v1alpha1@1.12.6
-	istio.io/istio v0.0.0-20220328194112-a0c7a3355331
-	k8s.io/api v0.22.2
-	k8s.io/apiextensions-apiserver v0.22.2
-	k8s.io/apimachinery v0.22.2
-	k8s.io/client-go v0.22.2
-	k8s.io/klog/v2 v2.10.0
-	sigs.k8s.io/controller-runtime v0.10.2
+	istio.io/api v0.0.0-20220929135006-93870da8d382
+	istio.io/client-go v1.12.4-0.20220304040955-30b642d5ba34 // indirect
+	istio.io/istio v0.0.0-20220929144806-42b01b1beb7d
+	k8s.io/api v0.25.1
+	k8s.io/apiextensions-apiserver v0.25.0
+	k8s.io/apimachinery v0.25.1
+	k8s.io/client-go v0.25.1
+	k8s.io/klog/v2 v2.80.1
+	sigs.k8s.io/controller-runtime v0.13.0
+	sigs.k8s.io/gateway-api v0.5.1-0.20220830123301-a7a465ababc8
 )

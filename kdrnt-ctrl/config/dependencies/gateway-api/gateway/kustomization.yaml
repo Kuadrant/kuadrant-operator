@@ -1,5 +1,0 @@
----
-# Adds namespace to all resources.
-namespace: istio-system
-resources:
-- gateway.yaml

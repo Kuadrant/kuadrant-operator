@@ -14,4 +14,6 @@ data:
       resourceName: f139389e.kuadrant.io
 kind: ConfigMap
 metadata:
+  labels:
+    app: kuadrant
   name: kuadrant-operator-manager-config

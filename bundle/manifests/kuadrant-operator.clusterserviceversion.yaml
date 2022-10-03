@@ -26,11 +26,17 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - kind: AuthPolicy
+      name: authpolicies.apim.kuadrant.io
+      version: v1alpha1
     - description: Kuadrant is the Schema for the kuadrants API
       displayName: Kuadrant
       kind: Kuadrant
       name: kuadrants.kuadrant.kuadrant.io
       version: v1beta1
+    - kind: RateLimitPolicy
+      name: ratelimitpolicies.apim.kuadrant.io
+      version: v1alpha1
   description: Kuadrant Operator
   displayName: Kuadrant
   icon:
@@ -300,22 +306,25 @@ spec:
         serviceAccountName: kuadrant-operator-controller-manager
       deployments:
       - label:
+          app: kuadrant
           control-plane: controller-manager
         name: kuadrant-operator-controller-manager
         spec:
           replicas: 1
           selector:
             matchLabels:
+              app: kuadrant
               control-plane: controller-manager
           strategy: {}
           template:
             metadata:
               labels:
+                app: kuadrant
                 control-plane: controller-manager
             spec:
               containers:
               - args:
-                - --leader-elect
+                - --config=controller_manager_config.yaml
                 command:
                 - /manager
                 env:
@@ -347,10 +356,18 @@ spec:
                     memory: 200Mi
                 securityContext:
                   allowPrivilegeEscalation: false
+                volumeMounts:
+                - mountPath: /controller_manager_config.yaml
+                  name: manager-config
+                  subPath: controller_manager_config.yaml
               securityContext:
                 runAsNonRoot: true
               serviceAccountName: kuadrant-operator-controller-manager
               terminationGracePeriodSeconds: 10
+              volumes:
+              - configMap:
+                  name: kuadrant-operator-manager-config
+                name: manager-config
       permissions:
       - rules:
         - apiGroups:

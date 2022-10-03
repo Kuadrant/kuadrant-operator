@@ -3,6 +3,7 @@ kind: Service
 metadata:
   creationTimestamp: null
   labels:
+    app: kuadrant
     control-plane: controller-manager
   name: kuadrant-operator-controller-manager-metrics-service
 spec:
@@ -11,6 +12,7 @@ spec:
     port: 8080
     targetPort: metrics
   selector:
+    app: kuadrant
     control-plane: controller-manager
 status:
   loadBalancer: {}

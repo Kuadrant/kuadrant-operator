@@ -1,6 +1,7 @@
 namespace: kuadrant-system
 
 resources:
+  - kuadrant-namespace.yaml
   - authorino
   - limitador
 

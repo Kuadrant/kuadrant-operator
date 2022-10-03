@@ -19,6 +19,23 @@ spec:
       - enabled: true
         name: istio-ingressgateway
         k8s:
+          service:
+            type: NodePort
+            ports:
+              - name: status-port
+                port: 15021
+                protocol: TCP
+                targetPort: 15021
+              - name: http2
+                port: 80
+                protocol: TCP
+                targetPort: 8080
+                nodePort: 30950
+              - name: https
+                port: 443
+                protocol: TCP
+                targetPort: 8443
+                nodePort: 30951
           resources:
             requests:
               cpu: "0"
@@ -37,3 +54,9 @@ spec:
         autoscaleEnabled: false
     global:
       istioNamespace: istio-system
+  meshConfig:
+    extensionProviders:
+      - name: "kuadrant-authorization"
+        envoyExtAuthzGrpc:
+          service: "authorino-authorino-authorization.kuadrant-system.svc.cluster.local"
+          port: 50051

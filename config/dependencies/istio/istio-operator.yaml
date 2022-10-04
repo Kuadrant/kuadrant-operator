@@ -54,9 +54,3 @@ spec:
         autoscaleEnabled: false
     global:
       istioNamespace: istio-system
-  meshConfig:
-    extensionProviders:
-      - name: "kuadrant-authorization"
-        envoyExtAuthzGrpc:
-          service: "authorino-authorino-authorization.kuadrant-system.svc.cluster.local"
-          port: 50051

@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"google.golang.org/protobuf/types/known/structpb"
 	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
@@ -30,8 +29,6 @@ import (
 	istioapiv1alpha1 "istio.io/api/operator/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/kuadrantcontrollermanifests"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
@@ -278,10 +274,6 @@ func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileKuadrantController(ctx, kObj); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	if err := r.reconcileAuthorino(ctx, kObj); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -348,88 +340,6 @@ func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadr
 	}
 
 	return r.ReconcileResource(ctx, &limitadorv1alpha1.Limitador{}, limitador, reconcilers.CreateOnlyMutator)
-}
-
-func (r *KuadrantReconciler) reconcileKuadrantController(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	logger, _ := logr.FromContext(ctx)
-	kuadrantControllerVersion, err := common.KuadrantControllerImage(ctx, r.Scheme)
-	if err != nil {
-		return err
-	}
-	logger.Info("Deploying kuadrant controller", "version", kuadrantControllerVersion)
-
-	data, err := kuadrantcontrollermanifests.Content()
-	if err != nil {
-		return err
-	}
-
-	return common.DecodeFile(ctx, data, r.Scheme, r.createOnlyInKuadrantNSCb(ctx, kObj))
-}
-
-func (r *KuadrantReconciler) createOnlyInKuadrantNSCb(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) common.DecodeCallback {
-	return func(obj runtime.Object) error {
-		logger, _ := logr.FromContext(ctx)
-		k8sObj, ok := obj.(client.Object)
-		if !ok {
-			return errors.New("runtime.Object could not be type asserted to client.Object")
-		}
-
-		// Create in Kuadrant CR's namespace
-		k8sObj.SetNamespace(kObj.Namespace)
-		err := r.SetOwnerReference(kObj, k8sObj)
-		if err != nil {
-			return err
-		}
-
-		var newObj client.Object
-		newObj = k8sObj
-
-		switch obj := k8sObj.(type) {
-		case *appsv1.Deployment: // If it's a Deployment obj, it adds the required env vars
-			obj.Spec.Template.Spec.Containers[0].Env = append(
-				obj.Spec.Template.Spec.Containers[0].Env,
-				v1.EnvVar{Name: envLimitadorNamespace, Value: kObj.Namespace},
-				v1.EnvVar{Name: envLimitadorName, Value: limitadorName},
-				// env var name taken from https://github.com/Kuadrant/kuadrant-controller/blob/4e9763bbabc8a7b5f7695aa4f53d9edc0c376ba3/pkg/rlptools/wasm_utils.go#L18
-				v1.EnvVar{Name: "WASM_FILTER_IMAGE", Value: common.GetWASMShimImageVersion()},
-			)
-			newObj = obj
-		// TODO: DRY the following 2 case switches
-		case *rbacv1.RoleBinding:
-			if obj.Name == "kuadrant-leader-election-rolebinding" {
-				for i, subject := range obj.Subjects {
-					if subject.Name == "kuadrant-controller-manager" {
-						obj.Subjects[i].Namespace = kObj.Namespace
-					}
-				}
-			}
-			newObj = obj
-		case *rbacv1.ClusterRoleBinding:
-			if obj.Name == "kuadrant-manager-rolebinding" {
-				for i, subject := range obj.Subjects {
-					if subject.Name == "kuadrant-controller-manager" {
-						obj.Subjects[i].Namespace = kObj.Namespace
-					}
-				}
-			}
-			newObj = obj
-		default:
-		}
-		newObjCloned := newObj.DeepCopyObject()
-		err = r.Client().Create(ctx, newObj)
-
-		k8sObjKind := newObjCloned.GetObjectKind()
-		logger.V(1).Info("create resource", "GKV", k8sObjKind.GroupVersionKind(), "name", newObj.GetName(), "error", err)
-		if err != nil {
-			if apierrors.IsAlreadyExists(err) {
-				// Omit error
-				logger.Info("Already exists", "GKV", k8sObjKind.GroupVersionKind(), "name", newObj.GetName())
-			} else {
-				return err
-			}
-		}
-		return nil
-	}
 }
 
 func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {

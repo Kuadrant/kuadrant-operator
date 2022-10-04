@@ -17,18 +17,13 @@ limitations under the License.
 package common
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
 
-	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-
-	"github.com/kuadrant/kuadrant-operator/kuadrantcontrollermanifests"
 )
 
 // TODO: move the const to a proper place, or get it from config
@@ -150,33 +145,4 @@ func ValidSubdomains(domains, subdomains []string) (bool, string) {
 		}
 	}
 	return true, ""
-}
-
-func KuadrantControllerImage(ctx context.Context, scheme *runtime.Scheme) (string, error) {
-	image := "unknown"
-
-	parser := func(obj runtime.Object) error {
-		if deployment, ok := obj.(*appsv1.Deployment); ok {
-			if deployment.GetName() == "kuadrant-controller-manager" {
-				for _, container := range deployment.Spec.Template.Spec.Containers {
-					if container.Name == "manager" {
-						image = container.Image
-					}
-				}
-			}
-		}
-		return nil
-	}
-
-	content, err := kuadrantcontrollermanifests.Content()
-	if err != nil {
-		return "", err
-	}
-
-	err = DecodeFile(ctx, content, scheme, parser)
-	if err != nil {
-		return "", err
-	}
-
-	return image, nil
 }

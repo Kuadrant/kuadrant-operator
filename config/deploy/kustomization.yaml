@@ -3,5 +3,3 @@ namespace: kuadrant-system
 resources:
   - ../default
   - ../dependencies
-patchesStrategicMerge:
-  - devel_mode_patch.yaml

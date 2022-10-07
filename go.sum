@@ -1073,6 +1073,7 @@ honnef.co/go/tools v0.0.1-2020.1.4/go.mod h1:X/FiERA/W4tHapMX5mGpAtMSVEeEUOyHaw9
 istio.io/api v0.0.0-20220907134937-b47284812feb h1:gww8VW5FEh7e1qvdtJfLiNL7tpPzeSCZkXtwUM1gCCc=
 istio.io/api v0.0.0-20220907134937-b47284812feb/go.mod h1:hQkF0Q19MCmfOTre/Sg4KvrwwETq45oaFplnBm2p4j8=
 istio.io/client-go v1.15.1-0.20220907135338-7f6428013c07 h1:0NaIOpISKJH+sAVsdZzJA0UfTqT6kiJHg4pnKrmP3A0=
+istio.io/client-go v1.15.1-0.20220907135338-7f6428013c07/go.mod h1:y7N6Hi3uohxutNPWhilQ0sTVzuhWWA6JyRHNj3QyMxU=
 istio.io/istio v0.0.0-20220923214536-bf836f0be536 h1:fZZTZUPpzAJqGqKzijw7j5ss1kAZXYHO8YNfdhZmn48=
 istio.io/istio v0.0.0-20220923214536-bf836f0be536/go.mod h1:TLnweNm1q+jQT0mkQtKbJkz8GLEQm2d31oisK9vfENA=
 istio.io/pkg v0.0.0-20220907025138-198870de7239 h1:fT4mErRurULEFGqBYwrY/a9lq3BC6qgilzsUNFnnw6w=
@@ -1124,8 +1125,8 @@ sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.0.30/go.mod h1:fEO7lR
 sigs.k8s.io/controller-runtime v0.10.0/go.mod h1:GCdh6kqV6IY4LK0JLwX0Zm6g233RtVGdb/f0+KSfprg=
 sigs.k8s.io/controller-runtime v0.12.2 h1:nqV02cvhbAj7tbt21bpPpTByrXGn2INHRsi39lXy9sE=
 sigs.k8s.io/controller-runtime v0.12.2/go.mod h1:qKsk4WE6zW2Hfj0G4v10EnNB2jMG1C+NTb8h+DwCoU0=
-sigs.k8s.io/gateway-api v0.5.1 h1:EqzgOKhChzyve9rmeXXbceBYB6xiM50vDfq0kK5qpdw=
-sigs.k8s.io/gateway-api v0.5.1/go.mod h1:x0AP6gugkFV8fC/oTlnOMU0pnmuzIR8LfIPRVUjxSqA=
+sigs.k8s.io/gateway-api v0.5.1-0.20220815164014-854e2bfc5276 h1:7L9X/IkG9/Ww8Glcbtf8KTZde8kReC3m2e1RGRytANQ=
+sigs.k8s.io/gateway-api v0.5.1-0.20220815164014-854e2bfc5276/go.mod h1:x0AP6gugkFV8fC/oTlnOMU0pnmuzIR8LfIPRVUjxSqA=
 sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2/go.mod h1:B+TnT182UBxE84DiCz4CVE26eOSDAeYCpfDnC2kdKMY=
 sigs.k8s.io/json v0.0.0-20220713155537-f223a00ba0e2 h1:iXTIw73aPyC+oRdyqqvVJuloN1p0AC/kzH07hu3NE+k=
 sigs.k8s.io/json v0.0.0-20220713155537-f223a00ba0e2/go.mod h1:B8JuhiUyNFVKdsE8h686QcCxMaH6HrOAZj4vswFpcB0=

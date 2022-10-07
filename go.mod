@@ -4,7 +4,9 @@ go 1.18
 
 require (
 	github.com/go-logr/logr v1.2.3
+	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.9
+	github.com/google/uuid v1.3.0
 	github.com/kuadrant/authorino v0.10.0
 	github.com/kuadrant/authorino-operator v0.4.1
 	github.com/kuadrant/limitador-operator v0.3.1-0.20220830090346-4f6d5794272b
@@ -14,6 +16,7 @@ require (
 	google.golang.org/protobuf v1.28.1
 	gotest.tools v2.2.0+incompatible
 	istio.io/api v0.0.0-20220907134937-b47284812feb
+	istio.io/client-go v1.15.1-0.20220907135338-7f6428013c07
 	istio.io/istio v0.0.0-20220923214536-bf836f0be536
 	k8s.io/api v0.24.2
 	k8s.io/apiextensions-apiserver v0.24.2
@@ -21,7 +24,7 @@ require (
 	k8s.io/client-go v0.24.2
 	k8s.io/klog/v2 v2.80.1
 	sigs.k8s.io/controller-runtime v0.12.2
-	sigs.k8s.io/gateway-api v0.5.1
+	sigs.k8s.io/gateway-api v0.5.1-0.20220815164014-854e2bfc5276
 )
 
 require (
@@ -47,10 +50,8 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/gnostic v0.5.7-v3refs // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/uuid v1.3.0 // indirect
 	github.com/imdario/mergo v0.3.12 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect

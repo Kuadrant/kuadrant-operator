@@ -9,6 +9,17 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - events
   verbs:
   - create
@@ -29,6 +40,18 @@ rules:
   - apiextensions.k8s.io
   resources:
   - customresourcedefinitions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apim.kuadrant.io
+  resources:
+  - authpolicies
   verbs:
   - create
   - delete
@@ -64,6 +87,18 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - apim.kuadrant.io
+  resources:
+  - ratelimitpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - apim.kuadrant.io
   resources:

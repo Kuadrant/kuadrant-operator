@@ -1,4 +1,4 @@
-package apim
+package controllers
 
 import (
 	"context"
@@ -6,8 +6,8 @@ import (
 
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,7 +18,7 @@ import (
 const APAvailableConditionType string = "Available"
 
 // reconcileStatus makes sure status block of AuthPolicy is up-to-date.
-func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *apimv1alpha1.AuthPolicy, specErr error) (ctrl.Result, error) {
+func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy, specErr error) (ctrl.Result, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger.V(1).Info("Reconciling AuthPolicy status", "spec error", specErr)
 
@@ -64,8 +64,8 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *apimv1al
 	return ctrl.Result{}, nil
 }
 
-func (r *AuthPolicyReconciler) calculateStatus(ap *apimv1alpha1.AuthPolicy, specErr error, authConfigReady bool) *apimv1alpha1.AuthPolicyStatus {
-	newStatus := &apimv1alpha1.AuthPolicyStatus{
+func (r *AuthPolicyReconciler) calculateStatus(ap *kuadrantv1beta1.AuthPolicy, specErr error, authConfigReady bool) *kuadrantv1beta1.AuthPolicyStatus {
+	newStatus := &kuadrantv1beta1.AuthPolicyStatus{
 		Conditions:         common.CopyConditions(ap.Status.Conditions),
 		ObservedGeneration: ap.Generation,
 	}

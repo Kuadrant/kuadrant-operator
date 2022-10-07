@@ -1,4 +1,4 @@
-package apim
+package controllers
 
 import (
 	"context"
@@ -8,9 +8,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	"github.com/kuadrant/kuadrant-controller/pkg/rlptools"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
 const (
@@ -18,7 +18,7 @@ const (
 	rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
 )
 
-func (r *RateLimitPolicyReconciler) finalizeRLP(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+func (r *RateLimitPolicyReconciler) finalizeRLP(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.V(1).Info("Handling removal of ratelimitpolicy object")
 
@@ -54,7 +54,7 @@ func (r *RateLimitPolicyReconciler) finalizeRLP(ctx context.Context, rlp *apimv1
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) computeFinalizeGatewayDiff(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) (*gatewayDiff, error) {
+func (r *RateLimitPolicyReconciler) computeFinalizeGatewayDiff(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) (*gatewayDiff, error) {
 	logger, _ := logr.FromContext(ctx)
 
 	// Prepare gatewayDiff object only with LeftGateways list populated.
@@ -87,7 +87,7 @@ func (r *RateLimitPolicyReconciler) computeFinalizeGatewayDiff(ctx context.Conte
 	return gwDiff, nil
 }
 
-func (r *RateLimitPolicyReconciler) deleteNetworkResourceBackReference(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+func (r *RateLimitPolicyReconciler) deleteNetworkResourceBackReference(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) error {
 	return r.DeleteTargetBackReference(ctx, client.ObjectKeyFromObject(rlp), rlp.Spec.TargetRef,
 		rlp.Namespace, common.RateLimitPolicyBackRefAnnotation)
 }

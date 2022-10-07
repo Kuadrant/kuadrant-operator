@@ -10,18 +10,18 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
-type LimitsByDomain map[string][]apimv1alpha1.Limit
+type LimitsByDomain map[string][]kuadrantv1beta1.Limit
 
 func (l LimitsByDomain) String() string {
 	jsonData, _ := json.MarshalIndent(l, "", "  ")
 	return string(jsonData)
 }
 
-type LimitList []apimv1alpha1.Limit
+type LimitList []kuadrantv1beta1.Limit
 
 func (l LimitList) Len() int {
 	return len(l)
@@ -76,13 +76,13 @@ func (l LimitList) Swap(i, j int) {
 	l[i], l[j] = l[j], l[i]
 }
 
-func SameLimitList(a, b []apimv1alpha1.Limit) bool {
+func SameLimitList(a, b []kuadrantv1beta1.Limit) bool {
 	if len(a) != len(b) {
 		return false
 	}
 
-	aCopy := make([]apimv1alpha1.Limit, len(a))
-	bCopy := make([]apimv1alpha1.Limit, len(b))
+	aCopy := make([]kuadrantv1beta1.Limit, len(a))
+	bCopy := make([]kuadrantv1beta1.Limit, len(b))
 
 	copy(aCopy, a)
 	copy(bCopy, b)
@@ -156,7 +156,7 @@ func (l *LimitIndex) AddGatewayLimits(gwKey client.ObjectKey, gwLimits LimitsByD
 }
 
 // AddLimit adds one new limit to the index structure
-func (l *LimitIndex) AddLimit(gwKey client.ObjectKey, domain string, limit *apimv1alpha1.Limit) {
+func (l *LimitIndex) AddLimit(gwKey client.ObjectKey, domain string, limit *kuadrantv1beta1.Limit) {
 	if _, ok := l.gatewayLimits[gwKey]; !ok {
 		l.gatewayLimits[gwKey] = make(LimitsByDomain)
 	}
@@ -178,7 +178,7 @@ func (l *LimitIndex) AddLimitFromRateLimit(limit *limitadorv1alpha1.RateLimit) {
 		return
 	}
 
-	l.AddLimit(gwKey, domain, apimv1alpha1.LimitFromLimitadorRateLimit(limit))
+	l.AddLimit(gwKey, domain, kuadrantv1beta1.LimitFromLimitadorRateLimit(limit))
 }
 
 func (l *LimitIndex) Equals(other *LimitIndex) bool {

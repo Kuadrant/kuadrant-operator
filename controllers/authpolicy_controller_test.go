@@ -1,6 +1,6 @@
 //go:build integration
 
-package apim
+package controllers
 
 import (
 	"context"
@@ -19,8 +19,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 const GatewayName = "istio-ingressgateway"
@@ -120,19 +120,19 @@ var _ = Describe("AuthPolicy controller", func() {
 	})
 })
 
-func authPolicies(namespace string) []*apimv1alpha1.AuthPolicy {
-	routePolicy := &apimv1alpha1.AuthPolicy{
+func authPolicies(namespace string) []*kuadrantv1beta1.AuthPolicy {
+	routePolicy := &kuadrantv1beta1.AuthPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "target-route",
 			Namespace: namespace,
 		},
-		Spec: apimv1alpha1.AuthPolicySpec{
+		Spec: kuadrantv1beta1.AuthPolicySpec{
 			TargetRef: v1alpha2.PolicyTargetReference{
 				Group: "gateway.networking.k8s.io",
 				Kind:  "HTTPRoute",
 				Name:  "toystore",
 			},
-			AuthRules: []*apimv1alpha1.AuthRule{
+			AuthRules: []*kuadrantv1beta1.AuthRule{
 				{
 					Hosts:   []string{"*.toystore.com"},
 					Methods: []string{"DELETE", "POST"},
@@ -168,10 +168,10 @@ func authPolicies(namespace string) []*apimv1alpha1.AuthPolicy {
 	gatewayPolicy.SetNamespace("istio-system")
 	gatewayPolicy.Spec.TargetRef.Kind = "Gateway"
 	gatewayPolicy.Spec.TargetRef.Name = GatewayName
-	gatewayPolicy.Spec.AuthRules = []*apimv1alpha1.AuthRule{
+	gatewayPolicy.Spec.AuthRules = []*kuadrantv1beta1.AuthRule{
 		{Hosts: []string{"*.toystore.com"}},
 	}
 	gatewayPolicy.Spec.AuthScheme.Identity[0].APIKey.Selector.MatchLabels["admin"] = "yes"
 
-	return []*apimv1alpha1.AuthPolicy{routePolicy, gatewayPolicy}
+	return []*kuadrantv1beta1.AuthPolicy{routePolicy, gatewayPolicy}
 }

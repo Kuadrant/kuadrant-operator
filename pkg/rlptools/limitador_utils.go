@@ -1,7 +1,7 @@
 package rlptools
 
 import (
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 // TODO: we might want to have every single ENV in the same file

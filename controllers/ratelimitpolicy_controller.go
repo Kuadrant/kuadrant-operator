@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package apim
+package controllers
 
 import (
 	"context"
@@ -30,10 +30,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
-	"github.com/kuadrant/kuadrant-controller/pkg/rlptools"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
 // RateLimitPolicyReconciler reconciles a RateLimitPolicy object
@@ -65,7 +65,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	logger.Info("Reconciling RateLimitPolicy")
 	ctx := logr.NewContext(eventCtx, logger)
 
-	rlp := &apimv1alpha1.RateLimitPolicy{}
+	rlp := &kuadrantv1beta1.RateLimitPolicy{}
 	if err := r.Client().Get(ctx, req.NamespacedName, rlp); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("no RateLimitPolicy found")
@@ -134,7 +134,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileSpec(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) (ctrl.Result, error) {
+func (r *RateLimitPolicyReconciler) reconcileSpec(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) (ctrl.Result, error) {
 	err := rlp.Validate()
 	if err != nil {
 		return ctrl.Result{}, err
@@ -159,7 +159,7 @@ func (r *RateLimitPolicyReconciler) reconcileSpec(ctx context.Context, rlp *apim
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileGatewayDiffs(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+func (r *RateLimitPolicyReconciler) reconcileGatewayDiffs(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) error {
 	// Reconcile based on gateway diffs:
 	// * Limits
 	// * WASM Plugin configuration object
@@ -206,7 +206,7 @@ type gatewayDiff struct {
 // * list of gateways to which the RLP applies for the first time
 // * list of gateways to which the RLP no longer apply
 // * list of gateways to which the RLP still applies
-func (r *RateLimitPolicyReconciler) computeGatewayDiffs(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) (*gatewayDiff, error) {
+func (r *RateLimitPolicyReconciler) computeGatewayDiffs(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) (*gatewayDiff, error) {
 	logger, _ := logr.FromContext(ctx)
 
 	gwKeys, err := r.TargetedGatewayKeys(ctx, rlp.Spec.TargetRef, rlp.Namespace)
@@ -235,12 +235,12 @@ func (r *RateLimitPolicyReconciler) computeGatewayDiffs(ctx context.Context, rlp
 	return gwDiff, nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileDirectBackReference(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+func (r *RateLimitPolicyReconciler) reconcileDirectBackReference(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) error {
 	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(rlp), rlp.Spec.TargetRef,
 		rlp.Namespace, common.RateLimitPolicyBackRefAnnotation)
 }
 
-func (r *RateLimitPolicyReconciler) reconcileGatewayRLPReferences(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
+func (r *RateLimitPolicyReconciler) reconcileGatewayRLPReferences(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
 	logger, _ := logr.FromContext(ctx)
 
 	for _, leftGateway := range gwDiffObj.LeftGateways {
@@ -265,7 +265,7 @@ func (r *RateLimitPolicyReconciler) reconcileGatewayRLPReferences(ctx context.Co
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) validateRuleHosts(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) error {
+func (r *RateLimitPolicyReconciler) validateRuleHosts(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) error {
 	targetHostnames, err := r.TargetHostnames(ctx, rlp.Spec.TargetRef, rlp.Namespace)
 	if err != nil {
 		return err
@@ -298,7 +298,7 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Client: r.Client(),
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&apimv1alpha1.RateLimitPolicy{}).
+		For(&kuadrantv1beta1.RateLimitPolicy{}).
 		Watches(
 			&source.Kind{Type: &gatewayapiv1alpha2.HTTPRoute{}},
 			handler.EnqueueRequestsFromMapFunc(httpRouteEventMapper.MapToRateLimitPolicy),
@@ -311,7 +311,7 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		// When gateway level RLP changes, notify route level RLP's
 		Watches(
-			&source.Kind{Type: &apimv1alpha1.RateLimitPolicy{}},
+			&source.Kind{Type: &kuadrantv1beta1.RateLimitPolicy{}},
 			handler.EnqueueRequestsFromMapFunc(gatewayRateLimtPolicyEventMapper.MapRouteRateLimitPolicy),
 		).
 		Complete(r)

@@ -1,4 +1,4 @@
-package apim
+package controllers
 
 import (
 	"context"
@@ -13,15 +13,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 const (
 	RLPAvailableConditionType string = "Available"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy, specErr error) (ctrl.Result, error) {
+func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, specErr error) (ctrl.Result, error) {
 	logger, _ := logr.FromContext(ctx)
 	newStatus, err := r.calculateStatus(ctx, rlp, specErr)
 	if err != nil {
@@ -60,8 +60,8 @@ func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *ap
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyReconciler) calculateStatus(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy, specErr error) (*apimv1alpha1.RateLimitPolicyStatus, error) {
-	newStatus := &apimv1alpha1.RateLimitPolicyStatus{
+func (r *RateLimitPolicyReconciler) calculateStatus(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, specErr error) (*kuadrantv1beta1.RateLimitPolicyStatus, error) {
+	newStatus := &kuadrantv1beta1.RateLimitPolicyStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions:         common.CopyConditions(rlp.Status.Conditions),
 		ObservedGeneration: rlp.Status.ObservedGeneration,
@@ -102,7 +102,7 @@ func (r *RateLimitPolicyReconciler) availableCondition(specErr error) *metav1.Co
 
 // gatewaysRateLimits returns all gateway level rate limits configuration from all the
 // gateways where this rate limit policy adds configuration
-func (r *RateLimitPolicyReconciler) gatewaysRateLimits(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy) ([]apimv1alpha1.GatewayRateLimits, error) {
+func (r *RateLimitPolicyReconciler) gatewaysRateLimits(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) ([]kuadrantv1beta1.GatewayRateLimits, error) {
 	logger, _ := logr.FromContext(ctx)
 	gwKeys, err := r.TargetedGatewayKeys(ctx, rlp.Spec.TargetRef, rlp.Namespace)
 	if err != nil {
@@ -113,7 +113,7 @@ func (r *RateLimitPolicyReconciler) gatewaysRateLimits(ctx context.Context, rlp 
 		}
 	}
 
-	result := make([]apimv1alpha1.GatewayRateLimits, 0)
+	result := make([]kuadrantv1beta1.GatewayRateLimits, 0)
 
 	for _, gwKey := range gwKeys {
 		gw := &gatewayapiv1alpha2.Gateway{}
@@ -136,7 +136,7 @@ func (r *RateLimitPolicyReconciler) gatewaysRateLimits(ctx context.Context, rlp 
 				logger.V(1).Info("gatewaysRateLimits", "cannot parse rlp back ref key", rlpKey, "err", err)
 				continue
 			}
-			gwRLP := &apimv1alpha1.RateLimitPolicy{}
+			gwRLP := &kuadrantv1beta1.RateLimitPolicy{}
 			err = r.Client().Get(ctx, rlpKey, gwRLP)
 			logger.V(1).Info("gatewaysRateLimits", "get gateway rlp", rlpKey, "err", err)
 			if err != nil {
@@ -146,7 +146,7 @@ func (r *RateLimitPolicyReconciler) gatewaysRateLimits(ctx context.Context, rlp 
 				return nil, err
 			}
 
-			result = append(result, apimv1alpha1.GatewayRateLimits{
+			result = append(result, kuadrantv1beta1.GatewayRateLimits{
 				GatewayName: gwKey.String(),
 				RateLimits:  gwRLP.Spec.RateLimits,
 			})

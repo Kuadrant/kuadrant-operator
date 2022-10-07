@@ -1,4 +1,4 @@
-package apim
+package controllers
 
 import (
 	"context"
@@ -18,9 +18,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	"github.com/kuadrant/kuadrant-controller/pkg/reconcilers"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
 // AuthPolicyReconciler reconciles a AuthPolicy object
@@ -43,7 +43,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	logger.Info("Reconciling AuthPolicy")
 	ctx := logr.NewContext(eventCtx, logger)
 
-	var ap apimv1alpha1.AuthPolicy
+	var ap kuadrantv1beta1.AuthPolicy
 	if err := r.Client().Get(ctx, req.NamespacedName, &ap); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("no AuthPolicy found")
@@ -113,7 +113,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	return ctrl.Result{}, nil
 }
 
-func (r *AuthPolicyReconciler) reconcileSpec(ctx context.Context, ap *apimv1alpha1.AuthPolicy) (ctrl.Result, error) {
+func (r *AuthPolicyReconciler) reconcileSpec(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) (ctrl.Result, error) {
 	if err := ap.Validate(); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -137,7 +137,7 @@ func (r *AuthPolicyReconciler) reconcileSpec(ctx context.Context, ap *apimv1alph
 	return ctrl.Result{}, nil
 }
 
-func (r *AuthPolicyReconciler) enforceHierarchicalConstraints(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
+func (r *AuthPolicyReconciler) enforceHierarchicalConstraints(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {
 	targetHostnames, err := r.TargetHostnames(ctx, ap.Spec.TargetRef, ap.Namespace)
 	if err != nil {
 		return err
@@ -159,7 +159,7 @@ func (r *AuthPolicyReconciler) enforceHierarchicalConstraints(ctx context.Contex
 	return nil
 }
 
-func (r *AuthPolicyReconciler) reconcileAuthSchemes(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
+func (r *AuthPolicyReconciler) reconcileAuthSchemes(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {
 	logger, _ := logr.FromContext(ctx)
 
 	apKey := client.ObjectKeyFromObject(ap)
@@ -180,7 +180,7 @@ func (r *AuthPolicyReconciler) reconcileAuthSchemes(ctx context.Context, ap *api
 }
 
 // reconcileAuthRules translates and reconciles `AuthRules` into an Istio AuthorizationPoilcy containing them.
-func (r *AuthPolicyReconciler) reconcileAuthRules(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
+func (r *AuthPolicyReconciler) reconcileAuthRules(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {
 	logger, _ := logr.FromContext(ctx)
 
 	toRules := []*secv1beta1types.Rule_To{}
@@ -262,12 +262,12 @@ func (r *AuthPolicyReconciler) reconcileAuthRules(ctx context.Context, ap *apimv
 	return nil
 }
 
-func (r *AuthPolicyReconciler) reconcileNetworkResourceBackReference(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
+func (r *AuthPolicyReconciler) reconcileNetworkResourceBackReference(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {
 	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(ap), ap.Spec.TargetRef,
 		ap.Namespace, common.AuthPolicyBackRefAnnotation)
 }
 
-func (r *AuthPolicyReconciler) removeAuthSchemes(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
+func (r *AuthPolicyReconciler) removeAuthSchemes(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("Removing Authorino's AuthConfigs")
 
@@ -290,7 +290,7 @@ func (r *AuthPolicyReconciler) removeAuthSchemes(ctx context.Context, ap *apimv1
 	return nil
 }
 
-func (r *AuthPolicyReconciler) removeIstioAuthPolicy(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
+func (r *AuthPolicyReconciler) removeIstioAuthPolicy(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("Removing Istio's AuthorizationPolicy")
 
@@ -322,7 +322,7 @@ func (r *AuthPolicyReconciler) removeIstioAuthPolicy(ctx context.Context, ap *ap
 	return nil
 }
 
-func (r *AuthPolicyReconciler) deleteNetworkResourceBackReference(ctx context.Context, ap *apimv1alpha1.AuthPolicy) error {
+func (r *AuthPolicyReconciler) deleteNetworkResourceBackReference(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {
 	return r.DeleteTargetBackReference(ctx, client.ObjectKeyFromObject(ap), ap.Spec.TargetRef,
 		ap.Namespace, common.AuthPolicyBackRefAnnotation)
 }
@@ -333,7 +333,7 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Logger: r.Logger().WithName("httpRouteHandler"),
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&apimv1alpha1.AuthPolicy{}).
+		For(&kuadrantv1beta1.AuthPolicy{}).
 		Watches(
 			&source.Kind{Type: &gatewayapiv1alpha2.HTTPRoute{}},
 			handler.EnqueueRequestsFromMapFunc(HTTPRouteEventMapper.MapToAuthPolicy),

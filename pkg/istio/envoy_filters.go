@@ -8,7 +8,7 @@ import (
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 // LimitadorClusterPatch returns an EnvoyFilter patch that adds a custom cluster entry to compensate for kuadrant/limitador#53.

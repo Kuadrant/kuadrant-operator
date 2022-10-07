@@ -1,4 +1,4 @@
-package apim
+package controllers
 
 import (
 	"context"
@@ -12,12 +12,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	"github.com/kuadrant/kuadrant-controller/pkg/rlptools"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
+func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
 	logger, _ := logr.FromContext(ctx)
 
 	for _, leftGateway := range gwDiffObj.LeftGateways {
@@ -125,10 +125,10 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 	gw rlptools.GatewayWrapper, rlpRefs []client.ObjectKey) (*rlptools.WASMPlugin, error) {
 	logger, _ := logr.FromContext(ctx)
 
-	routeRLPList := make([]*apimv1alpha1.RateLimitPolicy, 0)
-	var gwRLP *apimv1alpha1.RateLimitPolicy
+	routeRLPList := make([]*kuadrantv1beta1.RateLimitPolicy, 0)
+	var gwRLP *kuadrantv1beta1.RateLimitPolicy
 	for _, rlpKey := range rlpRefs {
-		rlp := &apimv1alpha1.RateLimitPolicy{}
+		rlp := &kuadrantv1beta1.RateLimitPolicy{}
 		err := r.Client().Get(ctx, rlpKey, rlp)
 		logger.V(1).Info("wasmPluginConfig", "get rlp", rlpKey, "err", err)
 		if err != nil {
@@ -194,7 +194,7 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 }
 
 // merge operations currently implemented with list append operation
-func mergeGatewayActions(routeRLP *apimv1alpha1.RateLimitPolicy, gwRLP *apimv1alpha1.RateLimitPolicy, route *gatewayapiv1alpha2.HTTPRoute) []rlptools.GatewayAction {
+func mergeGatewayActions(routeRLP *kuadrantv1beta1.RateLimitPolicy, gwRLP *kuadrantv1beta1.RateLimitPolicy, route *gatewayapiv1alpha2.HTTPRoute) []rlptools.GatewayAction {
 	gatewayActions := rlptools.GatewayActionsFromRateLimitPolicy(routeRLP, route)
 
 	if gwRLP == nil {

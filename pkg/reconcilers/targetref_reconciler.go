@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 type TargetRefReconciler struct {
@@ -73,7 +73,7 @@ func (r *TargetRefReconciler) FetchValidHTTPRoute(ctx context.Context, key clien
 	// Check HTTProute parents (gateways) in the status object
 	// if any of the current parent gateways reports not "Admitted", return error
 	for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
-		routeParentStatus := func(pRef gatewayapiv1alpha2.ParentRef) *gatewayapiv1alpha2.RouteParentStatus {
+		routeParentStatus := func(pRef gatewayapiv1alpha2.ParentReference) *gatewayapiv1alpha2.RouteParentStatus {
 			for idx := range httpRoute.Status.RouteStatus.Parents {
 				if reflect.DeepEqual(pRef, httpRoute.Status.RouteStatus.Parents[idx].ParentRef) {
 					return &httpRoute.Status.RouteStatus.Parents[idx]

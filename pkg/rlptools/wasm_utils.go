@@ -11,8 +11,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 var (
@@ -20,14 +20,14 @@ var (
 )
 
 type GatewayAction struct {
-	Configurations []apimv1alpha1.Configuration `json:"configurations"`
+	Configurations []kuadrantv1beta1.Configuration `json:"configurations"`
 
 	// +optional
-	Rules []apimv1alpha1.Rule `json:"rules,omitempty"`
+	Rules []kuadrantv1beta1.Rule `json:"rules,omitempty"`
 }
 
 // GatewayActionsFromRateLimitPolicy return flatten list from GatewayAction from the RLP
-func GatewayActionsFromRateLimitPolicy(rlp *apimv1alpha1.RateLimitPolicy, route *gatewayapiv1alpha2.HTTPRoute) []GatewayAction {
+func GatewayActionsFromRateLimitPolicy(rlp *kuadrantv1beta1.RateLimitPolicy, route *gatewayapiv1alpha2.HTTPRoute) []GatewayAction {
 	flattenActions := make([]GatewayAction, 0)
 	if rlp == nil {
 		return flattenActions
@@ -49,11 +49,11 @@ func GatewayActionsFromRateLimitPolicy(rlp *apimv1alpha1.RateLimitPolicy, route 
 	return flattenActions
 }
 
-func HTTPRouteRulesToRLPRules(httpRouteRules []common.HTTPRouteRule) []apimv1alpha1.Rule {
-	rlpRules := make([]apimv1alpha1.Rule, 0, len(httpRouteRules))
+func HTTPRouteRulesToRLPRules(httpRouteRules []common.HTTPRouteRule) []kuadrantv1beta1.Rule {
+	rlpRules := make([]kuadrantv1beta1.Rule, 0, len(httpRouteRules))
 	for idx := range httpRouteRules {
 		var tmp []string
-		rlpRules = append(rlpRules, apimv1alpha1.Rule{
+		rlpRules = append(rlpRules, kuadrantv1beta1.Rule{
 			// copy slice
 			Paths:   append(tmp, httpRouteRules[idx].Paths...),
 			Methods: append(tmp, httpRouteRules[idx].Methods...),

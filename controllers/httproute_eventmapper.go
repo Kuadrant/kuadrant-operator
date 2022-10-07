@@ -1,11 +1,11 @@
-package apim
+package controllers
 
 import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 // HTTPRouteEventMapper is an EventHandler that maps HTTPRoute object events to Policy events.

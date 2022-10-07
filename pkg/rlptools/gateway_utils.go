@@ -6,7 +6,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 func NewGateways(gwList *gatewayapiv1alpha2.GatewayList,

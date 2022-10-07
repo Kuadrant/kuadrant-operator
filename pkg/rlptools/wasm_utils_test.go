@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -15,10 +15,10 @@ func TestHTTPRouteRulesToRLPRules(t *testing.T) {
 	testCases := []struct {
 		name             string
 		routeRules       []common.HTTPRouteRule
-		expectedRLPRules []apimv1alpha1.Rule
+		expectedRLPRules []kuadrantv1beta1.Rule
 	}{
 		{
-			"nil rules", nil, make([]apimv1alpha1.Rule, 0),
+			"nil rules", nil, make([]kuadrantv1beta1.Rule, 0),
 		},
 		{
 			"rule with paths methods and hosts",
@@ -28,7 +28,7 @@ func TestHTTPRouteRulesToRLPRules(t *testing.T) {
 					Paths:   []string{"/admin/*", "/cats"},
 					Methods: []string{"GET", "POST"},
 				},
-			}, []apimv1alpha1.Rule{
+			}, []kuadrantv1beta1.Rule{
 				{
 					Hosts:   []string{"*", "*.example.com"},
 					Paths:   []string{"/admin/*", "/cats"},
@@ -72,11 +72,11 @@ func TestGatewayActionsFromRateLimitPolicy(t *testing.T) {
 		},
 	}
 
-	rlp := &apimv1alpha1.RateLimitPolicy{
-		Spec: apimv1alpha1.RateLimitPolicySpec{
-			RateLimits: []apimv1alpha1.RateLimit{
+	rlp := &kuadrantv1beta1.RateLimitPolicy{
+		Spec: kuadrantv1beta1.RateLimitPolicySpec{
+			RateLimits: []kuadrantv1beta1.RateLimit{
 				{
-					Rules: []apimv1alpha1.Rule{
+					Rules: []kuadrantv1beta1.Rule{
 						{
 							Hosts: []string{"*.protected.example.com"},
 						},
@@ -91,14 +91,14 @@ func TestGatewayActionsFromRateLimitPolicy(t *testing.T) {
 
 	expectedGatewayActions := []GatewayAction{
 		{
-			Rules: []apimv1alpha1.Rule{
+			Rules: []kuadrantv1beta1.Rule{
 				{
 					Hosts: []string{"*.protected.example.com"},
 				},
 			},
 		},
 		{
-			Rules: []apimv1alpha1.Rule{
+			Rules: []kuadrantv1beta1.Rule{
 				{
 					Hosts:   []string{"*.example.com"},
 					Paths:   []string{"/toy*"},

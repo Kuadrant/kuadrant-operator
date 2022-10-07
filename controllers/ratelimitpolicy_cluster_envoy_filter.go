@@ -1,4 +1,4 @@
-package apim
+package controllers
 
 import (
 	"context"
@@ -12,13 +12,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	kuadrantistioutils "github.com/kuadrant/kuadrant-controller/pkg/istio"
-	"github.com/kuadrant/kuadrant-controller/pkg/rlptools"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
+func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
 	logger, _ := logr.FromContext(ctx)
 
 	for _, leftGateway := range gwDiffObj.LeftGateways {

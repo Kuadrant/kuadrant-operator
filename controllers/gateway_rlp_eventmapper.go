@@ -1,4 +1,4 @@
-package apim
+package controllers
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	"github.com/kuadrant/kuadrant-controller/pkg/rlptools"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
 // GatewayRateLimitPolicyEventMapper is an EventHandler that maps:
@@ -23,9 +23,9 @@ type GatewayRateLimitPolicyEventMapper struct {
 }
 
 func (h *GatewayRateLimitPolicyEventMapper) MapRouteRateLimitPolicy(obj client.Object) []reconcile.Request {
-	rlp, ok := obj.(*apimv1alpha1.RateLimitPolicy)
+	rlp, ok := obj.(*kuadrantv1beta1.RateLimitPolicy)
 	if !ok {
-		h.Logger.V(1).Info("MapRouteRateLimitPolicy: RLP not received", "error", fmt.Sprintf("%T is not a *apimv1alpha1.RateLimitPolicy", obj))
+		h.Logger.V(1).Info("MapRouteRateLimitPolicy: RLP not received", "error", fmt.Sprintf("%T is not a *kuadrantv1beta1.RateLimitPolicy", obj))
 		return []reconcile.Request{}
 	}
 

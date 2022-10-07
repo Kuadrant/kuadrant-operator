@@ -1,4 +1,4 @@
-package apim
+package controllers
 
 import (
 	"context"
@@ -9,12 +9,12 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	"github.com/kuadrant/kuadrant-controller/pkg/rlptools"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *apimv1alpha1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
+func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
 	logger, _ := logr.FromContext(ctx)
 	limitadorKey := client.ObjectKey{Name: rlptools.LimitadorName, Namespace: rlptools.LimitadorNamespace}
 	limitador := &limitadorv1alpha1.Limitador{}
@@ -106,10 +106,10 @@ func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context,
 	logger.V(1).Info("gatewayLimits", "gwKey", gw.Key(), "rlpRefs", rlpRefs)
 
 	// Load all rate limit policies
-	routeRLPList := make([]*apimv1alpha1.RateLimitPolicy, 0)
-	var gwRLP *apimv1alpha1.RateLimitPolicy
+	routeRLPList := make([]*kuadrantv1beta1.RateLimitPolicy, 0)
+	var gwRLP *kuadrantv1beta1.RateLimitPolicy
 	for _, rlpKey := range rlpRefs {
-		rlp := &apimv1alpha1.RateLimitPolicy{}
+		rlp := &kuadrantv1beta1.RateLimitPolicy{}
 		err := r.Client().Get(ctx, rlpKey, rlp)
 		logger.V(1).Info("gatewayLimits", "get rlp", rlpKey, "err", err)
 		if err != nil {
@@ -158,7 +158,7 @@ func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context,
 }
 
 // merged currently implemented with list append operation
-func mergeLimits(routeRLP *apimv1alpha1.RateLimitPolicy, gwRLP *apimv1alpha1.RateLimitPolicy) []apimv1alpha1.Limit {
+func mergeLimits(routeRLP *kuadrantv1beta1.RateLimitPolicy, gwRLP *kuadrantv1beta1.RateLimitPolicy) []kuadrantv1beta1.Limit {
 	limits := routeRLP.FlattenLimits()
 
 	if gwRLP == nil {

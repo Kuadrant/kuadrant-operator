@@ -1,6 +1,6 @@
 //go:build integration
 
-package apim
+package controllers
 
 import (
 	"context"
@@ -17,9 +17,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	apimv1alpha1 "github.com/kuadrant/kuadrant-controller/apis/apim/v1alpha1"
-	"github.com/kuadrant/kuadrant-controller/pkg/common"
-	"github.com/kuadrant/kuadrant-controller/pkg/rlptools"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 )
 
@@ -88,31 +88,31 @@ func testBuildBasicHttpRoute(routeName, gwName, ns string) *gatewayapiv1alpha2.H
 	}
 }
 
-func testBuildBasicRoutePolicy(policyName, ns, routeName string) *apimv1alpha1.RateLimitPolicy {
+func testBuildBasicRoutePolicy(policyName, ns, routeName string) *kuadrantv1beta1.RateLimitPolicy {
 	genericDescriptorKey := "op"
 
-	return &apimv1alpha1.RateLimitPolicy{
+	return &kuadrantv1beta1.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
-			APIVersion: apimv1alpha1.GroupVersion.String(),
+			APIVersion: kuadrantv1beta1.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      policyName,
 			Namespace: ns,
 		},
-		Spec: apimv1alpha1.RateLimitPolicySpec{
+		Spec: kuadrantv1beta1.RateLimitPolicySpec{
 			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 				Group: gatewayapiv1alpha2.Group("gateway.networking.k8s.io"),
 				Kind:  "HTTPRoute",
 				Name:  gatewayapiv1alpha2.ObjectName(routeName),
 			},
-			RateLimits: []apimv1alpha1.RateLimit{
+			RateLimits: []kuadrantv1beta1.RateLimit{
 				{
-					Configurations: []apimv1alpha1.Configuration{
+					Configurations: []kuadrantv1beta1.Configuration{
 						{
-							Actions: []apimv1alpha1.ActionSpecifier{
+							Actions: []kuadrantv1beta1.ActionSpecifier{
 								{
-									GenericKey: &apimv1alpha1.GenericKeySpec{
+									GenericKey: &kuadrantv1beta1.GenericKeySpec{
 										DescriptorValue: "1",
 										DescriptorKey:   &genericDescriptorKey,
 									},
@@ -120,7 +120,7 @@ func testBuildBasicRoutePolicy(policyName, ns, routeName string) *apimv1alpha1.R
 							},
 						},
 					},
-					Limits: []apimv1alpha1.Limit{
+					Limits: []kuadrantv1beta1.Limit{
 						{
 							MaxValue:   5,
 							Seconds:    10,
@@ -166,7 +166,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check RLP status is available
 			Eventually(func() bool {
-				existingRLP := &apimv1alpha1.RateLimitPolicy{}
+				existingRLP := &kuadrantv1beta1.RateLimitPolicy{}
 				err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
 				if err != nil {
 					return false
@@ -228,18 +228,18 @@ var _ = Describe("RateLimitPolicy controller", func() {
 						Hostnames:       []string{"*.example.com"},
 						GatewayActions: []rlptools.GatewayAction{
 							{
-								Rules: []apimv1alpha1.Rule{
+								Rules: []kuadrantv1beta1.Rule{
 									{
 										Hosts:   []string{"*.example.com"},
 										Paths:   []string{"/toy*"},
 										Methods: []string{"GET"},
 									},
 								},
-								Configurations: []apimv1alpha1.Configuration{
+								Configurations: []kuadrantv1beta1.Configuration{
 									{
-										Actions: []apimv1alpha1.ActionSpecifier{
+										Actions: []kuadrantv1beta1.ActionSpecifier{
 											{
-												GenericKey: &apimv1alpha1.GenericKeySpec{
+												GenericKey: &kuadrantv1beta1.GenericKeySpec{
 													DescriptorValue: "1",
 													DescriptorKey:   &genericDescriptorKey,
 												},

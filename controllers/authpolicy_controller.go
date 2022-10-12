@@ -32,9 +32,9 @@ const authPolicyFinalizer = "authpolicy.kuadrant.io/finalizer"
 
 var AuthProvider = common.FetchEnv("AUTH_PROVIDER", "kuadrant-authorization")
 
-//+kubebuilder:rbac:groups=apim.kuadrant.io,resources=authpolicies,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=apim.kuadrant.io,resources=authpolicies/finalizers,verbs=update
-//+kubebuilder:rbac:groups=apim.kuadrant.io,resources=authpolicies/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=authpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=authpolicies/finalizers,verbs=update
+//+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=authpolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=security.istio.io,resources=authorizationpolicies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
 

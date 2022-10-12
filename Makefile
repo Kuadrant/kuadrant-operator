@@ -68,6 +68,8 @@ endif
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+KUADRANT_NAMESPACE=kuadrant-system
+
 # Kuadrant component versions
 ## kuadrant controller
 #ToDo Pin this version once we have an initial release of the controller
@@ -155,6 +157,43 @@ clean-cov: ## Remove coverage report
 test: clean-cov manifests generate fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out -v -timeout 0
 
+.PHONY: namespace
+namespace: ## Creates a namespace where to deploy Kuadrant Operator
+	kubectl create namespace $(KUADRANT_NAMESPACE)
+
+.PHONY: local-setup
+local-setup: export IMG := $(IMAGE_TAG_BASE):dev
+local-setup: ## Deploy locally kuadrant operator from the current code
+	$(MAKE) local-env-setup
+	$(MAKE) docker-build
+	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
+	$(MAKE) deploy
+	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
+	@echo
+	@echo "Now you can export the kuadrant gateway by doing:"
+	@echo "kubectl port-forward -n istio-system service/istio-ingressgateway 8080:80 &"
+	@echo "after that, you can curl -H \"Host: myhost.com\" localhost:8080"
+	@echo "-- Linux only -- Ingress gateway is exported using nodePort service in port 9080"
+	@echo "curl -H \"Host: myhost.com\" localhost:9080"
+	@echo
+
+.PHONY: local-cleanup
+local-cleanup: ## Delete local cluster
+	$(MAKE) kind-delete-cluster
+
+# kuadrant is not deployed
+.PHONY: local-env-setup
+local-env-setup: ## Deploys all services and manifests required by kuadrant to run. Used to run kuadrant with "make run"
+	$(MAKE) kind-delete-cluster
+	$(MAKE) kind-create-cluster
+	$(MAKE) namespace
+	$(MAKE) gateway-api-install
+	$(MAKE) istio-install
+	$(MAKE) deploy-gateway
+	$(MAKE) deploy-dependencies
+	$(MAKE) install
+
+
 ##@ Build
 
 build: generate fmt vet ## Build manager binary.
@@ -186,6 +225,12 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/deploy | kubectl delete -f -
+
+deploy-dependencies: kustomize ## Deploy dependencies to the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/dependencies | kubectl apply -f -
+	kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments --all
+	kubectl apply -n "$(KUADRANT_NAMESPACE)" -f utils/local-deployment/authorino.yaml
+	kubectl apply -n "$(KUADRANT_NAMESPACE)" -f utils/local-deployment/limitador.yaml
 
 .PHONY: install-olm
 install-olm:

@@ -71,11 +71,11 @@ type KuadrantReconciler struct {
 //+kubebuilder:rbac:groups=coordination.k8s.io,resources=configmaps;leases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=leases,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="apim.kuadrant.io",resources=authpolicies;ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="apim.kuadrant.io",resources=authpolicies/finalizers,verbs=update
-//+kubebuilder:rbac:groups="apim.kuadrant.io",resources=ratelimitpolicies/finalizers,verbs=update
-//+kubebuilder:rbac:groups="apim.kuadrant.io",resources=authpolicies/status,verbs=get;patch;update
-//+kubebuilder:rbac:groups="apim.kuadrant.io",resources=ratelimitpolicies/status,verbs=get;patch;update
+//+kubebuilder:rbac:groups="kuadrant.kuadrant.io",resources=authpolicies;ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="kuadrant.kuadrant.io",resources=authpolicies/finalizers,verbs=update
+//+kubebuilder:rbac:groups="kuadrant.kuadrant.io",resources=ratelimitpolicies/finalizers,verbs=update
+//+kubebuilder:rbac:groups="kuadrant.kuadrant.io",resources=authpolicies/status,verbs=get;patch;update
+//+kubebuilder:rbac:groups="kuadrant.kuadrant.io",resources=ratelimitpolicies/status,verbs=get;patch;update
 //+kubebuilder:rbac:groups="gateway.networking.k8s.io",resources=gateways,verbs=get;list;watch;create;update;delete;patch
 //+kubebuilder:rbac:groups="gateway.networking.k8s.io",resources=httproutes,verbs=get;list;patch;update;watch
 //+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos,verbs=get;list;watch;create;update;delete;patch

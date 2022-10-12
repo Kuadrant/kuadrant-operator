@@ -27,16 +27,16 @@ spec:
   customresourcedefinitions:
     owned:
     - kind: AuthPolicy
-      name: authpolicies.apim.kuadrant.io
-      version: v1alpha1
+      name: authpolicies.kuadrant.kuadrant.io
+      version: v1beta1
     - description: Kuadrant is the Schema for the kuadrants API
       displayName: Kuadrant
       kind: Kuadrant
       name: kuadrants.kuadrant.kuadrant.io
       version: v1beta1
     - kind: RateLimitPolicy
-      name: ratelimitpolicies.apim.kuadrant.io
-      version: v1alpha1
+      name: ratelimitpolicies.kuadrant.kuadrant.io
+      version: v1beta1
   description: Kuadrant Operator
   displayName: Kuadrant
   icon:
@@ -88,71 +88,6 @@ spec:
           - patch
           - update
           - watch
-        - apiGroups:
-          - apim.kuadrant.io
-          resources:
-          - authpolicies
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - apim.kuadrant.io
-          resources:
-          - authpolicies
-          - ratelimitpolicies
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - apim.kuadrant.io
-          resources:
-          - authpolicies/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - apim.kuadrant.io
-          resources:
-          - authpolicies/status
-          verbs:
-          - get
-          - patch
-          - update
-        - apiGroups:
-          - apim.kuadrant.io
-          resources:
-          - ratelimitpolicies
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - apim.kuadrant.io
-          resources:
-          - ratelimitpolicies/finalizers
-          verbs:
-          - update
-        - apiGroups:
-          - apim.kuadrant.io
-          resources:
-          - ratelimitpolicies/status
-          verbs:
-          - get
-          - patch
-          - update
         - apiGroups:
           - apps
           resources:
@@ -252,6 +187,45 @@ spec:
         - apiGroups:
           - kuadrant.kuadrant.io
           resources:
+          - authpolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kuadrant.kuadrant.io
+          resources:
+          - authpolicies
+          - ratelimitpolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kuadrant.kuadrant.io
+          resources:
+          - authpolicies/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - kuadrant.kuadrant.io
+          resources:
+          - authpolicies/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - kuadrant.kuadrant.io
+          resources:
           - kuadrants
           verbs:
           - create
@@ -271,6 +245,32 @@ spec:
           - kuadrant.kuadrant.io
           resources:
           - kuadrants/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - kuadrant.kuadrant.io
+          resources:
+          - ratelimitpolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kuadrant.kuadrant.io
+          resources:
+          - ratelimitpolicies/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - kuadrant.kuadrant.io
+          resources:
+          - ratelimitpolicies/status
           verbs:
           - get
           - patch

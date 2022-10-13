@@ -229,8 +229,6 @@ undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/confi
 deploy-dependencies: kustomize ## Deploy dependencies to the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/dependencies | kubectl apply -f -
 	kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments --all
-	kubectl apply -n "$(KUADRANT_NAMESPACE)" -f utils/local-deployment/authorino.yaml
-	kubectl apply -n "$(KUADRANT_NAMESPACE)" -f utils/local-deployment/limitador.yaml
 
 .PHONY: install-olm
 install-olm:

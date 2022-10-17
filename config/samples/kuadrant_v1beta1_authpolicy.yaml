@@ -1,5 +1,5 @@
 ---
-apiVersion: kuadrant.kuadrant.io/v1beta1
+apiVersion: kuadrant.io/v1beta1
 kind: AuthPolicy
 metadata:
   name: toystore

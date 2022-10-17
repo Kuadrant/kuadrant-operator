@@ -6,9 +6,9 @@ metadata:
   creationTimestamp: null
   labels:
     app: kuadrant
-  name: ratelimitpolicies.kuadrant.kuadrant.io
+  name: ratelimitpolicies.kuadrant.io
 spec:
-  group: kuadrant.kuadrant.io
+  group: kuadrant.io
   names:
     kind: RateLimitPolicy
     listKind: RateLimitPolicyList

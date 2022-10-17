@@ -6,9 +6,9 @@ metadata:
   creationTimestamp: null
   labels:
     app: kuadrant
-  name: kuadrants.kuadrant.kuadrant.io
+  name: kuadrants.kuadrant.io
 spec:
-  group: kuadrant.kuadrant.io
+  group: kuadrant.io
   names:
     kind: Kuadrant
     listKind: KuadrantList

@@ -43,7 +43,7 @@ import (
 )
 
 const (
-	kuadrantFinalizer     = "kuadrant.kuadrant.io/finalizer"
+	kuadrantFinalizer     = "kuadrant.io/finalizer"
 	extAuthorizerName     = "kuadrant-authorization"
 	envLimitadorNamespace = "LIMITADOR_NAMESPACE"
 	envLimitadorName      = "LIMITADOR_NAME"
@@ -59,9 +59,9 @@ type KuadrantReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=kuadrants,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=kuadrants/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=kuadrants/finalizers,verbs=update
+//+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants/finalizers,verbs=update
 
 //+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;delete;patch
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;delete;patch
@@ -71,11 +71,11 @@ type KuadrantReconciler struct {
 //+kubebuilder:rbac:groups=coordination.k8s.io,resources=configmaps;leases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=leases,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="kuadrant.kuadrant.io",resources=authpolicies;ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="kuadrant.kuadrant.io",resources=authpolicies/finalizers,verbs=update
-//+kubebuilder:rbac:groups="kuadrant.kuadrant.io",resources=ratelimitpolicies/finalizers,verbs=update
-//+kubebuilder:rbac:groups="kuadrant.kuadrant.io",resources=authpolicies/status,verbs=get;patch;update
-//+kubebuilder:rbac:groups="kuadrant.kuadrant.io",resources=ratelimitpolicies/status,verbs=get;patch;update
+//+kubebuilder:rbac:groups="kuadrant.io",resources=authpolicies;ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="kuadrant.io",resources=authpolicies/finalizers,verbs=update
+//+kubebuilder:rbac:groups="kuadrant.io",resources=ratelimitpolicies/finalizers,verbs=update
+//+kubebuilder:rbac:groups="kuadrant.io",resources=authpolicies/status,verbs=get;patch;update
+//+kubebuilder:rbac:groups="kuadrant.io",resources=ratelimitpolicies/status,verbs=get;patch;update
 //+kubebuilder:rbac:groups="gateway.networking.k8s.io",resources=gateways,verbs=get;list;watch;create;update;delete;patch
 //+kubebuilder:rbac:groups="gateway.networking.k8s.io",resources=httproutes,verbs=get;list;patch;update;watch
 //+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos,verbs=get;list;watch;create;update;delete;patch

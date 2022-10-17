@@ -41,9 +41,9 @@ type RateLimitPolicyReconciler struct {
 	reconcilers.TargetRefReconciler
 }
 
-//+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=ratelimitpolicies/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
+//+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
 //+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=get;list;watch;create;update;patch;delete

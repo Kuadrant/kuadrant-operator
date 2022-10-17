@@ -19,7 +19,7 @@ spec:
     - description: Kuadrant is the Schema for the kuadrants API
       displayName: Kuadrant
       kind: Kuadrant
-      name: kuadrants.kuadrant.kuadrant.io
+      name: kuadrants.kuadrant.io
       version: v1beta1
   description: Kuadrant Operator
   displayName: Kuadrant

@@ -5,7 +5,7 @@ metadata:
     alm-examples: |-
       [
         {
-          "apiVersion": "kuadrant.kuadrant.io/v1beta1",
+          "apiVersion": "kuadrant.io/v1beta1",
           "kind": "Kuadrant",
           "metadata": {
             "name": "kuadrant-sample"
@@ -27,15 +27,15 @@ spec:
   customresourcedefinitions:
     owned:
     - kind: AuthPolicy
-      name: authpolicies.kuadrant.kuadrant.io
+      name: authpolicies.kuadrant.io
       version: v1beta1
     - description: Kuadrant is the Schema for the kuadrants API
       displayName: Kuadrant
       kind: Kuadrant
-      name: kuadrants.kuadrant.kuadrant.io
+      name: kuadrants.kuadrant.io
       version: v1beta1
     - kind: RateLimitPolicy
-      name: ratelimitpolicies.kuadrant.kuadrant.io
+      name: ratelimitpolicies.kuadrant.io
       version: v1beta1
   description: Kuadrant Operator
   displayName: Kuadrant
@@ -185,7 +185,7 @@ spec:
           - update
           - watch
         - apiGroups:
-          - kuadrant.kuadrant.io
+          - kuadrant.io
           resources:
           - authpolicies
           verbs:
@@ -197,7 +197,7 @@ spec:
           - update
           - watch
         - apiGroups:
-          - kuadrant.kuadrant.io
+          - kuadrant.io
           resources:
           - authpolicies
           - ratelimitpolicies
@@ -210,13 +210,13 @@ spec:
           - update
           - watch
         - apiGroups:
-          - kuadrant.kuadrant.io
+          - kuadrant.io
           resources:
           - authpolicies/finalizers
           verbs:
           - update
         - apiGroups:
-          - kuadrant.kuadrant.io
+          - kuadrant.io
           resources:
           - authpolicies/status
           verbs:
@@ -224,7 +224,7 @@ spec:
           - patch
           - update
         - apiGroups:
-          - kuadrant.kuadrant.io
+          - kuadrant.io
           resources:
           - kuadrants
           verbs:
@@ -236,13 +236,13 @@ spec:
           - update
           - watch
         - apiGroups:
-          - kuadrant.kuadrant.io
+          - kuadrant.io
           resources:
           - kuadrants/finalizers
           verbs:
           - update
         - apiGroups:
-          - kuadrant.kuadrant.io
+          - kuadrant.io
           resources:
           - kuadrants/status
           verbs:
@@ -250,7 +250,7 @@ spec:
           - patch
           - update
         - apiGroups:
-          - kuadrant.kuadrant.io
+          - kuadrant.io
           resources:
           - ratelimitpolicies
           verbs:
@@ -262,13 +262,13 @@ spec:
           - update
           - watch
         - apiGroups:
-          - kuadrant.kuadrant.io
+          - kuadrant.io
           resources:
           - ratelimitpolicies/finalizers
           verbs:
           - update
         - apiGroups:
-          - kuadrant.kuadrant.io
+          - kuadrant.io
           resources:
           - ratelimitpolicies/status
           verbs:

@@ -144,7 +144,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - kuadrant.kuadrant.io
+  - kuadrant.io
   resources:
   - authpolicies
   verbs:
@@ -156,7 +156,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - kuadrant.kuadrant.io
+  - kuadrant.io
   resources:
   - authpolicies
   - ratelimitpolicies
@@ -169,13 +169,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - kuadrant.kuadrant.io
+  - kuadrant.io
   resources:
   - authpolicies/finalizers
   verbs:
   - update
 - apiGroups:
-  - kuadrant.kuadrant.io
+  - kuadrant.io
   resources:
   - authpolicies/status
   verbs:
@@ -183,7 +183,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - kuadrant.kuadrant.io
+  - kuadrant.io
   resources:
   - kuadrants
   verbs:
@@ -195,13 +195,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - kuadrant.kuadrant.io
+  - kuadrant.io
   resources:
   - kuadrants/finalizers
   verbs:
   - update
 - apiGroups:
-  - kuadrant.kuadrant.io
+  - kuadrant.io
   resources:
   - kuadrants/status
   verbs:
@@ -209,7 +209,7 @@ rules:
   - patch
   - update
 - apiGroups:
-  - kuadrant.kuadrant.io
+  - kuadrant.io
   resources:
   - ratelimitpolicies
   verbs:
@@ -221,13 +221,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - kuadrant.kuadrant.io
+  - kuadrant.io
   resources:
   - ratelimitpolicies/finalizers
   verbs:
   - update
 - apiGroups:
-  - kuadrant.kuadrant.io
+  - kuadrant.io
   resources:
   - ratelimitpolicies/status
   verbs:

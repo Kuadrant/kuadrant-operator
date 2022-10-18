@@ -27,8 +27,6 @@ spec:
       containers:
       - command:
         - /manager
-        args:
-        - --leader-elect
         env:
         - name: RELATED_IMAGE_WASMSHIM
           value: "oci://quay.io/kuadrant/wasm-shim:latest"

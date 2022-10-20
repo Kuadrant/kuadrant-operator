@@ -134,7 +134,7 @@ func TestFetchValidHTTPRoute(t *testing.T) {
 		},
 		Spec: gatewayapiv1alpha2.HTTPRouteSpec{
 			CommonRouteSpec: gatewayapiv1alpha2.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1alpha2.ParentRef{
+				ParentRefs: []gatewayapiv1alpha2.ParentReference{
 					{
 						Name: "gwName",
 					},
@@ -145,7 +145,7 @@ func TestFetchValidHTTPRoute(t *testing.T) {
 			RouteStatus: gatewayapiv1alpha2.RouteStatus{
 				Parents: []gatewayapiv1alpha2.RouteParentStatus{
 					{
-						ParentRef: gatewayapiv1alpha2.ParentRef{
+						ParentRef: gatewayapiv1alpha2.ParentReference{
 							Name: "gwName",
 						},
 						Conditions: []metav1.Condition{
@@ -224,7 +224,7 @@ func TestFetchValidTargetRef(t *testing.T) {
 		},
 		Spec: gatewayapiv1alpha2.HTTPRouteSpec{
 			CommonRouteSpec: gatewayapiv1alpha2.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1alpha2.ParentRef{
+				ParentRefs: []gatewayapiv1alpha2.ParentReference{
 					{
 						Name: "gwName",
 					},
@@ -235,7 +235,7 @@ func TestFetchValidTargetRef(t *testing.T) {
 			RouteStatus: gatewayapiv1alpha2.RouteStatus{
 				Parents: []gatewayapiv1alpha2.RouteParentStatus{
 					{
-						ParentRef: gatewayapiv1alpha2.ParentRef{
+						ParentRef: gatewayapiv1alpha2.ParentReference{
 							Name: "gwName",
 						},
 						Conditions: []metav1.Condition{
@@ -320,7 +320,7 @@ func TestReconcileTargetBackReference(t *testing.T) {
 		},
 		Spec: gatewayapiv1alpha2.HTTPRouteSpec{
 			CommonRouteSpec: gatewayapiv1alpha2.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1alpha2.ParentRef{
+				ParentRefs: []gatewayapiv1alpha2.ParentReference{
 					{
 						Name: "gwName",
 					},
@@ -331,7 +331,7 @@ func TestReconcileTargetBackReference(t *testing.T) {
 			RouteStatus: gatewayapiv1alpha2.RouteStatus{
 				Parents: []gatewayapiv1alpha2.RouteParentStatus{
 					{
-						ParentRef: gatewayapiv1alpha2.ParentRef{
+						ParentRef: gatewayapiv1alpha2.ParentReference{
 							Name: "gwName",
 						},
 						Conditions: []metav1.Condition{
@@ -424,7 +424,7 @@ func TestTargetedGatewayKeys(t *testing.T) {
 		},
 		Spec: gatewayapiv1alpha2.HTTPRouteSpec{
 			CommonRouteSpec: gatewayapiv1alpha2.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1alpha2.ParentRef{
+				ParentRefs: []gatewayapiv1alpha2.ParentReference{
 					{
 						Name: "gwName",
 					},
@@ -435,7 +435,7 @@ func TestTargetedGatewayKeys(t *testing.T) {
 			RouteStatus: gatewayapiv1alpha2.RouteStatus{
 				Parents: []gatewayapiv1alpha2.RouteParentStatus{
 					{
-						ParentRef: gatewayapiv1alpha2.ParentRef{
+						ParentRef: gatewayapiv1alpha2.ParentReference{
 							Name: "gwName",
 						},
 						Conditions: []metav1.Condition{
@@ -515,7 +515,7 @@ func TestTargetHostnames(t *testing.T) {
 		Spec: gatewayapiv1alpha2.HTTPRouteSpec{
 			Hostnames: []gatewayapiv1alpha2.Hostname{"*.com", "*.net"},
 			CommonRouteSpec: gatewayapiv1alpha2.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1alpha2.ParentRef{
+				ParentRefs: []gatewayapiv1alpha2.ParentReference{
 					{
 						Name: "gwName",
 					},
@@ -526,7 +526,7 @@ func TestTargetHostnames(t *testing.T) {
 			RouteStatus: gatewayapiv1alpha2.RouteStatus{
 				Parents: []gatewayapiv1alpha2.RouteParentStatus{
 					{
-						ParentRef: gatewayapiv1alpha2.ParentRef{
+						ParentRef: gatewayapiv1alpha2.ParentReference{
 							Name: "gwName",
 						},
 						Conditions: []metav1.Condition{
@@ -611,7 +611,7 @@ func TestDeleteTargetBackReference(t *testing.T) {
 		},
 		Spec: gatewayapiv1alpha2.HTTPRouteSpec{
 			CommonRouteSpec: gatewayapiv1alpha2.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1alpha2.ParentRef{
+				ParentRefs: []gatewayapiv1alpha2.ParentReference{
 					{
 						Name: "gwName",
 					},
@@ -622,7 +622,7 @@ func TestDeleteTargetBackReference(t *testing.T) {
 			RouteStatus: gatewayapiv1alpha2.RouteStatus{
 				Parents: []gatewayapiv1alpha2.RouteParentStatus{
 					{
-						ParentRef: gatewayapiv1alpha2.ParentRef{
+						ParentRef: gatewayapiv1alpha2.ParentReference{
 							Name: "gwName",
 						},
 						Conditions: []metav1.Condition{

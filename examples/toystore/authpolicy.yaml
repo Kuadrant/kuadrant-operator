@@ -1,0 +1,58 @@
+---
+apiVersion: kuadrant.io/v1beta1
+kind: AuthPolicy
+metadata:
+  name: toystore
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
+  rules:
+  - hosts: ["*.toystore.com"]
+    methods: ["DELETE", "POST"]
+    paths: ["/admin*"]
+  authScheme:
+    hosts: ["api.toystore.com"]
+    identity:
+    - name: apikey
+      apiKey:
+        labelSelectors:
+          app: toystore
+      credentials:
+        in: authorization_header
+        keySelector: APIKEY
+    response:
+    - json:
+        properties:
+          - name: user-id
+            value: null
+            valueFrom:
+              authJSON: auth.identity.metadata.annotations.secret\.kuadrant\.io/user-id
+      name: rate-limit-apikey
+      wrapper: envoyDynamicMetadata
+      wrapperKey: ext_auth_data
+---
+apiVersion: kuadrant.io/v1beta1
+kind: AuthPolicy
+metadata:
+  name: toystore
+  namespace: istio-system
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: istio-ingressgateway
+  rules:
+  - hosts: ["*.toystore.com"]
+  authScheme:
+    hosts: ["api.toystore.com"]
+    identity:
+      - name: apikey
+        apiKey:
+          labelSelectors:
+            app: toystore
+            admin: "yes"
+        credentials:
+          in: authorization_header
+          keySelector: APIKEY

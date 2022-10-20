@@ -64,7 +64,7 @@ func testBuildBasicHttpRoute(routeName, gwName, ns string) *gatewayapiv1alpha2.H
 		},
 		Spec: gatewayapiv1alpha2.HTTPRouteSpec{
 			CommonRouteSpec: gatewayapiv1alpha2.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1alpha2.ParentRef{
+				ParentRefs: []gatewayapiv1alpha2.ParentReference{
 					{
 						Name: gatewayapiv1alpha2.ObjectName(gwName),
 					},

@@ -34,10 +34,10 @@ var _ = Describe("AuthPolicy controller", func() {
 
 	Context("Attach to HTTPRoute and Gateway", func() {
 		It("Should create and delete everything successfully", func() {
-			err := ApplyResources(filepath.Join("..", "..", "examples", "toystore", "toystore.yaml"), k8sClient, testNamespace)
+			err := ApplyResources(filepath.Join("..", "examples", "toystore", "toystore.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
 
-			err = ApplyResources(filepath.Join("..", "..", "examples", "toystore", "httproute.yaml"), k8sClient, testNamespace)
+			err = ApplyResources(filepath.Join("..", "examples", "toystore", "httproute.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
 
 			authpolicies := authPolicies(testNamespace)

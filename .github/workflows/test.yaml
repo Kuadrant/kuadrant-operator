@@ -2,10 +2,10 @@ name: Test
 
 on:
   push:
-    branches: [ 'main', 'master' ]
+    branches: [ 'main' ]
 
   pull_request:
-    branches: [ 'main', 'master' ]
+    branches: [ '*' ]
 
   schedule:
     - cron: "15 1 * * *"
@@ -59,7 +59,7 @@ jobs:
         uses: helm/kind-action@v1.2.0
         with:
           version: v0.11.0
-          config: utils/local-deployment/kind-cluster.yaml
+          config: utils/kind-cluster.yaml
           cluster_name: ${{ env.KIND_CLUSTER_NAME }}
           wait: 120s
       - name: Check cluster info

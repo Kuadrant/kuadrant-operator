@@ -74,7 +74,8 @@ endif
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
-KUADRANT_NAMESPACE=kuadrant-system
+# Kuadrant Namespace
+KUADRANT_NAMESPACE ?= kuadrant-system
 
 # Kuadrant component versions
 ## kuadrant controller

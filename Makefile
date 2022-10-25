@@ -205,6 +205,15 @@ local-env-setup: ## Deploys all services and manifests required by kuadrant to r
 	$(MAKE) deploy-dependencies
 	$(MAKE) install
 
+.PHONY: test-env-setup
+test-env-setup: ## Deploys all services and manifests required by kuadrant to run on CI.
+	$(MAKE) namespace
+	$(MAKE) gateway-api-install
+	$(MAKE) istio-install
+	$(MAKE) deploy-gateway
+	$(MAKE) deploy-dependencies
+	$(MAKE) install
+
 
 ##@ Build
 

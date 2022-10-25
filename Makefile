@@ -163,7 +163,7 @@ clean-cov: ## Remove coverage report
 .PHONY: test
 test: test-unit test-integration ## Run all tests
 
-test-integration: clean-cov generate fmt vet manifests envtest ## Run Integration tests.
+test-integration: clean-cov generate fmt vet envtest ## Run Integration tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)" USE_EXISTING_CLUSTER=true go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
 
 test-unit: clean-cov generate fmt vet ## Run Unit tests.
@@ -247,7 +247,7 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/deploy | kubectl delete -f -
 
-deploy-dependencies: kustomize ## Deploy dependencies to the K8s cluster specified in ~/.kube/config.
+deploy-dependencies: kustomize dependencies-manifests ## Deploy dependencies to the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/dependencies | kubectl apply -f -
 	kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments --all
 

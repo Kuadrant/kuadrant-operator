@@ -138,11 +138,13 @@ var _ = Describe("RateLimitPolicy controller", func() {
 	var (
 		testNamespace        string
 		genericDescriptorKey string = "op"
+		// TODO: Fix testing random namespace generation with dependencies getting config from ENV
+		kuadrantDefaultNamespace string = "kuadrant-system"
 	)
 
 	beforeEachCallback := func() {
 		CreateNamespace(&testNamespace)
-		ApplyKuadrantCR(testNamespace)
+		ApplyKuadrantCR(kuadrantDefaultNamespace)
 	}
 
 	BeforeEach(beforeEachCallback)
@@ -153,7 +155,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check Limitador Status is Ready
 			Eventually(func() bool {
 				limitador := &limitadorv1alpha1.Limitador{}
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "limitador", Namespace: testNamespace}, limitador)
+				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: rlptools.LimitadorName, Namespace: kuadrantDefaultNamespace}, limitador)
 				if err != nil {
 					return false
 				}

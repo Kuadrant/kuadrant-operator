@@ -41,6 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test
+      KUADRANT_NAMESPACE: kuadrant-system
     defaults:
       run:
         shell: bash
@@ -68,6 +69,9 @@ jobs:
       - name: Run make local-env-setup
         run: |
           make local-env-setup
+      - name: Wait for deployments
+        run: |
+          kubectl -n ${{ env.KUADRANT_NAMESPACE }} wait --timeout=300s --for=condition=Available deployments --all
       - name: Run integration tests
         run: |
           make test-integration

@@ -25,11 +25,15 @@ import (
 
 const GatewayName = "istio-ingressgateway"
 
-// TODO: Fix AuthPolicy reconciling and its tests
-var _ = XDescribe("AuthPolicy controller", func() {
+var _ = Describe("AuthPolicy controller", func() {
 	var testNamespace string
 
-	BeforeEach(CreateNamespaceCallback(&testNamespace))
+	beforeEachCallback := func() {
+		CreateNamespace(&testNamespace)
+		ApplyKuadrantCR(testNamespace)
+	}
+
+	BeforeEach(beforeEachCallback)
 
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 

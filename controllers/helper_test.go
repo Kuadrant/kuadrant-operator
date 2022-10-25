@@ -6,8 +6,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,29 +27,43 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func CreateNamespaceCallback(namespace *string) func() {
-	return func() {
-		var generatedTestNamespace = "test-namespace-" + uuid.New().String()
-
-		nsObject := &v1.Namespace{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
-			ObjectMeta: metav1.ObjectMeta{Name: generatedTestNamespace},
+func ApplyKuadrantCR(namespace string) {
+	err := ApplyResources(filepath.Join("..", "examples", "toystore", "kuadrant.yaml"), k8sClient, namespace)
+	Expect(err).ToNot(HaveOccurred())
+	Eventually(func() bool {
+		kuadrant := &kuadrantv1beta1.Kuadrant{}
+		err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "kuadrant-sample", Namespace: namespace}, kuadrant)
+		if err != nil {
+			return false
 		}
+		if !meta.IsStatusConditionTrue(kuadrant.Status.Conditions, "Ready") {
+			return false
+		}
+		return true
+	}, time.Minute, 5*time.Second).Should(BeTrue())
+}
 
-		err := testClient().Create(context.Background(), nsObject)
-		Expect(err).ToNot(HaveOccurred())
+func CreateNamespace(namespace *string) {
+	var generatedTestNamespace = "test-namespace-" + uuid.New().String()
 
-		existingNamespace := &v1.Namespace{}
-		Eventually(func() bool {
-			err := testClient().Get(context.Background(), types.NamespacedName{Name: generatedTestNamespace}, existingNamespace)
-			if err != nil {
-				return false
-			}
-			return true
-		}, time.Minute, 5*time.Second).Should(BeTrue())
-
-		*namespace = existingNamespace.Name
+	nsObject := &v1.Namespace{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
+		ObjectMeta: metav1.ObjectMeta{Name: generatedTestNamespace},
 	}
+
+	err := testClient().Create(context.Background(), nsObject)
+	Expect(err).ToNot(HaveOccurred())
+
+	existingNamespace := &v1.Namespace{}
+	Eventually(func() bool {
+		err := testClient().Get(context.Background(), types.NamespacedName{Name: generatedTestNamespace}, existingNamespace)
+		if err != nil {
+			return false
+		}
+		return true
+	}, time.Minute, 5*time.Second).Should(BeTrue())
+
+	*namespace = existingNamespace.Name
 }
 
 func DeleteNamespaceCallback(namespace *string) func() {

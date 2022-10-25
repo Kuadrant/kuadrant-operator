@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -141,17 +140,16 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		genericDescriptorKey string = "op"
 	)
 
-	BeforeEach(CreateNamespaceCallback(&testNamespace))
+	beforeEachCallback := func() {
+		CreateNamespace(&testNamespace)
+		ApplyKuadrantCR(testNamespace)
+	}
 
+	BeforeEach(beforeEachCallback)
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
 	Context("Basic: RLP targeting HTTPRoute", func() {
 		It("check created resources", func() {
-
-			// Apply empty Kuadrant CR
-			err := ApplyResources(filepath.Join("..", "examples", "toystore", "kuadrant.yaml"), k8sClient, testNamespace)
-			Expect(err).ToNot(HaveOccurred())
-
 			// Check Limitador Status is Ready
 			Eventually(func() bool {
 				limitador := &limitadorv1alpha1.Limitador{}
@@ -170,7 +168,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			rlpName := "toystore-rlp"
 
 			gateway := testBuildBasicGateway(gwName, testNamespace)
-			err = k8sClient.Create(context.Background(), gateway)
+			err := k8sClient.Create(context.Background(), gateway)
 			Expect(err).ToNot(HaveOccurred())
 
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace)

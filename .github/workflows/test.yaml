@@ -66,9 +66,9 @@ jobs:
       - name: Check cluster info
         run: |
           kubectl cluster-info dump
-      - name: Run make local-env-setup
+      - name: Run make test-env-setup
         run: |
-          make local-env-setup
+          make test-env-setup
       - name: Wait for deployments
         run: |
           kubectl -n ${{ env.KUADRANT_NAMESPACE }} wait --timeout=300s --for=condition=Available deployments --all

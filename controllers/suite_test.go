@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	authorinoopv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo"
@@ -30,6 +31,7 @@ import (
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
+	istioapis "istio.io/istio/operator/pkg/apis"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -83,7 +85,13 @@ var _ = BeforeSuite(func() {
 	err = gatewayapiv1alpha2.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = authorinoopv1beta1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	err = authorinov1beta1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = istioapis.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = istiosecurityv1beta1.AddToScheme(scheme.Scheme)
@@ -131,6 +139,18 @@ var _ = BeforeSuite(func() {
 		TargetRefReconciler: reconcilers.TargetRefReconciler{
 			BaseReconciler: rateLimitPolicyBaseReconciler,
 		},
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
+	kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("kuadrant-controller"),
+		mgr.GetEventRecorderFor("Kuadrant"),
+	)
+
+	err = (&KuadrantReconciler{
+		BaseReconciler: kuadrantBaseReconciler,
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())

@@ -214,7 +214,6 @@ test-env-setup: ## Deploys all services and manifests required by kuadrant to ru
 	$(MAKE) deploy-dependencies
 	$(MAKE) install
 
-
 ##@ Build
 
 build: generate fmt vet ## Build manager binary.

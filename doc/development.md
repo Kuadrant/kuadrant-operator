@@ -5,7 +5,7 @@
 * [operator-sdk] version v1.22.0
 * [kind] version v0.11.1
 * [git][git_tool]
-* [go] version 1.16+
+* [go] version 1.18+
 * [kubernetes] version v1.19+
 * [kubectl] version v1.19+
 

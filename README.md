@@ -13,8 +13,10 @@ The Operator to install and manage the lifecycle of the [Kuadrant](https://githu
     * [Provided APIs](#provided-apis)
 * [Getting started](#getting-started)
     * [Pre-requisites](#pre-requisites)
-    * [If you are an <em>API Provider</em>](#if-you-are-an-api-provider)
-    * [If you are a <em>Cluster Operator</em>](#if-you-are-a-cluster-operator)
+    * [Installing Kuadrant](#installing-kuadrant)
+    * [Protect Your Service](#protect-your-service)
+      * [If you are an <em>API Provider</em>](#if-you-are-an-api-provider)
+      * [If you are a <em>Cluster Operator</em>](#if-you-are-a-cluster-operator)
 * [User guides](#user-guides)
 * [<a href="/doc/rate-limiting.md">Kuadrant Rate Limiting</a>](#kuadrant-rate-limiting)
 * [Documentation](#documentation)
@@ -81,11 +83,59 @@ Additionally, Kuadrant provides the following CRDs
   [Istio getting started guide](https://istio.io/latest/docs/setup/getting-started/).
 * Kubernetes Gateway API is installed in the cluster. Otherwise,
   [configure Istio to expose a service using the Kubernetes Gateway API](https://istio.io/latest/docs/tasks/traffic-management/ingress/gateway-api/).
-* Kuadrant is installed in the cluster.
-  Otherwise, refer to the [kuadrant operator](https://github.com/Kuadrant/kuadrant-operator)
-  for installation.
 
-### If you are an *API Provider*
+### Installing Kuadrant
+
+1. Create the namespace for the Operator
+
+```sh
+kubectl create namespace kuadrant-system
+```
+
+2. Install Kuadrant dependencies: Authorino and Limitador operators.
+
+```sh
+make install-dependencies
+```
+
+3. Install the Operator manifests
+
+```sh
+make install
+```
+
+4. Deploy the Operator
+
+```sh
+make deploy
+```
+
+<details>
+  <summary><i>Tip:</i> Deploy a custom image of the Operator</summary>
+  <br/>
+  To deploy an image of the Operator other than the default <code>quay.io/kuadrant/kuadrant-operator:latest</code>, specify by setting the <code>OPERATOR_IMAGE</code> parameter. E.g.:
+
+  ```sh
+  make deploy OPERATOR_IMAGE=kuadrant-operator:local
+  ```
+</details>
+
+5. Create Kuadrant CR
+This will setup the required dependencies for protecting your service. At the moment there's no major configuration needed:
+
+```sh
+kubectl -n kuadrant-system apply -f - <<EOF
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant-sample
+spec: {}
+EOF
+```
+
+### Protect your service
+
+#### If you are an *API Provider*
 
 * Deploy the service/API to be protected ("Upstream")
 * Expose the service/API using the kubernetes Gateway API, ie
@@ -94,7 +144,7 @@ Additionally, Kuadrant provides the following CRDs
   [AuthPolicy](apis/apim/v1alpha1/authpolicy_types.go) custom resources targeting the HTTPRoute resource
   to have your API protected.
 
-### If you are a *Cluster Operator*
+#### If you are a *Cluster Operator*
 
 * (Optionally) deploy istio ingress gateway using the
   [Gateway](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.Gateway) resource.

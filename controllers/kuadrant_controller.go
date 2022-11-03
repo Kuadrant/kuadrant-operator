@@ -380,12 +380,12 @@ func meshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshCo
 	if structure == nil {
 		return &istiomeshv1alpha1.MeshConfig{}, nil
 	}
-	meshConfigJson, err := structure.MarshalJSON()
+	meshConfigJSON, err := structure.MarshalJSON()
 	if err != nil {
 		return nil, err
 	}
 	meshConfig := &istiomeshv1alpha1.MeshConfig{}
-	if err = json.Unmarshal(meshConfigJson, meshConfig); err != nil {
+	if err = json.Unmarshal(meshConfigJSON, meshConfig); err != nil {
 		return nil, err
 	}
 
@@ -393,13 +393,13 @@ func meshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshCo
 }
 
 func meshConfigToStruct(config *istiomeshv1alpha1.MeshConfig) (*structpb.Struct, error) {
-	configJson, err := json.Marshal(config)
+	configJSON, err := json.Marshal(config)
 	if err != nil {
 		return nil, err
 	}
 	configStruct := &structpb.Struct{}
 
-	if err = configStruct.UnmarshalJSON(configJson); err != nil {
+	if err = configStruct.UnmarshalJSON(configJSON); err != nil {
 		return nil, err
 	}
 	return configStruct, nil

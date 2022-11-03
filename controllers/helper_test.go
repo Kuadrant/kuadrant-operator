@@ -6,11 +6,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"io"
 	"os"
 	"path/filepath"
 	"time"
+
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/gomega"

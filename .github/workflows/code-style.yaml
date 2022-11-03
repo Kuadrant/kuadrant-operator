@@ -37,7 +37,7 @@ jobs:
           - tool: gofmt
             options: -s
           - tool: goimports
-            importpath: golang.org/x/tools/cmd/goimports
+            importpath: golang.org/x/tools/cmd/goimports@latest
 
     steps:
       - name: Set up Go 1.18.x
@@ -53,7 +53,7 @@ jobs:
         if: ${{ matrix.importpath != '' }}
         run: |
           cd $(mktemp -d)
-          GO111MODULE=on go get ${{ matrix.importpath }}
+          GO111MODULE=on go install ${{ matrix.importpath }}
 
       - name: ${{ matrix.tool }} ${{ matrix.options }}
         shell: bash
@@ -111,7 +111,7 @@ jobs:
           echo '::endgroup::'
 
           echo '::group:: Installing misspell ... https://github.com/client9/misspell'
-          go get github.com/client9/misspell/cmd/misspell
+          go install github.com/client9/misspell/cmd/misspell@latest
           echo '::endgroup::'
 
           echo '::group:: Installing woke ... https://github.com/get-woke/woke'

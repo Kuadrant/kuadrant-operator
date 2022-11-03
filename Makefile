@@ -366,5 +366,20 @@ catalog-generate: opm ## Generate a catalog/index Dockerfile.
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
+##@ Code Style
+
+GOLANGCI-LINT = $(PROJECT_PATH)/bin/golangci-lint
+
+.PHONY: run-lint
+run-lint: $(GOLANGCI-LINT) ## Run lint tests
+	$(GOLANGCI-LINT) run
+
+$(GOLANGCI-LINT):
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(PROJECT_PATH)/bin v1.50.1
+
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI-LINT) ## Download golangci-lint locally if necessary.
+
+
 # Include last to avoid changing MAKEFILE_LIST used above
 include ./make/*.mk

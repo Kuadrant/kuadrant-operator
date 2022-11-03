@@ -3,6 +3,7 @@ package common
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"io/ioutil"
 
@@ -26,7 +27,7 @@ func DecodeFile(ctx context.Context, fileData []byte, scheme *runtime.Scheme, cb
 	for {
 		n, err := docDecoder.Read(buf)
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(io.EOF, err) {
 				break
 			}
 			return err

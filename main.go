@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
 	"os"
 	"runtime"
 
@@ -28,7 +29,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	authorinoopv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istioextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
@@ -60,6 +61,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(corev1.AddToScheme(scheme))
 	utilruntime.Must(limitadorv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(authorinoopv1beta1.AddToScheme(scheme))
 	utilruntime.Must(authorinov1beta1.AddToScheme(scheme))
 	utilruntime.Must(istionetworkingv1alpha3.AddToScheme(scheme))
 	utilruntime.Must(istiosecurityv1beta1.AddToScheme(scheme))

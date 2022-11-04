@@ -183,8 +183,8 @@ local-setup: ## Deploy locally kuadrant operator from the current code
 	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
 	@echo
 	@echo "Now you can export the kuadrant gateway by doing:"
-	@echo "kubectl port-forward -n istio-system service/istio-ingressgateway 8080:80 &"
-	@echo "after that, you can curl -H \"Host: myhost.com\" localhost:8080"
+	@echo "kubectl port-forward -n istio-system service/istio-ingressgateway 9080:80 &"
+	@echo "after that, you can curl -H \"Host: myhost.com\" localhost:9080"
 	@echo "-- Linux only -- Ingress gateway is exported using nodePort service in port 9080"
 	@echo "curl -H \"Host: myhost.com\" localhost:9080"
 	@echo

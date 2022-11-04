@@ -43,7 +43,7 @@ The `RateLimitPolicy` resource includes, basically, three parts:
 
 ```yaml
 ---
-apiVersion: apim.kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1beta1
 kind: RateLimitPolicy
 metadata:
   name: my-rate-limit-policy
@@ -79,7 +79,7 @@ referenced by the HTTPRoute in the `spec.parentRefs` field.
 Targeting is defined with the `spec.targetRef` field, as follows:
 
 ```yaml
-apiVersion: apim.kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1beta1
 kind: RateLimitPolicy
 metadata:
   name: <RLP name>
@@ -137,7 +137,7 @@ the gateway.
 Targeting is defined with the `spec.targetRef` field, as follows:
 
 ```yaml
-apiVersion: apim.kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1beta1
 kind: RateLimitPolicy
 metadata:
   name: <RLP name>

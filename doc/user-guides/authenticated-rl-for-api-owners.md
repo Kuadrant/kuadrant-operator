@@ -16,13 +16,26 @@ git clone https://github.com/Kuadrant/kuadrant-operator
 This step creates a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
 then it installs Istio, Kubernetes Gateway API and kuadrant.
 
-```
+```sh
 make local-setup
+```
+
+### Apply Kuadrant CR
+
+```yaml
+kubectl -n kuadrant-system apply -f - <<EOF
+---
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant-sample
+spec: {}
+EOF
 ```
 
 ### Deploy toystore example deployment
 
-```
+```sh
 kubectl apply -f examples/toystore/toystore.yaml
 ```
 
@@ -58,7 +71,7 @@ EOF
 
 ### Check `toystore` HTTPRoute works
 
-```
+```sh
 curl -v -H 'Host: api.toystore.com' http://localhost:9080/toy
 ```
 
@@ -68,7 +81,7 @@ It should return `200 OK`.
 you may need to forward ports
 
 ```bash
-kubectl port-forward -n kuadrant-system service/kuadrant-gateway 9080:80
+kubectl port-forward -n istio-system service/istio-ingressgateway 9080:80 &
 ```
 
 ### Create API keys for user `Bob` and `Alice`
@@ -109,7 +122,7 @@ EOF
 ```yaml
 kubectl apply -f - <<EOF
 ---
-apiVersion: apim.kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1beta1
 kind: AuthPolicy
 metadata:
   name: toystore
@@ -158,7 +171,7 @@ EOF
 ```yaml
 kubectl apply -f -<<EOF
 ---
-apiVersion: apim.kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1beta1
 kind: RateLimitPolicy
 metadata:
   name: toystore

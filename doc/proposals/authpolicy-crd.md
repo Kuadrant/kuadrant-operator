@@ -17,7 +17,7 @@ With `targetRef`  from policy attachment concept, following are the goals:
 Following is the proposed new CRD that combines policy attachment concepts with Istio's AuthorizationPolicy:
 
 ```yaml=
-apiVersion: apim.kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1beta1
 kind: AuthPolicy
 metadata:
   name: toystore

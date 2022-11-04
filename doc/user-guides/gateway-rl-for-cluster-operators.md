@@ -19,6 +19,19 @@ then it installs Istio, Kubernetes Gateway API and kuadrant.
 make local-setup
 ```
 
+### Apply Kuadrant CR
+
+```yaml
+kubectl -n kuadrant-system apply -f - <<EOF
+---
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant-sample
+spec: {}
+EOF
+```
+
 ### Deploy toystore example deployment
 
 ```
@@ -97,7 +110,7 @@ RateLimitPolicy applied for the `toystore` HTTPRoute.
 ```yaml
 kubectl apply -f - <<EOF
 ---
-apiVersion: apim.kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1beta1
 kind: RateLimitPolicy
 metadata:
   name: toystore
@@ -174,7 +187,7 @@ RateLimitPolicy applied for the Gateway.
 ```yaml
 kubectl apply -f - <<EOF
 ---
-apiVersion: apim.kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1beta1
 kind: RateLimitPolicy
 metadata:
   name: kuadrant-gw

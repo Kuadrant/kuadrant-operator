@@ -20,7 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
 
@@ -177,16 +177,15 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) e
 		return err
 	}
 
-	if !hasKuadrantAuthorizer(iop) {
-		return nil
-	}
-
 	meshConfig, err := meshConfigFromStruct(iop.Spec.MeshConfig)
 	if err != nil {
 		return err
 	}
-
 	extensionProviders := extensionProvidersFromMeshConfig(meshConfig)
+
+	if !hasKuadrantAuthorizer(extensionProviders) {
+		return nil
+	}
 
 	for idx, extensionProvider := range extensionProviders {
 		name := extensionProvider.Name
@@ -222,10 +221,6 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 		return err
 	}
 
-	if hasKuadrantAuthorizer(iop) {
-		return nil
-	}
-
 	//meshConfig:
 	//    extensionProviders:
 	//      - envoyExtAuthzGrpc:
@@ -241,18 +236,13 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 	if err != nil {
 		return err
 	}
-
 	extensionProviders := extensionProvidersFromMeshConfig(meshConfig)
 
-	envoyExtAuthzGrpc := make(map[string]interface{})
-	envoyExtAuthzGrpc["port"] = 50051
-	envoyExtAuthzGrpc["service"] = fmt.Sprintf("authorino-authorino-authorization.%s.svc.cluster.local", kObj.Namespace)
+	if hasKuadrantAuthorizer(extensionProviders) {
+		return nil
+	}
 
-	kuadrantExtensionProvider := make(map[string]interface{})
-	kuadrantExtensionProvider["name"] = extAuthorizerName
-	kuadrantExtensionProvider["envoyExtAuthzGrpc"] = envoyExtAuthzGrpc
-
-	meshConfig.ExtensionProviders = extensionProviders
+	meshConfig.ExtensionProviders = append(meshConfig.ExtensionProviders, createKuadrantAuthorizer(kObj.Namespace))
 	meshConfigStruct, err := meshConfigToStruct(meshConfig)
 	if err != nil {
 		return err
@@ -290,10 +280,7 @@ func iopNamespace() string {
 	return common.FetchEnv("ISTIOOPERATOR_NAMESPACE", "istio-system")
 }
 
-func hasKuadrantAuthorizer(iop *iopv1alpha1.IstioOperator) bool {
-	if iop == nil || iop.Spec == nil {
-		return false
-	}
+func hasKuadrantAuthorizer(extensionProviders []*istiomeshv1alpha1.MeshConfig_ExtensionProvider) bool {
 
 	// IstioOperator
 	//
@@ -304,11 +291,6 @@ func hasKuadrantAuthorizer(iop *iopv1alpha1.IstioOperator) bool {
 	//          service: AUTHORINO SERVICE
 	//        name: kuadrant-authorization
 
-	meshConfig, err := meshConfigFromStruct(iop.Spec.MeshConfig)
-	if err != nil {
-		return false
-	}
-	extensionProviders := meshConfig.ExtensionProviders
 	if len(extensionProviders) == 0 {
 		return false
 	}
@@ -320,6 +302,19 @@ func hasKuadrantAuthorizer(iop *iopv1alpha1.IstioOperator) bool {
 	}
 
 	return false
+}
+
+func createKuadrantAuthorizer(namespace string) *istiomeshv1alpha1.MeshConfig_ExtensionProvider {
+	envoyExtAuthGRPC := &istiomeshv1alpha1.MeshConfig_ExtensionProvider_EnvoyExtAuthzGrpc{
+		EnvoyExtAuthzGrpc: &istiomeshv1alpha1.MeshConfig_ExtensionProvider_EnvoyExternalAuthorizationGrpcProvider{
+			Port:    50051,
+			Service: fmt.Sprintf("authorino-authorino-authorization.%s.svc.cluster.local", namespace),
+		},
+	}
+	return &istiomeshv1alpha1.MeshConfig_ExtensionProvider{
+		Name:     extAuthorizerName,
+		Provider: envoyExtAuthGRPC,
+	}
 }
 
 func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
@@ -381,12 +376,14 @@ func meshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshCo
 	if structure == nil {
 		return &istiomeshv1alpha1.MeshConfig{}, nil
 	}
+
 	meshConfigJSON, err := structure.MarshalJSON()
 	if err != nil {
 		return nil, err
 	}
 	meshConfig := &istiomeshv1alpha1.MeshConfig{}
-	if err = json.Unmarshal(meshConfigJSON, meshConfig); err != nil {
+	// istiomeshv1alpha1.MeshConfig doesn't implement JSON/Yaml marshalling, only protobuf
+	if err = protojson.Unmarshal(meshConfigJSON, meshConfig); err != nil {
 		return nil, err
 	}
 
@@ -394,7 +391,7 @@ func meshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshCo
 }
 
 func meshConfigToStruct(config *istiomeshv1alpha1.MeshConfig) (*structpb.Struct, error) {
-	configJSON, err := json.Marshal(config)
+	configJSON, err := protojson.Marshal(config)
 	if err != nil {
 		return nil, err
 	}

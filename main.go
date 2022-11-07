@@ -19,9 +19,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
 	"os"
 	"runtime"
+
+	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
 
 	corev1 "k8s.io/api/core/v1"
 

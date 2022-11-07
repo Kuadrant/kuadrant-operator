@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
@@ -281,7 +282,6 @@ func iopNamespace() string {
 }
 
 func hasKuadrantAuthorizer(extensionProviders []*istiomeshv1alpha1.MeshConfig_ExtensionProvider) bool {
-
 	// IstioOperator
 	//
 	//meshConfig:

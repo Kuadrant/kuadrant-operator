@@ -24,7 +24,7 @@ const (
 )
 
 func (r *KuadrantReconciler) reconcileStatus(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant, specErr error) (ctrl.Result, error) {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	newStatus, err := r.calculateStatus(ctx, kObj, specErr)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -92,18 +92,7 @@ func (r *KuadrantReconciler) readyCondition(ctx context.Context, kObj *kuadrantv
 		return cond, nil
 	}
 
-	reason, err := r.checkKuadrantControllerAvailable(ctx, kObj)
-	if err != nil {
-		return nil, err
-	}
-	if reason != nil {
-		cond.Status = metav1.ConditionFalse
-		cond.Reason = "KuadrantControllerNotReady"
-		cond.Message = *reason
-		return cond, nil
-	}
-
-	reason, err = r.checkLimitadorAvailable(ctx, kObj)
+	reason, err := r.checkLimitadorAvailable(ctx, kObj)
 	if err != nil {
 		return nil, err
 	}
@@ -126,32 +115,6 @@ func (r *KuadrantReconciler) readyCondition(ctx context.Context, kObj *kuadrantv
 	}
 
 	return cond, nil
-}
-
-func (r *KuadrantReconciler) checkKuadrantControllerAvailable(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (*string, error) {
-	deployment := &appsv1.Deployment{}
-	dKey := client.ObjectKey{Name: "kuadrant-controller-manager", Namespace: kObj.Namespace}
-	err := r.Client().Get(ctx, dKey, deployment)
-	if err != nil && !errors.IsNotFound(err) {
-		return nil, err
-	}
-
-	if err != nil && errors.IsNotFound(err) {
-		tmp := err.Error()
-		return &tmp, nil
-	}
-
-	availableCondition := common.FindDeploymentStatusCondition(deployment.Status.Conditions, "Available")
-	if availableCondition == nil {
-		tmp := "Available condition not found"
-		return &tmp, nil
-	}
-
-	if availableCondition.Status != corev1.ConditionTrue {
-		return &availableCondition.Message, nil
-	}
-
-	return nil, nil
 }
 
 func (r *KuadrantReconciler) checkLimitadorAvailable(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (*string, error) {

@@ -19,8 +19,11 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
+	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
 
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
@@ -28,8 +31,6 @@ import (
 	istioapiv1alpha1 "istio.io/api/operator/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,14 +39,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/kuadrantcontrollermanifests"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
 const (
-	kuadrantFinalizer     = "kuadrant.kuadrant.io/finalizer"
+	kuadrantFinalizer     = "kuadrant.io/finalizer"
 	extAuthorizerName     = "kuadrant-authorization"
 	envLimitadorNamespace = "LIMITADOR_NAMESPACE"
 	envLimitadorName      = "LIMITADOR_NAME"
@@ -61,9 +61,9 @@ type KuadrantReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=kuadrants,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=kuadrants/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=kuadrant.kuadrant.io,resources=kuadrants/finalizers,verbs=update
+//+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants/finalizers,verbs=update
 
 //+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;delete;patch
 //+kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,verbs=get;list;watch;create;update;delete;patch
@@ -73,11 +73,11 @@ type KuadrantReconciler struct {
 //+kubebuilder:rbac:groups=coordination.k8s.io,resources=configmaps;leases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=leases,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="apim.kuadrant.io",resources=authpolicies;ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups="apim.kuadrant.io",resources=authpolicies/finalizers,verbs=update
-//+kubebuilder:rbac:groups="apim.kuadrant.io",resources=ratelimitpolicies/finalizers,verbs=update
-//+kubebuilder:rbac:groups="apim.kuadrant.io",resources=authpolicies/status,verbs=get;patch;update
-//+kubebuilder:rbac:groups="apim.kuadrant.io",resources=ratelimitpolicies/status,verbs=get;patch;update
+//+kubebuilder:rbac:groups="kuadrant.io",resources=authpolicies;ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="kuadrant.io",resources=authpolicies/finalizers,verbs=update
+//+kubebuilder:rbac:groups="kuadrant.io",resources=ratelimitpolicies/finalizers,verbs=update
+//+kubebuilder:rbac:groups="kuadrant.io",resources=authpolicies/status,verbs=get;patch;update
+//+kubebuilder:rbac:groups="kuadrant.io",resources=ratelimitpolicies/status,verbs=get;patch;update
 //+kubebuilder:rbac:groups="gateway.networking.k8s.io",resources=gateways,verbs=get;list;watch;create;update;delete;patch
 //+kubebuilder:rbac:groups="gateway.networking.k8s.io",resources=httproutes,verbs=get;list;patch;update;watch
 //+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos,verbs=get;list;watch;create;update;delete;patch
@@ -168,7 +168,7 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 }
 
 func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	iop := &iopv1alpha1.IstioOperator{}
 
 	iopKey := client.ObjectKey{Name: iopName(), Namespace: iopNamespace()}
@@ -178,33 +178,27 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) e
 		return err
 	}
 
-	if !hasKuadrantAuthorizer(iop) {
+	meshConfig, err := meshConfigFromStruct(iop.Spec.MeshConfig)
+	if err != nil {
+		return err
+	}
+	extensionProviders := extensionProvidersFromMeshConfig(meshConfig)
+
+	if !hasKuadrantAuthorizer(extensionProviders) {
 		return nil
 	}
 
-	obj, ok := iop.Spec.MeshConfig["extensionProviders"]
-	if !ok || obj == nil {
-		obj = make([]interface{}, 0)
-	}
-
-	extensionProviders, ok := obj.([]interface{})
-	if !ok {
-		return fmt.Errorf("istiooperator MeshConfig[extensionProviders] type assertion failed: %T", obj)
-	}
-
-	for idx := range extensionProviders {
-		extensionProvider, ok := extensionProviders[idx].(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("istiooperator MeshConfig[extensionProviders][idx] type assertion failed: %T", extensionProviders[idx])
-		}
-		name, ok := extensionProvider["name"]
-		if !ok {
-			continue
-		}
+	for idx, extensionProvider := range extensionProviders {
+		name := extensionProvider.Name
 		if name == extAuthorizerName {
 			// deletes the element in the array
 			extensionProviders = append(extensionProviders[:idx], extensionProviders[idx+1:]...)
-			iop.Spec.MeshConfig["extensionProviders"] = extensionProviders
+			meshConfig.ExtensionProviders = extensionProviders
+			meshConfigStruct, err := meshConfigToStruct(meshConfig)
+			if err != nil {
+				return err
+			}
+			iop.Spec.MeshConfig = meshConfigStruct
 			break
 		}
 	}
@@ -218,7 +212,7 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) e
 }
 
 func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	iop := &iopv1alpha1.IstioOperator{}
 
 	iopKey := client.ObjectKey{Name: iopName(), Namespace: iopNamespace()}
@@ -226,10 +220,6 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 		// It should exists, NotFound also considered as error
 		logger.Error(err, "failed to get istiooperator object", "key", iopKey)
 		return err
-	}
-
-	if hasKuadrantAuthorizer(iop) {
-		return nil
 	}
 
 	//meshConfig:
@@ -243,29 +233,22 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 		iop.Spec = &istioapiv1alpha1.IstioOperatorSpec{}
 	}
 
-	if iop.Spec.MeshConfig == nil {
-		iop.Spec.MeshConfig = make(map[string]interface{})
+	meshConfig, err := meshConfigFromStruct(iop.Spec.MeshConfig)
+	if err != nil {
+		return err
+	}
+	extensionProviders := extensionProvidersFromMeshConfig(meshConfig)
+
+	if hasKuadrantAuthorizer(extensionProviders) {
+		return nil
 	}
 
-	obj, ok := iop.Spec.MeshConfig["extensionProviders"]
-	if !ok || obj == nil {
-		obj = make([]interface{}, 0)
+	meshConfig.ExtensionProviders = append(meshConfig.ExtensionProviders, createKuadrantAuthorizer(kObj.Namespace))
+	meshConfigStruct, err := meshConfigToStruct(meshConfig)
+	if err != nil {
+		return err
 	}
-
-	extensionProviders, ok := obj.([]interface{})
-	if !ok {
-		return fmt.Errorf("istiooperator extensionprovider type assertion failed: %T", obj)
-	}
-
-	envoyExtAuthzGrpc := make(map[string]interface{})
-	envoyExtAuthzGrpc["port"] = 50051
-	envoyExtAuthzGrpc["service"] = fmt.Sprintf("authorino-authorino-authorization.%s.svc.cluster.local", kObj.Namespace)
-
-	kuadrantExtensionProvider := make(map[string]interface{})
-	kuadrantExtensionProvider["name"] = extAuthorizerName
-	kuadrantExtensionProvider["envoyExtAuthzGrpc"] = envoyExtAuthzGrpc
-
-	iop.Spec.MeshConfig["extensionProviders"] = append(extensionProviders, kuadrantExtensionProvider)
+	iop.Spec.MeshConfig = meshConfigStruct
 	logger.Info("adding external authorizer to meshconfig")
 	if err := r.Client().Update(ctx, iop); err != nil {
 		return err
@@ -280,10 +263,6 @@ func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1
 	}
 
 	if err := r.reconcileLimitador(ctx, kObj); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if err := r.reconcileKuadrantController(ctx, kObj); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -302,11 +281,7 @@ func iopNamespace() string {
 	return common.FetchEnv("ISTIOOPERATOR_NAMESPACE", "istio-system")
 }
 
-func hasKuadrantAuthorizer(iop *iopv1alpha1.IstioOperator) bool {
-	if iop == nil || iop.Spec == nil {
-		return false
-	}
-
+func hasKuadrantAuthorizer(extensionProviders []*istiomeshv1alpha1.MeshConfig_ExtensionProvider) bool {
 	// IstioOperator
 	//
 	//meshConfig:
@@ -316,31 +291,30 @@ func hasKuadrantAuthorizer(iop *iopv1alpha1.IstioOperator) bool {
 	//          service: AUTHORINO SERVICE
 	//        name: kuadrant-authorization
 
-	extensionProvidersObj, ok := iop.Spec.MeshConfig["extensionProviders"]
-	if !ok || extensionProvidersObj == nil {
+	if len(extensionProviders) == 0 {
 		return false
 	}
 
-	extensionProvidersList, ok := extensionProvidersObj.([]interface{})
-	if !ok {
-		return false
-	}
-
-	for idx := range extensionProvidersList {
-		extensionProvider, ok := extensionProvidersList[idx].(map[string]interface{})
-		if !ok {
-			return false
-		}
-		name, ok := extensionProvider["name"]
-		if !ok {
-			continue
-		}
-		if name == extAuthorizerName {
+	for _, extensionProvider := range extensionProviders {
+		if extensionProvider.Name == extAuthorizerName {
 			return true
 		}
 	}
 
 	return false
+}
+
+func createKuadrantAuthorizer(namespace string) *istiomeshv1alpha1.MeshConfig_ExtensionProvider {
+	envoyExtAuthGRPC := &istiomeshv1alpha1.MeshConfig_ExtensionProvider_EnvoyExtAuthzGrpc{
+		EnvoyExtAuthzGrpc: &istiomeshv1alpha1.MeshConfig_ExtensionProvider_EnvoyExternalAuthorizationGrpcProvider{
+			Port:    50051,
+			Service: fmt.Sprintf("authorino-authorino-authorization.%s.svc.cluster.local", namespace),
+		},
+	}
+	return &istiomeshv1alpha1.MeshConfig_ExtensionProvider{
+		Name:     extAuthorizerName,
+		Provider: envoyExtAuthGRPC,
+	}
 }
 
 func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
@@ -362,88 +336,6 @@ func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadr
 	}
 
 	return r.ReconcileResource(ctx, &limitadorv1alpha1.Limitador{}, limitador, reconcilers.CreateOnlyMutator)
-}
-
-func (r *KuadrantReconciler) reconcileKuadrantController(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	logger := logr.FromContext(ctx)
-	kuadrantControllerVersion, err := common.KuadrantControllerImage(ctx, r.Scheme)
-	if err != nil {
-		return err
-	}
-	logger.Info("Deploying kuadrant controller", "version", kuadrantControllerVersion)
-
-	data, err := kuadrantcontrollermanifests.Content()
-	if err != nil {
-		return err
-	}
-
-	return common.DecodeFile(ctx, data, r.Scheme, r.createOnlyInKuadrantNSCb(ctx, kObj))
-}
-
-func (r *KuadrantReconciler) createOnlyInKuadrantNSCb(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) common.DecodeCallback {
-	return func(obj runtime.Object) error {
-		logger := logr.FromContext(ctx)
-		k8sObj, ok := obj.(client.Object)
-		if !ok {
-			return errors.New("runtime.Object could not be type asserted to client.Object")
-		}
-
-		// Create in Kuadrant CR's namespace
-		k8sObj.SetNamespace(kObj.Namespace)
-		err := r.SetOwnerReference(kObj, k8sObj)
-		if err != nil {
-			return err
-		}
-
-		var newObj client.Object
-		newObj = k8sObj
-
-		switch obj := k8sObj.(type) {
-		case *appsv1.Deployment: // If it's a Deployment obj, it adds the required env vars
-			obj.Spec.Template.Spec.Containers[0].Env = append(
-				obj.Spec.Template.Spec.Containers[0].Env,
-				v1.EnvVar{Name: envLimitadorNamespace, Value: kObj.Namespace},
-				v1.EnvVar{Name: envLimitadorName, Value: limitadorName},
-				// env var name taken from https://github.com/Kuadrant/kuadrant-controller/blob/4e9763bbabc8a7b5f7695aa4f53d9edc0c376ba3/pkg/rlptools/wasm_utils.go#L18
-				v1.EnvVar{Name: "WASM_FILTER_IMAGE", Value: common.GetWASMShimImageVersion()},
-			)
-			newObj = obj
-		// TODO: DRY the following 2 case switches
-		case *rbacv1.RoleBinding:
-			if obj.Name == "kuadrant-leader-election-rolebinding" {
-				for i, subject := range obj.Subjects {
-					if subject.Name == "kuadrant-controller-manager" {
-						obj.Subjects[i].Namespace = kObj.Namespace
-					}
-				}
-			}
-			newObj = obj
-		case *rbacv1.ClusterRoleBinding:
-			if obj.Name == "kuadrant-manager-rolebinding" {
-				for i, subject := range obj.Subjects {
-					if subject.Name == "kuadrant-controller-manager" {
-						obj.Subjects[i].Namespace = kObj.Namespace
-					}
-				}
-			}
-			newObj = obj
-		default:
-		}
-		newObjCloned := newObj.DeepCopyObject()
-		err = r.Client().Create(ctx, newObj)
-
-		k8sObjKind := newObjCloned.GetObjectKind()
-		logger.V(1).Info("create resource", "GKV", k8sObjKind.GroupVersionKind(), "name", newObj.GetName(), "error", err)
-		if err != nil {
-			if apierrors.IsAlreadyExists(err) {
-				// Omit error
-				logger.Info("Already exists", "GKV", k8sObjKind.GroupVersionKind(), "name", newObj.GetName())
-			} else {
-				return err
-			}
-		}
-		return nil
-	}
 }
 
 func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
@@ -478,6 +370,45 @@ func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadr
 	}
 
 	return r.ReconcileResource(ctx, &authorinov1beta1.Authorino{}, authorino, reconcilers.CreateOnlyMutator)
+}
+
+func meshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshConfig, error) {
+	if structure == nil {
+		return &istiomeshv1alpha1.MeshConfig{}, nil
+	}
+
+	meshConfigJSON, err := structure.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	meshConfig := &istiomeshv1alpha1.MeshConfig{}
+	// istiomeshv1alpha1.MeshConfig doesn't implement JSON/Yaml marshalling, only protobuf
+	if err = protojson.Unmarshal(meshConfigJSON, meshConfig); err != nil {
+		return nil, err
+	}
+
+	return meshConfig, nil
+}
+
+func meshConfigToStruct(config *istiomeshv1alpha1.MeshConfig) (*structpb.Struct, error) {
+	configJSON, err := protojson.Marshal(config)
+	if err != nil {
+		return nil, err
+	}
+	configStruct := &structpb.Struct{}
+
+	if err = configStruct.UnmarshalJSON(configJSON); err != nil {
+		return nil, err
+	}
+	return configStruct, nil
+}
+
+func extensionProvidersFromMeshConfig(config *istiomeshv1alpha1.MeshConfig) (extensionProviders []*istiomeshv1alpha1.MeshConfig_ExtensionProvider) {
+	extensionProviders = config.ExtensionProviders
+	if len(extensionProviders) == 0 {
+		extensionProviders = make([]*istiomeshv1alpha1.MeshConfig_ExtensionProvider, 0)
+	}
+	return
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -74,6 +74,9 @@ endif
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+# Kuadrant Namespace
+KUADRANT_NAMESPACE ?= kuadrant-system
+
 # Kuadrant component versions
 ## kuadrant controller
 #ToDo Pin this version once we have an initial release of the controller
@@ -158,8 +161,58 @@ clean-cov: ## Remove coverage report
 	rm -rf cover.out
 
 .PHONY: test
-test: clean-cov manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out -v
+test: test-unit test-integration ## Run all tests
+
+test-integration: clean-cov generate fmt vet envtest ## Run Integration tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)" USE_EXISTING_CLUSTER=true go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
+
+test-unit: clean-cov generate fmt vet ## Run Unit tests.
+	go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags unit -v -timeout 0
+
+.PHONY: namespace
+namespace: ## Creates a namespace where to deploy Kuadrant Operator
+	kubectl create namespace $(KUADRANT_NAMESPACE)
+
+.PHONY: local-setup
+local-setup: export IMG := $(IMAGE_TAG_BASE):dev
+local-setup: ## Deploy locally kuadrant operator from the current code
+	$(MAKE) local-env-setup
+	$(MAKE) docker-build
+	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
+	$(MAKE) deploy
+	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
+	@echo
+	@echo "Now you can export the kuadrant gateway by doing:"
+	@echo "kubectl port-forward -n istio-system service/istio-ingressgateway 9080:80 &"
+	@echo "after that, you can curl -H \"Host: myhost.com\" localhost:9080"
+	@echo "-- Linux only -- Ingress gateway is exported using nodePort service in port 9080"
+	@echo "curl -H \"Host: myhost.com\" localhost:9080"
+	@echo
+
+.PHONY: local-cleanup
+local-cleanup: ## Delete local cluster
+	$(MAKE) kind-delete-cluster
+
+# kuadrant is not deployed
+.PHONY: local-env-setup
+local-env-setup: ## Deploys all services and manifests required by kuadrant to run. Used to run kuadrant with "make run"
+	$(MAKE) kind-delete-cluster
+	$(MAKE) kind-create-cluster
+	$(MAKE) namespace
+	$(MAKE) gateway-api-install
+	$(MAKE) istio-install
+	$(MAKE) deploy-gateway
+	$(MAKE) deploy-dependencies
+	$(MAKE) install
+
+.PHONY: test-env-setup
+test-env-setup: ## Deploys all services and manifests required by kuadrant to run on CI.
+	$(MAKE) namespace
+	$(MAKE) gateway-api-install
+	$(MAKE) istio-install
+	$(MAKE) deploy-gateway
+	$(MAKE) deploy-dependencies
+	$(MAKE) install
 
 ##@ Build
 
@@ -193,6 +246,10 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/deploy | kubectl delete -f -
 
+deploy-dependencies: kustomize dependencies-manifests ## Deploy dependencies to the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/dependencies | kubectl apply -f -
+	kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments --all
+
 .PHONY: install-olm
 install-olm:
 	$(OPERATOR_SDK) olm install
@@ -209,7 +266,7 @@ undeploy-olm: ## Undeploy controller from the K8s cluster specified in ~/.kube/c
 
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
 controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.7.0)
+	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.10.0)
 
 KUSTOMIZE = $(shell pwd)/bin/kustomize
 kustomize: ## Download kustomize locally if necessary.
@@ -308,6 +365,21 @@ catalog-generate: opm ## Generate a catalog/index Dockerfile.
 .PHONY: catalog-push
 catalog-push: ## Push a catalog image.
 	$(MAKE) docker-push IMG=$(CATALOG_IMG)
+
+##@ Code Style
+
+GOLANGCI-LINT = $(PROJECT_PATH)/bin/golangci-lint
+
+.PHONY: run-lint
+run-lint: $(GOLANGCI-LINT) ## Run lint tests
+	$(GOLANGCI-LINT) run
+
+$(GOLANGCI-LINT):
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(PROJECT_PATH)/bin v1.50.1
+
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI-LINT) ## Download golangci-lint locally if necessary.
+
 
 # Include last to avoid changing MAKEFILE_LIST used above
 include ./make/*.mk

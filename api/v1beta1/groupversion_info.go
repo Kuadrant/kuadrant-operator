@@ -15,8 +15,8 @@ limitations under the License.
 */
 
 // Package v1beta1 contains API Schema definitions for the kuadrant v1beta1 API group
-//+kubebuilder:object:generate=true
-//+groupName=kuadrant.kuadrant.io
+// +kubebuilder:object:generate=true
+// +groupName=kuadrant.io
 package v1beta1
 
 import (
@@ -26,7 +26,7 @@ import (
 
 var (
 	// GroupVersion is group version used to register these objects
-	GroupVersion = schema.GroupVersion{Group: "kuadrant.kuadrant.io", Version: "v1beta1"}
+	GroupVersion = schema.GroupVersion{Group: "kuadrant.io", Version: "v1beta1"}
 
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme
 	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}

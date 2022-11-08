@@ -1,4 +1,3 @@
-
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -6,6 +5,17 @@ metadata:
   creationTimestamp: null
   name: manager-role
 rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -37,47 +47,6 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - apim.kuadrant.io
-  resources:
-  - authpolicies
-  - ratelimitpolicies
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - apim.kuadrant.io
-  resources:
-  - authpolicies/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - apim.kuadrant.io
-  resources:
-  - authpolicies/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - apim.kuadrant.io
-  resources:
-  - ratelimitpolicies/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - apim.kuadrant.io
-  resources:
-  - ratelimitpolicies/status
-  verbs:
-  - get
-  - patch
-  - update
 - apiGroups:
   - apps
   resources:
@@ -175,7 +144,46 @@ rules:
   - update
   - watch
 - apiGroups:
-  - kuadrant.kuadrant.io
+  - kuadrant.io
+  resources:
+  - authpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - authpolicies
+  - ratelimitpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - authpolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - authpolicies/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - kuadrant.io
   resources:
   - kuadrants
   verbs:
@@ -187,15 +195,41 @@ rules:
   - update
   - watch
 - apiGroups:
-  - kuadrant.kuadrant.io
+  - kuadrant.io
   resources:
   - kuadrants/finalizers
   verbs:
   - update
 - apiGroups:
-  - kuadrant.kuadrant.io
+  - kuadrant.io
   resources:
   - kuadrants/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - ratelimitpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - ratelimitpolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - ratelimitpolicies/status
   verbs:
   - get
   - patch

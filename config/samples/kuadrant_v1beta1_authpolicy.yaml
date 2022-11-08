@@ -1,0 +1,24 @@
+---
+apiVersion: kuadrant.io/v1beta1
+kind: AuthPolicy
+metadata:
+  name: toystore
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
+  rules:
+  - hosts: ["*.toystore.com"]
+    methods: ["DELETE", "POST"]
+    paths: ["/admin*"]
+  authScheme:
+    hosts: ["api.toystore.com"]
+    identity:
+    - name: friends
+      apiKey:
+        labelSelectors:
+          group: friends
+      credentials:
+        in: authorization_header
+        keySelector: APIKEY

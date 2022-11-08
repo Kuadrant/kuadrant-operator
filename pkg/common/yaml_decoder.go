@@ -3,6 +3,7 @@ package common
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"io/ioutil"
 
@@ -15,7 +16,7 @@ import (
 type DecodeCallback = func(runtime.Object) error
 
 func DecodeFile(ctx context.Context, fileData []byte, scheme *runtime.Scheme, cb DecodeCallback) error {
-	logger := logr.FromContext(ctx)
+	logger, _ := logr.FromContext(ctx)
 	codec := serializer.NewCodecFactory(scheme)
 	decoder := codec.UniversalDeserializer()
 
@@ -26,7 +27,7 @@ func DecodeFile(ctx context.Context, fileData []byte, scheme *runtime.Scheme, cb
 	for {
 		n, err := docDecoder.Read(buf)
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(io.EOF, err) {
 				break
 			}
 			return err

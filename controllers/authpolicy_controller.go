@@ -126,7 +126,7 @@ func (r *AuthPolicyReconciler) reconcileSpec(ctx context.Context, ap *kuadrantv1
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileAuthRules(ctx, ap); err != nil {
+	if err := r.reconcileIstioAuthorizationPolicies(ctx, ap); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -152,42 +152,49 @@ func (r *AuthPolicyReconciler) enforceHierarchicalConstraints(ctx context.Contex
 		return fmt.Errorf("rule host (%s) does not follow any hierarchical constraints", invalidHost)
 	}
 
-	if valid, invalidHost := common.ValidSubdomains(targetHostnames, ap.Spec.AuthScheme.Hosts); !valid {
-		return fmt.Errorf("host defined in authscheme (%s) does not follow any hierarchical constraints", invalidHost)
-	}
-
 	return nil
 }
 
 func (r *AuthPolicyReconciler) reconcileAuthSchemes(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {
-	logger, _ := logr.FromContext(ctx)
-
-	apKey := client.ObjectKeyFromObject(ap)
-	authConfig := &authorinov1beta1.AuthConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      authConfigName(apKey),
-			Namespace: common.KuadrantNamespace,
-		},
-		Spec: *ap.Spec.AuthScheme,
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return err
 	}
-	err := r.ReconcileResource(ctx, &authorinov1beta1.AuthConfig{}, authConfig, alwaysUpdateAuthConfig)
+
+	authConfig, err := r.desiredAuthConfig(ctx, ap)
+	if err != nil {
+		return err
+	}
+
+	err = r.ReconcileResource(ctx, &authorinov1beta1.AuthConfig{}, authConfig, alwaysUpdateAuthConfig)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		logger.Error(err, "ReconcileResource failed to create/update AuthConfig resource")
 		return err
 	}
-
 	return nil
 }
 
-// reconcileAuthRules translates and reconciles `AuthRules` into an Istio AuthorizationPoilcy containing them.
-func (r *AuthPolicyReconciler) reconcileAuthRules(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {
-	logger, _ := logr.FromContext(ctx)
+// reconcileIstioAuthorizationPolicies translates and reconciles `AuthRules` into an Istio AuthorizationPoilcy containing them.
+func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	targetHostnames, err := r.TargetHostnames(ctx, ap.Spec.TargetRef, ap.Namespace)
+	if err != nil {
+		return err
+	}
 
 	toRules := []*secv1beta1types.Rule_To{}
 	for _, rule := range ap.Spec.AuthRules {
+		hosts := rule.Hosts
+		if len(rule.Hosts) == 0 {
+			hosts = targetHostnames
+		}
 		toRules = append(toRules, &secv1beta1types.Rule_To{
 			Operation: &secv1beta1types.Operation{
-				Hosts:   rule.Hosts,
+				Hosts:   hosts,
 				Methods: rule.Methods,
 				Paths:   rule.Paths,
 			},
@@ -220,7 +227,7 @@ func (r *AuthPolicyReconciler) reconcileAuthRules(ctx context.Context, ap *kuadr
 
 	gwKeys, err := r.TargetedGatewayKeys(ctx, ap.Spec.TargetRef, ap.Namespace)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	targetObjectKind := "Gateway"
@@ -268,18 +275,26 @@ func (r *AuthPolicyReconciler) reconcileNetworkResourceBackReference(ctx context
 }
 
 func (r *AuthPolicyReconciler) removeAuthSchemes(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {
-	logger, _ := logr.FromContext(ctx)
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return err
+	}
+
 	logger.Info("Removing Authorino's AuthConfigs")
 
 	apKey := client.ObjectKeyFromObject(ap)
 	authConfig := &authorinov1beta1.AuthConfig{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "AuthConfig",
+			APIVersion: authorinov1beta1.GroupVersion.String(),
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      authConfigName(apKey),
 			Namespace: common.KuadrantNamespace,
 		},
 	}
 
-	err := r.DeleteResource(ctx, authConfig)
+	err = r.DeleteResource(ctx, authConfig)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
@@ -288,6 +303,59 @@ func (r *AuthPolicyReconciler) removeAuthSchemes(ctx context.Context, ap *kuadra
 		return err
 	}
 	return nil
+}
+
+func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) (*authorinov1beta1.AuthConfig, error) {
+	hosts, err := r.policyHosts(ctx, ap)
+	if err != nil {
+		return nil, err
+	}
+
+	return &authorinov1beta1.AuthConfig{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "AuthConfig",
+			APIVersion: authorinov1beta1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      authConfigName(client.ObjectKeyFromObject(ap)),
+			Namespace: common.KuadrantNamespace,
+		},
+		Spec: authorinov1beta1.AuthConfigSpec{
+			Hosts:         hosts,
+			Patterns:      ap.Spec.AuthScheme.Patterns,
+			Conditions:    ap.Spec.AuthScheme.Conditions,
+			Identity:      ap.Spec.AuthScheme.Identity,
+			Metadata:      ap.Spec.AuthScheme.Metadata,
+			Authorization: ap.Spec.AuthScheme.Authorization,
+			Response:      ap.Spec.AuthScheme.Response,
+			DenyWith:      ap.Spec.AuthScheme.DenyWith,
+		},
+	}, nil
+}
+
+func (r *AuthPolicyReconciler) policyHosts(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) ([]string, error) {
+	if len(ap.Spec.AuthRules) == 0 {
+		return r.TargetHostnames(ctx, ap.Spec.TargetRef, ap.Namespace)
+	}
+
+	uniqueHostnamesMap := make(map[string]interface{})
+	for idx := range ap.Spec.AuthRules {
+		if len(ap.Spec.AuthRules[idx].Hosts) == 0 {
+			// When one of the rules does not have hosts, just return target hostnames
+			return r.TargetHostnames(ctx, ap.Spec.TargetRef, ap.Namespace)
+		}
+
+		for _, hostname := range ap.Spec.AuthRules[idx].Hosts {
+			uniqueHostnamesMap[hostname] = nil
+		}
+	}
+
+	hostnames := make([]string, 0, len(uniqueHostnamesMap))
+	for k := range uniqueHostnamesMap {
+		hostnames = append(hostnames, k)
+	}
+
+	return hostnames, nil
 }
 
 func (r *AuthPolicyReconciler) removeIstioAuthPolicy(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {

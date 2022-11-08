@@ -49,7 +49,14 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrant
 		return ctrl.Result{}, nil
 	}
 
-	logger.V(1).Info("Updating Status", "sequence change:", fmt.Sprintf("%v->%v", ap.Status.ObservedGeneration, newStatus.ObservedGeneration))
+	// Save the generation number we acted on, otherwise we might wrongfully indicate
+	// that we've seen a spec update when we retry.
+	// TODO: This can clobber an update if we allow multiple agents to write to the
+	// same status.
+	newStatus.ObservedGeneration = ap.Generation
+
+	logger.V(1).Info("Updating Status", "sequence no:", fmt.Sprintf("sequence No: %v->%v", ap.Status.ObservedGeneration, newStatus.ObservedGeneration))
+
 	ap.Status = *newStatus
 	updateErr := r.Client().Status().Update(ctx, ap)
 	if updateErr != nil {
@@ -67,7 +74,7 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrant
 func (r *AuthPolicyReconciler) calculateStatus(ap *kuadrantv1beta1.AuthPolicy, specErr error, authConfigReady bool) *kuadrantv1beta1.AuthPolicyStatus {
 	newStatus := &kuadrantv1beta1.AuthPolicyStatus{
 		Conditions:         common.CopyConditions(ap.Status.Conditions),
-		ObservedGeneration: ap.Generation,
+		ObservedGeneration: ap.Status.ObservedGeneration,
 	}
 
 	targetObjectKind := string(ap.Spec.TargetRef.Kind)

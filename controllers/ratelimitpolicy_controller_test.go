@@ -47,10 +47,15 @@ func testBuildBasicGateway(gwName, ns string) *gatewayapiv1alpha2.Gateway {
 	}
 }
 
-func testBuildBasicHttpRoute(routeName, gwName, ns string) *gatewayapiv1alpha2.HTTPRoute {
+func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnamesStrSlice []string) *gatewayapiv1alpha2.HTTPRoute {
 	tmpMatchPathPrefix := gatewayapiv1alpha2.PathMatchPathPrefix
 	tmpMatchValue := "/toy"
 	tmpMatchMethod := gatewayapiv1alpha2.HTTPMethod("GET")
+
+	var hostnames []gatewayapiv1alpha2.Hostname
+	for _, str := range hostnamesStrSlice {
+		hostnames = append(hostnames, gatewayapiv1alpha2.Hostname(str))
+	}
 
 	return &gatewayapiv1alpha2.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
@@ -70,7 +75,7 @@ func testBuildBasicHttpRoute(routeName, gwName, ns string) *gatewayapiv1alpha2.H
 					},
 				},
 			},
-			Hostnames: []gatewayapiv1alpha2.Hostname{"*.example.com"},
+			Hostnames: hostnames,
 			Rules: []gatewayapiv1alpha2.HTTPRouteRule{
 				{
 					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
@@ -173,7 +178,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			err := k8sClient.Create(context.Background(), gateway)
 			Expect(err).ToNot(HaveOccurred())
 
-			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace)
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
 			err = k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
 

@@ -13,12 +13,12 @@ spec:
     methods: ["DELETE", "POST"]
     paths: ["/admin*"]
   authScheme:
-    hosts: ["api.toystore.com"]
     identity:
     - name: friends
       apiKey:
-        labelSelectors:
-          group: friends
+        selector:
+          matchLabels:
+            group: friends
       credentials:
         in: authorization_header
         keySelector: APIKEY

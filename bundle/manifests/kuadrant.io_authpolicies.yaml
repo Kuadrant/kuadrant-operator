@@ -670,14 +670,6 @@ spec:
                             type: object
                         type: object
                     type: object
-                  hosts:
-                    description: The list of public host names of the services protected
-                      by this authentication/authorization scheme. Authorino uses
-                      the requested host to lookup for the corresponding authentication/authorization
-                      configs to enforce.
-                    items:
-                      type: string
-                    type: array
                   identity:
                     description: List of identity sources/authentication modes. At
                       least one config of this list MUST evaluate to a valid identity
@@ -1672,8 +1664,6 @@ spec:
                           type: string
                       type: object
                     type: array
-                required:
-                - hosts
                 type: object
               rules:
                 description: Rule describe the requests that will be routed to external

@@ -9,16 +9,15 @@ spec:
     kind: HTTPRoute
     name: toystore
   rules:
-  - hosts: ["*.toystore.com"]
-    methods: ["DELETE", "POST"]
+  - methods: ["DELETE", "POST"]
     paths: ["/admin*"]
   authScheme:
-    hosts: ["api.toystore.com"]
     identity:
     - name: apikey
       apiKey:
-        labelSelectors:
-          app: toystore
+        selector:
+          matchLabels:
+            app: toystore
       credentials:
         in: authorization_header
         keySelector: APIKEY
@@ -46,13 +45,13 @@ spec:
   rules:
   - hosts: ["*.toystore.com"]
   authScheme:
-    hosts: ["api.toystore.com"]
     identity:
       - name: apikey
         apiKey:
-          labelSelectors:
-            app: toystore
-            admin: "yes"
+          selector:
+            matchLabels:
+              app: toystore
+              admin: "yes"
         credentials:
           in: authorization_header
           keySelector: APIKEY

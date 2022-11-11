@@ -3,24 +3,53 @@ package v1beta1
 import (
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
+
+type AuthSchemeSpec struct {
+	// Named sets of JSON patterns that can be referred in `when` conditionals and in JSON-pattern matching policy rules.
+	Patterns map[string]authorinov1beta1.JSONPatternExpressions `json:"patterns,omitempty"`
+
+	// Conditions for the AuthConfig to be enforced.
+	// If omitted, the AuthConfig will be enforced for all requests.
+	// If present, all conditions must match for the AuthConfig to be enforced; otherwise, Authorino skips the AuthConfig and returns immediately with status OK.
+	Conditions []authorinov1beta1.JSONPattern `json:"when,omitempty"`
+
+	// List of identity sources/authentication modes.
+	// At least one config of this list MUST evaluate to a valid identity for a request to be successful in the identity verification phase.
+	Identity []*authorinov1beta1.Identity `json:"identity,omitempty"`
+
+	// List of metadata source configs.
+	// Authorino fetches JSON content from sources on this list on every request.
+	Metadata []*authorinov1beta1.Metadata `json:"metadata,omitempty"`
+
+	// Authorization is the list of authorization policies.
+	// All policies in this list MUST evaluate to "true" for a request be successful in the authorization phase.
+	Authorization []*authorinov1beta1.Authorization `json:"authorization,omitempty"`
+
+	// List of response configs.
+	// Authorino gathers data from the auth pipeline to build custom responses for the client.
+	Response []*authorinov1beta1.Response `json:"response,omitempty"`
+
+	// Custom denial response codes, statuses and headers to override default 40x's.
+	DenyWith *authorinov1beta1.DenyWith `json:"denyWith,omitempty"`
+}
 
 type AuthPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
 
 	// Rule describe the requests that will be routed to external authorization provider
-	AuthRules []*AuthRule `json:"rules,omitempty"`
+	AuthRules []AuthRule `json:"rules,omitempty"`
 
 	// AuthSchemes are embedded Authorino's AuthConfigs
-	AuthScheme *authorinov1beta1.AuthConfigSpec `json:"authScheme,omitempty"`
+	AuthScheme AuthSchemeSpec `json:"authScheme,omitempty"`
 }
 
 type AuthRule struct {

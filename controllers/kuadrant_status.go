@@ -64,7 +64,8 @@ func (r *KuadrantReconciler) reconcileStatus(ctx context.Context, kObj *kuadrant
 func (r *KuadrantReconciler) calculateStatus(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant, specErr error) (*kuadrantv1beta1.KuadrantStatus, error) {
 	newStatus := &kuadrantv1beta1.KuadrantStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
-		Conditions: common.CopyConditions(kObj.Status.Conditions),
+		Conditions:         common.CopyConditions(kObj.Status.Conditions),
+		ObservedGeneration: kObj.Status.ObservedGeneration,
 	}
 
 	availableCond, err := r.readyCondition(ctx, kObj, specErr)

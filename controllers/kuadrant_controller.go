@@ -299,10 +299,6 @@ func hasKuadrantAuthorizer(extensionProviders []*istiomeshv1alpha1.MeshConfig_Ex
 	//          service: AUTHORINO SERVICE
 	//        name: kuadrant-authorization
 
-	if len(extensionProviders) == 0 {
-		return false
-	}
-
 	for _, extensionProvider := range extensionProviders {
 		if extensionProvider.Name == extAuthorizerName {
 			return true

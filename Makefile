@@ -245,15 +245,19 @@ local-setup: $(KIND) ## Deploy locally kuadrant operator from the current code
 local-cleanup: ## Delete local cluster
 	$(MAKE) kind-delete-cluster
 
-# kuadrant is not deployed
-.PHONY: local-env-setup
-local-env-setup: ## Deploys all services and manifests required by kuadrant to run. Used to run kuadrant with "make run"
+.PHONY: local-cluster-setup
+local-cluster-setup: ## Sets up Kind cluster with GatewayAPI manifests and istio GW, nothing Kuadrant.
 	$(MAKE) kind-delete-cluster
 	$(MAKE) kind-create-cluster
 	$(MAKE) namespace
 	$(MAKE) gateway-api-install
 	$(MAKE) istio-install
 	$(MAKE) deploy-gateway
+
+# kuadrant is not deployed
+.PHONY: local-env-setup
+local-env-setup: ## Deploys all services and manifests required by kuadrant to run. Used to run kuadrant with "make run"
+	$(MAKE) local-cluster-setup
 	$(MAKE) deploy-dependencies
 	$(MAKE) install
 
@@ -265,6 +269,20 @@ test-env-setup: ## Deploys all services and manifests required by kuadrant to ru
 	$(MAKE) deploy-gateway
 	$(MAKE) deploy-dependencies
 	$(MAKE) install
+
+.PHONY: local-olm-setup
+local-olm-setup: ## Installs OLM and the Kuadrant operator catalog, then installs the operator with its dependencies.
+	$(MAKE) local-cluster-setup
+	$(MAKE) docker-build
+	$(MAKE) install-olm
+	$(MAKE) bundle
+	$(MAKE) bundle-build
+	$(MAKE) catalog-generate
+	$(MAKE) catalog-custom-build
+	$(MAKE) kind-load-catalog
+	$(MAKE) kind-load-image
+	$(MAKE) kind-load-bundle
+	$(MAKE) deploy-olm
 
 ##@ Build
 
@@ -281,6 +299,15 @@ docker-build: ## Build docker image with the manager.
 
 docker-push: ## Push docker image with the manager.
 	docker push $(IMG)
+
+kind-load-catalog: ## Load catalog image to local cluster
+	$(KIND) load docker-image $(CATALOG_IMG) --name $(KIND_CLUSTER_NAME)
+
+kind-load-image: ## Load image to local cluster
+	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
+
+kind-load-bundle: ## Load image to local cluster
+	$(KIND) load docker-image $(BUNDLE_IMG) --name $(KIND_CLUSTER_NAME)
 
 ##@ Deployment
 
@@ -310,7 +337,7 @@ install-olm: $(OPERATOR_SDK)
 uninstall-olm:
 	$(OPERATOR_SDK) olm uninstall
 
-deploy-catalog: $(KUSTOMIZE) $(YQ) ## Deploy controller to the K8s cluster specified in ~/.kube/config using OLM catalog image.
+deploy-catalog: $(KUSTOMIZE) $(YQ) ## Deploy operator to the K8s cluster specified in ~/.kube/config using OLM catalog image.
 	V="$(CATALOG_IMG)" $(YQ) eval '.spec.image = strenv(V)' -i config/deploy/olm/catalogsource.yaml
 	$(KUSTOMIZE) build config/deploy/olm | kubectl apply -f -
 
@@ -363,6 +390,61 @@ bundle-build: ## Build the bundle image.
 .PHONY: bundle-push
 bundle-push: ## Push the bundle image.
 	$(MAKE) docker-push IMG=$(BUNDLE_IMG)
+
+.PHONY: opm
+OPM = ./bin/opm
+opm: ## Download opm locally if necessary.
+ifeq (,$(wildcard $(OPM)))
+ifeq (,$(shell which opm 2>/dev/null))
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(OPM)) ;\
+	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
+	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.26.2/$${OS}-$${ARCH}-opm ;\
+	chmod +x $(OPM) ;\
+	}
+else
+OPM = $(shell which opm)
+endif
+endif
+
+# A comma-separated list of bundle images (e.g. make catalog-build BUNDLE_IMGS=example.com/operator-bundle:v0.1.0,example.com/operator-bundle:v0.2.0).
+# These images MUST exist in a registry and be pull-able.
+BUNDLE_IMGS ?= $(BUNDLE_IMG),$(LIMITADOR_OPERATOR_BUNDLE_IMG),$(AUTHORINO_OPERATOR_BUNDLE_IMG)
+
+# The image tag given to the resulting catalog image (e.g. make catalog-build CATALOG_IMG=example.com/operator-catalog:v0.2.0).
+CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:$(IMAGE_TAG)
+
+# Set CATALOG_BASE_IMG to an existing catalog image tag to add $BUNDLE_IMGS to that image.
+ifneq ($(origin CATALOG_BASE_IMG), undefined)
+FROM_INDEX_OPT := --from-index $(CATALOG_BASE_IMG)
+endif
+
+PLATFORM_PARAM =
+ifeq ($(shell uname -sm),Darwin arm64)
+	PLATFORM_PARAM = --platform=linux/arm64
+endif
+
+# Build a catalog image by adding bundle images to an empty catalog using the operator package manager tool, 'opm'.
+# This recipe invokes 'opm' in 'semver' bundle add mode. For more information on add modes, see:
+# https://github.com/operator-framework/community-operators/blob/7f1438c/docs/packaging-operator.md#updating-your-existing-operator
+.PHONY: catalog-build
+catalog-build: opm ## Build a catalog image.
+	$(OPM) index add --container-tool docker --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
+
+.PHONY: catalog-custom-build
+catalog-custom-build: ## Build the bundle image.
+	docker build $(PLATFORM_PARAM) -f catalog.Dockerfile -t $(CATALOG_IMG) .
+
+
+.PHONY: catalog-generate
+catalog-generate: opm ## Generate a catalog/index Dockerfile.
+	$(OPM) index add --generate --container-tool docker --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
+
+# Push the catalog image.
+.PHONY: catalog-push
+catalog-push: ## Push a catalog image.
+	$(MAKE) docker-push IMG=$(CATALOG_IMG)
 
 ##@ Code Style
 

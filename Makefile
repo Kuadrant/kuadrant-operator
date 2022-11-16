@@ -193,15 +193,19 @@ local-setup: ## Deploy locally kuadrant operator from the current code
 local-cleanup: ## Delete local cluster
 	$(MAKE) kind-delete-cluster
 
-# kuadrant is not deployed
-.PHONY: local-env-setup
-local-env-setup: ## Deploys all services and manifests required by kuadrant to run. Used to run kuadrant with "make run"
+.PHONY: local-cluster-setup
+local-cluster-setup: ## Sets up Kind cluster with GatewayAPI manifests and istio GW, nothing Kuadrant.
 	$(MAKE) kind-delete-cluster
 	$(MAKE) kind-create-cluster
 	$(MAKE) namespace
 	$(MAKE) gateway-api-install
 	$(MAKE) istio-install
 	$(MAKE) deploy-gateway
+
+# kuadrant is not deployed
+.PHONY: local-env-setup
+local-env-setup: ## Deploys all services and manifests required by kuadrant to run. Used to run kuadrant with "make run"
+	$(MAKE) local-cluster-setup
 	$(MAKE) deploy-dependencies
 	$(MAKE) install
 
@@ -213,6 +217,20 @@ test-env-setup: ## Deploys all services and manifests required by kuadrant to ru
 	$(MAKE) deploy-gateway
 	$(MAKE) deploy-dependencies
 	$(MAKE) install
+
+.PHONY: local-olm-setup
+local-olm-setup: ## Installs OLM and the Kuadrant operator catalog, then installs the operator with its dependencies.
+	$(MAKE) local-cluster-setup
+	$(MAKE) docker-build
+	$(MAKE) install-olm
+	$(MAKE) bundle
+	$(MAKE) bundle-build
+	$(MAKE) catalog-generate
+	$(MAKE) catalog-custom-build
+	$(MAKE) kind-load-catalog
+	$(MAKE) kind-load-image
+	$(MAKE) kind-load-bundle
+	$(MAKE) deploy-olm
 
 ##@ Build
 
@@ -229,6 +247,15 @@ docker-build: ## Build docker image with the manager.
 
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
+
+kind-load-catalog: ## Load catalog image to local cluster
+	$(KIND) load docker-image $(CATALOG_IMG) --name $(KIND_CLUSTER_NAME)
+
+kind-load-image: ## Load image to local cluster
+	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
+
+kind-load-bundle: ## Load image to local cluster
+	$(KIND) load docker-image $(BUNDLE_IMG) --name $(KIND_CLUSTER_NAME)
 
 ##@ Deployment
 
@@ -258,7 +285,7 @@ install-olm:
 uninstall-olm:
 	$(OPERATOR_SDK) olm uninstall
 
-deploy-olm: ## Deploy controller to the K8s cluster specified in ~/.kube/config using OLM catalog image.
+deploy-olm: ## Deploy operator to the K8s cluster specified in ~/.kube/config using OLM catalog image.
 	$(KUSTOMIZE) build config/deploy/olm | kubectl apply -f -
 
 undeploy-olm: ## Undeploy controller from the K8s cluster specified in ~/.kube/config using OLM catalog image.
@@ -330,7 +357,7 @@ ifeq (,$(shell which opm 2>/dev/null))
 	set -e ;\
 	mkdir -p $(dir $(OPM)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
-	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.15.1/$${OS}-$${ARCH}-opm ;\
+	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.26.2/$${OS}-$${ARCH}-opm ;\
 	chmod +x $(OPM) ;\
 	}
 else
@@ -356,6 +383,11 @@ endif
 .PHONY: catalog-build
 catalog-build: opm ## Build a catalog image.
 	$(OPM) index add --container-tool docker --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
+
+.PHONY: catalog-custom-build
+catalog-custom-build: ## Build the bundle image.
+	docker build -f catalog.Dockerfile -t $(CATALOG_IMG) .
+
 
 .PHONY: catalog-generate
 catalog-generate: opm ## Generate a catalog/index Dockerfile.

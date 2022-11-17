@@ -258,16 +258,24 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 }
 
 func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (ctrl.Result, error) {
+	var reconcileAuthorino = true
+
 	if err := r.registerExternalAuthorizer(ctx, kObj); err != nil {
-		return ctrl.Result{}, err
+		if apierrors.IsNotFound(err) {
+			reconcileAuthorino = false
+		} else {
+			return ctrl.Result{}, err
+		}
 	}
 
 	if err := r.reconcileLimitador(ctx, kObj); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileAuthorino(ctx, kObj); err != nil {
-		return ctrl.Result{}, err
+	if reconcileAuthorino {
+		if err := r.reconcileAuthorino(ctx, kObj); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -290,10 +298,6 @@ func hasKuadrantAuthorizer(extensionProviders []*istiomeshv1alpha1.MeshConfig_Ex
 	//          port: POST
 	//          service: AUTHORINO SERVICE
 	//        name: kuadrant-authorization
-
-	if len(extensionProviders) == 0 {
-		return false
-	}
 
 	for _, extensionProvider := range extensionProviders {
 		if extensionProvider.Name == extAuthorizerName {

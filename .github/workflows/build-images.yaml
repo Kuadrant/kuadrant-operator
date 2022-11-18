@@ -122,7 +122,7 @@ jobs:
           image: kuadrant-operator-catalog
           tags: ${{ env.IMG_TAGS }}
           dockerfiles: |
-            ./index.Dockerfile
+            ./catalog.Dockerfile
       - name: Push Image
         if: ${{ !env.ACT }}
         id: push-to-quay

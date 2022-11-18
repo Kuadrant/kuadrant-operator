@@ -23,12 +23,17 @@ jobs:
         id: add-latest-tag
         run: |
           echo "IMG_TAGS=latest ${{ env.IMG_TAGS }}" >> $GITHUB_ENV
+      - name: Install qemu dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
       - name: Build Image
         id: build-image
         uses: redhat-actions/buildah-build@v2
         with:
           image: kuadrant-operator
           tags: ${{ env.IMG_TAGS }}
+          platforms: linux/amd64,linux/arm64
           dockerfiles: |
             ./Dockerfile
       - name: Push Image
@@ -69,12 +74,17 @@ jobs:
         run: make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} IMAGE_TAG=latest VERSION=0.0.0
       - name: Git diff
         run: git diff
+      - name: Install qemu dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
       - name: Build Image
         id: build-image
         uses: redhat-actions/buildah-build@v2
         with:
           image: kuadrant-operator-bundle
           tags: ${{ env.IMG_TAGS }}
+          platforms: linux/amd64,linux/arm64
           dockerfiles: |
             ./bundle.Dockerfile
       - name: Push Image
@@ -115,12 +125,17 @@ jobs:
         run: make catalog-generate REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} IMAGE_TAG=latest VERSION=0.0.0
       - name: Git diff
         run: git diff
+      - name: Install qemu dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
       - name: Build Image
         id: build-image
         uses: redhat-actions/buildah-build@v2
         with:
           image: kuadrant-operator-catalog
           tags: ${{ env.IMG_TAGS }}
+          platforms: linux/amd64,linux/arm64
           dockerfiles: |
             ./catalog.Dockerfile
       - name: Push Image

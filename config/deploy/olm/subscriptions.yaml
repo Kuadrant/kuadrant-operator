@@ -1,0 +1,30 @@
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: kuadrant
+spec:
+  source: kuadrant-operator-catalog
+  sourceNamespace: kuadrant-system
+  name: kuadrant-operator
+  channel: "preview"
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: limitador
+spec:
+  source: kuadrant-operator-catalog
+  sourceNamespace: kuadrant-system
+  name: limitador-operator
+  channel: "preview"
+---
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: authorino
+spec:
+  source: kuadrant-operator-catalog
+  sourceNamespace: kuadrant-system
+  name: authorino-operator
+  channel: "preview"

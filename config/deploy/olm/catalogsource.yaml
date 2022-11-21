@@ -4,6 +4,6 @@ metadata:
   name: kuadrant-operator-catalog
 spec:
   sourceType: grpc
-  image: quay.io/kuadrant/kuadrant-operator-catalog:latest
+  image: quay.io/kuadrant/kuadrant-operator-catalog:eguzki-test-02
   displayName: Kuadrant Operators
   publisher: grpc

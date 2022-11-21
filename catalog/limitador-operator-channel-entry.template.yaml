@@ -1,0 +1,6 @@
+---
+schema: olm.channel
+package: limitador-operator
+name: preview
+entries:
+  - name: limitador-operator.v${LIMITADOR_OPERATOR_BUNDLE_VERSION}

@@ -5,4 +5,4 @@ resources:
 - namespace.yaml
 - operatorgroup.yaml
 - catalogsource.yaml
-- subscription.yaml
+- subscriptions.yaml

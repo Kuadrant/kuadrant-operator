@@ -26,6 +26,5 @@ testbin/*
 *~
 kuadrant-operator
 
-# ./bin/opm index add --generate output
-database/index.db
-index.Dockerfile
+/catalog/kuadrant-operator-catalog
+/catalog/kuadrant-operator-catalog.Dockerfile

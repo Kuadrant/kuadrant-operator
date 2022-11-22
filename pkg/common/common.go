@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,6 +35,7 @@ const (
 	KuadrantRateLimitPolicyRefAnnotation = "kuadrant.io/ratelimitpolicies"
 	RateLimitPolicyBackRefAnnotation     = "kuadrant.io/ratelimitpolicy-direct-backref"
 	AuthPolicyBackRefAnnotation          = "kuadrant.io/authpolicy-backref"
+	KuadrantNamespaceLabel               = "kuadrant.io/namespace"
 	NamespaceSeparator                   = '/'
 )
 

@@ -1,6 +1,9 @@
 package common
 
 import (
+	"fmt"
+
+	"k8s.io/apimachinery/pkg/api/errors"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -76,6 +79,41 @@ func RulesFromHTTPRoute(route *gatewayapiv1alpha2.HTTPRoute) []HTTPRouteRule {
 	}
 
 	return rules
+}
+
+func GetKuadrantNamespace(gw gatewayapiv1alpha2.Gateway) (string, error) {
+	if !IsGWKuadrantManaged(&gw) {
+		return "", errors.NewInternalError(fmt.Errorf("gateway %s/%s is not Kuadrant managed", gw.Name, gw.Namespace))
+	}
+	return gw.ObjectMeta.Annotations[KuadrantNamespaceLabel], nil
+}
+
+func IsGWKuadrantManaged(gw *gatewayapiv1alpha2.Gateway) bool {
+	_, isSet := gw.GetAnnotations()[KuadrantNamespaceLabel]
+	return isSet
+}
+
+func AnnotateGateway(gw *gatewayapiv1alpha2.Gateway, namespace string) {
+	annotations := gw.GetAnnotations()
+	if annotations == nil || len(annotations) == 0 {
+		gw.SetAnnotations(
+			map[string]string{
+				KuadrantNamespaceLabel: namespace,
+			},
+		)
+	} else {
+		if !IsGWKuadrantManaged(gw) {
+			annotations[KuadrantNamespaceLabel] = namespace
+			gw.SetAnnotations(annotations)
+		}
+	}
+}
+
+func DeleteKuadrantAnnotationFromGateway(gw *gatewayapiv1alpha2.Gateway, namespace string) {
+	annotations := gw.GetAnnotations()
+	if IsGWKuadrantManaged(gw) && annotations[KuadrantNamespaceLabel] == namespace {
+		delete(gw.Annotations, KuadrantNamespaceLabel)
+	}
 }
 
 // routePathMatchToRulePath converts HTTPRoute pathmatch rule to kuadrant's rule path

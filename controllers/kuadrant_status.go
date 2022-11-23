@@ -23,8 +23,22 @@ const (
 	ReadyConditionType string = "Ready"
 )
 
-func (r *KuadrantReconciler) reconcileStatus(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant, specErr error) (ctrl.Result, error) {
-	logger, _ := logr.FromContext(ctx)
+func (r *KuadrantReconciler) reconcileStatus(prevCtx context.Context, kObj *kuadrantv1beta1.Kuadrant, specErr error) (ctrl.Result, error) {
+	logger, err := logr.FromContext(prevCtx)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	istioEnabled, err := r.isIstioEnabled(prevCtx)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !istioEnabled {
+		logger.Info("external auth disabled")
+	}
+
+	ctx := newContextWithIstioEnabled(prevCtx, istioEnabled)
+
 	newStatus, err := r.calculateStatus(ctx, kObj, specErr)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -147,9 +161,19 @@ func (r *KuadrantReconciler) checkLimitadorAvailable(ctx context.Context, kObj *
 }
 
 func (r *KuadrantReconciler) checkAuthorinoAvailable(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (*string, error) {
+	istioEnabled, err := isIstioEnabledFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// When Istio not enabled, it should be OSSM and no need to check availability of authorino
+	if !istioEnabled {
+		return nil, nil
+	}
+
 	authorino := &authorinov1beta1.Authorino{}
 	dKey := client.ObjectKey{Name: "authorino", Namespace: kObj.Namespace}
-	err := r.Client().Get(ctx, dKey, authorino)
+	err = r.Client().Get(ctx, dKey, authorino)
 	if err != nil && !errors.IsNotFound(err) {
 		return nil, err
 	}

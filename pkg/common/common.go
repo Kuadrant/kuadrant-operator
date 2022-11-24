@@ -39,6 +39,12 @@ const (
 	NamespaceSeparator                   = '/'
 )
 
+type KuadrantPolicy interface {
+	client.Object
+	GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference
+	GetWrappedNamespace() gatewayapiv1alpha2.Namespace
+}
+
 func FetchEnv(key string, def string) string {
 	val, ok := os.LookupEnv(key)
 	if !ok {
@@ -46,6 +52,13 @@ func FetchEnv(key string, def string) string {
 	}
 
 	return val
+}
+
+func GetDefaultIfNil[T any](val *T, def T) T {
+	if reflect.ValueOf(val).IsNil() {
+		return def
+	}
+	return *val
 }
 
 // NamespacedNameToObjectKey converts <namespace/name> format string to k8s object key.

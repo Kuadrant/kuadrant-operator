@@ -286,6 +286,14 @@ type RateLimitPolicyList struct {
 	Items           []RateLimitPolicy `json:"items"`
 }
 
+func (r *RateLimitPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
+	return r.Spec.TargetRef
+}
+
+func (r *RateLimitPolicy) GetWrappedNamespace() gatewayapiv1alpha2.Namespace {
+	return gatewayapiv1alpha2.Namespace(r.Namespace)
+}
+
 func init() {
 	SchemeBuilder.Register(&RateLimitPolicy{}, &RateLimitPolicyList{})
 }

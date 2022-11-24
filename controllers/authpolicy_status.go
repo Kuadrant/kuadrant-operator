@@ -18,7 +18,7 @@ import (
 const APAvailableConditionType string = "Available"
 
 // reconcileStatus makes sure status block of AuthPolicy is up-to-date.
-func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy, specErr error) (ctrl.Result, error) {
+func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy, kuadrantNamespace string, specErr error) (ctrl.Result, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger.V(1).Info("Reconciling AuthPolicy status", "spec error", specErr)
 
@@ -27,7 +27,7 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrant
 	if specErr == nil { // skip fetching authconfig if we already have a reconciliation error.
 		apKey := client.ObjectKeyFromObject(ap)
 		authConfigKey := client.ObjectKey{
-			Namespace: common.KuadrantNamespace,
+			Namespace: kuadrantNamespace,
 			Name:      authConfigName(apKey),
 		}
 		authConfig := &authorinov1beta1.AuthConfig{}

@@ -21,20 +21,26 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
-const GatewayName = "istio-ingressgateway"
+const (
+	IstioGatewayName      = "istio-ingressgateway"
+	IstioGatewayNamespace = "istio-system"
+	CustomGatewayName     = "toystore-gw"
+)
 
 var _ = Describe("AuthPolicy controller", func() {
 	var (
 		testNamespace string
 		routeName     = "toystore-route"
-		gwName        = "toystore-gw"
+		gwName        = CustomGatewayName
 	)
 
 	beforeEachCallback := func() {
 		CreateNamespace(&testNamespace)
+		gateway := testBuildBasicGateway(gwName, testNamespace)
+		err := k8sClient.Create(context.Background(), gateway)
+		Expect(err).ToNot(HaveOccurred())
 		ApplyKuadrantCR(testNamespace)
 	}
 
@@ -60,9 +66,15 @@ var _ = Describe("AuthPolicy controller", func() {
 
 				// check Istio's AuthorizationPolicy existence
 				iap := &secv1beta1resources.AuthorizationPolicy{}
+				namespace := IstioGatewayNamespace
+				name := IstioGatewayName
+				if authpolicies[idx].Spec.TargetRef.Kind == "Gateway" {
+					namespace = testNamespace
+					name = CustomGatewayName
+				}
 				iapKey := types.NamespacedName{
-					Name:      getAuthPolicyName(GatewayName, string(authpolicies[idx].Spec.TargetRef.Name), string(authpolicies[idx].Spec.TargetRef.Kind)),
-					Namespace: "istio-system",
+					Name:      getAuthPolicyName(name, string(authpolicies[idx].Spec.TargetRef.Name), string(authpolicies[idx].Spec.TargetRef.Kind)),
+					Namespace: namespace,
 				}
 				Eventually(func() bool {
 					err := k8sClient.Get(context.Background(), iapKey, iap)
@@ -77,7 +89,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				ac := &authorinov1beta1.AuthConfig{}
 				acKey := types.NamespacedName{
 					Name:      authConfigName(client.ObjectKeyFromObject(authpolicies[idx])),
-					Namespace: common.KuadrantNamespace,
+					Namespace: testNamespace,
 				}
 				Eventually(func() bool {
 					err := k8sClient.Get(context.Background(), acKey, ac)
@@ -97,9 +109,15 @@ var _ = Describe("AuthPolicy controller", func() {
 
 				// check Istio's AuthorizationPolicy existence
 				iap := &secv1beta1resources.AuthorizationPolicy{}
+				namespace := IstioGatewayNamespace
+				name := IstioGatewayName
+				if authpolicies[idx].Spec.TargetRef.Kind == "Gateway" {
+					namespace = testNamespace
+					name = CustomGatewayName
+				}
 				iapKey := types.NamespacedName{
-					Name:      getAuthPolicyName(GatewayName, string(authpolicies[idx].Spec.TargetRef.Name), string(authpolicies[idx].Spec.TargetRef.Kind)),
-					Namespace: common.KuadrantNamespace,
+					Name:      getAuthPolicyName(name, string(authpolicies[idx].Spec.TargetRef.Name), string(authpolicies[idx].Spec.TargetRef.Kind)),
+					Namespace: namespace,
 				}
 				Eventually(func() bool {
 					err := k8sClient.Get(context.Background(), iapKey, iap)
@@ -114,7 +132,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				ac := &authorinov1beta1.AuthConfig{}
 				acKey := types.NamespacedName{
 					Name:      authConfigName(client.ObjectKeyFromObject(authpolicies[idx])),
-					Namespace: common.KuadrantNamespace,
+					Namespace: testNamespace,
 				}
 				Eventually(func() bool {
 					err := k8sClient.Get(context.Background(), acKey, ac)
@@ -131,14 +149,11 @@ var _ = Describe("AuthPolicy controller", func() {
 
 	Context("Some rules without hosts", func() {
 		BeforeEach(func() {
-			gateway := testBuildBasicGateway(gwName, testNamespace)
-			err := k8sClient.Create(context.Background(), gateway)
-			Expect(err).ToNot(HaveOccurred())
-
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.toystore.com"})
-			err = k8sClient.Create(context.Background(), httpRoute)
+			err := k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
 
+			typedNamespace := v1alpha2.Namespace(testNamespace)
 			policy := &kuadrantv1beta1.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
@@ -146,9 +161,10 @@ var _ = Describe("AuthPolicy controller", func() {
 				},
 				Spec: kuadrantv1beta1.AuthPolicySpec{
 					TargetRef: v1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1alpha2.Group(gatewayapiv1alpha2.GroupVersion.Group),
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1alpha2.ObjectName(routeName),
+						Group:     gatewayapiv1alpha2.Group(gatewayapiv1alpha2.GroupVersion.Group),
+						Kind:      "HTTPRoute",
+						Name:      gatewayapiv1alpha2.ObjectName(routeName),
+						Namespace: &typedNamespace,
 					},
 					AuthRules: []kuadrantv1beta1.AuthRule{
 						{
@@ -188,7 +204,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			// Check authconfig's hosts
 			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
 			existingAuthC := &authorinov1beta1.AuthConfig{}
-			authCKey := types.NamespacedName{Name: authConfigName(kapKey), Namespace: common.KuadrantNamespace}
+			authCKey := types.NamespacedName{Name: authConfigName(kapKey), Namespace: testNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), authCKey, existingAuthC)
 				return err == nil
@@ -226,14 +242,11 @@ var _ = Describe("AuthPolicy controller", func() {
 
 	Context("All rules with subdomains", func() {
 		BeforeEach(func() {
-			gateway := testBuildBasicGateway(gwName, testNamespace)
-			err := k8sClient.Create(context.Background(), gateway)
-			Expect(err).ToNot(HaveOccurred())
-
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.toystore.com"})
-			err = k8sClient.Create(context.Background(), httpRoute)
+			err := k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
 
+			typedNamespace := v1alpha2.Namespace(testNamespace)
 			policy := &kuadrantv1beta1.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
@@ -241,9 +254,10 @@ var _ = Describe("AuthPolicy controller", func() {
 				},
 				Spec: kuadrantv1beta1.AuthPolicySpec{
 					TargetRef: v1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1alpha2.Group(gatewayapiv1alpha2.GroupVersion.Group),
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1alpha2.ObjectName(routeName),
+						Group:     gatewayapiv1alpha2.Group(gatewayapiv1alpha2.GroupVersion.Group),
+						Kind:      "HTTPRoute",
+						Name:      gatewayapiv1alpha2.ObjectName(routeName),
+						Namespace: &typedNamespace,
 					},
 					AuthRules: []kuadrantv1beta1.AuthRule{
 						{
@@ -289,7 +303,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			// Check authconfig's hosts
 			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
 			existingAuthC := &authorinov1beta1.AuthConfig{}
-			authCKey := types.NamespacedName{Name: authConfigName(kapKey), Namespace: common.KuadrantNamespace}
+			authCKey := types.NamespacedName{Name: authConfigName(kapKey), Namespace: testNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), authCKey, existingAuthC)
 				return err == nil
@@ -301,14 +315,11 @@ var _ = Describe("AuthPolicy controller", func() {
 
 	Context("No rules", func() {
 		BeforeEach(func() {
-			gateway := testBuildBasicGateway(gwName, testNamespace)
-			err := k8sClient.Create(context.Background(), gateway)
-			Expect(err).ToNot(HaveOccurred())
-
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.toystore.com"})
-			err = k8sClient.Create(context.Background(), httpRoute)
+			err := k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
 
+			typedNamespace := v1alpha2.Namespace(testNamespace)
 			policy := &kuadrantv1beta1.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
@@ -316,9 +327,10 @@ var _ = Describe("AuthPolicy controller", func() {
 				},
 				Spec: kuadrantv1beta1.AuthPolicySpec{
 					TargetRef: v1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1alpha2.Group(gatewayapiv1alpha2.GroupVersion.Group),
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1alpha2.ObjectName(routeName),
+						Group:     gatewayapiv1alpha2.Group(gatewayapiv1alpha2.GroupVersion.Group),
+						Kind:      "HTTPRoute",
+						Name:      gatewayapiv1alpha2.ObjectName(routeName),
+						Namespace: &typedNamespace,
 					},
 					AuthRules:  nil,
 					AuthScheme: testBasicAuthScheme(),
@@ -347,7 +359,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			// Check authconfig's hosts
 			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
 			existingAuthC := &authorinov1beta1.AuthConfig{}
-			authCKey := types.NamespacedName{Name: authConfigName(kapKey), Namespace: common.KuadrantNamespace}
+			authCKey := types.NamespacedName{Name: authConfigName(kapKey), Namespace: testNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), authCKey, existingAuthC)
 				return err == nil
@@ -381,6 +393,7 @@ func testBasicAuthScheme() kuadrantv1beta1.AuthSchemeSpec {
 }
 
 func authPolicies(namespace string) []*kuadrantv1beta1.AuthPolicy {
+	typedNamespace := v1alpha2.Namespace(namespace)
 	routePolicy := &kuadrantv1beta1.AuthPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "target-route",
@@ -388,9 +401,10 @@ func authPolicies(namespace string) []*kuadrantv1beta1.AuthPolicy {
 		},
 		Spec: kuadrantv1beta1.AuthPolicySpec{
 			TargetRef: v1alpha2.PolicyTargetReference{
-				Group: "gateway.networking.k8s.io",
-				Kind:  "HTTPRoute",
-				Name:  "toystore",
+				Group:     "gateway.networking.k8s.io",
+				Kind:      "HTTPRoute",
+				Name:      "toystore",
+				Namespace: &typedNamespace,
 			},
 			AuthRules: []kuadrantv1beta1.AuthRule{
 				{
@@ -421,12 +435,12 @@ func authPolicies(namespace string) []*kuadrantv1beta1.AuthPolicy {
 			},
 		},
 	}
-
 	gatewayPolicy := routePolicy.DeepCopy()
 	gatewayPolicy.SetName("target-gateway")
-	gatewayPolicy.SetNamespace("istio-system")
+	gatewayPolicy.SetNamespace(namespace)
 	gatewayPolicy.Spec.TargetRef.Kind = "Gateway"
-	gatewayPolicy.Spec.TargetRef.Name = GatewayName
+	gatewayPolicy.Spec.TargetRef.Name = CustomGatewayName
+	gatewayPolicy.Spec.TargetRef.Namespace = &typedNamespace
 	gatewayPolicy.Spec.AuthRules = []kuadrantv1beta1.AuthRule{
 		{Hosts: []string{"*.toystore.com"}},
 	}

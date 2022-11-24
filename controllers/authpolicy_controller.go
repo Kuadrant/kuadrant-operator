@@ -53,6 +53,24 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 		return ctrl.Result{}, err
 	}
 
+	logger.V(1).Info("Getting Kuadrant namespace")
+	var kuadrantNamespace string
+	kuadrantNamespace, isSet := common.GetNamespaceFromPolicy(&ap)
+	if !isSet {
+		var err error
+		kuadrantNamespace, err = common.GetNamespaceFromPolicyTargetRef(ctx, r.Client(), &ap)
+		if err != nil {
+			logger.Error(err, "failed to get Kuadrant namespace")
+			return ctrl.Result{}, err
+		}
+		common.AnnotateObject(&ap, kuadrantNamespace)
+		err = r.UpdateResource(ctx, &ap)
+		if err != nil {
+			logger.Error(err, "failed to update policy, re-queuing")
+			return ctrl.Result{Requeue: true}, err
+		}
+	}
+
 	if ap.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(&ap, authPolicyFinalizer) {
 		logger.V(1).Info("Handling removal of authpolicy object")
 		if err := r.removeIstioAuthPolicy(ctx, &ap); err != nil {
@@ -60,7 +78,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 			return ctrl.Result{}, err
 		}
 
-		if err := r.removeAuthSchemes(ctx, &ap); err != nil {
+		if err := r.removeAuthSchemes(ctx, &ap, kuadrantNamespace); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -88,13 +106,13 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 		}
 	}
 
-	specResult, specErr := r.reconcileSpec(ctx, &ap)
+	specResult, specErr := r.reconcileSpec(ctx, &ap, kuadrantNamespace)
 	if specErr == nil && specResult.Requeue {
 		logger.V(1).Info("Reconciling spec not finished. Requeueing.")
 		return specResult, nil
 	}
 
-	statusResult, statusErr := r.reconcileStatus(ctx, &ap, specErr)
+	statusResult, statusErr := r.reconcileStatus(ctx, &ap, kuadrantNamespace, specErr)
 
 	if specErr != nil {
 		return ctrl.Result{}, specErr
@@ -113,7 +131,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	return ctrl.Result{}, nil
 }
 
-func (r *AuthPolicyReconciler) reconcileSpec(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) (ctrl.Result, error) {
+func (r *AuthPolicyReconciler) reconcileSpec(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy, kuadrantNamespace string) (ctrl.Result, error) {
 	if err := ap.Validate(); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -130,7 +148,7 @@ func (r *AuthPolicyReconciler) reconcileSpec(ctx context.Context, ap *kuadrantv1
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileAuthSchemes(ctx, ap); err != nil {
+	if err := r.reconcileAuthSchemes(ctx, ap, kuadrantNamespace); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -155,13 +173,13 @@ func (r *AuthPolicyReconciler) enforceHierarchicalConstraints(ctx context.Contex
 	return nil
 }
 
-func (r *AuthPolicyReconciler) reconcileAuthSchemes(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {
+func (r *AuthPolicyReconciler) reconcileAuthSchemes(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy, kuadrantNamespace string) error {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return err
 	}
 
-	authConfig, err := r.desiredAuthConfig(ctx, ap)
+	authConfig, err := r.desiredAuthConfig(ctx, ap, kuadrantNamespace)
 	if err != nil {
 		return err
 	}
@@ -274,7 +292,7 @@ func (r *AuthPolicyReconciler) reconcileNetworkResourceBackReference(ctx context
 		ap.Namespace, common.AuthPolicyBackRefAnnotation)
 }
 
-func (r *AuthPolicyReconciler) removeAuthSchemes(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) error {
+func (r *AuthPolicyReconciler) removeAuthSchemes(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy, kuadrantNamespace string) error {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return err
@@ -290,7 +308,7 @@ func (r *AuthPolicyReconciler) removeAuthSchemes(ctx context.Context, ap *kuadra
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      authConfigName(apKey),
-			Namespace: common.KuadrantNamespace,
+			Namespace: kuadrantNamespace,
 		},
 	}
 
@@ -305,7 +323,7 @@ func (r *AuthPolicyReconciler) removeAuthSchemes(ctx context.Context, ap *kuadra
 	return nil
 }
 
-func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy) (*authorinov1beta1.AuthConfig, error) {
+func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy, kuadrantNamespace string) (*authorinov1beta1.AuthConfig, error) {
 	hosts, err := r.policyHosts(ctx, ap)
 	if err != nil {
 		return nil, err
@@ -318,7 +336,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *kuadra
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      authConfigName(client.ObjectKeyFromObject(ap)),
-			Namespace: common.KuadrantNamespace,
+			Namespace: kuadrantNamespace,
 		},
 		Spec: authorinov1beta1.AuthConfigSpec{
 			Hosts:         hosts,
@@ -380,7 +398,7 @@ func (r *AuthPolicyReconciler) removeIstioAuthPolicy(ctx context.Context, ap *ku
 			},
 		}
 
-		if err := r.DeleteResource(ctx, istioAuthPolicy); err != nil {
+		if err := r.DeleteResource(ctx, istioAuthPolicy); err != nil && !apierrors.IsNotFound(err) {
 			logger.Error(err, "failed to delete Istio's AuthorizationPolicy")
 			return err
 		}

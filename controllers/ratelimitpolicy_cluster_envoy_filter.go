@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/go-logr/logr"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
@@ -70,6 +72,11 @@ func (r *RateLimitPolicyReconciler) gatewayRateLimitingClusterEnvoyFilter(
 	gwKey := client.ObjectKeyFromObject(gw)
 	logger.V(1).Info("gatewayRateLimitingClusterEnvoyFilter", "gwKey", gwKey, "rlpRefs", rlpRefs)
 
+	kuadrantNamespace, err := common.GetKuadrantNamespace(gw)
+	if err != nil {
+		return nil, errors.NewInternalError(fmt.Errorf("gateway is not Kuadrant managed"))
+	}
+
 	ef := &istioclientnetworkingv1alpha3.EnvoyFilter{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "EnvoyFilter",
@@ -92,9 +99,10 @@ func (r *RateLimitPolicyReconciler) gatewayRateLimitingClusterEnvoyFilter(
 		return ef, nil
 	}
 
-	limitadorKey := client.ObjectKey{Name: rlptools.LimitadorName, Namespace: rlptools.LimitadorNamespace}
+	limitadorKey := client.ObjectKey{Name: rlptools.LimitadorName, Namespace: kuadrantNamespace}
+
 	limitador := &limitadorv1alpha1.Limitador{}
-	err := r.Client().Get(ctx, limitadorKey, limitador)
+	err = r.Client().Get(ctx, limitadorKey, limitador)
 	logger.V(1).Info("gatewayRateLimitingClusterEnvoyFilter", "get limitador", limitadorKey, "err", err)
 	if err != nil {
 		return nil, err

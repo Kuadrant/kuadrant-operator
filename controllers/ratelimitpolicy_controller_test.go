@@ -51,6 +51,7 @@ func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnamesStrSlice []s
 	tmpMatchPathPrefix := gatewayapiv1alpha2.PathMatchPathPrefix
 	tmpMatchValue := "/toy"
 	tmpMatchMethod := gatewayapiv1alpha2.HTTPMethod("GET")
+	gwNamespace := gatewayapiv1alpha2.Namespace(ns)
 
 	var hostnames []gatewayapiv1alpha2.Hostname
 	for _, str := range hostnamesStrSlice {
@@ -71,7 +72,8 @@ func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnamesStrSlice []s
 			CommonRouteSpec: gatewayapiv1alpha2.CommonRouteSpec{
 				ParentRefs: []gatewayapiv1alpha2.ParentReference{
 					{
-						Name: gatewayapiv1alpha2.ObjectName(gwName),
+						Name:      gatewayapiv1alpha2.ObjectName(gwName),
+						Namespace: &gwNamespace,
 					},
 				},
 			},
@@ -143,13 +145,18 @@ var _ = Describe("RateLimitPolicy controller", func() {
 	var (
 		testNamespace        string
 		genericDescriptorKey string = "op"
-		// TODO: Fix testing random namespace generation with dependencies getting config from ENV
-		kuadrantDefaultNamespace string = "kuadrant-system"
+		routeName                   = "toystore-route"
+		gwName                      = "toystore-gw"
+		rlpName                     = "toystore-rlp"
+		gateway              *gatewayapiv1alpha2.Gateway
 	)
 
 	beforeEachCallback := func() {
 		CreateNamespace(&testNamespace)
-		ApplyKuadrantCR(kuadrantDefaultNamespace)
+		gateway = testBuildBasicGateway(gwName, testNamespace)
+		err := k8sClient.Create(context.Background(), gateway)
+		Expect(err).ToNot(HaveOccurred())
+		ApplyKuadrantCR(testNamespace)
 	}
 
 	BeforeEach(beforeEachCallback)
@@ -160,7 +167,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check Limitador Status is Ready
 			Eventually(func() bool {
 				limitador := &limitadorv1alpha1.Limitador{}
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: rlptools.LimitadorName, Namespace: kuadrantDefaultNamespace}, limitador)
+				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: rlptools.LimitadorName, Namespace: testNamespace}, limitador)
 				if err != nil {
 					return false
 				}
@@ -170,16 +177,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				return true
 			}, time.Minute, 5*time.Second).Should(BeTrue())
 
-			routeName := "toystore-route"
-			gwName := "toystore-gw"
-			rlpName := "toystore-rlp"
-
-			gateway := testBuildBasicGateway(gwName, testNamespace)
-			err := k8sClient.Create(context.Background(), gateway)
-			Expect(err).ToNot(HaveOccurred())
-
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
-			err = k8sClient.Create(context.Background(), httpRoute)
+			err := k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
 
 			rlp := testBuildBasicRoutePolicy(rlpName, testNamespace, routeName)
@@ -211,7 +210,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				common.RateLimitPolicyBackRefAnnotation, client.ObjectKeyFromObject(rlp).String()))
 
 			// check limits
-			limitadorKey := client.ObjectKey{Name: rlptools.LimitadorName, Namespace: rlptools.LimitadorNamespace}
+			limitadorKey := client.ObjectKey{Name: rlptools.LimitadorName, Namespace: testNamespace}
 			existingLimitador := &limitadorv1alpha1.Limitador{}
 			err = k8sClient.Get(context.Background(), limitadorKey, existingLimitador)
 			// must exist

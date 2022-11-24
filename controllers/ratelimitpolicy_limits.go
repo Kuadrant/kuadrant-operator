@@ -16,7 +16,26 @@ import (
 
 func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
 	logger, _ := logr.FromContext(ctx)
-	limitadorKey := client.ObjectKey{Name: rlptools.LimitadorName, Namespace: rlptools.LimitadorNamespace}
+
+	logger.V(1).Info("Getting Kuadrant namespace")
+	var kuadrantNamespace string
+	kuadrantNamespace, isSet := common.GetNamespaceFromPolicy(rlp)
+	if !isSet {
+		var err error
+		kuadrantNamespace, err = common.GetNamespaceFromPolicyTargetRef(ctx, r.Client(), rlp)
+		if err != nil {
+			logger.Error(err, "failed to get Kuadrant namespace")
+			return err
+		}
+		common.AnnotateObject(rlp, kuadrantNamespace)
+		err = r.UpdateResource(ctx, rlp)
+		if err != nil {
+			logger.Error(err, "failed to update policy, re-queuing")
+			return err
+		}
+	}
+
+	limitadorKey := client.ObjectKey{Name: rlptools.LimitadorName, Namespace: kuadrantNamespace}
 	limitador := &limitadorv1alpha1.Limitador{}
 	err := r.Client().Get(ctx, limitadorKey, limitador)
 	logger.V(1).Info("reconcileLimits", "get limitador", limitadorKey, "err", err)

@@ -1,9 +1,12 @@
 package common
 
 import (
+	"context"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -81,37 +84,67 @@ func RulesFromHTTPRoute(route *gatewayapiv1alpha2.HTTPRoute) []HTTPRouteRule {
 	return rules
 }
 
-func GetKuadrantNamespace(gw gatewayapiv1alpha2.Gateway) (string, error) {
-	if !IsGWKuadrantManaged(&gw) {
-		return "", errors.NewInternalError(fmt.Errorf("gateway %s/%s is not Kuadrant managed", gw.Name, gw.Namespace))
+func GetNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, policy KuadrantPolicy) (string, error) {
+	targetRef := policy.GetTargetRef()
+	gwNamespacedName := types.NamespacedName{Namespace: string(GetDefaultIfNil(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)}
+	if IsTargetRefHTTPRoute(targetRef) {
+		route := &gatewayapiv1alpha2.HTTPRoute{}
+		if err := cli.Get(
+			ctx,
+			types.NamespacedName{Namespace: string(GetDefaultIfNil(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)},
+			route,
+		); err != nil {
+			return "", err
+		}
+		// First should be OK considering there's 1 Kuadrant instance per cluster and all are tagged
+		parentRef := route.Spec.ParentRefs[0]
+		gwNamespacedName = types.NamespacedName{Namespace: string(*parentRef.Namespace), Name: string(parentRef.Name)}
 	}
-	return gw.ObjectMeta.Annotations[KuadrantNamespaceLabel], nil
+	gw := &gatewayapiv1alpha2.Gateway{}
+	if err := cli.Get(ctx, gwNamespacedName, gw); err != nil {
+		return "", err
+	}
+	return GetKuadrantNamespace(gw)
 }
 
-func IsGWKuadrantManaged(gw *gatewayapiv1alpha2.Gateway) bool {
-	_, isSet := gw.GetAnnotations()[KuadrantNamespaceLabel]
+func GetNamespaceFromPolicy(policy KuadrantPolicy) (string, bool) {
+	if kuadrantNamespace, isSet := policy.GetAnnotations()[KuadrantNamespaceLabel]; isSet {
+		return kuadrantNamespace, true
+	}
+	return "", false
+}
+
+func GetKuadrantNamespace(obj client.Object) (string, error) {
+	if !IsKuadrantManaged(obj) {
+		return "", errors.NewInternalError(fmt.Errorf("object %T is not Kuadrant managed", obj))
+	}
+	return obj.GetAnnotations()[KuadrantNamespaceLabel], nil
+}
+
+func IsKuadrantManaged(obj client.Object) bool {
+	_, isSet := obj.GetAnnotations()[KuadrantNamespaceLabel]
 	return isSet
 }
 
-func AnnotateGateway(gw *gatewayapiv1alpha2.Gateway, namespace string) {
-	annotations := gw.GetAnnotations()
-	if annotations == nil || len(annotations) == 0 {
-		gw.SetAnnotations(
+func AnnotateObject(obj client.Object, namespace string) {
+	annotations := obj.GetAnnotations()
+	if len(annotations) == 0 {
+		obj.SetAnnotations(
 			map[string]string{
 				KuadrantNamespaceLabel: namespace,
 			},
 		)
 	} else {
-		if !IsGWKuadrantManaged(gw) {
+		if !IsKuadrantManaged(obj) {
 			annotations[KuadrantNamespaceLabel] = namespace
-			gw.SetAnnotations(annotations)
+			obj.SetAnnotations(annotations)
 		}
 	}
 }
 
 func DeleteKuadrantAnnotationFromGateway(gw *gatewayapiv1alpha2.Gateway, namespace string) {
 	annotations := gw.GetAnnotations()
-	if IsGWKuadrantManaged(gw) && annotations[KuadrantNamespaceLabel] == namespace {
+	if IsKuadrantManaged(gw) && annotations[KuadrantNamespaceLabel] == namespace {
 		delete(gw.Annotations, KuadrantNamespaceLabel)
 	}
 }

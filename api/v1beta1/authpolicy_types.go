@@ -132,3 +132,11 @@ func (ap *AuthPolicy) Validate() error {
 	}
 	return nil
 }
+
+func (ap *AuthPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
+	return ap.Spec.TargetRef
+}
+
+func (ap *AuthPolicy) GetWrappedNamespace() gatewayapiv1alpha2.Namespace {
+	return gatewayapiv1alpha2.Namespace(ap.Namespace)
+}

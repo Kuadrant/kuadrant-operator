@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -213,6 +214,16 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) e
 }
 
 func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+	istioEnabled, err := isIstioEnabledFromContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	// When Istio not enabled, it should be OSSM and external auth is not registered
+	if !istioEnabled {
+		return nil
+	}
+
 	logger, _ := logr.FromContext(ctx)
 	iop := &iopv1alpha1.IstioOperator{}
 
@@ -257,27 +268,32 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 	return nil
 }
 
-func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (ctrl.Result, error) {
-	logger, _ := logr.FromContext(ctx)
-	var reconcileAuthorino = true
+func (r *KuadrantReconciler) reconcileSpec(prevCtx context.Context, kObj *kuadrantv1beta1.Kuadrant) (ctrl.Result, error) {
+	logger, err := logr.FromContext(prevCtx)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	istioEnabled, err := r.isIstioEnabled(prevCtx)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !istioEnabled {
+		logger.Info("external auth disabled")
+	}
+
+	ctx := newContextWithIstioInfo(prevCtx, istioEnabled)
 
 	if err := r.registerExternalAuthorizer(ctx, kObj); err != nil {
-		if apimachinerymeta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
-			logger.Info("not reconciling authorino")
-			reconcileAuthorino = false
-		} else {
-			return ctrl.Result{}, err
-		}
+		return ctrl.Result{}, err
 	}
 
 	if err := r.reconcileLimitador(ctx, kObj); err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if reconcileAuthorino {
-		if err := r.reconcileAuthorino(ctx, kObj); err != nil {
-			return ctrl.Result{}, err
-		}
+	if err := r.reconcileAuthorino(ctx, kObj); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
@@ -345,6 +361,22 @@ func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadr
 }
 
 func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	istioEnabled, err := isIstioEnabledFromContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	// When Istio not enabled, it should be OSSM and external auth is not registered
+	if !istioEnabled {
+		logger.Info("not reconciling authorino")
+		return nil
+	}
+
 	tmpFalse := false
 	authorino := &authorinov1beta1.Authorino{
 		TypeMeta: metav1.TypeMeta{
@@ -370,12 +402,45 @@ func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadr
 		},
 	}
 
-	err := r.SetOwnerReference(kObj, authorino)
+	err = r.SetOwnerReference(kObj, authorino)
 	if err != nil {
 		return err
 	}
 
 	return r.ReconcileResource(ctx, &authorinov1beta1.Authorino{}, authorino, reconcilers.CreateOnlyMutator)
+}
+
+// TODO(eguzki): Define better whether istio is enabled or not
+func (r *KuadrantReconciler) isIstioEnabled(ctx context.Context) (bool, error) {
+	iop := &iopv1alpha1.IstioOperator{}
+	iopKey := client.ObjectKey{Name: iopName(), Namespace: iopNamespace()}
+	if err := r.Client().Get(ctx, iopKey, iop); err != nil {
+		if apimachinerymeta.IsNoMatchError(err) {
+			return false, nil
+		}
+		if apierrors.IsNotFound(err) {
+			return true, nil
+		}
+
+		return false, err
+	}
+
+	return true, nil
+}
+
+// extAuthEnabled is how we find external auth enable flag in a context.Context.
+type extAuthEnabled struct{}
+
+func newContextWithIstioInfo(ctx context.Context, istioEnabled bool) context.Context {
+	return context.WithValue(ctx, extAuthEnabled{}, istioEnabled)
+}
+
+func isIstioEnabledFromContext(ctx context.Context) (bool, error) {
+	if v, ok := ctx.Value(extAuthEnabled{}).(bool); ok {
+		return v, nil
+	}
+
+	return false, errors.New("no istioEnabled was present")
 }
 
 func meshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshConfig, error) {

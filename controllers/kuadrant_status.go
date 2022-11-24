@@ -37,7 +37,7 @@ func (r *KuadrantReconciler) reconcileStatus(prevCtx context.Context, kObj *kuad
 		logger.Info("external auth disabled")
 	}
 
-	ctx := newContextWithIstioEnabled(prevCtx, istioEnabled)
+	ctx := newContextWithIstioInfo(prevCtx, istioEnabled)
 
 	newStatus, err := r.calculateStatus(ctx, kObj, specErr)
 	if err != nil {

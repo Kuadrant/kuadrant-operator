@@ -282,7 +282,7 @@ func (r *KuadrantReconciler) reconcileSpec(prevCtx context.Context, kObj *kuadra
 		logger.Info("external auth disabled")
 	}
 
-	ctx := newContextWithIstioEnabled(prevCtx, istioEnabled)
+	ctx := newContextWithIstioInfo(prevCtx, istioEnabled)
 
 	if err := r.registerExternalAuthorizer(ctx, kObj); err != nil {
 		return ctrl.Result{}, err
@@ -431,7 +431,7 @@ func (r *KuadrantReconciler) isIstioEnabled(ctx context.Context) (bool, error) {
 // extAuthEnabled is how we find external auth enable flag in a context.Context.
 type extAuthEnabled struct{}
 
-func newContextWithIstioEnabled(ctx context.Context, istioEnabled bool) context.Context {
+func newContextWithIstioInfo(ctx context.Context, istioEnabled bool) context.Context {
 	return context.WithValue(ctx, extAuthEnabled{}, istioEnabled)
 }
 

@@ -78,14 +78,6 @@ SHELL = /usr/bin/env bash -o pipefail
 KUADRANT_NAMESPACE ?= kuadrant-system
 
 # Kuadrant component versions
-## kuadrant controller
-#ToDo Pin this version once we have an initial release of the controller
-KUADRANT_CONTROLLER_VERSION ?= latest
-ifeq (latest,$(KUADRANT_CONTROLLER_VERSION))
-KUADRANT_CONTROLLER_GITREF = main
-else
-KUADRANT_CONTROLLER_GITREF = $(KUADRANT_CONTROLLER_VERSION)
-endif
 ## authorino
 #ToDo Pin this version once we have an initial release of authorino
 AUTHORINO_OPERATOR_VERSION ?= latest
@@ -94,7 +86,7 @@ AUTHORINO_OPERATOR_BUNDLE_VERSION = 0.0.0
 AUTHORINO_OPERATOR_BUNDLE_IMG_TAG = latest
 AUTHORINO_OPERATOR_GITREF = main
 else
-AUTHORINO_OPERATOR_BUNDLE_VERSION = ${AUTHORINO_OPERATOR_VERSION}
+AUTHORINO_OPERATOR_BUNDLE_VERSION = $(AUTHORINO_OPERATOR_VERSION)
 AUTHORINO_OPERATOR_BUNDLE_IMG_TAG = v$(AUTHORINO_OPERATOR_BUNDLE_VERSION)
 AUTHORINO_OPERATOR_GITREF = v$(AUTHORINO_OPERATOR_BUNDLE_VERSION)
 endif
@@ -131,26 +123,69 @@ all: build
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-30s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
+##@ Tools
+
 OPERATOR_SDK = $(PROJECT_PATH)/bin/operator-sdk
 OPERATOR_SDK_VERSION = v1.22.0
 $(OPERATOR_SDK):
 	./utils/install-operator-sdk.sh $(OPERATOR_SDK) $(OPERATOR_SDK_VERSION)
 
+.PHONY: operator-sdk
 operator-sdk: $(OPERATOR_SDK) ## Download operator-sdk locally if necessary.
 
-CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
-controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.10.0)
+CONTROLLER_GEN = $(PROJECT_PATH)/bin/controller-gen
+$(CONTROLLER_GEN):
+	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.10.0)
+
+.PHONY: controller-gen
+controller-gen: $(CONTROLLER_GEN)  ## Download controller-gen locally if necessary.
 
 KUSTOMIZE = $(PROJECT_PATH)/bin/kustomize
-$(KUSTOMIZE): 
-	$(call go-get-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v4@v4.5.5)
+$(KUSTOMIZE):
+	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v4@v4.5.5)
 
+.PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
+
+YQ=$(PROJECT_PATH)/bin/yq
+$(YQ):
+	$(call go-install-tool,$(YQ),github.com/mikefarah/yq/v4@latest)
+
+.PHONY: yq
+yq: $(YQ) ## Download yq locally if necessary.
+
+OPM = $(PROJECT_PATH)/bin/opm
+OPM_VERSION = v1.26.2
+$(OPM):
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(OPM)) ;\
+	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
+	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/$(OPM_VERSION)/$${OS}-$${ARCH}-opm ;\
+	chmod +x $(OPM) ;\
+	}
+
+.PHONY: opm
+opm: $(OPM) ## Download opm locally if necessary.
+
+KIND = $(PROJECT_PATH)/bin/kind
+$(KIND):
+	$(call go-install-tool,$(KIND),sigs.k8s.io/kind@v0.11.1)
+
+.PHONY: kind
+kind: $(KIND) ## Download kind locally if necessary.
+
+ACT = $(PROJECT_PATH)/bin/act
+$(ACT):
+	$(call go-install-tool,$(ACT),github.com/nektos/act@latest)
+
+.PHONY: act
+act: $(ACT) ## Download act locally if necessary.
 
 ##@ Development
 
-manifests: controller-gen dependencies-manifests ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
+.PHONY: manifests
+manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: dependencies-manifests
@@ -164,6 +199,7 @@ dependencies-manifests: ## Update kuadrant dependencies manifests.
         < config/dependencies/limitador/kustomization.template.yaml \
         > config/dependencies/limitador/kustomization.yaml
 
+.PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
@@ -191,12 +227,11 @@ namespace: ## Creates a namespace where to deploy Kuadrant Operator
 	kubectl create namespace $(KUADRANT_NAMESPACE)
 
 .PHONY: local-setup
-local-setup: export IMG := $(IMAGE_TAG_BASE):dev
-local-setup: ## Deploy locally kuadrant operator from the current code
+local-setup: $(KIND) ## Deploy locally kuadrant operator from the current code
 	$(MAKE) local-env-setup
-	$(MAKE) docker-build
-	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
-	$(MAKE) deploy
+	$(MAKE) docker-build IMG=$(IMAGE_TAG_BASE):dev
+	$(KIND) load docker-image $(IMAGE_TAG_BASE):dev --name $(KIND_CLUSTER_NAME)
+	$(MAKE) deploy IMG=$(IMAGE_TAG_BASE):dev
 	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
 	@echo
 	@echo "Now you can export the kuadrant gateway by doing:"
@@ -242,10 +277,10 @@ run: generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
 docker-build: ## Build docker image with the manager.
-	docker build -t ${IMG} .
+	docker build -t $(IMG) .
 
 docker-push: ## Push docker image with the manager.
-	docker push ${IMG}
+	docker push $(IMG)
 
 ##@ Deployment
 
@@ -255,10 +290,10 @@ install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~
 uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
 
-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+deploy: manifests dependencies-manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	$(KUSTOMIZE) build config/deploy | kubectl apply -f -
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMAGE_TAG_BASE}:latest
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMAGE_TAG_BASE):latest
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/deploy | kubectl delete -f -
@@ -275,20 +310,21 @@ install-olm: $(OPERATOR_SDK)
 uninstall-olm:
 	$(OPERATOR_SDK) olm uninstall
 
-deploy-olm: $(KUSTOMIZE) ## Deploy controller to the K8s cluster specified in ~/.kube/config using OLM catalog image.
+deploy-catalog: $(KUSTOMIZE) $(YQ) ## Deploy controller to the K8s cluster specified in ~/.kube/config using OLM catalog image.
+	V="$(CATALOG_IMG)" $(YQ) eval '.spec.image = strenv(V)' -i config/deploy/olm/catalogsource.yaml
 	$(KUSTOMIZE) build config/deploy/olm | kubectl apply -f -
 
-undeploy-olm: $(KUSTOMIZE) ## Undeploy controller from the K8s cluster specified in ~/.kube/config using OLM catalog image.
+undeploy-catalog: $(KUSTOMIZE) ## Undeploy controller from the K8s cluster specified in ~/.kube/config using OLM catalog image.
 	$(KUSTOMIZE) build config/deploy/olm | kubectl delete -f -
 
 
 ENVTEST = $(shell pwd)/bin/setup-envtest
 envtest: ## Download envtest-setup locally if necessary.
-	$(call go-get-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
+	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
 
-# go-get-tool will 'go install' any package $2 and install it to $1.
+# go-install-tool will 'go install' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
-define go-get-tool
+define go-install-tool
 @[ -f $(1) ] || { \
 set -e ;\
 TMP_DIR=$$(mktemp -d) ;\
@@ -300,23 +336,24 @@ rm -rf $$TMP_DIR ;\
 }
 endef
 
-
-.PHONY: bundle-dependencies
-bundle-dependencies: export AUTHORINO_OPERATOR_BUNDLE_VERSION := $(AUTHORINO_OPERATOR_BUNDLE_VERSION)
-bundle-dependencies: export LIMITADOR_OPERATOR_BUNDLE_VERSION := $(LIMITADOR_OPERATOR_BUNDLE_VERSION)
-bundle-dependencies: ## Generate bundle dependencies file.
-	./utils/generate-dependencies-yaml.sh > bundle/metadata/dependencies.yaml
-
 .PHONY: bundle
-bundle: export IMAGE_TAG := $(IMAGE_TAG)
-bundle: export BUNDLE_VERSION := $(VERSION)
-bundle: manifests kustomize operator-sdk bundle-dependencies ## Generate bundle manifests and metadata, then validate generated files.
+bundle: $(OPM) $(YQ) manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
+	# Set desired operator image
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-	envsubst \
-		< config/manifests/bases/kuadrant-operator.clusterserviceversion.template.yaml \
-		> config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
+	# Update CSV
+	V="kuadrant-operator.v$(VERSION)" $(YQ) eval '.metadata.name = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
+	V="$(VERSION)" $(YQ) eval '.spec.version = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
+	V="$(IMG)" $(YQ) eval '.metadata.annotations.containerImage = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
+	# Generate bundle
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
+	# Update operator dependencies
+	# TODO(eguzki): run only if not default one. Avoid bundle parsing if version is known in advance
+	V=`$(PROJECT_PATH)/utils/parse-bundle-version.sh $(OPM) $(YQ) $(LIMITADOR_OPERATOR_BUNDLE_IMG)` \
+	    $(YQ) eval '(.dependencies[] | select(.value.packageName == "limitador-operator").value.version) = strenv(V)' -i bundle/metadata/dependencies.yaml
+	V=`$(PROJECT_PATH)/utils/parse-bundle-version.sh $(OPM) $(YQ) $(AUTHORINO_OPERATOR_BUNDLE_IMG)` \
+	    $(YQ) eval '(.dependencies[] | select(.value.packageName == "authorino-operator").value.version) = strenv(V)' -i bundle/metadata/dependencies.yaml
+	# Validate bundle manifests
 	$(OPERATOR_SDK) bundle validate ./bundle
 
 .PHONY: bundle-build

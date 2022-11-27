@@ -3,10 +3,6 @@
 
 ## Targets to help install and use kind for development https://kind.sigs.k8s.io
 
-KIND = $(shell pwd)/bin/kind
-kind: ## Download kind locally if necessary.
-	$(call go-get-tool,$(KIND),sigs.k8s.io/kind@v0.11.1)
-
 KIND_CLUSTER_NAME ?= kuadrant-local
 
 .PHONY: kind-create-cluster

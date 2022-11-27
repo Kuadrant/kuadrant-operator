@@ -1,1 +1,0 @@
-### Kuadrant Operator Preview

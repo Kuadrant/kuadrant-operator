@@ -3,4 +3,4 @@ schema: olm.channel
 package: kuadrant-operator
 name: preview
 entries:
-  - name: kuadrant-operator.v${BUNDLE_VERSION}
+  - name: kuadrant-operator.v0.0.0

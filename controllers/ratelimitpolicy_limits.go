@@ -35,7 +35,7 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ku
 		}
 	}
 
-	limitadorKey := client.ObjectKey{Name: rlptools.LimitadorName, Namespace: kuadrantNamespace}
+	limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantNamespace}
 	limitador := &limitadorv1alpha1.Limitador{}
 	err := r.Client().Get(ctx, limitadorKey, limitador)
 	logger.V(1).Info("reconcileLimits", "get limitador", limitadorKey, "err", err)

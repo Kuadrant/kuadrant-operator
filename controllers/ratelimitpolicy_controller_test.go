@@ -167,7 +167,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check Limitador Status is Ready
 			Eventually(func() bool {
 				limitador := &limitadorv1alpha1.Limitador{}
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: rlptools.LimitadorName, Namespace: testNamespace}, limitador)
+				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, limitador)
 				if err != nil {
 					return false
 				}
@@ -210,7 +210,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				common.RateLimitPolicyBackRefAnnotation, client.ObjectKeyFromObject(rlp).String()))
 
 			// check limits
-			limitadorKey := client.ObjectKey{Name: rlptools.LimitadorName, Namespace: testNamespace}
+			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
 			existingLimitador := &limitadorv1alpha1.Limitador{}
 			err = k8sClient.Get(context.Background(), limitadorKey, existingLimitador)
 			// must exist

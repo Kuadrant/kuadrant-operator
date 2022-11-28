@@ -17,7 +17,6 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
 func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
@@ -99,7 +98,7 @@ func (r *RateLimitPolicyReconciler) gatewayRateLimitingClusterEnvoyFilter(
 		return ef, nil
 	}
 
-	limitadorKey := client.ObjectKey{Name: rlptools.LimitadorName, Namespace: kuadrantNamespace}
+	limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantNamespace}
 
 	limitador := &limitadorv1alpha1.Limitador{}
 	err = r.Client().Get(ctx, limitadorKey, limitador)

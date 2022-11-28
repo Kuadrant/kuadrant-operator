@@ -48,11 +48,6 @@ import (
 const (
 	kuadrantFinalizer = "kuadrant.io/finalizer"
 	extAuthorizerName = "kuadrant-authorization"
-	envLimitadorName  = "LIMITADOR_NAME"
-)
-
-var (
-	limitadorName = common.FetchEnv(envLimitadorName, "limitador")
 )
 
 // KuadrantReconciler reconciles a Kuadrant object
@@ -396,7 +391,7 @@ func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadr
 			APIVersion: "limitador.kuadrant.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      limitadorName,
+			Name:      common.LimitadorName,
 			Namespace: kObj.Namespace,
 		},
 		Spec: limitadorv1alpha1.LimitadorSpec{},

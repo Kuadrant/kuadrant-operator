@@ -32,7 +32,6 @@ import (
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	apimachinerymeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -174,7 +173,7 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) e
 
 	iopKey := client.ObjectKey{Name: iopName(), Namespace: iopNamespace()}
 	if err := r.Client().Get(ctx, iopKey, iop); err != nil {
-		// It should exist, NotFound also considered as error
+		// It should exists, NotFound also considered as error
 		logger.Error(err, "failed to get istiooperator object", "key", iopKey)
 		return err
 	}
@@ -218,7 +217,8 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 
 	iopKey := client.ObjectKey{Name: iopName(), Namespace: iopNamespace()}
 	if err := r.Client().Get(ctx, iopKey, iop); err != nil {
-		// It should exists, NotFound, NoKindMatchError also considered as error
+		// It should exists, NotFound also considered as error
+		logger.Error(err, "failed to get istiooperator object", "key", iopKey)
 		return err
 	}
 
@@ -258,12 +258,10 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 }
 
 func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (ctrl.Result, error) {
-	logger, _ := logr.FromContext(ctx)
 	var reconcileAuthorino = true
 
 	if err := r.registerExternalAuthorizer(ctx, kObj); err != nil {
-		if apimachinerymeta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
-			logger.Info("not reconciling authorino")
+		if apierrors.IsNotFound(err) {
 			reconcileAuthorino = false
 		} else {
 			return ctrl.Result{}, err

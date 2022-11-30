@@ -31,6 +31,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	authorinoopv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istioextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
@@ -70,6 +71,7 @@ func init() {
 	utilruntime.Must(istioextensionv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(apiextv1.AddToScheme(scheme))
 	utilruntime.Must(istioapis.AddToScheme(scheme))
+	utilruntime.Must(maistraapis.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta1.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme

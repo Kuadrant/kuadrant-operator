@@ -81,7 +81,7 @@ func DeleteNamespaceCallback(namespace *string) func() {
 				return true
 			}
 			return false
-		}, time.Minute, 5*time.Second).Should(BeTrue())
+		}, 3*time.Minute, 2*time.Second).Should(BeTrue())
 	}
 }
 

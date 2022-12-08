@@ -12,7 +12,7 @@
       * [Deploy kuadrant operator using OLM](#deploy-kuadrant-operator-using-olm-1)
    * [Cleaning up](#cleaning-up)
    * [Run tests](#run-tests)
-      * [Unittests](#unittests)
+      * [Unit tests](#unittests)
       * [Integration tests](#integration-tests)
       * [All tests](#all-tests)
       * [Lint tests](#lint-tests)

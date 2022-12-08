@@ -3,10 +3,6 @@
 
 ## Targets to help test GitHub Actions locally using act https://github.com/nektos/act
 
-ACT = $(shell pwd)/bin/act
-act: ## Download act locally if necessary.
-	$(call go-get-tool,$(ACT),github.com/nektos/act@latest)
-
 .PHONY: act-pull-request-jobs
 act-pull-request-jobs: act kind ## Run pull request jobs.
 	$(ACT) pull_request --privileged

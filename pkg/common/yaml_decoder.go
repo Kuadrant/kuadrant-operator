@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/ioutil"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,7 +21,7 @@ func DecodeFile(ctx context.Context, fileData []byte, scheme *runtime.Scheme, cb
 
 	// the maximum size used to buffer a doc 5M
 	buf := make([]byte, 5*1024*1024)
-	docDecoder := yaml.NewDocumentDecoder(ioutil.NopCloser(bytes.NewReader(fileData)))
+	docDecoder := yaml.NewDocumentDecoder(io.NopCloser(bytes.NewReader(fileData)))
 
 	for {
 		n, err := docDecoder.Read(buf)

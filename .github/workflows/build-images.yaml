@@ -69,6 +69,9 @@ jobs:
       - name: Run make bundle
         if: ${{ github.ref_name != env.MAIN_BRANCH_NAME }}
         run: make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} IMAGE_TAG=${{ github.ref_name }}
+      - name: Run make bundle (main)
+        if: ${{ github.ref_name == env.MAIN_BRANCH_NAME }}
+        run: make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} IMAGE_TAG=latest VERSION=0.0.0
       - name: Git diff
         run: git diff
       - name: Install qemu dependency
@@ -114,8 +117,14 @@ jobs:
         id: add-latest-tag
         run: |
           echo "IMG_TAGS=latest ${{ env.IMG_TAGS }}" >> $GITHUB_ENV
-      - name: Generate Catalog Content
-        run: make catalog
+      - name: Run make catalog-generate
+        if: ${{ github.ref_name != env.MAIN_BRANCH_NAME }}
+        run: make catalog-generate REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} IMAGE_TAG=${{ github.ref_name }}
+      - name: Run make catalog-generate (main)
+        if: ${{ github.ref_name == env.MAIN_BRANCH_NAME }}
+        run: make catalog-generate REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} IMAGE_TAG=latest VERSION=0.0.0
+      - name: Git diff
+        run: git diff
       - name: Install qemu dependency
         run: |
           sudo apt-get update
@@ -127,9 +136,8 @@ jobs:
           image: kuadrant-operator-catalog
           tags: ${{ env.IMG_TAGS }}
           platforms: linux/amd64,linux/arm64
-          context: ./catalog
           dockerfiles: |
-            ./catalog/kuadrant-operator-catalog.Dockerfile
+            ./catalog.Dockerfile
       - name: Push Image
         if: ${{ !env.ACT }}
         id: push-to-quay

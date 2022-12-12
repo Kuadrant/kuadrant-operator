@@ -394,27 +394,6 @@ ifeq ($(shell uname -sm),Darwin arm64)
 	PLATFORM_PARAM = --platform=linux/arm64
 endif
 
-# Build a catalog image by adding bundle images to an empty catalog using the operator package manager tool, 'opm'.
-# This recipe invokes 'opm' in 'semver' bundle add mode. For more information on add modes, see:
-# https://github.com/operator-framework/community-operators/blob/7f1438c/docs/packaging-operator.md#updating-your-existing-operator
-.PHONY: catalog-build
-catalog-build: opm ## Build a catalog image.
-	$(OPM) index add --container-tool docker --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
-
-.PHONY: catalog-custom-build
-catalog-custom-build: ## Build the bundle image.
-	docker build $(PLATFORM_PARAM) -f catalog.Dockerfile -t $(CATALOG_IMG) .
-
-
-.PHONY: catalog-generate
-catalog-generate: opm ## Generate a catalog/index Dockerfile.
-	$(OPM) index add --generate --container-tool docker --mode semver --tag $(CATALOG_IMG) --bundles $(BUNDLE_IMGS) $(FROM_INDEX_OPT)
-
-# Push the catalog image.
-.PHONY: catalog-push
-catalog-push: ## Push a catalog image.
-	$(MAKE) docker-push IMG=$(CATALOG_IMG)
-
 ##@ Code Style
 
 GOLANGCI-LINT = $(PROJECT_PATH)/bin/golangci-lint

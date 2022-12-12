@@ -136,8 +136,9 @@ jobs:
           image: kuadrant-operator-catalog
           tags: ${{ env.IMG_TAGS }}
           platforms: linux/amd64,linux/arm64
+          context: ./catalog
           dockerfiles: |
-            ./catalog.Dockerfile
+            ./catalog/kuadrant-operator-catalog.Dockerfile
       - name: Push Image
         if: ${{ !env.ACT }}
         id: push-to-quay

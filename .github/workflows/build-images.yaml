@@ -67,13 +67,7 @@ jobs:
         run: |
           echo "IMG_TAGS=latest ${{ env.IMG_TAGS }}" >> $GITHUB_ENV
       - name: Run make bundle
-        if: ${{ github.ref_name != env.MAIN_BRANCH_NAME }}
         run: make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} IMAGE_TAG=${{ github.ref_name }}
-      - name: Run make bundle (main)
-        if: ${{ github.ref_name == env.MAIN_BRANCH_NAME }}
-        run: make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} IMAGE_TAG=latest VERSION=0.0.0
-      - name: Git diff
-        run: git diff
       - name: Install qemu dependency
         run: |
           sudo apt-get update
@@ -117,14 +111,8 @@ jobs:
         id: add-latest-tag
         run: |
           echo "IMG_TAGS=latest ${{ env.IMG_TAGS }}" >> $GITHUB_ENV
-      - name: Run make catalog
-        if: ${{ github.ref_name != env.MAIN_BRANCH_NAME }}
-        run: make catalog REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} IMAGE_TAG=${{ github.ref_name }}
-      - name: Run make catalog (main)
-        if: ${{ github.ref_name == env.MAIN_BRANCH_NAME }}
-        run: make catalog REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} IMAGE_TAG=latest VERSION=0.0.0
-      - name: Git diff
-        run: git diff
+      - name: Generate Catalog Content
+        run: make catalog
       - name: Install qemu dependency
         run: |
           sudo apt-get update

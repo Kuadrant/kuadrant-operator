@@ -286,9 +286,6 @@ docker-build: ## Build docker image with the manager.
 docker-push: ## Push docker image with the manager.
 	docker push $(IMG)
 
-kind-load-catalog: ## Load catalog image to local cluster
-	$(KIND) load docker-image $(CATALOG_IMG) --name $(KIND_CLUSTER_NAME)
-
 kind-load-image: ## Load image to local cluster
 	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
 

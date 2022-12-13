@@ -67,10 +67,7 @@ jobs:
         run: |
           echo "IMG_TAGS=latest ${{ env.IMG_TAGS }}" >> $GITHUB_ENV
       - name: Run make bundle
-        if: ${{ github.ref_name != env.MAIN_BRANCH_NAME }}
         run: make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} IMAGE_TAG=${{ github.ref_name }}
-      - name: Git diff
-        run: git diff
       - name: Install qemu dependency
         run: |
           sudo apt-get update

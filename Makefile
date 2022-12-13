@@ -186,7 +186,7 @@ act: $(ACT) ## Download act locally if necessary.
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./api/v1beta1" output:crd:artifacts:config=config/crd/bases
 
 .PHONY: dependencies-manifests
 dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
@@ -245,15 +245,19 @@ local-setup: $(KIND) ## Deploy locally kuadrant operator from the current code
 local-cleanup: ## Delete local cluster
 	$(MAKE) kind-delete-cluster
 
-# kuadrant is not deployed
-.PHONY: local-env-setup
-local-env-setup: ## Deploys all services and manifests required by kuadrant to run. Used to run kuadrant with "make run"
+.PHONY: local-cluster-setup
+local-cluster-setup: ## Sets up Kind cluster with GatewayAPI manifests and istio GW, nothing Kuadrant.
 	$(MAKE) kind-delete-cluster
 	$(MAKE) kind-create-cluster
 	$(MAKE) namespace
 	$(MAKE) gateway-api-install
 	$(MAKE) istio-install
 	$(MAKE) deploy-gateway
+
+# kuadrant is not deployed
+.PHONY: local-env-setup
+local-env-setup: ## Deploys all services and manifests required by kuadrant to run. Used to run kuadrant with "make run"
+	$(MAKE) local-cluster-setup
 	$(MAKE) deploy-dependencies
 	$(MAKE) install
 
@@ -281,6 +285,12 @@ docker-build: ## Build docker image with the manager.
 
 docker-push: ## Push docker image with the manager.
 	docker push $(IMG)
+
+kind-load-image: ## Load image to local cluster
+	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
+
+kind-load-bundle: ## Load image to local cluster
+	$(KIND) load docker-image $(BUNDLE_IMG) --name $(KIND_CLUSTER_NAME)
 
 ##@ Deployment
 
@@ -310,7 +320,7 @@ install-olm: $(OPERATOR_SDK)
 uninstall-olm:
 	$(OPERATOR_SDK) olm uninstall
 
-deploy-catalog: $(KUSTOMIZE) $(YQ) ## Deploy controller to the K8s cluster specified in ~/.kube/config using OLM catalog image.
+deploy-catalog: $(KUSTOMIZE) $(YQ) ## Deploy operator to the K8s cluster specified in ~/.kube/config using OLM catalog image.
 	V="$(CATALOG_IMG)" $(YQ) eval '.spec.image = strenv(V)' -i config/deploy/olm/catalogsource.yaml
 	$(KUSTOMIZE) build config/deploy/olm | kubectl apply -f -
 

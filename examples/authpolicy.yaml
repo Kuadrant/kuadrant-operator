@@ -1,0 +1,44 @@
+# A Kuadrant AuthPolicy to protect an API with authentication based on OpenId Connect (OIDC) ID tokens (signed JWTs)
+# and Kubernetes Service Account tokens combined, and authorization with permissions (bindings) stored in the
+# Kubernetes RBAC, enforced by Authorino, Kuadrant's authorization service.
+apiVersion: kuadrant.io/v1beta1
+kind: AuthPolicy
+metadata:
+  name: my-api-auth
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: my-api-route
+  authScheme:
+    identity:
+      # An OIDC authentication server listed as a trusted source of identities who can send requests the protected API.
+      # Authorino will prefetch the JWKS using OpenId Connect Discovery, and verify ID tokens (JWTs) issued by the server
+      # as valid authentication tokens to consume the protected API.
+      # Read more about this feature at https://github.com/Kuadrant/authorino/blob/v0.5.0/docs/user-guides/oidc-jwt-authentication.md.
+      - name: sso-users
+        oidc:
+          endpoint: https://sso-server/realm
+
+      # Authorino will verify Kubernetes Service Account tokens, using Kubernetes TokenReview API,
+      # as valid authentication tokens to consume the protected API.
+      # Read more about this feature at https://github.com/Kuadrant/authorino/blob/v0.5.0/docs/user-guides/kubernetes-tokenreview.md.
+      - name: k8s-sa
+        kubernetes:
+          audiences:
+            - https://kubernetes.default.svc.cluster.local
+
+    # Authorino will enforce authorization using Kubernetes SubjectAccessReview API.
+    # Permissions to consume the API are stored in the Kubernetes cluster as ClusterRoles and ClusterRoleBindings.
+    # The path and the method of the request to the protected API will be implicitly used as the rules to check for
+    # an existing binding in the Kubernetes RBAC system.
+    # Read more about this feature at https://github.com/Kuadrant/authorino/blob/main/docs/user-guides/kubernetes-subjectaccessreview.md.
+    # For using Roles and RoleBindings instead of ClusterRoles and ClusterRoleBindings, thus more flexible attribute-based
+    # permissions to protect the API, see the spec for `resourceAttributes` in the Authorino docs at
+    # https://github.com/Kuadrant/authorino/blob/v0.5.0/docs/features.md#kubernetes-subjectaccessreview-authorizationkubernetes.
+    authorization:
+      - name: k8s-rbac
+        kubernetes:
+          user:
+            valueFrom:
+              authJSON: auth.identity.sub

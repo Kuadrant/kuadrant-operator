@@ -9,41 +9,21 @@ spec:
     kind: HTTPRoute
     name: toystore
   rateLimits:
-    - rules:
-        - paths: ["/admin/toy"]
-          methods: ["POST"]
-      configurations:
-        - actions:
-            - generic_key:
-                descriptor_key: admin-operation
-                descriptor_value: "1"
-      limits:
-        - conditions:
-            - "admin-operation == 1"
-          maxValue: 5
-          seconds: 10
-          variables: []
-    - rules:
-        - paths: ["/toy"]
-          methods: ["GET"]
-      configurations:
-        - actions:
-            - generic_key:
-                descriptor_key: get-operation
-                descriptor_value: "1"
-      limits:
-        - conditions:
-            - "get-operation == 1"
-          maxValue: 8
-          seconds: 10
-          variables: []
     - configurations:
         - actions:
-            - generic_key:
-                descriptor_key: toystore
-                descriptor_value: "1"
+            - metadata:
+                descriptor_key: "userID"
+                default_value: "no-user"
+                metadata_key:
+                  key: "envoy.filters.http.ext_authz"
+                  path:
+                    - segment:
+                        key: "ext_auth_data"
+                    - segment:
+                        key: "userID"
       limits:
-        - conditions: ["toystore == 1"]
-          maxValue: 30
+        - conditions: []
+          maxValue: 2
           seconds: 10
-          variables: []
+          variables:
+            - userID

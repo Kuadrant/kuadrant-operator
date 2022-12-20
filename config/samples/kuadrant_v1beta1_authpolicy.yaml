@@ -9,16 +9,23 @@ spec:
     kind: HTTPRoute
     name: toystore
   rules:
-  - hosts: ["*.toystore.com"]
-    methods: ["DELETE", "POST"]
-    paths: ["/admin*"]
   authScheme:
     identity:
-    - name: friends
-      apiKey:
-        selector:
-          matchLabels:
-            group: friends
-      credentials:
-        in: authorization_header
-        keySelector: APIKEY
+      - name: friends
+        apiKey:
+          allNamespaces: true
+          selector:
+            matchLabels:
+              app: toystore
+        credentials:
+          in: authorization_header
+          keySelector: APIKEY
+    response:
+      - json:
+          properties:
+            - name: userID
+              valueFrom:
+                authJSON: auth.identity.metadata.annotations.secret\.kuadrant\.io/user-id
+        name: rate-limit-apikey
+        wrapper: envoyDynamicMetadata
+        wrapperKey: ext_auth_data

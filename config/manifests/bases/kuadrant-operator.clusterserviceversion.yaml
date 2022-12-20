@@ -21,6 +21,16 @@ spec:
         kind: Kuadrant
         name: kuadrants.kuadrant.io
         version: v1beta1
+      - description: Enable AuthN and AuthZ based access control on workloads
+        displayName: AuthPolicy
+        kind: AuthPolicy
+        name: authpolicies.kuadrant.io
+        version: v1beta1
+      - description: Enable access control on workloads based on HTTP rate limiting
+        displayName: RateLimitPolicy
+        kind: RateLimitPolicy
+        name: ratelimitpolicies.kuadrant.io
+        version: v1beta1
   description: Kuadrant Operator
   displayName: Kuadrant
   icon:

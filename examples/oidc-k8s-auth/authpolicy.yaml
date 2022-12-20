@@ -4,26 +4,27 @@
 apiVersion: kuadrant.io/v1beta1
 kind: AuthPolicy
 metadata:
-  name: my-api-auth
+  name: toystore-protection
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
-    name: my-api-route
+    name: toystore
   authScheme:
+    # The list of trusted identity sources which can send requests the protected API.
     identity:
-      # An OIDC authentication server listed as a trusted source of identities who can send requests the protected API.
+      # An OIDC authentication server listed as a trusted source of identities which can send requests the protected API.
       # Authorino will prefetch the JWKS using OpenId Connect Discovery, and verify ID tokens (JWTs) issued by the server
       # as valid authentication tokens to consume the protected API.
       # Read more about this feature at https://github.com/Kuadrant/authorino/blob/v0.11.0/docs/user-guides/oidc-jwt-authentication.md.
-      - name: sso-users
+      - name: keycloak-users
         oidc:
-          endpoint: https://sso-server/realm
+          endpoint: http://keycloak.keycloak.svc.cluster.local:8080/auth/realms/kuadrant
 
       # Authorino will verify Kubernetes Service Account tokens, using Kubernetes TokenReview API,
       # as valid authentication tokens to consume the protected API.
       # Read more about this feature at https://github.com/Kuadrant/authorino/blob/v0.11.0/docs/user-guides/kubernetes-tokenreview.md.
-      - name: k8s-sa
+      - name: k8s-service-accounts
         kubernetes:
           audiences:
             - https://kubernetes.default.svc.cluster.local

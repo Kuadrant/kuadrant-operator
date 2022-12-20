@@ -78,7 +78,7 @@ the [Quay.io/Kuadrant](https://quay.io/organization/kuadrant) image repository.
 Create kind cluster
 
 ```sh
-kind-create-cluster
+make kind-create-cluster
 ```
 
 Deploy OLM system

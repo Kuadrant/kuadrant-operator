@@ -33,8 +33,8 @@
 
 ## Build
 
-```
-$ make
+```sh
+make
 ```
 
 ## Run locally
@@ -43,20 +43,20 @@ You need an active session open to a kubernetes cluster.
 
 Optionally, run kind and deploy kuadrant deps
 
-```
-$ make local-env-setup
+```sh
+make local-env-setup
 ```
 
 Then, run the operator locally
 
-```
-$ make run
+```sh
+make run
 ```
 
 ## Deploy the operator in a deployment object
 
-```
-$ make local-setup
+```sh
+make local-setup
 ```
 
 List of tasks done by the command above:
@@ -77,13 +77,13 @@ the [Quay.io/Kuadrant](https://quay.io/organization/kuadrant) image repository.
 
 Create kind cluster
 
-```
-make kind-create-cluster
+```sh
+kind-create-cluster
 ```
 
 Deploy OLM system
 
-```
+```sh
 make install-olm
 ```
 
@@ -93,7 +93,7 @@ Deploy kuadrant using OLM. The `make deploy-catalog` target accepts the followin
 | --- | --- | --- |
 | `CATALOG_IMG` | Kuadrant operator catalog image URL | `quay.io/kuadrant/kuadrant-operator-catalog:latest` |
 
-```
+```sh
 make deploy-catalog [CATALOG_IMG=quay.io/kuadrant/kuadrant-operator-catalog:latest]
 ```
 
@@ -132,7 +132,7 @@ make bundle [IMG=quay.io/kuadrant/kuadrant-operator:latest] \
 | --- | --- | --- |
 | `BUNDLE_IMG` | Kuadrant operator bundle image URL | `quay.io/kuadrant/kuadrant-operator-bundle:latest` |
 
-```bash
+```sh
 make bundle-build [BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest]
 ```
 
@@ -142,7 +142,7 @@ make bundle-build [BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest]
 | --- | --- | --- |
 | `BUNDLE_IMG` | Kuadrant operator bundle image URL | `quay.io/kuadrant/kuadrant-operator-bundle:latest` |
 
-```bash
+```sh
 make bundle-push [BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest]
 ```
 
@@ -154,7 +154,7 @@ In the example, a new kuadrant operator bundle version `0.8.0` will be created t
 the kuadrant operator image `quay.io/kuadrant/kuadrant-operator:v0.5.0` and latest Limitador and
 Authorino bundles.
 
-```bash
+```sh
 # manifests
 make bundle IMG=quay.io/kuadrant/kuadrant-operator:v0.5.0 VERSION=0.8.0
 
@@ -179,7 +179,7 @@ The `make catalog` target accepts the following variables:
 | `LIMITADOR_OPERATOR_BUNDLE_IMG` | Limitador operator bundle URL | `quay.io/kuadrant/limitador-operator-bundle:latest` |
 | `AUTHORINO_OPERATOR_BUNDLE_IMG` | Authorino operator bundle URL | `quay.io/kuadrant/authorino-operator-bundle:latest` |
 
-```bash
+```sh
 make catalog [BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest] \
             [LIMITADOR_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/limitador-operator-bundle:latest] \
             [AUTHORINO_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/authorino-operator-bundle:latest]
@@ -191,13 +191,13 @@ make catalog [BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest] \
 | --- | --- | --- |
 | `CATALOG_IMG` | Kuadrant operator catalog image URL | `quay.io/kuadrant/kuadrant-operator-catalog:latest` |
 
-```bash
+```sh
 make catalog-build [CATALOG_IMG=quay.io/kuadrant/kuadrant-operator-catalog:latest]
 ```
 
 * Push the catalog image to a registry
 
-```bash
+```sh
 make catalog-push [CATALOG_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest]
 ```
 
@@ -206,16 +206,16 @@ You can try out your custom catalog image following the steps of the
 
 ## Cleaning up
 
-```
-$ make local-cleanup
+```sh
+make local-cleanup
 ```
 
 ## Run tests
 
 ### Unittests
 
-```
-$ make test-unit
+```sh
+make test-unit
 ```
 
 ### Integration tests
@@ -224,14 +224,14 @@ You need an active session open to a kubernetes cluster.
 
 Optionally, run kind and deploy kuadrant deps
 
-```
-$ make local-env-setup
+```sh
+make local-env-setup
 ```
 
 Run integration tests
 
-```
-$ make test-integration
+```sh
+make test-integration
 ```
 
 ### All tests
@@ -240,20 +240,20 @@ You need an active session open to a kubernetes cluster.
 
 Optionally, run kind and deploy kuadrant deps
 
-```
-$ make local-env-setup
+```sh
+make local-env-setup
 ```
 
 Run all tests
 
-```
-$ make test
+```sh
+make test
 ```
 
 ### Lint tests
 
-```
-$ make run-lint
+```sh
+make run-lint
 ```
 
 ## (Un)Install Kuadrant CRDs
@@ -262,8 +262,8 @@ You need an active session open to a kubernetes cluster.
 
 Remove CRDs
 
-```
-$ make uninstall
+```sh
+make uninstall
 ```
 
 [git_tool]:https://git-scm.com/downloads

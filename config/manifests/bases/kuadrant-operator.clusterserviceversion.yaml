@@ -53,6 +53,12 @@ spec:
     - api
     - api-management
     - Kuadrant
+    - kubernetes
+    - openshift
+    - cloud-service-protection
+    - rate-limiting
+    - authentication
+    - authorization
   links:
     - name: Kuadrant Operator
       url: https://github.com/Kuadrant/kuadrant-operator

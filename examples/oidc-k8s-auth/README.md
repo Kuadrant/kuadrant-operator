@@ -1,8 +1,8 @@
-# Protecting an API with JSON Web Tokens (JWTs) and Kubernetes authnz using Kuadrant
+# Rate-limiting and protecting an API with JSON Web Tokens (JWTs) and Kubernetes authnz using Kuadrant
 
-Example of protecting an API (the Toy Store API) with authentication based on ID tokens (signed JWTs) issued by an
-OpenId Connect (OIDC) server (Keycloak) and alternative Kubernetes Service Account tokens, and authorization based on
-Kubernetes RBAC, with permissions (bindings) stored as Kubernetes Roles and RoleBindings.
+Example of rate-limiting and protecting an API (the Toy Store API) with authentication based on ID tokens (signed JWTs)
+issued by an OpenId Connect (OIDC) server (Keycloak) and alternative Kubernetes Service Account tokens, and authorization
+based on Kubernetes RBAC, with permissions (bindings) stored as Kubernetes Roles and RoleBindings.
 
 ## Pre-requisites
 
@@ -10,7 +10,7 @@ Kubernetes RBAC, with permissions (bindings) stored as Kubernetes Roles and Role
 - [kubectl](https://kubernetes.io/docs/reference/kubectl/) command-line tool
 - [jq](https://stedolan.github.io/jq/)
 
-## Run the guide ❶ → ❻
+## Run the guide ❶ → ❼
 
 ### ❶ Setup the environment
 
@@ -124,6 +124,15 @@ spec:
           user:
             valueFrom:
               authJSON: auth.identity.sub
+    response:
+      - name: rate-limit
+        json:
+          properties:
+            - name: userID
+              valueFrom:
+                authJSON: auth.identity.sub
+        wrapper: envoyDynamicMetadata
+        wrapperKey: ext_auth_data
 EOF
 ```
 
@@ -269,6 +278,61 @@ curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://loc
 curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' -X POST http://localhost:9080/admin/toy -i
 # HTTP/1.1 403 Forbidden
 ```
+
+### ❼ Create the `RateLimitPolicy`
+
+```sh
+kubectl apply -f -<<EOF
+apiVersion: kuadrant.io/v1beta1
+kind: RateLimitPolicy
+metadata:
+  name: toystore-rate-limit
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
+  rateLimits:
+    - configurations:
+        - actions:
+            - metadata:
+                descriptor_key: "userID"
+                default_value: "no-user"
+                metadata_key:
+                  key: "envoy.filters.http.ext_authz"
+                  path:
+                    - segment:
+                        key: "ext_auth_data"
+                    - segment:
+                        key: "userID"
+      limits:
+        - conditions: []
+          maxValue: 5
+          seconds: 10
+          variables:
+            - userID
+EOF
+```
+
+> **Note:** It may take a couple minutes for the RateLimitPolicy to be applied depending on your cluster.
+
+#### Try the API rate limited
+
+Send requests as the Keycloak-authenticated user:
+
+```sh
+while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
+```
+
+Send requests as the service account:
+
+```sh
+while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
+```
+
+Each user should be entitled to a maximum of 5 requests to the API every 10 seconds.
+
+> **Note:** You may need to refresh the tokens if they are expired.
 
 ## Cleanup
 

@@ -15,10 +15,10 @@ spec:
       configurations:
         - actions:
             - generic_key:
-                descriptor_key: get-toy
+                descriptor_key: get_toy
                 descriptor_value: "yes"
       limits:
-        - conditions: ["get-toy == yes"]
+        - conditions: ["get_toy == 'yes'"]
           maxValue: 2
           seconds: 30
           variables: []
@@ -31,7 +31,7 @@ spec:
                 descriptor_key: admin
                 descriptor_value: "yes"
             - metadata:
-                descriptor_key: "user-id"
+                descriptor_key: "user_id"
                 default_value: "no-user"
                 metadata_key:
                   key: "envoy.filters.http.ext_authz"
@@ -39,17 +39,17 @@ spec:
                     - segment:
                         key: "ext_auth_data"
                     - segment:
-                        key: "user-id"
+                        key: "user_id"
       limits:
         - conditions:
-            - "admin == yes"
-            - "user-id == bob"
+            - "admin == 'yes'"
+            - "user_id == 'bob'"
           maxValue: 2
           seconds: 30
           variables: []
         - conditions:
-            - "admin == yes"
-            - "user-id == alice"
+            - "admin == 'yes'"
+            - "user_id == 'alice'"
           maxValue: 4
           seconds: 30
           variables: []
@@ -59,7 +59,7 @@ spec:
                 descriptor_key: vhaction
                 descriptor_value: "yes"
       limits:
-        - conditions: ["vhaction == yes"]
+        - conditions: ["vhaction == 'yes'"]
           maxValue: 6
           seconds: 30
           variables: []

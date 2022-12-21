@@ -16,10 +16,10 @@ spec:
       configurations:
         - actions:
             - generic_key:
-                descriptor_key: expensive-op
+                descriptor_key: expensive_op
                 descriptor_value: "1"
       limits:
-        - conditions: ["expensive-op == 1"]
+        - conditions: ["expensive_op == '1'"]
           maxValue: 2
           seconds: 30
           variables: []

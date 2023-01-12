@@ -189,40 +189,40 @@ func (c *KuadrantRateLimitPolicyRefsConfig) PolicyRefsAnnotation() string {
 
 // TODO(guicassolato): Define KuadrantAuthPolicyRefsConfig
 
-func NewGateways(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
+func GatewaysMissingPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
 	// gateways referenced by the policy but do not have reference to it in the annotations
-	newGateways := make([]GatewayWrapper, 0)
-	for _, gw := range gwList.Items {
-		if ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gw)) &&
-			!(GatewayWrapper{&gw, config}).ContainsPolicy(policyKey) {
-			newGateways = append(newGateways, GatewayWrapper{&gw, config})
+	gateways := make([]GatewayWrapper, 0)
+	for _, gateway := range gwList.Items {
+		gw := GatewayWrapper{&gateway, config}
+		if ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && !gw.ContainsPolicy(policyKey) {
+			gateways = append(gateways, gw)
 		}
 	}
-	return newGateways
+	return gateways
 }
 
-func SameGateways(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
+func GatewaysWithValidPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
 	// gateways referenced by the policy but also have reference to it in the annotations
-	sameGateways := make([]GatewayWrapper, 0)
-	for _, gw := range gwList.Items {
-		if ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gw)) &&
-			(GatewayWrapper{&gw, config}).ContainsPolicy(policyKey) {
-			sameGateways = append(sameGateways, GatewayWrapper{&gw, config})
+	gateways := make([]GatewayWrapper, 0)
+	for _, gateway := range gwList.Items {
+		gw := GatewayWrapper{&gateway, config}
+		if ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && gw.ContainsPolicy(policyKey) {
+			gateways = append(gateways, gw)
 		}
 	}
-	return sameGateways
+	return gateways
 }
 
-func LeftGateways(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
+func GatewaysWithInvalidPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
 	// gateways not referenced by the policy but still have reference in the annotations
-	leftGateways := make([]GatewayWrapper, 0)
-	for _, gw := range gwList.Items {
-		if !ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gw)) &&
-			(GatewayWrapper{&gw, config}).ContainsPolicy(policyKey) {
-			leftGateways = append(leftGateways, GatewayWrapper{&gw, config})
+	gateways := make([]GatewayWrapper, 0)
+	for _, gateway := range gwList.Items {
+		gw := GatewayWrapper{&gateway, config}
+		if !ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && gw.ContainsPolicy(policyKey) {
+			gateways = append(gateways, gw)
 		}
 	}
-	return leftGateways
+	return gateways
 }
 
 // GatewayWrapper wraps a Gateway API Gateway adding methods and configs to manage policy references in annotations

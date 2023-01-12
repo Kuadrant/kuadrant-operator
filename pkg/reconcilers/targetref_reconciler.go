@@ -261,15 +261,15 @@ func (r *TargetRefReconciler) ComputeGatewayDiffs(ctx context.Context, policy co
 	}
 
 	gwDiff := &GatewayDiff{
-		NewGateways:  common.NewGateways(allGwList, client.ObjectKeyFromObject(policy), gwKeys, policyRefsConfig),
-		SameGateways: common.SameGateways(allGwList, client.ObjectKeyFromObject(policy), gwKeys, policyRefsConfig),
-		LeftGateways: common.LeftGateways(allGwList, client.ObjectKeyFromObject(policy), gwKeys, policyRefsConfig),
+		GatewaysMissingPolicyRef:     common.GatewaysMissingPolicyRef(allGwList, client.ObjectKeyFromObject(policy), gwKeys, policyRefsConfig),
+		GatewaysWithValidPolicyRef:   common.GatewaysWithValidPolicyRef(allGwList, client.ObjectKeyFromObject(policy), gwKeys, policyRefsConfig),
+		GatewaysWithInvalidPolicyRef: common.GatewaysWithInvalidPolicyRef(allGwList, client.ObjectKeyFromObject(policy), gwKeys, policyRefsConfig),
 	}
 
 	logger.V(1).Info("ComputeGatewayDiffs",
-		"#new-gw", len(gwDiff.NewGateways),
-		"#same-gw", len(gwDiff.SameGateways),
-		"#left-gw", len(gwDiff.LeftGateways),
+		"#missing-policy-ref", len(gwDiff.GatewaysMissingPolicyRef),
+		"#valid-policy-ref", len(gwDiff.GatewaysWithValidPolicyRef),
+		"#invalid-policy-ref", len(gwDiff.GatewaysWithInvalidPolicyRef),
 	)
 
 	return gwDiff, nil
@@ -278,12 +278,12 @@ func (r *TargetRefReconciler) ComputeGatewayDiffs(ctx context.Context, policy co
 func (r *TargetRefReconciler) ComputeFinalizeGatewayDiff(ctx context.Context, policy common.KuadrantPolicy, policyRefsConfig common.PolicyRefsConfig) (*GatewayDiff, error) {
 	logger, _ := logr.FromContext(ctx)
 
-	// Prepare gatewayDiff object only with LeftGateways list populated.
+	// Prepare gatewayDiff object only with GatewaysWithInvalidPolicyRef list populated.
 	// Used for the common reconciliation methods of Limits, EnvoyFilters, WasmPlugins, etc...
 	gwDiff := &GatewayDiff{
-		NewGateways:  nil,
-		SameGateways: nil,
-		LeftGateways: nil,
+		GatewaysMissingPolicyRef:     nil,
+		GatewaysWithValidPolicyRef:   nil,
+		GatewaysWithInvalidPolicyRef: nil,
 	}
 
 	gwKeys, err := r.TargetedGatewayKeys(ctx, policy.GetTargetRef(), policy.GetNamespace())
@@ -301,9 +301,9 @@ func (r *TargetRefReconciler) ComputeFinalizeGatewayDiff(ctx context.Context, po
 			}
 			return nil, err
 		}
-		gwDiff.LeftGateways = append(gwDiff.LeftGateways, common.GatewayWrapper{Gateway: gw, PolicyRefsConfig: policyRefsConfig})
+		gwDiff.GatewaysWithInvalidPolicyRef = append(gwDiff.GatewaysWithInvalidPolicyRef, common.GatewayWrapper{Gateway: gw, PolicyRefsConfig: policyRefsConfig})
 	}
-	logger.V(1).Info("ComputeFinalizeGatewayDiff", "#left-gw", len(gwDiff.LeftGateways))
+	logger.V(1).Info("ComputeFinalizeGatewayDiff", "#invalid-policy-ref", len(gwDiff.GatewaysWithInvalidPolicyRef))
 
 	return gwDiff, nil
 }
@@ -311,30 +311,31 @@ func (r *TargetRefReconciler) ComputeFinalizeGatewayDiff(ctx context.Context, po
 func (r *TargetRefReconciler) ReconcileGatewayPolicyReferences(ctx context.Context, policy client.Object, gwDiffObj *GatewayDiff) error {
 	logger, _ := logr.FromContext(ctx)
 
-	for _, leftGateway := range gwDiffObj.LeftGateways {
-		if leftGateway.DeletePolicy(client.ObjectKeyFromObject(policy)) {
-			err := r.UpdateResource(ctx, leftGateway.Gateway)
-			logger.V(1).Info("ReconcileGatewayPolicyReferences: update gateway", "left gateway key", leftGateway.Key(), "err", err)
+	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
+		if gw.DeletePolicy(client.ObjectKeyFromObject(policy)) {
+			err := r.UpdateResource(ctx, gw.Gateway)
+			logger.V(1).Info("ReconcileGatewayPolicyReferences: update gateway", "gateway with invalid policy ref", gw.Key(), "err", err)
 			if err != nil {
 				return err
 			}
 		}
 	}
 
-	for _, newGateway := range gwDiffObj.NewGateways {
-		if newGateway.AddPolicy(client.ObjectKeyFromObject(policy)) {
-			err := r.UpdateResource(ctx, newGateway.Gateway)
-			logger.V(1).Info("ReconcileGatewayPolicyReferences: update gateway", "new gateway key", newGateway.Key(), "err", err)
+	for _, gw := range gwDiffObj.GatewaysMissingPolicyRef {
+		if gw.AddPolicy(client.ObjectKeyFromObject(policy)) {
+			err := r.UpdateResource(ctx, gw.Gateway)
+			logger.V(1).Info("ReconcileGatewayPolicyReferences: update gateway", "gateway missinf policy ref", gw.Key(), "err", err)
 			if err != nil {
 				return err
 			}
 		}
 	}
+
 	return nil
 }
 
 type GatewayDiff struct {
-	NewGateways  []common.GatewayWrapper
-	SameGateways []common.GatewayWrapper
-	LeftGateways []common.GatewayWrapper
+	GatewaysMissingPolicyRef     []common.GatewayWrapper
+	GatewaysWithValidPolicyRef   []common.GatewayWrapper
+	GatewaysWithInvalidPolicyRef []common.GatewayWrapper
 }

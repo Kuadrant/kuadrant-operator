@@ -46,15 +46,15 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ku
 
 	limitIdx := rlptools.NewLimitadorIndex(limitador, logger)
 
-	for _, leftGateway := range gwDiffObj.LeftGateways {
-		logger.V(1).Info("reconcileLimits: left gateways", "key", leftGateway.Key())
-		limitIdx.DeleteGateway(leftGateway.Key())
+	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
+		logger.V(1).Info("reconcileLimits: left gateways", "key", gw.Key())
+		limitIdx.DeleteGateway(gw.Key())
 	}
 
-	for _, sameGateway := range gwDiffObj.SameGateways {
-		logger.V(1).Info("reconcileLimits: same gateways", "rlpRefs", sameGateway.PolicyRefs())
+	for _, gw := range gwDiffObj.GatewaysWithValidPolicyRef {
+		logger.V(1).Info("reconcileLimits: same gateways", "rlpRefs", gw.PolicyRefs())
 
-		gwLimits, err := r.gatewayLimits(ctx, sameGateway, sameGateway.PolicyRefs())
+		gwLimits, err := r.gatewayLimits(ctx, gw, gw.PolicyRefs())
 		if err != nil {
 			return err
 		}
@@ -64,15 +64,15 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ku
 		// one limit has been deleted for gwA (coming from a limit deletion in one RLP)
 		// gw A has now 2 limits
 		// Deleting the 3 original limits the resulting index will contain only 2 limits as expected
-		limitIdx.DeleteGateway(sameGateway.Key())
-		limitIdx.AddGatewayLimits(sameGateway.Key(), gwLimits)
+		limitIdx.DeleteGateway(gw.Key())
+		limitIdx.AddGatewayLimits(gw.Key(), gwLimits)
 	}
 
-	for _, newGateway := range gwDiffObj.NewGateways {
-		rlpRefs := append(newGateway.PolicyRefs(), client.ObjectKeyFromObject(rlp))
+	for _, gw := range gwDiffObj.GatewaysMissingPolicyRef {
+		rlpRefs := append(gw.PolicyRefs(), client.ObjectKeyFromObject(rlp))
 		logger.V(1).Info("reconcileLimits: new gateways", "rlpRefs", rlpRefs)
 
-		gwLimits, err := r.gatewayLimits(ctx, newGateway, rlpRefs)
+		gwLimits, err := r.gatewayLimits(ctx, gw, rlpRefs)
 		if err != nil {
 			return err
 		}
@@ -82,8 +82,8 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ku
 		// r.gatewayLimits will compute all the limits for the given gateway with the N+1 RLPs
 		// the existing limits need to be deleted first,
 		// otherwise they would be added again and will be duplicated in the index
-		limitIdx.DeleteGateway(newGateway.Key())
-		limitIdx.AddGatewayLimits(newGateway.Key(), gwLimits)
+		limitIdx.DeleteGateway(gw.Key())
+		limitIdx.AddGatewayLimits(gw.Key(), gwLimits)
 	}
 
 	// Build a new index with the original content of limitador to compare with the new limits

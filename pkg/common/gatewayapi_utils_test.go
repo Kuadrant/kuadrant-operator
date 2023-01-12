@@ -459,3 +459,156 @@ func TestGatewaysWithInvalidPolicyRef(t *testing.T) {
 		t.Error("gateway expected not to be listed as with invalid policy ref")
 	}
 }
+
+func TestGatewayWrapperKey(t *testing.T) {
+	gw := GatewayWrapper{
+		Gateway: &gatewayapiv1alpha2.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:   "gw-ns",
+				Name:        "gw-1",
+				Annotations: map[string]string{"kuadrant.io/ratelimitpolicies": `[{"Namespace":"app-ns","Name":"policy-1"},{"Namespace":"app-ns","Name":"policy-2"}]`},
+			},
+		},
+		PolicyRefsConfig: &KuadrantRateLimitPolicyRefsConfig{},
+	}
+	if gw.Key().Namespace != "gw-ns" || gw.Key().Name != "gw-1" {
+		t.Fail()
+	}
+}
+
+func TestGatewayWrapperPolicyRefs(t *testing.T) {
+	gw := GatewayWrapper{
+		Gateway: &gatewayapiv1alpha2.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:   "gw-ns",
+				Name:        "gw-1",
+				Annotations: map[string]string{"kuadrant.io/ratelimitpolicies": `[{"Namespace":"app-ns","Name":"policy-1"},{"Namespace":"app-ns","Name":"policy-2"}]`},
+			},
+		},
+		PolicyRefsConfig: &KuadrantRateLimitPolicyRefsConfig{},
+	}
+	refs := Map(gw.PolicyRefs(), func(ref k8stypes.NamespacedName) string { return ref.String() })
+	if !Contains(refs, "app-ns/policy-1") {
+		t.Error("GatewayWrapper.PolicyRefs() should contain app-ns/policy-1")
+	}
+	if !Contains(refs, "app-ns/policy-2") {
+		t.Error("GatewayWrapper.PolicyRefs() should contain app-ns/policy-2")
+	}
+	if len(refs) != 2 {
+		t.Fail()
+	}
+}
+
+func TestGatewayWrapperContainsPolicy(t *testing.T) {
+	gw := GatewayWrapper{
+		Gateway: &gatewayapiv1alpha2.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:   "gw-ns",
+				Name:        "gw-1",
+				Annotations: map[string]string{"kuadrant.io/ratelimitpolicies": `[{"Namespace":"app-ns","Name":"policy-1"},{"Namespace":"app-ns","Name":"policy-2"}]`},
+			},
+		},
+		PolicyRefsConfig: &KuadrantRateLimitPolicyRefsConfig{},
+	}
+	if !gw.ContainsPolicy(client.ObjectKey{Namespace: "app-ns", Name: "policy-1"}) {
+		t.Error("GatewayWrapper.ContainsPolicy() should contain app-ns/policy-1")
+	}
+	if !gw.ContainsPolicy(client.ObjectKey{Namespace: "app-ns", Name: "policy-2"}) {
+		t.Error("GatewayWrapper.ContainsPolicy() should contain app-ns/policy-1")
+	}
+	if gw.ContainsPolicy(client.ObjectKey{Namespace: "app-ns", Name: "policy-3"}) {
+		t.Error("GatewayWrapper.ContainsPolicy() should not contain app-ns/policy-1")
+	}
+}
+
+func TestGatewayWrapperAddPolicy(t *testing.T) {
+	gateway := gatewayapiv1alpha2.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:   "gw-ns",
+			Name:        "gw-1",
+			Annotations: map[string]string{"kuadrant.io/ratelimitpolicies": `[{"Namespace":"app-ns","Name":"policy-1"},{"Namespace":"app-ns","Name":"policy-2"}]`},
+		},
+	}
+	gw := GatewayWrapper{
+		Gateway:          &gateway,
+		PolicyRefsConfig: &KuadrantRateLimitPolicyRefsConfig{},
+	}
+	if gw.AddPolicy(client.ObjectKey{Namespace: "app-ns", Name: "policy-1"}) {
+		t.Error("GatewayWrapper.AddPolicy() expected to return false")
+	}
+	if !gw.AddPolicy(client.ObjectKey{Namespace: "app-ns", Name: "policy-3"}) {
+		t.Error("GatewayWrapper.AddPolicy() expected to return true")
+	}
+	if gw.Annotations["kuadrant.io/ratelimitpolicies"] != `[{"Namespace":"app-ns","Name":"policy-1"},{"Namespace":"app-ns","Name":"policy-2"},{"Namespace":"app-ns","Name":"policy-3"}]` {
+		t.Error("GatewayWrapper.AddPolicy() expected to have added policy ref to the annotations")
+	}
+}
+
+func TestGatewayDeletePolicy(t *testing.T) {
+	gateway := gatewayapiv1alpha2.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:   "gw-ns",
+			Name:        "gw-1",
+			Annotations: map[string]string{"kuadrant.io/ratelimitpolicies": `[{"Namespace":"app-ns","Name":"policy-1"},{"Namespace":"app-ns","Name":"policy-2"}]`},
+		},
+	}
+	gw := GatewayWrapper{
+		Gateway:          &gateway,
+		PolicyRefsConfig: &KuadrantRateLimitPolicyRefsConfig{},
+	}
+	if !gw.DeletePolicy(client.ObjectKey{Namespace: "app-ns", Name: "policy-1"}) {
+		t.Error("GatewayWrapper.DeletePolicy() expected to return true")
+	}
+	if gw.DeletePolicy(client.ObjectKey{Namespace: "app-ns", Name: "policy-3"}) {
+		t.Error("GatewayWrapper.DeletePolicy() expected to return false")
+	}
+	if gw.Annotations["kuadrant.io/ratelimitpolicies"] != `[{"Namespace":"app-ns","Name":"policy-2"}]` {
+		t.Error("GatewayWrapper.DeletePolicy() expected to have deleted policy ref from the annotations")
+	}
+}
+
+func TestGatewayHostnames(t *testing.T) {
+	hostname := gatewayapiv1alpha2.Hostname("toystore.com")
+	gateway := gatewayapiv1alpha2.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:   "gw-ns",
+			Name:        "gw-1",
+			Annotations: map[string]string{"kuadrant.io/ratelimitpolicies": `[{"Namespace":"app-ns","Name":"policy-1"},{"Namespace":"app-ns","Name":"policy-2"}]`},
+		},
+		Spec: gatewayapiv1alpha2.GatewaySpec{
+			Listeners: []gatewayapiv1alpha2.Listener{
+				{
+					Name:     "my-listener",
+					Hostname: &hostname,
+				},
+			},
+		},
+	}
+	gw := GatewayWrapper{
+		Gateway:          &gateway,
+		PolicyRefsConfig: &KuadrantRateLimitPolicyRefsConfig{},
+	}
+	hostnames := gw.Hostnames()
+	if !Contains(hostnames, "toystore.com") {
+		t.Error("GatewayWrapper.Hostnames() expected to contain 'toystore.com'")
+	}
+	if len(hostnames) != 1 {
+		t.Fail()
+	}
+}
+
+func TestGatewayWrapperPolicyRefsAnnotation(t *testing.T) {
+	gw := GatewayWrapper{
+		Gateway: &gatewayapiv1alpha2.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:   "gw-ns",
+				Name:        "gw-1",
+				Annotations: map[string]string{"kuadrant.io/ratelimitpolicies": `[{"Namespace":"app-ns","Name":"policy-1"},{"Namespace":"app-ns","Name":"policy-2"}]`},
+			},
+		},
+		PolicyRefsConfig: &KuadrantRateLimitPolicyRefsConfig{},
+	}
+	if gw.PolicyRefsAnnotation() != KuadrantRateLimitPolicyRefAnnotation {
+		t.Fail()
+	}
+}

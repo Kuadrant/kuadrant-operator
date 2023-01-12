@@ -174,9 +174,7 @@ func (r *TargetRefReconciler) TargetHostnames(ctx context.Context, targetRef gat
 }
 
 // ReconcileTargetBackReference adds policy key in annotations of the target object
-func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context,
-	policyKey client.ObjectKey, targetRef gatewayapiv1alpha2.PolicyTargetReference,
-	defaultNs string, annotationName string) error {
+func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, policyKey client.ObjectKey, targetRef gatewayapiv1alpha2.PolicyTargetReference, defaultNs, annotationName string) error {
 	logger, _ := logr.FromContext(ctx)
 	targetObj, err := r.FetchValidTargetRef(ctx, targetRef, defaultNs)
 	if err != nil {
@@ -193,18 +191,15 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context,
 		objAnnotations = map[string]string{}
 	}
 
-	val, ok := objAnnotations[annotationName]
-	if ok {
+	if val, ok := objAnnotations[annotationName]; ok {
 		if val != policyKey.String() {
-			return fmt.Errorf("the %s target %s is already referenced by policy %s",
-				targetObjType, targetObjKey, policyKey.String())
+			return fmt.Errorf("the %s target %s is already referenced by policy %s", targetObjType, targetObjKey, policyKey.String())
 		}
 	} else {
 		objAnnotations[annotationName] = policyKey.String()
 		targetObj.SetAnnotations(objAnnotations)
 		err := r.UpdateResource(ctx, targetObj)
-		logger.V(1).Info("ReconcileTargetBackReference: update target object",
-			"type", targetObjType, "name", targetObjKey, "err", err)
+		logger.V(1).Info("ReconcileTargetBackReference: update target object", "type", targetObjType, "name", targetObjKey, "err", err)
 		if err != nil {
 			return err
 		}
@@ -213,9 +208,7 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context,
 	return nil
 }
 
-func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context,
-	policyKey client.ObjectKey, targetRef gatewayapiv1alpha2.PolicyTargetReference,
-	defaultNs string, annotationName string) error {
+func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, policyKey client.ObjectKey, targetRef gatewayapiv1alpha2.PolicyTargetReference, defaultNs, annotationName string) error {
 	logger, _ := logr.FromContext(ctx)
 
 	targetObj, err := r.FetchValidTargetRef(ctx, targetRef, defaultNs)
@@ -239,11 +232,109 @@ func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context,
 		delete(objAnnotations, annotationName)
 		targetObj.SetAnnotations(objAnnotations)
 		err := r.UpdateResource(ctx, targetObj)
-		logger.V(1).Info("DeleteTargetBackReference: update network resource",
-			"type", targetObjType, "name", targetObjKey, "err", err)
+		logger.V(1).Info("DeleteTargetBackReference: update network resource", "type", targetObjType, "name", targetObjKey, "err", err)
 		if err != nil {
 			return err
 		}
 	}
+
 	return nil
+}
+
+// Returns:
+// * list of gateways to which the policy applies for the first time
+// * list of gateways to which the policy no longer applies
+// * list of gateways to which the policy still applies
+func (r *TargetRefReconciler) ComputeGatewayDiffs(ctx context.Context, policy common.KuadrantPolicy, policyRefsConfig common.PolicyRefsConfig) (*GatewayDiff, error) {
+	logger, _ := logr.FromContext(ctx)
+
+	gwKeys, err := r.TargetedGatewayKeys(ctx, policy.GetTargetRef(), policy.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(rahulanand16nov): maybe think about optimizing it with a label later
+	allGwList := &gatewayapiv1alpha2.GatewayList{}
+	err = r.Client().List(ctx, allGwList)
+	if err != nil {
+		return nil, err
+	}
+
+	gwDiff := &GatewayDiff{
+		NewGateways:  common.NewGateways(allGwList, client.ObjectKeyFromObject(policy), gwKeys, policyRefsConfig),
+		SameGateways: common.SameGateways(allGwList, client.ObjectKeyFromObject(policy), gwKeys, policyRefsConfig),
+		LeftGateways: common.LeftGateways(allGwList, client.ObjectKeyFromObject(policy), gwKeys, policyRefsConfig),
+	}
+
+	logger.V(1).Info("ComputeGatewayDiffs",
+		"#new-gw", len(gwDiff.NewGateways),
+		"#same-gw", len(gwDiff.SameGateways),
+		"#left-gw", len(gwDiff.LeftGateways),
+	)
+
+	return gwDiff, nil
+}
+
+func (r *TargetRefReconciler) ComputeFinalizeGatewayDiff(ctx context.Context, policy common.KuadrantPolicy, policyRefsConfig common.PolicyRefsConfig) (*GatewayDiff, error) {
+	logger, _ := logr.FromContext(ctx)
+
+	// Prepare gatewayDiff object only with LeftGateways list populated.
+	// Used for the common reconciliation methods of Limits, EnvoyFilters, WasmPlugins, etc...
+	gwDiff := &GatewayDiff{
+		NewGateways:  nil,
+		SameGateways: nil,
+		LeftGateways: nil,
+	}
+
+	gwKeys, err := r.TargetedGatewayKeys(ctx, policy.GetTargetRef(), policy.GetNamespace())
+	if err != nil && !apierrors.IsNotFound(err) {
+		return nil, err
+	}
+
+	for _, gwKey := range gwKeys {
+		gw := &gatewayapiv1alpha2.Gateway{}
+		err := r.Client().Get(ctx, gwKey, gw)
+		logger.V(1).Info("ComputeFinalizeGatewayDiff", "fetch gateway", gwKey, "err", err)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			return nil, err
+		}
+		gwDiff.LeftGateways = append(gwDiff.LeftGateways, common.GatewayWrapper{Gateway: gw, PolicyRefsConfig: policyRefsConfig})
+	}
+	logger.V(1).Info("ComputeFinalizeGatewayDiff", "#left-gw", len(gwDiff.LeftGateways))
+
+	return gwDiff, nil
+}
+
+func (r *TargetRefReconciler) ReconcileGatewayPolicyReferences(ctx context.Context, policy client.Object, gwDiffObj *GatewayDiff) error {
+	logger, _ := logr.FromContext(ctx)
+
+	for _, leftGateway := range gwDiffObj.LeftGateways {
+		if leftGateway.DeletePolicy(client.ObjectKeyFromObject(policy)) {
+			err := r.UpdateResource(ctx, leftGateway.Gateway)
+			logger.V(1).Info("ReconcileGatewayPolicyReferences: update gateway", "left gateway key", leftGateway.Key(), "err", err)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	for _, newGateway := range gwDiffObj.NewGateways {
+		if newGateway.AddPolicy(client.ObjectKeyFromObject(policy)) {
+			err := r.UpdateResource(ctx, newGateway.Gateway)
+			logger.V(1).Info("ReconcileGatewayPolicyReferences: update gateway", "new gateway key", newGateway.Key(), "err", err)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+type GatewayDiff struct {
+	NewGateways  []common.GatewayWrapper
+	SameGateways []common.GatewayWrapper
+	LeftGateways []common.GatewayWrapper
 }

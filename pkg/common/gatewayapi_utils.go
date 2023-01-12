@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -174,4 +175,215 @@ func routePathMatchToRulePath(pathMatch *gatewayapiv1alpha2.HTTPPathMatch) []str
 	}
 
 	return []string{val + suffix}
+}
+
+type PolicyRefsConfig interface {
+	PolicyRefsAnnotation() string
+}
+
+type KuadrantRateLimitPolicyRefsConfig struct{}
+
+func (c *KuadrantRateLimitPolicyRefsConfig) PolicyRefsAnnotation() string {
+	return KuadrantRateLimitPolicyRefAnnotation
+}
+
+// TODO(guicassolato): Define KuadrantAuthPolicyRefsConfig
+
+func NewGateways(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
+	// gateways referenced by the policy but do not have reference to it in the annotations
+	newGateways := make([]GatewayWrapper, 0)
+	for _, gw := range gwList.Items {
+		if ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gw)) &&
+			!(GatewayWrapper{&gw, config}).ContainsPolicy(policyKey) {
+			newGateways = append(newGateways, GatewayWrapper{&gw, config})
+		}
+	}
+	return newGateways
+}
+
+func SameGateways(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
+	// gateways referenced by the policy but also have reference to it in the annotations
+	sameGateways := make([]GatewayWrapper, 0)
+	for _, gw := range gwList.Items {
+		if ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gw)) &&
+			(GatewayWrapper{&gw, config}).ContainsPolicy(policyKey) {
+			sameGateways = append(sameGateways, GatewayWrapper{&gw, config})
+		}
+	}
+	return sameGateways
+}
+
+func LeftGateways(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
+	// gateways not referenced by the policy but still have reference in the annotations
+	leftGateways := make([]GatewayWrapper, 0)
+	for _, gw := range gwList.Items {
+		if !ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gw)) &&
+			(GatewayWrapper{&gw, config}).ContainsPolicy(policyKey) {
+			leftGateways = append(leftGateways, GatewayWrapper{&gw, config})
+		}
+	}
+	return leftGateways
+}
+
+// GatewayWrapper wraps a Gateway API Gateway adding methods and configs to manage policy references in annotations
+type GatewayWrapper struct {
+	*gatewayapiv1alpha2.Gateway
+	PolicyRefsConfig
+}
+
+func (g GatewayWrapper) Key() client.ObjectKey {
+	if g.Gateway == nil {
+		return client.ObjectKey{}
+	}
+	return client.ObjectKeyFromObject(g.Gateway)
+}
+
+func (g GatewayWrapper) PolicyRefs() []client.ObjectKey {
+	if g.Gateway == nil {
+		return make([]client.ObjectKey, 0)
+	}
+
+	gwAnnotations := g.GetAnnotations()
+	if gwAnnotations == nil {
+		gwAnnotations = map[string]string{}
+	}
+
+	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
+	if !ok {
+		return make([]client.ObjectKey, 0)
+	}
+
+	var refs []client.ObjectKey
+
+	err := json.Unmarshal([]byte(val), &refs)
+	if err != nil {
+		return make([]client.ObjectKey, 0)
+	}
+
+	return refs
+}
+
+func (g GatewayWrapper) ContainsPolicy(policyKey client.ObjectKey) bool {
+	if g.Gateway == nil {
+		return false
+	}
+
+	gwAnnotations := g.GetAnnotations()
+	if gwAnnotations == nil {
+		gwAnnotations = map[string]string{}
+	}
+
+	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
+	if !ok {
+		return false
+	}
+
+	var refs []client.ObjectKey
+
+	err := json.Unmarshal([]byte(val), &refs)
+	if err != nil {
+		return false
+	}
+
+	return ContainsObjectKey(refs, policyKey)
+}
+
+// AddPolicy tries to add a policy to the existing ref list.
+// Returns true if policy was added, false otherwise
+func (g GatewayWrapper) AddPolicy(policyKey client.ObjectKey) bool {
+	if g.Gateway == nil {
+		return false
+	}
+
+	gwAnnotations := g.GetAnnotations()
+	if gwAnnotations == nil {
+		gwAnnotations = map[string]string{}
+	}
+
+	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
+	if !ok {
+		refs := []client.ObjectKey{policyKey}
+		serialized, err := json.Marshal(refs)
+		if err != nil {
+			return false
+		}
+		gwAnnotations[g.PolicyRefsAnnotation()] = string(serialized)
+		g.SetAnnotations(gwAnnotations)
+		return true
+	}
+
+	var refs []client.ObjectKey
+
+	err := json.Unmarshal([]byte(val), &refs)
+	if err != nil {
+		return false
+	}
+
+	if ContainsObjectKey(refs, policyKey) {
+		return false
+	}
+
+	refs = append(refs, policyKey)
+	serialized, err := json.Marshal(refs)
+	if err != nil {
+		return false
+	}
+	gwAnnotations[g.PolicyRefsAnnotation()] = string(serialized)
+	g.SetAnnotations(gwAnnotations)
+	return true
+}
+
+// DeletePolicy tries to delete a policy from the existing ref list.
+// Returns true if the policy was deleted, false otherwise
+func (g GatewayWrapper) DeletePolicy(policyKey client.ObjectKey) bool {
+	if g.Gateway == nil {
+		return false
+	}
+
+	gwAnnotations := g.GetAnnotations()
+	if gwAnnotations == nil {
+		gwAnnotations = map[string]string{}
+	}
+
+	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
+	if !ok {
+		return false
+	}
+
+	var refs []client.ObjectKey
+
+	err := json.Unmarshal([]byte(val), &refs)
+	if err != nil {
+		return false
+	}
+
+	if refID := FindObjectKey(refs, policyKey); refID != len(refs) {
+		// remove index
+		refs = append(refs[:refID], refs[refID+1:]...)
+		serialized, err := json.Marshal(refs)
+		if err != nil {
+			return false
+		}
+		gwAnnotations[g.PolicyRefsAnnotation()] = string(serialized)
+		g.SetAnnotations(gwAnnotations)
+		return true
+	}
+
+	return false
+}
+
+// Hostnames builds a list of hostnames from the listeners.
+func (g GatewayWrapper) Hostnames() []string {
+	hostnames := make([]string, 0)
+	if g.Gateway == nil {
+		return hostnames
+	}
+
+	for idx := range g.Spec.Listeners {
+		if g.Spec.Listeners[idx].Hostname != nil {
+			hostnames = append(hostnames, string(*g.Spec.Listeners[idx].Hostname))
+		}
+	}
+
+	return hostnames
 }

@@ -11,10 +11,11 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
+func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
 	logger, _ := logr.FromContext(ctx)
 
 	logger.V(1).Info("Getting Kuadrant namespace")
@@ -51,9 +52,9 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ku
 	}
 
 	for _, sameGateway := range gwDiffObj.SameGateways {
-		logger.V(1).Info("reconcileLimits: same gateways", "rlpRefs", sameGateway.RLPRefs())
+		logger.V(1).Info("reconcileLimits: same gateways", "rlpRefs", sameGateway.PolicyRefs())
 
-		gwLimits, err := r.gatewayLimits(ctx, sameGateway, sameGateway.RLPRefs())
+		gwLimits, err := r.gatewayLimits(ctx, sameGateway, sameGateway.PolicyRefs())
 		if err != nil {
 			return err
 		}
@@ -68,7 +69,7 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ku
 	}
 
 	for _, newGateway := range gwDiffObj.NewGateways {
-		rlpRefs := append(newGateway.RLPRefs(), client.ObjectKeyFromObject(rlp))
+		rlpRefs := append(newGateway.PolicyRefs(), client.ObjectKeyFromObject(rlp))
 		logger.V(1).Info("reconcileLimits: new gateways", "rlpRefs", rlpRefs)
 
 		gwLimits, err := r.gatewayLimits(ctx, newGateway, rlpRefs)
@@ -120,7 +121,7 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ku
 }
 
 func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context,
-	gw rlptools.GatewayWrapper, rlpRefs []client.ObjectKey) (rlptools.LimitsByDomain, error) {
+	gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (rlptools.LimitsByDomain, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger.V(1).Info("gatewayLimits", "gwKey", gw.Key(), "rlpRefs", rlpRefs)
 

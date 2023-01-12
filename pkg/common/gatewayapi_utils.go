@@ -193,7 +193,7 @@ func GatewaysMissingPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policyKey 
 	// gateways referenced by the policy but do not have reference to it in the annotations
 	gateways := make([]GatewayWrapper, 0)
 	for _, gateway := range gwList.Items {
-		gw := GatewayWrapper{&gateway, config}
+		gw := GatewayWrapper{gateway.DeepCopy(), config}
 		if ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && !gw.ContainsPolicy(policyKey) {
 			gateways = append(gateways, gw)
 		}
@@ -205,7 +205,7 @@ func GatewaysWithValidPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policyKe
 	// gateways referenced by the policy but also have reference to it in the annotations
 	gateways := make([]GatewayWrapper, 0)
 	for _, gateway := range gwList.Items {
-		gw := GatewayWrapper{&gateway, config}
+		gw := GatewayWrapper{gateway.DeepCopy(), config}
 		if ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && gw.ContainsPolicy(policyKey) {
 			gateways = append(gateways, gw)
 		}
@@ -217,7 +217,7 @@ func GatewaysWithInvalidPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policy
 	// gateways not referenced by the policy but still have reference in the annotations
 	gateways := make([]GatewayWrapper, 0)
 	for _, gateway := range gwList.Items {
-		gw := GatewayWrapper{&gateway, config}
+		gw := GatewayWrapper{gateway.DeepCopy(), config}
 		if !ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && gw.ContainsPolicy(policyKey) {
 			gateways = append(gateways, gw)
 		}

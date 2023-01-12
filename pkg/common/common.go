@@ -80,6 +80,14 @@ func Contains(slice []string, target string) bool {
 	return false
 }
 
+func Map[T, U any](slice []T, f func(T) U) []U {
+	arr := make([]U, len(slice))
+	for i, e := range slice {
+		arr[i] = f(e)
+	}
+	return arr
+}
+
 // MergeMapStringString Merge desired into existing.
 // Not Thread-Safe. Does it matter?
 func MergeMapStringString(existing *map[string]string, desired map[string]string) bool {

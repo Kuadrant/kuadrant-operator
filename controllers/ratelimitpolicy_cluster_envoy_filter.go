@@ -17,14 +17,15 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
+	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
+func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
 	logger, _ := logr.FromContext(ctx)
 
-	for _, leftGateway := range gwDiffObj.LeftGateways {
-		logger.V(1).Info("reconcileWASMPluginConf: left gateways", "gw key", leftGateway.Key())
-		rlpRefs := leftGateway.RLPRefs()
+	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
+		logger.V(1).Info("reconcileWASMPluginConf: left gateways", "gw key", gw.Key())
+		rlpRefs := gw.PolicyRefs()
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Remove the RLP key from the reference list. Only if it exists (it should)
 		if refID := common.FindObjectKey(rlpRefs, rlpKey); refID != len(rlpRefs) {
@@ -32,7 +33,7 @@ func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx 
 			rlpRefs = append(rlpRefs[:refID], rlpRefs[refID+1:]...)
 		}
 
-		ef, err := r.gatewayRateLimitingClusterEnvoyFilter(ctx, leftGateway.Gateway, rlpRefs)
+		ef, err := r.gatewayRateLimitingClusterEnvoyFilter(ctx, gw.Gateway, rlpRefs)
 		if err != nil {
 			return err
 		}
@@ -42,17 +43,17 @@ func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx 
 		}
 	}
 
-	// Nothing to do for the gwDiffObj.SameGateways
+	// Nothing to do for the gwDiffObj.GatewaysWithValidPolicyRef
 
-	for _, newGateway := range gwDiffObj.NewGateways {
-		logger.V(1).Info("reconcileWASMPluginConf: new gateways", "gw key", newGateway.Key())
-		rlpRefs := newGateway.RLPRefs()
+	for _, gw := range gwDiffObj.GatewaysMissingPolicyRef {
+		logger.V(1).Info("reconcileWASMPluginConf: new gateways", "gw key", gw.Key())
+		rlpRefs := gw.PolicyRefs()
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Add the RLP key to the reference list. Only if it does not exist (it should not)
 		if !common.ContainsObjectKey(rlpRefs, rlpKey) {
-			rlpRefs = append(newGateway.RLPRefs(), rlpKey)
+			rlpRefs = append(gw.PolicyRefs(), rlpKey)
 		}
-		ef, err := r.gatewayRateLimitingClusterEnvoyFilter(ctx, newGateway.Gateway, rlpRefs)
+		ef, err := r.gatewayRateLimitingClusterEnvoyFilter(ctx, gw.Gateway, rlpRefs)
 		if err != nil {
 			return err
 		}

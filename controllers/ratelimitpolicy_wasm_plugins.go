@@ -14,22 +14,23 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
+func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
 	logger, _ := logr.FromContext(ctx)
 
-	for _, leftGateway := range gwDiffObj.LeftGateways {
-		logger.V(1).Info("reconcileWASMPluginConf: left gateways", "gw key", leftGateway.Key())
-		rlpRefs := leftGateway.RLPRefs()
+	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
+		logger.V(1).Info("reconcileWASMPluginConf: left gateways", "gw key", gw.Key())
+		rlpRefs := gw.PolicyRefs()
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Remove the RLP key from the reference list. Only if it exists (it should)
 		if refID := common.FindObjectKey(rlpRefs, rlpKey); refID != len(rlpRefs) {
 			// remove index
 			rlpRefs = append(rlpRefs[:refID], rlpRefs[refID+1:]...)
 		}
-		wp, err := r.gatewayWASMPlugin(ctx, leftGateway, rlpRefs)
+		wp, err := r.gatewayWASMPlugin(ctx, gw, rlpRefs)
 		if err != nil {
 			return err
 		}
@@ -39,9 +40,9 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 		}
 	}
 
-	for _, sameGateway := range gwDiffObj.SameGateways {
-		logger.V(1).Info("reconcileWASMPluginConf: same gateways", "gw key", sameGateway.Key())
-		wp, err := r.gatewayWASMPlugin(ctx, sameGateway, sameGateway.RLPRefs())
+	for _, gw := range gwDiffObj.GatewaysWithValidPolicyRef {
+		logger.V(1).Info("reconcileWASMPluginConf: same gateways", "gw key", gw.Key())
+		wp, err := r.gatewayWASMPlugin(ctx, gw, gw.PolicyRefs())
 		if err != nil {
 			return err
 		}
@@ -51,15 +52,15 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 		}
 	}
 
-	for _, newGateway := range gwDiffObj.NewGateways {
-		logger.V(1).Info("reconcileWASMPluginConf: new gateways", "gw key", newGateway.Key())
-		rlpRefs := newGateway.RLPRefs()
+	for _, gw := range gwDiffObj.GatewaysMissingPolicyRef {
+		logger.V(1).Info("reconcileWASMPluginConf: new gateways", "gw key", gw.Key())
+		rlpRefs := gw.PolicyRefs()
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Add the RLP key to the reference list. Only if it does not exist (it should not)
 		if !common.ContainsObjectKey(rlpRefs, rlpKey) {
-			rlpRefs = append(newGateway.RLPRefs(), rlpKey)
+			rlpRefs = append(gw.PolicyRefs(), rlpKey)
 		}
-		wp, err := r.gatewayWASMPlugin(ctx, newGateway, rlpRefs)
+		wp, err := r.gatewayWASMPlugin(ctx, gw, rlpRefs)
 		if err != nil {
 			return err
 		}
@@ -71,7 +72,7 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw rlptools.GatewayWrapper, rlpRefs []client.ObjectKey) (*istioclientgoextensionv1alpha1.WasmPlugin, error) {
+func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (*istioclientgoextensionv1alpha1.WasmPlugin, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger.V(1).Info("gatewayWASMPlugin", "gwKey", gw.Key(), "rlpRefs", rlpRefs)
 
@@ -122,7 +123,7 @@ func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw rl
 
 // returns nil when there is no rate limit policy to apply
 func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
-	gw rlptools.GatewayWrapper, rlpRefs []client.ObjectKey) (*rlptools.WASMPlugin, error) {
+	gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (*rlptools.WASMPlugin, error) {
 	logger, _ := logr.FromContext(ctx)
 
 	routeRLPList := make([]*kuadrantv1beta1.RateLimitPolicy, 0)

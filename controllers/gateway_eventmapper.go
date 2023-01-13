@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 // GatewayEventMapper is an EventHandler that maps Gateway object events to policy events.
@@ -23,11 +23,11 @@ func (h *GatewayEventMapper) MapToRateLimitPolicy(obj client.Object) []reconcile
 		return []reconcile.Request{}
 	}
 
-	gw := rlptools.GatewayWrapper{Gateway: gateway}
+	gw := common.GatewayWrapper{Gateway: gateway, PolicyRefsConfig: &common.KuadrantRateLimitPolicyRefsConfig{}}
 
 	requests := make([]reconcile.Request, 0)
 
-	for _, rlpKey := range gw.RLPRefs() {
+	for _, rlpKey := range gw.PolicyRefs() {
 		h.Logger.V(1).Info("MapToRateLimitPolicy", "ratelimitpolicy", rlpKey)
 		requests = append(requests, reconcile.Request{
 			NamespacedName: rlpKey,

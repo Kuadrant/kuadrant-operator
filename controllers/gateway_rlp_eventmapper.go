@@ -12,7 +12,6 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
 // GatewayRateLimitPolicyEventMapper is an EventHandler that maps:
@@ -45,11 +44,11 @@ func (h *GatewayRateLimitPolicyEventMapper) MapRouteRateLimitPolicy(obj client.O
 		return []reconcile.Request{}
 	}
 
-	gw := rlptools.GatewayWrapper{Gateway: gateway}
+	gw := common.GatewayWrapper{Gateway: gateway, PolicyRefsConfig: &common.KuadrantRateLimitPolicyRefsConfig{}}
 
 	requests := make([]reconcile.Request, 0)
 
-	for _, rlpKey := range gw.RLPRefs() {
+	for _, rlpKey := range gw.PolicyRefs() {
 		h.Logger.V(1).Info("MapRouteRateLimitPolicy", "ratelimitpolicy", rlpKey)
 		requests = append(requests, reconcile.Request{
 			NamespacedName: rlpKey,

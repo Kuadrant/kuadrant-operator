@@ -33,7 +33,6 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
 // RateLimitPolicyReconciler reconciles a RateLimitPolicy object
@@ -146,7 +145,7 @@ func (r *RateLimitPolicyReconciler) reconcileSpec(ctx context.Context, rlp *kuad
 	}
 
 	// Ensure only one RLP is targeting the Gateway/HTTPRoute
-	err = r.reconcileDirectBackReference(ctx, rlp)
+	err = r.reconcileTargetBackReference(ctx, rlp)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -159,6 +158,10 @@ func (r *RateLimitPolicyReconciler) reconcileSpec(ctx context.Context, rlp *kuad
 	return ctrl.Result{}, nil
 }
 
+func (r *RateLimitPolicyReconciler) reconcileTargetBackReference(ctx context.Context, policy common.KuadrantPolicy) error {
+	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(policy), policy.GetTargetRef(), policy.GetNamespace(), common.RateLimitPolicyBackRefAnnotation)
+}
+
 func (r *RateLimitPolicyReconciler) reconcileGatewayDiffs(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) error {
 	// Reconcile based on gateway diffs:
 	// * Limits
@@ -167,7 +170,7 @@ func (r *RateLimitPolicyReconciler) reconcileGatewayDiffs(ctx context.Context, r
 	// * Gateway rate limit policy annotations (last)
 	logger, _ := logr.FromContext(ctx)
 
-	gatewayDiffObj, err := r.computeGatewayDiffs(ctx, rlp)
+	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, &common.KuadrantRateLimitPolicyRefsConfig{})
 	if err != nil {
 		return err
 	}
@@ -189,79 +192,10 @@ func (r *RateLimitPolicyReconciler) reconcileGatewayDiffs(ctx context.Context, r
 	}
 
 	// should be the last step, only when all the reconciliation steps succeed
-	if err := r.reconcileGatewayRLPReferences(ctx, rlp, gatewayDiffObj); err != nil {
+	if err := r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj); err != nil {
 		return err
 	}
 
-	return nil
-}
-
-type gatewayDiff struct {
-	NewGateways  []rlptools.GatewayWrapper
-	SameGateways []rlptools.GatewayWrapper
-	LeftGateways []rlptools.GatewayWrapper
-}
-
-// Returns:
-// * list of gateways to which the RLP applies for the first time
-// * list of gateways to which the RLP no longer apply
-// * list of gateways to which the RLP still applies
-func (r *RateLimitPolicyReconciler) computeGatewayDiffs(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) (*gatewayDiff, error) {
-	logger, _ := logr.FromContext(ctx)
-
-	gwKeys, err := r.TargetedGatewayKeys(ctx, rlp.Spec.TargetRef, rlp.Namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO(rahulanand16nov): maybe think about optimizing it with a label later
-	allGwList := &gatewayapiv1alpha2.GatewayList{}
-	err = r.Client().List(ctx, allGwList)
-	if err != nil {
-		return nil, err
-	}
-
-	gwDiff := &gatewayDiff{
-		NewGateways:  rlptools.NewGateways(allGwList, client.ObjectKeyFromObject(rlp), gwKeys),
-		SameGateways: rlptools.SameGateways(allGwList, client.ObjectKeyFromObject(rlp), gwKeys),
-		LeftGateways: rlptools.LeftGateways(allGwList, client.ObjectKeyFromObject(rlp), gwKeys),
-	}
-
-	logger.V(1).Info("computeGatewayDiffs",
-		"#new-gw", len(gwDiff.NewGateways),
-		"#same-gw", len(gwDiff.SameGateways),
-		"#left-gw", len(gwDiff.LeftGateways))
-
-	return gwDiff, nil
-}
-
-func (r *RateLimitPolicyReconciler) reconcileDirectBackReference(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) error {
-	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(rlp), rlp.Spec.TargetRef,
-		rlp.Namespace, common.RateLimitPolicyBackRefAnnotation)
-}
-
-func (r *RateLimitPolicyReconciler) reconcileGatewayRLPReferences(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *gatewayDiff) error {
-	logger, _ := logr.FromContext(ctx)
-
-	for _, leftGateway := range gwDiffObj.LeftGateways {
-		if leftGateway.DeleteRLP(client.ObjectKeyFromObject(rlp)) {
-			err := r.UpdateResource(ctx, leftGateway.Gateway)
-			logger.V(1).Info("reconcileGatewayRLPReferences: update gateway", "left gateway key", leftGateway.Key(), "err", err)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	for _, newGateway := range gwDiffObj.NewGateways {
-		if newGateway.AddRLP(client.ObjectKeyFromObject(rlp)) {
-			err := r.UpdateResource(ctx, newGateway.Gateway)
-			logger.V(1).Info("reconcileGatewayRLPReferences: update gateway", "new gateway key", newGateway.Key(), "err", err)
-			if err != nil {
-				return err
-			}
-		}
-	}
 	return nil
 }
 

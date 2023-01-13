@@ -249,7 +249,7 @@ func (r *TargetRefReconciler) ComputeGatewayDiffs(ctx context.Context, policy co
 	logger, _ := logr.FromContext(ctx)
 
 	gwKeys, err := r.TargetedGatewayKeys(ctx, policy.GetTargetRef(), policy.GetNamespace())
-	if err != nil {
+	if err != nil && !apierrors.IsNotFound(err) {
 		return nil, err
 	}
 

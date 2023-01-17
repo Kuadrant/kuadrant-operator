@@ -127,10 +127,6 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileNetworkResourceDirectBackReference(ctx, ap, targetObj); err != nil { // direct back ref
-		return ctrl.Result{}, err
-	}
-
 	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, ap, targetObj, &common.KuadrantAuthPolicyRefsConfig{})
 	if err != nil {
 		return ctrl.Result{}, err
@@ -148,6 +144,10 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 		return ctrl.Result{}, err
 	}
 
+	if err := r.reconcileNetworkResourceDirectBackReference(ctx, ap, targetObj); err != nil { // direct back ref
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -157,15 +157,15 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 		return err
 	}
 
-	if err := r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj); err != nil {
-		return err
-	}
-
 	if err := r.deleteIstioAuthorizationPolicies(ctx, ap, gatewayDiffObj); err != nil {
 		return err
 	}
 
 	if err := r.deleteAuthConfigs(ctx, ap); err != nil {
+		return err
+	}
+
+	if err := r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj); err != nil {
 		return err
 	}
 

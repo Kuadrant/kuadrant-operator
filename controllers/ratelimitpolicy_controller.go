@@ -168,12 +168,12 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 		return ctrl.Result{}, err
 	}
 
-	err = r.reconcileNetworkResourceDirectBackReference(ctx, rlp, targetObj)
+	err = r.reconcileGatewayDiffs(ctx, rlp, targetObj)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	err = r.reconcileGatewayDiffs(ctx, rlp, targetObj)
+	err = r.reconcileNetworkResourceDirectBackReference(ctx, rlp, targetObj)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -190,10 +190,6 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 		return err
 	}
 
-	if err := r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj); err != nil {
-		return err
-	}
-
 	if err := r.reconcileWASMPluginConf(ctx, rlp, gatewayDiffObj); err != nil {
 		return err
 	}
@@ -203,6 +199,10 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 	}
 
 	if err := r.reconcileLimits(ctx, rlp, gatewayDiffObj); err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+
+	if err := r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj); err != nil {
 		return err
 	}
 

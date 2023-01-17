@@ -87,7 +87,7 @@ func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw co
 		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{
 			Selector: &istiotypev1beta1.WorkloadSelector{
-				MatchLabels: gw.Labels,
+				MatchLabels: gw.Labels, // FIXME: https://github.com/Kuadrant/kuadrant-operator/issues/141
 			},
 			Url:          rlptools.WASMFilterImageURL,
 			PluginConfig: nil,

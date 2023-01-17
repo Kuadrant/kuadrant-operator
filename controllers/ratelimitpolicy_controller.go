@@ -35,6 +35,8 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
+const rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
+
 // RateLimitPolicyReconciler reconciles a RateLimitPolicy object
 type RateLimitPolicyReconciler struct {
 	reconcilers.TargetRefReconciler
@@ -64,6 +66,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	logger.Info("Reconciling RateLimitPolicy")
 	ctx := logr.NewContext(eventCtx, logger)
 
+	// fetch the ratelimitpolicy
 	rlp := &kuadrantv1beta1.RateLimitPolicy{}
 	if err := r.Client().Get(ctx, req.NamespacedName, rlp); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -82,25 +85,44 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 		logger.V(1).Info(string(jsonData))
 	}
 
-	if rlp.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(rlp, rateLimitPolicyFinalizer) {
-		if err := r.finalizeRLP(ctx, rlp); err != nil {
-			return ctrl.Result{}, err
+	markedForDeletion := rlp.GetDeletionTimestamp() != nil
+
+	// fetch the target network object
+	targetObj, err := r.FetchValidTargetRef(ctx, rlp.GetTargetRef(), rlp.Namespace)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.V(1).Info("Network object not found. Cleaning up")
+			delResErr := r.deleteResources(ctx, rlp, nil)
+			if markedForDeletion {
+				return ctrl.Result{}, delResErr
+			}
+			if delResErr == nil {
+				delResErr = err
+			}
+			return r.reconcileStatus(ctx, rlp, nil, delResErr)
+		}
+		return ctrl.Result{}, err
+	}
+
+	// handle authpolicy marked for deletion
+	if markedForDeletion {
+		if controllerutil.ContainsFinalizer(rlp, rateLimitPolicyFinalizer) {
+			logger.V(1).Info("Handling removal of ratelimitpolicy object")
+
+			if err := r.deleteResources(ctx, rlp, targetObj); err != nil {
+				return ctrl.Result{}, err
+			}
+
+			logger.Info("removing finalizer")
+			if err := r.RemoveFinalizer(ctx, rlp, rateLimitPolicyFinalizer); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 
-		logger.Info("removing finalizer")
-		controllerutil.RemoveFinalizer(rlp, rateLimitPolicyFinalizer)
-		if err := r.UpdateResource(ctx, rlp); client.IgnoreNotFound(err) != nil {
-			return ctrl.Result{}, err
-		}
 		return ctrl.Result{}, nil
 	}
 
-	// Ignore deleted resources, this can happen when foregroundDeletion is enabled
-	// https://kubernetes.io/docs/concepts/workloads/controllers/garbage-collection/#foreground-cascading-deletion
-	if rlp.GetDeletionTimestamp() != nil {
-		return ctrl.Result{}, nil
-	}
-
+	// add finalizer to the ratelimitpolicy
 	if !controllerutil.ContainsFinalizer(rlp, rateLimitPolicyFinalizer) {
 		controllerutil.AddFinalizer(rlp, rateLimitPolicyFinalizer)
 		if err := r.UpdateResource(ctx, rlp); client.IgnoreNotFound(err) != nil {
@@ -108,13 +130,15 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 		}
 	}
 
-	specResult, specErr := r.reconcileSpec(ctx, rlp)
+	// reconcile the ratelimitpolicy spec
+	specResult, specErr := r.reconcileResources(ctx, rlp, targetObj)
 	if specErr == nil && specResult.Requeue {
 		logger.V(1).Info("Reconciling spec not finished. Requeueing.")
 		return specResult, nil
 	}
 
-	statusResult, statusErr := r.reconcileStatus(ctx, rlp, specErr)
+	// reconcile ratelimitpolicy status
+	statusResult, statusErr := r.reconcileStatus(ctx, rlp, targetObj, specErr)
 
 	if specErr != nil {
 		return ctrl.Result{}, specErr
@@ -129,28 +153,27 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 		return statusResult, nil
 	}
 
-	logger.Info("successfully reconciled RateLimitPolicy")
+	logger.Info("RateLimitPolicy reconciled successfully")
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileSpec(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) (ctrl.Result, error) {
+func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) (ctrl.Result, error) {
 	err := rlp.Validate()
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	err = r.validateRuleHosts(ctx, rlp)
+	err = r.validateHierarchicalRules(ctx, rlp, targetObj)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	// Ensure only one RLP is targeting the Gateway/HTTPRoute
-	err = r.reconcileTargetBackReference(ctx, rlp)
+	err = r.reconcileNetworkResourceDirectBackReference(ctx, rlp, targetObj)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	err = r.reconcileGatewayDiffs(ctx, rlp)
+	err = r.reconcileGatewayDiffs(ctx, rlp, targetObj)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -158,11 +181,68 @@ func (r *RateLimitPolicyReconciler) reconcileSpec(ctx context.Context, rlp *kuad
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileTargetBackReference(ctx context.Context, policy common.KuadrantPolicy) error {
-	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(policy), policy.GetTargetRef(), policy.GetNamespace(), common.RateLimitPolicyBackRefAnnotation)
+func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) error {
+	logger, _ := logr.FromContext(ctx)
+	logger.V(1).Info("Handling removal of ratelimitpolicy object")
+
+	gatewayDiffObj, err := r.ComputeFinalizeGatewayDiff(ctx, rlp, targetObj, &common.KuadrantRateLimitPolicyRefsConfig{})
+	if err != nil {
+		return err
+	}
+
+	if err := r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj); err != nil {
+		return err
+	}
+
+	if err := r.reconcileWASMPluginConf(ctx, rlp, gatewayDiffObj); err != nil {
+		return err
+	}
+
+	if err := r.reconcileRateLimitingClusterEnvoyFilter(ctx, rlp, gatewayDiffObj); err != nil {
+		return err
+	}
+
+	if err := r.reconcileLimits(ctx, rlp, gatewayDiffObj); err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+
+	if targetObj != nil {
+		return r.deleteNetworkResourceDirectBackReference(ctx, rlp, targetObj)
+	}
+
+	return nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileGatewayDiffs(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) error {
+func (r *RateLimitPolicyReconciler) validateHierarchicalRules(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) error {
+	targetHostnames, err := r.TargetHostnames(ctx, targetObj)
+	if err != nil {
+		return err
+	}
+
+	ruleHosts := make([]string, 0)
+	for idx := range rlp.Spec.RateLimits {
+		for ruleIdx := range rlp.Spec.RateLimits[idx].Rules {
+			ruleHosts = append(ruleHosts, rlp.Spec.RateLimits[idx].Rules[ruleIdx].Hosts...)
+		}
+	}
+
+	if valid, invalidHost := common.ValidSubdomains(targetHostnames, ruleHosts); !valid {
+		return fmt.Errorf("rule host (%s) not valid", invalidHost)
+	}
+
+	return nil
+}
+
+// Ensures only one RLP targets the network resource
+func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, policy common.KuadrantPolicy, targetObj client.Object) error {
+	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(policy), targetObj, common.RateLimitPolicyBackRefAnnotation)
+}
+
+func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) error {
+	return r.DeleteTargetBackReference(ctx, client.ObjectKeyFromObject(rlp), targetObj, common.RateLimitPolicyBackRefAnnotation)
+}
+
+func (r *RateLimitPolicyReconciler) reconcileGatewayDiffs(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) error {
 	// Reconcile based on gateway diffs:
 	// * Limits
 	// * WASM Plugin configuration object
@@ -170,7 +250,7 @@ func (r *RateLimitPolicyReconciler) reconcileGatewayDiffs(ctx context.Context, r
 	// * Gateway rate limit policy annotations (last)
 	logger, _ := logr.FromContext(ctx)
 
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, &common.KuadrantRateLimitPolicyRefsConfig{})
+	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, targetObj, &common.KuadrantRateLimitPolicyRefsConfig{})
 	if err != nil {
 		return err
 	}
@@ -194,26 +274,6 @@ func (r *RateLimitPolicyReconciler) reconcileGatewayDiffs(ctx context.Context, r
 	// should be the last step, only when all the reconciliation steps succeed
 	if err := r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj); err != nil {
 		return err
-	}
-
-	return nil
-}
-
-func (r *RateLimitPolicyReconciler) validateRuleHosts(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy) error {
-	targetHostnames, err := r.TargetHostnames(ctx, rlp.Spec.TargetRef, rlp.Namespace)
-	if err != nil {
-		return err
-	}
-
-	ruleHosts := make([]string, 0)
-	for idx := range rlp.Spec.RateLimits {
-		for ruleIdx := range rlp.Spec.RateLimits[idx].Rules {
-			ruleHosts = append(ruleHosts, rlp.Spec.RateLimits[idx].Rules[ruleIdx].Hosts...)
-		}
-	}
-
-	if valid, invalidHost := common.ValidSubdomains(targetHostnames, ruleHosts); !valid {
-		return fmt.Errorf("rule host (%s) not valid", invalidHost)
 	}
 
 	return nil

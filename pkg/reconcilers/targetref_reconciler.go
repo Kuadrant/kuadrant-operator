@@ -114,20 +114,11 @@ func (r *TargetRefReconciler) FetchValidTargetRef(ctx context.Context, targetRef
 }
 
 // TargetedGatewayKeys returns the list of gateways that are being referenced from the target.
-func (r *TargetRefReconciler) TargetedGatewayKeys(ctx context.Context, targetRef gatewayapiv1alpha2.PolicyTargetReference, defaultNs string) ([]client.ObjectKey, error) {
-	gwKeys := make([]client.ObjectKey, 0)
-
-	if common.IsTargetRefHTTPRoute(targetRef) {
-		tmpNS := defaultNs
-		if targetRef.Namespace != nil {
-			tmpNS = string(*targetRef.Namespace)
-		}
-		objKey := client.ObjectKey{Name: string(targetRef.Name), Namespace: tmpNS}
-		httpRoute, err := r.FetchValidHTTPRoute(ctx, objKey)
-		if err != nil {
-			return nil, err
-		}
-
+func (r *TargetRefReconciler) TargetedGatewayKeys(ctx context.Context, targetObj client.Object) []client.ObjectKey {
+	switch targetObj.(type) {
+	case *gatewayapiv1alpha2.HTTPRoute:
+		httpRoute, _ := targetObj.(*gatewayapiv1alpha2.HTTPRoute)
+		gwKeys := make([]client.ObjectKey, 0)
 		for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
 			gwKey := client.ObjectKey{Name: string(parentRef.Name), Namespace: httpRoute.Namespace}
 			if parentRef.Namespace != nil {
@@ -135,23 +126,19 @@ func (r *TargetRefReconciler) TargetedGatewayKeys(ctx context.Context, targetRef
 			}
 			gwKeys = append(gwKeys, gwKey)
 		}
-	} else if common.IsTargetRefGateway(targetRef) {
-		gwKey := client.ObjectKey{Name: string(targetRef.Name), Namespace: defaultNs}
-		if targetRef.Namespace != nil {
-			gwKey.Namespace = string(*targetRef.Namespace)
-		}
-		gwKeys = []client.ObjectKey{gwKey}
-	}
+		return gwKeys
 
-	return gwKeys, nil
+	case *gatewayapiv1alpha2.Gateway:
+		return []client.ObjectKey{client.ObjectKeyFromObject(targetObj)}
+
+	// If the targetObj is nil, we don't fail; instead, we return an empty slice of gateway keys.
+	// This is for supporting a smooth cleanup in cases where the network object has been deleted already
+	default:
+		return []client.ObjectKey{}
+	}
 }
 
-func (r *TargetRefReconciler) TargetHostnames(ctx context.Context, targetRef gatewayapiv1alpha2.PolicyTargetReference, defaultNs string) ([]string, error) {
-	targetObj, err := r.FetchValidTargetRef(ctx, targetRef, defaultNs)
-	if err != nil {
-		return nil, err
-	}
-
+func (r *TargetRefReconciler) TargetHostnames(ctx context.Context, targetObj client.Object) ([]string, error) {
 	netResourceHosts := make([]string, 0)
 	switch netResource := targetObj.(type) {
 	case *gatewayapiv1alpha2.HTTPRoute:
@@ -174,13 +161,8 @@ func (r *TargetRefReconciler) TargetHostnames(ctx context.Context, targetRef gat
 }
 
 // ReconcileTargetBackReference adds policy key in annotations of the target object
-func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, policyKey client.ObjectKey, targetRef gatewayapiv1alpha2.PolicyTargetReference, defaultNs, annotationName string) error {
+func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, policyKey client.ObjectKey, targetObj client.Object, annotationName string) error {
 	logger, _ := logr.FromContext(ctx)
-	targetObj, err := r.FetchValidTargetRef(ctx, targetRef, defaultNs)
-	if err != nil {
-		// The object should also exist
-		return err
-	}
 
 	targetObjKey := client.ObjectKeyFromObject(targetObj)
 	targetObjType := targetObj.GetObjectKind().GroupVersionKind()
@@ -208,16 +190,8 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, 
 	return nil
 }
 
-func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, policyKey client.ObjectKey, targetRef gatewayapiv1alpha2.PolicyTargetReference, defaultNs, annotationName string) error {
+func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, policyKey client.ObjectKey, targetObj client.Object, annotationName string) error {
 	logger, _ := logr.FromContext(ctx)
-
-	targetObj, err := r.FetchValidTargetRef(ctx, targetRef, defaultNs)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
 
 	targetObjKey := client.ObjectKeyFromObject(targetObj)
 	targetObjType := targetObj.GetObjectKind().GroupVersionKind()
@@ -245,17 +219,14 @@ func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, pol
 // * list of gateways to which the policy applies for the first time
 // * list of gateways to which the policy no longer applies
 // * list of gateways to which the policy still applies
-func (r *TargetRefReconciler) ComputeGatewayDiffs(ctx context.Context, policy common.KuadrantPolicy, policyRefsConfig common.PolicyRefsConfig) (*GatewayDiff, error) {
+func (r *TargetRefReconciler) ComputeGatewayDiffs(ctx context.Context, policy common.KuadrantPolicy, targetObj client.Object, policyRefsConfig common.PolicyRefsConfig) (*GatewayDiff, error) {
 	logger, _ := logr.FromContext(ctx)
 
-	gwKeys, err := r.TargetedGatewayKeys(ctx, policy.GetTargetRef(), policy.GetNamespace())
-	if err != nil && !apierrors.IsNotFound(err) {
-		return nil, err
-	}
+	gwKeys := r.TargetedGatewayKeys(ctx, targetObj)
 
 	// TODO(rahulanand16nov): maybe think about optimizing it with a label later
 	allGwList := &gatewayapiv1alpha2.GatewayList{}
-	err = r.Client().List(ctx, allGwList)
+	err := r.Client().List(ctx, allGwList)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +246,7 @@ func (r *TargetRefReconciler) ComputeGatewayDiffs(ctx context.Context, policy co
 	return gwDiff, nil
 }
 
-func (r *TargetRefReconciler) ComputeFinalizeGatewayDiff(ctx context.Context, policy common.KuadrantPolicy, policyRefsConfig common.PolicyRefsConfig) (*GatewayDiff, error) {
+func (r *TargetRefReconciler) ComputeFinalizeGatewayDiff(ctx context.Context, policy common.KuadrantPolicy, targetObj client.Object, policyRefsConfig common.PolicyRefsConfig) (*GatewayDiff, error) {
 	logger, _ := logr.FromContext(ctx)
 
 	// Prepare gatewayDiff object only with GatewaysWithInvalidPolicyRef list populated.
@@ -286,12 +257,7 @@ func (r *TargetRefReconciler) ComputeFinalizeGatewayDiff(ctx context.Context, po
 		GatewaysWithInvalidPolicyRef: nil,
 	}
 
-	gwKeys, err := r.TargetedGatewayKeys(ctx, policy.GetTargetRef(), policy.GetNamespace())
-	if err != nil && !apierrors.IsNotFound(err) {
-		return nil, err
-	}
-
-	for _, gwKey := range gwKeys {
+	for _, gwKey := range r.TargetedGatewayKeys(ctx, targetObj) {
 		gw := &gatewayapiv1alpha2.Gateway{}
 		err := r.Client().Get(ctx, gwKey, gw)
 		logger.V(1).Info("ComputeFinalizeGatewayDiff", "fetch gateway", gwKey, "err", err)
@@ -303,14 +269,18 @@ func (r *TargetRefReconciler) ComputeFinalizeGatewayDiff(ctx context.Context, po
 		}
 		gwDiff.GatewaysWithInvalidPolicyRef = append(gwDiff.GatewaysWithInvalidPolicyRef, common.GatewayWrapper{Gateway: gw, PolicyRefsConfig: policyRefsConfig})
 	}
+
 	logger.V(1).Info("ComputeFinalizeGatewayDiff", "#invalid-policy-ref", len(gwDiff.GatewaysWithInvalidPolicyRef))
 
 	return gwDiff, nil
 }
 
+// ReconcileGatewayPolicyReferences updates the annotations in the Gateway resources that list to all the policies
+// that directly or indirectly target the gateway, based upon a pre-computed gateway diff object
 func (r *TargetRefReconciler) ReconcileGatewayPolicyReferences(ctx context.Context, policy client.Object, gwDiffObj *GatewayDiff) error {
 	logger, _ := logr.FromContext(ctx)
 
+	// delete the policy from the annotations of the gateways no longer target by the policy
 	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
 		if gw.DeletePolicy(client.ObjectKeyFromObject(policy)) {
 			err := r.UpdateResource(ctx, gw.Gateway)
@@ -321,6 +291,7 @@ func (r *TargetRefReconciler) ReconcileGatewayPolicyReferences(ctx context.Conte
 		}
 	}
 
+	// add the policy to the annotations of the gateways target by the policy
 	for _, gw := range gwDiffObj.GatewaysMissingPolicyRef {
 		if gw.AddPolicy(client.ObjectKeyFromObject(policy)) {
 			err := r.UpdateResource(ctx, gw.Gateway)

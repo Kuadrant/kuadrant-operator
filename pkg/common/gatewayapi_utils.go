@@ -184,10 +184,14 @@ type PolicyRefsConfig interface {
 type KuadrantRateLimitPolicyRefsConfig struct{}
 
 func (c *KuadrantRateLimitPolicyRefsConfig) PolicyRefsAnnotation() string {
-	return KuadrantRateLimitPolicyRefAnnotation
+	return RateLimitPoliciesBackRefAnnotation
 }
 
-// TODO(guicassolato): Define KuadrantAuthPolicyRefsConfig
+type KuadrantAuthPolicyRefsConfig struct{}
+
+func (c *KuadrantAuthPolicyRefsConfig) PolicyRefsAnnotation() string {
+	return AuthPoliciesBackRefAnnotation
+}
 
 func GatewaysMissingPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
 	// gateways referenced by the policy but do not have reference to it in the annotations

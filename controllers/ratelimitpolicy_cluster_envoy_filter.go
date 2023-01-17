@@ -24,7 +24,7 @@ func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx 
 	logger, _ := logr.FromContext(ctx)
 
 	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
-		logger.V(1).Info("reconcileRateLimitingClusterEnvoyFilter: left gateways", "gw key", gw.Key())
+		logger.V(1).Info("reconcileRateLimitingClusterEnvoyFilter: gateway with invalid policy ref", "gw key", gw.Key())
 		rlpRefs := gw.PolicyRefs()
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Remove the RLP key from the reference list. Only if it exists (it should)
@@ -46,7 +46,7 @@ func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx 
 	// Nothing to do for the gwDiffObj.GatewaysWithValidPolicyRef
 
 	for _, gw := range gwDiffObj.GatewaysMissingPolicyRef {
-		logger.V(1).Info("reconcileRateLimitingClusterEnvoyFilter: new gateways", "gw key", gw.Key())
+		logger.V(1).Info("reconcileRateLimitingClusterEnvoyFilter: gateway missing policy ref", "gw key", gw.Key())
 		rlpRefs := gw.PolicyRefs()
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Add the RLP key to the reference list. Only if it does not exist (it should not)

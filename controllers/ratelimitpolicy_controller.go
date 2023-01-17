@@ -185,7 +185,7 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 	logger, _ := logr.FromContext(ctx)
 	logger.V(1).Info("Handling removal of ratelimitpolicy object")
 
-	gatewayDiffObj, err := r.ComputeFinalizeGatewayDiff(ctx, rlp, targetObj, &common.KuadrantRateLimitPolicyRefsConfig{})
+	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, targetObj, &common.KuadrantRateLimitPolicyRefsConfig{})
 	if err != nil {
 		return err
 	}

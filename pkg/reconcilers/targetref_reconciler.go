@@ -22,7 +22,6 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -242,35 +241,6 @@ func (r *TargetRefReconciler) ComputeGatewayDiffs(ctx context.Context, policy co
 		"#valid-policy-ref", len(gwDiff.GatewaysWithValidPolicyRef),
 		"#invalid-policy-ref", len(gwDiff.GatewaysWithInvalidPolicyRef),
 	)
-
-	return gwDiff, nil
-}
-
-func (r *TargetRefReconciler) ComputeFinalizeGatewayDiff(ctx context.Context, policy common.KuadrantPolicy, targetObj client.Object, policyRefsConfig common.PolicyRefsConfig) (*GatewayDiff, error) {
-	logger, _ := logr.FromContext(ctx)
-
-	// Prepare gatewayDiff object only with GatewaysWithInvalidPolicyRef list populated.
-	// Used for the common reconciliation methods of Limits, EnvoyFilters, WasmPlugins, etc...
-	gwDiff := &GatewayDiff{
-		GatewaysMissingPolicyRef:     nil,
-		GatewaysWithValidPolicyRef:   nil,
-		GatewaysWithInvalidPolicyRef: nil,
-	}
-
-	for _, gwKey := range r.TargetedGatewayKeys(ctx, targetObj) {
-		gw := &gatewayapiv1alpha2.Gateway{}
-		err := r.Client().Get(ctx, gwKey, gw)
-		logger.V(1).Info("ComputeFinalizeGatewayDiff", "fetch gateway", gwKey, "err", err)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				continue
-			}
-			return nil, err
-		}
-		gwDiff.GatewaysWithInvalidPolicyRef = append(gwDiff.GatewaysWithInvalidPolicyRef, common.GatewayWrapper{Gateway: gw, PolicyRefsConfig: policyRefsConfig})
-	}
-
-	logger.V(1).Info("ComputeFinalizeGatewayDiff", "#invalid-policy-ref", len(gwDiff.GatewaysWithInvalidPolicyRef))
 
 	return gwDiff, nil
 }

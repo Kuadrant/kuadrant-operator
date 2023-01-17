@@ -47,12 +47,12 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ku
 	limitIdx := rlptools.NewLimitadorIndex(limitador, logger)
 
 	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
-		logger.V(1).Info("reconcileLimits: left gateways", "key", gw.Key())
+		logger.V(1).Info("reconcileLimits: gateway with invalid policy ref", "key", gw.Key())
 		limitIdx.DeleteGateway(gw.Key())
 	}
 
 	for _, gw := range gwDiffObj.GatewaysWithValidPolicyRef {
-		logger.V(1).Info("reconcileLimits: same gateways", "rlpRefs", gw.PolicyRefs())
+		logger.V(1).Info("reconcileLimits: gateway with valid policy ref", "rlpRefs", gw.PolicyRefs())
 
 		gwLimits, err := r.gatewayLimits(ctx, gw, gw.PolicyRefs())
 		if err != nil {
@@ -70,7 +70,7 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ku
 
 	for _, gw := range gwDiffObj.GatewaysMissingPolicyRef {
 		rlpRefs := append(gw.PolicyRefs(), client.ObjectKeyFromObject(rlp))
-		logger.V(1).Info("reconcileLimits: new gateways", "rlpRefs", rlpRefs)
+		logger.V(1).Info("reconcileLimits: gateway missing policy ref", "rlpRefs", rlpRefs)
 
 		gwLimits, err := r.gatewayLimits(ctx, gw, rlpRefs)
 		if err != nil {

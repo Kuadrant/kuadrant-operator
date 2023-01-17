@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	WASMFilterImageURL = common.FetchEnv("WASM_FILTER_IMAGE", "oci://quay.io/kuadrant/wasm-shim:latest")
+	WASMFilterImageURL = common.FetchEnv("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
 )
 
 type GatewayAction struct {

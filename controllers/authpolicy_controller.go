@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -45,6 +46,14 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 		}
 		logger.Error(err, "failed to get AuthPolicy")
 		return ctrl.Result{}, err
+	}
+
+	if logger.V(1).Enabled() {
+		jsonData, err := json.MarshalIndent(ap, "", "  ")
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		logger.V(1).Info(string(jsonData))
 	}
 
 	markedForDeletion := ap.GetDeletionTimestamp() != nil

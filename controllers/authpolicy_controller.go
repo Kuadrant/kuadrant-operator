@@ -204,16 +204,20 @@ func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx cont
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	HTTPRouteEventMapper := &HTTPRouteEventMapper{
-		Logger: r.Logger().WithName("httpRouteHandler"),
+	httpRouteEventMapper := &HTTPRouteEventMapper{
+		Logger: r.Logger().WithName("httpRouteEventMapper"),
 	}
+	gatewayEventMapper := &GatewayEventMapper{
+		Logger: r.Logger().WithName("gatewayEventMapper"),
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.AuthPolicy{}).
 		Watches(
 			&source.Kind{Type: &gatewayapiv1alpha2.HTTPRoute{}},
-			handler.EnqueueRequestsFromMapFunc(HTTPRouteEventMapper.MapToAuthPolicy),
+			handler.EnqueueRequestsFromMapFunc(httpRouteEventMapper.MapToAuthPolicy),
 		).
 		Watches(&source.Kind{Type: &gatewayapiv1alpha2.Gateway{}},
-			handler.EnqueueRequestsFromMapFunc(HTTPRouteEventMapper.MapToAuthPolicy)).
+			handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.MapToAuthPolicy)).
 		Complete(r)
 }

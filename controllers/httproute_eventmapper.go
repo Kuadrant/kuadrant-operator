@@ -13,50 +13,23 @@ type HTTPRouteEventMapper struct {
 	Logger logr.Logger
 }
 
-func (h *HTTPRouteEventMapper) MapToRateLimitPolicy(obj client.Object) []reconcile.Request {
-	httpRouteAnnotations := obj.GetAnnotations()
-	if httpRouteAnnotations == nil {
-		httpRouteAnnotations = map[string]string{}
-	}
-
-	rateLimitRef, ok := httpRouteAnnotations[common.RateLimitPolicyBackRefAnnotation]
-	if !ok {
-		return []reconcile.Request{}
-	}
-
-	rlpKey := common.NamespacedNameToObjectKey(rateLimitRef, obj.GetNamespace())
-
-	h.Logger.V(1).Info("Processing object", "key", client.ObjectKeyFromObject(obj), "ratelimitpolicy", rlpKey)
-
-	requests := []reconcile.Request{
-		{
-			NamespacedName: rlpKey,
-		},
-	}
-
-	return requests
+func (m *HTTPRouteEventMapper) MapToRateLimitPolicy(obj client.Object) []reconcile.Request {
+	return m.mapToPolicyRequest(obj, "ratelimitpolicy", common.RateLimitPolicyBackRefAnnotation)
 }
 
-func (h *HTTPRouteEventMapper) MapToAuthPolicy(obj client.Object) []reconcile.Request {
-	httpRouteAnnotations := obj.GetAnnotations()
-	if httpRouteAnnotations == nil {
-		httpRouteAnnotations = map[string]string{}
-	}
+func (m *HTTPRouteEventMapper) MapToAuthPolicy(obj client.Object) []reconcile.Request {
+	return m.mapToPolicyRequest(obj, "authpolicy", common.AuthPolicyBackRefAnnotation)
+}
 
-	apRef, present := httpRouteAnnotations[common.AuthPolicyBackRefAnnotation]
-	if !present {
+func (m *HTTPRouteEventMapper) mapToPolicyRequest(obj client.Object, policyKind, policyBackRefAnnotationName string) []reconcile.Request {
+	policyRef, found := common.ObjectAnnotations(obj)[policyBackRefAnnotationName]
+	if !found {
 		return []reconcile.Request{}
 	}
 
-	apKey := common.NamespacedNameToObjectKey(apRef, obj.GetNamespace())
+	policyKey := common.NamespacedNameToObjectKey(policyRef, obj.GetNamespace())
 
-	h.Logger.V(1).Info("Processing object", "key", client.ObjectKeyFromObject(obj), "AuthPolicy", apKey)
+	m.Logger.V(1).Info("Processing object", "object", client.ObjectKeyFromObject(obj), policyKind, policyKey)
 
-	requests := []reconcile.Request{
-		{
-			NamespacedName: apKey,
-		},
-	}
-
-	return requests
+	return []reconcile.Request{{NamespacedName: policyKey}}
 }

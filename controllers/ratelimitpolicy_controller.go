@@ -90,18 +90,18 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	// fetch the target network object
 	targetObj, err := r.FetchValidTargetRef(ctx, rlp.GetTargetRef(), rlp.Namespace)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			logger.V(1).Info("Network object not found. Cleaning up")
-			delResErr := r.deleteResources(ctx, rlp, nil)
-			if markedForDeletion {
-				return ctrl.Result{}, delResErr
+		if !markedForDeletion {
+			if apierrors.IsNotFound(err) {
+				logger.V(1).Info("Network object not found. Cleaning up")
+				delResErr := r.deleteResources(ctx, rlp, nil)
+				if delResErr == nil {
+					delResErr = err
+				}
+				return r.reconcileStatus(ctx, rlp, nil, delResErr)
 			}
-			if delResErr == nil {
-				delResErr = err
-			}
-			return r.reconcileStatus(ctx, rlp, nil, delResErr)
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, err
+		targetObj = nil // we need the object set to nil when there's an error, otherwise deleting the resources (when marked for deletion) will panic
 	}
 
 	// handle authpolicy marked for deletion
@@ -131,11 +131,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	}
 
 	// reconcile the ratelimitpolicy spec
-	specResult, specErr := r.reconcileResources(ctx, rlp, targetObj)
-	if specErr == nil && specResult.Requeue {
-		logger.V(1).Info("Reconciling spec not finished. Requeueing.")
-		return specResult, nil
-	}
+	specErr := r.reconcileResources(ctx, rlp, targetObj)
 
 	// reconcile ratelimitpolicy status
 	statusResult, statusErr := r.reconcileStatus(ctx, rlp, targetObj, specErr)
@@ -157,34 +153,47 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) (ctrl.Result, error) {
+func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) error {
+	// validate
 	err := rlp.Validate()
 	if err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 
 	err = r.validateHierarchicalRules(ctx, rlp, targetObj)
 	if err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 
-	err = r.reconcileGatewayDiffs(ctx, rlp, targetObj)
+	// reconcile based on gateway diffs
+	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, targetObj, &common.KuadrantRateLimitPolicyRefsConfig{})
 	if err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 
-	err = r.reconcileNetworkResourceDirectBackReference(ctx, rlp, targetObj)
-	if err != nil {
-		return ctrl.Result{}, err
+	if err := r.reconcileLimits(ctx, rlp, gatewayDiffObj); err != nil {
+		return err
 	}
 
-	return ctrl.Result{}, nil
+	if err := r.reconcileRateLimitingClusterEnvoyFilter(ctx, rlp, gatewayDiffObj); err != nil {
+		return err
+	}
+
+	if err := r.reconcileWASMPluginConf(ctx, rlp, gatewayDiffObj); err != nil {
+		return err
+	}
+
+	// set direct back ref - i.e. claim the target network object as taken asap
+  if err := r.reconcileNetworkResourceDirectBackReference(ctx, rlp, targetObj); err != nil {
+		return err
+	}
+
+	// set annotation of policies afftecting the gateway - should be the last step, only when all the reconciliation steps succeed
+	return r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
 }
 
 func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) error {
-	logger, _ := logr.FromContext(ctx)
-	logger.V(1).Info("Handling removal of ratelimitpolicy object")
-
+	// delete based on gateway diffs
 	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, targetObj, &common.KuadrantRateLimitPolicyRefsConfig{})
 	if err != nil {
 		return err
@@ -202,15 +211,15 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 		return err
 	}
 
-	if err := r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj); err != nil {
-		return err
-	}
-
+	// remove direct back ref
 	if targetObj != nil {
-		return r.deleteNetworkResourceDirectBackReference(ctx, rlp, targetObj)
+		if err := r.deleteNetworkResourceDirectBackReference(ctx, rlp, targetObj); err != nil {
+			return err
+		}
 	}
 
-	return nil
+	// update annotation of policies afftecting the gateway
+	return r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
 }
 
 func (r *RateLimitPolicyReconciler) validateHierarchicalRules(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) error {
@@ -240,43 +249,6 @@ func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(
 
 func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) error {
 	return r.DeleteTargetBackReference(ctx, client.ObjectKeyFromObject(rlp), targetObj, common.RateLimitPolicyBackRefAnnotation)
-}
-
-func (r *RateLimitPolicyReconciler) reconcileGatewayDiffs(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) error {
-	// Reconcile based on gateway diffs:
-	// * Limits
-	// * WASM Plugin configuration object
-	// * EnvoyFilter
-	// * Gateway rate limit policy annotations (last)
-	logger, _ := logr.FromContext(ctx)
-
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, targetObj, &common.KuadrantRateLimitPolicyRefsConfig{})
-	if err != nil {
-		return err
-	}
-	if gatewayDiffObj == nil {
-		logger.V(1).Info("gatewayDiffObj is nil")
-		return nil
-	}
-
-	if err := r.reconcileLimits(ctx, rlp, gatewayDiffObj); err != nil {
-		return err
-	}
-
-	if err := r.reconcileRateLimitingClusterEnvoyFilter(ctx, rlp, gatewayDiffObj); err != nil {
-		return err
-	}
-
-	if err := r.reconcileWASMPluginConf(ctx, rlp, gatewayDiffObj); err != nil {
-		return err
-	}
-
-	// should be the last step, only when all the reconciliation steps succeed
-	if err := r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -61,18 +61,18 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	// fetch the target network object
 	targetObj, err := r.FetchValidTargetRef(ctx, ap.GetTargetRef(), ap.Namespace)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			logger.V(1).Info("Network object not found. Cleaning up")
-			delResErr := r.deleteResources(ctx, ap, nil)
-			if markedForDeletion {
-				return ctrl.Result{}, delResErr
+		if !markedForDeletion {
+			if apierrors.IsNotFound(err) {
+				logger.V(1).Info("Network object not found. Cleaning up")
+				delResErr := r.deleteResources(ctx, ap, nil)
+				if delResErr == nil {
+					delResErr = err
+				}
+				return r.reconcileStatus(ctx, ap, delResErr)
 			}
-			if delResErr == nil {
-				delResErr = err
-			}
-			return r.reconcileStatus(ctx, ap, delResErr)
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, err
+		targetObj = nil // we need the object set to nil when there's an error, otherwise deleting the resources (when marked for deletion) will panic
 	}
 
 	// handle authpolicy marked for deletion
@@ -101,11 +101,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	}
 
 	// reconcile the authpolicy spec
-	specResult, specErr := r.reconcileResources(ctx, ap, targetObj)
-	if specErr == nil && specResult.Requeue {
-		logger.V(1).Info("Reconciling spec not finished. Requeueing.")
-		return specResult, nil
-	}
+	specErr := r.reconcileResources(ctx, ap, targetObj)
 
 	// reconcile authpolicy status
 	statusResult, statusErr := r.reconcileStatus(ctx, ap, specErr)
@@ -127,40 +123,41 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	return ctrl.Result{}, nil
 }
 
-func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.AuthPolicy, targetObj client.Object) (ctrl.Result, error) {
+func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.AuthPolicy, targetObj client.Object) error {
+	// validate
 	if err := ap.Validate(); err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 
 	if err := r.validateHierarchicalRules(ctx, ap, targetObj); err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 
+	// reconcile based on gateway diffs
 	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, ap, targetObj, &common.KuadrantAuthPolicyRefsConfig{})
 	if err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 
 	if err := r.reconcileIstioAuthorizationPolicies(ctx, ap, targetObj, gatewayDiffObj); err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 
 	if err := r.reconcileAuthConfigs(ctx, ap, targetObj); err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 
-	if err := r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj); err != nil {
-		return ctrl.Result{}, err
+	// set direct back ref - i.e. claim the target network object as taken asap
+	if err := r.reconcileNetworkResourceDirectBackReference(ctx, ap, targetObj); err != nil {
+		return err
 	}
 
-	if err := r.reconcileNetworkResourceDirectBackReference(ctx, ap, targetObj); err != nil { // direct back ref
-		return ctrl.Result{}, err
-	}
-
-	return ctrl.Result{}, nil
+	// set annotation of policies afftecting the gateway - should be the last step, only when all the reconciliation steps succeed
+	return r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
 }
 
 func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.AuthPolicy, targetObj client.Object) error {
+	// delete based on gateway diffs
 	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, ap, targetObj, &common.KuadrantAuthPolicyRefsConfig{})
 	if err != nil {
 		return err
@@ -174,14 +171,15 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 		return err
 	}
 
-	if err := r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj); err != nil {
-		return err
+	// remove direct back ref
+	if targetObj != nil {
+		if err := r.deleteNetworkResourceDirectBackReference(ctx, ap, targetObj); err != nil {
+			return err
+		}
 	}
 
-	if targetObj != nil {
-		return r.deleteNetworkResourceDirectBackReference(ctx, ap, targetObj) // direct back ref
-	}
-	return nil
+	// update annotation of policies afftecting the gateway
+	return r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
 }
 
 func (r *AuthPolicyReconciler) validateHierarchicalRules(ctx context.Context, ap *api.AuthPolicy, targetObj client.Object) error {

@@ -22,7 +22,7 @@ func (m *HTTPRouteEventMapper) MapToAuthPolicy(obj client.Object) []reconcile.Re
 }
 
 func (m *HTTPRouteEventMapper) mapToPolicyRequest(obj client.Object, policyKind, policyBackRefAnnotationName string) []reconcile.Request {
-	policyRef, found := common.ObjectAnnotations(obj)[policyBackRefAnnotationName]
+	policyRef, found := common.ReadAnnotationsFromObject(obj)[policyBackRefAnnotationName]
 	if !found {
 		return []reconcile.Request{}
 	}

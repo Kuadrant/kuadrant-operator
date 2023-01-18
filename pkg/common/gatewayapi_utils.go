@@ -250,10 +250,7 @@ func (g GatewayWrapper) PolicyRefs() []client.ObjectKey {
 		return make([]client.ObjectKey, 0)
 	}
 
-	gwAnnotations := g.GetAnnotations()
-	if gwAnnotations == nil {
-		gwAnnotations = map[string]string{}
-	}
+	gwAnnotations := ReadAnnotationsFromObject(g)
 
 	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
 	if !ok {
@@ -275,10 +272,7 @@ func (g GatewayWrapper) ContainsPolicy(policyKey client.ObjectKey) bool {
 		return false
 	}
 
-	gwAnnotations := g.GetAnnotations()
-	if gwAnnotations == nil {
-		gwAnnotations = map[string]string{}
-	}
+	gwAnnotations := ReadAnnotationsFromObject(g)
 
 	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
 	if !ok {
@@ -302,10 +296,7 @@ func (g GatewayWrapper) AddPolicy(policyKey client.ObjectKey) bool {
 		return false
 	}
 
-	gwAnnotations := g.GetAnnotations()
-	if gwAnnotations == nil {
-		gwAnnotations = map[string]string{}
-	}
+	gwAnnotations := ReadAnnotationsFromObject(g)
 
 	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
 	if !ok {
@@ -347,10 +338,7 @@ func (g GatewayWrapper) DeletePolicy(policyKey client.ObjectKey) bool {
 		return false
 	}
 
-	gwAnnotations := g.GetAnnotations()
-	if gwAnnotations == nil {
-		gwAnnotations = map[string]string{}
-	}
+	gwAnnotations := ReadAnnotationsFromObject(g)
 
 	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
 	if !ok {

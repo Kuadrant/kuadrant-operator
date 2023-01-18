@@ -167,10 +167,7 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, 
 	targetObjType := targetObj.GetObjectKind().GroupVersionKind()
 
 	// Reconcile the back reference:
-	objAnnotations := targetObj.GetAnnotations()
-	if objAnnotations == nil {
-		objAnnotations = map[string]string{}
-	}
+	objAnnotations := common.ReadAnnotationsFromObject(targetObj)
 
 	if val, ok := objAnnotations[annotationName]; ok {
 		if val != policyKey.String() {
@@ -196,10 +193,7 @@ func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, pol
 	targetObjType := targetObj.GetObjectKind().GroupVersionKind()
 
 	// Reconcile the back reference:
-	objAnnotations := targetObj.GetAnnotations()
-	if objAnnotations == nil {
-		objAnnotations = map[string]string{}
-	}
+	objAnnotations := common.ReadAnnotationsFromObject(targetObj)
 
 	if _, ok := objAnnotations[annotationName]; ok {
 		delete(objAnnotations, annotationName)

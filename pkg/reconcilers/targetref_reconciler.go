@@ -215,7 +215,10 @@ func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, pol
 func (r *TargetRefReconciler) ComputeGatewayDiffs(ctx context.Context, policy common.KuadrantPolicy, targetObj client.Object, policyRefsConfig common.PolicyRefsConfig) (*GatewayDiff, error) {
 	logger, _ := logr.FromContext(ctx)
 
-	gwKeys := r.TargetedGatewayKeys(ctx, targetObj)
+	var gwKeys []client.ObjectKey
+	if policy.GetDeletionTimestamp() == nil {
+		gwKeys = r.TargetedGatewayKeys(ctx, targetObj)
+	}
 
 	// TODO(rahulanand16nov): maybe think about optimizing it with a label later
 	allGwList := &gatewayapiv1alpha2.GatewayList{}

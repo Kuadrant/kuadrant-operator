@@ -24,7 +24,7 @@ import (
 var KuadrantExtAuthProviderName = common.FetchEnv("AUTH_PROVIDER", "kuadrant-authorization")
 
 // reconcileIstioAuthorizationPolicies translates and reconciles `AuthRules` into an Istio AuthorizationPoilcy containing them.
-func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.Context, ap *api.AuthPolicy, targetObj client.Object, gwDiffObj *reconcilers.GatewayDiff) error {
+func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, gwDiffObj *reconcilers.GatewayDiff) error {
 	if err := r.deleteIstioAuthorizationPolicies(ctx, ap, gwDiffObj); err != nil {
 		return err
 	}
@@ -34,13 +34,13 @@ func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.C
 		return err
 	}
 
-	targetHostnames, err := r.TargetHostnames(ctx, targetObj)
+	targetHostnames, err := r.TargetHostnames(ctx, targetNetworkObject)
 	if err != nil {
 		return err
 	}
 
 	// TODO(guicassolato): should the rules filter only the hostnames valid for each gateway?
-	toRules := istioAuthorizationPolicyRules(ctx, ap.Spec.AuthRules, targetHostnames, targetObj)
+	toRules := istioAuthorizationPolicyRules(ctx, ap.Spec.AuthRules, targetHostnames, targetNetworkObject)
 
 	// Create IstioAuthorizationPolicy for each gateway directly or indirectly referred by the policy (existing and new)
 	for _, gw := range append(gwDiffObj.GatewaysWithValidPolicyRef, gwDiffObj.GatewaysMissingPolicyRef...) {
@@ -128,7 +128,7 @@ func istioAuthorizationPolicyLabels(gwKey, apKey client.ObjectKey) map[string]st
 	}
 }
 
-func istioAuthorizationPolicyRules(ctx context.Context, authRules []api.AuthRule, targetHostnames []string, targetObj client.Object) []*istiosecurity.Rule_To {
+func istioAuthorizationPolicyRules(ctx context.Context, authRules []api.AuthRule, targetHostnames []string, targetNetworkObject client.Object) []*istiosecurity.Rule_To {
 	toRules := []*istiosecurity.Rule_To{}
 
 	// Rules set in the AuthPolicy
@@ -150,10 +150,10 @@ func istioAuthorizationPolicyRules(ctx context.Context, authRules []api.AuthRule
 
 	if len(toRules) == 0 {
 		// Rules not set in the AuthPolicy - inherit the rules from the target network object
-		switch netResource := targetObj.(type) {
+		switch obj := targetNetworkObject.(type) {
 		case *gatewayapiv1alpha2.HTTPRoute:
 			// Rules not set and targeting a HTTPRoute - inherit the rules (hostnames, methods and paths) from the HTTPRoute
-			httpRouterules := common.RulesFromHTTPRoute(netResource)
+			httpRouterules := common.RulesFromHTTPRoute(obj)
 			for idx := range httpRouterules {
 				toRules = append(toRules, &istiosecurity.Rule_To{
 					Operation: &istiosecurity.Operation{

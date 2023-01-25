@@ -88,7 +88,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	markedForDeletion := rlp.GetDeletionTimestamp() != nil
 
 	// fetch the target network object
-	targetObj, err := r.FetchValidTargetRef(ctx, rlp.GetTargetRef(), rlp.Namespace)
+	targetNetworkObject, err := r.FetchValidTargetRef(ctx, rlp.GetTargetRef(), rlp.Namespace)
 	if err != nil {
 		if !markedForDeletion {
 			if apierrors.IsNotFound(err) {
@@ -101,7 +101,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 			}
 			return ctrl.Result{}, err
 		}
-		targetObj = nil // we need the object set to nil when there's an error, otherwise deleting the resources (when marked for deletion) will panic
+		targetNetworkObject = nil // we need the object set to nil when there's an error, otherwise deleting the resources (when marked for deletion) will panic
 	}
 
 	// handle authpolicy marked for deletion
@@ -109,7 +109,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 		if controllerutil.ContainsFinalizer(rlp, rateLimitPolicyFinalizer) {
 			logger.V(1).Info("Handling removal of ratelimitpolicy object")
 
-			if err := r.deleteResources(ctx, rlp, targetObj); err != nil {
+			if err := r.deleteResources(ctx, rlp, targetNetworkObject); err != nil {
 				return ctrl.Result{}, err
 			}
 
@@ -131,10 +131,10 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	}
 
 	// reconcile the ratelimitpolicy spec
-	specErr := r.reconcileResources(ctx, rlp, targetObj)
+	specErr := r.reconcileResources(ctx, rlp, targetNetworkObject)
 
 	// reconcile ratelimitpolicy status
-	statusResult, statusErr := r.reconcileStatus(ctx, rlp, targetObj, specErr)
+	statusResult, statusErr := r.reconcileStatus(ctx, rlp, targetNetworkObject, specErr)
 
 	if specErr != nil {
 		return ctrl.Result{}, specErr
@@ -153,20 +153,20 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) error {
+func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetNetworkObject client.Object) error {
 	// validate
 	err := rlp.Validate()
 	if err != nil {
 		return err
 	}
 
-	err = r.validateHierarchicalRules(ctx, rlp, targetObj)
+	err = r.validateHierarchicalRules(ctx, rlp, targetNetworkObject)
 	if err != nil {
 		return err
 	}
 
 	// reconcile based on gateway diffs
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, targetObj, &common.KuadrantRateLimitPolicyRefsConfig{})
+	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, targetNetworkObject, &common.KuadrantRateLimitPolicyRefsConfig{})
 	if err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 	}
 
 	// set direct back ref - i.e. claim the target network object as taken asap
-  if err := r.reconcileNetworkResourceDirectBackReference(ctx, rlp, targetObj); err != nil {
+	if err := r.reconcileNetworkResourceDirectBackReference(ctx, rlp, targetNetworkObject); err != nil {
 		return err
 	}
 
@@ -192,9 +192,9 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 	return r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
 }
 
-func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) error {
+func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, targetObj, &common.KuadrantRateLimitPolicyRefsConfig{})
+	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, targetNetworkObject, &common.KuadrantRateLimitPolicyRefsConfig{})
 	if err != nil {
 		return err
 	}
@@ -212,8 +212,8 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 	}
 
 	// remove direct back ref
-	if targetObj != nil {
-		if err := r.deleteNetworkResourceDirectBackReference(ctx, rlp, targetObj); err != nil {
+	if targetNetworkObject != nil {
+		if err := r.deleteNetworkResourceDirectBackReference(ctx, rlp, targetNetworkObject); err != nil {
 			return err
 		}
 	}
@@ -222,8 +222,8 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 	return r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
 }
 
-func (r *RateLimitPolicyReconciler) validateHierarchicalRules(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) error {
-	targetHostnames, err := r.TargetHostnames(ctx, targetObj)
+func (r *RateLimitPolicyReconciler) validateHierarchicalRules(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetNetworkObject client.Object) error {
+	targetHostnames, err := r.TargetHostnames(ctx, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -243,12 +243,12 @@ func (r *RateLimitPolicyReconciler) validateHierarchicalRules(ctx context.Contex
 }
 
 // Ensures only one RLP targets the network resource
-func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, policy common.KuadrantPolicy, targetObj client.Object) error {
-	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(policy), targetObj, common.RateLimitPolicyBackRefAnnotation)
+func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, policy common.KuadrantPolicy, targetNetworkObject client.Object) error {
+	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(policy), targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
 }
 
-func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object) error {
-	return r.DeleteTargetBackReference(ctx, client.ObjectKeyFromObject(rlp), targetObj, common.RateLimitPolicyBackRefAnnotation)
+func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetNetworkObject client.Object) error {
+	return r.DeleteTargetBackReference(ctx, client.ObjectKeyFromObject(rlp), targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -21,9 +21,9 @@ const (
 	RLPAvailableConditionType string = "Available"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object, specErr error) (ctrl.Result, error) {
+func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetNetworkObject client.Object, specErr error) (ctrl.Result, error) {
 	logger, _ := logr.FromContext(ctx)
-	newStatus, err := r.calculateStatus(ctx, rlp, targetObj, specErr)
+	newStatus, err := r.calculateStatus(ctx, rlp, targetNetworkObject, specErr)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -60,7 +60,7 @@ func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *ku
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyReconciler) calculateStatus(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetObj client.Object, specErr error) (*kuadrantv1beta1.RateLimitPolicyStatus, error) {
+func (r *RateLimitPolicyReconciler) calculateStatus(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetNetworkObject client.Object, specErr error) (*kuadrantv1beta1.RateLimitPolicyStatus, error) {
 	newStatus := &kuadrantv1beta1.RateLimitPolicyStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions:         common.CopyConditions(rlp.Status.Conditions),
@@ -69,7 +69,7 @@ func (r *RateLimitPolicyReconciler) calculateStatus(ctx context.Context, rlp *ku
 
 	// Only makes sense for rlp's targeting a route
 	if common.IsTargetRefHTTPRoute(rlp.Spec.TargetRef) {
-		gwRateLimits, err := r.gatewaysRateLimits(ctx, targetObj)
+		gwRateLimits, err := r.gatewaysRateLimits(ctx, targetNetworkObject)
 		if err != nil {
 			return nil, err
 		}
@@ -101,12 +101,12 @@ func (r *RateLimitPolicyReconciler) availableCondition(specErr error) *metav1.Co
 }
 
 // gatewaysRateLimits returns all gateway-level rate limit configurations from all the gateways targeted by the ratelimitpolicy (directly or indirectly)
-func (r *RateLimitPolicyReconciler) gatewaysRateLimits(ctx context.Context, targetObj client.Object) ([]kuadrantv1beta1.GatewayRateLimits, error) {
+func (r *RateLimitPolicyReconciler) gatewaysRateLimits(ctx context.Context, targetNetworkObject client.Object) ([]kuadrantv1beta1.GatewayRateLimits, error) {
 	logger, _ := logr.FromContext(ctx)
 
 	result := make([]kuadrantv1beta1.GatewayRateLimits, 0)
 
-	for _, gwKey := range r.TargetedGatewayKeys(ctx, targetObj) {
+	for _, gwKey := range r.TargetedGatewayKeys(ctx, targetNetworkObject) {
 		gw := &gatewayapiv1alpha2.Gateway{}
 		err := r.Client().Get(ctx, gwKey, gw)
 		logger.V(1).Info("get gateway", "key", gwKey, "err", err)

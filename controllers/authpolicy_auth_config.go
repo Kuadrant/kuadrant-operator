@@ -14,13 +14,13 @@ import (
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 )
 
-func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api.AuthPolicy, targetObj client.Object) error {
+func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return err
 	}
 
-	authConfig, err := r.desiredAuthConfig(ctx, ap, targetObj)
+	authConfig, err := r.desiredAuthConfig(ctx, ap, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -59,8 +59,8 @@ func (r *AuthPolicyReconciler) deleteAuthConfigs(ctx context.Context, ap *api.Au
 	return nil
 }
 
-func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.AuthPolicy, targetObj client.Object) (*authorinoapi.AuthConfig, error) {
-	hosts, err := r.policyHosts(ctx, ap, targetObj)
+func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) (*authorinoapi.AuthConfig, error) {
+	hosts, err := r.policyHosts(ctx, ap, targetNetworkObject)
 	if err != nil {
 		return nil, err
 	}
@@ -87,16 +87,16 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	}, nil
 }
 
-func (r *AuthPolicyReconciler) policyHosts(ctx context.Context, ap *api.AuthPolicy, targetObj client.Object) ([]string, error) {
+func (r *AuthPolicyReconciler) policyHosts(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) ([]string, error) {
 	if len(ap.Spec.AuthRules) == 0 {
-		return r.TargetHostnames(ctx, targetObj)
+		return r.TargetHostnames(ctx, targetNetworkObject)
 	}
 
 	uniqueHostnamesMap := make(map[string]interface{})
 	for idx := range ap.Spec.AuthRules {
 		if len(ap.Spec.AuthRules[idx].Hosts) == 0 {
 			// When one of the rules does not have hosts, just return target hostnames
-			return r.TargetHostnames(ctx, targetObj)
+			return r.TargetHostnames(ctx, targetNetworkObject)
 		}
 
 		for _, hostname := range ap.Spec.AuthRules[idx].Hosts {

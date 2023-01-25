@@ -113,10 +113,10 @@ func (r *TargetRefReconciler) FetchValidTargetRef(ctx context.Context, targetRef
 }
 
 // TargetedGatewayKeys returns the list of gateways that are being referenced from the target.
-func (r *TargetRefReconciler) TargetedGatewayKeys(ctx context.Context, targetObj client.Object) []client.ObjectKey {
-	switch targetObj.(type) {
+func (r *TargetRefReconciler) TargetedGatewayKeys(ctx context.Context, targetNetworkObject client.Object) []client.ObjectKey {
+	switch targetNetworkObject.(type) {
 	case *gatewayapiv1alpha2.HTTPRoute:
-		httpRoute, _ := targetObj.(*gatewayapiv1alpha2.HTTPRoute)
+		httpRoute, _ := targetNetworkObject.(*gatewayapiv1alpha2.HTTPRoute)
 		gwKeys := make([]client.ObjectKey, 0)
 		for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
 			gwKey := client.ObjectKey{Name: string(parentRef.Name), Namespace: httpRoute.Namespace}
@@ -128,56 +128,56 @@ func (r *TargetRefReconciler) TargetedGatewayKeys(ctx context.Context, targetObj
 		return gwKeys
 
 	case *gatewayapiv1alpha2.Gateway:
-		return []client.ObjectKey{client.ObjectKeyFromObject(targetObj)}
+		return []client.ObjectKey{client.ObjectKeyFromObject(targetNetworkObject)}
 
-	// If the targetObj is nil, we don't fail; instead, we return an empty slice of gateway keys.
+	// If the targetNetworkObject is nil, we don't fail; instead, we return an empty slice of gateway keys.
 	// This is for supporting a smooth cleanup in cases where the network object has been deleted already
 	default:
 		return []client.ObjectKey{}
 	}
 }
 
-func (r *TargetRefReconciler) TargetHostnames(ctx context.Context, targetObj client.Object) ([]string, error) {
-	netResourceHosts := make([]string, 0)
-	switch netResource := targetObj.(type) {
+func (r *TargetRefReconciler) TargetHostnames(ctx context.Context, targetNetworkObject client.Object) ([]string, error) {
+	hosts := make([]string, 0)
+	switch obj := targetNetworkObject.(type) {
 	case *gatewayapiv1alpha2.HTTPRoute:
-		for _, hostname := range netResource.Spec.Hostnames {
-			netResourceHosts = append(netResourceHosts, string(hostname))
+		for _, hostname := range obj.Spec.Hostnames {
+			hosts = append(hosts, string(hostname))
 		}
 	case *gatewayapiv1alpha2.Gateway:
-		for idx := range netResource.Spec.Listeners {
-			if netResource.Spec.Listeners[idx].Hostname != nil {
-				netResourceHosts = append(netResourceHosts, string(*netResource.Spec.Listeners[idx].Hostname))
+		for idx := range obj.Spec.Listeners {
+			if obj.Spec.Listeners[idx].Hostname != nil {
+				hosts = append(hosts, string(*obj.Spec.Listeners[idx].Hostname))
 			}
 		}
 	}
 
-	if len(netResourceHosts) == 0 {
-		netResourceHosts = append(netResourceHosts, string("*"))
+	if len(hosts) == 0 {
+		hosts = append(hosts, string("*"))
 	}
 
-	return netResourceHosts, nil
+	return hosts, nil
 }
 
 // ReconcileTargetBackReference adds policy key in annotations of the target object
-func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, policyKey client.ObjectKey, targetObj client.Object, annotationName string) error {
+func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, policyKey client.ObjectKey, targetNetworkObject client.Object, annotationName string) error {
 	logger, _ := logr.FromContext(ctx)
 
-	targetObjKey := client.ObjectKeyFromObject(targetObj)
-	targetObjType := targetObj.GetObjectKind().GroupVersionKind()
+	targetNetworkObjectKey := client.ObjectKeyFromObject(targetNetworkObject)
+	targetNetworkObjectKind := targetNetworkObject.GetObjectKind().GroupVersionKind()
 
 	// Reconcile the back reference:
-	objAnnotations := common.ReadAnnotationsFromObject(targetObj)
+	objAnnotations := common.ReadAnnotationsFromObject(targetNetworkObject)
 
 	if val, ok := objAnnotations[annotationName]; ok {
 		if val != policyKey.String() {
-			return fmt.Errorf("the %s target %s is already referenced by policy %s", targetObjType, targetObjKey, policyKey.String())
+			return fmt.Errorf("the %s target %s is already referenced by policy %s", targetNetworkObjectKind, targetNetworkObjectKey, policyKey.String())
 		}
 	} else {
 		objAnnotations[annotationName] = policyKey.String()
-		targetObj.SetAnnotations(objAnnotations)
-		err := r.UpdateResource(ctx, targetObj)
-		logger.V(1).Info("ReconcileTargetBackReference: update target object", "type", targetObjType, "name", targetObjKey, "err", err)
+		targetNetworkObject.SetAnnotations(objAnnotations)
+		err := r.UpdateResource(ctx, targetNetworkObject)
+		logger.V(1).Info("ReconcileTargetBackReference: update target object", "kind", targetNetworkObjectKind, "name", targetNetworkObjectKey, "err", err)
 		if err != nil {
 			return err
 		}
@@ -186,20 +186,20 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, 
 	return nil
 }
 
-func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, policyKey client.ObjectKey, targetObj client.Object, annotationName string) error {
+func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, policyKey client.ObjectKey, targetNetworkObject client.Object, annotationName string) error {
 	logger, _ := logr.FromContext(ctx)
 
-	targetObjKey := client.ObjectKeyFromObject(targetObj)
-	targetObjType := targetObj.GetObjectKind().GroupVersionKind()
+	targetNetworkObjectKey := client.ObjectKeyFromObject(targetNetworkObject)
+	targetNetworkObjectKind := targetNetworkObject.GetObjectKind().GroupVersionKind()
 
 	// Reconcile the back reference:
-	objAnnotations := common.ReadAnnotationsFromObject(targetObj)
+	objAnnotations := common.ReadAnnotationsFromObject(targetNetworkObject)
 
 	if _, ok := objAnnotations[annotationName]; ok {
 		delete(objAnnotations, annotationName)
-		targetObj.SetAnnotations(objAnnotations)
-		err := r.UpdateResource(ctx, targetObj)
-		logger.V(1).Info("DeleteTargetBackReference: update network resource", "type", targetObjType, "name", targetObjKey, "err", err)
+		targetNetworkObject.SetAnnotations(objAnnotations)
+		err := r.UpdateResource(ctx, targetNetworkObject)
+		logger.V(1).Info("DeleteTargetBackReference: update network resource", "kind", targetNetworkObjectKind, "name", targetNetworkObjectKey, "err", err)
 		if err != nil {
 			return err
 		}
@@ -212,12 +212,12 @@ func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, pol
 // * list of gateways to which the policy applies for the first time
 // * list of gateways to which the policy no longer applies
 // * list of gateways to which the policy still applies
-func (r *TargetRefReconciler) ComputeGatewayDiffs(ctx context.Context, policy common.KuadrantPolicy, targetObj client.Object, policyRefsConfig common.PolicyRefsConfig) (*GatewayDiff, error) {
+func (r *TargetRefReconciler) ComputeGatewayDiffs(ctx context.Context, policy common.KuadrantPolicy, targetNetworkObject client.Object, policyRefsConfig common.PolicyRefsConfig) (*GatewayDiff, error) {
 	logger, _ := logr.FromContext(ctx)
 
 	var gwKeys []client.ObjectKey
 	if policy.GetDeletionTimestamp() == nil {
-		gwKeys = r.TargetedGatewayKeys(ctx, targetObj)
+		gwKeys = r.TargetedGatewayKeys(ctx, targetNetworkObject)
 	}
 
 	// TODO(rahulanand16nov): maybe think about optimizing it with a label later

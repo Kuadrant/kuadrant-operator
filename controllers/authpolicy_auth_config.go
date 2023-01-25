@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -124,6 +125,10 @@ func alwaysUpdateAuthConfig(existingObj, desiredObj client.Object) (bool, error)
 	desired, ok := desiredObj.(*authorinoapi.AuthConfig)
 	if !ok {
 		return false, fmt.Errorf("%T is not an *authorinoapi.AuthConfig", desiredObj)
+	}
+
+	if reflect.DeepEqual(existing.Spec, desired.Spec) && reflect.DeepEqual(existing.Annotations, desired.Annotations) {
+		return false, nil
 	}
 
 	existing.Spec = desired.Spec

@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -183,6 +184,10 @@ func alwaysUpdateAuthPolicy(existingObj, desiredObj client.Object) (bool, error)
 	desired, ok := desiredObj.(*istio.AuthorizationPolicy)
 	if !ok {
 		return false, fmt.Errorf("%T is not an *istio.AuthorizationPolicy", desiredObj)
+	}
+
+	if reflect.DeepEqual(existing.Spec, desired.Spec) && reflect.DeepEqual(existing.Annotations, desired.Annotations) {
+		return false, nil
 	}
 
 	existing.Spec.Action = desired.Spec.Action

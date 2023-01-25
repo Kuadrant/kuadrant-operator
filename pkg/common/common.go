@@ -89,12 +89,10 @@ func Map[T, U any](slice []T, f func(T) U) []U {
 	return arr
 }
 
-func SliceCopy[T any](slice []T) []T {
-	copy := make([]T, len(slice))
-	for i, e := range slice {
-		copy[i] = e
-	}
-	return copy
+func SliceCopy[T any](s1 []T) []T {
+	s2 := make([]T, len(s1))
+	copy(s2, s1)
+	return s2
 }
 
 // MergeMapStringString Merge desired into existing.

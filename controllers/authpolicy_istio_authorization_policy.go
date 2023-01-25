@@ -40,7 +40,7 @@ func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.C
 	}
 
 	// TODO(guicassolato): should the rules filter only the hostnames valid for each gateway?
-	toRules := istioAuthorizationPolicyRules(ctx, ap.Spec.AuthRules, targetHostnames, targetNetworkObject)
+	toRules := istioAuthorizationPolicyRules(ap.Spec.AuthRules, targetHostnames, targetNetworkObject)
 
 	// Create IstioAuthorizationPolicy for each gateway directly or indirectly referred by the policy (existing and new)
 	for _, gw := range append(gwDiffObj.GatewaysWithValidPolicyRef, gwDiffObj.GatewaysMissingPolicyRef...) {
@@ -128,7 +128,7 @@ func istioAuthorizationPolicyLabels(gwKey, apKey client.ObjectKey) map[string]st
 	}
 }
 
-func istioAuthorizationPolicyRules(ctx context.Context, authRules []api.AuthRule, targetHostnames []string, targetNetworkObject client.Object) []*istiosecurity.Rule_To {
+func istioAuthorizationPolicyRules(authRules []api.AuthRule, targetHostnames []string, targetNetworkObject client.Object) []*istiosecurity.Rule_To {
 	toRules := []*istiosecurity.Rule_To{}
 
 	// Rules set in the AuthPolicy
@@ -186,14 +186,30 @@ func alwaysUpdateAuthPolicy(existingObj, desiredObj client.Object) (bool, error)
 		return false, fmt.Errorf("%T is not an *istio.AuthorizationPolicy", desiredObj)
 	}
 
-	if reflect.DeepEqual(existing.Spec, desired.Spec) && reflect.DeepEqual(existing.Annotations, desired.Annotations) {
+	if reflect.DeepEqual(existing.Spec.Action, desired.Spec.Action) {
 		return false, nil
 	}
-
 	existing.Spec.Action = desired.Spec.Action
+
+	if reflect.DeepEqual(existing.Spec.ActionDetail, desired.Spec.ActionDetail) {
+		return false, nil
+	}
 	existing.Spec.ActionDetail = desired.Spec.ActionDetail
+
+	if reflect.DeepEqual(existing.Spec.Rules, desired.Spec.Rules) {
+		return false, nil
+	}
 	existing.Spec.Rules = desired.Spec.Rules
+
+	if reflect.DeepEqual(existing.Spec.Selector, desired.Spec.Selector) {
+		return false, nil
+	}
 	existing.Spec.Selector = desired.Spec.Selector
+
+	if reflect.DeepEqual(existing.Annotations, desired.Annotations) {
+		return false, nil
+	}
 	existing.Annotations = desired.Annotations
+
 	return true, nil
 }

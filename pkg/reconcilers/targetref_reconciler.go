@@ -114,12 +114,11 @@ func (r *TargetRefReconciler) FetchValidTargetRef(ctx context.Context, targetRef
 
 // TargetedGatewayKeys returns the list of gateways that are being referenced from the target.
 func (r *TargetRefReconciler) TargetedGatewayKeys(ctx context.Context, targetNetworkObject client.Object) []client.ObjectKey {
-	switch targetNetworkObject.(type) {
+	switch obj := targetNetworkObject.(type) {
 	case *gatewayapiv1alpha2.HTTPRoute:
-		httpRoute, _ := targetNetworkObject.(*gatewayapiv1alpha2.HTTPRoute)
 		gwKeys := make([]client.ObjectKey, 0)
-		for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
-			gwKey := client.ObjectKey{Name: string(parentRef.Name), Namespace: httpRoute.Namespace}
+		for _, parentRef := range obj.Spec.CommonRouteSpec.ParentRefs {
+			gwKey := client.ObjectKey{Name: string(parentRef.Name), Namespace: obj.Namespace}
 			if parentRef.Namespace != nil {
 				gwKey.Namespace = string(*parentRef.Namespace)
 			}

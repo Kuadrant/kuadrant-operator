@@ -285,7 +285,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			serialized, err := json.Marshal(refs)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				common.KuadrantRateLimitPolicyRefAnnotation, string(serialized)))
+				common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
 		})
 	})
 })

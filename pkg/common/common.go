@@ -29,14 +29,15 @@ import (
 
 // TODO: move the const to a proper place, or get it from config
 const (
-	KuadrantRateLimitClusterName         = "kuadrant-rate-limiting-service"
-	HTTPRouteKind                        = "HTTPRoute"
-	KuadrantRateLimitPolicyRefAnnotation = "kuadrant.io/ratelimitpolicies"
-	RateLimitPolicyBackRefAnnotation     = "kuadrant.io/ratelimitpolicy-direct-backref"
-	AuthPolicyBackRefAnnotation          = "kuadrant.io/authpolicy-backref"
-	KuadrantNamespaceLabel               = "kuadrant.io/namespace"
-	NamespaceSeparator                   = '/'
-	LimitadorName                        = "limitador"
+	KuadrantRateLimitClusterName       = "kuadrant-rate-limiting-service"
+	HTTPRouteKind                      = "HTTPRoute"
+	RateLimitPoliciesBackRefAnnotation = "kuadrant.io/ratelimitpolicies"
+	RateLimitPolicyBackRefAnnotation   = "kuadrant.io/ratelimitpolicy"
+	AuthPoliciesBackRefAnnotation      = "kuadrant.io/authpolicies"
+	AuthPolicyBackRefAnnotation        = "kuadrant.io/authpolicy"
+	KuadrantNamespaceLabel             = "kuadrant.io/namespace"
+	NamespaceSeparator                 = '/'
+	LimitadorName                      = "limitador"
 )
 
 type KuadrantPolicy interface {
@@ -86,6 +87,14 @@ func Map[T, U any](slice []T, f func(T) U) []U {
 		arr[i] = f(e)
 	}
 	return arr
+}
+
+func SliceCopy[T any](slice []T) []T {
+	copy := make([]T, len(slice))
+	for i, e := range slice {
+		copy[i] = e
+	}
+	return copy
 }
 
 // MergeMapStringString Merge desired into existing.

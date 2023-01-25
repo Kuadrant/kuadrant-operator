@@ -18,7 +18,7 @@ import (
 const APAvailableConditionType string = "Available"
 
 // reconcileStatus makes sure status block of AuthPolicy is up-to-date.
-func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy, kuadrantNamespace string, specErr error) (ctrl.Result, error) {
+func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy, specErr error) (ctrl.Result, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger.V(1).Info("Reconciling AuthPolicy status", "spec error", specErr)
 
@@ -27,7 +27,7 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrant
 	if specErr == nil { // skip fetching authconfig if we already have a reconciliation error.
 		apKey := client.ObjectKeyFromObject(ap)
 		authConfigKey := client.ObjectKey{
-			Namespace: kuadrantNamespace,
+			Namespace: ap.Namespace,
 			Name:      authConfigName(apKey),
 		}
 		authConfig := &authorinov1beta1.AuthConfig{}
@@ -77,21 +77,21 @@ func (r *AuthPolicyReconciler) calculateStatus(ap *kuadrantv1beta1.AuthPolicy, s
 		ObservedGeneration: ap.Status.ObservedGeneration,
 	}
 
-	targetObjectKind := string(ap.Spec.TargetRef.Kind)
-	availableCond := r.availableCondition(targetObjectKind, specErr, authConfigReady)
+	targetNetworkObjectectKind := string(ap.Spec.TargetRef.Kind)
+	availableCond := r.availableCondition(targetNetworkObjectectKind, specErr, authConfigReady)
 
 	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
 
 	return newStatus
 }
 
-func (r *AuthPolicyReconciler) availableCondition(targetObjectKind string, specErr error, authConfigReady bool) *metav1.Condition {
+func (r *AuthPolicyReconciler) availableCondition(targetNetworkObjectectKind string, specErr error, authConfigReady bool) *metav1.Condition {
 	// Condition if there is not issue
 	cond := &metav1.Condition{
 		Type:    APAvailableConditionType,
 		Status:  metav1.ConditionTrue,
-		Reason:  fmt.Sprintf("%sProtected", targetObjectKind),
-		Message: fmt.Sprintf("%s is protected", targetObjectKind),
+		Reason:  fmt.Sprintf("%sProtected", targetNetworkObjectectKind),
+		Message: fmt.Sprintf("%s is protected", targetNetworkObjectectKind),
 	}
 
 	if specErr != nil {

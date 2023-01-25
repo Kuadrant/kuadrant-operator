@@ -16,22 +16,30 @@ type GatewayEventMapper struct {
 	Logger logr.Logger
 }
 
-func (h *GatewayEventMapper) MapToRateLimitPolicy(obj client.Object) []reconcile.Request {
+func (m *GatewayEventMapper) MapToRateLimitPolicy(obj client.Object) []reconcile.Request {
+	return m.mapToPolicyRequest(obj, "ratelimitpolicy", &common.KuadrantRateLimitPolicyRefsConfig{})
+}
+
+func (m *GatewayEventMapper) MapToAuthPolicy(obj client.Object) []reconcile.Request {
+	return m.mapToPolicyRequest(obj, "authpolicy", &common.KuadrantAuthPolicyRefsConfig{})
+}
+
+func (m *GatewayEventMapper) mapToPolicyRequest(obj client.Object, policyKind string, policyRefsConfig common.PolicyRefsConfig) []reconcile.Request {
+	logger := m.Logger.V(1).WithValues("object", client.ObjectKeyFromObject(obj))
+
 	gateway, ok := obj.(*gatewayapiv1alpha2.Gateway)
 	if !ok {
-		h.Logger.V(1).Info("MapToRateLimitPolicy: gateway not received", "error", fmt.Sprintf("%T is not a *gatewayapiv1alpha2.Gateway", obj))
+		logger.Info("mapToPolicyRequest:", "error", fmt.Sprintf("%T is not a *gatewayapiv1alpha2.Gateway", obj))
 		return []reconcile.Request{}
 	}
 
-	gw := common.GatewayWrapper{Gateway: gateway, PolicyRefsConfig: &common.KuadrantRateLimitPolicyRefsConfig{}}
+	gw := common.GatewayWrapper{Gateway: gateway, PolicyRefsConfig: policyRefsConfig}
 
 	requests := make([]reconcile.Request, 0)
 
-	for _, rlpKey := range gw.PolicyRefs() {
-		h.Logger.V(1).Info("MapToRateLimitPolicy", "ratelimitpolicy", rlpKey)
-		requests = append(requests, reconcile.Request{
-			NamespacedName: rlpKey,
-		})
+	for _, policyKey := range gw.PolicyRefs() {
+		logger.Info("mapToPolicyRequest", policyKind, policyKey)
+		requests = append(requests, reconcile.Request{NamespacedName: policyKey})
 	}
 
 	return requests

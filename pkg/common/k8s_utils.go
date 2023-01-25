@@ -39,6 +39,14 @@ func ObjectInfo(obj client.Object) string {
 	return fmt.Sprintf("%s/%s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
 }
 
+func ReadAnnotationsFromObject(obj client.Object) map[string]string {
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	return annotations
+}
+
 func TagObjectToDelete(obj client.Object) {
 	// Add custom annotation
 	annotations := obj.GetAnnotations()

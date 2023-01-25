@@ -25,6 +25,7 @@ testbin/*
 *.swo
 *~
 kuadrant-operator
+tmp
 
 /catalog/kuadrant-operator-catalog
 /catalog/kuadrant-operator-catalog.Dockerfile

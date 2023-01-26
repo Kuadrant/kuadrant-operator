@@ -65,9 +65,7 @@ func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx 
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) gatewayRateLimitingClusterEnvoyFilter(
-	ctx context.Context, gw *gatewayapiv1alpha2.Gateway,
-	rlpRefs []client.ObjectKey) (*istioclientnetworkingv1alpha3.EnvoyFilter, error) {
+func (r *RateLimitPolicyReconciler) gatewayRateLimitingClusterEnvoyFilter(ctx context.Context, gw *gatewayapiv1alpha2.Gateway, rlpRefs []client.ObjectKey) (*istioclientnetworkingv1alpha3.EnvoyFilter, error) {
 	logger, _ := logr.FromContext(ctx)
 	gwKey := client.ObjectKeyFromObject(gw)
 	logger.V(1).Info("gatewayRateLimitingClusterEnvoyFilter", "gwKey", gwKey, "rlpRefs", rlpRefs)
@@ -88,7 +86,7 @@ func (r *RateLimitPolicyReconciler) gatewayRateLimitingClusterEnvoyFilter(
 		},
 		Spec: istioapinetworkingv1alpha3.EnvoyFilter{
 			WorkloadSelector: &istioapinetworkingv1alpha3.WorkloadSelector{
-				Labels: gw.Labels, // FIXME: https://github.com/Kuadrant/kuadrant-operator/issues/141
+				Labels: common.IstioWorkloadSelectorFromGateway(ctx, r.Client(), gw).MatchLabels,
 			},
 			ConfigPatches: nil,
 		},

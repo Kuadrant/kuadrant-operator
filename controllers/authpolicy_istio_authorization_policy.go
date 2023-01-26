@@ -13,7 +13,6 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	istiosecurity "istio.io/api/security/v1beta1"
-	istiocommon "istio.io/api/type/v1beta1"
 	istio "istio.io/client-go/pkg/apis/security/v1beta1"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -44,7 +43,7 @@ func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.C
 
 	// Create IstioAuthorizationPolicy for each gateway directly or indirectly referred by the policy (existing and new)
 	for _, gw := range append(gwDiffObj.GatewaysWithValidPolicyRef, gwDiffObj.GatewaysMissingPolicyRef...) {
-		iap := istioAuthorizationPolicy(gw.Gateway, ap, toRules)
+		iap := r.istioAuthorizationPolicy(ctx, gw.Gateway, ap, toRules)
 		err := r.ReconcileResource(ctx, &istio.AuthorizationPolicy{}, iap, alwaysUpdateAuthPolicy)
 		if err != nil && !apierrors.IsAlreadyExists(err) {
 			logger.Error(err, "failed to reconcile IstioAuthorizationPolicy resource")
@@ -82,7 +81,7 @@ func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Cont
 	return nil
 }
 
-func istioAuthorizationPolicy(gateway *gatewayapiv1alpha2.Gateway, ap *api.AuthPolicy, toRules []*istiosecurity.Rule_To) *istio.AuthorizationPolicy {
+func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, gateway *gatewayapiv1alpha2.Gateway, ap *api.AuthPolicy, toRules []*istiosecurity.Rule_To) *istio.AuthorizationPolicy {
 	return &istio.AuthorizationPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      istioAuthorizationPolicyName(gateway.Name, ap.GetTargetRef()),
@@ -96,9 +95,7 @@ func istioAuthorizationPolicy(gateway *gatewayapiv1alpha2.Gateway, ap *api.AuthP
 					To: toRules,
 				},
 			},
-			Selector: &istiocommon.WorkloadSelector{
-				MatchLabels: gateway.Labels, // FIXME: https://github.com/Kuadrant/kuadrant-operator/issues/141
-			},
+			Selector: common.IstioWorkloadSelectorFromGateway(ctx, r.Client(), gateway),
 			ActionDetail: &istiosecurity.AuthorizationPolicy_Provider{
 				Provider: &istiosecurity.AuthorizationPolicy_ExtensionProvider{
 					Name: KuadrantExtAuthProviderName,

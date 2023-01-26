@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -381,4 +382,22 @@ func (g GatewayWrapper) Hostnames() []string {
 	}
 
 	return hostnames
+}
+
+func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway *gatewayapiv1alpha2.Gateway) (map[string]string, error) {
+	address, found := Find(
+		gateway.Status.Addresses,
+		func(address gatewayapiv1alpha2.GatewayAddress) bool {
+			return address.Type != nil && *address.Type == gatewayapiv1alpha2.HostnameAddressType
+		},
+	)
+	if !found {
+		return nil, fmt.Errorf("cannot find service Hostname in the Gateway status")
+	}
+	serviceNameParts := strings.Split(address.Value, ".")
+	serviceKey := client.ObjectKey{
+		Name:      serviceNameParts[0],
+		Namespace: serviceNameParts[1],
+	}
+	return GetServiceWorkloadSelector(ctx, cli, serviceKey)
 }

@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-logr/logr"
 	istioextensionsv1alpha1 "istio.io/api/extensions/v1alpha1"
-	istiotypev1beta1 "istio.io/api/type/v1beta1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -86,9 +85,7 @@ func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw co
 			Namespace: gw.Namespace,
 		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{
-			Selector: &istiotypev1beta1.WorkloadSelector{
-				MatchLabels: gw.Labels, // FIXME: https://github.com/Kuadrant/kuadrant-operator/issues/141
-			},
+			Selector:     common.IstioWorkloadSelectorFromGateway(ctx, r.Client(), gw.Gateway),
 			Url:          rlptools.WASMFilterImageURL,
 			PluginConfig: nil,
 			// Insert plugin before Istio stats filters and after Istio authorization filters.

@@ -184,10 +184,14 @@ type PolicyRefsConfig interface {
 type KuadrantRateLimitPolicyRefsConfig struct{}
 
 func (c *KuadrantRateLimitPolicyRefsConfig) PolicyRefsAnnotation() string {
-	return KuadrantRateLimitPolicyRefAnnotation
+	return RateLimitPoliciesBackRefAnnotation
 }
 
-// TODO(guicassolato): Define KuadrantAuthPolicyRefsConfig
+type KuadrantAuthPolicyRefsConfig struct{}
+
+func (c *KuadrantAuthPolicyRefsConfig) PolicyRefsAnnotation() string {
+	return AuthPoliciesBackRefAnnotation
+}
 
 func GatewaysMissingPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
 	// gateways referenced by the policy but do not have reference to it in the annotations
@@ -246,10 +250,7 @@ func (g GatewayWrapper) PolicyRefs() []client.ObjectKey {
 		return make([]client.ObjectKey, 0)
 	}
 
-	gwAnnotations := g.GetAnnotations()
-	if gwAnnotations == nil {
-		gwAnnotations = map[string]string{}
-	}
+	gwAnnotations := ReadAnnotationsFromObject(g)
 
 	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
 	if !ok {
@@ -271,10 +272,7 @@ func (g GatewayWrapper) ContainsPolicy(policyKey client.ObjectKey) bool {
 		return false
 	}
 
-	gwAnnotations := g.GetAnnotations()
-	if gwAnnotations == nil {
-		gwAnnotations = map[string]string{}
-	}
+	gwAnnotations := ReadAnnotationsFromObject(g)
 
 	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
 	if !ok {
@@ -298,10 +296,7 @@ func (g GatewayWrapper) AddPolicy(policyKey client.ObjectKey) bool {
 		return false
 	}
 
-	gwAnnotations := g.GetAnnotations()
-	if gwAnnotations == nil {
-		gwAnnotations = map[string]string{}
-	}
+	gwAnnotations := ReadAnnotationsFromObject(g)
 
 	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
 	if !ok {
@@ -343,10 +338,7 @@ func (g GatewayWrapper) DeletePolicy(policyKey client.ObjectKey) bool {
 		return false
 	}
 
-	gwAnnotations := g.GetAnnotations()
-	if gwAnnotations == nil {
-		gwAnnotations = map[string]string{}
-	}
+	gwAnnotations := ReadAnnotationsFromObject(g)
 
 	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
 	if !ok {

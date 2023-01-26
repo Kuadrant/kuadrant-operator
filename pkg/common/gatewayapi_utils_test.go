@@ -608,7 +608,7 @@ func TestGatewayWrapperPolicyRefsAnnotation(t *testing.T) {
 		},
 		PolicyRefsConfig: &KuadrantRateLimitPolicyRefsConfig{},
 	}
-	if gw.PolicyRefsAnnotation() != KuadrantRateLimitPolicyRefAnnotation {
+	if gw.PolicyRefsAnnotation() != RateLimitPoliciesBackRefAnnotation {
 		t.Fail()
 	}
 }

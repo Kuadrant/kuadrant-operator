@@ -22,7 +22,7 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 	logger, _ := logr.FromContext(ctx)
 
 	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
-		logger.V(1).Info("reconcileWASMPluginConf: left gateways", "gw key", gw.Key())
+		logger.V(1).Info("reconcileWASMPluginConf: gateway with invalid policy ref", "gw key", gw.Key())
 		rlpRefs := gw.PolicyRefs()
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Remove the RLP key from the reference list. Only if it exists (it should)
@@ -41,7 +41,7 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 	}
 
 	for _, gw := range gwDiffObj.GatewaysWithValidPolicyRef {
-		logger.V(1).Info("reconcileWASMPluginConf: same gateways", "gw key", gw.Key())
+		logger.V(1).Info("reconcileWASMPluginConf: gateway with valid policy ref", "gw key", gw.Key())
 		wp, err := r.gatewayWASMPlugin(ctx, gw, gw.PolicyRefs())
 		if err != nil {
 			return err
@@ -53,7 +53,7 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 	}
 
 	for _, gw := range gwDiffObj.GatewaysMissingPolicyRef {
-		logger.V(1).Info("reconcileWASMPluginConf: new gateways", "gw key", gw.Key())
+		logger.V(1).Info("reconcileWASMPluginConf: gateway missing policy ref", "gw key", gw.Key())
 		rlpRefs := gw.PolicyRefs()
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Add the RLP key to the reference list. Only if it does not exist (it should not)
@@ -87,7 +87,7 @@ func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw co
 		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{
 			Selector: &istiotypev1beta1.WorkloadSelector{
-				MatchLabels: gw.Labels,
+				MatchLabels: gw.Labels, // FIXME: https://github.com/Kuadrant/kuadrant-operator/issues/141
 			},
 			Url:          rlptools.WASMFilterImageURL,
 			PluginConfig: nil,

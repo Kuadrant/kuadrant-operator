@@ -73,7 +73,7 @@ var _ = Describe("AuthPolicy controller", func() {
 					name = CustomGatewayName
 				}
 				iapKey := types.NamespacedName{
-					Name:      getAuthPolicyName(name, string(authpolicies[idx].Spec.TargetRef.Name), string(authpolicies[idx].Spec.TargetRef.Kind)),
+					Name:      istioAuthorizationPolicyName(name, authpolicies[idx].Spec.TargetRef),
 					Namespace: namespace,
 				}
 				Eventually(func() bool {
@@ -116,7 +116,7 @@ var _ = Describe("AuthPolicy controller", func() {
 					name = CustomGatewayName
 				}
 				iapKey := types.NamespacedName{
-					Name:      getAuthPolicyName(name, string(authpolicies[idx].Spec.TargetRef.Name), string(authpolicies[idx].Spec.TargetRef.Kind)),
+					Name:      istioAuthorizationPolicyName(name, authpolicies[idx].Spec.TargetRef),
 					Namespace: namespace,
 				}
 				Eventually(func() bool {
@@ -213,10 +213,18 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Istio's authorizationpolicy should include network resource hostnames on kuadrant rules without hosts", func() {
+			typedNamespace := v1alpha2.Namespace(testNamespace)
+			targetRef := v1alpha2.PolicyTargetReference{
+				Group:     gatewayapiv1alpha2.Group(gatewayapiv1alpha2.GroupVersion.Group),
+				Kind:      "HTTPRoute",
+				Name:      gatewayapiv1alpha2.ObjectName(routeName),
+				Namespace: &typedNamespace,
+			}
+
 			// Check Istio's authorization policy rules
 			existingIAP := &secv1beta1resources.AuthorizationPolicy{}
 			key := types.NamespacedName{
-				Name:      getAuthPolicyName(gwName, routeName, "HTTPRoute"),
+				Name:      istioAuthorizationPolicyName(gwName, targetRef),
 				Namespace: testNamespace,
 			}
 

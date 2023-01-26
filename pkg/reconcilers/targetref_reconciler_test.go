@@ -301,12 +301,6 @@ func TestReconcileTargetBackReference(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	targetRef := gatewayapiv1alpha2.PolicyTargetReference{
-		Group: "gateway.networking.k8s.io",
-		Kind:  "HTTPRoute",
-		Name:  gatewayapiv1alpha2.ObjectName(routeName),
-	}
-
 	policyKey := client.ObjectKey{Name: "someName", Namespace: "someNamespace"}
 
 	existingRoute := &gatewayapiv1alpha2.HTTPRoute{
@@ -359,8 +353,7 @@ func TestReconcileTargetBackReference(t *testing.T) {
 		BaseReconciler: baseReconciler,
 	}
 
-	err = targetRefReconciler.ReconcileTargetBackReference(ctx, policyKey, targetRef,
-		namespace, annotationName)
+	err = targetRefReconciler.ReconcileTargetBackReference(ctx, policyKey, existingRoute, annotationName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -405,12 +398,6 @@ func TestTargetedGatewayKeys(t *testing.T) {
 	err = gatewayapiv1alpha2.AddToScheme(s)
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	targetRef := gatewayapiv1alpha2.PolicyTargetReference{
-		Group: "gateway.networking.k8s.io",
-		Kind:  "HTTPRoute",
-		Name:  gatewayapiv1alpha2.ObjectName(routeName),
 	}
 
 	existingRoute := &gatewayapiv1alpha2.HTTPRoute{
@@ -463,19 +450,16 @@ func TestTargetedGatewayKeys(t *testing.T) {
 		BaseReconciler: baseReconciler,
 	}
 
-	res, err := targetRefReconciler.TargetedGatewayKeys(ctx, targetRef, namespace)
-	if err != nil {
-		t.Fatal(err)
-	}
+	keys := targetRefReconciler.TargetedGatewayKeys(ctx, existingRoute)
 
-	if len(res) != 1 {
-		t.Fatalf("gateway key slice length is %d and it was expected to be 1", len(res))
+	if len(keys) != 1 {
+		t.Fatalf("gateway key slice length is %d and it was expected to be 1", len(keys))
 	}
 
 	expectedKey := client.ObjectKey{Name: "gwName", Namespace: namespace}
 
-	if res[0] != expectedKey {
-		t.Fatalf("gwKey value (%+v) does not match expected (%+v)", res[0], expectedKey)
+	if keys[0] != expectedKey {
+		t.Fatalf("gwKey value (%+v) does not match expected (%+v)", keys[0], expectedKey)
 	}
 }
 
@@ -495,12 +479,6 @@ func TestTargetHostnames(t *testing.T) {
 	err = gatewayapiv1alpha2.AddToScheme(s)
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	targetRef := gatewayapiv1alpha2.PolicyTargetReference{
-		Group: "gateway.networking.k8s.io",
-		Kind:  "HTTPRoute",
-		Name:  gatewayapiv1alpha2.ObjectName(routeName),
 	}
 
 	existingRoute := &gatewayapiv1alpha2.HTTPRoute{
@@ -554,7 +532,7 @@ func TestTargetHostnames(t *testing.T) {
 		BaseReconciler: baseReconciler,
 	}
 
-	res, err := targetRefReconciler.TargetHostnames(ctx, targetRef, namespace)
+	res, err := targetRefReconciler.TargetHostnames(ctx, existingRoute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -587,12 +565,6 @@ func TestDeleteTargetBackReference(t *testing.T) {
 	err = gatewayapiv1alpha2.AddToScheme(s)
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	targetRef := gatewayapiv1alpha2.PolicyTargetReference{
-		Group: "gateway.networking.k8s.io",
-		Kind:  "HTTPRoute",
-		Name:  gatewayapiv1alpha2.ObjectName(routeName),
 	}
 
 	policyKey := client.ObjectKey{Name: "someName", Namespace: "someNamespace"}
@@ -650,8 +622,7 @@ func TestDeleteTargetBackReference(t *testing.T) {
 		BaseReconciler: baseReconciler,
 	}
 
-	err = targetRefReconciler.DeleteTargetBackReference(ctx, policyKey, targetRef,
-		namespace, annotationName)
+	err = targetRefReconciler.DeleteTargetBackReference(ctx, policyKey, existingRoute, annotationName)
 	if err != nil {
 		t.Fatal(err)
 	}

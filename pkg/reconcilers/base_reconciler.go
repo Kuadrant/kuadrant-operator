@@ -168,6 +168,22 @@ func (b *BaseReconciler) UpdateResourceStatus(ctx context.Context, obj client.Ob
 	return b.Client().Status().Update(ctx, obj)
 }
 
+func (b *BaseReconciler) AddFinalizer(ctx context.Context, obj client.Object, finalizer string) error {
+	controllerutil.AddFinalizer(obj, finalizer)
+	if err := b.UpdateResource(ctx, obj); client.IgnoreNotFound(err) != nil {
+		return err
+	}
+	return nil
+}
+
+func (b *BaseReconciler) RemoveFinalizer(ctx context.Context, obj client.Object, finalizer string) error {
+	controllerutil.RemoveFinalizer(obj, finalizer)
+	if err := b.UpdateResource(ctx, obj); client.IgnoreNotFound(err) != nil {
+		return err
+	}
+	return nil
+}
+
 // SetOwnerReference sets owner as a Controller OwnerReference on owned
 func (b *BaseReconciler) SetOwnerReference(owner, obj client.Object) error {
 	err := controllerutil.SetControllerReference(owner, obj, b.Scheme())

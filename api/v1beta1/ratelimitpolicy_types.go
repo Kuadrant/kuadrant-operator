@@ -294,6 +294,16 @@ func (r *RateLimitPolicy) GetWrappedNamespace() gatewayapiv1alpha2.Namespace {
 	return gatewayapiv1alpha2.Namespace(r.Namespace)
 }
 
+func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
+	ruleHosts = make([]string, 0)
+	for idx := range r.Spec.RateLimits {
+		for ruleIdx := range r.Spec.RateLimits[idx].Rules {
+			ruleHosts = append(ruleHosts, r.Spec.RateLimits[idx].Rules[ruleIdx].Hosts...)
+		}
+	}
+	return
+}
+
 func init() {
 	SchemeBuilder.Register(&RateLimitPolicy{}, &RateLimitPolicyList{})
 }

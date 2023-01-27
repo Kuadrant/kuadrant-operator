@@ -19,8 +19,6 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -160,7 +158,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 		return err
 	}
 
-	err = r.validateHierarchicalRules(ctx, rlp, targetNetworkObject)
+	err = common.ValidateHierarchicalRules(rlp, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -220,26 +218,6 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 
 	// update annotation of policies afftecting the gateway
 	return r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
-}
-
-func (r *RateLimitPolicyReconciler) validateHierarchicalRules(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetNetworkObject client.Object) error {
-	targetHostnames, err := r.TargetHostnames(ctx, targetNetworkObject)
-	if err != nil {
-		return err
-	}
-
-	ruleHosts := make([]string, 0)
-	for idx := range rlp.Spec.RateLimits {
-		for ruleIdx := range rlp.Spec.RateLimits[idx].Rules {
-			ruleHosts = append(ruleHosts, rlp.Spec.RateLimits[idx].Rules[ruleIdx].Hosts...)
-		}
-	}
-
-	if valid, invalidHost := common.ValidSubdomains(targetHostnames, ruleHosts); !valid {
-		return fmt.Errorf("rule host (%s) not valid", invalidHost)
-	}
-
-	return nil
 }
 
 // Ensures only one RLP targets the network resource

@@ -44,6 +44,7 @@ type KuadrantPolicy interface {
 	client.Object
 	GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference
 	GetWrappedNamespace() gatewayapiv1alpha2.Namespace
+	GetRulesHostnames() []string
 }
 
 func FetchEnv(key string, def string) string {

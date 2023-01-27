@@ -140,3 +140,11 @@ func (ap *AuthPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 func (ap *AuthPolicy) GetWrappedNamespace() gatewayapiv1alpha2.Namespace {
 	return gatewayapiv1alpha2.Namespace(ap.Namespace)
 }
+
+func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
+	ruleHosts = make([]string, 0)
+	for _, rule := range ap.Spec.AuthRules {
+		ruleHosts = append(ruleHosts, rule.Hosts...)
+	}
+	return
+}

@@ -627,12 +627,13 @@ func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadr
 }
 
 // Builds the Istio/OSSM MeshConfig from a compatible structure:
-//   meshConfig:
-//     extensionProviders:
-//       - envoyExtAuthzGrpc:
-//           port: <port>
-//           service: <authorino-service>
-//         name: kuadrant-authorization
+//
+//	meshConfig:
+//	  extensionProviders:
+//	    - envoyExtAuthzGrpc:
+//	        port: <port>
+//	        service: <authorino-service>
+//	      name: kuadrant-authorization
 func meshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshConfig, error) {
 	if structure == nil {
 		return &istiomeshv1alpha1.MeshConfig{}, nil

@@ -146,10 +146,8 @@ spec:
                               type: string
                             type: array
                         required:
-                        - conditions
                         - maxValue
                         - seconds
-                        - variables
                         type: object
                       type: array
                     rules:
@@ -178,8 +176,6 @@ spec:
                             type: array
                         type: object
                       type: array
-                  required:
-                  - configurations
                   type: object
                 type: array
               targetRef:
@@ -416,10 +412,8 @@ spec:
                                     type: string
                                   type: array
                               required:
-                              - conditions
                               - maxValue
                               - seconds
-                              - variables
                               type: object
                             type: array
                           rules:
@@ -448,8 +442,6 @@ spec:
                                   type: array
                               type: object
                             type: array
-                        required:
-                        - configurations
                         type: object
                       type: array
                   required:

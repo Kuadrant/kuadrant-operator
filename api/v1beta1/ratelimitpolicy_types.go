@@ -115,10 +115,13 @@ type Configuration struct {
 
 // Limit represents partially a Limitador limit.
 type Limit struct {
-	MaxValue   int      `json:"maxValue"`
-	Seconds    int      `json:"seconds"`
-	Conditions []string `json:"conditions"`
-	Variables  []string `json:"variables"`
+	MaxValue int `json:"maxValue"`
+	Seconds  int `json:"seconds"`
+
+	// +optional
+	Conditions []string `json:"conditions,omitempty"`
+	// +optional
+	Variables []string `json:"variables,omitempty"`
 }
 
 func LimitFromLimitadorRateLimit(limit *limitadorv1alpha1.RateLimit) *Limit {
@@ -151,7 +154,8 @@ func LimitFromLimitadorRateLimit(limit *limitadorv1alpha1.RateLimit) *Limit {
 // RateLimit represents a complete rate limit configuration
 type RateLimit struct {
 	// Configurations holds list of (action) configuration.
-	Configurations []Configuration `json:"configurations"`
+	// +optional
+	Configurations []Configuration `json:"configurations,omitempty"`
 
 	// Rules represents the definition of the scope of the rate limit object
 	// Defines a list of conditions for which rate limit configuration will apply

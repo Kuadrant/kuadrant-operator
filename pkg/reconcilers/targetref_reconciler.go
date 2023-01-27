@@ -136,28 +136,6 @@ func (r *TargetRefReconciler) TargetedGatewayKeys(ctx context.Context, targetNet
 	}
 }
 
-func (r *TargetRefReconciler) TargetHostnames(ctx context.Context, targetNetworkObject client.Object) ([]string, error) {
-	hosts := make([]string, 0)
-	switch obj := targetNetworkObject.(type) {
-	case *gatewayapiv1alpha2.HTTPRoute:
-		for _, hostname := range obj.Spec.Hostnames {
-			hosts = append(hosts, string(hostname))
-		}
-	case *gatewayapiv1alpha2.Gateway:
-		for idx := range obj.Spec.Listeners {
-			if obj.Spec.Listeners[idx].Hostname != nil {
-				hosts = append(hosts, string(*obj.Spec.Listeners[idx].Hostname))
-			}
-		}
-	}
-
-	if len(hosts) == 0 {
-		hosts = append(hosts, string("*"))
-	}
-
-	return hosts, nil
-}
-
 // ReconcileTargetBackReference adds policy key in annotations of the target object
 func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, policyKey client.ObjectKey, targetNetworkObject client.Object, annotationName string) error {
 	logger, _ := logr.FromContext(ctx)

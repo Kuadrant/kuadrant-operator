@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"reflect"
 
 	"github.com/go-logr/logr"
@@ -89,14 +90,14 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 
 func (r *AuthPolicyReconciler) policyHosts(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) ([]string, error) {
 	if len(ap.Spec.AuthRules) == 0 {
-		return r.TargetHostnames(ctx, targetNetworkObject)
+		return common.TargetHostnames(targetNetworkObject)
 	}
 
 	uniqueHostnamesMap := make(map[string]interface{})
 	for idx := range ap.Spec.AuthRules {
 		if len(ap.Spec.AuthRules[idx].Hosts) == 0 {
 			// When one of the rules does not have hosts, just return target hostnames
-			return r.TargetHostnames(ctx, targetNetworkObject)
+			return common.TargetHostnames(targetNetworkObject)
 		}
 
 		for _, hostname := range ap.Spec.AuthRules[idx].Hosts {

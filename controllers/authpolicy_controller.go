@@ -3,8 +3,6 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -129,7 +127,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 		return err
 	}
 
-	if err := r.validateHierarchicalRules(ctx, ap, targetNetworkObject); err != nil {
+	if err := common.ValidateHierarchicalRules(ap, targetNetworkObject); err != nil {
 		return err
 	}
 
@@ -180,24 +178,6 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 
 	// update annotation of policies afftecting the gateway
 	return r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
-}
-
-func (r *AuthPolicyReconciler) validateHierarchicalRules(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
-	targetHostnames, err := r.TargetHostnames(ctx, targetNetworkObject)
-	if err != nil {
-		return err
-	}
-
-	ruleHosts := make([]string, 0)
-	for _, rule := range ap.Spec.AuthRules {
-		ruleHosts = append(ruleHosts, rule.Hosts...)
-	}
-
-	if valid, invalidHost := common.ValidSubdomains(targetHostnames, ruleHosts); !valid {
-		return fmt.Errorf("rule host (%s) does not follow any hierarchical constraints", invalidHost)
-	}
-
-	return nil
 }
 
 // Ensures only one RLP targets the network resource

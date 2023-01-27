@@ -33,7 +33,7 @@ func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.C
 		return err
 	}
 
-	targetHostnames, err := r.TargetHostnames(ctx, targetNetworkObject)
+	targetHostnames, err := common.TargetHostnames(targetNetworkObject)
 	if err != nil {
 		return err
 	}

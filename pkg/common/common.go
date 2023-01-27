@@ -155,7 +155,7 @@ func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 	return client.ObjectKey{Namespace: keySplit[0], Name: keySplit[1]}, nil
 }
 
-// converts []gatewayapi_v1alpha2.Hostname to []string
+// HostnamesToStrings converts []gatewayapi_v1alpha2.Hostname to []string
 func HostnamesToStrings(hostnames []gatewayapiv1alpha2.Hostname) []string {
 	hosts := []string{}
 	for idx := range hostnames {

@@ -105,6 +105,19 @@ func SliceCopy[T any](s1 []T) []T {
 	return s2
 }
 
+func ReverseSlice[T any](input []T) []T {
+	inputLen := len(input)
+	output := make([]T, inputLen)
+
+	for i, n := range input {
+		j := inputLen - i - 1
+
+		output[j] = n
+	}
+
+	return output
+}
+
 // MergeMapStringString Merge desired into existing.
 // Not Thread-Safe. Does it matter?
 func MergeMapStringString(existing *map[string]string, desired map[string]string) bool {

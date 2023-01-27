@@ -219,8 +219,11 @@ test: test-unit test-integration ## Run all tests
 test-integration: clean-cov generate fmt vet envtest ## Run Integration tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)" USE_EXISTING_CLUSTER=true go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
 
+ifdef TEST_NAME
+test-unit: TEST_PATTERN := --run $(TEST_NAME)
+endif
 test-unit: clean-cov generate fmt vet ## Run Unit tests.
-	go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags unit -v -timeout 0
+	go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags unit -v -timeout 0 $(TEST_PATTERN)
 
 .PHONY: namespace
 namespace: ## Creates a namespace where to deploy Kuadrant Operator

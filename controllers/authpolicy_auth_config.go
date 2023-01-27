@@ -21,7 +21,7 @@ func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api
 		return err
 	}
 
-	authConfig, err := r.desiredAuthConfig(ctx, ap, targetNetworkObject)
+	authConfig, err := r.desiredAuthConfig(ap, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -60,8 +60,8 @@ func (r *AuthPolicyReconciler) deleteAuthConfigs(ctx context.Context, ap *api.Au
 	return nil
 }
 
-func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) (*authorinoapi.AuthConfig, error) {
-	hosts, err := r.policyHosts(ctx, ap, targetNetworkObject)
+func (r *AuthPolicyReconciler) desiredAuthConfig(ap *api.AuthPolicy, targetNetworkObject client.Object) (*authorinoapi.AuthConfig, error) {
+	hosts, err := r.policyHosts(ap, targetNetworkObject)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	}, nil
 }
 
-func (r *AuthPolicyReconciler) policyHosts(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) ([]string, error) {
+func (r *AuthPolicyReconciler) policyHosts(ap *api.AuthPolicy, targetNetworkObject client.Object) ([]string, error) {
 	if len(ap.Spec.AuthRules) == 0 {
 		return common.TargetHostnames(targetNetworkObject)
 	}

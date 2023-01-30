@@ -288,4 +288,129 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
 		})
 	})
+
+	Context("Basic: Simplest RLP targeting HTTPRoute", func() {
+		It("check created resources", func() {
+			// Check Limitador Status is Ready
+			Eventually(func() bool {
+				limitador := &limitadorv1alpha1.Limitador{}
+				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, limitador)
+				if err != nil {
+					return false
+				}
+				if !meta.IsStatusConditionTrue(limitador.Status.Conditions, "Ready") {
+					return false
+				}
+				return true
+			}, time.Minute, 5*time.Second).Should(BeTrue())
+
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
+			err := k8sClient.Create(context.Background(), httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+
+			rlp := &kuadrantv1beta1.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "RateLimitPolicy",
+					APIVersion: kuadrantv1beta1.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rlpName,
+					Namespace: testNamespace,
+				},
+				Spec: kuadrantv1beta1.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1alpha2.Group("gateway.networking.k8s.io"),
+						Kind:  "HTTPRoute",
+						Name:  gatewayapiv1alpha2.ObjectName(routeName),
+					},
+					RateLimits: []kuadrantv1beta1.RateLimit{
+						{
+							Limits: []kuadrantv1beta1.Limit{
+								{
+									MaxValue: 5,
+									Seconds:  10,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
+			err = k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check RLP status is available
+			Eventually(func() bool {
+				existingRLP := &kuadrantv1beta1.RateLimitPolicy{}
+				err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+				if err != nil {
+					return false
+				}
+				if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, "Available") {
+					return false
+				}
+
+				return true
+			}, time.Minute, 5*time.Second).Should(BeTrue())
+
+			// check limits
+			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+			existingLimitador := &limitadorv1alpha1.Limitador{}
+			err = k8sClient.Get(context.Background(), limitadorKey, existingLimitador)
+			// must exist
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+				MaxValue:   5,
+				Seconds:    10,
+				Namespace:  common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*.example.com"),
+				Conditions: []string{},
+				Variables:  []string{},
+			}))
+
+			// Check wasm plugin
+			wpName := fmt.Sprintf("kuadrant-%s", gwName)
+			wasmPluginKey := client.ObjectKey{Name: wpName, Namespace: testNamespace}
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+			// must exist
+			Expect(err).ToNot(HaveOccurred())
+			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingWASMConfig).To(Equal(&rlptools.WASMPlugin{
+				FailureModeDeny: true,
+				RateLimitPolicies: []rlptools.RateLimitPolicy{
+					{
+						Name:            "*.example.com",
+						RateLimitDomain: common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*.example.com"),
+						UpstreamCluster: common.KuadrantRateLimitClusterName,
+						Hostnames:       []string{"*.example.com"},
+						GatewayActions: []rlptools.GatewayAction{
+							{
+								Rules: []kuadrantv1beta1.Rule{
+									{
+										Paths:   []string{"/toy*"},
+										Methods: []string{"GET"},
+										Hosts:   []string{"*.example.com"},
+									},
+								},
+								Configurations: []kuadrantv1beta1.Configuration{
+									{
+										Actions: []kuadrantv1beta1.ActionSpecifier{
+											{
+												GenericKey: &kuadrantv1beta1.GenericKeySpec{
+													DescriptorValue: rlpKey.String(),
+													DescriptorKey:   &[]string{"generic_key"}[0],
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}))
+		})
+	})
 })

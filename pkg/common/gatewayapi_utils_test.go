@@ -3,12 +3,16 @@
 package common
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	fake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -610,5 +614,96 @@ func TestGatewayWrapperPolicyRefsAnnotation(t *testing.T) {
 	}
 	if gw.PolicyRefsAnnotation() != RateLimitPoliciesBackRefAnnotation {
 		t.Fail()
+	}
+}
+
+func TestGetGatewayWorkloadSelector(t *testing.T) {
+	hostnameAddress := gatewayapiv1alpha2.AddressType("Hostname")
+	gateway := &gatewayapiv1alpha2.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "my-ns",
+			Name:      "my-gw",
+			Labels: map[string]string{
+				"app":           "foo",
+				"control-plane": "kuadrant",
+			},
+		},
+		Status: gatewayapiv1alpha2.GatewayStatus{
+			Addresses: []gatewayapiv1alpha2.GatewayAddress{
+				{
+					Type:  &hostnameAddress,
+					Value: "my-gw-svc.my-ns.svc.cluster.local:80",
+				},
+			},
+		},
+	}
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "my-ns",
+			Name:      "my-gw-svc",
+			Labels: map[string]string{
+				"a-label": "irrelevant",
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				"a-selector": "what-we-are-looking-for",
+			},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = gatewayapiv1alpha2.AddToScheme(scheme)
+	k8sClient := fake.NewFakeClientWithScheme(scheme, gateway, service)
+
+	var selector map[string]string
+	var err error
+
+	selector, err = GetGatewayWorkloadSelector(context.TODO(), k8sClient, gateway)
+	if err != nil || len(selector) != 1 || selector["a-selector"] != "what-we-are-looking-for" {
+		t.Error("should not have failed to get the gateway workload selector")
+	}
+}
+
+func TestGetGatewayWorkloadSelectorWithoutHostnameAddress(t *testing.T) {
+	gateway := &gatewayapiv1alpha2.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "my-ns",
+			Name:      "my-gw",
+			Labels: map[string]string{
+				"app":           "foo",
+				"control-plane": "kuadrant",
+			},
+		},
+	}
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "my-ns",
+			Name:      "my-gw-svc",
+			Labels: map[string]string{
+				"a-label": "irrelevant",
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				"a-selector": "what-we-are-looking-for",
+			},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = gatewayapiv1alpha2.AddToScheme(scheme)
+	k8sClient := fake.NewFakeClientWithScheme(scheme, gateway, service)
+
+	var selector map[string]string
+	var err error
+
+	selector, err = GetGatewayWorkloadSelector(context.TODO(), k8sClient, gateway)
+	if err == nil || err.Error() != "cannot find service Hostname in the Gateway status" || selector != nil {
+		t.Error("should have failed to get the gateway workload selector")
 	}
 }

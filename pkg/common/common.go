@@ -81,6 +81,15 @@ func Contains(slice []string, target string) bool {
 	return false
 }
 
+func Find[T any](slice []T, match func(T) bool) (*T, bool) {
+	for _, item := range slice {
+		if match(item) {
+			return &item, true
+		}
+	}
+	return nil, false
+}
+
 func Map[T, U any](slice []T, f func(T) U) []U {
 	arr := make([]U, len(slice))
 	for i, e := range slice {

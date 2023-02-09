@@ -34,7 +34,7 @@ Generated using [github-markdown-toc](https://github.com/ekalinin/github-markdow
 
 | **json/yaml field**| **Type** | **Required** | **Default value** | **Description** |
 | --- | --- | --- | --- | --- |
-| `configurations` | [][Configuration](#Configuration) | Yes | N/A | list of action configurations |
+| `configurations` | [][Configuration](#Configuration) | No | Empty | list of action configurations |
 | `rules` | [][Rule](#Rule) | No | Empty. All configurations apply | list of action configurations rules. Rate limit configuration will apply when at least one rule matches the request |
 | `limits` | [][Limit](#Limit) | No | Empty | list of Limitador limit objects |
 
@@ -67,8 +67,8 @@ Generated using [github-markdown-toc](https://github.com/ekalinin/github-markdow
 | --- | --- | --- | --- | --- |
 | `maxValue` | int | Yes | N/A | max number of request for the specified time period |
 | `seconds` | int | Yes | N/A | time period in seconds |
-| `conditions` | []string | Yes | N/A | Limit conditions. Check [Limitador](https://github.com/Kuadrant/limitador) for more information |
-| `variables` | []string | Yes | N/A | Limit variables. Check [Limitador](https://github.com/Kuadrant/limitador) for more information |
+| `conditions` | []string | No | Empty list | Limit conditions. Check [Limitador](https://github.com/Kuadrant/limitador) for more information |
+| `variables` | []string | No | Empty list | Limit variables. Check [Limitador](https://github.com/Kuadrant/limitador) for more information |
 
 ## RateLimitPolicyStatus
 

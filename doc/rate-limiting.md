@@ -223,6 +223,22 @@ one entry each descriptor:
 **Note**: The external rate limiting service will be called only when there is at least one not empty
 descriptor.
 
+### Policy default action configurations
+
+When a rate limit policy does not specify any action configuration, the Kuadrant control plane
+will assign a generic default action configuration for the traffic related to the targeted network
+resource. This default action configuration allows defining global limits for all the traffic
+related the targeted network resource. For instance, the following rate limit policy is valid:
+
+```yaml
+spec:
+    targetRef: { ... }
+    rateLimits:
+      - limits:
+         - maxValue: 5
+           seconds: 10
+```
+
 ### Rate limiting configuration rules
 
 Configuration rules allow rate limit configurations to be activated conditionally depending on

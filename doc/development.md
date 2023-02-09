@@ -227,7 +227,7 @@ make test-unit TEST_NAME=TestLimitIndexEquals
 or even subtest
 
 ```sh
-make test-unit TEST_NAME=TestLimitIndexEquals/limit_conditions_order_does_not_matter
+make test-unit TEST_NAME=TestLimitIndexEquals/empty_indexes_are_equal
 ```
 
 ### Integration tests

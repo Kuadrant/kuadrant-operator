@@ -63,6 +63,13 @@ func GetDefaultIfNil[T any](val *T, def T) T {
 	return *val
 }
 
+func GetEmptySliceIfNil[T any](val []T) []T {
+	if val == nil {
+		return make([]T, 0)
+	}
+	return val
+}
+
 // NamespacedNameToObjectKey converts <namespace/name> format string to k8s object key.
 // It's common for K8s to reference an object using this format. For e.g. gateways in VirtualService.
 func NamespacedNameToObjectKey(namespacedName, defaultNamespace string) client.ObjectKey {

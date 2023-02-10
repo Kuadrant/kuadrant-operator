@@ -131,15 +131,8 @@ func (l *LimitIndex) ToLimits() []limitadorv1alpha1.RateLimit {
 			for idx := range limitList {
 				// Currently, Limitador CRD v0.3.1,
 				// the fields "Variables" and "Conditions" are required
-				variables := limitList[idx].Variables
-				if variables == nil {
-					variables = make([]string, 0)
-				}
-				conditions := limitList[idx].Conditions
-				if conditions == nil {
-					conditions = make([]string, 0)
-				}
-
+				variables := common.GetEmptySliceIfNil(limitList[idx].Variables)
+				conditions := common.GetEmptySliceIfNil(limitList[idx].Conditions)
 				limits = append(limits, limitadorv1alpha1.RateLimit{
 					Namespace:  common.MarshallNamespace(gwKey, domain),
 					MaxValue:   limitList[idx].MaxValue,

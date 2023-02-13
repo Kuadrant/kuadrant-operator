@@ -63,6 +63,13 @@ func GetDefaultIfNil[T any](val *T, def T) T {
 	return *val
 }
 
+func GetEmptySliceIfNil[T any](val []T) []T {
+	if val == nil {
+		return make([]T, 0)
+	}
+	return val
+}
+
 // NamespacedNameToObjectKey converts <namespace/name> format string to k8s object key.
 // It's common for K8s to reference an object using this format. For e.g. gateways in VirtualService.
 func NamespacedNameToObjectKey(namespacedName, defaultNamespace string) client.ObjectKey {
@@ -103,6 +110,19 @@ func SliceCopy[T any](s1 []T) []T {
 	s2 := make([]T, len(s1))
 	copy(s2, s1)
 	return s2
+}
+
+func ReverseSlice[T any](input []T) []T {
+	inputLen := len(input)
+	output := make([]T, inputLen)
+
+	for i, n := range input {
+		j := inputLen - i - 1
+
+		output[j] = n
+	}
+
+	return output
 }
 
 // MergeMapStringString Merge desired into existing.

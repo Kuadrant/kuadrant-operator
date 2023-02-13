@@ -218,6 +218,18 @@ make local-cleanup
 make test-unit
 ```
 
+Optionally, add `TEST_NAME` makefile variable to run specific test
+
+```sh
+make test-unit TEST_NAME=TestLimitIndexEquals
+```
+
+or even subtest
+
+```sh
+make test-unit TEST_NAME=TestLimitIndexEquals/empty_indexes_are_equal
+```
+
 ### Integration tests
 
 You need an active session open to a kubernetes cluster.

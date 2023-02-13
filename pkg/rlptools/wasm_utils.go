@@ -26,6 +26,23 @@ type GatewayAction struct {
 	Rules []kuadrantv1beta1.Rule `json:"rules,omitempty"`
 }
 
+func DefaultGatewayConfiguration(key client.ObjectKey) []kuadrantv1beta1.Configuration {
+	return []kuadrantv1beta1.Configuration{
+		{
+			Actions: []kuadrantv1beta1.ActionSpecifier{
+				{
+					GenericKey: &kuadrantv1beta1.GenericKeySpec{
+						DescriptorValue: key.String(),
+						// using default value as specified in Envoy spec
+						// https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-ratelimit-action-generickey
+						DescriptorKey: &[]string{"ratelimitpolicy"}[0],
+					},
+				},
+			},
+		},
+	}
+}
+
 // GatewayActionsFromRateLimitPolicy return flatten list from GatewayAction from the RLP
 func GatewayActionsFromRateLimitPolicy(rlp *kuadrantv1beta1.RateLimitPolicy, route *gatewayapiv1alpha2.HTTPRoute) []GatewayAction {
 	flattenActions := make([]GatewayAction, 0)
@@ -34,6 +51,10 @@ func GatewayActionsFromRateLimitPolicy(rlp *kuadrantv1beta1.RateLimitPolicy, rou
 	}
 
 	for idx := range rlp.Spec.RateLimits {
+		// Skip those RateLimit objects with empty configurations, even if they have rules defined
+		if len(rlp.Spec.RateLimits[idx].Configurations) == 0 {
+			continue
+		}
 		// if HTTPRoute is available, fill empty rules with defaults from the route
 		rules := rlp.Spec.RateLimits[idx].Rules
 		if route != nil && len(rules) == 0 {
@@ -44,6 +65,17 @@ func GatewayActionsFromRateLimitPolicy(rlp *kuadrantv1beta1.RateLimitPolicy, rou
 			Configurations: rlp.Spec.RateLimits[idx].Configurations,
 			Rules:          rules,
 		})
+	}
+
+	if len(rlp.Spec.RateLimits) > 0 && len(flattenActions) == 0 {
+		// no configurations specified in the rlp,
+		// then apply the default configuration (action list) and default rules from the route
+		flattenActions = []GatewayAction{
+			{
+				Configurations: DefaultGatewayConfiguration(client.ObjectKeyFromObject(rlp)),
+				Rules:          HTTPRouteRulesToRLPRules(common.RulesFromHTTPRoute(route)),
+			},
+		}
 	}
 
 	return flattenActions

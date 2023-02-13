@@ -111,7 +111,7 @@ $ kubectl create -f https://operatorhub.io/install/kuadrant-operator.yaml
 **Openshift**
 
 The operator is available from the [Openshift Console OperatorHub](https://docs.openshift.com/container-platform/4.11/operators/user/olm-installing-operators-in-namespace.html#olm-installing-from-operatorhub-using-web-console_olm-installing-operators-in-namespace).
-Just follow installation steps choosing the "Kuadrant Operator" from the catalog
+Just follow installation steps choosing the "Kuadrant Operator" from the catalog:
 
 ![Kuadrant Operator in OperatorHub](https://content.cloud.redhat.com/hs-fs/hubfs/ogFyppY.png?width=449&height=380&name=ogFyppY.png)
 

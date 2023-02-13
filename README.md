@@ -99,7 +99,7 @@ The operator is available from [OperatorHub.io](https://operatorhub.io/operator/
 Just go to the linked page and follow installation steps (or just run these two commands):
 
 ```
-# Install Operator Lifecycle Manager (OLM), a tool to help manage the Operators running on your cluster.
+# Install Operator Lifecycle Manager (OLM), a tool to help manage the operators running on your cluster.
 
 $ curl -sL https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.23.1/install.sh | bash -s v0.23.1
 

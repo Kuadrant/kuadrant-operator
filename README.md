@@ -95,7 +95,7 @@ The Kuadrant Operator is available in public community operator catalogs, such a
 
 **Kubernetes**
 
-The operator is available from [operatorhub.io](https://operatorhub.io/operator/kuadrant-operator).
+The operator is available from [OperatorHub.io](https://operatorhub.io/operator/kuadrant-operator).
 Just go to the linked page and follow installation steps (or just run these two commands):
 
 ```

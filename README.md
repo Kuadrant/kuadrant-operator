@@ -86,7 +86,7 @@ Additionally, Kuadrant provides the following CRDs
 
 ### Installing Kuadrant
 
-Installing Kuadrant is two step procedure. Firstly, install the kuadrant operator and seconly,
+Installing Kuadrant is a two-step procedure. Firstly, install the Kuadrant Operator and seconly,
 request a Kuadrant instance using the *Kuadrant* custom resource.
 
 #### 1. Install the Kuadrant Operator

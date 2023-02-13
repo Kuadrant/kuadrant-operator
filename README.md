@@ -91,7 +91,7 @@ request a Kuadrant instance by creating a *Kuadrant* custom resource.
 
 #### 1. Install the Kuadrant Operator
 
-The Kuadrant operator is available in public operator catalogs both in Kubernetes and Openshift platforms.
+The Kuadrant Operator is available in public community operator catalogs, such as the Kubernetes [OperatorHub.io](https://operatorhub.io/operator/kuadrant-operator) and the [Openshift Container Platform and OKD OperatorHub](https://redhat-openshift-ecosystem.github.io/community-operators-prod).
 
 **Kubernetes**
 

@@ -81,6 +81,98 @@ func TestLimitIndexEquals(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("limit conditions order does not matter", func(subT *testing.T) {
+		limitadorA := &limitadorv1alpha1.Limitador{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Limitador",
+				APIVersion: "limitador.kuadrant.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "nsA"},
+			Spec: limitadorv1alpha1.LimitadorSpec{
+				Limits: []limitadorv1alpha1.RateLimit{
+					{
+						Conditions: []string{"a", "b"},
+						MaxValue:   1,
+						Namespace:  limitadorNamespaceA(),
+						Seconds:    1,
+						Variables:  make([]string, 0),
+					},
+				},
+			},
+		}
+		idxA := NewLimitadorIndex(limitadorA, logger)
+
+		limitadorB := &limitadorv1alpha1.Limitador{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Limitador",
+				APIVersion: "limitador.kuadrant.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "nsB"},
+			Spec: limitadorv1alpha1.LimitadorSpec{
+				Limits: []limitadorv1alpha1.RateLimit{
+					{
+						Conditions: []string{"b", "a"}, // reverse order regarding limitadorA
+						MaxValue:   1,
+						Namespace:  limitadorNamespaceA(),
+						Seconds:    1,
+						Variables:  make([]string, 0),
+					},
+				},
+			},
+		}
+		idxB := NewLimitadorIndex(limitadorB, logger)
+
+		if !idxA.Equals(idxB) {
+			subT.Fatal("indexes with limits with reversed conditions are not equal")
+		}
+	})
+
+	t.Run("limit variables order does not matter", func(subT *testing.T) {
+		limitadorA := &limitadorv1alpha1.Limitador{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Limitador",
+				APIVersion: "limitador.kuadrant.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "nsA"},
+			Spec: limitadorv1alpha1.LimitadorSpec{
+				Limits: []limitadorv1alpha1.RateLimit{
+					{
+						Conditions: make([]string, 0),
+						MaxValue:   1,
+						Namespace:  limitadorNamespaceA(),
+						Seconds:    1,
+						Variables:  []string{"a", "b"},
+					},
+				},
+			},
+		}
+		idxA := NewLimitadorIndex(limitadorA, logger)
+
+		limitadorB := &limitadorv1alpha1.Limitador{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Limitador",
+				APIVersion: "limitador.kuadrant.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "nsB"},
+			Spec: limitadorv1alpha1.LimitadorSpec{
+				Limits: []limitadorv1alpha1.RateLimit{
+					{
+						Conditions: make([]string, 0),
+						MaxValue:   1,
+						Namespace:  limitadorNamespaceA(),
+						Seconds:    1,
+						Variables:  []string{"b", "a"}, // reverse order regarding limitadorA
+					},
+				},
+			},
+		}
+		idxB := NewLimitadorIndex(limitadorB, logger)
+
+		if !idxA.Equals(idxB) {
+			subT.Fatal("indexes with limits with reversed variables are not equal")
+		}
+	})
 }
 
 func TestLimitIndexToLimits(t *testing.T) {

@@ -86,49 +86,51 @@ Additionally, Kuadrant provides the following CRDs
 
 ### Installing Kuadrant
 
-1. Create the namespace for the Operator
+Installing Kuadrant is a two-step procedure. Firstly, install the Kuadrant Operator and seconly,
+request a Kuadrant instance by creating a *Kuadrant* custom resource.
 
-```sh
-kubectl create namespace kuadrant-system
+#### 1. Install the Kuadrant Operator
+
+The Kuadrant Operator is available in public community operator catalogs, such as the Kubernetes [OperatorHub.io](https://operatorhub.io/operator/kuadrant-operator) and the [Openshift Container Platform and OKD OperatorHub](https://redhat-openshift-ecosystem.github.io/community-operators-prod).
+
+**Kubernetes**
+
+The operator is available from [OperatorHub.io](https://operatorhub.io/operator/kuadrant-operator).
+Just go to the linked page and follow installation steps (or just run these two commands):
+
+```
+# Install Operator Lifecycle Manager (OLM), a tool to help manage the operators running on your cluster.
+
+$ curl -sL https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.23.1/install.sh | bash -s v0.23.1
+
+# Install the operator by running the following command:
+
+$ kubectl create -f https://operatorhub.io/install/kuadrant-operator.yaml
 ```
 
-2. Install Kuadrant dependencies: Authorino and Limitador operators.
+**Openshift**
+
+The operator is available from the [Openshift Console OperatorHub](https://docs.openshift.com/container-platform/4.11/operators/user/olm-installing-operators-in-namespace.html#olm-installing-from-operatorhub-using-web-console_olm-installing-operators-in-namespace).
+Just follow installation steps choosing the "Kuadrant Operator" from the catalog:
+
+![Kuadrant Operator in OperatorHub](https://content.cloud.redhat.com/hs-fs/hubfs/ogFyppY.png?width=449&height=380&name=ogFyppY.png)
+
+#### 2. Request a Kuadrant instance
+
+Create the namespace:
 
 ```sh
-make install-dependencies
+kubectl create namespace kuadrant
 ```
 
-3. Install the Operator manifests
+Apply the `Kuadrant` custom resource:
 
-```sh
-make install
-```
-
-4. Deploy the Operator
-
-```sh
-make deploy
-```
-
-<details>
-  <summary><i>Tip:</i> Deploy a custom image of the Operator</summary>
-  <br/>
-  To deploy an image of the Operator other than the default <code>quay.io/kuadrant/kuadrant-operator:latest</code>, specify by setting the <code>OPERATOR_IMAGE</code> parameter. E.g.:
-
-  ```sh
-  make deploy OPERATOR_IMAGE=kuadrant-operator:local
-  ```
-</details>
-
-5. Create Kuadrant CR
-This will setup the required dependencies for protecting your service. At the moment there's no major configuration needed:
-
-```sh
-kubectl -n kuadrant-system apply -f - <<EOF
+```yaml
+kubectl apply -n kuadrant -f -<<EOF
 apiVersion: kuadrant.io/v1beta1
 kind: Kuadrant
 metadata:
-  name: kuadrant-sample
+  name: kuadrant
 spec: {}
 EOF
 ```

@@ -400,7 +400,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 											{
 												GenericKey: &kuadrantv1beta1.GenericKeySpec{
 													DescriptorValue: rlpKey.String(),
-													DescriptorKey:   &[]string{"generic_key"}[0],
+													DescriptorKey:   &[]string{"ratelimitpolicy"}[0],
 												},
 											},
 										},

@@ -35,7 +35,7 @@ func DefaultGatewayConfiguration(key client.ObjectKey) []kuadrantv1beta1.Configu
 						DescriptorValue: key.String(),
 						// using default value as specified in Envoy spec
 						// https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-ratelimit-action-generickey
-						DescriptorKey: &[]string{"generic_key"}[0],
+						DescriptorKey: &[]string{"ratelimitpolicy"}[0],
 					},
 				},
 			},

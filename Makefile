@@ -28,10 +28,14 @@ endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 DEFAULT_IMAGE_TAG = latest
+
+# Semantic versioning (i.e. Major.Minor.Patch)
+is_semantic_version = $(shell [[ $(1) =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$$ ]] && echo "true")
+
 # BUNDLE_VERSION defines the version for the kuadrant-operator bundle.
-# If the version is not semantic (i.e. Major.Minor.Patch), will use the default one
-using_semantic_version := $(shell [[ $(VERSION) =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$$ ]] && echo "true")
-ifdef using_semantic_version
+# If the version is not semantic, will use the default one
+bundle_is_semantic := $(call is_semantic_version,$(VERSION))
+ifdef bundle_is_semantic
 BUNDLE_VERSION = $(VERSION)
 IMAGE_TAG = v$(VERSION)
 else
@@ -93,27 +97,39 @@ KUADRANT_NAMESPACE ?= kuadrant-system
 ## authorino
 #ToDo Pin this version once we have an initial release of authorino
 AUTHORINO_OPERATOR_VERSION ?= latest
+authorino_bundle_is_semantic := $(call is_semantic_version,$(AUTHORINO_OPERATOR_VERSION))
+
 ifeq (latest,$(AUTHORINO_OPERATOR_VERSION))
 AUTHORINO_OPERATOR_BUNDLE_VERSION = 0.0.0
 AUTHORINO_OPERATOR_BUNDLE_IMG_TAG = latest
 AUTHORINO_OPERATOR_GITREF = main
-else
+else ifeq (true,$(authorino_bundle_is_semantic))
 AUTHORINO_OPERATOR_BUNDLE_VERSION = $(AUTHORINO_OPERATOR_VERSION)
 AUTHORINO_OPERATOR_BUNDLE_IMG_TAG = v$(AUTHORINO_OPERATOR_BUNDLE_VERSION)
 AUTHORINO_OPERATOR_GITREF = v$(AUTHORINO_OPERATOR_BUNDLE_VERSION)
+else
+AUTHORINO_OPERATOR_BUNDLE_VERSION = $(AUTHORINO_OPERATOR_VERSION)
+AUTHORINO_OPERATOR_BUNDLE_IMG_TAG = $(AUTHORINO_OPERATOR_BUNDLE_VERSION)
+AUTHORINO_OPERATOR_GITREF = $(AUTHORINO_OPERATOR_BUNDLE_VERSION)
 endif
+
 AUTHORINO_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/authorino-operator-bundle:$(AUTHORINO_OPERATOR_BUNDLE_IMG_TAG)
 ## limitador
 #ToDo Pin this version once we have an initial release of limitador
 LIMITADOR_OPERATOR_VERSION ?= latest
+limitador_bundle_is_semantic := $(call is_semantic_version,$(LIMITADOR_OPERATOR_VERSION))
 ifeq (latest,$(LIMITADOR_OPERATOR_VERSION))
 LIMITADOR_OPERATOR_BUNDLE_VERSION = 0.0.0
 LIMITADOR_OPERATOR_BUNDLE_IMG_TAG = latest
 LIMITADOR_OPERATOR_GITREF = main
-else
+else ifeq (true,$(limitador_bundle_is_semantic))
 LIMITADOR_OPERATOR_BUNDLE_VERSION = $(LIMITADOR_OPERATOR_VERSION)
 LIMITADOR_OPERATOR_BUNDLE_IMG_TAG = v$(LIMITADOR_OPERATOR_BUNDLE_VERSION)
 LIMITADOR_OPERATOR_GITREF = v$(LIMITADOR_OPERATOR_BUNDLE_VERSION)
+else
+LIMITADOR_OPERATOR_BUNDLE_VERSION = $(LIMITADOR_OPERATOR_VERSION)
+LIMITADOR_OPERATOR_BUNDLE_IMG_TAG = $(LIMITADOR_OPERATOR_BUNDLE_VERSION)
+LIMITADOR_OPERATOR_GITREF = $(LIMITADOR_OPERATOR_BUNDLE_VERSION)
 endif
 LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LIMITADOR_OPERATOR_BUNDLE_IMG_TAG)
 

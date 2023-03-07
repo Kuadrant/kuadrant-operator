@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/api/errors"
-
 	"github.com/go-logr/logr"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -105,9 +105,11 @@ func (r *RateLimitPolicyReconciler) gatewayRateLimitingClusterEnvoyFilter(ctx co
 	if err != nil {
 		return nil, err
 	}
-	if !limitador.Status.Ready() {
+
+	if !meta.IsStatusConditionTrue(limitador.Status.Conditions, "Ready") {
 		return nil, fmt.Errorf("limitador Status not ready")
 	}
+
 	configPatches, err := kuadrantistioutils.LimitadorClusterPatch(limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC))
 	if err != nil {
 		return nil, err

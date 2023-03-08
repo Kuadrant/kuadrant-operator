@@ -173,6 +173,52 @@ func TestLimitIndexEquals(t *testing.T) {
 			subT.Fatal("indexes with limits with reversed variables are not equal")
 		}
 	})
+
+	t.Run("nil or empty array does not matter", func(subT *testing.T) {
+		limitadorWithNilVariablesAndConditions := &limitadorv1alpha1.Limitador{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Limitador",
+				APIVersion: "limitador.kuadrant.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "nsA"},
+			Spec: limitadorv1alpha1.LimitadorSpec{
+				Limits: []limitadorv1alpha1.RateLimit{
+					{
+						Conditions: nil,
+						MaxValue:   1,
+						Namespace:  limitadorNamespaceA(),
+						Seconds:    1,
+						Variables:  nil,
+					},
+				},
+			},
+		}
+		idxA := NewLimitadorIndex(limitadorWithNilVariablesAndConditions, logger)
+
+		limitadorWithEmptyVariablesAndConditions := &limitadorv1alpha1.Limitador{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Limitador",
+				APIVersion: "limitador.kuadrant.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "nsA"},
+			Spec: limitadorv1alpha1.LimitadorSpec{
+				Limits: []limitadorv1alpha1.RateLimit{
+					{
+						Conditions: []string{},
+						MaxValue:   1,
+						Namespace:  limitadorNamespaceA(),
+						Seconds:    1,
+						Variables:  []string{},
+					},
+				},
+			},
+		}
+		idxB := NewLimitadorIndex(limitadorWithEmptyVariablesAndConditions, logger)
+
+		if !idxA.Equals(idxB) {
+			subT.Fatal("indexes with nil and empty arrays variables and conditions are not equal")
+		}
+	})
 }
 
 func TestLimitIndexToLimits(t *testing.T) {

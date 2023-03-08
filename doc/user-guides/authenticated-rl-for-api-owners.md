@@ -193,12 +193,12 @@ spec:
                       key: "userID"
     limits:
       - conditions:
-          - "userID == bob"
+          - "userID == 'bob'"
         maxValue: 2
         seconds: 10
         variables: []
       - conditions:
-          - "userID == alice"
+          - "userID == 'alice'"
         maxValue: 5
         seconds: 10
         variables: []

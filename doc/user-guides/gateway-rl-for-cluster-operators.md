@@ -130,7 +130,7 @@ spec:
                 descriptor_value: "1"
       limits:
         - conditions:
-            - "admin_operation == 1"
+            - "admin_operation == '1'"
           maxValue: 5
           seconds: 10
           variables: []
@@ -144,7 +144,7 @@ spec:
                 descriptor_value: "1"
       limits:
         - conditions:
-            - "get_operation == 1"
+            - "get_operation == '1'"
           maxValue: 8
           seconds: 10
           variables: []
@@ -154,7 +154,7 @@ spec:
                 descriptor_key: toystore
                 descriptor_value: "1"
       limits:
-        - conditions: ["toystore == 1"]
+        - conditions: ["toystore == '1'"]
           maxValue: 30
           seconds: 10
           variables: []
@@ -206,7 +206,7 @@ spec:
                 descriptor_key: expensive_op
                 descriptor_value: "1"
       limits:
-        - conditions: ["expensive_op == 1"]
+        - conditions: ["expensive_op == '1'"]
           maxValue: 2
           seconds: 10
           variables: []

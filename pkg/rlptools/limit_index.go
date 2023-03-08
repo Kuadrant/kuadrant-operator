@@ -88,13 +88,20 @@ func SameLimitList(a, b []kuadrantv1beta1.Limit) bool {
 	copy(bCopy, b)
 
 	// two limits with reordered conditions/variables are effectively the same
+	// For comparison purposes, nil equals the empty array for conditions and variables
 	for idx := range aCopy {
+		aCopy[idx].Conditions = common.GetEmptySliceIfNil(aCopy[idx].Conditions)
 		sort.Strings(aCopy[idx].Conditions)
+
+		aCopy[idx].Variables = common.GetEmptySliceIfNil(aCopy[idx].Variables)
 		sort.Strings(aCopy[idx].Variables)
 	}
 
 	for idx := range bCopy {
+		bCopy[idx].Conditions = common.GetEmptySliceIfNil(bCopy[idx].Conditions)
 		sort.Strings(bCopy[idx].Conditions)
+
+		bCopy[idx].Variables = common.GetEmptySliceIfNil(bCopy[idx].Variables)
 		sort.Strings(bCopy[idx].Variables)
 	}
 

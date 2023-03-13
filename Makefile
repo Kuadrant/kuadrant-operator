@@ -133,6 +133,16 @@ LIMITADOR_OPERATOR_GITREF = $(LIMITADOR_OPERATOR_BUNDLE_VERSION)
 endif
 LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LIMITADOR_OPERATOR_BUNDLE_IMG_TAG)
 
+## wasm-shim
+WASM_SHIM_VERSION ?= latest
+shim_version_is_semantic := $(call is_semantic_version,$(WASM_SHIM_VERSION))
+
+ifeq (true,$(shim_version_is_semantic))
+RELATED_IMAGE_WASMSHIM=quay.io/kuadrant/wasm-shim:v$(WASM_SHIM_VERSION)
+else
+RELATED_IMAGE_WASMSHIM=quay.io/kuadrant/wasm-shim:$(WASM_SHIM_VERSION)
+endif
+
 all: build
 
 ##@ General
@@ -379,6 +389,7 @@ rm -rf $$TMP_DIR ;\
 endef
 
 .PHONY: bundle
+bundle: export RELATED_IMAGE_WASMSHIM := $(RELATED_IMAGE_WASMSHIM)
 bundle: $(OPM) $(YQ) manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
 	# Set desired operator image

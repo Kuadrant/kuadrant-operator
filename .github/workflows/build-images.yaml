@@ -4,6 +4,7 @@ on:
   push:
     branches: ['*']
     tags: ['*']
+  workflow_call:
 
 env:
   IMG_TAGS: ${{ github.sha }}
@@ -95,12 +96,26 @@ jobs:
           else
           echo "VERSION=${{ github.sha }}" >> $GITHUB_ENV
           fi
+      - name: Add SHA tags if triggered by scheduled workflow
+        if: ${{ github.event_name == "workflow_call" }}
+        id: set-dependencies-sha-tags
+        run: |
+          echo "Setting dependencies image versions from stored variables..."
+          echo "AUTHORINO_OPERATOR_VERSION=${vars.AUTHORINO_OPERATOR_BUNDLE_SHA}" >> $GITHUB_ENV
+          echo "LIMITADOR_OPERATOR_VERSION=${vars.LIMITADOR_OPERATOR_BUNDLE_SHA}  >> $GITHUB_ENV
+          echo "WASM_SHIM_VERSION=${vars.WASM_SHIM_SHA}  >> $GITHUB_ENV
       - name: Install qemu dependency
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-user-static
       - name: Run make bundle
-        run: make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} IMAGE_TAG=${{ github.ref_name }}
+        run: |
+          if [[ ${github.event_name} == "workflow_call" ]]; then
+          echo "Building bundle via workflow call"
+          make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} VERSION=${TAG_NAME/v/} AUTHORINO_OPERATOR_VERSION=${env.AUTHORINO_OPERATOR_VERSION} LIMITADOR_OPERATOR_VERSION=${env.LIMITADOR_OPERATOR_VERSION} WASM_SHIM_VERSION=${env.WASM_SHIM_VERSION}
+          else
+          make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} IMAGE_TAG=${{ github.ref_name }}
+          fi
       - name: Build Image
         id: build-image
         uses: redhat-actions/buildah-build@v2

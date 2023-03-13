@@ -1,0 +1,13 @@
+name: Schedule build with latest image SHA versions
+
+on:
+  push:
+    branches: ['main']
+  schedule:
+    - cron: '0 0 * * 0'
+  repository_dispatch: {}
+
+jobs:
+  workflow-build:
+    name: Calls build-images workflow
+    uses: ./.github/workflows/build-images.yaml

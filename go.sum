@@ -391,6 +391,8 @@ github.com/kuadrant/authorino-operator v0.4.1 h1:dumqrOQzLTJNoAq/MlBYquhK6klvsWB
 github.com/kuadrant/authorino-operator v0.4.1/go.mod h1:oC3pRooAkzsiR66eHQY/vZ2CziORTrl8Yx1yQX0AsT0=
 github.com/kuadrant/limitador-operator v0.3.1-0.20220830090346-4f6d5794272b h1:HIi736Hgs6hNbyykPt1uaHI7J2H1cedTnyQYNRuOBUQ=
 github.com/kuadrant/limitador-operator v0.3.1-0.20220830090346-4f6d5794272b/go.mod h1:p4XO1/2kYbyKMqPssJ8YBBcWvYmyFJgAji7FK4EmMOQ=
+github.com/kuadrant/limitador-operator v0.4.0 h1:HgJi7LuOsenCUMs2ACCfKMKsKpfHcqmmwVmqpci0hw4=
+github.com/kuadrant/limitador-operator v0.4.0/go.mod h1:5fQo2XwxPr7bDObut9sK5sHCnK4hwAmTsTptaYvGfuc=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/lestrrat-go/backoff/v2 v2.0.8 h1:oNb5E5isby2kiro9AgdHLv5N5tint1AnDVVf2E2un5A=
 github.com/lestrrat-go/blackmagic v1.0.0 h1:XzdxDbuQTz0RZZEmdU7cnQxUtFUzgCSPq8RCz4BxIi4=

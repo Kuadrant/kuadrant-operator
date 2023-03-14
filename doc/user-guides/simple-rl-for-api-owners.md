@@ -115,7 +115,7 @@ spec:
                 descriptor_value: "1"
       limits:
         - conditions:
-            - "limited == 1"
+            - "limited == '1'"
           maxValue: 5
           seconds: 10
           variables: []

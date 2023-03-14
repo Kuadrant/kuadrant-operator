@@ -9,7 +9,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/kuadrant/authorino v0.10.0
 	github.com/kuadrant/authorino-operator v0.4.1
-	github.com/kuadrant/limitador-operator v0.3.1-0.20220830090346-4f6d5794272b
+	github.com/kuadrant/limitador-operator v0.4.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.20.2
 	go.uber.org/zap v1.22.0

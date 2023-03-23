@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -65,7 +65,7 @@ func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx 
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) gatewayRateLimitingClusterEnvoyFilter(ctx context.Context, gw *gatewayapiv1alpha2.Gateway, rlpRefs []client.ObjectKey) (*istioclientnetworkingv1alpha3.EnvoyFilter, error) {
+func (r *RateLimitPolicyReconciler) gatewayRateLimitingClusterEnvoyFilter(ctx context.Context, gw *gatewayapiv1beta1.Gateway, rlpRefs []client.ObjectKey) (*istioclientnetworkingv1alpha3.EnvoyFilter, error) {
 	logger, _ := logr.FromContext(ctx)
 	gwKey := client.ObjectKeyFromObject(gw)
 	logger.V(1).Info("gatewayRateLimitingClusterEnvoyFilter", "gwKey", gwKey, "rlpRefs", rlpRefs)

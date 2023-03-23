@@ -11,7 +11,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -107,7 +107,7 @@ func (r *RateLimitPolicyReconciler) gatewaysRateLimits(ctx context.Context, targ
 	result := make([]kuadrantv1beta1.GatewayRateLimits, 0)
 
 	for _, gwKey := range r.TargetedGatewayKeys(ctx, targetNetworkObject) {
-		gw := &gatewayapiv1alpha2.Gateway{}
+		gw := &gatewayapiv1beta1.Gateway{}
 		err := r.Client().Get(ctx, gwKey, gw)
 		logger.V(1).Info("get gateway", "key", gwKey, "err", err)
 		if err != nil {

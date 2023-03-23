@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -243,11 +244,11 @@ type RateLimitPolicy struct {
 }
 
 func (r *RateLimitPolicy) Validate() error {
-	if r.Spec.TargetRef.Group != gatewayapiv1alpha2.Group("gateway.networking.k8s.io") {
+	if r.Spec.TargetRef.Group != ("gateway.networking.k8s.io") {
 		return fmt.Errorf("invalid targetRef.Group %s. The only supported group is gateway.networking.k8s.io", r.Spec.TargetRef.Group)
 	}
 
-	if r.Spec.TargetRef.Kind != gatewayapiv1alpha2.Kind("HTTPRoute") && r.Spec.TargetRef.Kind != gatewayapiv1alpha2.Kind("Gateway") {
+	if r.Spec.TargetRef.Kind != ("HTTPRoute") && r.Spec.TargetRef.Kind != ("Gateway") {
 		return fmt.Errorf("invalid targetRef.Kind %s. The only supported kind types are HTTPRoute and Gateway", r.Spec.TargetRef.Kind)
 	}
 
@@ -294,8 +295,8 @@ func (r *RateLimitPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReferenc
 	return r.Spec.TargetRef
 }
 
-func (r *RateLimitPolicy) GetWrappedNamespace() gatewayapiv1alpha2.Namespace {
-	return gatewayapiv1alpha2.Namespace(r.Namespace)
+func (r *RateLimitPolicy) GetWrappedNamespace() gatewayapiv1beta1.Namespace {
+	return gatewayapiv1beta1.Namespace(r.Namespace)
 }
 
 func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {

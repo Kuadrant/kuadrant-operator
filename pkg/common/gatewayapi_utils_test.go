@@ -21,7 +21,7 @@ import (
 func TestRouteHostnames(t *testing.T) {
 	testCases := []struct {
 		name     string
-		route    *gatewayapiv1alpha2.HTTPRoute
+		route    *gatewayapiv1beta1.HTTPRoute
 		expected []string
 	}{
 		{
@@ -31,8 +31,8 @@ func TestRouteHostnames(t *testing.T) {
 		},
 		{
 			"nil hostname",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
 					Hostnames: nil,
 				},
 			},
@@ -40,9 +40,9 @@ func TestRouteHostnames(t *testing.T) {
 		},
 		{
 			"basic",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
-					Hostnames: []gatewayapiv1alpha2.Hostname{"*.com", "example.net", "test.example.net"},
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
+					Hostnames: []gatewayapiv1beta1.Hostname{"*.com", "example.net", "test.example.net"},
 				},
 			},
 			[]string{"*.com", "example.net", "test.example.net"},
@@ -60,30 +60,30 @@ func TestRouteHostnames(t *testing.T) {
 
 func TestRulesFromHTTPRoute(t *testing.T) {
 	var (
-		getMethod                                          = "GET"
-		catsPath                                           = "/cats"
-		dogsPath                                           = "/dogs"
-		rabbitsPath                                        = "/rabbits"
-		getHTTPMethod        gatewayapiv1alpha2.HTTPMethod = "GET"
-		postHTTPMethod       gatewayapiv1alpha2.HTTPMethod = "POST"
-		pathPrefix                                         = gatewayapiv1beta1.PathMatchPathPrefix
-		pathExact                                          = gatewayapiv1beta1.PathMatchExact
-		catsPrefixPatchMatch                               = gatewayapiv1alpha2.HTTPPathMatch{
+		getMethod                                         = "GET"
+		catsPath                                          = "/cats"
+		dogsPath                                          = "/dogs"
+		rabbitsPath                                       = "/rabbits"
+		getHTTPMethod        gatewayapiv1beta1.HTTPMethod = "GET"
+		postHTTPMethod       gatewayapiv1beta1.HTTPMethod = "POST"
+		pathPrefix                                        = gatewayapiv1beta1.PathMatchPathPrefix
+		pathExact                                         = gatewayapiv1beta1.PathMatchExact
+		catsPrefixPatchMatch                              = gatewayapiv1beta1.HTTPPathMatch{
 			Type:  &pathPrefix,
 			Value: &catsPath,
 		}
-		dogsExactPatchMatch = gatewayapiv1alpha2.HTTPPathMatch{
+		dogsExactPatchMatch = gatewayapiv1beta1.HTTPPathMatch{
 			Type:  &pathExact,
 			Value: &dogsPath,
 		}
-		rabbitsPrefixPatchMatch = gatewayapiv1alpha2.HTTPPathMatch{
+		rabbitsPrefixPatchMatch = gatewayapiv1beta1.HTTPPathMatch{
 			Value: &rabbitsPath,
 		}
 	)
 
 	testCases := []struct {
 		name     string
-		route    *gatewayapiv1alpha2.HTTPRoute
+		route    *gatewayapiv1beta1.HTTPRoute
 		expected []HTTPRouteRule
 	}{
 		{
@@ -93,31 +93,31 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 		},
 		{
 			"nil rules",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
 					Rules:     nil,
-					Hostnames: []gatewayapiv1alpha2.Hostname{"*.com"},
+					Hostnames: []gatewayapiv1beta1.Hostname{"*.com"},
 				},
 			},
 			[]HTTPRouteRule{{Hosts: []string{"*.com"}}},
 		},
 		{
 			"empty rules",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
-					Rules:     make([]gatewayapiv1alpha2.HTTPRouteRule, 0),
-					Hostnames: []gatewayapiv1alpha2.Hostname{"*.com"},
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
+					Rules:     make([]gatewayapiv1beta1.HTTPRouteRule, 0),
+					Hostnames: []gatewayapiv1beta1.Hostname{"*.com"},
 				},
 			},
 			[]HTTPRouteRule{{Hosts: []string{"*.com"}}},
 		},
 		{
 			"with method",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
-					Rules: []gatewayapiv1alpha2.HTTPRouteRule{
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
+					Rules: []gatewayapiv1beta1.HTTPRouteRule{
 						{
-							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 								{
 									Method: &getHTTPMethod,
 								},
@@ -133,11 +133,11 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 		},
 		{
 			"with path",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
-					Rules: []gatewayapiv1alpha2.HTTPRouteRule{
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
+					Rules: []gatewayapiv1beta1.HTTPRouteRule{
 						{
-							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 								{
 									Path: &catsPrefixPatchMatch,
 								},
@@ -153,11 +153,11 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 		},
 		{
 			"with path and default path match type",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
-					Rules: []gatewayapiv1alpha2.HTTPRouteRule{
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
+					Rules: []gatewayapiv1beta1.HTTPRouteRule{
 						{
-							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 								{
 									Path: &rabbitsPrefixPatchMatch,
 								},
@@ -173,13 +173,13 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 		},
 		{
 			"no paths or methods",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
-					Rules: []gatewayapiv1alpha2.HTTPRouteRule{
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
+					Rules: []gatewayapiv1beta1.HTTPRouteRule{
 						{
-							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 								{
-									Headers: []gatewayapiv1alpha2.HTTPHeaderMatch{
+									Headers: []gatewayapiv1beta1.HTTPHeaderMatch{
 										{
 											Name:  "someheader",
 											Value: "somevalue",
@@ -189,21 +189,21 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 							},
 						},
 					},
-					Hostnames: []gatewayapiv1alpha2.Hostname{"*.com"},
+					Hostnames: []gatewayapiv1beta1.Hostname{"*.com"},
 				},
 			},
 			[]HTTPRouteRule{{Hosts: []string{"*.com"}}},
 		},
 		{
 			"basic",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
-					Hostnames: []gatewayapiv1alpha2.Hostname{"*.com"},
-					Rules: []gatewayapiv1alpha2.HTTPRouteRule{
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
+					Hostnames: []gatewayapiv1beta1.Hostname{"*.com"},
+					Rules: []gatewayapiv1beta1.HTTPRouteRule{
 						{
 							// GET /cats*
 							// POST /dogs
-							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 								{
 									Path:   &catsPrefixPatchMatch,
 									Method: &getHTTPMethod,
@@ -242,8 +242,8 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 }
 
 func TestGatewaysMissingPolicyRef(t *testing.T) {
-	gwList := &gatewayapiv1alpha2.GatewayList{
-		Items: []gatewayapiv1alpha2.Gateway{
+	gwList := &gatewayapiv1beta1.GatewayList{
+		Items: []gatewayapiv1beta1.Gateway{
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace:   "gw-ns",
@@ -317,8 +317,8 @@ func TestGatewaysMissingPolicyRef(t *testing.T) {
 }
 
 func TestGatewaysWithValidPolicyRef(t *testing.T) {
-	gwList := &gatewayapiv1alpha2.GatewayList{
-		Items: []gatewayapiv1alpha2.Gateway{
+	gwList := &gatewayapiv1beta1.GatewayList{
+		Items: []gatewayapiv1beta1.Gateway{
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace:   "gw-ns",
@@ -392,8 +392,8 @@ func TestGatewaysWithValidPolicyRef(t *testing.T) {
 }
 
 func TestGatewaysWithInvalidPolicyRef(t *testing.T) {
-	gwList := &gatewayapiv1alpha2.GatewayList{
-		Items: []gatewayapiv1alpha2.Gateway{
+	gwList := &gatewayapiv1beta1.GatewayList{
+		Items: []gatewayapiv1beta1.Gateway{
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace:   "gw-ns",
@@ -468,7 +468,7 @@ func TestGatewaysWithInvalidPolicyRef(t *testing.T) {
 
 func TestGatewayWrapperKey(t *testing.T) {
 	gw := GatewayWrapper{
-		Gateway: &gatewayapiv1alpha2.Gateway{
+		Gateway: &gatewayapiv1beta1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace:   "gw-ns",
 				Name:        "gw-1",
@@ -484,7 +484,7 @@ func TestGatewayWrapperKey(t *testing.T) {
 
 func TestGatewayWrapperPolicyRefs(t *testing.T) {
 	gw := GatewayWrapper{
-		Gateway: &gatewayapiv1alpha2.Gateway{
+		Gateway: &gatewayapiv1beta1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace:   "gw-ns",
 				Name:        "gw-1",
@@ -507,7 +507,7 @@ func TestGatewayWrapperPolicyRefs(t *testing.T) {
 
 func TestGatewayWrapperContainsPolicy(t *testing.T) {
 	gw := GatewayWrapper{
-		Gateway: &gatewayapiv1alpha2.Gateway{
+		Gateway: &gatewayapiv1beta1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace:   "gw-ns",
 				Name:        "gw-1",
@@ -528,7 +528,7 @@ func TestGatewayWrapperContainsPolicy(t *testing.T) {
 }
 
 func TestGatewayWrapperAddPolicy(t *testing.T) {
-	gateway := gatewayapiv1alpha2.Gateway{
+	gateway := gatewayapiv1beta1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:   "gw-ns",
 			Name:        "gw-1",
@@ -551,7 +551,7 @@ func TestGatewayWrapperAddPolicy(t *testing.T) {
 }
 
 func TestGatewayDeletePolicy(t *testing.T) {
-	gateway := gatewayapiv1alpha2.Gateway{
+	gateway := gatewayapiv1beta1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:   "gw-ns",
 			Name:        "gw-1",
@@ -574,15 +574,15 @@ func TestGatewayDeletePolicy(t *testing.T) {
 }
 
 func TestGatewayHostnames(t *testing.T) {
-	hostname := gatewayapiv1alpha2.Hostname("toystore.com")
-	gateway := gatewayapiv1alpha2.Gateway{
+	hostname := gatewayapiv1beta1.Hostname("toystore.com")
+	gateway := gatewayapiv1beta1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:   "gw-ns",
 			Name:        "gw-1",
 			Annotations: map[string]string{"kuadrant.io/ratelimitpolicies": `[{"Namespace":"app-ns","Name":"policy-1"},{"Namespace":"app-ns","Name":"policy-2"}]`},
 		},
-		Spec: gatewayapiv1alpha2.GatewaySpec{
-			Listeners: []gatewayapiv1alpha2.Listener{
+		Spec: gatewayapiv1beta1.GatewaySpec{
+			Listeners: []gatewayapiv1beta1.Listener{
 				{
 					Name:     "my-listener",
 					Hostname: &hostname,
@@ -605,7 +605,7 @@ func TestGatewayHostnames(t *testing.T) {
 
 func TestGatewayWrapperPolicyRefsAnnotation(t *testing.T) {
 	gw := GatewayWrapper{
-		Gateway: &gatewayapiv1alpha2.Gateway{
+		Gateway: &gatewayapiv1beta1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace:   "gw-ns",
 				Name:        "gw-1",
@@ -620,8 +620,8 @@ func TestGatewayWrapperPolicyRefsAnnotation(t *testing.T) {
 }
 
 func TestGetGatewayWorkloadSelector(t *testing.T) {
-	hostnameAddress := gatewayapiv1alpha2.AddressType("Hostname")
-	gateway := &gatewayapiv1alpha2.Gateway{
+	hostnameAddress := gatewayapiv1beta1.AddressType("Hostname")
+	gateway := &gatewayapiv1beta1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "my-ns",
 			Name:      "my-gw",
@@ -630,8 +630,8 @@ func TestGetGatewayWorkloadSelector(t *testing.T) {
 				"control-plane": "kuadrant",
 			},
 		},
-		Status: gatewayapiv1alpha2.GatewayStatus{
-			Addresses: []gatewayapiv1alpha2.GatewayAddress{
+		Status: gatewayapiv1beta1.GatewayStatus{
+			Addresses: []gatewayapiv1beta1.GatewayAddress{
 				{
 					Type:  &hostnameAddress,
 					Value: "my-gw-svc.my-ns.svc.cluster.local:80",
@@ -657,7 +657,7 @@ func TestGetGatewayWorkloadSelector(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
-	_ = gatewayapiv1alpha2.AddToScheme(scheme)
+	_ = gatewayapiv1beta1.AddToScheme(scheme)
 	k8sClient := fake.NewFakeClientWithScheme(scheme, gateway, service)
 
 	var selector map[string]string
@@ -670,7 +670,7 @@ func TestGetGatewayWorkloadSelector(t *testing.T) {
 }
 
 func TestGetGatewayWorkloadSelectorWithoutHostnameAddress(t *testing.T) {
-	gateway := &gatewayapiv1alpha2.Gateway{
+	gateway := &gatewayapiv1beta1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "my-ns",
 			Name:      "my-gw",
@@ -698,7 +698,7 @@ func TestGetGatewayWorkloadSelectorWithoutHostnameAddress(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
-	_ = gatewayapiv1alpha2.AddToScheme(scheme)
+	_ = gatewayapiv1beta1.AddToScheme(scheme)
 	k8sClient := fake.NewFakeClientWithScheme(scheme, gateway, service)
 
 	var selector map[string]string
@@ -719,8 +719,8 @@ func (p *FakePolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 	return gatewayapiv1alpha2.PolicyTargetReference{}
 }
 
-func (p *FakePolicy) GetWrappedNamespace() gatewayapiv1alpha2.Namespace {
-	return gatewayapiv1alpha2.Namespace("")
+func (p *FakePolicy) GetWrappedNamespace() gatewayapiv1beta1.Namespace {
+	return gatewayapiv1beta1.Namespace("")
 }
 
 func (p *FakePolicy) GetRulesHostnames() []string {
@@ -728,13 +728,13 @@ func (p *FakePolicy) GetRulesHostnames() []string {
 }
 
 func TestValidateHierarchicalRules(t *testing.T) {
-	hostname := gatewayapiv1alpha2.Hostname("*.example.com")
-	gateway := &gatewayapiv1alpha2.Gateway{
+	hostname := gatewayapiv1beta1.Hostname("*.example.com")
+	gateway := &gatewayapiv1beta1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "cool-namespace",
 			Name:      "cool-gateway",
 		},
-		Spec: gatewayapiv1alpha2.GatewaySpec{Listeners: []gatewayapiv1alpha2.Listener{
+		Spec: gatewayapiv1beta1.GatewaySpec{Listeners: []gatewayapiv1beta1.Listener{
 			{
 				Hostname: &hostname,
 			},
@@ -766,7 +766,7 @@ func TestValidateHierarchicalRules(t *testing.T) {
 func TestIsHTTPRouteAccepted(t *testing.T) {
 	testCases := []struct {
 		name     string
-		route    *gatewayapiv1alpha2.HTTPRoute
+		route    *gatewayapiv1beta1.HTTPRoute
 		expected bool
 	}{
 		{
@@ -776,15 +776,15 @@ func TestIsHTTPRouteAccepted(t *testing.T) {
 		},
 		{
 			"empty parent refs",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{},
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{},
 			},
 			false,
 		},
 		{
 			"single parent accepted",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
 					CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
 						ParentRefs: []gatewayapiv1beta1.ParentReference{
 							{
@@ -793,7 +793,7 @@ func TestIsHTTPRouteAccepted(t *testing.T) {
 						},
 					},
 				},
-				Status: gatewayapiv1alpha2.HTTPRouteStatus{
+				Status: gatewayapiv1beta1.HTTPRouteStatus{
 					RouteStatus: gatewayapiv1beta1.RouteStatus{
 						Parents: []gatewayapiv1beta1.RouteParentStatus{
 							{
@@ -815,8 +815,8 @@ func TestIsHTTPRouteAccepted(t *testing.T) {
 		},
 		{
 			"single parent not accepted",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
 					CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
 						ParentRefs: []gatewayapiv1beta1.ParentReference{
 							{
@@ -825,7 +825,7 @@ func TestIsHTTPRouteAccepted(t *testing.T) {
 						},
 					},
 				},
-				Status: gatewayapiv1alpha2.HTTPRouteStatus{
+				Status: gatewayapiv1beta1.HTTPRouteStatus{
 					RouteStatus: gatewayapiv1beta1.RouteStatus{
 						Parents: []gatewayapiv1beta1.RouteParentStatus{
 							{
@@ -847,8 +847,8 @@ func TestIsHTTPRouteAccepted(t *testing.T) {
 		},
 		{
 			"wrong parent is accepted",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
 					CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
 						ParentRefs: []gatewayapiv1beta1.ParentReference{
 							{
@@ -857,7 +857,7 @@ func TestIsHTTPRouteAccepted(t *testing.T) {
 						},
 					},
 				},
-				Status: gatewayapiv1alpha2.HTTPRouteStatus{
+				Status: gatewayapiv1beta1.HTTPRouteStatus{
 					RouteStatus: gatewayapiv1beta1.RouteStatus{
 						Parents: []gatewayapiv1beta1.RouteParentStatus{
 							{
@@ -879,8 +879,8 @@ func TestIsHTTPRouteAccepted(t *testing.T) {
 		},
 		{
 			"multiple parents only one is accepted",
-			&gatewayapiv1alpha2.HTTPRoute{
-				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
+			&gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
 					CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
 						ParentRefs: []gatewayapiv1beta1.ParentReference{
 							{
@@ -892,7 +892,7 @@ func TestIsHTTPRouteAccepted(t *testing.T) {
 						},
 					},
 				},
-				Status: gatewayapiv1alpha2.HTTPRouteStatus{
+				Status: gatewayapiv1beta1.HTTPRouteStatus{
 					RouteStatus: gatewayapiv1beta1.RouteStatus{
 						Parents: []gatewayapiv1beta1.RouteParentStatus{
 							{

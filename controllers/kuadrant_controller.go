@@ -40,7 +40,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -463,7 +463,7 @@ func createKuadrantAuthorizer(namespace string) *istiomeshv1alpha1.MeshConfig_Ex
 
 func (r *KuadrantReconciler) reconcileClusterGateways(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	// TODO: After the RFC defined, we might want to get the gw to label/annotate from Kuadrant.Spec or manual labeling/annotation
-	gwList := &gatewayapiv1alpha2.GatewayList{}
+	gwList := &gatewayapiv1beta1.GatewayList{}
 	if err := r.Client().List(ctx, gwList); err != nil {
 		return err
 	}
@@ -495,7 +495,7 @@ func (r *KuadrantReconciler) reconcileClusterGateways(ctx context.Context, kObj 
 }
 
 func (r *KuadrantReconciler) removeAnnotationFromGateways(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	gwList := &gatewayapiv1alpha2.GatewayList{}
+	gwList := &gatewayapiv1beta1.GatewayList{}
 	if err := r.Client().List(ctx, gwList); err != nil {
 		return err
 	}

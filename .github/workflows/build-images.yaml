@@ -131,9 +131,9 @@ jobs:
         run: |
           make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} \
             VERSION=${TAG_NAME/v/} IMAGE_TAG=${{ github.sha }} \
-            AUTHORINO_OPERATOR_VERSION=${github.event.inputs.authorinoOperatorBundleVersion} \
-            LIMITADOR_OPERATOR_VERSION=${github.event.inputs.limitadorOperatorBundleVersion} \
-            WASM_SHIM_VERSION=${github.event.inputs.wasmShimVersion}
+            AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorBundleVersion }} \
+            LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorBundleVersion }} \
+            WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }}
       - name: Build Image
         id: build-image
         uses: redhat-actions/buildah-build@v2

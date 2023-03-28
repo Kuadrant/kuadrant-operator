@@ -9,23 +9,29 @@ on:
       authorinoOperatorBundleVersion:
         description: Authorino Operator bundle version
         default: latest
+        type: string
       limitadorOperatorBundleVersion:
         description: Limitador Operator bundle version
         default: latest
+        type: string
       wasmShimVersion:
         description: WASM Shim version
         default: latest
+        type: string
   workflow_dispatch:
     inputs:
       authorinoOperatorBundleVersion:
         description: Authorino Operator bundle version
         default: latest
+        type: string
       limitadorOperatorBundleVersion:
         description: Limitador Operator bundle version
         default: latest
+        type: string
       wasmShimVersion:
         description: WASM Shim version
         default: latest
+        type: string
 
 env:
   IMG_TAGS: ${{ github.sha }}

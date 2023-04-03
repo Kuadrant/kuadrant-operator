@@ -35,7 +35,7 @@ is_semantic_version = $(shell [[ $(1) =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$$ ]] && e
 # BUNDLE_VERSION defines the version for the kuadrant-operator bundle.
 # If the version is not semantic, will use the default one
 bundle_is_semantic := $(call is_semantic_version,$(VERSION))
-ifdef bundle_is_semantic
+ifeq ($(bundle_is_semantic),true)
 BUNDLE_VERSION = $(VERSION)
 IMAGE_TAG = v$(VERSION)
 else

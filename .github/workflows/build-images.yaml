@@ -132,13 +132,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-user-static
-      - name: Run make bundle
+      - name: Run make bundle for workflow dispatch and workflow call
+        id: workflow-dispatch-call
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
         run: |
           make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} \
             VERSION=${{ env.VERSION }} IMAGE_TAG=${{ env.TAG_NAME }} \
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorBundleVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorBundleVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }}
+      - name: Run make bundle for regular events
+        id: workflow-regular-events
+        if: ${{ github.event_name != 'workflow_dispatch' && github.event_name != 'workflow_call' }}
+        run: |
+          make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} VERSION=${{ env.VERSION }}
       - name: Build Image
         id: build-image
         uses: redhat-actions/buildah-build@v2

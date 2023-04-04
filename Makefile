@@ -35,7 +35,10 @@ is_semantic_version = $(shell [[ $(1) =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$$ ]] && e
 # BUNDLE_VERSION defines the version for the kuadrant-operator bundle.
 # If the version is not semantic, will use the default one
 bundle_is_semantic := $(call is_semantic_version,$(VERSION))
-ifeq ($(bundle_is_semantic),true)
+ifeq (0.0.0,$(VERSION))
+BUNDLE_VERSION = $(VERSION)
+IMAGE_TAG = latest
+else ifeq ($(bundle_is_semantic),true)
 BUNDLE_VERSION = $(VERSION)
 IMAGE_TAG = v$(VERSION)
 else
@@ -59,12 +62,6 @@ ORG ?= kuadrant
 # For example, running 'make bundle-build bundle-push catalog-build catalog-push' will build and push both
 # quay.io/kuadrant/kuadrant-operator-bundle:$VERSION and quay.io/kuadrant/kuadrant-operator-catalog:$VERSION.
 IMAGE_TAG_BASE ?= $(REGISTRY)/$(ORG)/kuadrant-operator
-
-ifeq (0.0.0,$(VERSION))
-IMAGE_TAG ?= latest
-else
-IMAGE_TAG ?= v$(VERSION)
-endif
 
 # kubebuilder-tools still doesn't support darwin/arm64. This is a workaround (https://github.com/kubernetes-sigs/controller-runtime/issues/1657)
 ARCH_PARAM =

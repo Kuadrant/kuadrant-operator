@@ -146,7 +146,12 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2
       - name: Generate Catalog Content
-        run: make catalog
+        run: |
+          make catalog REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} \
+            VERSION=${{ env.VERSION }} IMAGE_TAG=${{ inputs.kuadrantOperatorTag }} \
+            AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorBundleVersion }} \
+            LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorBundleVersion }} \
+            WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }}
       - name: Install qemu dependency
         run: |
           sudo apt-get update

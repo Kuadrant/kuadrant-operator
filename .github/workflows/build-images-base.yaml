@@ -1,0 +1,175 @@
+name: Build Images
+
+on:
+  workflow_call:
+    inputs:
+      kuadrantOperatorTag:
+        description: Kuadrant Operator tag
+        default: latest
+        type: string
+      kuadrantOperatorVersion:
+        description: Kuadrant Operator version
+        default: 0.0.0
+        type: string
+      authorinoOperatorBundleVersion:
+        description: Authorino Operator bundle version
+        default: latest
+        type: string
+      limitadorOperatorBundleVersion:
+        description: Limitador Operator bundle version
+        default: latest
+        type: string
+      wasmShimVersion:
+        description: WASM Shim version
+        default: latest
+        type: string
+  workflow_dispatch:
+    inputs:
+      kuadrantOperatorTag:
+        description: Kuadrant Operator tag
+        default: latest
+        type: string
+      kuadrantOperatorVersion:
+        description: Kuadrant Operator version
+        default: 0.0.0
+        type: string
+      authorinoOperatorBundleVersion:
+        description: Authorino Operator bundle version
+        default: latest
+        type: string
+      limitadorOperatorBundleVersion:
+        description: Limitador Operator bundle version
+        default: latest
+        type: string
+      wasmShimVersion:
+        description: WASM Shim version
+        default: latest
+        type: string
+
+env:
+  IMG_TAGS: ${{ github.sha }} ${{ inputs.kuadrantOperatorTag }}
+  VERSION: ${{ inputs.kuadrantOperatorVersion }}
+  IMG_REGISTRY_HOST: quay.io
+  IMG_REGISTRY_ORG: kuadrant
+  MAIN_BRANCH_NAME: main
+  OPERATOR_NAME: kuadrant-operator
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: Install qemu dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
+      - name: Build Image
+        id: build-image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.OPERATOR_NAME }}
+          tags: ${{ env.IMG_TAGS }}
+          platforms: linux/amd64,linux/arm64
+          dockerfiles: |
+            ./Dockerfile
+      - name: Push Image
+        if: ${{ !env.ACT }}
+        id: push-to-quay
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-image.outputs.image }}
+          tags: ${{ steps.build-image.outputs.tags }}
+          registry: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}
+          username: ${{ secrets.IMG_REGISTRY_USERNAME }}
+          password: ${{ secrets.IMG_REGISTRY_TOKEN }}
+      - name: Print Image URL
+        run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
+
+  build-bundle:
+    needs: build
+    name: Build Bundle
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.18.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.18.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: Install qemu dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
+      - name: Run make bundle
+        id: make-bundle
+        run: |
+          make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} \
+            VERSION=${{ env.VERSION }} IMAGE_TAG=${{ inputs.kuadrantOperatorTag }} \
+            AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorBundleVersion }} \
+            LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorBundleVersion }} \
+            WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }}
+      - name: Build Image
+        id: build-image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.OPERATOR_NAME }}-bundle
+          tags: ${{ env.IMG_TAGS }}
+          platforms: linux/amd64,linux/arm64
+          dockerfiles: |
+            ./bundle.Dockerfile
+      - name: Push Image
+        if: ${{ !env.ACT }}
+        id: push-to-quay
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-image.outputs.image }}
+          tags: ${{ steps.build-image.outputs.tags }}
+          registry: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}
+          username: ${{ secrets.IMG_REGISTRY_USERNAME }}
+          password: ${{ secrets.IMG_REGISTRY_TOKEN }}
+      - name: Print Image URL
+        run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
+
+  build-catalog:
+    name: Build Catalog
+    needs: [build, build-bundle]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.18.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.18.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v2
+      - name: Generate Catalog Content
+        run: make catalog
+      - name: Install qemu dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
+      - name: Build Image
+        id: build-image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: ${{ env.OPERATOR_NAME }}-catalog
+          tags: ${{ env.IMG_TAGS }}
+          platforms: linux/amd64,linux/arm64
+          context: ./catalog
+          dockerfiles: |
+            ./catalog/kuadrant-operator-catalog.Dockerfile
+      - name: Push Image
+        if: ${{ !env.ACT }}
+        id: push-to-quay
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-image.outputs.image }}
+          tags: ${{ steps.build-image.outputs.tags }}
+          registry: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}
+          username: ${{ secrets.IMG_REGISTRY_USERNAME }}
+          password: ${{ secrets.IMG_REGISTRY_TOKEN }}
+      - name: Print Image URL
+        run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"

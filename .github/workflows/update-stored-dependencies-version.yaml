@@ -35,12 +35,12 @@ jobs:
           method: 'GET'
           url: https://quay.io/api/v1/repository/kuadrant/${{ matrix.repository }}?includeTags=true
       - name: Parse the list to get the last SHA
-        id: parse
+        id: extract-sha-var
         run: |
           echo "sha=$(echo '${{ steps.fetch.outputs.response }}' | jq -c -r '.tags | keys_unsorted | .[] | select(.|test("[0-9a-f]{5,40}"))' | jq -Rn '[inputs]' | jq -c -r '.[0]')" >> $GITHUB_OUTPUT
+          echo "var=$(echo ${{ matrix.repository }} | sed -E 's/-/_/g;s/[a-z]/\U&/g')_SHA" >> $GITHUB_OUTPUT
       - name: Update stored variable
         id: update
         run: |
           var=$(echo ${{ matrix.repository }} | sed -E 's/-/_/g;s/[a-z]/\U&/g')_SHA
-          sha=${{ steps.parse.outputs.sha }}
-          curl -L -X PATCH "https://api.github.com/repos/kuadrant/kuadrant-operator/actions/variables/${var}" -H "X-GitHub-Api-Version: 2022-11-28" -H 'Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' -H 'Accept: application/vnd.github+json' -d '{ "value": "${sha}" }'
+          curl -L -X PATCH "https://api.github.com/repos/kuadrant/kuadrant-operator/actions/variables/${{steps.extract-sha-var.outputs.var}}" -H "X-GitHub-Api-Version: 2022-11-28" -H 'Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' -H 'Accept: application/vnd.github+json' -d '{ "value": "${{ steps.extract-sha-var.outputs.sha }}" }'

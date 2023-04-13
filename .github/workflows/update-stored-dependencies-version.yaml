@@ -18,7 +18,6 @@ jobs:
   get-latest-sha:
     name: Get projects latest SHA
     runs-on: ubuntu-latest
-    shell: bash
     permissions:
       actions_variables: write
     strategy:

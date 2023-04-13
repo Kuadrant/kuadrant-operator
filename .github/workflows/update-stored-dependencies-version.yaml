@@ -1,8 +1,6 @@
 name: Update dependencies image versions
 
 on:
-  push:
-    branches: ['**']
   schedule:
     - cron: '0 0 * * *'
   repository_dispatch: {}

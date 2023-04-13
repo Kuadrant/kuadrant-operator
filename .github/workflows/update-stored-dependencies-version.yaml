@@ -19,7 +19,7 @@ jobs:
     name: Get projects latest SHA
     runs-on: ubuntu-latest
     permissions:
-      actions_variables: write
+      actions: write
     strategy:
       fail-fast: true
       matrix:

@@ -8,7 +8,7 @@ ISTIO_NAMESPACE = istio-system
 
 # istioctl tool
 ISTIOCTL=$(shell pwd)/bin/istioctl
-ISTIOVERSION = 1.13.2
+ISTIOVERSION = 1.17.2
 $(ISTIOCTL):
 	mkdir -p $(shell pwd)/bin
 	$(eval TMP := $(shell mktemp -d))

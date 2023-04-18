@@ -6,11 +6,8 @@ on:
   repository_dispatch: {}
 
 env:
-  IMG_TAGS: ${{ github.sha }}
-  IMG_REGISTRY_HOST: quay.io
-  IMG_REGISTRY_ORG: kuadrant
-  MAIN_BRANCH_NAME: main
-  OPERATOR_NAME: kuadrant-operator
+  IMG_REPO_URL: https://kuadrant/api/v1/repository/kuadrant/
+  GH_API_ORG_ENDPOINT: https://api.github.com/orgs/Kuadrant/actions/variables/
 
 jobs:
   get-latest-sha:
@@ -31,7 +28,7 @@ jobs:
         uses: fjogeleit/http-request-action@master
         with:
           method: 'GET'
-          url: https://quay.io/api/v1/repository/kuadrant/${{ matrix.repository }}?includeTags=true
+          url: ${{env.IMG_REPO_URL}}${{ matrix.repository }}?includeTags=true
       - name: Parse the list to get the last SHA
         id: extract-sha-var
         run: |
@@ -41,7 +38,7 @@ jobs:
         id: update
         run: |
           var=$(echo ${{ matrix.repository }} | sed -E 's/-/_/g;s/[a-z]/\U&/g')_SHA
-          http_code=$(curl --write-out "%{http_code}\n" -L -X PATCH "https://api.github.com/repos/Kuadrant/kuadrant-operator/actions/variables/${{steps.extract-sha-var.outputs.var}}" -H "X-GitHub-Api-Version: 2022-11-28" -H 'Authorization: Bearer ${{ secrets.UPDATE_ACTION_VARS_TOKEN }}' -H 'Accept: application/vnd.github+json' -d '{ "value": "${{ steps.extract-sha-var.outputs.sha }}" }')
+          http_code=$(curl --write-out "%{http_code}\n" -L -X PATCH "${{env.GH_API_ORG_ENDPOINT}}${{steps.extract-sha-var.outputs.var}}" -H "X-GitHub-Api-Version: 2022-11-28" -H 'Authorization: Bearer ${{ secrets.UPDATE_ACTION_VARS_TOKEN }}' -H 'Accept: application/vnd.github+json' -d '{ "value": "${{ steps.extract-sha-var.outputs.sha }}" }')
           if [[ $http_code != 204 ]]; then
             exit 1
           fi

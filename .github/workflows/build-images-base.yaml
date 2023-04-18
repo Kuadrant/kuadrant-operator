@@ -11,11 +11,11 @@ on:
         description: Kuadrant Operator version
         default: 0.0.0
         type: string
-      authorinoOperatorBundleVersion:
+      authorinoOperatorVersion:
         description: Authorino Operator bundle version
         default: latest
         type: string
-      limitadorOperatorBundleVersion:
+      limitadorOperatorVersion:
         description: Limitador Operator bundle version
         default: latest
         type: string
@@ -33,11 +33,11 @@ on:
         description: Kuadrant Operator version
         default: 0.0.0
         type: string
-      authorinoOperatorBundleVersion:
+      authorinoOperatorVersion:
         description: Authorino Operator bundle version
         default: latest
         type: string
-      limitadorOperatorBundleVersion:
+      limitadorOperatorVersion:
         description: Limitador Operator bundle version
         default: latest
         type: string
@@ -108,8 +108,8 @@ jobs:
         run: |
           make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} \
             VERSION=${{ env.VERSION }} IMAGE_TAG=${{ inputs.kuadrantOperatorTag }} \
-            AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorBundleVersion }} \
-            LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorBundleVersion }} \
+            AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
+            LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }}
       - name: Build Image
         id: build-image
@@ -149,8 +149,8 @@ jobs:
         run: |
           make catalog REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} \
             VERSION=${{ env.VERSION }} IMAGE_TAG=${{ inputs.kuadrantOperatorTag }} \
-            AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorBundleVersion }} \
-            LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorBundleVersion }} \
+            AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
+            LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }}
       - name: Install qemu dependency
         run: |

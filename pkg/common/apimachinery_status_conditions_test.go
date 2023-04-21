@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestCopyCondition(t *testing.T) {
+func TestCopyConditions(t *testing.T) {
 	now := metav1.Now()
 	testCases := []struct {
 		name               string
@@ -80,7 +80,7 @@ func TestCopyCondition(t *testing.T) {
 	}
 }
 
-func TestCopyCondition_OriginalConditionsNotModified(t *testing.T) {
+func TestCopyConditions_OriginalConditionsNotModified(t *testing.T) {
 	now := metav1.Now()
 	expectedConditions := []metav1.Condition{
 		metav1.Condition{

@@ -38,3 +38,47 @@ func TestNameSubsetOf(t *testing.T) {
 		})
 	}
 }
+
+func TestIsWildCarded(t *testing.T) {
+	testCases := []struct {
+		name     string
+		hostname Name
+		expected bool
+	}{
+		{"when wildcard at beginning then return true", "*.example.com", true},
+		{"when empty string then return false", "", false},
+		{"when no wildcard then return false", "example.com", false},
+		{"when wildcard in middle then return false", "subdomain.*.example.com", false},
+		{"when wildcard at end then return false", "subdomain.example.*", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			res := tc.hostname.IsWildCarded()
+			if res != tc.expected {
+				subT.Errorf("expected (%t) for hostname '%s', but got (%t)", tc.expected, tc.hostname, res)
+			}
+		})
+	}
+}
+
+func TestString(t *testing.T) {
+	testCases := []struct {
+		name     string
+		actual   Name
+		expected string
+	}{
+		{"empty name", "", ""},
+		{"non-empty name", "example.com", "example.com"},
+		{"wildcarded name", "*.com", "*.com"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			res := tc.actual.String()
+			if res != tc.expected {
+				subT.Errorf("expected (%s), got (%s)", tc.expected, res)
+			}
+		})
+	}
+}

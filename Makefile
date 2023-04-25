@@ -135,9 +135,9 @@ WASM_SHIM_VERSION ?= latest
 shim_version_is_semantic := $(call is_semantic_version,$(WASM_SHIM_VERSION))
 
 ifeq (true,$(shim_version_is_semantic))
-RELATED_IMAGE_WASMSHIM=quay.io/kuadrant/wasm-shim:v$(WASM_SHIM_VERSION)
+RELATED_IMAGE_WASMSHIM ?= oci://quay.io/kuadrant/wasm-shim:v$(WASM_SHIM_VERSION)
 else
-RELATED_IMAGE_WASMSHIM=quay.io/kuadrant/wasm-shim:$(WASM_SHIM_VERSION)
+RELATED_IMAGE_WASMSHIM ?= oci://quay.io/kuadrant/wasm-shim:$(WASM_SHIM_VERSION)
 endif
 
 all: build
@@ -389,7 +389,8 @@ endef
 bundle: export RELATED_IMAGE_WASMSHIM := $(RELATED_IMAGE_WASMSHIM)
 bundle: $(OPM) $(YQ) manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
-	# Set desired operator image
+	# Set desired operator image and related wasm shim image
+	V="$(RELATED_IMAGE_WASMSHIM)" $(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Update CSV
 	V="kuadrant-operator.v$(BUNDLE_VERSION)" $(YQ) eval '.metadata.name = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml

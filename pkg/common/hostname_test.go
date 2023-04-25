@@ -21,6 +21,12 @@ func TestNameSubsetOf(t *testing.T) {
 		{"hostname is not subset of wildcard subdomain", "foo.com", "*.foo.com", false},
 		{"global wildcard is not subset of wildcard hostname", "*", "*.com", false},
 		{"wildcard hostname is subset of global wildcard", "*.com", "*", true},
+		{"wildcards with different TLDs", "*.com", "*.org", false},
+		{"wildcards at different levels in domain hierarchy", "*.foo.com", "*.bar.foo.com", false},
+		{"wildcards with subdomains", "*.foo.com", "*.baz.foo.com", false},
+		{"empty hostnames", "", "", true},
+		{"one empty hostname", "", "foo.com", false},
+		{"multiple wildcards", "*.foo.*.com", "*.foo.*.com", true},
 	}
 
 	for _, tc := range testCases {

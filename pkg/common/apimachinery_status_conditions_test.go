@@ -16,7 +16,7 @@ func TestCopyConditions(t *testing.T) {
 		expectedConditions []metav1.Condition
 	}{
 		{
-			name: "default conditions",
+			name: "when multiple conditions then return copy",
 			expectedConditions: []metav1.Condition{
 				metav1.Condition{
 					Type:               "Installed",
@@ -53,7 +53,7 @@ func TestCopyConditions(t *testing.T) {
 			},
 		},
 		{
-			name: "one condition",
+			name: "when one condition then return copy",
 			expectedConditions: []metav1.Condition{
 				metav1.Condition{
 					Type:               "Validated",
@@ -66,7 +66,7 @@ func TestCopyConditions(t *testing.T) {
 			},
 		},
 		{
-			name:               "empty slice",
+			name:               "when empty conditions slice return empty slice",
 			expectedConditions: []metav1.Condition{},
 		},
 	}
@@ -127,13 +127,13 @@ func TestConditionMarshal(t *testing.T) {
 		expectedError      error
 	}{
 		{
-			name:               "empty conditions slice",
+			name:               "when empty conditions slice then return (null,nil)",
 			conditions:         []metav1.Condition{},
 			expectedJSONOutput: "null",
 			expectedError:      nil,
 		},
 		{
-			name: "single condition",
+			name: "when single condition then return JSON",
 			conditions: []metav1.Condition{
 				metav1.Condition{
 					Type:               "Installed",
@@ -148,7 +148,7 @@ func TestConditionMarshal(t *testing.T) {
 			expectedError:      nil,
 		},
 		{
-			name: "multiple conditions",
+			name: "when multiple conditions then return JSON",
 			conditions: []metav1.Condition{
 				metav1.Condition{
 					Type:               "Ready",
@@ -179,7 +179,7 @@ func TestConditionMarshal(t *testing.T) {
 			expectedError:      nil,
 		},
 		{
-			name: "empty ObservedGeneration (EQ 0) is omitted by json.Marshal",
+			name: "when empty ObservedGeneration field (EQ 0) then it is omitted in JSON",
 			conditions: []metav1.Condition{
 				metav1.Condition{
 					Type:               "Installed",

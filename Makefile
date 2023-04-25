@@ -386,7 +386,6 @@ rm -rf $$TMP_DIR ;\
 endef
 
 .PHONY: bundle
-bundle: export RELATED_IMAGE_WASMSHIM := $(RELATED_IMAGE_WASMSHIM)
 bundle: $(OPM) $(YQ) manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
 	# Set desired operator image and related wasm shim image

@@ -127,9 +127,9 @@ func TestConditionMarshal(t *testing.T) {
 		expectedError      error
 	}{
 		{
-			name:               "when empty conditions slice then return (null,nil)",
+			name:               "when empty conditions slice then return empty slice",
 			conditions:         []metav1.Condition{},
-			expectedJSONOutput: "null",
+			expectedJSONOutput: "[]",
 			expectedError:      nil,
 		},
 		{

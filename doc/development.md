@@ -109,12 +109,13 @@ bundle and a custom catalog including the custom bundle.
 
 The `make bundle` target accepts the following variables:
 
-| **Makefile Variable** | **Description** | **Default value** |
-| --- | --- | --- |
-| `IMG` | Kuadrant operator image URL | `quay.io/kuadrant/kuadrant-operator:latest` |
-| `VERSION` | Bundle version | `0.0.0` |
-| `LIMITADOR_OPERATOR_BUNDLE_IMG` | Limitador operator bundle URL | `quay.io/kuadrant/limitador-operator-bundle:latest` |
-| `AUTHORINO_OPERATOR_BUNDLE_IMG` | Authorino operator bundle URL | `quay.io/kuadrant/authorino-operator-bundle:latest` |
+| **Makefile Variable**           | **Description**               | **Default value**                                   | **Notes**                                                                                          |
+|---------------------------------|-------------------------------|-----------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| `IMG`                           | Kuadrant operator image URL   | `quay.io/kuadrant/kuadrant-operator:latest`         | `TAG` var could be use to build this URL, defaults to _latest_  if not provided                    |
+| `VERSION`                       | Bundle version                | `0.0.0`                                             |                                                                                                    |
+| `LIMITADOR_OPERATOR_BUNDLE_IMG` | Limitador operator bundle URL | `quay.io/kuadrant/limitador-operator-bundle:latest` | `LIMITADOR_OPERATOR_VERSION` var could be used to build this, defaults to _latest_ if not provided |
+| `AUTHORINO_OPERATOR_BUNDLE_IMG` | Authorino operator bundle URL | `quay.io/kuadrant/authorino-operator-bundle:latest` | `AUTHORINO_OPERATOR_VERSION` var could be used to build this, defaults to _latest_ if not provided |
+| `RELATED_IMAGE_WASMSHIM`        | WASM shim image URL           | `oci://quay.io/kuadrant/wasm-shim:latest`           | `WASM_SHIM_VERSION` var could be used to build this, defaults to _latest_ if not provided          |
 
 * Build the bundle manifests
 
@@ -123,7 +124,8 @@ The `make bundle` target accepts the following variables:
 make bundle [IMG=quay.io/kuadrant/kuadrant-operator:latest] \
             [VERSION=0.0.0] \
             [LIMITADOR_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/limitador-operator-bundle:latest] \
-            [AUTHORINO_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/authorino-operator-bundle:latest]
+            [AUTHORINO_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/authorino-operator-bundle:latest] \
+            [RELATED_IMAGE_WASMSHIM=oci://quay.io/kuadrant/wasm-shim:latest]
 ```
 
 * Build the bundle image from the manifests

@@ -10,10 +10,7 @@ import (
 // CopyConditions copies the set of conditions
 func CopyConditions(conditions []metav1.Condition) []metav1.Condition {
 	newConditions := make([]metav1.Condition, len(conditions))
-	for idx := range conditions {
-		// copy
-		newConditions[idx] = conditions[idx]
-	}
+	copy(newConditions, conditions)
 	return newConditions
 }
 

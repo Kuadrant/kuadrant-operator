@@ -3,9 +3,10 @@
 package common
 
 import (
+	"testing"
+
 	goCmp "github.com/google/go-cmp/cmp"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
-	"testing"
 )
 
 func TestFindAuthorinoStatusCondition(t *testing.T) {

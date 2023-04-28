@@ -68,6 +68,7 @@ func GetDefaultIfNil[T any](val *T, def T) T {
 	return *val
 }
 
+// GetEmptySliceIfNil returns a provided slice, or an empty slice of the same type if the input slice is nil.
 func GetEmptySliceIfNil[T any](val []T) []T {
 	if val == nil {
 		return make([]T, 0)

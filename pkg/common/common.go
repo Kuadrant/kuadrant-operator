@@ -60,6 +60,7 @@ func FetchEnv(key string, def string) string {
 	return val
 }
 
+// GetDefaultIfNil returns the value of a pointer argument, or a default value if the pointer is nil.
 func GetDefaultIfNil[T any](val *T, def T) T {
 	if reflect.ValueOf(val).IsNil() {
 		return def

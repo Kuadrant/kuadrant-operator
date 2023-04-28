@@ -3,6 +3,7 @@
 package common
 
 import (
+	"os"
 	"testing"
 )
 
@@ -66,4 +67,98 @@ func TestFind(t *testing.T) {
 	if r, found := Find(i, func(el int) bool { return el == 75 }); found || r != nil {
 		t.Error("should not have found anything in the slice")
 	}
+}
+
+func TestFetchEnv(t *testing.T) {
+	t.Run("when env var exists & has a value different from the default value then return the env var value", func(t *testing.T) {
+		key := "LOG_LEVEL"
+		defaultVal := "info"
+		val := "debug"
+		os.Setenv(key, val)
+		defer os.Unsetenv(key)
+
+		result := FetchEnv(key, defaultVal)
+
+		if result != val {
+			t.Errorf("Expected %v, but got %v", val, result)
+		}
+	})
+	t.Run("when env var exists & has the same value as the default value then return the env var value", func(t *testing.T) {
+		key := "LOG_LEVEL"
+		defaultVal := "info"
+		val := "info"
+		os.Setenv(key, val)
+		defer os.Unsetenv(key)
+
+		result := FetchEnv(key, defaultVal)
+
+		if result != val {
+			t.Errorf("Expected %v, but got %v", val, result)
+		}
+	})
+	t.Run("when env var exists but has an empty value then return the empty value", func(t *testing.T) {
+		key := "LOG_MODE"
+		defaultVal := "production"
+		val := ""
+		os.Setenv(key, val)
+		defer os.Unsetenv(key)
+
+		result := FetchEnv(key, defaultVal)
+
+		if result != val {
+			t.Errorf("Expected %v, but got %v", val, result)
+		}
+	})
+	t.Run("when env var does not exist & the default value is used then return the default value", func(t *testing.T) {
+		key := "LOG_MODE"
+		defaultVal := "production"
+
+		result := FetchEnv(key, defaultVal)
+
+		if result != defaultVal {
+			t.Errorf("Expected %v, but got %v", defaultVal, result)
+		}
+	})
+	t.Run("when key is empty or invalid then return the default value", func(t *testing.T) {
+		key := ""
+		defaultVal := "production"
+
+		result := FetchEnv(key, defaultVal)
+
+		if result != defaultVal {
+			t.Errorf("Expected %v, but got %v", defaultVal, result)
+		}
+	})
+	t.Run("when a runtime error occurs during execution then return the default value", func(t *testing.T) {
+		key := "LOG_LEVEL"
+		defaultVal := "info"
+
+		os.Unsetenv(key)
+
+		result := FetchEnv(key, defaultVal)
+
+		if result != defaultVal {
+			t.Errorf("Expected %v, but got %v", defaultVal, result)
+		}
+	})
+	t.Run("when default value is an empty string then return an empty string", func(t *testing.T) {
+		key := "LOG_MODE"
+		defaultVal := ""
+
+		result := FetchEnv(key, defaultVal)
+
+		if result != defaultVal {
+			t.Errorf("Expected %v, but got %v", defaultVal, result)
+		}
+	})
+	t.Run(" when a non-reserved env var name is used as the key then return the default value", func(t *testing.T) {
+		key := "MY_VAR"
+		defaultVal := ""
+
+		result := FetchEnv(key, defaultVal)
+
+		if result != defaultVal {
+			t.Errorf("Expected %v, but got %v", defaultVal, result)
+		}
+	})
 }

@@ -4,6 +4,7 @@ package common
 
 import (
 	"os"
+	"reflect"
 	"testing"
 )
 
@@ -192,6 +193,30 @@ func TestGetDefaultIfNil(t *testing.T) {
 
 		if result != val {
 			t.Errorf("Expected %v, but got %v", val, result)
+		}
+	})
+}
+
+func TestGetEmptySliceIfNil(t *testing.T) {
+	t.Run("when a non-nil slice is provided then return same slice", func(t *testing.T) {
+		value := []int{1, 2, 3}
+		expected := value
+
+		result := GetEmptySliceIfNil(value)
+
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("Expected %v, but got %v", expected, result)
+		}
+	})
+
+	t.Run("when a nil slice is provided then return an empty slice of the same type", func(t *testing.T) {
+		var value []int
+		expected := []int{}
+
+		result := GetEmptySliceIfNil(value)
+
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("Expected %v, but got %v", expected, result)
 		}
 	})
 }

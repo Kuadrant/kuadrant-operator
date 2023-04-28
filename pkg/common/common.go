@@ -79,11 +79,10 @@ func GetEmptySliceIfNil[T any](val []T) []T {
 // NamespacedNameToObjectKey converts <namespace/name> format string to k8s object key.
 // It's common for K8s to reference an object using this format. For e.g. gateways in VirtualService.
 func NamespacedNameToObjectKey(namespacedName, defaultNamespace string) client.ObjectKey {
-	split := strings.Split(namespacedName, "/")
-	if len(split) == 2 {
-		return client.ObjectKey{Name: split[1], Namespace: split[0]}
+	if i := strings.IndexRune(namespacedName, '/'); i >= 0 {
+		return client.ObjectKey{Namespace: namespacedName[:i], Name: namespacedName[i+1:]}
 	}
-	return client.ObjectKey{Namespace: defaultNamespace, Name: split[0]}
+	return client.ObjectKey{Namespace: defaultNamespace, Name: namespacedName}
 }
 
 func Contains(slice []string, target string) bool {

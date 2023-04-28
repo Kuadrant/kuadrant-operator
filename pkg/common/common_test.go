@@ -162,3 +162,36 @@ func TestFetchEnv(t *testing.T) {
 		}
 	})
 }
+
+func TestGetDefaultIfNil(t *testing.T) {
+	t.Run("when value is non-nil pointer type and default value is provided then return value", func(t *testing.T) {
+		val := "test"
+		def := "default"
+
+		result := GetDefaultIfNil(&val, def)
+
+		if result != val {
+			t.Errorf("Expected %v, but got %v", val, result)
+		}
+	})
+	t.Run("when value is nil pointer type and default value is provided then return default value", func(t *testing.T) {
+		var val *string
+		def := "default"
+
+		result := GetDefaultIfNil(val, def)
+
+		if result != def {
+			t.Errorf("Expected %v, but got %v", def, result)
+		}
+	})
+	t.Run("when value is not a pointer type and default value is provided then return default value", func(t *testing.T) {
+		var val int
+		def := 123
+
+		result := GetDefaultIfNil(&val, def)
+
+		if result != val {
+			t.Errorf("Expected %v, but got %v", val, result)
+		}
+	})
+}

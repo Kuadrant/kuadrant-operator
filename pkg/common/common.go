@@ -47,6 +47,10 @@ type KuadrantPolicy interface {
 	GetRulesHostnames() []string
 }
 
+// FetchEnv fetches the value of the environment variable with the specified key,
+// or returns the default value if the variable is not found or has an empty value.
+// If an error occurs during the lookup, the function returns the default value.
+// The key and default value parameters must be valid strings.
 func FetchEnv(key string, def string) string {
 	val, ok := os.LookupEnv(key)
 	if !ok {

@@ -6,7 +6,7 @@ on:
   repository_dispatch: {}
 
 env:
-  IMG_REPO_URL: https://kuadrant/api/v1/repository/kuadrant/
+  IMG_REPO_URL: https://quay.io/api/v1/repository/kuadrant/
   GH_API_ORG_ENDPOINT: https://api.github.com/orgs/Kuadrant/actions/variables/
 
 jobs:

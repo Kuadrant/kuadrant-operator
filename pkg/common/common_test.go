@@ -3,7 +3,11 @@
 package common
 
 import (
+	"os"
+	"reflect"
 	"testing"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestValidSubdomains(t *testing.T) {
@@ -65,5 +69,47 @@ func TestFind(t *testing.T) {
 
 	if r, found := Find(i, func(el int) bool { return el == 75 }); found || r != nil {
 		t.Error("should not have found anything in the slice")
+	}
+}
+
+func TestContains(t *testing.T) {
+	testCases := []struct {
+		name     string
+		slice    []string
+		target   string
+		expected bool
+	}{
+		{
+			name:     "when slice has one target item then return true",
+			slice:    []string{"test-gw"},
+			target:   "test-gw",
+			expected: true,
+		},
+		{
+			name:     "when slice is empty then return false",
+			slice:    []string{},
+			target:   "test-gw",
+			expected: false,
+		},
+		{
+			name:     "when target is in a slice then return true",
+			slice:    []string{"test-gw1", "test-gw2", "test-gw3"},
+			target:   "test-gw2",
+			expected: true,
+		},
+		{
+			name:     "when no target in a slice then return false",
+			slice:    []string{"test-gw1", "test-gw2", "test-gw3"},
+			target:   "test-gw4",
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if Contains(tc.slice, tc.target) != tc.expected {
+				t.Errorf("when slice=%v and target=%s, expected=%v, but got=%v", tc.slice, tc.target, tc.expected, !tc.expected)
+			}
+		})
 	}
 }

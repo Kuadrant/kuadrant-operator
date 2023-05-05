@@ -216,3 +216,60 @@ func TestReverseSlice(t *testing.T) {
 		}
 	})
 }
+
+func TestMergeMapStringString(t *testing.T) {
+	testCases := []struct {
+		name          string
+		existing      map[string]string
+		desired       map[string]string
+		expected      bool
+		expectedState map[string]string
+	}{
+		{
+			name:          "when existing and desired are empty then return false and not modify the existing map",
+			existing:      map[string]string{},
+			desired:       map[string]string{},
+			expected:      false,
+			expectedState: map[string]string{},
+		},
+		{
+			name:          "when existing is empty and desired has values then return true and set the values in the existing map",
+			existing:      map[string]string{},
+			desired:       map[string]string{"a": "1", "b": "2"},
+			expected:      true,
+			expectedState: map[string]string{"a": "1", "b": "2"},
+		},
+		{
+			name:          "when existing has some values and desired has different/new values then return true and modify the existing map",
+			existing:      map[string]string{"a": "1", "b": "2"},
+			desired:       map[string]string{"a": "3", "c": "4"},
+			expected:      true,
+			expectedState: map[string]string{"a": "3", "b": "2", "c": "4"},
+		},
+		{
+			name:          "when existing has all the values from desired then return false and not modify the existing map",
+			existing:      map[string]string{"a": "1", "b": "2"},
+			desired:       map[string]string{"a": "1", "b": "2"},
+			expected:      false,
+			expectedState: map[string]string{"a": "1", "b": "2"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			existingCopy := make(map[string]string, len(tc.existing))
+			for k, v := range tc.existing {
+				existingCopy[k] = v
+			}
+			modified := MergeMapStringString(&existingCopy, tc.desired)
+
+			if modified != tc.expected {
+				t.Errorf("MergeMapStringString(%v, %v) returned %v; expected %v", tc.existing, tc.desired, modified, tc.expected)
+			}
+
+			if !reflect.DeepEqual(existingCopy, tc.expectedState) {
+				t.Errorf("MergeMapStringString(%v, %v) modified the existing map to %v; expected %v", tc.existing, tc.desired, existingCopy, tc.expectedState)
+			}
+		})
+	}
+}

@@ -52,7 +52,7 @@ func (r *TargetRefReconciler) FetchValidGateway(ctx context.Context, key client.
 		return nil, err
 	}
 
-	if meta.IsStatusConditionFalse(gw.Status.Conditions, "Ready") {
+	if meta.IsStatusConditionFalse(gw.Status.Conditions, common.GatewayProgrammedConditionType) {
 		return nil, fmt.Errorf("FetchValidGateway: gateway (%v) not ready", key)
 	}
 

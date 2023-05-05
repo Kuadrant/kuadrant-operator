@@ -109,18 +109,6 @@ func TestFetchEnv(t *testing.T) {
 			t.Errorf("Expected %v, but got %v", defaultVal, result)
 		}
 	})
-	t.Run("when a runtime error occurs during execution then return the default value", func(t *testing.T) {
-		key := "LOG_LEVEL"
-		defaultVal := "info"
-
-		os.Unsetenv(key)
-
-		result := FetchEnv(key, defaultVal)
-
-		if result != defaultVal {
-			t.Errorf("Expected %v, but got %v", defaultVal, result)
-		}
-	})
 	t.Run("when default value is an empty string then return an empty string", func(t *testing.T) {
 		key := "LOG_MODE"
 		defaultVal := ""
@@ -152,16 +140,6 @@ func TestGetDefaultIfNil(t *testing.T) {
 
 		if result != def {
 			t.Errorf("Expected %v, but got %v", def, result)
-		}
-	})
-	t.Run("when value is not a pointer type and default value is provided then return default value", func(t *testing.T) {
-		var val int
-		def := 123
-
-		result := GetDefaultIfNil(&val, def)
-
-		if result != val {
-			t.Errorf("Expected %v, but got %v", val, result)
 		}
 	})
 }

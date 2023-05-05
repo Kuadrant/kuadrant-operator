@@ -109,6 +109,7 @@ func Map[T, U any](slice []T, f func(T) U) []U {
 	return arr
 }
 
+// SliceCopy copies the elements from the input slice into the output slice, and returns the output slice.
 func SliceCopy[T any](s1 []T) []T {
 	s2 := make([]T, len(s1))
 	copy(s2, s1)

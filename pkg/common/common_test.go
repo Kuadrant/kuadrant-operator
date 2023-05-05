@@ -191,3 +191,32 @@ func TestSliceCopy(t *testing.T) {
 		}
 	})
 }
+
+func TestReverseSlice(t *testing.T) {
+	input1 := []int{1, 2, 3}
+	expected1 := []int{3, 2, 1}
+	output1 := ReverseSlice(input1)
+	t.Run("when given slice of integers then return reversed copy of the input slice", func(t *testing.T) {
+		if !reflect.DeepEqual(output1, expected1) {
+			t.Errorf("ReverseSlice(%v) = %v; expected %v", input1, output1, expected1)
+		}
+	})
+
+	input2 := []string{"foo", "bar", "baz"}
+	expected2 := []string{"baz", "bar", "foo"}
+	output2 := ReverseSlice(input2)
+	t.Run("when given slice of strings then return reversed copy of the input slice", func(t *testing.T) {
+		if !reflect.DeepEqual(output2, expected2) {
+			t.Errorf("ReverseSlice(%v) = %v; expected %v", input2, output2, expected2)
+		}
+	})
+
+	input3 := []int{}
+	expected3 := []int{}
+	output3 := ReverseSlice(input3)
+	t.Run("when given an empty slice then return empty slice", func(t *testing.T) {
+		if !reflect.DeepEqual(output3, expected3) {
+			t.Errorf("ReverseSlice(%v) = %v; expected %v", input3, output3, expected3)
+		}
+	})
+}

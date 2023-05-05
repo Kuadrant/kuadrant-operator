@@ -116,6 +116,7 @@ func SliceCopy[T any](s1 []T) []T {
 	return s2
 }
 
+// ReverseSlice creates a reversed copy of the input slice.
 func ReverseSlice[T any](input []T) []T {
 	inputLen := len(input)
 	output := make([]T, inputLen)

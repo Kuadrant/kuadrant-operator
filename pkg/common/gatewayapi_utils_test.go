@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 func TestRouteHostnames(t *testing.T) {
@@ -65,8 +66,8 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 		rabbitsPath                                        = "/rabbits"
 		getHTTPMethod        gatewayapiv1alpha2.HTTPMethod = "GET"
 		postHTTPMethod       gatewayapiv1alpha2.HTTPMethod = "POST"
-		pathPrefix                                         = gatewayapiv1alpha2.PathMatchPathPrefix
-		pathExact                                          = gatewayapiv1alpha2.PathMatchExact
+		pathPrefix                                         = gatewayapiv1beta1.PathMatchPathPrefix
+		pathExact                                          = gatewayapiv1beta1.PathMatchExact
 		catsPrefixPatchMatch                               = gatewayapiv1alpha2.HTTPPathMatch{
 			Type:  &pathPrefix,
 			Value: &catsPath,

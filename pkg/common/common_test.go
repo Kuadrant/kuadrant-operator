@@ -109,3 +109,29 @@ func TestContains(t *testing.T) {
 		})
 	}
 }
+
+func TestMap(t *testing.T) {
+	slice1 := []int{1, 2, 3, 4}
+	f1 := func(x int) int { return x + 1 }
+	expected1 := []int{2, 3, 4, 5}
+	result1 := Map(slice1, f1)
+	if !reflect.DeepEqual(result1, expected1) {
+		t.Errorf("when mapping an int slice with an increment function expected %v but got %v", expected1, result1)
+	}
+
+	slice2 := []string{"hello", "world", "buz", "a"}
+	f2 := func(s string) int { return len(s) }
+	expected2 := []int{5, 5, 3, 1}
+	result2 := Map(slice2, f2)
+	if !reflect.DeepEqual(result2, expected2) {
+		t.Errorf("when mapping a string slice with string->int mapping expected %v but got %v", expected2, result2)
+	}
+
+	slice3 := []int{}
+	f3 := func(x int) float32 { return float32(x) / 2 }
+	expected3 := []float32{}
+	result3 := Map(slice3, f3)
+	if !reflect.DeepEqual(result3, expected3) {
+		t.Errorf("when mapping an empty int slice expected %v but got %v", expected3, result3)
+	}
+}

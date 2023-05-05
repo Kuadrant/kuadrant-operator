@@ -80,6 +80,8 @@ func NamespacedNameToObjectKey(namespacedName, defaultNamespace string) client.O
 	return client.ObjectKey{Namespace: defaultNamespace, Name: split[0]}
 }
 
+// Contains checks if the given target string is present in the slice of strings 'slice'.
+// It returns true if the target string is found in the slice, false otherwise.
 func Contains(slice []string, target string) bool {
 	for idx := range slice {
 		if slice[idx] == target {

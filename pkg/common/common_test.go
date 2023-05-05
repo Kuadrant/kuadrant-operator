@@ -145,3 +145,49 @@ func TestMap(t *testing.T) {
 		}
 	})
 }
+
+func TestSliceCopy(t *testing.T) {
+	input1 := []int{1, 2, 3}
+	expected1 := []int{1, 2, 3}
+	output1 := SliceCopy(input1)
+	t.Run("when given slice of integers then return a copy of the input slice", func(t *testing.T) {
+		if !reflect.DeepEqual(output1, expected1) {
+			t.Errorf("SliceCopy(%v) = %v; expected %v", input1, output1, expected1)
+		}
+	})
+
+	input2 := []string{"foo", "bar", "baz"}
+	expected2 := []string{"foo", "bar", "baz"}
+	output2 := SliceCopy(input2)
+	t.Run("when given slice of strings then return a copy of the input slice", func(t *testing.T) {
+		if !reflect.DeepEqual(output2, expected2) {
+			t.Errorf("SliceCopy(%v) = %v; expected %v", input2, output2, expected2)
+		}
+	})
+
+	type person struct {
+		name string
+		age  int
+	}
+	input3 := []person{{"Artem", 65}, {"DD", 18}, {"Charlie", 23}}
+	expected3 := []person{{"Artem", 65}, {"DD", 18}, {"Charlie", 23}}
+	output3 := SliceCopy(input3)
+	t.Run("when given slice of structs then return a copy of the input slice", func(t *testing.T) {
+		if !reflect.DeepEqual(output3, expected3) {
+			t.Errorf("SliceCopy(%v) = %v; expected %v", input3, output3, expected3)
+		}
+	})
+
+	input4 := []int{1, 2, 3}
+	expected4 := []int{1, 2, 3}
+	output4 := SliceCopy(input4)
+	t.Run("when modifying the original input slice then does not affect the returned copy", func(t *testing.T) {
+		if !reflect.DeepEqual(output4, expected4) {
+			t.Errorf("SliceCopy(%v) = %v; expected %v", input4, output4, expected4)
+		}
+		input4[0] = 4
+		if reflect.DeepEqual(output4, input4) {
+			t.Errorf("modifying the original input slice should not change the output slice")
+		}
+	})
+}

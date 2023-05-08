@@ -10,7 +10,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
+
+const GatewayProgrammedConditionType = "Programmed"
 
 type HTTPRouteRule struct {
 	Paths   []string
@@ -158,14 +161,14 @@ func routePathMatchToRulePath(pathMatch *gatewayapiv1alpha2.HTTPPathMatch) []str
 	}
 
 	// Only support for Exact and Prefix match
-	if pathMatch.Type != nil && *pathMatch.Type != gatewayapiv1alpha2.PathMatchPathPrefix &&
-		*pathMatch.Type != gatewayapiv1alpha2.PathMatchExact {
+	if pathMatch.Type != nil && *pathMatch.Type != gatewayapiv1beta1.PathMatchPathPrefix &&
+		*pathMatch.Type != gatewayapiv1beta1.PathMatchExact {
 		return nil
 	}
 
 	// Exact path match
 	suffix := ""
-	if pathMatch.Type == nil || *pathMatch.Type == gatewayapiv1alpha2.PathMatchPathPrefix {
+	if pathMatch.Type == nil || *pathMatch.Type == gatewayapiv1beta1.PathMatchPathPrefix {
 		// defaults to path prefix match type
 		suffix = "*"
 	}

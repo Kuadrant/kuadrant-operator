@@ -10,6 +10,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 func TestHTTPRouteRulesToRLPRules(t *testing.T) {
@@ -58,7 +59,7 @@ func TestGatewayActionsFromRateLimitPolicy(t *testing.T) {
 					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
 						{
 							Path: &gatewayapiv1alpha2.HTTPPathMatch{
-								Type:  &[]gatewayapiv1alpha2.PathMatchType{gatewayapiv1alpha2.PathMatchPathPrefix}[0],
+								Type:  &[]gatewayapiv1alpha2.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
 								Value: &[]string{"/toy"}[0],
 							},
 							Method: &[]gatewayapiv1alpha2.HTTPMethod{gatewayapiv1alpha2.HTTPMethod("GET")}[0],

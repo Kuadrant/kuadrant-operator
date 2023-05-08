@@ -37,7 +37,7 @@ import (
 // +kubebuilder:validation:MaxLength=253
 type ContextSelector string
 
-// +kubebuilder:validation:Enum:=eq;neq;incl;excl;matches
+// +kubebuilder:validation:Enum:=eq;neq
 type WhenConditionOperator string
 
 // +kubebuilder:validation:Enum:=second;minute;hour;day
@@ -64,11 +64,10 @@ type WhenCondition struct {
 	Selector ContextSelector `json:"selector"`
 
 	// The binary operator to be applied to the content fetched from the selector
-	// Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
+	// Possible values are: "eq" (equal to), "neq" (not equal to)
 	Operator WhenConditionOperator `json:"operator"`
 
 	// The value of reference for the comparison.
-	// If used with the "matches" operator, the value must compile to a valid Golang regex.
 	Value string `json:"value"`
 }
 

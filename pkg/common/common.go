@@ -47,6 +47,10 @@ type KuadrantPolicy interface {
 	GetRulesHostnames() []string
 }
 
+// FetchEnv fetches the value of the environment variable with the specified key,
+// or returns the default value if the variable is not found or has an empty value.
+// If an error occurs during the lookup, the function returns the default value.
+// The key and default value parameters must be valid strings.
 func FetchEnv(key string, def string) string {
 	val, ok := os.LookupEnv(key)
 	if !ok {
@@ -56,6 +60,7 @@ func FetchEnv(key string, def string) string {
 	return val
 }
 
+// GetDefaultIfNil returns the value of a pointer argument, or a default value if the pointer is nil.
 func GetDefaultIfNil[T any](val *T, def T) T {
 	if reflect.ValueOf(val).IsNil() {
 		return def
@@ -63,6 +68,7 @@ func GetDefaultIfNil[T any](val *T, def T) T {
 	return *val
 }
 
+// GetEmptySliceIfNil returns a provided slice, or an empty slice of the same type if the input slice is nil.
 func GetEmptySliceIfNil[T any](val []T) []T {
 	if val == nil {
 		return make([]T, 0)
@@ -73,11 +79,10 @@ func GetEmptySliceIfNil[T any](val []T) []T {
 // NamespacedNameToObjectKey converts <namespace/name> format string to k8s object key.
 // It's common for K8s to reference an object using this format. For e.g. gateways in VirtualService.
 func NamespacedNameToObjectKey(namespacedName, defaultNamespace string) client.ObjectKey {
-	split := strings.Split(namespacedName, "/")
-	if len(split) == 2 {
-		return client.ObjectKey{Name: split[1], Namespace: split[0]}
+	if i := strings.IndexRune(namespacedName, '/'); i >= 0 {
+		return client.ObjectKey{Namespace: namespacedName[:i], Name: namespacedName[i+1:]}
 	}
-	return client.ObjectKey{Namespace: defaultNamespace, Name: split[0]}
+	return client.ObjectKey{Namespace: defaultNamespace, Name: namespacedName}
 }
 
 func Contains(slice []string, target string) bool {

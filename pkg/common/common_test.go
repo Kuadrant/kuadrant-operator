@@ -3,7 +3,11 @@
 package common
 
 import (
+	"os"
+	"reflect"
 	"testing"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestValidSubdomains(t *testing.T) {
@@ -66,4 +70,138 @@ func TestFind(t *testing.T) {
 	if r, found := Find(i, func(el int) bool { return el == 75 }); found || r != nil {
 		t.Error("should not have found anything in the slice")
 	}
+}
+
+func TestFetchEnv(t *testing.T) {
+	t.Run("when env var exists & has a value different from the default value then return the env var value", func(t *testing.T) {
+		key := "LOG_LEVEL"
+		defaultVal := "info"
+		val := "debug"
+		os.Setenv(key, val)
+		defer os.Unsetenv(key)
+
+		result := FetchEnv(key, defaultVal)
+
+		if result != val {
+			t.Errorf("Expected %v, but got %v", val, result)
+		}
+	})
+	t.Run("when env var exists but has an empty value then return the empty value", func(t *testing.T) {
+		key := "LOG_MODE"
+		defaultVal := "production"
+		val := ""
+		os.Setenv(key, val)
+		defer os.Unsetenv(key)
+
+		result := FetchEnv(key, defaultVal)
+
+		if result != val {
+			t.Errorf("Expected %v, but got %v", val, result)
+		}
+	})
+	t.Run("when env var does not exist & the default value is used then return the default value", func(t *testing.T) {
+		key := "LOG_MODE"
+		defaultVal := "production"
+
+		result := FetchEnv(key, defaultVal)
+
+		if result != defaultVal {
+			t.Errorf("Expected %v, but got %v", defaultVal, result)
+		}
+	})
+	t.Run("when default value is an empty string then return an empty string", func(t *testing.T) {
+		key := "LOG_MODE"
+		defaultVal := ""
+
+		result := FetchEnv(key, defaultVal)
+
+		if result != defaultVal {
+			t.Errorf("Expected %v, but got %v", defaultVal, result)
+		}
+	})
+}
+
+func TestGetDefaultIfNil(t *testing.T) {
+	t.Run("when value is non-nil pointer type and default value is provided then return value", func(t *testing.T) {
+		val := "test"
+		def := "default"
+
+		result := GetDefaultIfNil(&val, def)
+
+		if result != val {
+			t.Errorf("Expected %v, but got %v", val, result)
+		}
+	})
+	t.Run("when value is nil pointer type and default value is provided then return default value", func(t *testing.T) {
+		var val *string
+		def := "default"
+
+		result := GetDefaultIfNil(val, def)
+
+		if result != def {
+			t.Errorf("Expected %v, but got %v", def, result)
+		}
+	})
+}
+
+func TestGetEmptySliceIfNil(t *testing.T) {
+	t.Run("when a non-nil slice is provided then return same slice", func(t *testing.T) {
+		value := []int{1, 2, 3}
+		expected := value
+
+		result := GetEmptySliceIfNil(value)
+
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("Expected %v, but got %v", expected, result)
+		}
+	})
+
+	t.Run("when a nil slice is provided then return an empty slice of the same type", func(t *testing.T) {
+		var value []int
+		expected := []int{}
+
+		result := GetEmptySliceIfNil(value)
+
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("Expected %v, but got %v", expected, result)
+		}
+	})
+}
+
+func TestNamespacedNameToObjectKey(t *testing.T) {
+	t.Run("when a namespaced name is provided then return an ObjectKey with corresponding namespace and name", func(t *testing.T) {
+		namespacedName := "test-namespace/test-name"
+		defaultNamespace := "default"
+
+		result := NamespacedNameToObjectKey(namespacedName, defaultNamespace)
+
+		expected := client.ObjectKey{Name: "test-name", Namespace: "test-namespace"}
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("Expected %v, but got %v", expected, result)
+		}
+	})
+
+	t.Run("when only a name is provided then return an ObjectKey with the default namespace and provided name", func(t *testing.T) {
+		namespacedName := "test-name"
+		defaultNamespace := "default"
+
+		result := NamespacedNameToObjectKey(namespacedName, defaultNamespace)
+
+		expected := client.ObjectKey{Name: "test-name", Namespace: "default"}
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("Expected %v, but got %v", expected, result)
+		}
+	})
+
+	t.Run("when an empty string is provided, then return an ObjectKey with default namespace and empty name", func(t *testing.T) {
+		namespacedName := ""
+		defaultNamespace := "default"
+
+		result := NamespacedNameToObjectKey(namespacedName, defaultNamespace)
+
+		expected := client.ObjectKey{Name: "", Namespace: "default"}
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("Expected %v, but got %v", expected, result)
+		}
+	})
 }

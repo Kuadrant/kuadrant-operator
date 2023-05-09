@@ -205,3 +205,80 @@ func TestNamespacedNameToObjectKey(t *testing.T) {
 		}
 	})
 }
+
+func TestUnMarshallLimitNamespace(t *testing.T) {
+	testCases := []struct {
+		name           string
+		namespace      string
+		expectedKey    client.ObjectKey
+		expectedDomain string
+		expectedError  bool
+	}{
+		{
+			name:           "when namespace is valid and contains both namespace and domain then return the correct values",
+			namespace:      "exampleNS/exampleGW#domain.com",
+			expectedKey:    client.ObjectKey{Name: "exampleGW", Namespace: "exampleNS"},
+			expectedDomain: "domain.com",
+			expectedError:  false,
+		},
+		{
+			name:           "when namespace is invalid (no '#domain') then return an error",
+			namespace:      "exampleNS/exampleGW",
+			expectedKey:    client.ObjectKey{},
+			expectedDomain: "",
+			expectedError:  true,
+		},
+		{
+			name:           "when namespace contains more than one '#' then return an error",
+			namespace:      "exampleNS/exampleGW#domain.com#extra",
+			expectedKey:    client.ObjectKey{},
+			expectedDomain: "",
+			expectedError:  true,
+		},
+		{
+			name:           "when namespace missing both namespace and gateway parts then return an error",
+			namespace:      "#domain.com",
+			expectedKey:    client.ObjectKey{},
+			expectedDomain: "",
+			expectedError:  true,
+		},
+		{
+			name:           "when namespace only has gateway name (missing 'namespace/') then return an error",
+			namespace:      "exampleGW#domain.com",
+			expectedKey:    client.ObjectKey{},
+			expectedDomain: "",
+			expectedError:  true,
+		},
+		{
+			name:           "when namespace only has namespace name (missing '/gwName') then return an error",
+			namespace:      "exampleNS#domain.com",
+			expectedKey:    client.ObjectKey{},
+			expectedDomain: "",
+			expectedError:  true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			key, domain, err := UnMarshallLimitNamespace(tc.namespace)
+
+			if tc.expectedError {
+				if err == nil {
+					t.Errorf("Expected an error, but got %v", err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+
+				if key != tc.expectedKey {
+					t.Errorf("Expected %v, but got %v", tc.expectedKey, key)
+				}
+
+				if domain != tc.expectedDomain {
+					t.Errorf("Expected %v, but got %v", tc.expectedDomain, domain)
+				}
+			}
+		})
+	}
+}

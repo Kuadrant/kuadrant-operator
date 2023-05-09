@@ -177,12 +177,12 @@ func MarshallNamespace(gwKey client.ObjectKey, domain string) string {
 }
 
 func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
-	keySplit := strings.Split(keyStr, string(NamespaceSeparator))
-	if len(keySplit) < 2 {
-		return client.ObjectKey{}, fmt.Errorf("failed to split on %s: '%s'", string(NamespaceSeparator), keyStr)
+	namespaceEndIndex := strings.IndexByte(keyStr, NamespaceSeparator)
+	if namespaceEndIndex < 0 || len(keyStr)-namespaceEndIndex-1 < 1 {
+		return client.ObjectKey{}, errors.New(fmt.Sprintf("failed to split on %s %s", string(NamespaceSeparator), keyStr))
 	}
 
-	return client.ObjectKey{Namespace: keySplit[0], Name: keySplit[1]}, nil
+	return client.ObjectKey{Namespace: keyStr[:namespaceEndIndex], Name: keyStr[namespaceEndIndex+1:]}, nil
 }
 
 // HostnamesToStrings converts []gatewayapi_v1alpha2.Hostname to []string

@@ -171,6 +171,10 @@ func MarshallNamespace(gwKey client.ObjectKey, domain string) string {
 	return fmt.Sprintf("%s/%s#%s", gwKey.Namespace, gwKey.Name, domain)
 }
 
+// UnMarshallObjectKey takes a string input and converts it into an ObjectKey struct that
+// can be used to access a specific Kubernetes object. The input string is expected to be in the format "namespace/name".
+// If the input string does not contain a NamespaceSeparator (typically '/')
+// or has too few components, this function returns an error.
 func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 	keySplit := strings.Split(keyStr, string(NamespaceSeparator))
 	if len(keySplit) < 2 {

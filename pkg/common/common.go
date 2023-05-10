@@ -17,7 +17,6 @@ limitations under the License.
 package common
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -158,7 +157,7 @@ func MergeMapStringString(existing *map[string]string, desired map[string]string
 func UnMarshallLimitNamespace(ns string) (client.ObjectKey, string, error) {
 	delimIndex := strings.IndexByte(ns, '#')
 	if delimIndex == -1 {
-		return client.ObjectKey{}, "", errors.New("failed to split on #")
+		return client.ObjectKey{}, "", fmt.Errorf("failed to split on #")
 	}
 
 	gwSplit := ns[:delimIndex]
@@ -180,7 +179,7 @@ func MarshallNamespace(gwKey client.ObjectKey, domain string) string {
 func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 	namespaceEndIndex := strings.IndexByte(keyStr, NamespaceSeparator)
 	if namespaceEndIndex < 0 || len(keyStr)-namespaceEndIndex-1 < 1 {
-		return client.ObjectKey{}, errors.New(fmt.Sprintf("failed to split on %s %s", string(NamespaceSeparator), keyStr))
+		return client.ObjectKey{}, fmt.Errorf(fmt.Sprintf("failed to split on %s %s", string(NamespaceSeparator), keyStr))
 	}
 
 	return client.ObjectKey{Namespace: keyStr[:namespaceEndIndex], Name: keyStr[namespaceEndIndex+1:]}, nil

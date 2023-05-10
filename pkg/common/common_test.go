@@ -3,6 +3,7 @@
 package common
 
 import (
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
@@ -335,6 +336,70 @@ func TestMarshallNamespace(t *testing.T) {
 			result := MarshallNamespace(tc.gwKey, tc.domain)
 			if !reflect.DeepEqual(result, tc.expected) {
 				t.Errorf("Expected %v, but got %v", tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestUnMarshallObjectKey(t *testing.T) {
+	testCases := []struct {
+		name           string
+		input          string
+		expectedOutput client.ObjectKey
+		expectedError  error
+	}{
+		{
+			name:           "when valid key string then return valid ObjectKey",
+			input:          "default/object1",
+			expectedOutput: client.ObjectKey{Namespace: "default", Name: "object1"},
+			expectedError:  nil,
+		},
+		{
+			name:           "when valid key string with non-default namespace then return valid ObjectKey",
+			input:          "kube-system/object2",
+			expectedOutput: client.ObjectKey{Namespace: "kube-system", Name: "object2"},
+			expectedError:  nil,
+		},
+		{
+			name:           "when invalid namespace and name then return empty ObjectKey and error",
+			input:          "invalid",
+			expectedOutput: client.ObjectKey{},
+			expectedError:  fmt.Errorf("failed to split on %s: 'invalid'", string(NamespaceSeparator)),
+		},
+		{
+			name:           "when '#' separator used instead of '/' then return an error",
+			input:          "default#object1",
+			expectedOutput: client.ObjectKey{},
+			expectedError:  fmt.Errorf("failed to split on %s: 'default#object1'", string(NamespaceSeparator)),
+		},
+		{
+			name:           "when input string is empty then return an error",
+			input:          "",
+			expectedOutput: client.ObjectKey{},
+			expectedError:  fmt.Errorf("failed to split on %s: ''", string(NamespaceSeparator)),
+		},
+		{
+			name:           "when empty namespace and name then return valid empty ObjectKey",
+			input:          "/",
+			expectedOutput: client.ObjectKey{},
+			expectedError:  nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			output, err := UnMarshallObjectKey(tc.input)
+
+			if err != nil && tc.expectedError == nil {
+				t.Errorf("unexpected error: got %v, want nil", err)
+			} else if err == nil && tc.expectedError != nil {
+				t.Errorf("expected error but got nil")
+			} else if err != nil && tc.expectedError != nil && err.Error() != tc.expectedError.Error() {
+				t.Errorf("unexpected error: got '%v', want '%v'", err, tc.expectedError)
+			}
+
+			if output != tc.expectedOutput {
+				t.Errorf("unexpected output: got %v, want %v", output, tc.expectedOutput)
 			}
 		})
 	}

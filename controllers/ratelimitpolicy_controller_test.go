@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -48,7 +49,7 @@ func testBuildBasicGateway(gwName, ns string) *gatewayapiv1alpha2.Gateway {
 }
 
 func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnamesStrSlice []string) *gatewayapiv1alpha2.HTTPRoute {
-	tmpMatchPathPrefix := gatewayapiv1alpha2.PathMatchPathPrefix
+	tmpMatchPathPrefix := gatewayapiv1beta1.PathMatchPathPrefix
 	tmpMatchValue := "/toy"
 	tmpMatchMethod := gatewayapiv1alpha2.HTTPMethod("GET")
 	gwNamespace := gatewayapiv1alpha2.Namespace(ns)

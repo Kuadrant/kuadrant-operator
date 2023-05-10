@@ -188,9 +188,9 @@ func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 
 // HostnamesToStrings converts []gatewayapi_v1alpha2.Hostname to []string
 func HostnamesToStrings(hostnames []gatewayapiv1alpha2.Hostname) []string {
-	hosts := []string{}
-	for idx := range hostnames {
-		hosts = append(hosts, string(hostnames[idx]))
+	hosts := make([]string, len(hostnames))
+	for i, h := range hostnames {
+		hosts[i] = string(h)
 	}
 	return hosts
 }

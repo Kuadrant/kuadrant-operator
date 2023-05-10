@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,9 +32,10 @@ func testBuildBasicGateway(gwName, ns string) *gatewayapiv1alpha2.Gateway {
 			APIVersion: gatewayapiv1alpha2.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      gwName,
-			Namespace: ns,
-			Labels:    map[string]string{"app": "rlptest"},
+			Name:        gwName,
+			Namespace:   ns,
+			Labels:      map[string]string{"app": "rlptest"},
+			Annotations: map[string]string{"networking.istio.io/service-type": string(corev1.ServiceTypeClusterIP)},
 		},
 		Spec: gatewayapiv1alpha2.GatewaySpec{
 			GatewayClassName: gatewayapiv1alpha2.ObjectName("istio"),

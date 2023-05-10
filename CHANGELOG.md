@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2023-05-09
+
+## What's Changed
+* [refactor] GW utils for all types of policies by @guicassolato in https://github.com/Kuadrant/kuadrant-operator/pull/134
+* wasm shim image env var name does not match deployment var name by @eguzki in https://github.com/Kuadrant/kuadrant-operator/pull/136
+* fix: `ComputeGatewayDiffs` when missing target HTTPRoute by @guicassolato in https://github.com/Kuadrant/kuadrant-operator/pull/139
+* Istio workload selector fetched from the gateway service spec by @guicassolato in https://github.com/Kuadrant/kuadrant-operator/pull/143
+* Improve policy constraint error message by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/145
+* Doc install operator by @eguzki in https://github.com/Kuadrant/kuadrant-operator/pull/148
+* Simplify RateLimitPolicy by @eguzki in https://github.com/Kuadrant/kuadrant-operator/pull/144
+* RLP conditions and variables order does not matter by @eguzki in https://github.com/Kuadrant/kuadrant-operator/pull/147
+* Update limitador api to 0.4.0 by @eguzki in https://github.com/Kuadrant/kuadrant-operator/pull/150
+* Bump Kind version from 0.11.1 to 0.17.0 by @art-tapin in https://github.com/Kuadrant/kuadrant-operator/pull/152
+* Makefile: fix installing kind tool by @eguzki in https://github.com/Kuadrant/kuadrant-operator/pull/154
+* Schedule build images with git sha reference by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/149
+* Fix GH Workflow inputs error by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/155
+* Inheriting all secrets from caller workflow by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/157
+* Fix bundle generation by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/158
+* Refactoring Github workflows by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/161
+* Update kind-cluster config by @art-tapin in https://github.com/Kuadrant/kuadrant-operator/pull/160
+* Fix update action variables for dependencies by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/162
+* Fix scheduled build by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/165
+* Storing all dependencies sha by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/170
+* Fix inclusion of related wasm shim image by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/171
+* [test] Improve test coverage and performance in apimachinery_status_conditions by @art-tapin in https://github.com/Kuadrant/kuadrant-operator/pull/172
+* [test] Add tests for authorino_conditions.go in common package by @art-tapin in https://github.com/Kuadrant/kuadrant-operator/pull/173
+* [test] Add tests for hostname.go in common package by @art-tapin in https://github.com/Kuadrant/kuadrant-operator/pull/174
+* Fixing image repo URL by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/177
+* Removing release workflow by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/178
+
+## New Contributors
+* @art-tapin made their first contribution in https://github.com/Kuadrant/kuadrant-operator/pull/152
+
 ## [0.2.0] - 2022-12-16
 
 ### What's Changed
@@ -77,5 +110,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 **Full Changelog**: https://github.com/Kuadrant/kuadrant-operator/commits/v0.1.0
 
-[Unreleased]: https://github.com/Kuadrant/kuadrant-operator/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Kuadrant/kuadrant-operator/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Kuadrant/kuadrant-operator/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Kuadrant/kuadrant-operator/compare/v0.1.0...v0.2.0

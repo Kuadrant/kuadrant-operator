@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 func TestValidSubdomains(t *testing.T) {
@@ -400,6 +401,49 @@ func TestUnMarshallObjectKey(t *testing.T) {
 
 			if output != tc.expectedOutput {
 				t.Errorf("unexpected output: got %v, want %v", output, tc.expectedOutput)
+			}
+		})
+	}
+}
+
+func TestHostnamesToStrings(t *testing.T) {
+	testCases := []struct {
+		name           string
+		inputHostnames []gatewayapiv1alpha2.Hostname
+		expectedOutput []string
+	}{
+		{
+			name:           "when input is empty then return empty output",
+			inputHostnames: []gatewayapiv1alpha2.Hostname{},
+			expectedOutput: []string{},
+		},
+		{
+			name:           "when input has a single precise hostname then return a single string",
+			inputHostnames: []gatewayapiv1alpha2.Hostname{"example.com"},
+			expectedOutput: []string{"example.com"},
+		},
+		{
+			name:           "when input has multiple precise hostnames then return the corresponding strings",
+			inputHostnames: []gatewayapiv1alpha2.Hostname{"example.com", "test.com", "localhost"},
+			expectedOutput: []string{"example.com", "test.com", "localhost"},
+		},
+		{
+			name:           "when input has a wildcard hostname then return the wildcard string",
+			inputHostnames: []gatewayapiv1alpha2.Hostname{"*.example.com"},
+			expectedOutput: []string{"*.example.com"},
+		},
+		{
+			name:           "when input has both precise and wildcard hostnames then return the corresponding strings",
+			inputHostnames: []gatewayapiv1alpha2.Hostname{"example.com", "*.test.com"},
+			expectedOutput: []string{"example.com", "*.test.com"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			output := HostnamesToStrings(tc.inputHostnames)
+			if !reflect.DeepEqual(tc.expectedOutput, output) {
+				t.Errorf("Unexpected output. Expected %v but got %v", tc.expectedOutput, output)
 			}
 		})
 	}

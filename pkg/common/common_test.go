@@ -591,6 +591,18 @@ func TestUnMarshallObjectKey(t *testing.T) {
 			expectedOutput: client.ObjectKey{},
 			expectedError:  nil,
 		},
+		{
+			name:           "when valid namespace and empty name (strKey ends with '/') then return valid ObjectKey with namespace only",
+			input:          "default/",
+			expectedOutput: client.ObjectKey{Namespace: "default", Name: ""},
+			expectedError:  nil,
+		},
+		{
+			name:           "when valid name and empty namespace (strKey starts with '/') then return valid ObjectKey with name only",
+			input:          "/object",
+			expectedOutput: client.ObjectKey{Namespace: "", Name: "object"},
+			expectedError:  nil,
+		},
 	}
 
 	for _, tc := range testCases {

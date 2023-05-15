@@ -178,8 +178,8 @@ func MarshallNamespace(gwKey client.ObjectKey, domain string) string {
 
 func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 	namespaceEndIndex := strings.IndexByte(keyStr, NamespaceSeparator)
-	if namespaceEndIndex < 0 || len(keyStr)-namespaceEndIndex-1 < 1 {
-		return client.ObjectKey{}, fmt.Errorf(fmt.Sprintf("failed to split on %s %s", string(NamespaceSeparator), keyStr))
+	if namespaceEndIndex < 0 {
+		return client.ObjectKey{}, fmt.Errorf(fmt.Sprintf("failed to split on %s: '%s'", string(NamespaceSeparator), keyStr))
 	}
 
 	return client.ObjectKey{Namespace: keyStr[:namespaceEndIndex], Name: keyStr[namespaceEndIndex+1:]}, nil

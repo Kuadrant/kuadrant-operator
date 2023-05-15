@@ -85,6 +85,8 @@ func NamespacedNameToObjectKey(namespacedName, defaultNamespace string) client.O
 	return client.ObjectKey{Namespace: defaultNamespace, Name: namespacedName}
 }
 
+// Contains checks if the given target string is present in the slice of strings 'slice'.
+// It returns true if the target string is found in the slice, false otherwise.
 func Contains(slice []string, target string) bool {
 	for idx := range slice {
 		if slice[idx] == target {
@@ -103,6 +105,7 @@ func Find[T any](slice []T, match func(T) bool) (*T, bool) {
 	return nil, false
 }
 
+// Map applies the given mapper function to each element in the input slice and returns a new slice with the results.
 func Map[T, U any](slice []T, f func(T) U) []U {
 	arr := make([]U, len(slice))
 	for i, e := range slice {
@@ -111,12 +114,14 @@ func Map[T, U any](slice []T, f func(T) U) []U {
 	return arr
 }
 
+// SliceCopy copies the elements from the input slice into the output slice, and returns the output slice.
 func SliceCopy[T any](s1 []T) []T {
 	s2 := make([]T, len(s1))
 	copy(s2, s1)
 	return s2
 }
 
+// ReverseSlice creates a reversed copy of the input slice.
 func ReverseSlice[T any](input []T) []T {
 	inputLen := len(input)
 	output := make([]T, inputLen)

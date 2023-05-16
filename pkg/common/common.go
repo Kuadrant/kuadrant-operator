@@ -155,7 +155,7 @@ func MergeMapStringString(existing *map[string]string, desired map[string]string
 
 // UnMarshallLimitNamespace parses limit namespace with format "gwNS/gwName#domain"
 func UnMarshallLimitNamespace(ns string) (client.ObjectKey, string, error) {
-	delimIndex := strings.IndexByte(ns, '#')
+	delimIndex := strings.IndexRune(ns, '#')
 	if delimIndex == -1 {
 		return client.ObjectKey{}, "", fmt.Errorf("failed to split on #")
 	}
@@ -177,7 +177,7 @@ func MarshallNamespace(gwKey client.ObjectKey, domain string) string {
 }
 
 func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
-	namespaceEndIndex := strings.IndexByte(keyStr, NamespaceSeparator)
+	namespaceEndIndex := strings.IndexRune(keyStr, NamespaceSeparator)
 	if namespaceEndIndex < 0 {
 		return client.ObjectKey{}, fmt.Errorf(fmt.Sprintf("failed to split on %s: '%s'", string(NamespaceSeparator), keyStr))
 	}

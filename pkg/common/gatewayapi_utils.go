@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -446,4 +448,38 @@ func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway 
 		Namespace: serviceNameParts[1],
 	}
 	return GetServiceWorkloadSelector(ctx, cli, serviceKey)
+}
+
+func IsHTTPRouteAccepted(httpRoute *gatewayapiv1alpha2.HTTPRoute) bool {
+	if httpRoute == nil {
+		return false
+	}
+
+	if len(httpRoute.Spec.CommonRouteSpec.ParentRefs) == 0 {
+		return false
+	}
+
+	// Check HTTProute parents (gateways) in the status object
+	// if any of the current parent gateways reports not "Admitted", return false
+	for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
+		routeParentStatus := func(pRef gatewayapiv1alpha2.ParentReference) *gatewayapiv1alpha2.RouteParentStatus {
+			for idx := range httpRoute.Status.RouteStatus.Parents {
+				if reflect.DeepEqual(pRef, httpRoute.Status.RouteStatus.Parents[idx].ParentRef) {
+					return &httpRoute.Status.RouteStatus.Parents[idx]
+				}
+			}
+
+			return nil
+		}(parentRef)
+
+		if routeParentStatus == nil {
+			return false
+		}
+
+		if meta.IsStatusConditionFalse(routeParentStatus.Conditions, "Accepted") {
+			return false
+		}
+	}
+
+	return true
 }

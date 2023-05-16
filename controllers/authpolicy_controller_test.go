@@ -21,6 +21,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 const (
@@ -38,7 +39,23 @@ var _ = Describe("AuthPolicy controller", func() {
 		gateway := testBuildBasicGateway(CustomGatewayName, testNamespace)
 		err := k8sClient.Create(context.Background(), gateway)
 		Expect(err).ToNot(HaveOccurred())
-		// TODO check gateway is Programmed
+
+		Eventually(func() bool {
+			existingGateway := &gatewayapiv1alpha2.Gateway{}
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), existingGateway)
+			if err != nil {
+				logf.Log.V(1).Info("[WARN] Creating gateway failed", "error", err)
+				return false
+			}
+
+			if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType) {
+				logf.Log.V(1).Info("[WARN] Gateway not ready")
+				return false
+			}
+
+			return true
+		}, 15*time.Second, 5*time.Second).Should(BeTrue())
+
 		ApplyKuadrantCR(testNamespace)
 	}
 
@@ -54,7 +71,22 @@ var _ = Describe("AuthPolicy controller", func() {
 			httpRoute := testBuildBasicHttpRoute(CustomHTTPRouteName, CustomGatewayName, testNamespace, []string{"*.toystore.com"})
 			err = k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
-			// TODO check route is ready
+
+			Eventually(func() bool {
+				existingRoute := &gatewayapiv1alpha2.HTTPRoute{}
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(httpRoute), existingRoute)
+				if err != nil {
+					logf.Log.V(1).Info("[WARN] Creating route failed", "error", err)
+					return false
+				}
+
+				if !common.IsHTTPRouteAccepted(existingRoute) {
+					logf.Log.V(1).Info("[WARN] route not accepted")
+					return false
+				}
+
+				return true
+			}, 15*time.Second, 5*time.Second).Should(BeTrue())
 
 			authpolicies := authPolicies(testNamespace)
 
@@ -91,24 +123,26 @@ var _ = Describe("AuthPolicy controller", func() {
 						return false
 					}
 
-					// TODO check it is Ready
 					return true
 				}, 2*time.Minute, 5*time.Second).Should(BeTrue())
 
 				// check Authorino's AuthConfig existence
-				ac := &authorinov1beta1.AuthConfig{}
-				acKey := types.NamespacedName{
-					Name:      authConfigName(client.ObjectKeyFromObject(authpolicies[idx])),
-					Namespace: testNamespace,
-				}
 				Eventually(func() bool {
+					acKey := types.NamespacedName{
+						Name:      authConfigName(client.ObjectKeyFromObject(authpolicies[idx])),
+						Namespace: testNamespace,
+					}
+					ac := &authorinov1beta1.AuthConfig{}
 					err := k8sClient.Get(context.Background(), acKey, ac)
 					logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", acKey.String(), "error", err)
 					if err != nil && !apierrors.IsAlreadyExists(err) {
 						return false
 					}
+					if !ac.Status.Ready() {
+						logf.Log.V(1).Info("authConfig not ready", "key", acKey.String())
+						return false
+					}
 
-					// TODO check it is Ready
 					return true
 				}, 2*time.Minute, 5*time.Second).Should(BeTrue())
 			}

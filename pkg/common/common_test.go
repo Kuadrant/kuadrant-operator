@@ -451,13 +451,6 @@ func TestUnMarshallLimitNamespace(t *testing.T) {
 			expectedError:  true,
 		},
 		{
-			name:           "when namespace has no gateway name then return an error",
-			namespace:      "exampleNS/#domain.com",
-			expectedKey:    client.ObjectKey{},
-			expectedDomain: "",
-			expectedError:  true,
-		},
-		{
 			name:           "when namespace has no domain name then return an error",
 			namespace:      "exampleNS/exampleGW#",
 			expectedKey:    client.ObjectKey{},

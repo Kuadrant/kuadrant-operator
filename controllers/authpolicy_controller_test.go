@@ -42,7 +42,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 		Eventually(func() bool {
 			existingGateway := &gatewayapiv1alpha2.Gateway{}
-			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), existingGateway)
+			err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
 			if err != nil {
 				logf.Log.V(1).Info("[WARN] Creating gateway failed", "error", err)
 				return false
@@ -74,7 +74,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 			Eventually(func() bool {
 				existingRoute := &gatewayapiv1alpha2.HTTPRoute{}
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(httpRoute), existingRoute)
+				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(httpRoute), existingRoute)
 				if err != nil {
 					logf.Log.V(1).Info("[WARN] Creating route failed", "error", err)
 					return false

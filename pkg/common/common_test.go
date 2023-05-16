@@ -567,7 +567,7 @@ func TestUnMarshallObjectKey(t *testing.T) {
 			expectedError:  fmt.Errorf("failed to split on %s: 'invalid'", string(NamespaceSeparator)),
 		},
 		{
-			name:           "when '#' separator used instead of '/' then return an error",
+			name:           "when '#' separator used instead of default separator ('/') then return an error",
 			input:          "default#object1",
 			expectedOutput: client.ObjectKey{},
 			expectedError:  fmt.Errorf("failed to split on %s: 'default#object1'", string(NamespaceSeparator)),

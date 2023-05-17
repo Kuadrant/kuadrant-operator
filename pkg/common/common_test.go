@@ -3,11 +3,13 @@
 package common
 
 import (
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 func TestValidSubdomains(t *testing.T) {
@@ -407,6 +409,245 @@ func TestMergeMapStringString(t *testing.T) {
 
 			if !reflect.DeepEqual(existingCopy, tc.expectedState) {
 				t.Errorf("MergeMapStringString(%v, %v) modified the existing map to %v; expected %v", tc.existing, tc.desired, existingCopy, tc.expectedState)
+			}
+		})
+	}
+}
+
+func TestUnMarshallLimitNamespace(t *testing.T) {
+	testCases := []struct {
+		name           string
+		namespace      string
+		expectedKey    client.ObjectKey
+		expectedDomain string
+		expectedError  bool
+	}{
+		{
+			name:           "when namespace is valid and contains both namespace and domain then return the correct values",
+			namespace:      "exampleNS/exampleGW#domain.com",
+			expectedKey:    client.ObjectKey{Name: "exampleGW", Namespace: "exampleNS"},
+			expectedDomain: "domain.com",
+			expectedError:  false,
+		},
+		{
+			name:           "when namespace is invalid (no '#domain') then return an error",
+			namespace:      "exampleNS/exampleGW",
+			expectedKey:    client.ObjectKey{},
+			expectedDomain: "",
+			expectedError:  true,
+		},
+		{
+			name:           "when namespace missing both namespace and gateway parts then return an error",
+			namespace:      "#domain.com",
+			expectedKey:    client.ObjectKey{},
+			expectedDomain: "",
+			expectedError:  true,
+		},
+		{
+			name:           "when namespace has no domain name then return correct values",
+			namespace:      "exampleNS/exampleGW#",
+			expectedKey:    client.ObjectKey{"exampleNS", "exampleGW"},
+			expectedDomain: "",
+			expectedError:  false,
+		},
+		{
+			name:           "when namespace only has gateway name (missing 'namespace/') and domain then return an error",
+			namespace:      "exampleGW#domain.com",
+			expectedKey:    client.ObjectKey{},
+			expectedDomain: "",
+			expectedError:  true,
+		},
+		{
+			name:           "when namespace only has namespace name (missing '/gwName') and domain then return an error",
+			namespace:      "exampleNS#domain.com",
+			expectedKey:    client.ObjectKey{},
+			expectedDomain: "",
+			expectedError:  true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			key, domain, err := UnMarshallLimitNamespace(tc.namespace)
+
+			if tc.expectedError {
+				if err == nil {
+					t.Errorf("Expected an error, but got %v", err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+
+				if key != tc.expectedKey {
+					t.Errorf("Expected %v, but got %v", tc.expectedKey, key)
+				}
+
+				if domain != tc.expectedDomain {
+					t.Errorf("Expected %v, but got %v", tc.expectedDomain, domain)
+				}
+			}
+		})
+	}
+}
+
+func TestMarshallNamespace(t *testing.T) {
+	testCases := []struct {
+		name     string
+		gwKey    client.ObjectKey
+		domain   string
+		expected string
+	}{
+		{
+			name: "when input is valid then return expected output",
+			gwKey: client.ObjectKey{
+				Namespace: "test",
+				Name:      "myGwName",
+			},
+			domain:   "example.com",
+			expected: "test/myGwName#example.com",
+		},
+		{
+			name:     "when input is empty then return expected output",
+			gwKey:    client.ObjectKey{},
+			domain:   "",
+			expected: "/#",
+		},
+		{
+			name: "when input contains special characters then return expected output",
+			gwKey: client.ObjectKey{
+				Namespace: "test",
+				Name:      "myG.w-N*ame",
+			},
+			domain:   "example%-com",
+			expected: "test/myG.w-N*ame#example%-com",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := MarshallNamespace(tc.gwKey, tc.domain)
+			if !reflect.DeepEqual(result, tc.expected) {
+				t.Errorf("Expected %v, but got %v", tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestUnMarshallObjectKey(t *testing.T) {
+	testCases := []struct {
+		name           string
+		input          string
+		expectedOutput client.ObjectKey
+		expectedError  error
+	}{
+		{
+			name:           "when valid key string then return valid ObjectKey",
+			input:          "default/object1",
+			expectedOutput: client.ObjectKey{Namespace: "default", Name: "object1"},
+			expectedError:  nil,
+		},
+		{
+			name:           "when valid key string with non-default namespace then return valid ObjectKey",
+			input:          "kube-system/object2",
+			expectedOutput: client.ObjectKey{Namespace: "kube-system", Name: "object2"},
+			expectedError:  nil,
+		},
+		{
+			name:           "when invalid namespace and name then return empty ObjectKey and error",
+			input:          "invalid",
+			expectedOutput: client.ObjectKey{},
+			expectedError:  fmt.Errorf("failed to split on %s: 'invalid'", string(NamespaceSeparator)),
+		},
+		{
+			name:           "when '#' separator used instead of default separator ('/') then return an error",
+			input:          "default#object1",
+			expectedOutput: client.ObjectKey{},
+			expectedError:  fmt.Errorf("failed to split on %s: 'default#object1'", string(NamespaceSeparator)),
+		},
+		{
+			name:           "when input string is empty then return an error",
+			input:          "",
+			expectedOutput: client.ObjectKey{},
+			expectedError:  fmt.Errorf("failed to split on %s: ''", string(NamespaceSeparator)),
+		},
+		{
+			name:           "when empty namespace and name then return valid empty ObjectKey",
+			input:          "/",
+			expectedOutput: client.ObjectKey{},
+			expectedError:  nil,
+		},
+		{
+			name:           "when valid namespace and empty name (strKey ends with '/') then return valid ObjectKey with namespace only",
+			input:          "default/",
+			expectedOutput: client.ObjectKey{Namespace: "default", Name: ""},
+			expectedError:  nil,
+		},
+		{
+			name:           "when valid name and empty namespace (strKey starts with '/') then return valid ObjectKey with name only",
+			input:          "/object",
+			expectedOutput: client.ObjectKey{Namespace: "", Name: "object"},
+			expectedError:  nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			output, err := UnMarshallObjectKey(tc.input)
+
+			if err != nil && tc.expectedError == nil {
+				t.Errorf("unexpected error: got %v, want nil", err)
+			} else if err == nil && tc.expectedError != nil {
+				t.Errorf("expected error but got nil")
+			} else if err != nil && tc.expectedError != nil && err.Error() != tc.expectedError.Error() {
+				t.Errorf("unexpected error: got '%v', want '%v'", err, tc.expectedError)
+			}
+
+			if output != tc.expectedOutput {
+				t.Errorf("unexpected output: got %v, want %v", output, tc.expectedOutput)
+			}
+		})
+	}
+}
+
+func TestHostnamesToStrings(t *testing.T) {
+	testCases := []struct {
+		name           string
+		inputHostnames []gatewayapiv1alpha2.Hostname
+		expectedOutput []string
+	}{
+		{
+			name:           "when input is empty then return empty output",
+			inputHostnames: []gatewayapiv1alpha2.Hostname{},
+			expectedOutput: []string{},
+		},
+		{
+			name:           "when input has a single precise hostname then return a single string",
+			inputHostnames: []gatewayapiv1alpha2.Hostname{"example.com"},
+			expectedOutput: []string{"example.com"},
+		},
+		{
+			name:           "when input has multiple precise hostnames then return the corresponding strings",
+			inputHostnames: []gatewayapiv1alpha2.Hostname{"example.com", "test.com", "localhost"},
+			expectedOutput: []string{"example.com", "test.com", "localhost"},
+		},
+		{
+			name:           "when input has a wildcard hostname then return the wildcard string",
+			inputHostnames: []gatewayapiv1alpha2.Hostname{"*.example.com"},
+			expectedOutput: []string{"*.example.com"},
+		},
+		{
+			name:           "when input has both precise and wildcard hostnames then return the corresponding strings",
+			inputHostnames: []gatewayapiv1alpha2.Hostname{"example.com", "*.test.com"},
+			expectedOutput: []string{"example.com", "*.test.com"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			output := HostnamesToStrings(tc.inputHostnames)
+			if !reflect.DeepEqual(tc.expectedOutput, output) {
+				t.Errorf("Unexpected output. Expected %v but got %v", tc.expectedOutput, output)
 			}
 		})
 	}

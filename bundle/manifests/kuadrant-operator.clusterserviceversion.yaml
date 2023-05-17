@@ -159,17 +159,6 @@ spec:
         - apiGroups:
           - ""
           resources:
-          - configmaps
-          verbs:
-          - create
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - ""
-          resources:
           - events
           verbs:
           - create
@@ -178,24 +167,6 @@ spec:
           - ""
           resources:
           - leases
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - ""
-          resources:
-          - pods
-          verbs:
-          - update
-        - apiGroups:
-          - apiextensions.k8s.io
-          resources:
-          - customresourcedefinitions
           verbs:
           - create
           - delete
@@ -304,19 +275,6 @@ spec:
           - kuadrant.io
           resources:
           - authpolicies
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - kuadrant.io
-          resources:
-          - authpolicies
-          - ratelimitpolicies
           verbs:
           - create
           - delete
@@ -441,21 +399,6 @@ spec:
           - operator.authorino.kuadrant.io
           resources:
           - authorinos
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - rbac.authorization.k8s.io
-          resources:
-          - clusterrolebindings
-          - clusterroles
-          - rolebindings
-          - roles
           verbs:
           - create
           - delete

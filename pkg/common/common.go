@@ -17,7 +17,6 @@ limitations under the License.
 package common
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -156,19 +155,20 @@ func MergeMapStringString(existing *map[string]string, desired map[string]string
 
 // UnMarshallLimitNamespace parses limit namespace with format "gwNS/gwName#domain"
 func UnMarshallLimitNamespace(ns string) (client.ObjectKey, string, error) {
-	split := strings.Split(ns, "#")
-	if len(split) != 2 {
-		return client.ObjectKey{}, "", errors.New("failed to split on #")
+	delimIndex := strings.IndexRune(ns, '#')
+	if delimIndex == -1 {
+		return client.ObjectKey{}, "", fmt.Errorf("failed to split on #")
 	}
 
-	domain := split[1]
+	gwSplit := ns[:delimIndex]
+	domain := ns[delimIndex+1:]
 
-	gwKey, err := UnMarshallObjectKey(split[0])
+	objKey, err := UnMarshallObjectKey(gwSplit)
 	if err != nil {
 		return client.ObjectKey{}, "", err
 	}
 
-	return gwKey, domain, nil
+	return objKey, domain, nil
 }
 
 // MarshallNamespace serializes limit namespace with format "gwNS/gwName#domain"
@@ -176,20 +176,24 @@ func MarshallNamespace(gwKey client.ObjectKey, domain string) string {
 	return fmt.Sprintf("%s/%s#%s", gwKey.Namespace, gwKey.Name, domain)
 }
 
+// UnMarshallObjectKey takes a string input and converts it into an ObjectKey struct that
+// can be used to access a specific Kubernetes object. The input string is expected to be in the format "namespace/name".
+// If the input string does not contain a NamespaceSeparator (typically '/')
+// or has too few components, this function returns an error.
 func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
-	keySplit := strings.Split(keyStr, string(NamespaceSeparator))
-	if len(keySplit) < 2 {
-		return client.ObjectKey{}, fmt.Errorf("failed to split on %s: '%s'", string(NamespaceSeparator), keyStr)
+	namespaceEndIndex := strings.IndexRune(keyStr, NamespaceSeparator)
+	if namespaceEndIndex < 0 {
+		return client.ObjectKey{}, fmt.Errorf(fmt.Sprintf("failed to split on %s: '%s'", string(NamespaceSeparator), keyStr))
 	}
 
-	return client.ObjectKey{Namespace: keySplit[0], Name: keySplit[1]}, nil
+	return client.ObjectKey{Namespace: keyStr[:namespaceEndIndex], Name: keyStr[namespaceEndIndex+1:]}, nil
 }
 
 // HostnamesToStrings converts []gatewayapi_v1alpha2.Hostname to []string
 func HostnamesToStrings(hostnames []gatewayapiv1alpha2.Hostname) []string {
-	hosts := []string{}
-	for idx := range hostnames {
-		hosts = append(hosts, string(hostnames[idx]))
+	hosts := make([]string, len(hostnames))
+	for i, h := range hostnames {
+		hosts[i] = string(h)
 	}
 	return hosts
 }

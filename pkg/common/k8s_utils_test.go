@@ -318,3 +318,62 @@ func TestTagObjectToDelete(t *testing.T) {
 		})
 	}
 }
+
+func TestIsObjectTaggedToDelete(t *testing.T) {
+	testCases := []struct {
+		name        string
+		input       client.Object
+		annotations map[string]string
+		expected    bool
+	}{
+		{
+			name: "when object has delete tag annotation set to true then return true",
+			input: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						DeleteTagAnnotation: "true",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "when object has delete tag annotation set to false then return false",
+			input: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						DeleteTagAnnotation: "false",
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "when object has no delete tag annotation then return false",
+			input: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "when object annotations are nil then return false",
+			input: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: nil,
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, c := range testCases {
+		t.Run(c.name, func(t *testing.T) {
+			actual := IsObjectTaggedToDelete(c.input)
+			if actual != c.expected {
+				t.Errorf("Expected %v, but got %v", c.expected, actual)
+			}
+		})
+	}
+}

@@ -35,6 +35,9 @@ const (
 	ReadyStatusConditionType = "Ready"
 )
 
+// ObjectInfo generates a string representation of the provided Kubernetes object, including its kind and name.
+// The object must implement the client.Object interface, which provides access to the object's metadata.
+// The generated string follows the format: "kind/name".
 func ObjectInfo(obj client.Object) string {
 	return fmt.Sprintf("%s/%s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
 }

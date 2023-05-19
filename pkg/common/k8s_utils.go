@@ -52,7 +52,7 @@ func ReadAnnotationsFromObject(obj client.Object) map[string]string {
 	return annotations
 }
 
-// TagObjectToDelete adds a special 'delete' tag to the object's annotations.
+// TagObjectToDelete adds a special DeleteTagAnnotation to the object's annotations.
 // If the object's annotations are nil, it first initializes the Annotations field with an empty map.
 func TagObjectToDelete(obj client.Object) {
 	// Add custom annotation
@@ -64,6 +64,9 @@ func TagObjectToDelete(obj client.Object) {
 	annotations[DeleteTagAnnotation] = "true"
 }
 
+// IsObjectTaggedToDelete checks if the given object is tagged for deletion.
+// It looks for the DeleteTagAnnotation in the object's annotations
+// and returns true if the annotation value is set to "true", false otherwise.
 func IsObjectTaggedToDelete(obj client.Object) bool {
 	annotations := obj.GetAnnotations()
 	if annotations == nil {

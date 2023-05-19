@@ -246,3 +246,75 @@ func TestReadAnnotationsFromObject(t *testing.T) {
 		})
 	}
 }
+
+func TestTagObjectToDelete(t *testing.T) {
+	testCases := []struct {
+		name         string
+		input        client.Object
+		expectedTags map[string]string
+	}{
+		{
+			name: "when object has no annotations (nil) then initialize them with empty map and add 'delete' tag",
+			input: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Annotations: nil,
+				},
+			},
+			expectedTags: map[string]string{
+				DeleteTagAnnotation: "true",
+			},
+		},
+		{
+			name: "when object has empty annotations (empty map) then add 'delete' tag",
+			input: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-service",
+					Annotations: map[string]string{},
+				},
+			},
+			expectedTags: map[string]string{
+				DeleteTagAnnotation: "true",
+			},
+		},
+		{
+			name: "when object already has annotations then add 'delete' tag",
+			input: &v1alpha1.Limitador{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-service",
+					Annotations: map[string]string{
+						"key1": "value1",
+						"key2": "value2",
+					},
+				},
+			},
+			expectedTags: map[string]string{
+				DeleteTagAnnotation: "true",
+				"key1":              "value1",
+				"key2":              "value2",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			TagObjectToDelete(tc.input)
+
+			annotations := tc.input.GetAnnotations()
+			if annotations == nil {
+				t.Fatal("Expected annotations to be not nil, but got nil")
+			}
+
+			for key, expectedValue := range tc.expectedTags {
+				value, ok := annotations[key]
+				if !ok {
+					t.Errorf("Expected annotation key '%s' to exist, but it doesn't", key)
+				}
+
+				if value != expectedValue {
+					t.Errorf("Expected annotation value for key '%s' to be '%s', but got '%s'", key, expectedValue, value)
+				}
+			}
+		})
+	}
+}

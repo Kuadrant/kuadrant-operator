@@ -52,6 +52,8 @@ func ReadAnnotationsFromObject(obj client.Object) map[string]string {
 	return annotations
 }
 
+// TagObjectToDelete adds a special 'delete' tag to the object's annotations.
+// If the object's annotations are nil, it first initializes the Annotations field with an empty map.
 func TagObjectToDelete(obj client.Object) {
 	// Add custom annotation
 	annotations := obj.GetAnnotations()

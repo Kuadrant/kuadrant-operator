@@ -5,6 +5,7 @@ package common
 
 import (
 	"context"
+	"github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -135,5 +136,72 @@ func TestGetServiceWorkloadSelector(t *testing.T) {
 	selector, err = GetServiceWorkloadSelector(context.TODO(), k8sClient, client.ObjectKey{Namespace: "svc-ns", Name: "unknown-svc"})
 	if err == nil || !apierrors.IsNotFound(err) || selector != nil {
 		t.Error("should have failed to get the service workload selector")
+	}
+}
+
+func TestObjectInfo(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    client.Object
+		expected string
+	}{
+		{
+			name: "when given Kuadrant Limitador object then return formatted string",
+			input: &v1alpha1.Limitador{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "limitador",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-limitador",
+				},
+			},
+			expected: "limitador/test-limitador",
+		},
+		{
+			name: "when given k8s Pod object then return formatted string",
+			input: &corev1.Pod{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "pod",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-pod",
+				},
+			},
+			expected: "pod/test-pod",
+		},
+		{
+			name: "when given k8s Service object with empty Kind then return formatted string",
+			input: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-service",
+				},
+			},
+			expected: "/test-service",
+		},
+		{
+			name: "when given k8s Namespace object with empty Name then return formatted string",
+			input: &corev1.Namespace{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "namespace",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "",
+				},
+			},
+			expected: "namespace/",
+		},
+		{
+			name:     "when given empty object then return formatted string (separator only)",
+			input:    &corev1.Pod{},
+			expected: "/",
+		},
+	}
+
+	for _, c := range testCases {
+		t.Run(c.name, func(t *testing.T) {
+			if actual := ObjectInfo(c.input); actual != c.expected {
+				t.Errorf("Expected %q, got %q", c.expected, actual)
+			}
+		})
 	}
 }

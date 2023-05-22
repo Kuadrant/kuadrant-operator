@@ -151,25 +151,25 @@ func TestObjectInfo(t *testing.T) {
 			name: "when given Kuadrant Limitador object then return formatted string",
 			input: &v1alpha1.Limitador{
 				TypeMeta: metav1.TypeMeta{
-					Kind: "limitador",
+					Kind: "Limitador",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-limitador",
 				},
 			},
-			expected: "limitador/test-limitador",
+			expected: "Limitador/test-limitador",
 		},
 		{
 			name: "when given k8s Pod object then return formatted string",
 			input: &corev1.Pod{
 				TypeMeta: metav1.TypeMeta{
-					Kind: "pod",
+					Kind: "Pod",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-pod",
 				},
 			},
-			expected: "pod/test-pod",
+			expected: "Pod/test-pod",
 		},
 		{
 			name: "when given k8s Service object with empty Kind then return formatted string",
@@ -184,13 +184,13 @@ func TestObjectInfo(t *testing.T) {
 			name: "when given k8s Namespace object with empty Name then return formatted string",
 			input: &corev1.Namespace{
 				TypeMeta: metav1.TypeMeta{
-					Kind: "namespace",
+					Kind: "Namespace",
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "",
 				},
 			},
-			expected: "namespace/",
+			expected: "Namespace/",
 		},
 		{
 			name:     "when given empty object then return formatted string (separator only)",

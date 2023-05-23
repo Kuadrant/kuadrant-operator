@@ -91,6 +91,10 @@ func StatusConditionsMarshalJSON(input []metav1.Condition) ([]byte, error) {
 	return json.Marshal(conds)
 }
 
+// IsOwnedBy checks if the provided owned object is owned by the given owner object.
+// Ownership is determined based on matching the owner reference's group, kind, and name.
+// The version of the owner reference is not checked in this implementation.
+// Returns true if the owned object is owned by the owner object, false otherwise.
 func IsOwnedBy(owned, owner client.Object) bool {
 	ownerGVK := owner.GetObjectKind().GroupVersionKind()
 

@@ -306,15 +306,8 @@ func TestTagObjectToDelete(t *testing.T) {
 				t.Fatal("Expected annotations to be not nil, but got nil")
 			}
 
-			for key, expectedValue := range tc.expectedTags {
-				value, ok := annotations[key]
-				if !ok {
-					t.Errorf("Expected annotation key '%s' to exist, but it doesn't", key)
-				}
-
-				if value != expectedValue {
-					t.Errorf("Expected annotation value for key '%s' to be '%s', but got '%s'", key, expectedValue, value)
-				}
+			if !reflect.DeepEqual(annotations, tc.expectedTags) {
+				t.Errorf("Expected annotations to be '%v', but got '%v'", tc.expectedTags, annotations)
 			}
 		})
 	}

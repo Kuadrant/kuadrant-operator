@@ -21,6 +21,11 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"istio.io/istio/pkg/config/mesh"
+	"istio.io/istio/pkg/util/protomarshal"
+
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
@@ -297,37 +302,43 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 
 func (r *KuadrantReconciler) registerExternalAuthorizerIstio(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	logger, _ := logr.FromContext(ctx)
-	iop := &iopv1alpha1.IstioOperator{}
+	var configsToUpdate []client.Object
 
+	iop := &iopv1alpha1.IstioOperator{}
 	iopKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
 	if err := r.Client().Get(ctx, iopKey, iop); err != nil {
 		logger.V(1).Info("failed to get istiooperator object", "key", iopKey, "err", err)
-		return err
+		if apimeta.IsNoMatchError(err) {
+			// if it's a no match error (CRD not installed), return the error
+			// otherwise continue with the fetching of the configmap
+			return err
+		}
+	} else {
+		// if there is no error, add the iop to the list of configs to update
+		configsToUpdate = append(configsToUpdate, iop)
 	}
 
-	if iop.Spec == nil {
-		iop.Spec = &istioapiv1alpha1.IstioOperatorSpec{}
-	}
-
-	meshConfig, err := meshConfigFromStruct(iop.Spec.MeshConfig)
-	if err != nil {
+	istioConfigMap := &corev1.ConfigMap{}
+	if err := r.Client().Get(ctx, client.ObjectKey{Name: "istio", Namespace: controlPlaneProviderNamespace()}, istioConfigMap); err != nil {
+		logger.V(1).Info("failed to get istio configMap", "key", iopKey, "err", err)
 		return err
 	}
-	extensionProviders := extensionProvidersFromMeshConfig(meshConfig)
+	configsToUpdate = append(configsToUpdate, istioConfigMap)
 
-	if hasKuadrantAuthorizer(extensionProviders) {
-		return nil
-	}
-
-	meshConfig.ExtensionProviders = append(meshConfig.ExtensionProviders, createKuadrantAuthorizer(kObj.Namespace))
-	meshConfigStruct, err := meshConfigToStruct(meshConfig)
-	if err != nil {
-		return err
-	}
-	iop.Spec.MeshConfig = meshConfigStruct
-	logger.Info("adding external authorizer to meshconfig")
-	if err := r.Client().Update(ctx, iop); err != nil {
-		return err
+	for _, config := range configsToUpdate {
+		meshConfig, err := getMeshConfig(config)
+		if err != nil {
+			logger.V(1).Info("failed to get mesh config", "err", err)
+			return err
+		}
+		if needsUpdate, err := updateMeshConfig(config, meshConfig, kObj.Namespace); err != nil {
+			return err
+		} else if needsUpdate {
+			logger.Info("adding external authorizer to meshconfig")
+			if err := r.Client().Update(ctx, config); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
@@ -606,6 +617,25 @@ func meshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshCo
 	return meshConfig, nil
 }
 
+// meshConfigFromString returns the Istio MeshConfig from a ConfigMap
+func meshConfigFromString(config string) (*istiomeshv1alpha1.MeshConfig, error) {
+	meshConfig := mesh.DefaultMeshConfig()
+	err := protomarshal.ApplyYAML(config, meshConfig)
+	if err != nil {
+		return nil, err
+	}
+	return meshConfig, nil
+}
+
+// meshConfigToString returns the Istio MeshConfig as a string
+func meshConfigToString(config *istiomeshv1alpha1.MeshConfig) (string, error) {
+	configString, err := protomarshal.ToYAML(config)
+	if err != nil {
+		return "", err
+	}
+	return configString, nil
+}
+
 func meshConfigToStruct(config *istiomeshv1alpha1.MeshConfig) (*structpb.Struct, error) {
 	configJSON, err := protojson.Marshal(config)
 	if err != nil {
@@ -625,6 +655,48 @@ func extensionProvidersFromMeshConfig(config *istiomeshv1alpha1.MeshConfig) (ext
 		extensionProviders = make([]*istiomeshv1alpha1.MeshConfig_ExtensionProvider, 0)
 	}
 	return
+}
+
+func updateMeshConfig(configObject client.Object, meshConfig *istiomeshv1alpha1.MeshConfig, kObjNamespace string) (bool, error) {
+	extProviders := extensionProvidersFromMeshConfig(meshConfig)
+	if !hasKuadrantAuthorizer(extProviders) {
+		meshConfig.ExtensionProviders = append(meshConfig.ExtensionProviders, createKuadrantAuthorizer(kObjNamespace))
+
+		switch config := configObject.(type) {
+		case *iopv1alpha1.IstioOperator:
+			meshConfigStruct, err := meshConfigToStruct(meshConfig)
+			if err != nil {
+				return false, err
+			}
+			config.Spec.MeshConfig = meshConfigStruct
+			return true, nil
+		case *corev1.ConfigMap:
+			var err error
+			config.Data["mesh"], err = meshConfigToString(meshConfig)
+			if err != nil {
+				return false, err
+			}
+			return true, nil
+		default:
+			return false, fmt.Errorf("unsupported configObject type: %T", config)
+		}
+	}
+
+	return false, nil
+}
+
+func getMeshConfig(configObject client.Object) (*istiomeshv1alpha1.MeshConfig, error) {
+	switch config := configObject.(type) {
+	case *iopv1alpha1.IstioOperator:
+		if config.Spec == nil {
+			config.Spec = &istioapiv1alpha1.IstioOperatorSpec{}
+		}
+		return meshConfigFromStruct(config.Spec.MeshConfig)
+	case *corev1.ConfigMap:
+		return meshConfigFromString(config.Data["mesh"])
+	default:
+		return nil, fmt.Errorf("unsupported configObject type: %T", config)
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.

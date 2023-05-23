@@ -19,7 +19,6 @@ package reconcilers
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -69,26 +68,8 @@ func (r *TargetRefReconciler) FetchValidHTTPRoute(ctx context.Context, key clien
 		return nil, err
 	}
 
-	// Check HTTProute parents (gateways) in the status object
-	// if any of the current parent gateways reports not "Admitted", return error
-	for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
-		routeParentStatus := func(pRef gatewayapiv1alpha2.ParentReference) *gatewayapiv1alpha2.RouteParentStatus {
-			for idx := range httpRoute.Status.RouteStatus.Parents {
-				if reflect.DeepEqual(pRef, httpRoute.Status.RouteStatus.Parents[idx].ParentRef) {
-					return &httpRoute.Status.RouteStatus.Parents[idx]
-				}
-			}
-
-			return nil
-		}(parentRef)
-
-		if routeParentStatus == nil {
-			continue
-		}
-
-		if meta.IsStatusConditionFalse(routeParentStatus.Conditions, "Accepted") {
-			return nil, fmt.Errorf("FetchValidHTTPRoute: httproute (%v) not accepted", key)
-		}
+	if !common.IsHTTPRouteAccepted(httpRoute) {
+		return nil, fmt.Errorf("FetchValidHTTPRoute: httproute (%v) not accepted", key)
 	}
 
 	return httpRoute, nil

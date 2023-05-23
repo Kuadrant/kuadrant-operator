@@ -762,3 +762,174 @@ func TestValidateHierarchicalRules(t *testing.T) {
 	}
 
 }
+
+func TestIsHTTPRouteAccepted(t *testing.T) {
+	testCases := []struct {
+		name     string
+		route    *gatewayapiv1alpha2.HTTPRoute
+		expected bool
+	}{
+		{
+			"nil",
+			nil,
+			false,
+		},
+		{
+			"empty parent refs",
+			&gatewayapiv1alpha2.HTTPRoute{
+				Spec: gatewayapiv1alpha2.HTTPRouteSpec{},
+			},
+			false,
+		},
+		{
+			"single parent accepted",
+			&gatewayapiv1alpha2.HTTPRoute{
+				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
+					CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
+						ParentRefs: []gatewayapiv1beta1.ParentReference{
+							{
+								Name: "a",
+							},
+						},
+					},
+				},
+				Status: gatewayapiv1alpha2.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1beta1.RouteStatus{
+						Parents: []gatewayapiv1beta1.RouteParentStatus{
+							{
+								ParentRef: gatewayapiv1beta1.ParentReference{
+									Name: "a",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			true,
+		},
+		{
+			"single parent not accepted",
+			&gatewayapiv1alpha2.HTTPRoute{
+				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
+					CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
+						ParentRefs: []gatewayapiv1beta1.ParentReference{
+							{
+								Name: "a",
+							},
+						},
+					},
+				},
+				Status: gatewayapiv1alpha2.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1beta1.RouteStatus{
+						Parents: []gatewayapiv1beta1.RouteParentStatus{
+							{
+								ParentRef: gatewayapiv1beta1.ParentReference{
+									Name: "a",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionFalse,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			false,
+		},
+		{
+			"wrong parent is accepted",
+			&gatewayapiv1alpha2.HTTPRoute{
+				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
+					CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
+						ParentRefs: []gatewayapiv1beta1.ParentReference{
+							{
+								Name: "a",
+							},
+						},
+					},
+				},
+				Status: gatewayapiv1alpha2.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1beta1.RouteStatus{
+						Parents: []gatewayapiv1beta1.RouteParentStatus{
+							{
+								ParentRef: gatewayapiv1beta1.ParentReference{
+									Name: "b",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			false,
+		},
+		{
+			"multiple parents only one is accepted",
+			&gatewayapiv1alpha2.HTTPRoute{
+				Spec: gatewayapiv1alpha2.HTTPRouteSpec{
+					CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
+						ParentRefs: []gatewayapiv1beta1.ParentReference{
+							{
+								Name: "a",
+							},
+							{
+								Name: "b",
+							},
+						},
+					},
+				},
+				Status: gatewayapiv1alpha2.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1beta1.RouteStatus{
+						Parents: []gatewayapiv1beta1.RouteParentStatus{
+							{
+								ParentRef: gatewayapiv1beta1.ParentReference{
+									Name: "a",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+							{
+								ParentRef: gatewayapiv1beta1.ParentReference{
+									Name: "b",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionFalse,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			false,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			res := IsHTTPRouteAccepted(tc.route)
+			if res != tc.expected {
+				subT.Errorf("result (%t) does not match expected (%t)", res, tc.expected)
+			}
+		})
+	}
+}

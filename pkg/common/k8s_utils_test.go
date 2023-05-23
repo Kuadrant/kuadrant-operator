@@ -7,6 +7,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/kuadrant/limitador-operator/api/v1alpha1"
 
@@ -355,6 +356,89 @@ func TestIsObjectTaggedToDelete(t *testing.T) {
 			actual := IsObjectTaggedToDelete(c.input)
 			if actual != c.expected {
 				t.Errorf("Expected %v, but got %v", c.expected, actual)
+			}
+		})
+	}
+}
+
+func TestStatusConditionsMarshalJSON(t *testing.T) {
+	now := time.Now()
+	nowFmt := now.UTC().Format("2006-01-02T15:04:05Z")
+
+	testCases := []struct {
+		name     string
+		input    []metav1.Condition
+		expected []byte
+		err      error
+	}{
+		{
+			name:     "when input is empty then return an empty JSON (empty byte array)",
+			input:    []metav1.Condition{},
+			expected: []byte("[]"),
+			err:      nil,
+		},
+		{
+			name: "when input contains multiple conditions then return the sorted JSON array",
+			input: []metav1.Condition{
+				{
+					Type:               "ConditionB",
+					Status:             metav1.ConditionFalse,
+					LastTransitionTime: metav1.Time{Time: now},
+					Reason:             "ReasonB",
+					Message:            "MessageB",
+				},
+				{
+					Type:               "ConditionC",
+					Status:             metav1.ConditionTrue,
+					LastTransitionTime: metav1.Time{Time: now},
+					Reason:             "ReasonC",
+					Message:            "MessageC",
+				},
+				{
+					Type:               "ConditionA",
+					Status:             metav1.ConditionTrue,
+					LastTransitionTime: metav1.Time{Time: now},
+					Reason:             "ReasonA",
+					Message:            "MessageA",
+				},
+			},
+			expected: []byte(`[{"type":"ConditionA","status":"True","lastTransitionTime":"` + nowFmt + `","reason":"ReasonA","message":"MessageA"},{"type":"ConditionB","status":"False","lastTransitionTime":"` + nowFmt + `","reason":"ReasonB","message":"MessageB"},{"type":"ConditionC","status":"True","lastTransitionTime":"` + nowFmt + `","reason":"ReasonC","message":"MessageC"}]`),
+			err:      nil,
+		},
+		{
+			name: "when input contains condition with empty LastTransitionTime then return JSON with according null value",
+			input: []metav1.Condition{
+				{
+					Type:    "ConditionA",
+					Status:  metav1.ConditionTrue,
+					Reason:  "ReasonA",
+					Message: "MessageA",
+				},
+			},
+			expected: []byte(`[{"type":"ConditionA","status":"True","lastTransitionTime":null,"reason":"ReasonA","message":"MessageA"}]`),
+			err:      nil,
+		},
+		{
+			name: "when input contains condition with empty Type, Status, Reason and Message then return JSON with according empty values",
+			input: []metav1.Condition{
+				{
+					LastTransitionTime: metav1.Time{Time: now},
+				},
+			},
+			expected: []byte(`[{"type":"","status":"","lastTransitionTime":"` + nowFmt + `","reason":"","message":""}]`),
+			err:      nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual, err := StatusConditionsMarshalJSON(tc.input)
+			if err != tc.err {
+				t.Errorf("unexpected error: got %v, want %v", err, tc.err)
+			}
+
+			if !reflect.DeepEqual(actual, tc.expected) {
+				t.Errorf("unexpected result: got %s, want %s", string(actual), string(tc.expected))
 			}
 		})
 	}

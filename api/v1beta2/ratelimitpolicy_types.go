@@ -143,8 +143,10 @@ func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr
 	currentMarshaledJSON, _ := common.ConditionMarshal(s.Conditions)
 	otherMarshaledJSON, _ := common.ConditionMarshal(other.Conditions)
 	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
-		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
-		logger.V(1).Info("Conditions not equal", "difference", diff)
+		if logger.V(1).Enabled() {
+			diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
+			logger.V(1).Info("Conditions not equal", "difference", diff)
+		}
 		return false
 	}
 

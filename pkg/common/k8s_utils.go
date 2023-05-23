@@ -35,10 +35,14 @@ const (
 	ReadyStatusConditionType = "Ready"
 )
 
+// ObjectInfo generates a string representation of the provided Kubernetes object, including its kind and name.
+// The generated string follows the format: "kind/name".
 func ObjectInfo(obj client.Object) string {
 	return fmt.Sprintf("%s/%s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
 }
 
+// ReadAnnotationsFromObject reads the annotations from a Kubernetes object
+// and returns them as a map. If the object has no annotations, it returns an empty map.
 func ReadAnnotationsFromObject(obj client.Object) map[string]string {
 	annotations := obj.GetAnnotations()
 	if annotations == nil {
@@ -47,6 +51,8 @@ func ReadAnnotationsFromObject(obj client.Object) map[string]string {
 	return annotations
 }
 
+// TagObjectToDelete adds a special DeleteTagAnnotation to the object's annotations.
+// If the object's annotations are nil, it first initializes the Annotations field with an empty map.
 func TagObjectToDelete(obj client.Object) {
 	// Add custom annotation
 	annotations := obj.GetAnnotations()
@@ -57,6 +63,9 @@ func TagObjectToDelete(obj client.Object) {
 	annotations[DeleteTagAnnotation] = "true"
 }
 
+// IsObjectTaggedToDelete checks if the given object is tagged for deletion.
+// It looks for the DeleteTagAnnotation in the object's annotations
+// and returns true if the annotation value is set to "true", false otherwise.
 func IsObjectTaggedToDelete(obj client.Object) bool {
 	annotations := obj.GetAnnotations()
 	if annotations == nil {

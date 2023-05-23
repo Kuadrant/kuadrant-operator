@@ -5,6 +5,7 @@ package common
 
 import (
 	"context"
+	appsv1 "k8s.io/api/apps/v1"
 	"reflect"
 	"testing"
 	"time"
@@ -439,6 +440,136 @@ func TestStatusConditionsMarshalJSON(t *testing.T) {
 
 			if !reflect.DeepEqual(actual, tc.expected) {
 				t.Errorf("unexpected result: got %s, want %s", string(actual), string(tc.expected))
+			}
+		})
+	}
+}
+
+func TestIsOwnedBy(t *testing.T) {
+	testCases := []struct {
+		name     string
+		owned    client.Object
+		owner    client.Object
+		expected bool
+	}{
+		{
+			name: "when owned object has owner reference then return true",
+			owned: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "v1",
+							Kind:       "Deployment",
+							Name:       "my-deployment",
+						},
+					},
+				},
+			},
+			owner: &appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Deployment",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "my-deployment",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "when owned object does not have owner reference then return false",
+			owned: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{},
+			},
+			owner: &appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "Deployment",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "my-deployment",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "when owned object has owner reference with different group then return false",
+			owned: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "apps/v1",
+							Kind:       "Deployment",
+							Name:       "my-deployment",
+						},
+					},
+				},
+			},
+			owner: &appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Deployment",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "my-deployment",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "when owned object has owner reference with different kind then return false",
+			owned: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "v1",
+							Kind:       "StatefulSet",
+							Name:       "my-deployment",
+						},
+					},
+				},
+			},
+			owner: &appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Deployment",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "my-deployment",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "when owned object has owner reference with different name then return false",
+			owned: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "v1",
+							Kind:       "Deployment",
+							Name:       "other-deployment",
+						},
+					},
+				},
+			},
+			owner: &appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Deployment",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "my-deployment",
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := IsOwnedBy(tc.owned, tc.owner)
+			if actual != tc.expected {
+				t.Errorf("unexpected result: got %v, want %v", actual, tc.expected)
 			}
 		})
 	}

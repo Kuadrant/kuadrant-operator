@@ -23,6 +23,10 @@ on:
         description: WASM Shim version
         default: latest
         type: string
+      replacesVersion:
+        description: Kuadrant Operator replaced version
+        default: 0.0.0
+        type: string
   workflow_dispatch:
     inputs:
       kuadrantOperatorTag:
@@ -44,6 +48,10 @@ on:
       wasmShimVersion:
         description: WASM Shim version
         default: latest
+        type: string
+      replacesVersion:
+        description: Kuadrant Operator replaced version
+        default: 0.0.0
         type: string
 
 env:
@@ -110,7 +118,8 @@ jobs:
             VERSION=${{ env.VERSION }} IMAGE_TAG=${{ inputs.kuadrantOperatorTag }} \
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
-            WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }}
+            WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
+            REPLACES_VERSION=${{ inputs.replacesVersion }}
       - name: Build Image
         id: build-image
         uses: redhat-actions/buildah-build@v2
@@ -151,7 +160,8 @@ jobs:
             VERSION=${{ env.VERSION }} IMAGE_TAG=${{ inputs.kuadrantOperatorTag }} \
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
-            WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }}
+            WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
+            REPLACES_VERSION=${{ inputs.replacesVersion }}
       - name: Install qemu dependency
         run: |
           sudo apt-get update

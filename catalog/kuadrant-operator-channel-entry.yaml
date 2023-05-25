@@ -4,3 +4,4 @@ package: kuadrant-operator
 name: preview
 entries:
   - name: kuadrant-operator.v0.0.0
+    replaces: kuadrant-operator.v0.0.0-alpha

@@ -12,9 +12,10 @@ CHANNEL_NAME=preview
 OPM="${1?:Error \$OPM not set. Bye}"
 YQ="${2?:Error \$YQ not set. Bye}"
 BUNDLE_IMG="${3?:Error \$BUNDLE_IMG not set. Bye}"
-LIMITADOR_OPERATOR_BUNDLE_IMG="${4?:Error \$LIMITADOR_OPERATOR_BUNDLE_IMG not set. Bye}"
-AUTHORINO_OPERATOR_BUNDLE_IMG="${5?:Error \$AUTHORINO_OPERATOR_BUNDLE_IMG not set. Bye}"
-CATALOG_FILE="${6?:Error \$CATALOG_FILE not set. Bye}"
+REPLACES_VERSION="${4?:Error \$REPLACES_VERSION not set. Bye}"
+LIMITADOR_OPERATOR_BUNDLE_IMG="${5?:Error \$LIMITADOR_OPERATOR_BUNDLE_IMG not set. Bye}"
+AUTHORINO_OPERATOR_BUNDLE_IMG="${6?:Error \$AUTHORINO_OPERATOR_BUNDLE_IMG not set. Bye}"
+CATALOG_FILE="${7?:Error \$CATALOG_FILE not set. Bye}"
 
 CATALOG_FILE_BASEDIR="$( cd "$( dirname "$(realpath ${CATALOG_FILE})" )" && pwd )"
 CATALOG_BASEDIR="$( cd "$( dirname "$(realpath ${CATALOG_FILE_BASEDIR})" )" && pwd )"
@@ -77,7 +78,8 @@ ${OPM} init kuadrant-operator --default-channel=${CHANNEL_NAME} --output yaml >>
 # Add a bundles to the Catalog
 cat ${TMP_DIR}/kuadrant-operator-bundle.yaml >> ${CATALOG_FILE}
 # Add a channel entry for the bundle
-V=`${YQ} eval '.name' ${TMP_DIR}/kuadrant-operator-bundle.yaml` \
-    ${YQ} eval '(.entries[0].name = strenv(V))' ${CATALOG_BASEDIR}/kuadrant-operator-channel-entry.yaml >> ${CATALOG_FILE}
+NAME=`${YQ} eval '.name' ${TMP_DIR}/kuadrant-operator-bundle.yaml` \
+REPLACES=kuadrant-operator.v${REPLACES_VERSION} \
+    ${YQ} eval '(.entries[0].name = strenv(NAME)) | (.entries[0].replaces = strenv(REPLACES))' ${CATALOG_BASEDIR}/kuadrant-operator-channel-entry.yaml >> ${CATALOG_FILE}
 
 rm -rf $TMP_DIR

@@ -269,9 +269,8 @@ test-unit: clean-cov generate fmt vet ## Run Unit tests.
 namespace: ## Creates a namespace where to deploy Kuadrant Operator
 	kubectl create namespace $(KUADRANT_NAMESPACE)
 
-.PHONY: local-setup
-local-setup: $(KIND) ## Deploy locally kuadrant operator from the current code
-	$(MAKE) local-env-setup
+.PHONY: local-deploy
+local-deploy: ## Deploy Kuadrant Operator in the cluster pointed by KUBECONFIG
 	$(MAKE) docker-build IMG=$(IMAGE_TAG_BASE):dev
 	$(KIND) load docker-image $(IMAGE_TAG_BASE):dev --name $(KIND_CLUSTER_NAME)
 	$(MAKE) deploy IMG=$(IMAGE_TAG_BASE):dev
@@ -283,6 +282,11 @@ local-setup: $(KIND) ## Deploy locally kuadrant operator from the current code
 	@echo "-- Linux only -- Ingress gateway is exported using nodePort service in port 9080"
 	@echo "curl -H \"Host: myhost.com\" localhost:9080"
 	@echo
+
+.PHONY: local-setup
+local-setup: $(KIND) ## Deploy locally kuadrant operator from the current code
+	$(MAKE) local-env-setup
+	$(MAKE) local-deploy
 
 .PHONY: local-cleanup
 local-cleanup: ## Delete local cluster

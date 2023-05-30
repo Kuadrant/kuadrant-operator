@@ -105,7 +105,7 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 	if kObj.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(kObj, kuadrantFinalizer) {
 		logger.V(1).Info("Handling removal of kuadrant object")
 
-		if err := r.unregisterExternalAuthorizer(ctx, kObj); err != nil {
+		if err := r.unregisterExternalAuthorizer(ctx); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -163,13 +163,13 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) error {
 	logger, _ := logr.FromContext(ctx)
 
 	err := r.unregisterExternalAuthorizerIstio(ctx)
 
 	if err != nil && apimeta.IsNoMatchError(err) {
-		err = r.unregisterExternalAuthorizerOSSM(ctx, kObj)
+		err = r.unregisterExternalAuthorizerOSSM(ctx)
 	}
 
 	if err != nil {
@@ -222,12 +222,8 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerIstio(ctx context.Conte
 	return nil
 }
 
-func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Context) error {
 	logger, _ := logr.FromContext(ctx)
-
-	if err := r.unregisterFromServiceMeshMemberRoll(ctx, kObj); err != nil {
-		return err
-	}
 
 	smcp := &maistrav2.ServiceMeshControlPlane{}
 
@@ -281,31 +277,6 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Contex
 	}
 
 	return nil
-}
-
-func (r *KuadrantReconciler) unregisterFromServiceMeshMemberRoll(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	return r.ReconcileResource(ctx, &maistrav1.ServiceMeshMemberRoll{}, buildServiceMeshMemberRoll(kObj), func(existingObj, desiredObj client.Object) (bool, error) {
-		existing, ok := existingObj.(*maistrav1.ServiceMeshMemberRoll)
-		if !ok {
-			return false, fmt.Errorf("%T is not a *maistrav1.ServiceMeshMemberRoll", existingObj)
-		}
-		desired, ok := desiredObj.(*maistrav1.ServiceMeshMemberRoll)
-		if !ok {
-			return false, fmt.Errorf("%T is not a *maistrav1.ServiceMeshMemberRoll", desiredObj)
-		}
-		desired.Spec.Members = []string{}
-
-		update := false
-		for _, member := range existing.Spec.Members {
-			if member == kObj.Namespace {
-				update = true
-			} else {
-				desired.Spec.Members = append(desired.Spec.Members, member)
-			}
-		}
-		existing.Spec.Members = desired.Spec.Members
-		return update, nil
-	})
 }
 
 func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
@@ -365,7 +336,7 @@ func (r *KuadrantReconciler) registerExternalAuthorizerIstio(ctx context.Context
 func (r *KuadrantReconciler) registerExternalAuthorizerOSSM(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	logger, _ := logr.FromContext(ctx)
 
-	if err := r.registerToServiceMeshMemberRoll(ctx, kObj); err != nil {
+	if err := r.registerServiceMeshMember(ctx, kObj); err != nil {
 		return err
 	}
 
@@ -414,21 +385,14 @@ func (r *KuadrantReconciler) registerExternalAuthorizerOSSM(ctx context.Context,
 	return nil
 }
 
-func (r *KuadrantReconciler) registerToServiceMeshMemberRoll(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	return r.ReconcileResource(ctx, &maistrav1.ServiceMeshMemberRoll{}, buildServiceMeshMemberRoll(kObj), func(existingObj, _ client.Object) (bool, error) {
-		existing, ok := existingObj.(*maistrav1.ServiceMeshMemberRoll)
-		if !ok {
-			return false, fmt.Errorf("%T is not a *maistrav1.ServiceMeshMemberRoll", existingObj)
-		}
+func (r *KuadrantReconciler) registerServiceMeshMember(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+	member := buildServiceMeshMember(kObj)
+	err := r.SetOwnerReference(kObj, member)
+	if err != nil {
+		return err
+	}
 
-		for _, member := range existing.Spec.Members {
-			if member == kObj.Namespace {
-				return false, nil
-			}
-		}
-		existing.Spec.Members = append(existing.Spec.Members, kObj.Namespace)
-		return true, nil
-	})
+	return r.ReconcileResource(ctx, &maistrav1.ServiceMeshMember{}, member, reconcilers.CreateOnlyMutator)
 }
 
 func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (ctrl.Result, error) {
@@ -455,18 +419,21 @@ func controlPlaneProviderNamespace() string {
 	return common.FetchEnv("ISTIOOPERATOR_NAMESPACE", "istio-system")
 }
 
-func buildServiceMeshMemberRoll(kObj *kuadrantv1beta1.Kuadrant) *maistrav1.ServiceMeshMemberRoll {
-	return &maistrav1.ServiceMeshMemberRoll{
+func buildServiceMeshMember(kObj *kuadrantv1beta1.Kuadrant) *maistrav1.ServiceMeshMember {
+	return &maistrav1.ServiceMeshMember{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "ServiceMeshMemberRoll",
+			Kind:       "ServiceMeshMember",
 			APIVersion: maistrav1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "default",
-			Namespace: controlPlaneProviderNamespace(),
+			Namespace: kObj.Namespace,
 		},
-		Spec: maistrav1.ServiceMeshMemberRollSpec{
-			Members: []string{kObj.Namespace},
+		Spec: maistrav1.ServiceMeshMemberSpec{
+			ControlPlaneRef: maistrav1.ServiceMeshControlPlaneRef{
+				Name:      controlPlaneProviderName(),
+				Namespace: controlPlaneProviderNamespace(),
+			},
 		},
 	}
 }

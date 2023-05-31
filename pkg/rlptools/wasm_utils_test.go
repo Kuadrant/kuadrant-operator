@@ -6,11 +6,14 @@ import (
 	"reflect"
 	"testing"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 func TestHTTPRouteRulesToRLPRules(t *testing.T) {
@@ -71,12 +74,44 @@ func TestGatewayActionsFromRateLimitPolicy(t *testing.T) {
 	}
 
 	t.Run("empty rate limits return empty actions", func(subT *testing.T) {
-		rlp := &kuadrantv1beta1.RateLimitPolicy{
-			Spec: kuadrantv1beta1.RateLimitPolicySpec{
-				RateLimits: []kuadrantv1beta1.RateLimit{},
+		rlp := &kuadrantv1beta2.RateLimitPolicy{
+			TypeMeta: metav1.TypeMeta{
+				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String()},
+			ObjectMeta: metav1.ObjectMeta{Name: "rlpA", Namespace: "nsA"},
+			Spec: kuadrantv1beta2.RateLimitPolicySpec{
+				Limits: map[string]kuadrantv1beta2.Limit{
+					"l1": kuadrantv1beta2.Limit{
+						Rates: []kuadrantv1beta2.Rate{
+							Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+						},
+					},
+				},
 			},
 		}
-		expectedGatewayActions := []GatewayAction{}
+
+		expectedGatewayActions := []GatewayAction{
+			{
+				Configurations: []Configuration{
+					{
+						Actions: []ActionSpecifier{
+							{
+								GenericKey: &GenericKeySpec{
+									DescriptorKey:   "nsA/rlpA/l1",
+									DescriptorValue: "1",
+								},
+							},
+						},
+					},
+				},
+				Rules: []Rule{
+					{
+						Paths:   []string{"/toy*"},
+						Methods: []string{"GET"},
+						Hosts:   []string{"*.example.com"},
+					},
+				},
+			},
+		}
 
 		gatewayActions := GatewayActionsFromRateLimitPolicy(rlp, httpRoute)
 		if !reflect.DeepEqual(gatewayActions, expectedGatewayActions) {

@@ -9,13 +9,13 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
+func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
 	logger, _ := logr.FromContext(ctx)
 
 	logger.V(1).Info("Getting Kuadrant namespace")
@@ -126,10 +126,10 @@ func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context,
 	logger.V(1).Info("gatewayLimits", "gwKey", gw.Key(), "rlpRefs", rlpRefs)
 
 	// Load all rate limit policies
-	routeRLPList := make([]*kuadrantv1beta1.RateLimitPolicy, 0)
-	var gwRLP *kuadrantv1beta1.RateLimitPolicy
+	routeRLPList := make([]*kuadrantv1beta2.RateLimitPolicy, 0)
+	var gwRLP *kuadrantv1beta2.RateLimitPolicy
 	for _, rlpKey := range rlpRefs {
-		rlp := &kuadrantv1beta1.RateLimitPolicy{}
+		rlp := &kuadrantv1beta2.RateLimitPolicy{}
 		err := r.Client().Get(ctx, rlpKey, rlp)
 		logger.V(1).Info("gatewayLimits", "get rlp", rlpKey, "err", err)
 		if err != nil {
@@ -152,10 +152,10 @@ func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context,
 	if gwRLP != nil {
 		if len(gw.Hostnames()) == 0 {
 			// wildcard domain
-			limits["*"] = append(limits["*"], gwRLP.FlattenLimits()...)
+			limits["*"] = append(limits["*"], rlptools.ReadLimitsFromRLP(gwRLP)...)
 		} else {
 			for _, gwHostname := range gw.Hostnames() {
-				limits[gwHostname] = append(limits[gwHostname], gwRLP.FlattenLimits()...)
+				limits[gwHostname] = append(limits[gwHostname], rlptools.ReadLimitsFromRLP(gwRLP)...)
 			}
 		}
 	}
@@ -178,13 +178,13 @@ func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context,
 }
 
 // merged currently implemented with list append operation
-func mergeLimits(routeRLP *kuadrantv1beta1.RateLimitPolicy, gwRLP *kuadrantv1beta1.RateLimitPolicy) []kuadrantv1beta1.Limit {
-	limits := routeRLP.FlattenLimits()
+func mergeLimits(routeRLP *kuadrantv1beta2.RateLimitPolicy, gwRLP *kuadrantv1beta2.RateLimitPolicy) []rlptools.Limit {
+	limits := rlptools.ReadLimitsFromRLP(routeRLP)
 
 	if gwRLP == nil {
 		return limits
 	}
 
 	// add gateway level limits
-	return append(limits, gwRLP.FlattenLimits()...)
+	return append(limits, rlptools.ReadLimitsFromRLP(gwRLP)...)
 }

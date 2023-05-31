@@ -12,6 +12,7 @@ import (
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
@@ -19,11 +20,97 @@ var (
 	WASMFilterImageURL = common.FetchEnv("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
 )
 
+// MetadataSource https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-enum-config-route-v3-ratelimit-action-metadata-source
+
+// +kubebuilder:validation:Enum=DYNAMIC;ROUTE_ENTRY
+type MetadataSource string
+
+type GenericKeySpec struct {
+	DescriptorValue string `json:"descriptor_value"`
+	// +optional
+	DescriptorKey *string `json:"descriptor_key,omitempty"`
+}
+
+type MetadataPathSegmentKey struct {
+	Key string `json:"key"`
+}
+
+type MetadataPathSegment struct {
+	Segment MetadataPathSegmentKey `json:"segment"`
+}
+
+type MetadataKeySpec struct {
+	Key  string                `json:"key"`
+	Path []MetadataPathSegment `json:"path"`
+}
+
+type MetadataSpec struct {
+	DescriptorKey string          `json:"descriptor_key"`
+	MetadataKey   MetadataKeySpec `json:"metadata_key"`
+	// +optional
+	DefaultValue *string `json:"default_value,omitempty"`
+	// +kubebuilder:default=DYNAMIC
+	Source MetadataSource `json:"source,omitempty"`
+}
+
+// RemoteAddressSpec no need to specify
+// descriptor entry is populated using the trusted address from
+// [x-forwarded-for](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_conn_man/headers#config-http-conn-man-headers-x-forwarded-for)
+type RemoteAddressSpec struct {
+}
+
+// RequestHeadersSpec Rate limit on request headers.
+type RequestHeadersSpec struct {
+	HeaderName    string `json:"header_name"`
+	DescriptorKey string `json:"descriptor_key"`
+	// +optional
+	SkipIfAbsent *bool `json:"skip_if_absent,omitempty"`
+}
+
+// Action_Specifier defines one envoy rate limit action
+type ActionSpecifier struct {
+	// +optional
+	GenericKey *GenericKeySpec `json:"generic_key,omitempty"`
+	// +optional
+	Metadata *MetadataSpec `json:"metadata,omitempty"`
+	// +optional
+	RemoteAddress *RemoteAddressSpec `json:"remote_address,omitempty"`
+	// +optional
+	RequestHeaders *RequestHeadersSpec `json:"request_headers,omitempty"`
+}
+
+// Rule defines a single condition for the rate limit configuration
+// All defined fields within the rule must be met to have a rule match
+type Rule struct {
+	// +optional
+	Paths []string `json:"paths,omitempty"`
+	// +optional
+	Methods []string `json:"methods,omitempty"`
+	// +optional
+	Hosts []string `json:"hosts,omitempty"`
+
+	// When holds the list of conditions for the policy to be enforced.
+	// Called also "soft" conditions as route selectors must also match
+	// +optional
+	When []kuadrantv1beta2.WhenCondition `json:"when,omitempty"`
+}
+
+// Configuration represents an action configuration.
+// The equivalent of [config.route.v3.RateLimit](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-msg-config-route-v3-ratelimit)
+// envoy object.
+// Each action configuration produces, at most, one descriptor.
+// Depending on the incoming request, one configuration may or may not produce
+// a rate limit descriptor.
+type Configuration struct {
+	// Actions holds list of action specifiers. Each action specifier can only define one action type.
+	Actions []ActionSpecifier `json:"actions"`
+}
+
 type GatewayAction struct {
-	Configurations []kuadrantv1beta1.Configuration `json:"configurations"`
+	Configurations []Configuration `json:"configurations"`
 
 	// +optional
-	Rules []kuadrantv1beta1.Rule `json:"rules,omitempty"`
+	Rules []Rule `json:"rules,omitempty"`
 }
 
 func DefaultGatewayConfiguration(key client.ObjectKey) []kuadrantv1beta1.Configuration {
@@ -44,10 +131,13 @@ func DefaultGatewayConfiguration(key client.ObjectKey) []kuadrantv1beta1.Configu
 }
 
 // GatewayActionsFromRateLimitPolicy return flatten list from GatewayAction from the RLP
-func GatewayActionsFromRateLimitPolicy(rlp *kuadrantv1beta1.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []GatewayAction {
-	flattenActions := make([]GatewayAction, 0)
+func GatewayActionsFromRateLimitPolicy(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []GatewayAction {
+	gatewayActions := make([]GatewayAction, 0)
 	if rlp == nil {
-		return flattenActions
+		return gatewayActions
+	}
+
+	for idx := range rlp.Spec.RateLimits {
 	}
 
 	for idx := range rlp.Spec.RateLimits {

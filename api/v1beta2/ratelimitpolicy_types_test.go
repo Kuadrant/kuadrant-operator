@@ -3,11 +3,9 @@
 package v1beta2
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -92,87 +90,5 @@ func TestRateLimitPolicyValidation(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid targetRef.Namespace") {
 		t.Fatalf(`rlp.Validate() did not return expected error. Instead: %v`, err)
-	}
-}
-
-func TestLimitFromLimitadorRateLimit(t *testing.T) {
-	testCases := []struct {
-		name     string
-		limit    *limitadorv1alpha1.RateLimit
-		expected *Limit
-	}{
-		{
-			"nil conditions",
-			&limitadorv1alpha1.RateLimit{
-				Namespace:  "someNS",
-				MaxValue:   1,
-				Seconds:    2,
-				Conditions: nil,
-				Variables:  []string{"a", "b"},
-			},
-			&Limit{
-				MaxValue:   1,
-				Seconds:    2,
-				Conditions: nil,
-				Variables:  []string{"a", "b"},
-			},
-		},
-		{
-			"empty conditions",
-			&limitadorv1alpha1.RateLimit{
-				Namespace:  "someNS",
-				MaxValue:   1,
-				Seconds:    2,
-				Conditions: make([]string, 0),
-				Variables:  []string{"a", "b"},
-			},
-			&Limit{
-				MaxValue:   1,
-				Seconds:    2,
-				Conditions: make([]string, 0),
-				Variables:  []string{"a", "b"},
-			},
-		},
-		{
-			"nil variables",
-			&limitadorv1alpha1.RateLimit{
-				Namespace:  "someNS",
-				MaxValue:   1,
-				Seconds:    2,
-				Conditions: []string{"a", "b"},
-				Variables:  nil,
-			},
-			&Limit{
-				MaxValue:   1,
-				Seconds:    2,
-				Conditions: []string{"a", "b"},
-				Variables:  nil,
-			},
-		},
-		{
-			"empty variables",
-			&limitadorv1alpha1.RateLimit{
-				Namespace:  "someNS",
-				MaxValue:   1,
-				Seconds:    2,
-				Conditions: []string{"a", "b"},
-				Variables:  make([]string, 0),
-			},
-			&Limit{
-				MaxValue:   1,
-				Seconds:    2,
-				Conditions: []string{"a", "b"},
-				Variables:  make([]string, 0),
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(subT *testing.T) {
-			rlpLimit := LimitFromLimitadorRateLimit(tc.limit)
-			if !reflect.DeepEqual(rlpLimit, tc.expected) {
-				subT.Error("expected object does not match")
-			}
-		})
 	}
 }

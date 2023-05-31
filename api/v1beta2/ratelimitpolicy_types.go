@@ -18,7 +18,6 @@ package v1beta2
 
 import (
 	"fmt"
-	"reflect"
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
@@ -32,8 +31,9 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// ContextSelector defines one item from the well known selectors
-// TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+// ContextSelector defines one item from the well known attributes
+// Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+// Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=253
 type ContextSelector string
@@ -107,6 +107,14 @@ type Limit struct {
 	Rates []Rate `json:"rates,omitempty"`
 }
 
+func (l Limit) CountersAsStringList() []string {
+	var ret []string
+	for idx := range l.Counters {
+		ret = append(ret, string(l.Counters[idx]))
+	}
+	return ret
+}
+
 // RateLimitPolicySpec defines the desired state of RateLimitPolicy
 type RateLimitPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
@@ -150,11 +158,6 @@ func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr
 		return false
 	}
 
-	// TODO(eastizle): reflect.DeepEqual does not work well with lists without order
-	if !reflect.DeepEqual(s.GatewaysRateLimits, other.GatewaysRateLimits) {
-		logger.V(1).Info("GatewaysRateLimits not equal")
-		return false
-	}
 	return true
 }
 

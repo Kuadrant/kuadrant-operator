@@ -717,3 +717,85 @@ func limitadorWithMultipleLimitsVariables() *limitadorv1alpha1.Limitador {
 		},
 	}
 }
+
+func TestLimitFromLimitadorRateLimit(t *testing.T) {
+	testCases := []struct {
+		name     string
+		limit    *limitadorv1alpha1.RateLimit
+		expected *Limit
+	}{
+		{
+			"nil conditions",
+			&limitadorv1alpha1.RateLimit{
+				Namespace:  "someNS",
+				MaxValue:   1,
+				Seconds:    2,
+				Conditions: nil,
+				Variables:  []string{"a", "b"},
+			},
+			&Limit{
+				MaxValue:   1,
+				Seconds:    2,
+				Conditions: nil,
+				Variables:  []string{"a", "b"},
+			},
+		},
+		{
+			"empty conditions",
+			&limitadorv1alpha1.RateLimit{
+				Namespace:  "someNS",
+				MaxValue:   1,
+				Seconds:    2,
+				Conditions: make([]string, 0),
+				Variables:  []string{"a", "b"},
+			},
+			&Limit{
+				MaxValue:   1,
+				Seconds:    2,
+				Conditions: make([]string, 0),
+				Variables:  []string{"a", "b"},
+			},
+		},
+		{
+			"nil variables",
+			&limitadorv1alpha1.RateLimit{
+				Namespace:  "someNS",
+				MaxValue:   1,
+				Seconds:    2,
+				Conditions: []string{"a", "b"},
+				Variables:  nil,
+			},
+			&Limit{
+				MaxValue:   1,
+				Seconds:    2,
+				Conditions: []string{"a", "b"},
+				Variables:  nil,
+			},
+		},
+		{
+			"empty variables",
+			&limitadorv1alpha1.RateLimit{
+				Namespace:  "someNS",
+				MaxValue:   1,
+				Seconds:    2,
+				Conditions: []string{"a", "b"},
+				Variables:  make([]string, 0),
+			},
+			&Limit{
+				MaxValue:   1,
+				Seconds:    2,
+				Conditions: []string{"a", "b"},
+				Variables:  make([]string, 0),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			rlpLimit := limitFromLimitadorRateLimit(tc.limit)
+			if !reflect.DeepEqual(rlpLimit, tc.expected) {
+				subT.Error("expected object does not match")
+			}
+		})
+	}
+}

@@ -10,18 +10,55 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
-type LimitsByDomain map[string][]kuadrantv1beta1.Limit
+// Limit represents partially a Limitador limit.
+type Limit struct {
+	MaxValue int `json:"maxValue"`
+	Seconds  int `json:"seconds"`
+
+	// +optional
+	Conditions []string `json:"conditions,omitempty"`
+	// +optional
+	Variables []string `json:"variables,omitempty"`
+}
+
+func limitFromLimitadorRateLimit(limit *limitadorv1alpha1.RateLimit) *Limit {
+	if limit == nil {
+		return nil
+	}
+
+	rlpLimit := &Limit{
+		MaxValue:   limit.MaxValue,
+		Seconds:    limit.Seconds,
+		Conditions: nil,
+		Variables:  nil,
+	}
+
+	if limit.Conditions != nil {
+		// deep copy
+		rlpLimit.Conditions = make([]string, len(limit.Conditions))
+		copy(rlpLimit.Conditions, limit.Conditions)
+	}
+
+	if limit.Variables != nil {
+		// deep copy
+		rlpLimit.Variables = make([]string, len(limit.Variables))
+		copy(rlpLimit.Variables, limit.Variables)
+	}
+
+	return rlpLimit
+}
+
+type LimitsByDomain map[string][]Limit
 
 func (l LimitsByDomain) String() string {
 	jsonData, _ := json.MarshalIndent(l, "", "  ")
 	return string(jsonData)
 }
 
-type LimitList []kuadrantv1beta1.Limit
+type LimitList []Limit
 
 func (l LimitList) Len() int {
 	return len(l)
@@ -76,13 +113,13 @@ func (l LimitList) Swap(i, j int) {
 	l[i], l[j] = l[j], l[i]
 }
 
-func SameLimitList(a, b []kuadrantv1beta1.Limit) bool {
+func SameLimitList(a, b []Limit) bool {
 	if len(a) != len(b) {
 		return false
 	}
 
-	aCopy := make([]kuadrantv1beta1.Limit, len(a))
-	bCopy := make([]kuadrantv1beta1.Limit, len(b))
+	aCopy := make([]Limit, len(a))
+	bCopy := make([]Limit, len(b))
 
 	copy(aCopy, a)
 	copy(bCopy, b)
@@ -178,7 +215,7 @@ func (l *LimitIndex) AddGatewayLimits(gwKey client.ObjectKey, gwLimits LimitsByD
 }
 
 // AddLimit adds one new limit to the index structure
-func (l *LimitIndex) AddLimit(gwKey client.ObjectKey, domain string, limit *kuadrantv1beta1.Limit) {
+func (l *LimitIndex) AddLimit(gwKey client.ObjectKey, domain string, limit *Limit) {
 	if _, ok := l.gatewayLimits[gwKey]; !ok {
 		l.gatewayLimits[gwKey] = make(LimitsByDomain)
 	}
@@ -200,7 +237,7 @@ func (l *LimitIndex) AddLimitFromRateLimit(limit *limitadorv1alpha1.RateLimit) {
 		return
 	}
 
-	l.AddLimit(gwKey, domain, kuadrantv1beta1.LimitFromLimitadorRateLimit(limit))
+	l.AddLimit(gwKey, domain, limitFromLimitadorRateLimit(limit))
 }
 
 func (l *LimitIndex) Equals(other *LimitIndex) bool {

@@ -219,11 +219,12 @@ rules:
   - list
   - patch
   - update
+  - use
   - watch
 - apiGroups:
   - maistra.io
   resources:
-  - servicemeshmemberrolls
+  - servicemeshmembers
   verbs:
   - create
   - delete

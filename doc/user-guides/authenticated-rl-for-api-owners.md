@@ -46,7 +46,7 @@ kubectl apply -f examples/toystore/toystore.yaml
 ```yaml
 kubectl apply -f - <<EOF
 ---
-apiVersion: gateway.networking.k8s.io/v1alpha2
+apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
   name: toystore

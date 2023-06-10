@@ -19,7 +19,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	fake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 func TestObjectKeyListDifference(t *testing.T) {
@@ -98,7 +98,7 @@ func TestGetService(t *testing.T) {
 		},
 	}
 
-	k8sClient := fake.NewFakeClient(service)
+	k8sClient := fake.NewClientBuilder().WithRuntimeObjects(service).Build()
 
 	var svc *corev1.Service
 	var err error
@@ -130,7 +130,7 @@ func TestGetServiceWorkloadSelector(t *testing.T) {
 		},
 	}
 
-	k8sClient := fake.NewFakeClient(service)
+	k8sClient := fake.NewClientBuilder().WithRuntimeObjects(service).Build()
 
 	var selector map[string]string
 	var err error

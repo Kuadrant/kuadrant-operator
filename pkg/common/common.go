@@ -24,6 +24,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 // TODO: move the const to a proper place, or get it from config
@@ -42,7 +43,7 @@ const (
 type KuadrantPolicy interface {
 	client.Object
 	GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference
-	GetWrappedNamespace() gatewayapiv1alpha2.Namespace
+	GetWrappedNamespace() gatewayapiv1beta1.Namespace
 	GetRulesHostnames() []string
 }
 
@@ -190,7 +191,7 @@ func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 }
 
 // HostnamesToStrings converts []gatewayapi_v1alpha2.Hostname to []string
-func HostnamesToStrings(hostnames []gatewayapiv1alpha2.Hostname) []string {
+func HostnamesToStrings(hostnames []gatewayapiv1beta1.Hostname) []string {
 	hosts := make([]string, len(hostnames))
 	for i, h := range hostnames {
 		hosts[i] = string(h)

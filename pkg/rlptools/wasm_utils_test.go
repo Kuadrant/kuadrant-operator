@@ -9,7 +9,6 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -51,18 +50,18 @@ func TestHTTPRouteRulesToRLPRules(t *testing.T) {
 }
 
 func TestGatewayActionsFromRateLimitPolicy(t *testing.T) {
-	httpRoute := &gatewayapiv1alpha2.HTTPRoute{
-		Spec: gatewayapiv1alpha2.HTTPRouteSpec{
-			Hostnames: []gatewayapiv1alpha2.Hostname{"*.example.com"},
-			Rules: []gatewayapiv1alpha2.HTTPRouteRule{
+	httpRoute := &gatewayapiv1beta1.HTTPRoute{
+		Spec: gatewayapiv1beta1.HTTPRouteSpec{
+			Hostnames: []gatewayapiv1beta1.Hostname{"*.example.com"},
+			Rules: []gatewayapiv1beta1.HTTPRouteRule{
 				{
-					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 						{
-							Path: &gatewayapiv1alpha2.HTTPPathMatch{
-								Type:  &[]gatewayapiv1alpha2.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
+							Path: &gatewayapiv1beta1.HTTPPathMatch{
+								Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
 								Value: &[]string{"/toy"}[0],
 							},
-							Method: &[]gatewayapiv1alpha2.HTTPMethod{gatewayapiv1alpha2.HTTPMethod("GET")}[0],
+							Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethod("GET")}[0],
 						},
 					},
 				},

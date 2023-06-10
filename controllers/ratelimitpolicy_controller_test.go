@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
@@ -26,11 +26,11 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 )
 
-func testBuildBasicGateway(gwName, ns string) *gatewayapiv1alpha2.Gateway {
-	return &gatewayapiv1alpha2.Gateway{
+func testBuildBasicGateway(gwName, ns string) *gatewayapiv1beta1.Gateway {
+	return &gatewayapiv1beta1.Gateway{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Gateway",
-			APIVersion: gatewayapiv1alpha2.GroupVersion.String(),
+			APIVersion: gatewayapiv1beta1.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        gwName,
@@ -38,55 +38,55 @@ func testBuildBasicGateway(gwName, ns string) *gatewayapiv1alpha2.Gateway {
 			Labels:      map[string]string{"app": "rlptest"},
 			Annotations: map[string]string{"networking.istio.io/service-type": string(corev1.ServiceTypeClusterIP)},
 		},
-		Spec: gatewayapiv1alpha2.GatewaySpec{
-			GatewayClassName: gatewayapiv1alpha2.ObjectName("istio"),
-			Listeners: []gatewayapiv1alpha2.Listener{
+		Spec: gatewayapiv1beta1.GatewaySpec{
+			GatewayClassName: gatewayapiv1beta1.ObjectName("istio"),
+			Listeners: []gatewayapiv1beta1.Listener{
 				{
-					Name:     gatewayapiv1alpha2.SectionName("default"),
-					Port:     gatewayapiv1alpha2.PortNumber(80),
-					Protocol: gatewayapiv1alpha2.ProtocolType("HTTP"),
+					Name:     gatewayapiv1beta1.SectionName("default"),
+					Port:     gatewayapiv1beta1.PortNumber(80),
+					Protocol: gatewayapiv1beta1.ProtocolType("HTTP"),
 				},
 			},
 		},
 	}
 }
 
-func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnamesStrSlice []string) *gatewayapiv1alpha2.HTTPRoute {
+func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnamesStrSlice []string) *gatewayapiv1beta1.HTTPRoute {
 	tmpMatchPathPrefix := gatewayapiv1beta1.PathMatchPathPrefix
 	tmpMatchValue := "/toy"
-	tmpMatchMethod := gatewayapiv1alpha2.HTTPMethod("GET")
-	gwNamespace := gatewayapiv1alpha2.Namespace(ns)
+	tmpMatchMethod := gatewayapiv1beta1.HTTPMethod("GET")
+	gwNamespace := gatewayapiv1beta1.Namespace(ns)
 
-	var hostnames []gatewayapiv1alpha2.Hostname
+	var hostnames []gatewayapiv1beta1.Hostname
 	for _, str := range hostnamesStrSlice {
-		hostnames = append(hostnames, gatewayapiv1alpha2.Hostname(str))
+		hostnames = append(hostnames, gatewayapiv1beta1.Hostname(str))
 	}
 
-	return &gatewayapiv1alpha2.HTTPRoute{
+	return &gatewayapiv1beta1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "HTTPRoute",
-			APIVersion: gatewayapiv1alpha2.GroupVersion.String(),
+			APIVersion: gatewayapiv1beta1.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      routeName,
 			Namespace: ns,
 			Labels:    map[string]string{"app": "rlptest"},
 		},
-		Spec: gatewayapiv1alpha2.HTTPRouteSpec{
-			CommonRouteSpec: gatewayapiv1alpha2.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1alpha2.ParentReference{
+		Spec: gatewayapiv1beta1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
+				ParentRefs: []gatewayapiv1beta1.ParentReference{
 					{
-						Name:      gatewayapiv1alpha2.ObjectName(gwName),
+						Name:      gatewayapiv1beta1.ObjectName(gwName),
 						Namespace: &gwNamespace,
 					},
 				},
 			},
 			Hostnames: hostnames,
-			Rules: []gatewayapiv1alpha2.HTTPRouteRule{
+			Rules: []gatewayapiv1beta1.HTTPRouteRule{
 				{
-					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 						{
-							Path: &gatewayapiv1alpha2.HTTPPathMatch{
+							Path: &gatewayapiv1beta1.HTTPPathMatch{
 								Type:  &tmpMatchPathPrefix,
 								Value: &tmpMatchValue,
 							},
@@ -113,9 +113,9 @@ func testBuildBasicRoutePolicy(policyName, ns, routeName string) *kuadrantv1beta
 		},
 		Spec: kuadrantv1beta1.RateLimitPolicySpec{
 			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-				Group: gatewayapiv1alpha2.Group("gateway.networking.k8s.io"),
+				Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
 				Kind:  "HTTPRoute",
-				Name:  gatewayapiv1alpha2.ObjectName(routeName),
+				Name:  gatewayapiv1beta1.ObjectName(routeName),
 			},
 			RateLimits: []kuadrantv1beta1.RateLimit{
 				{
@@ -159,9 +159,9 @@ func testBuildGatewayPolicy(policyName, ns, gwName string) *kuadrantv1beta1.Rate
 		},
 		Spec: kuadrantv1beta1.RateLimitPolicySpec{
 			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-				Group: gatewayapiv1alpha2.Group("gateway.networking.k8s.io"),
+				Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
 				Kind:  "Gateway",
-				Name:  gatewayapiv1alpha2.ObjectName(gwName),
+				Name:  gatewayapiv1beta1.ObjectName(gwName),
 			},
 			RateLimits: []kuadrantv1beta1.RateLimit{
 				{
@@ -198,7 +198,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		routeName                   = "toystore-route"
 		gwName                      = "toystore-gw"
 		rlpName                     = "toystore-rlp"
-		gateway              *gatewayapiv1alpha2.Gateway
+		gateway              *gatewayapiv1beta1.Gateway
 	)
 
 	beforeEachCallback := func() {
@@ -208,7 +208,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(func() bool {
-			existingGateway := &gatewayapiv1alpha2.Gateway{}
+			existingGateway := &gatewayapiv1beta1.Gateway{}
 			err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
 			if err != nil {
 				logf.Log.V(1).Info("[WARN] Creating gateway failed", "error", err)
@@ -269,7 +269,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check HTTPRoute direct back reference
 			routeKey := client.ObjectKey{Name: routeName, Namespace: testNamespace}
-			existingRoute := &gatewayapiv1alpha2.HTTPRoute{}
+			existingRoute := &gatewayapiv1beta1.HTTPRoute{}
 			err = k8sClient.Get(context.Background(), routeKey, existingRoute)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
@@ -344,7 +344,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check gateway back references
 			gwKey := client.ObjectKey{Name: gwName, Namespace: testNamespace}
-			existingGateway := &gatewayapiv1alpha2.Gateway{}
+			existingGateway := &gatewayapiv1beta1.Gateway{}
 			err = k8sClient.Get(context.Background(), gwKey, existingGateway)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
@@ -386,9 +386,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				},
 				Spec: kuadrantv1beta1.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1alpha2.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
 						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1alpha2.ObjectName(routeName),
+						Name:  gatewayapiv1beta1.ObjectName(routeName),
 					},
 					RateLimits: []kuadrantv1beta1.RateLimit{
 						{
@@ -517,7 +517,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
-			existingGateway := &gatewayapiv1alpha2.Gateway{}
+			existingGateway := &gatewayapiv1beta1.Gateway{}
 			err = k8sClient.Get(context.Background(), gwKey, existingGateway)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())

@@ -9,7 +9,7 @@ import (
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -192,7 +192,7 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 }
 
 // merge operations currently implemented with list append operation
-func mergeGatewayActions(routeRLP *kuadrantv1beta1.RateLimitPolicy, gwRLP *kuadrantv1beta1.RateLimitPolicy, route *gatewayapiv1alpha2.HTTPRoute) []rlptools.GatewayAction {
+func mergeGatewayActions(routeRLP *kuadrantv1beta1.RateLimitPolicy, gwRLP *kuadrantv1beta1.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []rlptools.GatewayAction {
 	gatewayActions := rlptools.GatewayActionsFromRateLimitPolicy(routeRLP, route)
 
 	if gwRLP == nil {

@@ -9,7 +9,7 @@ import (
 	_struct "github.com/golang/protobuf/ptypes/struct"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -44,7 +44,7 @@ func DefaultGatewayConfiguration(key client.ObjectKey) []kuadrantv1beta1.Configu
 }
 
 // GatewayActionsFromRateLimitPolicy return flatten list from GatewayAction from the RLP
-func GatewayActionsFromRateLimitPolicy(rlp *kuadrantv1beta1.RateLimitPolicy, route *gatewayapiv1alpha2.HTTPRoute) []GatewayAction {
+func GatewayActionsFromRateLimitPolicy(rlp *kuadrantv1beta1.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []GatewayAction {
 	flattenActions := make([]GatewayAction, 0)
 	if rlp == nil {
 		return flattenActions

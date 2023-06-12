@@ -44,9 +44,9 @@ spec:
                         based on context qualifiers and well known selectors TODO
                         Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
                       items:
-                        description: ContextSelector defines one item from the well
-                          known selectors TODO Document properly "Well-known selector"
-                          https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                        description: 'ContextSelector defines one item from the well
+                          known attributes Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                          Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors'
                         maxLength: 253
                         minLength: 1
                         type: string
@@ -118,9 +118,9 @@ spec:
                                 to true only if all conditions are satisfied. \n For
                                 example, the match below will match a HTTP request
                                 only if its path starts with `/foo` AND it contains
-                                the `version: v1` header: \n ``` match: path: value:
+                                the `version: v1` header: \n ``` match: \n path: value:
                                 \"/foo\" headers: - name: \"version\" value \"v1\"
-                                ```"
+                                \n ```"
                               properties:
                                 headers:
                                   description: Headers specifies HTTP request header
@@ -154,13 +154,14 @@ spec:
                                       type:
                                         description: "Type specifies how to match
                                           against the value of the header. \n Support:
-                                          Core (Exact) \n Support: Custom (RegularExpression)
-                                          \n Since RegularExpression HeaderMatchType
-                                          has custom conformance, implementations
-                                          can support POSIX, PCRE or any other dialects
-                                          of regular expressions. Please read the
-                                          implementation's documentation to determine
-                                          the supported dialect."
+                                          Core (Exact) \n Support: Implementation-specific
+                                          (RegularExpression) \n Since RegularExpression
+                                          HeaderMatchType has implementation-specific
+                                          conformance, implementations can support
+                                          POSIX, PCRE or any other dialects of regular
+                                          expressions. Please read the implementation's
+                                          documentation to determine the supported
+                                          dialect."
                                         type: string
                                       value:
                                         description: Value is the value of HTTP Header
@@ -185,7 +186,7 @@ spec:
                                     type:
                                       description: "Type specifies how to match against
                                         the path Value. \n Support: Core (Exact, PathPrefix)
-                                        \n Support: Custom (RegularExpression)"
+                                        \n Support: Implementation-specific (RegularExpression)"
                                       type: string
                                     value:
                                       description: Value of the HTTP path to match
@@ -193,10 +194,11 @@ spec:
                                       type: string
                                   type: object
                                 queryParams:
-                                  description: QueryParams specifies HTTP query parameter
+                                  description: "QueryParams specifies HTTP query parameter
                                     matchers. Multiple match values are ANDed together,
                                     meaning, a request must match all the specified
-                                    query parameters to select the route.
+                                    query parameters to select the route. \n Support:
+                                    Extended"
                                   items:
                                     description: HTTPQueryParamMatch describes how
                                       to select a HTTP route by matching HTTP query
@@ -210,14 +212,27 @@ spec:
                                           query param names, only the first entry
                                           with an equivalent name MUST be considered
                                           for a match. Subsequent entries with an
-                                          equivalent query param name MUST be ignored."
+                                          equivalent query param name MUST be ignored.
+                                          \n If a query param is repeated in an HTTP
+                                          request, the behavior is purposely left
+                                          undefined, since different data planes have
+                                          different capabilities. However, it is *recommended*
+                                          that implementations should match against
+                                          the first value of the param if the data
+                                          plane supports it, as this behavior is expected
+                                          in other load balancing contexts outside
+                                          of the Gateway API. \n Users SHOULD NOT
+                                          route traffic based on repeated query params
+                                          to guard themselves against potential differences
+                                          in the implementations."
                                         type: string
                                       type:
                                         description: "Type specifies how to match
                                           against the value of the query parameter.
                                           \n Support: Extended (Exact) \n Support:
-                                          Custom (RegularExpression) \n Since RegularExpression
-                                          QueryParamMatchType has custom conformance,
+                                          Implementation-specific (RegularExpression)
+                                          \n Since RegularExpression QueryParamMatchType
+                                          has Implementation-specific conformance,
                                           implementations can support POSIX, PCRE
                                           or any other dialects of regular expressions.
                                           Please read the implementation's documentation
@@ -251,6 +266,10 @@ spec:
                             enum:
                             - eq
                             - neq
+                            - startswith
+                            - incl
+                            - excl
+                            - matches
                             type: string
                           selector:
                             description: Selector defines one item from the well known

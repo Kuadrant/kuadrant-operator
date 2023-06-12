@@ -10,188 +10,100 @@ import (
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 var (
 	WASMFilterImageURL = common.FetchEnv("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
+
+	PathMatchTypeMap = map[gatewayapiv1alpha2.PathMatchType]PatternOperator{
+		gatewayapiv1beta1.PathMatchExact:             PatternOperator(kuadrantv1beta2.EqualOperator),
+		gatewayapiv1beta1.PathMatchPathPrefix:        PatternOperator(kuadrantv1beta2.StartsWithOperator),
+		gatewayapiv1beta1.PathMatchRegularExpression: PatternOperator(kuadrantv1beta2.MatchesOperator),
+	}
 )
 
-// MetadataSource https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-enum-config-route-v3-ratelimit-action-metadata-source
+type SelectorSpec struct {
+	// Selector of an attribute from the contextual properties provided by Envoy
+	// during request and connection processing
+	// https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+	// They are named by a dot-separated path (e.g. request.path)
+	// Examples:
+	// "request.path" -> The path portion of the URL
+	Selector string `json:"selector"`
 
-// +kubebuilder:validation:Enum=DYNAMIC;ROUTE_ENTRY
-type MetadataSource string
-
-type GenericKeySpec struct {
-	DescriptorValue string `json:"descriptor_value"`
+	// If not set it defaults to `selector` field value as the descriptor key.
 	// +optional
-	DescriptorKey *string `json:"descriptor_key,omitempty"`
-}
+	Key *string `json:"key,omitempty"`
 
-type MetadataPathSegmentKey struct {
-	Key string `json:"key"`
-}
-
-type MetadataPathSegment struct {
-	Segment MetadataPathSegmentKey `json:"segment"`
-}
-
-type MetadataKeySpec struct {
-	Key  string                `json:"key"`
-	Path []MetadataPathSegment `json:"path"`
-}
-
-type MetadataSpec struct {
-	DescriptorKey string          `json:"descriptor_key"`
-	MetadataKey   MetadataKeySpec `json:"metadata_key"`
+	// An optional value to use if the selector is not found in the context.
+	// If not set and the selector is not found in the context, then no descriptor is generated.
 	// +optional
-	DefaultValue *string `json:"default_value,omitempty"`
-	// +kubebuilder:default=DYNAMIC
-	Source MetadataSource `json:"source,omitempty"`
+	Default *string `json:"default,omitempty"`
 }
 
-// RemoteAddressSpec no need to specify
-// descriptor entry is populated using the trusted address from
-// [x-forwarded-for](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_conn_man/headers#config-http-conn-man-headers-x-forwarded-for)
-type RemoteAddressSpec struct {
+type StaticSpec struct {
+	Value string `json:"value"`
+	Key   string `json:"key"`
 }
 
-// RequestHeadersSpec Rate limit on request headers.
-type RequestHeadersSpec struct {
-	HeaderName    string `json:"header_name"`
-	DescriptorKey string `json:"descriptor_key"`
+// TODO implement one of constraint
+// Precisely one of "static", "selector" must be set.
+type DataItem struct {
 	// +optional
-	SkipIfAbsent *bool `json:"skip_if_absent,omitempty"`
+	Static *StaticSpec `json:"static,omitempty"`
+
+	// +optional
+	Selector *SelectorSpec `json:"selector,omitempty"`
 }
 
-// Action_Specifier defines one envoy rate limit action
-type ActionSpecifier struct {
-	// +optional
-	GenericKey *GenericKeySpec `json:"generic_key,omitempty"`
-	// +optional
-	Metadata *MetadataSpec `json:"metadata,omitempty"`
-	// +optional
-	RemoteAddress *RemoteAddressSpec `json:"remote_address,omitempty"`
-	// +optional
-	RequestHeaders *RequestHeadersSpec `json:"request_headers,omitempty"`
+type PatternOperator kuadrantv1beta2.WhenConditionOperator
+
+type PatternExpression struct {
+	// Selector of an attribute from the contextual properties provided by Envoy
+	// during request and connection processing
+	// https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+	// They are named by a dot-separated path (e.g. request.path)
+	// Examples:
+	// "request.path" -> The path portion of the URL
+	Selector string `json:"selector"`
+
+	// The binary operator to be applied to the content fetched from context, for comparison with "value".
+	// Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
+	// TODO build comprehensive list of operators
+	Operator PatternOperator `json:"operator"`
+
+	// The value of reference for the comparison with the content fetched from the context.
+	Value string `json:"value"`
 }
 
-// Rule defines a single condition for the rate limit configuration
-// All defined fields within the rule must be met to have a rule match
+// Condition defines traffic matching rules
+type Condition struct {
+	// All of the expressions defined must match to match this condition
+	// +optional
+	AllOf []PatternExpression `json:"allOf,omitempty"`
+}
+
+// Rule defines one rate limit configuration. When conditions are met,
+// it uses `data` section to generate one RLS descriptor.
 type Rule struct {
 	// +optional
-	Paths []string `json:"paths,omitempty"`
+	Conditions []Condition `json:"conditions,omitempty"`
 	// +optional
-	Methods []string `json:"methods,omitempty"`
-	// +optional
-	Hosts []string `json:"hosts,omitempty"`
-
-	// When holds the list of conditions for the policy to be enforced.
-	// Called also "soft" conditions as route selectors must also match
-	// +optional
-	When []kuadrantv1beta2.WhenCondition `json:"when,omitempty"`
-}
-
-// Configuration represents an action configuration.
-// The equivalent of [config.route.v3.RateLimit](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-msg-config-route-v3-ratelimit)
-// envoy object.
-// Each action configuration produces, at most, one descriptor.
-// Depending on the incoming request, one configuration may or may not produce
-// a rate limit descriptor.
-type Configuration struct {
-	// Actions holds list of action specifiers. Each action specifier can only define one action type.
-	Actions []ActionSpecifier `json:"actions"`
-}
-
-type GatewayAction struct {
-	Configurations []Configuration `json:"configurations"`
-
-	// +optional
-	Rules []Rule `json:"rules,omitempty"`
-}
-
-func DefaultGatewayConfiguration(key client.ObjectKey) []kuadrantv1beta1.Configuration {
-	return []kuadrantv1beta1.Configuration{
-		{
-			Actions: []kuadrantv1beta1.ActionSpecifier{
-				{
-					GenericKey: &kuadrantv1beta1.GenericKeySpec{
-						DescriptorValue: key.String(),
-						// using default value as specified in Envoy spec
-						// https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-ratelimit-action-generickey
-						DescriptorKey: &[]string{"ratelimitpolicy"}[0],
-					},
-				},
-			},
-		},
-	}
-}
-
-// GatewayActionsFromRateLimitPolicy return flatten list from GatewayAction from the RLP
-func GatewayActionsFromRateLimitPolicy(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1alpha2.HTTPRoute) []GatewayAction {
-	gatewayActions := make([]GatewayAction, 0)
-	if rlp == nil {
-		return gatewayActions
-	}
-
-	for idx := range rlp.Spec.RateLimits {
-	}
-
-	for idx := range rlp.Spec.RateLimits {
-		// Skip those RateLimit objects with empty configurations, even if they have rules defined
-		if len(rlp.Spec.RateLimits[idx].Configurations) == 0 {
-			continue
-		}
-		// if HTTPRoute is available, fill empty rules with defaults from the route
-		rules := rlp.Spec.RateLimits[idx].Rules
-		if route != nil && len(rules) == 0 {
-			rules = HTTPRouteRulesToRLPRules(common.RulesFromHTTPRoute(route))
-		}
-
-		flattenActions = append(flattenActions, GatewayAction{
-			Configurations: rlp.Spec.RateLimits[idx].Configurations,
-			Rules:          rules,
-		})
-	}
-
-	if len(rlp.Spec.RateLimits) > 0 && len(flattenActions) == 0 {
-		// no configurations specified in the rlp,
-		// then apply the default configuration (action list) and default rules from the route
-		flattenActions = []GatewayAction{
-			{
-				Configurations: DefaultGatewayConfiguration(client.ObjectKeyFromObject(rlp)),
-				Rules:          HTTPRouteRulesToRLPRules(common.RulesFromHTTPRoute(route)),
-			},
-		}
-	}
-
-	return flattenActions
-}
-
-func HTTPRouteRulesToRLPRules(httpRouteRules []common.HTTPRouteRule) []kuadrantv1beta1.Rule {
-	rlpRules := make([]kuadrantv1beta1.Rule, 0, len(httpRouteRules))
-	for idx := range httpRouteRules {
-		var tmp []string
-		rlpRules = append(rlpRules, kuadrantv1beta1.Rule{
-			// copy slice
-			Paths:   append(tmp, httpRouteRules[idx].Paths...),
-			Methods: append(tmp, httpRouteRules[idx].Methods...),
-			Hosts:   append(tmp, httpRouteRules[idx].Hosts...),
-		})
-	}
-	return rlpRules
+	Data []DataItem `json:"data,omitempty"`
 }
 
 type RateLimitPolicy struct {
-	Name            string   `json:"name"`
-	RateLimitDomain string   `json:"rate_limit_domain"`
-	UpstreamCluster string   `json:"upstream_cluster"`
-	Hostnames       []string `json:"hostnames"`
+	Name      string   `json:"name"`
+	Domain    string   `json:"domain"`
+	Service   string   `json:"service"`
+	Hostnames []string `json:"hostnames"`
+
 	// +optional
-	GatewayActions []GatewayAction `json:"gateway_actions,omitempty"`
+	Rules []Rule `json:"rules,omitempty"`
 }
 
 type WASMPlugin struct {
@@ -212,6 +124,181 @@ func (w *WASMPlugin) ToStruct() (*_struct.Struct, error) {
 	return pluginConfigStruct, nil
 }
 
+// WasmRules computes WASM rules from the policy and the targeted Route (which can be nil when a gateway is targeted)
+func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1alpha2.HTTPRoute) []Rule {
+	rules := make([]Rule, 0)
+	if rlp == nil {
+		return rules
+	}
+
+	for limitName, limit := range rlp.Spec.Limits {
+		// 1 RLP limit <---> 1 WASM rule
+		limitFullName := FullLimitName(rlp, limitName)
+		rule := ruleFromLimit(limitFullName, &limit, route)
+
+		rules = append(rules, rule)
+	}
+
+	return rules
+}
+
+func ruleFromLimit(limitFullName string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1alpha2.HTTPRoute) Rule {
+	if limit == nil {
+		return Rule{}
+	}
+
+	return Rule{
+		Conditions: conditionsFromLimit(limit, route),
+		Data:       dataFromLimt(limitFullName, limit),
+	}
+}
+
+func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1alpha2.HTTPRoute) []Condition {
+	if limit == nil {
+		return make([]Condition, 0)
+	}
+
+	// TODO(eastizle): review this implementation. This is a first naive implementation.
+	// The conditions must always be a subset of the route's matching rules.
+
+	conditions := make([]Condition, 0)
+
+	for routeSelectorIdx := range limit.RouteSelectors {
+		// TODO(eastizle): what if there are only Hostnames (i.e. empty "matches" list)
+		for matchIdx := range limit.RouteSelectors[routeSelectorIdx].Matches {
+			condition := Condition{
+				AllOf: patternExpresionsFromMatch(&limit.RouteSelectors[routeSelectorIdx].Matches[matchIdx]),
+			}
+
+			// merge hostnames expression in the same condition
+			for _, hostname := range limit.RouteSelectors[routeSelectorIdx].Hostnames {
+				condition.AllOf = append(condition.AllOf, patternExpresionFromHostname(hostname))
+			}
+
+			conditions = append(conditions, condition)
+		}
+	}
+
+	if len(conditions) == 0 {
+		conditions = append(conditions, conditionsFromRoute(route)...)
+	}
+
+	// merge when expression in the same condition
+	// must be done after adding route level conditions when no route selector are available
+	// prevent conditions only filled with "when" definitions
+	for whenIdx := range limit.When {
+		for idx := range conditions {
+			conditions[idx].AllOf = append(conditions[idx].AllOf, patternExpresionFromWhen(limit.When[whenIdx]))
+		}
+	}
+
+	return conditions
+}
+
+func conditionsFromRoute(route *gatewayapiv1alpha2.HTTPRoute) []Condition {
+	if route == nil {
+		return make([]Condition, 0)
+	}
+
+	conditions := make([]Condition, 0)
+
+	for ruleIdx := range route.Spec.Rules {
+		// One condition per match
+		for matchIdx := range route.Spec.Rules[ruleIdx].Matches {
+			conditions = append(conditions, Condition{
+				AllOf: patternExpresionsFromMatch(&route.Spec.Rules[ruleIdx].Matches[matchIdx]),
+			})
+		}
+	}
+
+	return conditions
+}
+
+func patternExpresionsFromMatch(match *gatewayapiv1alpha2.HTTPRouteMatch) []PatternExpression {
+	// TODO(eastizle): only paths and methods implemented
+
+	if match == nil {
+		return make([]PatternExpression, 0)
+	}
+
+	expressions := make([]PatternExpression, 0)
+
+	if match.Path != nil {
+		expressions = append(expressions, patternExpresionFromPathMatch(*match.Path))
+	}
+
+	if match.Method != nil {
+		expressions = append(expressions, patternExpresionFromMethod(*match.Method))
+	}
+
+	return expressions
+}
+
+func patternExpresionFromPathMatch(pathMatch gatewayapiv1alpha2.HTTPPathMatch) PatternExpression {
+
+	var (
+		operator PatternOperator = PatternOperator(kuadrantv1beta2.StartsWithOperator) // default value
+		value    string          = "/"                                                 // default value
+	)
+
+	if pathMatch.Value != nil {
+		value = *pathMatch.Value
+	}
+
+	if pathMatch.Type != nil {
+		if val, ok := PathMatchTypeMap[*pathMatch.Type]; ok {
+			operator = val
+		}
+	}
+
+	return PatternExpression{
+		Selector: "request.url_path",
+		Operator: operator,
+		Value:    value,
+	}
+}
+
+func patternExpresionFromMethod(method gatewayapiv1alpha2.HTTPMethod) PatternExpression {
+	return PatternExpression{
+		Selector: "request.method",
+		Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+		Value:    string(method),
+	}
+}
+
+func patternExpresionFromWhen(when kuadrantv1beta2.WhenCondition) PatternExpression {
+	return PatternExpression{
+		Selector: string(when.Selector),
+		Operator: PatternOperator(when.Operator),
+		Value:    when.Value,
+	}
+}
+
+func patternExpresionFromHostname(hostname gatewayapiv1alpha2.Hostname) PatternExpression {
+	return PatternExpression{
+		Selector: "request.host",
+		Operator: "eq",
+		Value:    string(hostname),
+	}
+}
+
+func dataFromLimt(limitFullName string, limit *kuadrantv1beta2.Limit) []DataItem {
+	if limit == nil {
+		return make([]DataItem, 0)
+	}
+
+	data := make([]DataItem, 0)
+
+	// static key representing the limit
+	data = append(data, DataItem{Static: &StaticSpec{Key: limitFullName, Value: "1"}})
+
+	for _, counter := range limit.Counters {
+		data = append(data, DataItem{Selector: &SelectorSpec{Selector: string(counter)}})
+	}
+
+	return data
+}
+
 func WASMPluginFromStruct(structure *_struct.Struct) (*WASMPlugin, error) {
 	if structure == nil {
 		return nil, errors.New("cannot desestructure WASMPlugin from nil")
@@ -230,12 +317,7 @@ func WASMPluginFromStruct(structure *_struct.Struct) (*WASMPlugin, error) {
 	return wasmPlugin, nil
 }
 
-type GatewayActionsByDomain map[string][]GatewayAction
-
-func (g GatewayActionsByDomain) String() string {
-	jsonData, _ := json.MarshalIndent(g, "", "  ")
-	return string(jsonData)
-}
+type WasmRulesByDomain map[string][]Rule
 
 func WASMPluginMutator(existingObj, desiredObj client.Object) (bool, error) {
 	update := false

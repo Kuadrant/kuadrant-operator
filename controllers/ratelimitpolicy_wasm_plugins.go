@@ -144,15 +144,15 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 		}
 	}
 
-	gatewayActions := rlptools.GatewayActionsByDomain{}
+	wasmRulesByDomain := make(rlptools.WasmRulesByDomain)
 
 	if gwRLP != nil {
 		if len(gw.Hostnames()) == 0 {
 			// wildcard domain
-			gatewayActions["*"] = append(gatewayActions["*"], rlptools.GatewayActionsFromRateLimitPolicy(gwRLP, nil)...)
+			wasmRulesByDomain["*"] = append(wasmRulesByDomain["*"], rlptools.WasmRules(gwRLP, nil)...)
 		} else {
 			for _, gwHostname := range gw.Hostnames() {
-				gatewayActions[gwHostname] = append(gatewayActions[gwHostname], rlptools.GatewayActionsFromRateLimitPolicy(gwRLP, nil)...)
+				wasmRulesByDomain[gwHostname] = append(wasmRulesByDomain[gwHostname], rlptools.WasmRules(gwRLP, nil)...)
 			}
 		}
 	}
@@ -164,10 +164,10 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 		}
 
 		// gateways limits merged with the route level limits
-		mergedGatewayActions := mergeGatewayActions(httpRouteRLP, gwRLP, httpRoute)
+		mergedGatewayActions := mergeRules(httpRouteRLP, gwRLP, httpRoute)
 		// routeLimits referenced by multiple hostnames
 		for _, hostname := range httpRoute.Spec.Hostnames {
-			gatewayActions[string(hostname)] = append(gatewayActions[string(hostname)], mergedGatewayActions...)
+			wasmRulesByDomain[string(hostname)] = append(wasmRulesByDomain[string(hostname)], mergedGatewayActions...)
 		}
 	}
 
@@ -177,13 +177,13 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 	}
 
 	// One RateLimitPolicy per domain
-	for domain, gatewayActionList := range gatewayActions {
+	for domain, rules := range wasmRulesByDomain {
 		rateLimitPolicy := rlptools.RateLimitPolicy{
-			Name:            domain,
-			RateLimitDomain: common.MarshallNamespace(gw.Key(), domain),
-			UpstreamCluster: common.KuadrantRateLimitClusterName,
-			Hostnames:       []string{domain},
-			GatewayActions:  gatewayActionList,
+			Name:      domain,
+			Domain:    common.MarshallNamespace(gw.Key(), domain),
+			Service:   common.KuadrantRateLimitClusterName,
+			Hostnames: []string{domain},
+			Rules:     rules,
 		}
 		wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, rateLimitPolicy)
 	}
@@ -192,13 +192,13 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 }
 
 // merge operations currently implemented with list append operation
-func mergeGatewayActions(routeRLP *kuadrantv1beta2.RateLimitPolicy, gwRLP *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []rlptools.GatewayAction {
-	gatewayActions := rlptools.GatewayActionsFromRateLimitPolicy(routeRLP, route)
+func mergeRules(routeRLP *kuadrantv1beta2.RateLimitPolicy, gwRLP *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []rlptools.Rule {
+	routeRules := rlptools.WasmRules(routeRLP, route)
 
 	if gwRLP == nil {
-		return gatewayActions
+		return routeRules
 	}
 
 	// add gateway level actions
-	return append(gatewayActions, rlptools.GatewayActionsFromRateLimitPolicy(gwRLP, nil)...)
+	return append(routeRules, rlptools.WasmRules(gwRLP, nil)...)
 }

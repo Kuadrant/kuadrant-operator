@@ -6,6 +6,10 @@ import (
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
 
+func FullLimitName(rlp *kuadrantv1beta2.RateLimitPolicy, limitKey string) string {
+	return fmt.Sprintf("%s/%s/%s", rlp.GetNamespace(), rlp.GetName(), limitKey)
+}
+
 // ReadLimitsFromRLP returns a list of Kuadrant limit objects that will be used as template
 // for limitador configuration
 func ReadLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []Limit {
@@ -17,7 +21,7 @@ func ReadLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []Limit {
 			limits = append(limits, Limit{
 				MaxValue:   maxValue,
 				Seconds:    seconds,
-				Conditions: []string{fmt.Sprintf("%s/%s/%s == \"1\"", rlp.GetName(), rlp.GetNamespace(), limitKey)},
+				Conditions: []string{fmt.Sprintf("%s == \"1\"", FullLimitName(rlp, limitKey))},
 				Variables:  limit.CountersAsStringList(),
 			})
 		}

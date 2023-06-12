@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -37,8 +38,17 @@ import (
 // +kubebuilder:validation:MaxLength=253
 type ContextSelector string
 
-// +kubebuilder:validation:Enum:=eq;neq
+// +kubebuilder:validation:Enum:=eq;neq;startswith;incl;excl;matches
 type WhenConditionOperator string
+
+const (
+	EqualOperator      WhenConditionOperator = "eq"
+	NotEqualOperator   WhenConditionOperator = "neq"
+	StartsWithOperator WhenConditionOperator = "startswith"
+	IncludeOperator    WhenConditionOperator = "incl"
+	ExcludeOperator    WhenConditionOperator = "excl"
+	MatchesOperator    WhenConditionOperator = "matches"
+)
 
 // +kubebuilder:validation:Enum:=second;minute;hour;day
 type TimeUnit string
@@ -77,12 +87,12 @@ type RouteSelector struct {
 	// Hostnames defines a set of hostname that should match against the HTTP Host header to select a HTTPRoute to process the request
 	// https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
 	// +optional
-	Hostnames []gatewayapiv1alpha2.Hostname `json:"hostnames,omitempty"`
+	Hostnames []gatewayapiv1beta1.Hostname `json:"hostnames,omitempty"`
 
 	// Matches define conditions used for matching the rule against incoming HTTP requests.
 	// https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
 	// +optional
-	Matches []gatewayapiv1alpha2.HTTPRouteMatch `json:"matches,omitempty"`
+	Matches []gatewayapiv1beta1.HTTPRouteMatch `json:"matches,omitempty"`
 }
 
 // Limit represents a complete rate limit configuration
@@ -215,6 +225,23 @@ func (r *RateLimitPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReferenc
 
 func (r *RateLimitPolicy) GetWrappedNamespace() gatewayapiv1alpha2.Namespace {
 	return gatewayapiv1alpha2.Namespace(r.Namespace)
+}
+
+func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
+	ruleHosts = make([]string, 0)
+	for _, limit := range r.Spec.Limits {
+		for _, routeSelector := range limit.RouteSelectors {
+			convertHostnamesToString := func(gwHostnames []gatewayapiv1alpha2.Hostname) []string {
+				hostnames := make([]string, 0, len(gwHostnames))
+				for _, gwHostName := range gwHostnames {
+					hostnames = append(hostnames, string(gwHostName))
+				}
+				return hostnames
+			}
+			ruleHosts = append(ruleHosts, convertHostnamesToString(routeSelector.Hostnames)...)
+		}
+	}
+	return
 }
 
 func init() {

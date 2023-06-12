@@ -14,13 +14,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
+func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
 	logger, _ := logr.FromContext(ctx)
 
 	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {

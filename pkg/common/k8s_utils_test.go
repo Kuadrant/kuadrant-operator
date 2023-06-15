@@ -773,3 +773,49 @@ func TestContainsObjectKey(t *testing.T) {
 		})
 	}
 }
+
+func TestFindObjectKey(t *testing.T) {
+	key1 := client.ObjectKey{Namespace: "ns1", Name: "obj1"}
+	key2 := client.ObjectKey{Namespace: "ns2", Name: "obj2"}
+	key3 := client.ObjectKey{Namespace: "ns3", Name: "obj3"}
+
+	testCases := []struct {
+		name     string
+		list     []client.ObjectKey
+		key      client.ObjectKey
+		expected int
+	}{
+		{
+			name:     "when input slice has one search ObjectKey then return its index",
+			list:     []client.ObjectKey{key1, key2, key3},
+			key:      key2,
+			expected: 1,
+		},
+		{
+			name:     "when input slice has no search ObjectKey then return length of input slice",
+			list:     []client.ObjectKey{key1, key3},
+			key:      key2,
+			expected: 2,
+		},
+		{
+			name:     "when input slice is empty then return 0",
+			list:     []client.ObjectKey{},
+			key:      key1,
+			expected: 0,
+		},
+		{
+			name:     "when there are multiple occurrences of the search ObjectKey then return the index of first occurrence",
+			list:     []client.ObjectKey{key1, key2, key1, key3},
+			key:      key2,
+			expected: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if output := FindObjectKey(tc.list, tc.key); output != tc.expected {
+				t.Errorf("expected %d but got %d", tc.expected, output)
+			}
+		})
+	}
+}

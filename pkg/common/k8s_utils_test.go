@@ -36,31 +36,31 @@ func TestObjectKeyListDifference(t *testing.T) {
 		expected []client.ObjectKey
 	}{
 		{
-			"empty",
+			"when both input slices are empty then return an empty slice",
 			[]client.ObjectKey{},
 			[]client.ObjectKey{},
 			[]client.ObjectKey{},
 		},
 		{
-			"a empty",
+			"when inputA is empty and inputB has elements then return an empty slice",
 			[]client.ObjectKey{},
 			[]client.ObjectKey{key1},
 			[]client.ObjectKey{},
 		},
 		{
-			"b empty",
+			"when inputA has elements and inputB is empty then return inputA as the result",
 			[]client.ObjectKey{key1, key2},
 			[]client.ObjectKey{},
 			[]client.ObjectKey{key1, key2},
 		},
 		{
-			"equal",
+			"when inputA and inputB are equal then return an empty slice",
 			[]client.ObjectKey{key1, key2, key3},
 			[]client.ObjectKey{key1, key2, key3},
 			[]client.ObjectKey{},
 		},
 		{
-			"missing key2",
+			"when inputA and inputB have common elements then return the difference",
 			[]client.ObjectKey{key1, key2, key3},
 			[]client.ObjectKey{key1, key3},
 			[]client.ObjectKey{key2},

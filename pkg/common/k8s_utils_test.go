@@ -819,3 +819,79 @@ func TestFindObjectKey(t *testing.T) {
 		})
 	}
 }
+
+func TestFindDeploymentStatusCondition(t *testing.T) {
+	tests := []struct {
+		name          string
+		conditions    []appsv1.DeploymentCondition
+		conditionType string
+		expected      *appsv1.DeploymentCondition
+	}{
+		{
+			name: "when search condition exists then return the condition",
+			conditions: []appsv1.DeploymentCondition{
+				{
+					Type:   appsv1.DeploymentConditionType("Ready"),
+					Status: corev1.ConditionTrue,
+				},
+				{
+					Type:   appsv1.DeploymentConditionType("Progressing"),
+					Status: corev1.ConditionFalse,
+				},
+			},
+			conditionType: "Ready",
+			expected: &appsv1.DeploymentCondition{
+				Type:   appsv1.DeploymentConditionType("Ready"),
+				Status: corev1.ConditionTrue,
+			},
+		},
+		{
+			name: "when search condition does not exist then return nil",
+			conditions: []appsv1.DeploymentCondition{
+				{
+					Type:   appsv1.DeploymentConditionType("Progressing"),
+					Status: corev1.ConditionFalse,
+				},
+			},
+			conditionType: "Ready",
+			expected:      nil,
+		},
+		{
+			name:          "when conditions slice is empty then return nil",
+			conditions:    []appsv1.DeploymentCondition{},
+			conditionType: "Ready",
+			expected:      nil,
+		},
+		{
+			name: "when multiple conditions have the same type then return the first occurrence",
+			conditions: []appsv1.DeploymentCondition{
+				{
+					Type:   appsv1.DeploymentConditionType("Ready"),
+					Status: corev1.ConditionTrue,
+				},
+				{
+					Type:   appsv1.DeploymentConditionType("Progressing"),
+					Status: corev1.ConditionTrue,
+				},
+				{
+					Type:   appsv1.DeploymentConditionType("Ready"),
+					Status: corev1.ConditionFalse,
+				},
+			},
+			conditionType: "Ready",
+			expected: &appsv1.DeploymentCondition{
+				Type:   appsv1.DeploymentConditionType("Ready"),
+				Status: corev1.ConditionTrue,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := FindDeploymentStatusCondition(tc.conditions, tc.conditionType)
+			if !reflect.DeepEqual(actual, tc.expected) {
+				t.Errorf("unexpected result: got %s, want %s", actual.String(), tc.expected.String())
+			}
+		})
+	}
+}

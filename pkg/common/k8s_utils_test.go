@@ -27,6 +27,7 @@ func TestObjectKeyListDifference(t *testing.T) {
 	key1 := client.ObjectKey{Namespace: "ns1", Name: "obj1"}
 	key2 := client.ObjectKey{Namespace: "ns2", Name: "obj2"}
 	key3 := client.ObjectKey{Namespace: "ns3", Name: "obj3"}
+	key4 := client.ObjectKey{Namespace: "ns4", Name: "obj4"}
 
 	testCases := []struct {
 		name     string
@@ -63,6 +64,12 @@ func TestObjectKeyListDifference(t *testing.T) {
 			[]client.ObjectKey{key1, key2, key3},
 			[]client.ObjectKey{key1, key3},
 			[]client.ObjectKey{key2},
+		},
+		{
+			"when inputA and inputB have no common elements then return inputA as the result",
+			[]client.ObjectKey{key1, key2},
+			[]client.ObjectKey{key3, key4},
+			[]client.ObjectKey{key1, key2},
 		},
 	}
 

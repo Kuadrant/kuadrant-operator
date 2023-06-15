@@ -383,7 +383,7 @@ func TestStatusConditionsMarshalJSON(t *testing.T) {
 		err      error
 	}{
 		{
-			name:     "when input is empty then return an empty JSON (empty byte array)",
+			name:     "when input is empty then return an empty JSON array",
 			input:    []metav1.Condition{},
 			expected: []byte("[]"),
 			err:      nil,

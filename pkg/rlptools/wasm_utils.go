@@ -9,7 +9,6 @@ import (
 	_struct "github.com/golang/protobuf/ptypes/struct"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -19,7 +18,7 @@ import (
 var (
 	WASMFilterImageURL = common.FetchEnv("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
 
-	PathMatchTypeMap = map[gatewayapiv1alpha2.PathMatchType]PatternOperator{
+	PathMatchTypeMap = map[gatewayapiv1beta1.PathMatchType]PatternOperator{
 		gatewayapiv1beta1.PathMatchExact:             PatternOperator(kuadrantv1beta2.EqualOperator),
 		gatewayapiv1beta1.PathMatchPathPrefix:        PatternOperator(kuadrantv1beta2.StartsWithOperator),
 		gatewayapiv1beta1.PathMatchRegularExpression: PatternOperator(kuadrantv1beta2.MatchesOperator),
@@ -125,7 +124,7 @@ func (w *WASMPlugin) ToStruct() (*_struct.Struct, error) {
 }
 
 // WasmRules computes WASM rules from the policy and the targeted Route (which can be nil when a gateway is targeted)
-func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1alpha2.HTTPRoute) []Rule {
+func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []Rule {
 	rules := make([]Rule, 0)
 	if rlp == nil {
 		return rules
@@ -142,7 +141,7 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1alpha2.H
 	return rules
 }
 
-func ruleFromLimit(limitFullName string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1alpha2.HTTPRoute) Rule {
+func ruleFromLimit(limitFullName string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute) Rule {
 	if limit == nil {
 		return Rule{}
 	}
@@ -153,7 +152,7 @@ func ruleFromLimit(limitFullName string, limit *kuadrantv1beta2.Limit, route *ga
 	}
 }
 
-func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1alpha2.HTTPRoute) []Condition {
+func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute) []Condition {
 	if limit == nil {
 		return make([]Condition, 0)
 	}
@@ -195,7 +194,7 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1alpha2
 	return conditions
 }
 
-func conditionsFromRoute(route *gatewayapiv1alpha2.HTTPRoute) []Condition {
+func conditionsFromRoute(route *gatewayapiv1beta1.HTTPRoute) []Condition {
 	if route == nil {
 		return make([]Condition, 0)
 	}
@@ -214,7 +213,7 @@ func conditionsFromRoute(route *gatewayapiv1alpha2.HTTPRoute) []Condition {
 	return conditions
 }
 
-func patternExpresionsFromMatch(match *gatewayapiv1alpha2.HTTPRouteMatch) []PatternExpression {
+func patternExpresionsFromMatch(match *gatewayapiv1beta1.HTTPRouteMatch) []PatternExpression {
 	// TODO(eastizle): only paths and methods implemented
 
 	if match == nil {
@@ -234,7 +233,7 @@ func patternExpresionsFromMatch(match *gatewayapiv1alpha2.HTTPRouteMatch) []Patt
 	return expressions
 }
 
-func patternExpresionFromPathMatch(pathMatch gatewayapiv1alpha2.HTTPPathMatch) PatternExpression {
+func patternExpresionFromPathMatch(pathMatch gatewayapiv1beta1.HTTPPathMatch) PatternExpression {
 
 	var (
 		operator PatternOperator = PatternOperator(kuadrantv1beta2.StartsWithOperator) // default value
@@ -258,7 +257,7 @@ func patternExpresionFromPathMatch(pathMatch gatewayapiv1alpha2.HTTPPathMatch) P
 	}
 }
 
-func patternExpresionFromMethod(method gatewayapiv1alpha2.HTTPMethod) PatternExpression {
+func patternExpresionFromMethod(method gatewayapiv1beta1.HTTPMethod) PatternExpression {
 	return PatternExpression{
 		Selector: "request.method",
 		Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
@@ -274,7 +273,7 @@ func patternExpresionFromWhen(when kuadrantv1beta2.WhenCondition) PatternExpress
 	}
 }
 
-func patternExpresionFromHostname(hostname gatewayapiv1alpha2.Hostname) PatternExpression {
+func patternExpresionFromHostname(hostname gatewayapiv1beta1.Hostname) PatternExpression {
 	return PatternExpression{
 		Selector: "request.host",
 		Operator: "eq",

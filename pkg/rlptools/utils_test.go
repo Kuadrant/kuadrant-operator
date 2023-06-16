@@ -11,8 +11,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func rlp_1limit_1rate(ns, name string) kuadrantv1beta2.RateLimitPolicy {
-	return kuadrantv1beta2.RateLimitPolicy{
+func rlp_1limit_1rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
+	return &kuadrantv1beta2.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
 			APIVersion: kuadrantv1beta2.GroupVersion.String(),
@@ -37,8 +37,8 @@ func rlp_1limit_1rate(ns, name string) kuadrantv1beta2.RateLimitPolicy {
 	}
 }
 
-func rlp_2limit_1rate(ns, name string) kuadrantv1beta2.RateLimitPolicy {
-	return kuadrantv1beta2.RateLimitPolicy{
+func rlp_2limit_1rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
+	return &kuadrantv1beta2.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
 			APIVersion: kuadrantv1beta2.GroupVersion.String(),
@@ -72,8 +72,8 @@ func rlp_2limit_1rate(ns, name string) kuadrantv1beta2.RateLimitPolicy {
 	}
 }
 
-func rlp_1limit_2rate(ns, name string) kuadrantv1beta2.RateLimitPolicy {
-	return kuadrantv1beta2.RateLimitPolicy{
+func rlp_1limit_2rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
+	return &kuadrantv1beta2.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
 			APIVersion: kuadrantv1beta2.GroupVersion.String(),
@@ -103,8 +103,8 @@ func rlp_1limit_2rate(ns, name string) kuadrantv1beta2.RateLimitPolicy {
 	}
 }
 
-func rlp_1limit_1rate_1counter(ns, name string) kuadrantv1beta2.RateLimitPolicy {
-	return kuadrantv1beta2.RateLimitPolicy{
+func rlp_1limit_1rate_1counter(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
+	return &kuadrantv1beta2.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
 			APIVersion: kuadrantv1beta2.GroupVersion.String(),
@@ -135,7 +135,7 @@ func rlp_1limit_1rate_1counter(ns, name string) kuadrantv1beta2.RateLimitPolicy 
 func TestReadLimitsFromRLP(t *testing.T) {
 	testCases := []struct {
 		name           string
-		rlp            kuadrantv1beta2.RateLimitPolicy
+		rlp            *kuadrantv1beta2.RateLimitPolicy
 		expectedLimits []Limit
 	}{
 		{
@@ -222,72 +222,72 @@ func TestConvertRateIntoSeconds(t *testing.T) {
 	}{
 		{
 			name: "seconds",
-			rate: {
-				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.kuadrantv1beta2.TimeUnit("second"),
+			rate: kuadrantv1beta2.Rate{
+				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("second"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  2,
 		},
 		{
 			name: "minutes",
-			rate: {
-				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.kuadrantv1beta2.TimeUnit("minute"),
+			rate: kuadrantv1beta2.Rate{
+				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("minute"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  2 * 60,
 		},
 		{
 			name: "hours",
-			rate: {
-				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.kuadrantv1beta2.TimeUnit("hour"),
+			rate: kuadrantv1beta2.Rate{
+				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("hour"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  2 * 60 * 60,
 		},
 		{
 			name: "day",
-			rate: {
-				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.kuadrantv1beta2.TimeUnit("day"),
+			rate: kuadrantv1beta2.Rate{
+				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("day"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  2 * 60 * 60 * 24,
 		},
 		{
 			name: "negative limit",
-			rate: {
-				Limit: -5, Duration: 2, Unit: kuadrantv1beta2.kuadrantv1beta2.TimeUnit("second"),
+			rate: kuadrantv1beta2.Rate{
+				Limit: -5, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("second"),
 			},
 			expectedMaxValue: 0,
 			expectedSeconds:  2,
 		},
 		{
 			name: "negative duration",
-			rate: {
-				Limit: 5, Duration: -2, Unit: kuadrantv1beta2.kuadrantv1beta2.TimeUnit("second"),
+			rate: kuadrantv1beta2.Rate{
+				Limit: 5, Duration: -2, Unit: kuadrantv1beta2.TimeUnit("second"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  0,
 		},
 		{
 			name: "limit  is 0",
-			rate: {
-				Limit: 0, Duration: 2, Unit: kuadrantv1beta2.kuadrantv1beta2.TimeUnit("second"),
+			rate: kuadrantv1beta2.Rate{
+				Limit: 0, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("second"),
 			},
 			expectedMaxValue: 0,
 			expectedSeconds:  2,
 		},
 		{
 			name: "rate is 0",
-			rate: {
-				Limit: 5, Duration: 0, Unit: kuadrantv1beta2.kuadrantv1beta2.TimeUnit("second"),
+			rate: kuadrantv1beta2.Rate{
+				Limit: 5, Duration: 0, Unit: kuadrantv1beta2.TimeUnit("second"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  0,
 		},
 		{
 			name: "unexpected time unit",
-			rate: {
-				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.kuadrantv1beta2.TimeUnit("unknown"),
+			rate: kuadrantv1beta2.Rate{
+				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("unknown"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  0,

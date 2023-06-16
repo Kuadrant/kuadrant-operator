@@ -11,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
@@ -371,7 +370,7 @@ func TestLimitIndexAddLimit(t *testing.T) {
 		variables  = []string{"c", "d"}
 	)
 
-	limit := &kuadrantv1beta1.Limit{
+	limit := &Limit{
 		Conditions: conditions, MaxValue: maxValue, Seconds: seconds, Variables: variables,
 	}
 

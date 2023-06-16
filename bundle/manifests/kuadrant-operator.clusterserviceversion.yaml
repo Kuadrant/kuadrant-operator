@@ -62,6 +62,31 @@ metadata:
             "name": "kuadrant-sample"
           },
           "spec": {}
+        },
+        {
+          "apiVersion": "kuadrant.io/v1beta2",
+          "kind": "RateLimitPolicy",
+          "metadata": {
+            "name": "toystore"
+          },
+          "spec": {
+            "limits": {
+              "toys": {
+                "rates": [
+                  {
+                    "duration": 1,
+                    "limit": 50,
+                    "unit": "minute"
+                  }
+                ]
+              }
+            },
+            "targetRef": {
+              "group": "gateway.networking.k8s.io",
+              "kind": "HTTPRoute",
+              "name": "toystore"
+            }
+          }
         }
       ]
     capabilities: Basic Install

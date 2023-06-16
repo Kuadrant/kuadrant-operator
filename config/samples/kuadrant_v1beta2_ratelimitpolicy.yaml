@@ -1,5 +1,5 @@
 ---
-apiVersion: kuadrant.io/v1beta1
+apiVersion: kuadrant.io/v1beta2
 kind: RateLimitPolicy
 metadata:
   name: toystore
@@ -14,31 +14,3 @@ spec:
       - limit: 50
         duration: 1
         unit: minute
-      counters:
-      - auth.identity.username
-      routeSelectors:
-      - matches:
-        - path:
-            type: PathPrefix
-            value: "/toys"
-        hostnames:
-        - toys.example.com
-      when:
-      - selector: auth.identity.group
-        operator: neq
-        value: admin
-    assets:
-      rates:
-      - limit: 5
-        duration: 1
-        unit: minute
-      - limit: 100
-        duration: 12
-        unit: hour
-      routeSelectors:
-      - matches:
-        - path:
-            type: PathPrefix
-            value: "/assets/"
-        hostnames:
-        - assets.example.com

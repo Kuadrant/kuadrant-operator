@@ -16,7 +16,7 @@ spec:
     singular: ratelimitpolicy
   scope: Namespaced
   versions:
-  - name: v1beta1
+  - name: v1beta2
     schema:
       openAPIV3Schema:
         description: RateLimitPolicy is the Schema for the ratelimitpolicies API
@@ -36,185 +36,279 @@ spec:
           spec:
             description: RateLimitPolicySpec defines the desired state of RateLimitPolicy
             properties:
-              rateLimits:
-                description: RateLimits holds the list of rate limit configurations
-                items:
-                  description: RateLimit represents a complete rate limit configuration
+              limits:
+                additionalProperties:
+                  description: Limit represents a complete rate limit configuration
                   properties:
-                    configurations:
-                      description: Configurations holds list of (action) configuration.
+                    counters:
+                      description: Counters defines additional rate limit counters
+                        based on context qualifiers and well known selectors TODO
+                        Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
                       items:
-                        description: Configuration represents an action configuration.
-                          The equivalent of [config.route.v3.RateLimit](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-msg-config-route-v3-ratelimit)
-                          envoy object. Each action configuration produces, at most,
-                          one descriptor. Depending on the incoming request, one configuration
-                          may or may not produce a rate limit descriptor.
+                        description: 'ContextSelector defines one item from the well
+                          known attributes Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                          Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors'
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                      type: array
+                    rates:
+                      description: Rates holds the list of limit rates
+                      items:
+                        description: Rate defines the actual rate limit that will
+                          be used when there is a match
                         properties:
-                          actions:
-                            description: Actions holds list of action specifiers.
-                              Each action specifier can only define one action type.
+                          duration:
+                            description: Duration defines the time period for which
+                              the Limit specified above applies.
+                            type: integer
+                          limit:
+                            description: Limit defines the max value allowed for a
+                              given period of time
+                            type: integer
+                          unit:
+                            description: 'Duration defines the time uni Possible values
+                              are: "second", "minute", "hour", "day"'
+                            enum:
+                            - second
+                            - minute
+                            - hour
+                            - day
+                            type: string
+                        required:
+                        - duration
+                        - limit
+                        - unit
+                        type: object
+                      type: array
+                    routeSelectors:
+                      description: RouteSelectors defines semantics for matching an
+                        HTTP request based on conditions
+                      items:
+                        description: RouteSelector defines semantics for matching
+                          an HTTP request based on conditions https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                        properties:
+                          hostnames:
+                            description: Hostnames defines a set of hostname that
+                              should match against the HTTP Host header to select
+                              a HTTPRoute to process the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
                             items:
-                              description: Action_Specifier defines one envoy rate
-                                limit action
-                              oneOf:
-                              - required:
-                                - generic_key
-                              - required:
-                                - metadata
-                              - required:
-                                - remote_address
-                              - required:
-                                - request_headers
+                              description: "Hostname is the fully qualified domain
+                                name of a network host. This matches the RFC 1123
+                                definition of a hostname with 2 notable exceptions:
+                                \n 1. IPs are not allowed. 2. A hostname may be prefixed
+                                with a wildcard label (`*.`). The wildcard label must
+                                appear by itself as the first label. \n Hostname can
+                                be \"precise\" which is a domain name without the
+                                terminating dot of a network host (e.g. \"foo.example.com\")
+                                or \"wildcard\", which is a domain name prefixed with
+                                a single wildcard label (e.g. `*.example.com`). \n
+                                Note that as per RFC1035 and RFC1123, a *label* must
+                                consist of lower case alphanumeric characters or '-',
+                                and must start and end with an alphanumeric character.
+                                No other punctuation is allowed."
+                              type: string
+                            type: array
+                          matches:
+                            description: Matches define conditions used for matching
+                              the rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                            items:
+                              description: "HTTPRouteMatch defines the predicate used
+                                to match requests to a given action. Multiple match
+                                types are ANDed together, i.e. the match will evaluate
+                                to true only if all conditions are satisfied. \n For
+                                example, the match below will match a HTTP request
+                                only if its path starts with `/foo` AND it contains
+                                the `version: v1` header: \n ``` match: \n path: value:
+                                \"/foo\" headers: - name: \"version\" value \"v1\"
+                                \n ```"
                               properties:
-                                generic_key:
+                                headers:
+                                  description: Headers specifies HTTP request header
+                                    matchers. Multiple match values are ANDed together,
+                                    meaning, a request must match all the specified
+                                    headers to select the route.
+                                  items:
+                                    description: HTTPHeaderMatch describes how to
+                                      select a HTTP route by matching HTTP request
+                                      headers.
+                                    properties:
+                                      name:
+                                        description: "Name is the name of the HTTP
+                                          Header to be matched. Name matching MUST
+                                          be case insensitive. (See https://tools.ietf.org/html/rfc7230#section-3.2).
+                                          \n If multiple entries specify equivalent
+                                          header names, only the first entry with
+                                          an equivalent name MUST be considered for
+                                          a match. Subsequent entries with an equivalent
+                                          header name MUST be ignored. Due to the
+                                          case-insensitivity of header names, \"foo\"
+                                          and \"Foo\" are considered equivalent. \n
+                                          When a header is repeated in an HTTP request,
+                                          it is implementation-specific behavior as
+                                          to how this is represented. Generally, proxies
+                                          should follow the guidance from the RFC:
+                                          https://www.rfc-editor.org/rfc/rfc7230.html#section-3.2.2
+                                          regarding processing a repeated header,
+                                          with special handling for \"Set-Cookie\"."
+                                        type: string
+                                      type:
+                                        description: "Type specifies how to match
+                                          against the value of the header. \n Support:
+                                          Core (Exact) \n Support: Implementation-specific
+                                          (RegularExpression) \n Since RegularExpression
+                                          HeaderMatchType has implementation-specific
+                                          conformance, implementations can support
+                                          POSIX, PCRE or any other dialects of regular
+                                          expressions. Please read the implementation's
+                                          documentation to determine the supported
+                                          dialect."
+                                        type: string
+                                      value:
+                                        description: Value is the value of HTTP Header
+                                          to be matched.
+                                        type: string
+                                    required:
+                                    - name
+                                    - value
+                                    type: object
+                                  type: array
+                                method:
+                                  description: "Method specifies HTTP method matcher.
+                                    When specified, this route will be matched only
+                                    if the request has the specified method. \n Support:
+                                    Extended"
+                                  type: string
+                                path:
+                                  description: Path specifies a HTTP request path
+                                    matcher. If this field is not specified, a default
+                                    prefix match on the "/" path is provided.
                                   properties:
-                                    descriptor_key:
+                                    type:
+                                      description: "Type specifies how to match against
+                                        the path Value. \n Support: Core (Exact, PathPrefix)
+                                        \n Support: Implementation-specific (RegularExpression)"
                                       type: string
-                                    descriptor_value:
+                                    value:
+                                      description: Value of the HTTP path to match
+                                        against.
                                       type: string
-                                  required:
-                                  - descriptor_value
                                   type: object
-                                metadata:
-                                  properties:
-                                    default_value:
-                                      type: string
-                                    descriptor_key:
-                                      type: string
-                                    metadata_key:
-                                      properties:
-                                        key:
-                                          type: string
-                                        path:
-                                          items:
-                                            properties:
-                                              segment:
-                                                properties:
-                                                  key:
-                                                    type: string
-                                                required:
-                                                - key
-                                                type: object
-                                            required:
-                                            - segment
-                                            type: object
-                                          type: array
-                                      required:
-                                      - key
-                                      - path
-                                      type: object
-                                    source:
-                                      default: DYNAMIC
-                                      enum:
-                                      - DYNAMIC
-                                      - ROUTE_ENTRY
-                                      type: string
-                                  required:
-                                  - descriptor_key
-                                  - metadata_key
-                                  type: object
-                                remote_address:
-                                  description: RemoteAddressSpec no need to specify
-                                    descriptor entry is populated using the trusted
-                                    address from [x-forwarded-for](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_conn_man/headers#config-http-conn-man-headers-x-forwarded-for)
-                                  type: object
-                                request_headers:
-                                  description: RequestHeadersSpec Rate limit on request
-                                    headers.
-                                  properties:
-                                    descriptor_key:
-                                      type: string
-                                    header_name:
-                                      type: string
-                                    skip_if_absent:
-                                      type: boolean
-                                  required:
-                                  - descriptor_key
-                                  - header_name
-                                  type: object
+                                queryParams:
+                                  description: "QueryParams specifies HTTP query parameter
+                                    matchers. Multiple match values are ANDed together,
+                                    meaning, a request must match all the specified
+                                    query parameters to select the route. \n Support:
+                                    Extended"
+                                  items:
+                                    description: HTTPQueryParamMatch describes how
+                                      to select a HTTP route by matching HTTP query
+                                      parameters.
+                                    properties:
+                                      name:
+                                        description: "Name is the name of the HTTP
+                                          query param to be matched. This must be
+                                          an exact string match. (See https://tools.ietf.org/html/rfc7230#section-2.7.3).
+                                          \n If multiple entries specify equivalent
+                                          query param names, only the first entry
+                                          with an equivalent name MUST be considered
+                                          for a match. Subsequent entries with an
+                                          equivalent query param name MUST be ignored.
+                                          \n If a query param is repeated in an HTTP
+                                          request, the behavior is purposely left
+                                          undefined, since different data planes have
+                                          different capabilities. However, it is *recommended*
+                                          that implementations should match against
+                                          the first value of the param if the data
+                                          plane supports it, as this behavior is expected
+                                          in other load balancing contexts outside
+                                          of the Gateway API. \n Users SHOULD NOT
+                                          route traffic based on repeated query params
+                                          to guard themselves against potential differences
+                                          in the implementations."
+                                        type: string
+                                      type:
+                                        description: "Type specifies how to match
+                                          against the value of the query parameter.
+                                          \n Support: Extended (Exact) \n Support:
+                                          Implementation-specific (RegularExpression)
+                                          \n Since RegularExpression QueryParamMatchType
+                                          has Implementation-specific conformance,
+                                          implementations can support POSIX, PCRE
+                                          or any other dialects of regular expressions.
+                                          Please read the implementation's documentation
+                                          to determine the supported dialect."
+                                        type: string
+                                      value:
+                                        description: Value is the value of HTTP query
+                                          param to be matched.
+                                        type: string
+                                    required:
+                                    - name
+                                    - value
+                                    type: object
+                                  type: array
                               type: object
                             type: array
-                        required:
-                        - actions
                         type: object
                       type: array
-                    limits:
-                      description: Limits holds a list of Limitador limits
+                    when:
+                      description: When holds the list of conditions for the policy
+                        to be enforced. Called also "soft" conditions as route selectors
+                        must also match
                       items:
-                        description: Limit represents partially a Limitador limit.
+                        description: RouteSelector defines semantics for matching
+                          an HTTP request based on conditions https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
                         properties:
-                          conditions:
-                            items:
-                              type: string
-                            type: array
-                          maxValue:
-                            type: integer
-                          seconds:
-                            type: integer
-                          variables:
-                            items:
-                              type: string
-                            type: array
+                          operator:
+                            description: 'The binary operator to be applied to the
+                              content fetched from the selector Possible values are:
+                              "eq" (equal to), "neq" (not equal to)'
+                            enum:
+                            - eq
+                            - neq
+                            - startswith
+                            - incl
+                            - excl
+                            - matches
+                            type: string
+                          selector:
+                            description: Selector defines one item from the well known
+                              selectors TODO Document properly "Well-known selector"
+                              https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                          value:
+                            description: The value of reference for the comparison.
+                            type: string
                         required:
-                        - maxValue
-                        - seconds
-                        type: object
-                      type: array
-                    rules:
-                      description: Rules represents the definition of the scope of
-                        the rate limit object Defines a list of conditions for which
-                        rate limit configuration will apply Matching occurs when at
-                        least one rule applies against the incoming request. If rules
-                        are not set, or empty, it is equivalent to matching all the
-                        requests.
-                      items:
-                        description: Rule defines a single condition for the rate
-                          limit configuration All defined fields within the rule must
-                          be met to have a rule match
-                        properties:
-                          hosts:
-                            items:
-                              type: string
-                            type: array
-                          methods:
-                            items:
-                              type: string
-                            type: array
-                          paths:
-                            items:
-                              type: string
-                            type: array
+                        - operator
+                        - selector
+                        - value
                         type: object
                       type: array
                   type: object
-                type: array
+                description: Limits holds the struct of limits indexed by a unique
+                  name
+                type: object
               targetRef:
                 description: TargetRef identifies an API object to apply policy to.
                 properties:
                   group:
                     description: Group is the group of the target resource.
-                    maxLength: 253
-                    pattern: ^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                     type: string
                   kind:
                     description: Kind is kind of the target resource.
-                    maxLength: 63
-                    minLength: 1
-                    pattern: ^[a-zA-Z]([-a-zA-Z0-9]*[a-zA-Z0-9])?$
                     type: string
                   name:
                     description: Name is the name of the target resource.
-                    maxLength: 253
-                    minLength: 1
                     type: string
                   namespace:
                     description: Namespace is the namespace of the referent. When
                       unspecified, the local namespace is inferred. Even when policy
                       targets a resource in a different namespace, it MUST only apply
                       to traffic originating from the same namespace as the policy.
-                    maxLength: 63
-                    minLength: 1
-                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                     type: string
                 required:
                 - group
@@ -251,7 +345,6 @@ spec:
                     message:
                       description: message is a human readable message indicating
                         details about the transition. This may be an empty string.
-                      maxLength: 32768
                       type: string
                     observedGeneration:
                       description: observedGeneration represents the .metadata.generation
@@ -260,7 +353,6 @@ spec:
                         is 9, the condition is out of date with respect to the current
                         state of the instance.
                       format: int64
-                      minimum: 0
                       type: integer
                     reason:
                       description: reason contains a programmatic identifier indicating
@@ -269,16 +361,9 @@ spec:
                         meanings for this field, and whether the values are considered
                         a guaranteed API. The value should be a CamelCase string.
                         This field may not be empty.
-                      maxLength: 1024
-                      minLength: 1
-                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
                       type: string
                     status:
                       description: status of the condition, one of True, False, Unknown.
-                      enum:
-                      - "True"
-                      - "False"
-                      - Unknown
                       type: string
                     type:
                       description: type of condition in CamelCase or in foo.example.com/CamelCase.
@@ -286,8 +371,6 @@ spec:
                         like Available, but because arbitrary conditions can be useful
                         (see .node.status.conditions), the ability to deconflict is
                         important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
-                      maxLength: 316
-                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
                       type: string
                   required:
                   - lastTransitionTime
@@ -300,164 +383,6 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              gatewaysRateLimits:
-                description: GatewaysRateLimits shows the rate limit configuration
-                  applied by policies at the gateway level this field is only meant
-                  for rate limit policies targeting a route
-                items:
-                  properties:
-                    gatewayName:
-                      type: string
-                    rateLimits:
-                      description: RateLimits holds the list of rate limit configurations
-                      items:
-                        description: RateLimit represents a complete rate limit configuration
-                        properties:
-                          configurations:
-                            description: Configurations holds list of (action) configuration.
-                            items:
-                              description: Configuration represents an action configuration.
-                                The equivalent of [config.route.v3.RateLimit](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#envoy-v3-api-msg-config-route-v3-ratelimit)
-                                envoy object. Each action configuration produces,
-                                at most, one descriptor. Depending on the incoming
-                                request, one configuration may or may not produce
-                                a rate limit descriptor.
-                              properties:
-                                actions:
-                                  description: Actions holds list of action specifiers.
-                                    Each action specifier can only define one action
-                                    type.
-                                  items:
-                                    description: Action_Specifier defines one envoy
-                                      rate limit action
-                                    properties:
-                                      generic_key:
-                                        properties:
-                                          descriptor_key:
-                                            type: string
-                                          descriptor_value:
-                                            type: string
-                                        required:
-                                        - descriptor_value
-                                        type: object
-                                      metadata:
-                                        properties:
-                                          default_value:
-                                            type: string
-                                          descriptor_key:
-                                            type: string
-                                          metadata_key:
-                                            properties:
-                                              key:
-                                                type: string
-                                              path:
-                                                items:
-                                                  properties:
-                                                    segment:
-                                                      properties:
-                                                        key:
-                                                          type: string
-                                                      required:
-                                                      - key
-                                                      type: object
-                                                  required:
-                                                  - segment
-                                                  type: object
-                                                type: array
-                                            required:
-                                            - key
-                                            - path
-                                            type: object
-                                          source:
-                                            default: DYNAMIC
-                                            enum:
-                                            - DYNAMIC
-                                            - ROUTE_ENTRY
-                                            type: string
-                                        required:
-                                        - descriptor_key
-                                        - metadata_key
-                                        type: object
-                                      remote_address:
-                                        description: RemoteAddressSpec no need to
-                                          specify descriptor entry is populated using
-                                          the trusted address from [x-forwarded-for](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_conn_man/headers#config-http-conn-man-headers-x-forwarded-for)
-                                        type: object
-                                      request_headers:
-                                        description: RequestHeadersSpec Rate limit
-                                          on request headers.
-                                        properties:
-                                          descriptor_key:
-                                            type: string
-                                          header_name:
-                                            type: string
-                                          skip_if_absent:
-                                            type: boolean
-                                        required:
-                                        - descriptor_key
-                                        - header_name
-                                        type: object
-                                    type: object
-                                  type: array
-                              required:
-                              - actions
-                              type: object
-                            type: array
-                          limits:
-                            description: Limits holds a list of Limitador limits
-                            items:
-                              description: Limit represents partially a Limitador
-                                limit.
-                              properties:
-                                conditions:
-                                  items:
-                                    type: string
-                                  type: array
-                                maxValue:
-                                  type: integer
-                                seconds:
-                                  type: integer
-                                variables:
-                                  items:
-                                    type: string
-                                  type: array
-                              required:
-                              - maxValue
-                              - seconds
-                              type: object
-                            type: array
-                          rules:
-                            description: Rules represents the definition of the scope
-                              of the rate limit object Defines a list of conditions
-                              for which rate limit configuration will apply Matching
-                              occurs when at least one rule applies against the incoming
-                              request. If rules are not set, or empty, it is equivalent
-                              to matching all the requests.
-                            items:
-                              description: Rule defines a single condition for the
-                                rate limit configuration All defined fields within
-                                the rule must be met to have a rule match
-                              properties:
-                                hosts:
-                                  items:
-                                    type: string
-                                  type: array
-                                methods:
-                                  items:
-                                    type: string
-                                  type: array
-                                paths:
-                                  items:
-                                    type: string
-                                  type: array
-                              type: object
-                            type: array
-                        type: object
-                      type: array
-                  required:
-                  - gatewayName
-                  type: object
-                type: array
               observedGeneration:
                 description: ObservedGeneration reflects the generation of the most
                   recently observed spec.

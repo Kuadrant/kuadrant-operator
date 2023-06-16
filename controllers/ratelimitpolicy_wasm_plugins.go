@@ -172,7 +172,7 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 	}
 
 	wasmPlugin := &rlptools.WASMPlugin{
-		FailureModeDeny:   true,
+		FailureMode:       rlptools.FailureModeDeny,
 		RateLimitPolicies: make([]rlptools.RateLimitPolicy, 0),
 	}
 

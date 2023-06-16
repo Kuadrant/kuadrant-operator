@@ -105,9 +105,17 @@ type RateLimitPolicy struct {
 	Rules []Rule `json:"rules,omitempty"`
 }
 
+// +kubebuilder:validation:Enum:=deny;allow
+type FailureModeType string
+
+const (
+	FailureModeDeny  FailureModeType = "deny"
+	FailureModeAllow FailureModeType = "allow"
+)
+
 type WASMPlugin struct {
-	FailureModeDeny   bool              `json:"failure_mode_deny"`
-	RateLimitPolicies []RateLimitPolicy `json:"rate_limit_policies"`
+	FailureMode       FailureModeType   `json:"failureMode"`
+	RateLimitPolicies []RateLimitPolicy `json:"rateLimitPolicies"`
 }
 
 func (w *WASMPlugin) ToStruct() (*_struct.Struct, error) {

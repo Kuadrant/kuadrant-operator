@@ -23,6 +23,7 @@ import (
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 )
 
@@ -272,35 +273,35 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(&rlptools.WASMPlugin{
-				FailureMode: rlptools.FailureModeDeny,
-				RateLimitPolicies: []rlptools.RateLimitPolicy{
+			Expect(existingWASMConfig).To(Equal(&wasm.WASMPlugin{
+				FailureMode: wasm.FailureModeDeny,
+				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
 						Name:      "*.example.com",
 						Domain:    common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*.example.com"),
 						Service:   common.KuadrantRateLimitClusterName,
 						Hostnames: []string{"*.example.com"},
-						Rules: []rlptools.Rule{
+						Rules: []wasm.Rule{
 							{
-								Conditions: []rlptools.Condition{
+								Conditions: []wasm.Condition{
 									{
-										AllOf: []rlptools.PatternExpression{
+										AllOf: []wasm.PatternExpression{
 											{
 												Selector: "request.url_path",
-												Operator: rlptools.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+												Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
 												Value:    "/toy",
 											},
 											{
 												Selector: "request.method",
-												Operator: rlptools.PatternOperator(kuadrantv1beta2.EqualOperator),
+												Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
 												Value:    "GET",
 											},
 										},
 									},
 								},
-								Data: []rlptools.DataItem{
+								Data: []wasm.DataItem{
 									{
-										Static: &rlptools.StaticSpec{
+										Static: &wasm.StaticSpec{
 											Key:   fmt.Sprintf("%s/%s/l1", testNamespace, rlpName),
 											Value: "1",
 										},
@@ -400,20 +401,20 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(&rlptools.WASMPlugin{
-				FailureMode: rlptools.FailureModeDeny,
-				RateLimitPolicies: []rlptools.RateLimitPolicy{
+			Expect(existingWASMConfig).To(Equal(&wasm.WASMPlugin{
+				FailureMode: wasm.FailureModeDeny,
+				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
 						Name:      "*",
 						Domain:    common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*"),
 						Service:   common.KuadrantRateLimitClusterName,
 						Hostnames: []string{"*"},
-						Rules: []rlptools.Rule{
+						Rules: []wasm.Rule{
 							{
 								Conditions: nil,
-								Data: []rlptools.DataItem{
+								Data: []wasm.DataItem{
 									{
-										Static: &rlptools.StaticSpec{
+										Static: &wasm.StaticSpec{
 											Key:   fmt.Sprintf("%s/%s/l1", testNamespace, rlpName),
 											Value: "1",
 										},

@@ -15,6 +15,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
 func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
@@ -120,7 +121,7 @@ func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw co
 
 // returns nil when there is no rate limit policy to apply
 func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
-	gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (*rlptools.WASMPlugin, error) {
+	gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (*wasm.WASMPlugin, error) {
 	logger, _ := logr.FromContext(ctx)
 
 	routeRLPList := make([]*kuadrantv1beta2.RateLimitPolicy, 0)
@@ -171,14 +172,14 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 		}
 	}
 
-	wasmPlugin := &rlptools.WASMPlugin{
-		FailureMode:       rlptools.FailureModeDeny,
-		RateLimitPolicies: make([]rlptools.RateLimitPolicy, 0),
+	wasmPlugin := &wasm.WASMPlugin{
+		FailureMode:       wasm.FailureModeDeny,
+		RateLimitPolicies: make([]wasm.RateLimitPolicy, 0),
 	}
 
 	// One RateLimitPolicy per domain
 	for domain, rules := range wasmRulesByDomain {
-		rateLimitPolicy := rlptools.RateLimitPolicy{
+		rateLimitPolicy := wasm.RateLimitPolicy{
 			Name:      domain,
 			Domain:    common.MarshallNamespace(gw.Key(), domain),
 			Service:   common.KuadrantRateLimitClusterName,
@@ -192,7 +193,7 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 }
 
 // merge operations currently implemented with list append operation
-func mergeRules(routeRLP *kuadrantv1beta2.RateLimitPolicy, gwRLP *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []rlptools.Rule {
+func mergeRules(routeRLP *kuadrantv1beta2.RateLimitPolicy, gwRLP *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []wasm.Rule {
 	routeRules := rlptools.WasmRules(routeRLP, route)
 
 	if gwRLP == nil {

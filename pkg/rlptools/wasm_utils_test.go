@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
 // TODO(eastizle): missing WASMPluginMutator tests
@@ -53,26 +54,26 @@ func TestWasmRules(t *testing.T) {
 			},
 		}
 
-		expectedRule := Rule{
-			Conditions: []Condition{
+		expectedRule := wasm.Rule{
+			Conditions: []wasm.Condition{
 				{
-					AllOf: []PatternExpression{
+					AllOf: []wasm.PatternExpression{
 						{
 							Selector: "request.url_path",
-							Operator: PatternOperator(kuadrantv1beta2.StartsWithOperator),
+							Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
 							Value:    "/toy",
 						},
 						{
 							Selector: "request.method",
-							Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+							Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
 							Value:    "GET",
 						},
 					},
 				},
 			},
-			Data: []DataItem{
+			Data: []wasm.DataItem{
 				{
-					Static: &StaticSpec{
+					Static: &wasm.StaticSpec{
 						Key:   "nsA/rlpA/l1",
 						Value: "1",
 					},

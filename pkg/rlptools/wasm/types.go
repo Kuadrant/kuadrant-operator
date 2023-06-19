@@ -18,13 +18,9 @@ var (
 )
 
 type SelectorSpec struct {
-	// Selector of an attribute from the contextual properties provided by Envoy
+	// Selector of an attribute from the contextual properties provided by kuadrant
 	// during request and connection processing
-	// https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
-	// They are named by a dot-separated path (e.g. request.path)
-	// Examples:
-	// "request.path" -> The path portion of the URL
-	Selector string `json:"selector"`
+	Selector kuadrantv1beta2.ContextSelector `json:"selector"`
 
 	// If not set it defaults to `selector` field value as the descriptor key.
 	// +optional
@@ -54,13 +50,9 @@ type DataItem struct {
 type PatternOperator kuadrantv1beta2.WhenConditionOperator
 
 type PatternExpression struct {
-	// Selector of an attribute from the contextual properties provided by Envoy
+	// Selector of an attribute from the contextual properties provided by kuadrant
 	// during request and connection processing
-	// https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
-	// They are named by a dot-separated path (e.g. request.path)
-	// Examples:
-	// "request.path" -> The path portion of the URL
-	Selector string `json:"selector"`
+	Selector kuadrantv1beta2.ContextSelector `json:"selector"`
 
 	// The binary operator to be applied to the content fetched from context, for comparison with "value".
 	// Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)

@@ -165,7 +165,7 @@ func patternExpresionFromMethod(method gatewayapiv1beta1.HTTPMethod) wasm.Patter
 
 func patternExpresionFromWhen(when kuadrantv1beta2.WhenCondition) wasm.PatternExpression {
 	return wasm.PatternExpression{
-		Selector: string(when.Selector),
+		Selector: when.Selector,
 		Operator: wasm.PatternOperator(when.Operator),
 		Value:    when.Value,
 	}
@@ -190,7 +190,7 @@ func dataFromLimt(limitFullName string, limit *kuadrantv1beta2.Limit) []wasm.Dat
 	data = append(data, wasm.DataItem{Static: &wasm.StaticSpec{Key: limitFullName, Value: "1"}})
 
 	for _, counter := range limit.Counters {
-		data = append(data, wasm.DataItem{Selector: &wasm.SelectorSpec{Selector: string(counter)}})
+		data = append(data, wasm.DataItem{Selector: &wasm.SelectorSpec{Selector: counter}})
 	}
 
 	return data

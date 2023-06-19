@@ -34,6 +34,8 @@ import (
 // ContextSelector defines one item from the well known attributes
 // Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
 // Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+// They are named by a dot-separated path (e.g. request.path)
+// Example: "request.path" -> The path portion of the URL
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=253
 type ContextSelector string

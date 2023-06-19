@@ -117,7 +117,7 @@ func testBuildBasicRoutePolicy(policyName, ns, routeName string) *kuadrantv1beta
 				Name:  gatewayapiv1beta1.ObjectName(routeName),
 			},
 			Limits: map[string]kuadrantv1beta2.Limit{
-				"l1": kuadrantv1beta2.Limit{
+				"l1": {
 					Rates: []kuadrantv1beta2.Rate{
 						{
 							Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
@@ -146,7 +146,7 @@ func testBuildGatewayPolicy(policyName, ns, gwName string) *kuadrantv1beta2.Rate
 				Name:  gatewayapiv1beta1.ObjectName(gwName),
 			},
 			Limits: map[string]kuadrantv1beta2.Limit{
-				"l1": kuadrantv1beta2.Limit{
+				"l1": {
 					Rates: []kuadrantv1beta2.Rate{
 						{
 							Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),

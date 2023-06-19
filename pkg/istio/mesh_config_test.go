@@ -1,7 +1,7 @@
 //go:build unit
 // +build unit
 
-package common
+package istio
 
 import (
 	"testing"
@@ -151,13 +151,15 @@ func TestCreateKuadrantAuthorizer(t *testing.T) {
 	assert.Equal(t, authorizer.GetEnvoyExtAuthzGrpc().Port, uint32(50051))
 }
 
-func TestRemoveKuadrantAuthorizerFromList(t *testing.T) {
-	providers := getStubbedMeshConfig().ExtensionProviders
-	providers = append(providers, CreateKuadrantAuthorizer("kuadrant-system"))
-	providers = RemoveKuadrantAuthorizerFromList(providers)
+func TestRemoveKuadrantAuthorizerFromConfig(t *testing.T) {
+	config := getStubbedMeshConfig()
+	config.ExtensionProviders = append(config.ExtensionProviders, CreateKuadrantAuthorizer("kuadrant-system"))
+	assert.Equal(t, len(config.ExtensionProviders), 2)
 
-	assert.Equal(t, len(providers), 1)
-	assert.Equal(t, providers[0].Name, "custom-authorizer")
+	RemoveKuadrantAuthorizerFromConfig(config)
+
+	assert.Equal(t, len(config.ExtensionProviders), 1)
+	assert.Equal(t, config.ExtensionProviders[0].Name, "custom-authorizer")
 }
 
 func TestUpdateMeshConfig(t *testing.T) {
@@ -173,7 +175,8 @@ extensionProviders:
 `,
 			},
 		}
-		updated, err := UpdateMeshConfig(configMap, func(meshConfig *istiomeshv1alpha1.MeshConfig) bool {
+		configWrapper := NewConfigMapWrapper(configMap)
+		updated, err := configWrapper.UpdateConfig(func(meshConfig *istiomeshv1alpha1.MeshConfig) bool {
 			meshConfig.ExtensionProviders = append(meshConfig.ExtensionProviders, CreateKuadrantAuthorizer("kuadrant-system"))
 			return true
 		})
@@ -190,7 +193,8 @@ extensionProviders:
 				MeshConfig: meshConfig,
 			},
 		}
-		updated, err := UpdateMeshConfig(istioOperator, func(meshConfig *istiomeshv1alpha1.MeshConfig) bool {
+		istioOperatorWrapper := NewOperatorWrapper(istioOperator)
+		updated, err := istioOperatorWrapper.UpdateConfig(func(meshConfig *istiomeshv1alpha1.MeshConfig) bool {
 			meshConfig.ExtensionProviders = append(meshConfig.ExtensionProviders, CreateKuadrantAuthorizer("kuadrant-system"))
 			return true
 		})

@@ -5,8 +5,8 @@
 Kuadrant sees the following requirements for an **ingress gateway** based rate limit policy:
 
 * Allow it to target **routing/network** resources such as
-[HTTPRoute](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.HTTPRoute)
-and [Gateway](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.Gateway) and use these resources to provide needed context (which traffic workload (hostname), which gateway).
+[HTTPRoute](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRoute)
+and [Gateway](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.Gateway) and use these resources to provide needed context (which traffic workload (hostname), which gateway).
 * Use it to define when to invoke rate limiting (what paths, what methods etc) and the needed
 metadata IE actions and descriptors that are needed to enforce the rate limiting requirements.
 * Avoid exposing the end user to the complexity of the underlying configuration resources that has

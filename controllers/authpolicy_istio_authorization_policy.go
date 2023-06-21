@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	istiosecurity "istio.io/api/security/v1beta1"
 	istio "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -81,7 +82,7 @@ func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Cont
 	return nil
 }
 
-func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, gateway *gatewayapiv1alpha2.Gateway, ap *api.AuthPolicy, toRules []*istiosecurity.Rule_To) *istio.AuthorizationPolicy {
+func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, gateway *gatewayapiv1beta1.Gateway, ap *api.AuthPolicy, toRules []*istiosecurity.Rule_To) *istio.AuthorizationPolicy {
 	return &istio.AuthorizationPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      istioAuthorizationPolicyName(gateway.Name, ap.GetTargetRef()),
@@ -148,7 +149,7 @@ func istioAuthorizationPolicyRules(authRules []api.AuthRule, targetHostnames []s
 	if len(toRules) == 0 {
 		// Rules not set in the AuthPolicy - inherit the rules from the target network object
 		switch obj := targetNetworkObject.(type) {
-		case *gatewayapiv1alpha2.HTTPRoute:
+		case *gatewayapiv1beta1.HTTPRoute:
 			// Rules not set and targeting a HTTPRoute - inherit the rules (hostnames, methods and paths) from the HTTPRoute
 			httpRouterules := common.RulesFromHTTPRoute(obj)
 			for idx := range httpRouterules {
@@ -160,7 +161,7 @@ func istioAuthorizationPolicyRules(authRules []api.AuthRule, targetHostnames []s
 					},
 				})
 			}
-		case *gatewayapiv1alpha2.Gateway:
+		case *gatewayapiv1beta1.Gateway:
 			// Rules not set and targeting a Gateway - inherit the rules (hostnames) from the Gateway
 			toRules = append(toRules, &istiosecurity.Rule_To{
 				Operation: &istiosecurity.Operation{

@@ -8,6 +8,7 @@ import (
 	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
@@ -115,14 +116,14 @@ func init() {
 }
 
 func (ap *AuthPolicy) Validate() error {
-	if ap.Spec.TargetRef.Group != gatewayapiv1alpha2.Group("gateway.networking.k8s.io") {
+	if ap.Spec.TargetRef.Group != ("gateway.networking.k8s.io") {
 		return fmt.Errorf("invalid targetRef.Group %s. The only supported group is gateway.networking.k8s.io", ap.Spec.TargetRef.Group)
 	}
 
 	switch kind := ap.Spec.TargetRef.Kind; kind {
 	case
-		gatewayapiv1alpha2.Kind("HTTPRoute"),
-		gatewayapiv1alpha2.Kind("Gateway"):
+		"HTTPRoute",
+		"Gateway":
 	default:
 		return fmt.Errorf("invalid targetRef.Kind %s. The only supported kinds are HTTPRoute and Gateway", kind)
 	}
@@ -137,8 +138,8 @@ func (ap *AuthPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 	return ap.Spec.TargetRef
 }
 
-func (ap *AuthPolicy) GetWrappedNamespace() gatewayapiv1alpha2.Namespace {
-	return gatewayapiv1alpha2.Namespace(ap.Namespace)
+func (ap *AuthPolicy) GetWrappedNamespace() gatewayapiv1beta1.Namespace {
+	return gatewayapiv1beta1.Namespace(ap.Namespace)
 }
 
 func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {

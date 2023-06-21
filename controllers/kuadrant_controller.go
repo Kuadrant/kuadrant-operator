@@ -40,7 +40,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -72,8 +72,8 @@ type KuadrantReconciler struct {
 //+kubebuilder:rbac:groups="gateway.networking.k8s.io",resources=httproutes,verbs=get;list;patch;update;watch
 //+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos,verbs=get;list;watch;create;update;delete;patch
 //+kubebuilder:rbac:groups=install.istio.io,resources=istiooperators,verbs=get;list;watch;create;update;patch
-//+kubebuilder:rbac:groups=maistra.io,resources=servicemeshcontrolplanes,verbs=get;list;watch;update;patch
-//+kubebuilder:rbac:groups=maistra.io,resources=servicemeshmemberrolls,verbs=get;list;watch;create;update;delete;patch
+//+kubebuilder:rbac:groups=maistra.io,resources=servicemeshcontrolplanes,verbs=get;list;watch;update;use;patch
+//+kubebuilder:rbac:groups=maistra.io,resources=servicemeshmembers,verbs=get;list;watch;create;update;delete;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -105,7 +105,7 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 	if kObj.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(kObj, kuadrantFinalizer) {
 		logger.V(1).Info("Handling removal of kuadrant object")
 
-		if err := r.unregisterExternalAuthorizer(ctx, kObj); err != nil {
+		if err := r.unregisterExternalAuthorizer(ctx); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -163,13 +163,13 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) error {
 	logger, _ := logr.FromContext(ctx)
 
 	err := r.unregisterExternalAuthorizerIstio(ctx)
 
 	if err != nil && apimeta.IsNoMatchError(err) {
-		err = r.unregisterExternalAuthorizerOSSM(ctx, kObj)
+		err = r.unregisterExternalAuthorizerOSSM(ctx)
 	}
 
 	if err != nil {
@@ -222,12 +222,8 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerIstio(ctx context.Conte
 	return nil
 }
 
-func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Context) error {
 	logger, _ := logr.FromContext(ctx)
-
-	if err := r.unregisterFromServiceMeshMemberRoll(ctx, kObj); err != nil {
-		return err
-	}
 
 	smcp := &maistrav2.ServiceMeshControlPlane{}
 
@@ -281,31 +277,6 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Contex
 	}
 
 	return nil
-}
-
-func (r *KuadrantReconciler) unregisterFromServiceMeshMemberRoll(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	return r.ReconcileResource(ctx, &maistrav1.ServiceMeshMemberRoll{}, buildServiceMeshMemberRoll(kObj), func(existingObj, desiredObj client.Object) (bool, error) {
-		existing, ok := existingObj.(*maistrav1.ServiceMeshMemberRoll)
-		if !ok {
-			return false, fmt.Errorf("%T is not a *maistrav1.ServiceMeshMemberRoll", existingObj)
-		}
-		desired, ok := desiredObj.(*maistrav1.ServiceMeshMemberRoll)
-		if !ok {
-			return false, fmt.Errorf("%T is not a *maistrav1.ServiceMeshMemberRoll", desiredObj)
-		}
-		desired.Spec.Members = []string{}
-
-		update := false
-		for _, member := range existing.Spec.Members {
-			if member == kObj.Namespace {
-				update = true
-			} else {
-				desired.Spec.Members = append(desired.Spec.Members, member)
-			}
-		}
-		existing.Spec.Members = desired.Spec.Members
-		return update, nil
-	})
 }
 
 func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
@@ -365,7 +336,7 @@ func (r *KuadrantReconciler) registerExternalAuthorizerIstio(ctx context.Context
 func (r *KuadrantReconciler) registerExternalAuthorizerOSSM(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	logger, _ := logr.FromContext(ctx)
 
-	if err := r.registerToServiceMeshMemberRoll(ctx, kObj); err != nil {
+	if err := r.registerServiceMeshMember(ctx, kObj); err != nil {
 		return err
 	}
 
@@ -414,21 +385,14 @@ func (r *KuadrantReconciler) registerExternalAuthorizerOSSM(ctx context.Context,
 	return nil
 }
 
-func (r *KuadrantReconciler) registerToServiceMeshMemberRoll(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	return r.ReconcileResource(ctx, &maistrav1.ServiceMeshMemberRoll{}, buildServiceMeshMemberRoll(kObj), func(existingObj, _ client.Object) (bool, error) {
-		existing, ok := existingObj.(*maistrav1.ServiceMeshMemberRoll)
-		if !ok {
-			return false, fmt.Errorf("%T is not a *maistrav1.ServiceMeshMemberRoll", existingObj)
-		}
+func (r *KuadrantReconciler) registerServiceMeshMember(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+	member := buildServiceMeshMember(kObj)
+	err := r.SetOwnerReference(kObj, member)
+	if err != nil {
+		return err
+	}
 
-		for _, member := range existing.Spec.Members {
-			if member == kObj.Namespace {
-				return false, nil
-			}
-		}
-		existing.Spec.Members = append(existing.Spec.Members, kObj.Namespace)
-		return true, nil
-	})
+	return r.ReconcileResource(ctx, &maistrav1.ServiceMeshMember{}, member, reconcilers.CreateOnlyMutator)
 }
 
 func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (ctrl.Result, error) {
@@ -455,18 +419,21 @@ func controlPlaneProviderNamespace() string {
 	return common.FetchEnv("ISTIOOPERATOR_NAMESPACE", "istio-system")
 }
 
-func buildServiceMeshMemberRoll(kObj *kuadrantv1beta1.Kuadrant) *maistrav1.ServiceMeshMemberRoll {
-	return &maistrav1.ServiceMeshMemberRoll{
+func buildServiceMeshMember(kObj *kuadrantv1beta1.Kuadrant) *maistrav1.ServiceMeshMember {
+	return &maistrav1.ServiceMeshMember{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "ServiceMeshMemberRoll",
+			Kind:       "ServiceMeshMember",
 			APIVersion: maistrav1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "default",
-			Namespace: controlPlaneProviderNamespace(),
+			Namespace: kObj.Namespace,
 		},
-		Spec: maistrav1.ServiceMeshMemberRollSpec{
-			Members: []string{kObj.Namespace},
+		Spec: maistrav1.ServiceMeshMemberSpec{
+			ControlPlaneRef: maistrav1.ServiceMeshControlPlaneRef{
+				Name:      controlPlaneProviderName(),
+				Namespace: controlPlaneProviderNamespace(),
+			},
 		},
 	}
 }
@@ -496,7 +463,7 @@ func createKuadrantAuthorizer(namespace string) *istiomeshv1alpha1.MeshConfig_Ex
 
 func (r *KuadrantReconciler) reconcileClusterGateways(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	// TODO: After the RFC defined, we might want to get the gw to label/annotate from Kuadrant.Spec or manual labeling/annotation
-	gwList := &gatewayapiv1alpha2.GatewayList{}
+	gwList := &gatewayapiv1beta1.GatewayList{}
 	if err := r.Client().List(ctx, gwList); err != nil {
 		return err
 	}
@@ -528,7 +495,7 @@ func (r *KuadrantReconciler) reconcileClusterGateways(ctx context.Context, kObj 
 }
 
 func (r *KuadrantReconciler) removeAnnotationFromGateways(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	gwList := &gatewayapiv1alpha2.GatewayList{}
+	gwList := &gatewayapiv1beta1.GatewayList{}
 	if err := r.Client().List(ctx, gwList); err != nil {
 		return err
 	}

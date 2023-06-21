@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -244,13 +244,13 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta2.RateLimitPolicy{}).
 		Watches(
-			&source.Kind{Type: &gatewayapiv1alpha2.HTTPRoute{}},
+			&source.Kind{Type: &gatewayapiv1beta1.HTTPRoute{}},
 			handler.EnqueueRequestsFromMapFunc(httpRouteEventMapper.MapToRateLimitPolicy),
 		).
 		// Currently the purpose is to generate events when rlp references change in gateways
 		// so the status of the rlps targeting a route can be keep in sync
 		Watches(
-			&source.Kind{Type: &gatewayapiv1alpha2.Gateway{}},
+			&source.Kind{Type: &gatewayapiv1beta1.Gateway{}},
 			handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.MapToRateLimitPolicy),
 		).
 		// When gateway level RLP changes, notify route level RLP's

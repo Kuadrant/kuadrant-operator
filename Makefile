@@ -34,6 +34,9 @@ endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 DEFAULT_IMAGE_TAG = latest
+DEFAULT_REPLACES_VERSION = 0.0.0-alpha
+
+REPLACES_VERSION ?= $(DEFAULT_REPLACES_VERSION)
 
 # Semantic versioning (i.e. Major.Minor.Patch)
 is_semantic_version = $(shell [[ $(1) =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$$ ]] && echo "true")
@@ -161,7 +164,7 @@ help: ## Display this help.
 ##@ Tools
 
 OPERATOR_SDK = $(PROJECT_PATH)/bin/operator-sdk
-OPERATOR_SDK_VERSION = v1.22.0
+OPERATOR_SDK_VERSION = v1.28.1
 $(OPERATOR_SDK):
 	./utils/install-operator-sdk.sh $(OPERATOR_SDK) $(OPERATOR_SDK_VERSION)
 
@@ -396,6 +399,7 @@ bundle: $(OPM) $(YQ) manifests kustomize operator-sdk ## Generate bundle manifes
 	V="kuadrant-operator.v$(BUNDLE_VERSION)" $(YQ) eval '.metadata.name = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
 	V="$(BUNDLE_VERSION)" $(YQ) eval '.spec.version = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
 	V="$(IMG)" $(YQ) eval '.metadata.annotations.containerImage = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
+	V="kuadrant-operator.v$(REPLACES_VERSION)" $(YQ) eval '.spec.replaces = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
 	# Generate bundle
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)
 	# Update operator dependencies
@@ -406,6 +410,18 @@ bundle: $(OPM) $(YQ) manifests kustomize operator-sdk ## Generate bundle manifes
 	    $(YQ) eval '(.dependencies[] | select(.value.packageName == "authorino-operator").value.version) = strenv(V)' -i bundle/metadata/dependencies.yaml
 	# Validate bundle manifests
 	$(OPERATOR_SDK) bundle validate ./bundle
+	$(MAKE) bundle-ignore-createdAt
+
+.PHONY: bundle-ignore-createdAt
+bundle-ignore-createdAt:
+	# Since operator-sdk 1.26.0, `make bundle` changes the `createdAt` field from the bundle
+	# even if it is patched:
+	#   https://github.com/operator-framework/operator-sdk/pull/6136
+	# This code checks if only the createdAt field. If is the only change, it is ignored.
+	# Else, it will do nothing.
+	# https://github.com/operator-framework/operator-sdk/issues/6285#issuecomment-1415350333
+	# https://github.com/operator-framework/operator-sdk/issues/6285#issuecomment-1532150678
+	git diff --quiet -I'^    createdAt: ' ./bundle && git checkout ./bundle || true
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.

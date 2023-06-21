@@ -24,14 +24,14 @@ type HTTPRouteRule struct {
 }
 
 func IsTargetRefHTTPRoute(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool {
-	return targetRef.Kind == gatewayapiv1alpha2.Kind("HTTPRoute")
+	return targetRef.Kind == ("HTTPRoute")
 }
 
 func IsTargetRefGateway(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool {
-	return targetRef.Kind == gatewayapiv1alpha2.Kind("Gateway")
+	return targetRef.Kind == ("Gateway")
 }
 
-func RouteHTTPMethodToRuleMethod(httpMethod *gatewayapiv1alpha2.HTTPMethod) []string {
+func RouteHTTPMethodToRuleMethod(httpMethod *gatewayapiv1beta1.HTTPMethod) []string {
 	if httpMethod == nil {
 		return nil
 	}
@@ -39,7 +39,7 @@ func RouteHTTPMethodToRuleMethod(httpMethod *gatewayapiv1alpha2.HTTPMethod) []st
 	return []string{string(*httpMethod)}
 }
 
-func RouteHostnames(route *gatewayapiv1alpha2.HTTPRoute) []string {
+func RouteHostnames(route *gatewayapiv1beta1.HTTPRoute) []string {
 	if route == nil {
 		return nil
 	}
@@ -58,7 +58,7 @@ func RouteHostnames(route *gatewayapiv1alpha2.HTTPRoute) []string {
 }
 
 // RulesFromHTTPRoute computes a list of rules from the HTTPRoute object
-func RulesFromHTTPRoute(route *gatewayapiv1alpha2.HTTPRoute) []HTTPRouteRule {
+func RulesFromHTTPRoute(route *gatewayapiv1beta1.HTTPRoute) []HTTPRouteRule {
 	if route == nil {
 		return nil
 	}
@@ -95,7 +95,7 @@ func GetNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, pol
 	targetRef := policy.GetTargetRef()
 	gwNamespacedName := types.NamespacedName{Namespace: string(GetDefaultIfNil(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)}
 	if IsTargetRefHTTPRoute(targetRef) {
-		route := &gatewayapiv1alpha2.HTTPRoute{}
+		route := &gatewayapiv1beta1.HTTPRoute{}
 		if err := cli.Get(
 			ctx,
 			types.NamespacedName{Namespace: string(GetDefaultIfNil(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)},
@@ -107,7 +107,7 @@ func GetNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, pol
 		parentRef := route.Spec.ParentRefs[0]
 		gwNamespacedName = types.NamespacedName{Namespace: string(*parentRef.Namespace), Name: string(parentRef.Name)}
 	}
-	gw := &gatewayapiv1alpha2.Gateway{}
+	gw := &gatewayapiv1beta1.Gateway{}
 	if err := cli.Get(ctx, gwNamespacedName, gw); err != nil {
 		return "", err
 	}
@@ -149,7 +149,7 @@ func AnnotateObject(obj client.Object, namespace string) {
 	}
 }
 
-func DeleteKuadrantAnnotationFromGateway(gw *gatewayapiv1alpha2.Gateway, namespace string) {
+func DeleteKuadrantAnnotationFromGateway(gw *gatewayapiv1beta1.Gateway, namespace string) {
 	annotations := gw.GetAnnotations()
 	if IsKuadrantManaged(gw) && annotations[KuadrantNamespaceLabel] == namespace {
 		delete(gw.Annotations, KuadrantNamespaceLabel)
@@ -157,7 +157,7 @@ func DeleteKuadrantAnnotationFromGateway(gw *gatewayapiv1alpha2.Gateway, namespa
 }
 
 // routePathMatchToRulePath converts HTTPRoute pathmatch rule to kuadrant's rule path
-func routePathMatchToRulePath(pathMatch *gatewayapiv1alpha2.HTTPPathMatch) []string {
+func routePathMatchToRulePath(pathMatch *gatewayapiv1beta1.HTTPPathMatch) []string {
 	if pathMatch == nil {
 		return nil
 	}
@@ -199,7 +199,7 @@ func (c *KuadrantAuthPolicyRefsConfig) PolicyRefsAnnotation() string {
 	return AuthPoliciesBackRefAnnotation
 }
 
-func GatewaysMissingPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
+func GatewaysMissingPolicyRef(gwList *gatewayapiv1beta1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
 	// gateways referenced by the policy but do not have reference to it in the annotations
 	gateways := make([]GatewayWrapper, 0)
 	for i := range gwList.Items {
@@ -212,7 +212,7 @@ func GatewaysMissingPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policyKey 
 	return gateways
 }
 
-func GatewaysWithValidPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
+func GatewaysWithValidPolicyRef(gwList *gatewayapiv1beta1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
 	// gateways referenced by the policy but also have reference to it in the annotations
 	gateways := make([]GatewayWrapper, 0)
 	for i := range gwList.Items {
@@ -225,7 +225,7 @@ func GatewaysWithValidPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policyKe
 	return gateways
 }
 
-func GatewaysWithInvalidPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
+func GatewaysWithInvalidPolicyRef(gwList *gatewayapiv1beta1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
 	// gateways not referenced by the policy but still have reference in the annotations
 	gateways := make([]GatewayWrapper, 0)
 	for i := range gwList.Items {
@@ -240,7 +240,7 @@ func GatewaysWithInvalidPolicyRef(gwList *gatewayapiv1alpha2.GatewayList, policy
 
 // GatewayWrapper wraps a Gateway API Gateway adding methods and configs to manage policy references in annotations
 type GatewayWrapper struct {
-	*gatewayapiv1alpha2.Gateway
+	*gatewayapiv1beta1.Gateway
 	PolicyRefsConfig
 }
 
@@ -393,11 +393,11 @@ func (g GatewayWrapper) Hostnames() []string {
 func TargetHostnames(targetNetworkObject client.Object) ([]string, error) {
 	hosts := make([]string, 0)
 	switch obj := targetNetworkObject.(type) {
-	case *gatewayapiv1alpha2.HTTPRoute:
+	case *gatewayapiv1beta1.HTTPRoute:
 		for _, hostname := range obj.Spec.Hostnames {
 			hosts = append(hosts, string(hostname))
 		}
-	case *gatewayapiv1alpha2.Gateway:
+	case *gatewayapiv1beta1.Gateway:
 		for idx := range obj.Spec.Listeners {
 			if obj.Spec.Listeners[idx].Hostname != nil {
 				hosts = append(hosts, string(*obj.Spec.Listeners[idx].Hostname))
@@ -432,11 +432,11 @@ func ValidateHierarchicalRules(policy KuadrantPolicy, targetNetworkObject client
 	return nil
 }
 
-func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway *gatewayapiv1alpha2.Gateway) (map[string]string, error) {
+func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway *gatewayapiv1beta1.Gateway) (map[string]string, error) {
 	address, found := Find(
 		gateway.Status.Addresses,
-		func(address gatewayapiv1alpha2.GatewayAddress) bool {
-			return address.Type != nil && *address.Type == gatewayapiv1alpha2.HostnameAddressType
+		func(address gatewayapiv1beta1.GatewayAddress) bool {
+			return address.Type != nil && *address.Type == gatewayapiv1beta1.HostnameAddressType
 		},
 	)
 	if !found {
@@ -450,7 +450,7 @@ func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway 
 	return GetServiceWorkloadSelector(ctx, cli, serviceKey)
 }
 
-func IsHTTPRouteAccepted(httpRoute *gatewayapiv1alpha2.HTTPRoute) bool {
+func IsHTTPRouteAccepted(httpRoute *gatewayapiv1beta1.HTTPRoute) bool {
 	if httpRoute == nil {
 		return false
 	}
@@ -462,7 +462,7 @@ func IsHTTPRouteAccepted(httpRoute *gatewayapiv1alpha2.HTTPRoute) bool {
 	// Check HTTProute parents (gateways) in the status object
 	// if any of the current parent gateways reports not "Admitted", return false
 	for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
-		routeParentStatus := func(pRef gatewayapiv1alpha2.ParentReference) *gatewayapiv1alpha2.RouteParentStatus {
+		routeParentStatus := func(pRef gatewayapiv1beta1.ParentReference) *gatewayapiv1beta1.RouteParentStatus {
 			for idx := range httpRoute.Status.RouteStatus.Parents {
 				if reflect.DeepEqual(pRef, httpRoute.Status.RouteStatus.Parents[idx].ParentRef) {
 					return &httpRoute.Status.RouteStatus.Parents[idx]

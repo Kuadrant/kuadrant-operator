@@ -8,17 +8,17 @@ import (
 	"time"
 
 	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	secv1beta1resources "istio.io/client-go/pkg/apis/security/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	meta "k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -41,7 +41,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(func() bool {
-			existingGateway := &gatewayapiv1alpha2.Gateway{}
+			existingGateway := &gatewayapiv1beta1.Gateway{}
 			err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
 			if err != nil {
 				logf.Log.V(1).Info("[WARN] Creating gateway failed", "error", err)
@@ -73,7 +73,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			Eventually(func() bool {
-				existingRoute := &gatewayapiv1alpha2.HTTPRoute{}
+				existingRoute := &gatewayapiv1beta1.HTTPRoute{}
 				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(httpRoute), existingRoute)
 				if err != nil {
 					logf.Log.V(1).Info("[WARN] Creating route failed", "error", err)
@@ -191,17 +191,17 @@ var _ = Describe("AuthPolicy controller", func() {
 			err := k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
 
-			typedNamespace := v1alpha2.Namespace(testNamespace)
+			typedNamespace := gatewayapiv1beta1.Namespace(testNamespace)
 			policy := &kuadrantv1beta1.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1beta1.AuthPolicySpec{
-					TargetRef: v1alpha2.PolicyTargetReference{
-						Group:     gatewayapiv1alpha2.Group(gatewayapiv1alpha2.GroupVersion.Group),
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     gatewayapiv1beta1.Group(gatewayapiv1beta1.GroupVersion.Group),
 						Kind:      "HTTPRoute",
-						Name:      gatewayapiv1alpha2.ObjectName(CustomHTTPRouteName),
+						Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
 						Namespace: &typedNamespace,
 					},
 					AuthRules: []kuadrantv1beta1.AuthRule{
@@ -251,11 +251,11 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Istio's authorizationpolicy should include network resource hostnames on kuadrant rules without hosts", func() {
-			typedNamespace := v1alpha2.Namespace(testNamespace)
-			targetRef := v1alpha2.PolicyTargetReference{
-				Group:     gatewayapiv1alpha2.Group(gatewayapiv1alpha2.GroupVersion.Group),
+			typedNamespace := gatewayapiv1beta1.Namespace(testNamespace)
+			targetRef := gatewayapiv1alpha2.PolicyTargetReference{
+				Group:     gatewayapiv1beta1.Group(gatewayapiv1beta1.GroupVersion.Group),
 				Kind:      "HTTPRoute",
-				Name:      gatewayapiv1alpha2.ObjectName(CustomHTTPRouteName),
+				Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
 				Namespace: &typedNamespace,
 			}
 
@@ -292,17 +292,17 @@ var _ = Describe("AuthPolicy controller", func() {
 			err := k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
 
-			typedNamespace := v1alpha2.Namespace(testNamespace)
+			typedNamespace := gatewayapiv1beta1.Namespace(testNamespace)
 			policy := &kuadrantv1beta1.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1beta1.AuthPolicySpec{
-					TargetRef: v1alpha2.PolicyTargetReference{
-						Group:     gatewayapiv1alpha2.Group(gatewayapiv1alpha2.GroupVersion.Group),
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     gatewayapiv1beta1.Group(gatewayapiv1beta1.GroupVersion.Group),
 						Kind:      "HTTPRoute",
-						Name:      gatewayapiv1alpha2.ObjectName(CustomHTTPRouteName),
+						Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
 						Namespace: &typedNamespace,
 					},
 					AuthRules: []kuadrantv1beta1.AuthRule{
@@ -365,17 +365,17 @@ var _ = Describe("AuthPolicy controller", func() {
 			err := k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
 
-			typedNamespace := v1alpha2.Namespace(testNamespace)
+			typedNamespace := gatewayapiv1beta1.Namespace(testNamespace)
 			policy := &kuadrantv1beta1.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1beta1.AuthPolicySpec{
-					TargetRef: v1alpha2.PolicyTargetReference{
-						Group:     gatewayapiv1alpha2.Group(gatewayapiv1alpha2.GroupVersion.Group),
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     gatewayapiv1beta1.Group(gatewayapiv1beta1.GroupVersion.Group),
 						Kind:      "HTTPRoute",
-						Name:      gatewayapiv1alpha2.ObjectName(CustomHTTPRouteName),
+						Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
 						Namespace: &typedNamespace,
 					},
 					AuthRules:  nil,
@@ -439,14 +439,14 @@ func testBasicAuthScheme() kuadrantv1beta1.AuthSchemeSpec {
 }
 
 func authPolicies(namespace string) []*kuadrantv1beta1.AuthPolicy {
-	typedNamespace := v1alpha2.Namespace(namespace)
+	typedNamespace := gatewayapiv1beta1.Namespace(namespace)
 	routePolicy := &kuadrantv1beta1.AuthPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "target-route",
 			Namespace: namespace,
 		},
 		Spec: kuadrantv1beta1.AuthPolicySpec{
-			TargetRef: v1alpha2.PolicyTargetReference{
+			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 				Group:     "gateway.networking.k8s.io",
 				Kind:      "HTTPRoute",
 				Name:      CustomHTTPRouteName,

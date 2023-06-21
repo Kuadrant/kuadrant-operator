@@ -9,7 +9,6 @@ import (
 	_struct "github.com/golang/protobuf/ptypes/struct"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -22,7 +21,7 @@ var (
 )
 
 // WasmRules computes WASM rules from the policy and the targeted Route (which can be nil when a gateway is targeted)
-func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1alpha2.HTTPRoute) []wasm.Rule {
+func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []wasm.Rule {
 	rules := make([]wasm.Rule, 0)
 	if rlp == nil {
 		return rules
@@ -39,7 +38,7 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1alpha2.H
 	return rules
 }
 
-func ruleFromLimit(limitFullName string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1alpha2.HTTPRoute) wasm.Rule {
+func ruleFromLimit(limitFullName string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute) wasm.Rule {
 	if limit == nil {
 		return wasm.Rule{}
 	}
@@ -50,7 +49,7 @@ func ruleFromLimit(limitFullName string, limit *kuadrantv1beta2.Limit, route *ga
 	}
 }
 
-func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1alpha2.HTTPRoute) []wasm.Condition {
+func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute) []wasm.Condition {
 	if limit == nil {
 		return make([]wasm.Condition, 0)
 	}
@@ -92,7 +91,7 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1alpha2
 	return conditions
 }
 
-func conditionsFromRoute(route *gatewayapiv1alpha2.HTTPRoute) []wasm.Condition {
+func conditionsFromRoute(route *gatewayapiv1beta1.HTTPRoute) []wasm.Condition {
 	if route == nil {
 		return make([]wasm.Condition, 0)
 	}

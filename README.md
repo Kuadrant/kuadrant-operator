@@ -141,7 +141,7 @@ EOF
 
 * Deploy the service/API to be protected ("Upstream")
 * Expose the service/API using the kubernetes Gateway API, ie
-  [HTTPRoute](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.HTTPRoute) object.
+  [HTTPRoute](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRoute) object.
 * Write and apply the Kuadrant's [RateLimitPolicy](/doc/rate-limiting.md) and/or
   [AuthPolicy](apis/apim/v1alpha1/authpolicy_types.go) custom resources targeting the HTTPRoute resource
   to have your API protected.
@@ -149,7 +149,7 @@ EOF
 #### If you are a *Cluster Operator*
 
 * (Optionally) deploy istio ingress gateway using the
-  [Gateway](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.Gateway) resource.
+  [Gateway](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.Gateway) resource.
 * Write and apply the Kuadrant's [RateLimitPolicy](/doc/rate-limiting.md) and/or
   [AuthPolicy](apis/apim/v1alpha1/authpolicy_types.go) custom resources targeting the Gateway resource
   to have your gateway traffic protected.

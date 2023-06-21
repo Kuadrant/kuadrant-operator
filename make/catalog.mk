@@ -17,13 +17,14 @@ $(CATALOG_FILE): $(OPM) $(YQ)
 	@echo Build kuadrant operator catalog
 	@echo
 	@echo BUNDLE_IMG                     = $(BUNDLE_IMG)
+	@echo REPLACES_VERSION               = $(REPLACES_VERSION)
 	@echo LIMITADOR_OPERATOR_BUNDLE_IMG  = $(LIMITADOR_OPERATOR_BUNDLE_IMG)
 	@echo AUTHORINO_OPERATOR_BUNDLE_IMG  = $(AUTHORINO_OPERATOR_BUNDLE_IMG)
 	@echo "************************************************************"
 	@echo
 	@echo Please check this matches your expectations and override variables if needed.
 	@echo
-	$(PROJECT_PATH)/utils/generate-catalog.sh $(OPM) $(YQ) $(BUNDLE_IMG) \
+	$(PROJECT_PATH)/utils/generate-catalog.sh $(OPM) $(YQ) $(BUNDLE_IMG) $(REPLACES_VERSION)\
 			$(LIMITADOR_OPERATOR_BUNDLE_IMG) $(AUTHORINO_OPERATOR_BUNDLE_IMG) $@
 
 .PHONY: catalog

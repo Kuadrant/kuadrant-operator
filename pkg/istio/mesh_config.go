@@ -2,6 +2,8 @@ package istio
 
 import (
 	"fmt"
+
+	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
@@ -12,16 +14,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	ExtAuthorizerName = "kuadrant-authorization"
-)
-
-// ConfigWrapper wraps the IstioOperator CRD or ConfigMap
-type ConfigWrapper interface {
-	GetConfigObject() client.Object
-	GetConfig() (*istiomeshv1alpha1.MeshConfig, error)
-	UpdateConfig(updateFunc func(meshConfig *istiomeshv1alpha1.MeshConfig) bool) (bool, error)
-}
+// The structs below implement the interface defined in pkg/common/mesh_config.go `ConfigWrapper`
+// type ConfigWrapper interface {
+//		GetConfigObject() client.Object
+//		GetMeshConfig() (*istiomeshv1alpha1.MeshConfig, error)
+//		SetMeshConfig(*istiomeshv1alpha1.MeshConfig) error
+// }
 
 // OperatorWrapper wraps the IstioOperator CRD
 type OperatorWrapper struct {
@@ -38,29 +36,22 @@ func (w *OperatorWrapper) GetConfigObject() client.Object {
 	return w.config
 }
 
-// GetConfig returns the IstioOperator MeshConfig
-func (w *OperatorWrapper) GetConfig() (*istiomeshv1alpha1.MeshConfig, error) {
+// GetMeshConfig returns the IstioOperator MeshConfig
+func (w *OperatorWrapper) GetMeshConfig() (*istiomeshv1alpha1.MeshConfig, error) {
 	if w.config.Spec == nil {
 		w.config.Spec = &istioapiv1alpha1.IstioOperatorSpec{}
 	}
-	return MeshConfigFromStruct(w.config.Spec.MeshConfig)
+	return meshConfigFromStruct(w.config.Spec.MeshConfig)
 }
 
-// UpdateConfig updates the IstioOperator with the new MeshConfig and returns true if the MeshConfig was updated
-func (w *OperatorWrapper) UpdateConfig(updateFunc func(meshConfig *istiomeshv1alpha1.MeshConfig) bool) (bool, error) {
-	config, err := w.GetConfig()
+// SetMeshConfig sets the IstioOperator MeshConfig
+func (w *OperatorWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshConfig) error {
+	meshConfigStruct, err := meshConfigToStruct(config)
 	if err != nil {
-		return false, err
+		return err
 	}
-	if updateFunc(config) {
-		meshConfigStruct, err := MeshConfigToStruct(config)
-		if err != nil {
-			return false, err
-		}
-		w.config.Spec.MeshConfig = meshConfigStruct
-		return true, nil
-	}
-	return false, nil
+	w.config.Spec.MeshConfig = meshConfigStruct
+	return nil
 }
 
 // ConfigMapWrapper wraps the ConfigMap holding the Istio MeshConfig
@@ -78,34 +69,71 @@ func (w *ConfigMapWrapper) GetConfigObject() client.Object {
 	return w.config
 }
 
-// GetConfig returns the MeshConfig from the ConfigMap
-func (w *ConfigMapWrapper) GetConfig() (*istiomeshv1alpha1.MeshConfig, error) {
+// GetMeshConfig returns the MeshConfig from the ConfigMap
+func (w *ConfigMapWrapper) GetMeshConfig() (*istiomeshv1alpha1.MeshConfig, error) {
 	meshConfigString, ok := w.config.Data["mesh"]
 	if !ok {
 		return nil, fmt.Errorf("mesh config not found in ConfigMap")
 	}
-	return MeshConfigFromString(meshConfigString)
+	return meshConfigFromString(meshConfigString)
 }
 
-// UpdateConfig updates the ConfigMap with the new MeshConfig and returns true if the ConfigMap was updated
-func (w *ConfigMapWrapper) UpdateConfig(updateFunc func(meshConfig *istiomeshv1alpha1.MeshConfig) bool) (bool, error) {
-	config, err := w.GetConfig()
+// SetMeshConfig sets the MeshConfig in the ConfigMap
+func (w *ConfigMapWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshConfig) error {
+	meshConfigString, err := meshConfigToString(config)
 	if err != nil {
-		return false, err
+		return err
 	}
-
-	if updateFunc(config) {
-		meshString, err := meshConfigToString(config)
-		if err != nil {
-			return false, err
-		}
-		w.config.Data["mesh"] = meshString
-		return true, nil
-	}
-	return false, nil
+	w.config.Data["mesh"] = meshConfigString
+	return nil
 }
 
-// MeshConfigFromStruct Builds the Istio/OSSM MeshConfig from a compatible structure:
+// OSSMControlPlaneWrapper wraps the OSSM ServiceMeshControlPlane
+type OSSMControlPlaneWrapper struct {
+	config *maistrav2.ServiceMeshControlPlane
+}
+
+// NewOSSMControlPlaneWrapper creates a new OSSMControlPlaneWrapper
+func NewOSSMControlPlaneWrapper(config *maistrav2.ServiceMeshControlPlane) *OSSMControlPlaneWrapper {
+	return &OSSMControlPlaneWrapper{config: config}
+}
+
+// GetConfigObject returns the OSSM ServiceMeshControlPlane
+func (w *OSSMControlPlaneWrapper) GetConfigObject() client.Object {
+	return w.config
+}
+
+// GetMeshConfig returns the MeshConfig from the OSSM ServiceMeshControlPlane
+func (w *OSSMControlPlaneWrapper) GetMeshConfig() (*istiomeshv1alpha1.MeshConfig, error) {
+	if config, found, err := w.config.Spec.TechPreview.GetMap("meshConfig"); err != nil {
+		return nil, err
+	} else if found {
+		meshConfigStruct, err := structpb.NewStruct(config)
+		if err != nil {
+			return nil, err
+		}
+		meshConfig, err := meshConfigFromStruct(meshConfigStruct)
+		if err != nil {
+			return nil, err
+		}
+		return meshConfig, nil
+	}
+	return &istiomeshv1alpha1.MeshConfig{}, nil
+}
+
+// SetMeshConfig sets the MeshConfig in the OSSM ServiceMeshControlPlane
+func (w *OSSMControlPlaneWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshConfig) error {
+	meshConfigStruct, err := meshConfigToStruct(config)
+	if err != nil {
+		return err
+	}
+	if err := w.config.Spec.TechPreview.SetField("meshConfig", meshConfigStruct.AsMap()); err != nil {
+		return err
+	}
+	return nil
+}
+
+// meshConfigFromStruct Builds the Istio/OSSM MeshConfig from a compatible structure:
 //
 //	meshConfig:
 //	  extensionProviders:
@@ -113,7 +141,7 @@ func (w *ConfigMapWrapper) UpdateConfig(updateFunc func(meshConfig *istiomeshv1a
 //	        port: <port>
 //	        service: <authorino-service>
 //	      name: kuadrant-authorization
-func MeshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshConfig, error) {
+func meshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshConfig, error) {
 	if structure == nil {
 		return &istiomeshv1alpha1.MeshConfig{}, nil
 	}
@@ -131,18 +159,8 @@ func MeshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshCo
 	return meshConfig, nil
 }
 
-// MeshConfigFromString returns the Istio MeshConfig from a ConfigMap
-func MeshConfigFromString(config string) (*istiomeshv1alpha1.MeshConfig, error) {
-	meshConfig := &istiomeshv1alpha1.MeshConfig{}
-	err := protomarshal.ApplyYAML(config, meshConfig)
-	if err != nil {
-		return nil, err
-	}
-	return meshConfig, nil
-}
-
-// MeshConfigToStruct Marshals the Istio MeshConfig into a struct
-func MeshConfigToStruct(config *istiomeshv1alpha1.MeshConfig) (*structpb.Struct, error) {
+// meshConfigToStruct Marshals the Istio MeshConfig into a struct
+func meshConfigToStruct(config *istiomeshv1alpha1.MeshConfig) (*structpb.Struct, error) {
 	configJSON, err := protojson.Marshal(config)
 	if err != nil {
 		return nil, err
@@ -155,62 +173,14 @@ func MeshConfigToStruct(config *istiomeshv1alpha1.MeshConfig) (*structpb.Struct,
 	return configStruct, nil
 }
 
-// ExtensionProvidersFromMeshConfig Returns the Istio MeshConfig ExtensionProviders
-func ExtensionProvidersFromMeshConfig(config *istiomeshv1alpha1.MeshConfig) (extensionProviders []*istiomeshv1alpha1.MeshConfig_ExtensionProvider) {
-	extensionProviders = config.ExtensionProviders
-	if len(extensionProviders) == 0 {
-		extensionProviders = make([]*istiomeshv1alpha1.MeshConfig_ExtensionProvider, 0)
+// meshConfigFromString returns the Istio MeshConfig from a ConfigMap
+func meshConfigFromString(config string) (*istiomeshv1alpha1.MeshConfig, error) {
+	meshConfig := &istiomeshv1alpha1.MeshConfig{}
+	err := protomarshal.ApplyYAML(config, meshConfig)
+	if err != nil {
+		return nil, err
 	}
-	return
-}
-
-// HasKuadrantAuthorizer Checks if the Istio MeshConfig has the ExtensionProvider for Kuadrant
-func HasKuadrantAuthorizer(extensionProviders []*istiomeshv1alpha1.MeshConfig_ExtensionProvider) bool {
-	for _, extensionProvider := range extensionProviders {
-		if extensionProvider.Name == ExtAuthorizerName {
-			return true
-		}
-	}
-
-	return false
-}
-
-// RemoveKuadrantAuthorizerFromConfig Removes the Istio MeshConfig ExtensionProvider for Kuadrant
-func RemoveKuadrantAuthorizerFromConfig(config *istiomeshv1alpha1.MeshConfig) bool {
-	for i, extProvider := range config.ExtensionProviders {
-		if extProvider.Name == ExtAuthorizerName {
-			fmt.Println("Removing Kuadrant Authorizer from MeshConfig", config.ExtensionProviders)
-			config.ExtensionProviders = append(config.ExtensionProviders[:i], config.ExtensionProviders[i+1:]...)
-			fmt.Println("Removing Kuadrant Authorizer from MeshConfig", config.ExtensionProviders)
-			return true
-		}
-	}
-	return false
-}
-
-// AddKuadrantAuthorizerToConfig Adds the Istio MeshConfig ExtensionProvider for Kuadrant
-func AddKuadrantAuthorizerToConfig(namespace string) func(config *istiomeshv1alpha1.MeshConfig) bool {
-	return func(config *istiomeshv1alpha1.MeshConfig) bool {
-		if HasKuadrantAuthorizer(config.ExtensionProviders) {
-			return false
-		}
-		config.ExtensionProviders = append(config.ExtensionProviders, CreateKuadrantAuthorizer(namespace))
-		return true
-	}
-}
-
-// CreateKuadrantAuthorizer Creates the Istio MeshConfig ExtensionProvider for Kuadrant
-func CreateKuadrantAuthorizer(namespace string) *istiomeshv1alpha1.MeshConfig_ExtensionProvider {
-	envoyExtAuthGRPC := &istiomeshv1alpha1.MeshConfig_ExtensionProvider_EnvoyExtAuthzGrpc{
-		EnvoyExtAuthzGrpc: &istiomeshv1alpha1.MeshConfig_ExtensionProvider_EnvoyExternalAuthorizationGrpcProvider{
-			Port:    50051,
-			Service: fmt.Sprintf("authorino-authorino-authorization.%s.svc.cluster.local", namespace),
-		},
-	}
-	return &istiomeshv1alpha1.MeshConfig_ExtensionProvider{
-		Name:     ExtAuthorizerName,
-		Provider: envoyExtAuthGRPC,
-	}
+	return meshConfig, nil
 }
 
 // meshConfigToString returns the Istio MeshConfig as a string

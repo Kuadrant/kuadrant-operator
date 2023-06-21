@@ -6,6 +6,8 @@ package istio
 import (
 	"testing"
 
+	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
+	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gotest.tools/assert"
 	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
@@ -31,10 +33,8 @@ func getStubbedMeshConfig() *istiomeshv1alpha1.MeshConfig {
 	}
 }
 
-func TestMeshConfigFromStruct(t *testing.T) {
-	expectedConfig := getStubbedMeshConfig()
-
-	config := &structpb.Struct{
+func getStubbedMeshConfigStruct() *structpb.Struct {
+	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
 			"extensionProviders": {
 				Kind: &structpb.Value_ListValue{
@@ -77,130 +77,124 @@ func TestMeshConfigFromStruct(t *testing.T) {
 			},
 		},
 	}
-
-	meshConfig, _ := MeshConfigFromStruct(config)
-
-	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, expectedConfig.ExtensionProviders[0].Name)
-	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().Service, expectedConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().Service)
-	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().Port, expectedConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().Port)
 }
 
-func TestMeshConfigFromString(t *testing.T) {
-	expectedConfig := getStubbedMeshConfig()
+func TestOperatorWrapper_GetConfigObject(t *testing.T) {
+	config := &iopv1alpha1.IstioOperator{}
+	wrapper := NewOperatorWrapper(config)
 
-	config := `
-extensionProviders:
-- name: "custom-authorizer"
-  envoyExtAuthzGrpc:
-    service: "custom-authorizer.default.svc.cluster.local"
-    port: "50051"
-`
-
-	meshConfig, _ := MeshConfigFromString(config)
-
-	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, expectedConfig.ExtensionProviders[0].Name)
-	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().Service, expectedConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().Service)
-	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().Port, expectedConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().Port)
-
+	assert.Equal(t, wrapper.GetConfigObject(), config)
 }
 
-func TestMeshConfigToStruct(t *testing.T) {
-	config := getStubbedMeshConfig()
+func TestOperatorWrapper_GetMeshConfig(t *testing.T) {
+	structConfig := getStubbedMeshConfigStruct()
 
-	meshConfig, _ := MeshConfigToStruct(config)
+	config := &iopv1alpha1.IstioOperator{
+		Spec: &istioapiv1alpha1.IstioOperatorSpec{
+			MeshConfig: structConfig,
+		},
+	}
+	wrapper := NewOperatorWrapper(config)
 
-	assert.Equal(t, meshConfig.Fields["extensionProviders"].GetListValue().Values[0].GetStructValue().Fields["name"].GetStringValue(), "custom-authorizer")
-	assert.Equal(t, meshConfig.Fields["extensionProviders"].GetListValue().Values[0].GetStructValue().Fields["envoyExtAuthzGrpc"].GetStructValue().Fields["service"].GetStringValue(), "custom-authorizer.default.svc.cluster.local")
-	assert.Equal(t, meshConfig.Fields["extensionProviders"].GetListValue().Values[0].GetStructValue().Fields["envoyExtAuthzGrpc"].GetStructValue().Fields["port"].GetNumberValue(), float64(50051))
+	meshConfig, err := wrapper.GetMeshConfig()
+	assert.NilError(t, err)
+	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, "custom-authorizer")
+	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().GetPort(), uint32(50051))
 }
 
-func TestExtensionProvidersFromMeshConfig(t *testing.T) {
-	config := getStubbedMeshConfig()
+func TestOperatorWrapper_SetMeshConfig(t *testing.T) {
+	config := &iopv1alpha1.IstioOperator{
+		Spec: &istioapiv1alpha1.IstioOperatorSpec{},
+	}
+	wrapper := NewOperatorWrapper(config)
 
-	extensionProviders := ExtensionProvidersFromMeshConfig(config)
+	stubbedMeshConfig := getStubbedMeshConfig()
+	err := wrapper.SetMeshConfig(stubbedMeshConfig)
+	assert.NilError(t, err)
 
-	assert.Equal(t, extensionProviders[0].Name, "custom-authorizer")
-	assert.Equal(t, extensionProviders[0].GetEnvoyExtAuthzGrpc().Service, "custom-authorizer.default.svc.cluster.local")
-	assert.Equal(t, extensionProviders[0].GetEnvoyExtAuthzGrpc().Port, uint32(50051))
+	meshConfig, _ := wrapper.GetMeshConfig()
+
+	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, stubbedMeshConfig.ExtensionProviders[0].Name)
+	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().GetPort(), uint32(50051))
 }
 
-func TestExtensionProvidersFromMeshConfigWithEmptyConfig(t *testing.T) {
-	config := &istiomeshv1alpha1.MeshConfig{}
+func TestConfigMapWrapper_GetConfigObject(t *testing.T) {
+	configMap := &corev1.ConfigMap{}
+	wrapper := NewConfigMapWrapper(configMap)
 
-	extensionProviders := ExtensionProvidersFromMeshConfig(config)
-
-	assert.Equal(t, len(extensionProviders), 0)
+	assert.Equal(t, wrapper.GetConfigObject(), configMap)
 }
 
-func TestHasKuadrantAuthorizer(t *testing.T) {
-	configWithNoKuadrantAuth := getStubbedMeshConfig().ExtensionProviders
-
-	configWithKuadrantAuth := make([]*istiomeshv1alpha1.MeshConfig_ExtensionProvider, 0)
-	kuadrantAuthProvider := CreateKuadrantAuthorizer("kuadrant-system")
-	configWithKuadrantAuth = append(configWithKuadrantAuth, kuadrantAuthProvider)
-
-	assert.Equal(t, HasKuadrantAuthorizer(configWithNoKuadrantAuth), false)
-	assert.Equal(t, HasKuadrantAuthorizer(configWithKuadrantAuth), true)
-}
-
-func TestCreateKuadrantAuthorizer(t *testing.T) {
-	authorizer := CreateKuadrantAuthorizer("kuadrant-system")
-
-	assert.Equal(t, authorizer.Name, "kuadrant-authorization")
-	assert.Equal(t, authorizer.GetEnvoyExtAuthzGrpc().Service, "authorino-authorino-authorization.kuadrant-system.svc.cluster.local")
-	assert.Equal(t, authorizer.GetEnvoyExtAuthzGrpc().Port, uint32(50051))
-}
-
-func TestRemoveKuadrantAuthorizerFromConfig(t *testing.T) {
-	config := getStubbedMeshConfig()
-	config.ExtensionProviders = append(config.ExtensionProviders, CreateKuadrantAuthorizer("kuadrant-system"))
-	assert.Equal(t, len(config.ExtensionProviders), 2)
-
-	RemoveKuadrantAuthorizerFromConfig(config)
-
-	assert.Equal(t, len(config.ExtensionProviders), 1)
-	assert.Equal(t, config.ExtensionProviders[0].Name, "custom-authorizer")
-}
-
-func TestUpdateMeshConfig(t *testing.T) {
-	t.Run("TestUpdateMeshConfigWithConfigMap", func(t *testing.T) {
-		configMap := &corev1.ConfigMap{
-			Data: map[string]string{
-				"mesh": `
+func TestConfigMapWrapper_GetMeshConfig(t *testing.T) {
+	configMap := &corev1.ConfigMap{
+		Data: map[string]string{
+			"mesh": `
 extensionProviders:
 - name: "custom-authorizer"
   envoyExtAuthzGrpc:
     service: "custom-authorizer.default.svc.cluster.local"
     port: "50051"
 `,
-			},
-		}
-		configWrapper := NewConfigMapWrapper(configMap)
-		updated, err := configWrapper.UpdateConfig(func(meshConfig *istiomeshv1alpha1.MeshConfig) bool {
-			meshConfig.ExtensionProviders = append(meshConfig.ExtensionProviders, CreateKuadrantAuthorizer("kuadrant-system"))
-			return true
-		})
+		},
+	}
+	wrapper := NewConfigMapWrapper(configMap)
 
-		meshConfig, _ := MeshConfigFromString(configMap.Data["mesh"])
-		assert.NilError(t, err)
-		assert.Equal(t, updated, true)
-		assert.Equal(t, len(meshConfig.ExtensionProviders), 2)
-	})
-	t.Run("TestUpdateMeshConfigWithIstioOperator", func(t *testing.T) {
-		meshConfig, _ := MeshConfigToStruct(getStubbedMeshConfig())
-		istioOperator := &iopv1alpha1.IstioOperator{
-			Spec: &istioapiv1alpha1.IstioOperatorSpec{
-				MeshConfig: meshConfig,
-			},
-		}
-		istioOperatorWrapper := NewOperatorWrapper(istioOperator)
-		updated, err := istioOperatorWrapper.UpdateConfig(func(meshConfig *istiomeshv1alpha1.MeshConfig) bool {
-			meshConfig.ExtensionProviders = append(meshConfig.ExtensionProviders, CreateKuadrantAuthorizer("kuadrant-system"))
-			return true
-		})
-		config := istioOperator.Spec.MeshConfig
-		assert.NilError(t, err)
-		assert.Equal(t, updated, true)
-		assert.Equal(t, len(config.Fields["extensionProviders"].GetListValue().Values), 2)
-	})
+	meshConfig, _ := wrapper.GetMeshConfig()
+	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, "custom-authorizer")
+	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().GetPort(), uint32(50051))
+}
+
+func TestConfigMapWrapper_SetMeshConfig(t *testing.T) {
+	configMap := &corev1.ConfigMap{
+		Data: map[string]string{
+			"mesh": "",
+		},
+	}
+	wrapper := NewConfigMapWrapper(configMap)
+
+	stubbedMeshConfig := getStubbedMeshConfig()
+	err := wrapper.SetMeshConfig(stubbedMeshConfig)
+	assert.NilError(t, err)
+
+	meshConfig, _ := wrapper.GetMeshConfig()
+
+	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, "custom-authorizer")
+	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().GetPort(), uint32(50051))
+}
+
+func TestOSSMControlPlaneWrapper_GetConfigObject(t *testing.T) {
+	ossmControlPlane := &maistrav2.ServiceMeshControlPlane{}
+	wrapper := NewOSSMControlPlaneWrapper(ossmControlPlane)
+
+	assert.Equal(t, wrapper.GetConfigObject(), ossmControlPlane)
+}
+
+func TestOSSMControlPlaneWrapper_GetMeshConfig(t *testing.T) {
+	ossmControlPlane := &maistrav2.ServiceMeshControlPlane{}
+	ossmControlPlane.Spec.TechPreview = maistrav1.NewHelmValues(nil)
+	ossmControlPlane.Spec.TechPreview.SetField("meshConfig", getStubbedMeshConfigStruct().AsMap())
+
+	wrapper := NewOSSMControlPlaneWrapper(ossmControlPlane)
+	meshConfig, _ := wrapper.GetMeshConfig()
+
+	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, "custom-authorizer")
+	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().GetPort(), uint32(50051))
+}
+
+func TestOSSMControlPlaneWrapper_SetMeshConfig(t *testing.T) {
+	ossmControlPlane := &maistrav2.ServiceMeshControlPlane{}
+	ossmControlPlane.Spec.TechPreview = maistrav1.NewHelmValues(nil)
+	emptyConfig := &structpb.Struct{}
+	ossmControlPlane.Spec.TechPreview.SetField("meshConfig", emptyConfig.AsMap())
+
+	wrapper := NewOSSMControlPlaneWrapper(ossmControlPlane)
+
+	stubbedMeshConfig := getStubbedMeshConfig()
+	err := wrapper.SetMeshConfig(stubbedMeshConfig)
+	assert.NilError(t, err)
+
+	meshConfig, _ := wrapper.GetMeshConfig()
+
+	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, "custom-authorizer")
+	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().GetPort(), uint32(50051))
 }

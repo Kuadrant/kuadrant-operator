@@ -1,7 +1,7 @@
 ## Gateway Rate Limit For Cluster Operators
 
 This user guide shows how the kuadrant's control plane applies rate limit policy at
-[Gateway API's Gateway](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.Gateway)
+[Gateway API's Gateway](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.Gateway)
 level.
 
 ### Clone the project
@@ -45,7 +45,7 @@ kubectl apply -f examples/toystore/toystore.yaml
 ```yaml
 kubectl apply -f - <<EOF
 ---
-apiVersion: gateway.networking.k8s.io/v1alpha2
+apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
   name: toystore

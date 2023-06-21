@@ -92,7 +92,8 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    operators.operatorframework.io/builder: operator-sdk-v1.22.0
+    createdAt: "2023-05-31T13:23:21Z"
+    operators.operatorframework.io/builder: operator-sdk-v1.28.1
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator
     support: kuadrant
@@ -338,11 +339,12 @@ spec:
           - list
           - patch
           - update
+          - use
           - watch
         - apiGroups:
           - maistra.io
           resources:
-          - servicemeshmemberrolls
+          - servicemeshmembers
           verbs:
           - create
           - delete
@@ -526,4 +528,5 @@ spec:
   relatedImages:
   - image: oci://quay.io/kuadrant/wasm-shim:latest
     name: wasmshim
+  replaces: kuadrant-operator.v0.0.0-alpha
   version: 0.0.0

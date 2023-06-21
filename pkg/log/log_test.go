@@ -24,7 +24,7 @@ import (
 
 	// In this package there is no ginkgo tests
 	// Required to parse command line ginkgo flags -ginkgo.v -ginkgo.progress
-	_ "github.com/onsi/ginkgo"
+	_ "github.com/onsi/ginkgo/v2"
 	"gotest.tools/assert"
 )
 

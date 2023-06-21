@@ -27,6 +27,7 @@ func TestObjectKeyListDifference(t *testing.T) {
 	key1 := client.ObjectKey{Namespace: "ns1", Name: "obj1"}
 	key2 := client.ObjectKey{Namespace: "ns2", Name: "obj2"}
 	key3 := client.ObjectKey{Namespace: "ns3", Name: "obj3"}
+	key4 := client.ObjectKey{Namespace: "ns4", Name: "obj4"}
 
 	testCases := []struct {
 		name     string
@@ -35,34 +36,40 @@ func TestObjectKeyListDifference(t *testing.T) {
 		expected []client.ObjectKey
 	}{
 		{
-			"empty",
+			"when both input slices are empty then return an empty slice",
 			[]client.ObjectKey{},
 			[]client.ObjectKey{},
 			[]client.ObjectKey{},
 		},
 		{
-			"a empty",
+			"when inputA is empty and inputB has elements then return an empty slice",
 			[]client.ObjectKey{},
 			[]client.ObjectKey{key1},
 			[]client.ObjectKey{},
 		},
 		{
-			"b empty",
+			"when inputA has elements and inputB is empty then return inputA as the result",
 			[]client.ObjectKey{key1, key2},
 			[]client.ObjectKey{},
 			[]client.ObjectKey{key1, key2},
 		},
 		{
-			"equal",
+			"when inputA and inputB are equal then return an empty slice",
 			[]client.ObjectKey{key1, key2, key3},
 			[]client.ObjectKey{key1, key2, key3},
 			[]client.ObjectKey{},
 		},
 		{
-			"missing key2",
+			"when inputA and inputB have common elements then return the difference",
 			[]client.ObjectKey{key1, key2, key3},
 			[]client.ObjectKey{key1, key3},
 			[]client.ObjectKey{key2},
+		},
+		{
+			"when inputA and inputB have no common elements then return inputA as the result",
+			[]client.ObjectKey{key1, key2},
+			[]client.ObjectKey{key3, key4},
+			[]client.ObjectKey{key1, key2},
 		},
 	}
 
@@ -376,7 +383,7 @@ func TestStatusConditionsMarshalJSON(t *testing.T) {
 		err      error
 	}{
 		{
-			name:     "when input is empty then return an empty JSON (empty byte array)",
+			name:     "when input is empty then return an empty JSON array",
 			input:    []metav1.Condition{},
 			expected: []byte("[]"),
 			err:      nil,
@@ -720,6 +727,170 @@ func TestGetServicePortNumber(t *testing.T) {
 
 			if portNumber != tt.expected {
 				t.Errorf("unexpected port number: got %d, want %d", portNumber, tt.expected)
+			}
+		})
+	}
+}
+
+func TestContainsObjectKey(t *testing.T) {
+	key1 := client.ObjectKey{Namespace: "ns1", Name: "obj1"}
+	key2 := client.ObjectKey{Namespace: "ns2", Name: "obj2"}
+	key3 := client.ObjectKey{Namespace: "ns3", Name: "obj3"}
+	key4 := client.ObjectKey{Namespace: "ns4", Name: "obj4"}
+
+	testCases := []struct {
+		name     string
+		list     []client.ObjectKey
+		key      client.ObjectKey
+		expected bool
+	}{
+		{
+			name:     "when list contains key then return true",
+			list:     []client.ObjectKey{key1, key2, key3},
+			key:      key2,
+			expected: true,
+		},
+		{
+			name:     "when list does not contain key then return false",
+			list:     []client.ObjectKey{key1, key2, key3},
+			key:      key4,
+			expected: false,
+		},
+		{
+			name:     "when list is empty then return false",
+			list:     []client.ObjectKey{},
+			key:      key4,
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := ContainsObjectKey(tc.list, tc.key)
+			if result != tc.expected {
+				t.Errorf("unexpected result: got %t, want %t", result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestFindObjectKey(t *testing.T) {
+	key1 := client.ObjectKey{Namespace: "ns1", Name: "obj1"}
+	key2 := client.ObjectKey{Namespace: "ns2", Name: "obj2"}
+	key3 := client.ObjectKey{Namespace: "ns3", Name: "obj3"}
+
+	testCases := []struct {
+		name     string
+		list     []client.ObjectKey
+		key      client.ObjectKey
+		expected int
+	}{
+		{
+			name:     "when input slice has one search ObjectKey then return its index",
+			list:     []client.ObjectKey{key1, key2, key3},
+			key:      key2,
+			expected: 1,
+		},
+		{
+			name:     "when input slice has no search ObjectKey then return length of input slice",
+			list:     []client.ObjectKey{key1, key3},
+			key:      key2,
+			expected: 2,
+		},
+		{
+			name:     "when input slice is empty then return 0",
+			list:     []client.ObjectKey{},
+			key:      key1,
+			expected: 0,
+		},
+		{
+			name:     "when there are multiple occurrences of the search ObjectKey then return the index of first occurrence",
+			list:     []client.ObjectKey{key1, key2, key1, key3},
+			key:      key2,
+			expected: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if output := FindObjectKey(tc.list, tc.key); output != tc.expected {
+				t.Errorf("expected %d but got %d", tc.expected, output)
+			}
+		})
+	}
+}
+
+func TestFindDeploymentStatusCondition(t *testing.T) {
+	tests := []struct {
+		name          string
+		conditions    []appsv1.DeploymentCondition
+		conditionType string
+		expected      *appsv1.DeploymentCondition
+	}{
+		{
+			name: "when search condition exists then return the condition",
+			conditions: []appsv1.DeploymentCondition{
+				{
+					Type:   appsv1.DeploymentConditionType("Ready"),
+					Status: corev1.ConditionTrue,
+				},
+				{
+					Type:   appsv1.DeploymentConditionType("Progressing"),
+					Status: corev1.ConditionFalse,
+				},
+			},
+			conditionType: "Ready",
+			expected: &appsv1.DeploymentCondition{
+				Type:   appsv1.DeploymentConditionType("Ready"),
+				Status: corev1.ConditionTrue,
+			},
+		},
+		{
+			name: "when search condition does not exist then return nil",
+			conditions: []appsv1.DeploymentCondition{
+				{
+					Type:   appsv1.DeploymentConditionType("Progressing"),
+					Status: corev1.ConditionFalse,
+				},
+			},
+			conditionType: "Ready",
+			expected:      nil,
+		},
+		{
+			name:          "when conditions slice is empty then return nil",
+			conditions:    []appsv1.DeploymentCondition{},
+			conditionType: "Ready",
+			expected:      nil,
+		},
+		{
+			name: "when multiple conditions have the same type then return the first occurrence",
+			conditions: []appsv1.DeploymentCondition{
+				{
+					Type:   appsv1.DeploymentConditionType("Ready"),
+					Status: corev1.ConditionTrue,
+				},
+				{
+					Type:   appsv1.DeploymentConditionType("Progressing"),
+					Status: corev1.ConditionTrue,
+				},
+				{
+					Type:   appsv1.DeploymentConditionType("Ready"),
+					Status: corev1.ConditionFalse,
+				},
+			},
+			conditionType: "Ready",
+			expected: &appsv1.DeploymentCondition{
+				Type:   appsv1.DeploymentConditionType("Ready"),
+				Status: corev1.ConditionTrue,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := FindDeploymentStatusCondition(tc.conditions, tc.conditionType)
+			if !reflect.DeepEqual(actual, tc.expected) {
+				t.Errorf("unexpected result: got %s, want %s", actual.String(), tc.expected.String())
 			}
 		})
 	}

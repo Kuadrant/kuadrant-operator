@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -163,9 +164,9 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	logger, _ := logr.FromContext(ctx)
 
-	err := r.unregisterExternalAuthorizerIstio(ctx, kObj)
+	isIstioInstalled, err := r.unregisterExternalAuthorizerIstio(ctx, kObj)
 
-	if err != nil && apimeta.IsNoMatchError(err) {
+	if err == nil && !isIstioInstalled {
 		err = r.unregisterExternalAuthorizerOSSM(ctx, kObj)
 	}
 
@@ -176,7 +177,7 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context, k
 	return err
 }
 
-func (r *KuadrantReconciler) unregisterExternalAuthorizerIstio(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+func (r *KuadrantReconciler) unregisterExternalAuthorizerIstio(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (bool, error) {
 	logger, _ := logr.FromContext(ctx)
 	var configsToUpdate []common.ConfigWrapper
 
@@ -185,10 +186,12 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerIstio(ctx context.Conte
 	if err := r.GetResource(ctx, iopKey, iop); err != nil {
 		logger.V(1).Info("failed to get istiooperator object", "key", iopKey, "err", err)
 		if apimeta.IsNoMatchError(err) {
-			// return err only if there's no istiooperator CRD
-			return err
+			// return false and nil if there's no istiooperator CRD, means istio is not installed
+			return false, nil
+		} else if err.Error() != fmt.Sprintf("IstioOperator.install.istio.io \"%s\" not found", controlPlaneProviderName()) {
+			// return true and err if there's an error other than not found (no istiooperator CR)
+			return true, err
 		}
-		// otherwise, we assume that the control plane is istio but no installed by its operator
 	} else {
 		configsToUpdate = append(configsToUpdate, istio.NewOperatorWrapper(iop))
 	}
@@ -196,7 +199,7 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerIstio(ctx context.Conte
 	istioConfigMap := &corev1.ConfigMap{}
 	if err := r.GetResource(ctx, client.ObjectKey{Name: "istio", Namespace: controlPlaneProviderNamespace()}, istioConfigMap); err != nil {
 		logger.V(1).Info("failed to get istio configMap", "key", iopKey, "err", err)
-		return err
+		return true, err
 	}
 	configsToUpdate = append(configsToUpdate, istio.NewConfigMapWrapper(istioConfigMap))
 	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
@@ -204,20 +207,20 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerIstio(ctx context.Conte
 	for _, config := range configsToUpdate {
 		hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(config, *kuadrantAuthorizer)
 		if err != nil {
-			return err
+			return true, err
 		}
 		if hasKuadrantAuthorizer {
 			if err = common.UnregisterKuadrantAuthorizer(config, kuadrantAuthorizer); err != nil {
-				return err
+				return true, err
 			}
 
 			logger.Info("remove external authorizer from istio meshconfig")
-			if err := r.UpdateResource(ctx, config.GetConfigObject()); err != nil {
-				return err
+			if err = r.UpdateResource(ctx, config.GetConfigObject()); err != nil {
+				return true, err
 			}
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
@@ -255,9 +258,9 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Contex
 func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	logger, _ := logr.FromContext(ctx)
 
-	err := r.registerExternalAuthorizerIstio(ctx, kObj)
+	isIstioInstalled, err := r.registerExternalAuthorizerIstio(ctx, kObj)
 
-	if err != nil && apimeta.IsNoMatchError(err) {
+	if err == nil && !isIstioInstalled {
 		err = r.registerExternalAuthorizerOSSM(ctx, kObj)
 	}
 
@@ -268,7 +271,7 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 	return err
 }
 
-func (r *KuadrantReconciler) registerExternalAuthorizerIstio(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+func (r *KuadrantReconciler) registerExternalAuthorizerIstio(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (bool, error) {
 	logger, _ := logr.FromContext(ctx)
 	var configsToUpdate []common.ConfigWrapper
 
@@ -277,40 +280,42 @@ func (r *KuadrantReconciler) registerExternalAuthorizerIstio(ctx context.Context
 	if err := r.GetResource(ctx, iopKey, iop); err != nil {
 		logger.V(1).Info("failed to get istiooperator object", "key", iopKey, "err", err)
 		if apimeta.IsNoMatchError(err) {
-			// if it's a no match error (CRD not installed), return the error
-			// otherwise continue with the fetching of the configmap
-			return err
+			logger.V(1).Info("there's no istiooperator CRD", "key", iopKey, "err", err)
+			// return false and nil if there's no istiooperator CRD, means istio is not installed
+			return false, nil
+		} else if err.Error() != fmt.Sprintf("IstioOperator.install.istio.io \"%s\" not found", controlPlaneProviderName()) {
+			// return true and err if there's an error other than not found (no istiooperator CR)
+			return true, err
 		}
 	} else {
-		// if there is no error, add the iop to the list of configs to update
 		configsToUpdate = append(configsToUpdate, istio.NewOperatorWrapper(iop))
 	}
 
 	istioConfigMap := &corev1.ConfigMap{}
 	if err := r.GetResource(ctx, client.ObjectKey{Name: "istio", Namespace: controlPlaneProviderNamespace()}, istioConfigMap); err != nil {
 		logger.V(1).Info("failed to get istio configMap", "key", iopKey, "err", err)
-		return err
+		return true, err
 	}
 	configsToUpdate = append(configsToUpdate, istio.NewConfigMapWrapper(istioConfigMap))
 	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
 	for _, config := range configsToUpdate {
 		hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(config, *kuadrantAuthorizer)
 		if err != nil {
-			return err
+			return true, err
 		}
 		if !hasKuadrantAuthorizer {
-			err := common.RegisterKuadrantAuthorizer(config, kuadrantAuthorizer)
+			err = common.RegisterKuadrantAuthorizer(config, kuadrantAuthorizer)
 			if err != nil {
-				return err
+				return true, err
 			}
 			logger.Info("adding external authorizer to istio meshconfig")
-			if err := r.UpdateResource(ctx, config.GetConfigObject()); err != nil {
-				return err
+			if err = r.UpdateResource(ctx, config.GetConfigObject()); err != nil {
+				return true, err
 			}
 		}
 	}
 
-	return nil
+	return true, nil
 }
 
 func (r *KuadrantReconciler) registerExternalAuthorizerOSSM(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {

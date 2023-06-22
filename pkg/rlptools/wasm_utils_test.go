@@ -19,7 +19,9 @@ import (
 func TestWasmRules(t *testing.T) {
 	httpRoute := &gatewayapiv1beta1.HTTPRoute{
 		Spec: gatewayapiv1beta1.HTTPRouteSpec{
-			Hostnames: []gatewayapiv1beta1.Hostname{"*.example.com"},
+			Hostnames: []gatewayapiv1beta1.Hostname{
+				"*.example.com",
+			},
 			Rules: []gatewayapiv1beta1.HTTPRouteRule{
 				{
 					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
@@ -39,14 +41,21 @@ func TestWasmRules(t *testing.T) {
 	t.Run("minimal RLP", func(subT *testing.T) {
 		rlp := &kuadrantv1beta2.RateLimitPolicy{
 			TypeMeta: metav1.TypeMeta{
-				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String()},
-			ObjectMeta: metav1.ObjectMeta{Name: "rlpA", Namespace: "nsA"},
+				Kind:       "RateLimitPolicy",
+				APIVersion: kuadrantv1beta2.GroupVersion.String(),
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "rlpA",
+				Namespace: "nsA",
+			},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
 				Limits: map[string]kuadrantv1beta2.Limit{
-					"l1": kuadrantv1beta2.Limit{
+					"l1": {
 						Rates: []kuadrantv1beta2.Rate{
 							{
-								Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								Limit:    1,
+								Duration: 3,
+								Unit:     kuadrantv1beta2.TimeUnit("minute"),
 							},
 						},
 					},
@@ -67,6 +76,11 @@ func TestWasmRules(t *testing.T) {
 							Selector: "request.method",
 							Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
 							Value:    "GET",
+						},
+						{
+							Selector: "request.host",
+							Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+							Value:    "*.example.com",
 						},
 					},
 				},

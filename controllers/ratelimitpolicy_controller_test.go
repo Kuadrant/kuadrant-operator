@@ -296,6 +296,11 @@ var _ = Describe("RateLimitPolicy controller", func() {
 												Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
 												Value:    "GET",
 											},
+											{
+												Selector: "request.host",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+												Value:    "*.example.com",
+											},
 										},
 									},
 								},
@@ -411,7 +416,17 @@ var _ = Describe("RateLimitPolicy controller", func() {
 						Hostnames: []string{"*"},
 						Rules: []wasm.Rule{
 							{
-								Conditions: nil,
+								Conditions: []wasm.Condition{
+									{
+										AllOf: []wasm.PatternExpression{
+											{
+												Selector: "request.host",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+												Value:    "*",
+											},
+										},
+									},
+								},
 								Data: []wasm.DataItem{
 									{
 										Static: &wasm.StaticSpec{

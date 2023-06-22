@@ -120,8 +120,7 @@ func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw co
 }
 
 // returns nil when there is no rate limit policy to apply
-func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
-	gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (*wasm.WASMPlugin, error) {
+func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (*wasm.WASMPlugin, error) {
 	logger, _ := logr.FromContext(ctx)
 
 	routeRLPList := make([]*kuadrantv1beta2.RateLimitPolicy, 0)
@@ -146,15 +145,23 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 	}
 
 	wasmRulesByDomain := make(rlptools.WasmRulesByDomain)
+	var gwWasmRules []wasm.Rule
 
 	if gwRLP != nil {
-		if len(gw.Hostnames()) == 0 {
-			// wildcard domain
-			wasmRulesByDomain["*"] = append(wasmRulesByDomain["*"], rlptools.WasmRules(gwRLP, nil)...)
-		} else {
-			for _, gwHostname := range gw.Hostnames() {
-				wasmRulesByDomain[gwHostname] = append(wasmRulesByDomain[gwHostname], rlptools.WasmRules(gwRLP, nil)...)
-			}
+		hostnames := gw.Hostnames()
+		if len(hostnames) == 0 {
+			hostnames = []string{"*"}
+		}
+		// FIXME(guicassolato): this is a hack until we start going through all the httproutes that are children of the gateway and build the rules for each httproute
+		route := &gatewayapiv1beta1.HTTPRoute{
+			Spec: gatewayapiv1beta1.HTTPRouteSpec{
+				Hostnames: common.Map(hostnames, func(h string) gatewayapiv1beta1.Hostname { return gatewayapiv1beta1.Hostname(h) }),
+				Rules:     []gatewayapiv1beta1.HTTPRouteRule{{}},
+			},
+		}
+		gwWasmRules = rlptools.WasmRules(gwRLP, route) // FIXME(guicassolato): this is not correct. We need to go through all the httproutes that are children of the gateway and build the rules for each httproute instead
+		for _, gwHostname := range hostnames {
+			wasmRulesByDomain[gwHostname] = append(wasmRulesByDomain[gwHostname], gwWasmRules...)
 		}
 	}
 
@@ -163,12 +170,11 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
-
 		// gateways limits merged with the route level limits
-		mergedGatewayActions := mergeRules(httpRouteRLP, gwRLP, httpRoute)
+		wasmRules := append(rlptools.WasmRules(httpRouteRLP, httpRoute), gwWasmRules...) // FIXME(guicassolato): there will be no need to merge gwRLP rules when targeting a gateway == shortcut for targeting all the routes of a gateway
 		// routeLimits referenced by multiple hostnames
 		for _, hostname := range httpRoute.Spec.Hostnames {
-			wasmRulesByDomain[string(hostname)] = append(wasmRulesByDomain[string(hostname)], mergedGatewayActions...)
+			wasmRulesByDomain[string(hostname)] = append(wasmRulesByDomain[string(hostname)], wasmRules...)
 		}
 	}
 
@@ -178,10 +184,11 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 	}
 
 	// One RateLimitPolicy per domain
+	// FIXME(guicassolato): Why do we map per domain? Is it so the wasm-shim can index the config per domain and improve perfomance in the data plane? If so, this will occasionally generate incongruent entries of domain keys combined with rules that have no relation with that domain.
 	for domain, rules := range wasmRulesByDomain {
 		rateLimitPolicy := wasm.RateLimitPolicy{
-			Name:      domain,
-			Domain:    common.MarshallNamespace(gw.Key(), domain),
+			Name:      domain,                                     // FIXME(guicassolato): can't we use the name of the policy instead?
+			Domain:    common.MarshallNamespace(gw.Key(), domain), // FIXME(guicassolato) https://github.com/Kuadrant/kuadrant-operator/issues/201
 			Service:   common.KuadrantRateLimitClusterName,
 			Hostnames: []string{domain},
 			Rules:     rules,
@@ -190,16 +197,4 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 	}
 
 	return wasmPlugin, nil
-}
-
-// merge operations currently implemented with list append operation
-func mergeRules(routeRLP *kuadrantv1beta2.RateLimitPolicy, gwRLP *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []wasm.Rule {
-	routeRules := rlptools.WasmRules(routeRLP, route)
-
-	if gwRLP == nil {
-		return routeRules
-	}
-
-	// add gateway level actions
-	return append(routeRules, rlptools.WasmRules(gwRLP, nil)...)
 }

@@ -250,6 +250,212 @@ func TestContains(t *testing.T) {
 	}
 }
 
+func TestContainsWithInts(t *testing.T) {
+	testCases := []struct {
+		name     string
+		slice    []int
+		target   int
+		expected bool
+	}{
+		{
+			name:     "when slice has one target item then return true",
+			slice:    []int{1},
+			target:   1,
+			expected: true,
+		},
+		{
+			name:     "when slice is empty then return false",
+			slice:    []int{},
+			target:   2,
+			expected: false,
+		},
+		{
+			name:     "when target is in a slice then return true",
+			slice:    []int{1, 2, 3},
+			target:   2,
+			expected: true,
+		},
+		{
+			name:     "when no target in a slice then return false",
+			slice:    []int{1, 2, 3},
+			target:   4,
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if Contains(tc.slice, tc.target) != tc.expected {
+				t.Errorf("when slice=%v and target=%d, expected=%v, but got=%v", tc.slice, tc.target, tc.expected, !tc.expected)
+			}
+		})
+	}
+}
+
+func TestSameElements(t *testing.T) {
+	testCases := []struct {
+		name     string
+		slice1   []string
+		slice2   []string
+		expected bool
+	}{
+		{
+			name:     "when slice1 and slice2 contain the same elements then return true",
+			slice1:   []string{"test-gw1", "test-gw2", "test-gw3"},
+			slice2:   []string{"test-gw1", "test-gw2", "test-gw3"},
+			expected: true,
+		},
+		{
+			name:     "when slice1 and slice2 contain unique elements then return false",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{"test-gw1", "test-gw3"},
+			expected: false,
+		},
+		{
+			name:     "when both slices are empty then return true",
+			slice1:   []string{},
+			slice2:   []string{},
+			expected: true,
+		},
+		{
+			name:     "when both slices are nil then return true",
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if SameElements(tc.slice1, tc.slice2) != tc.expected {
+				t.Errorf("when slice1=%v and slice2=%v, expected=%v, but got=%v", tc.slice1, tc.slice2, tc.expected, !tc.expected)
+			}
+		})
+	}
+}
+
+func TestIntersect(t *testing.T) {
+	testCases := []struct {
+		name     string
+		slice1   []string
+		slice2   []string
+		expected bool
+	}{
+		{
+			name:     "when slice1 and slice2 have one common item then return true",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{"test-gw1", "test-gw3", "test-gw4"},
+			expected: true,
+		},
+		{
+			name:     "when slice1 and slice2 have no common item then return false",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{"test-gw3", "test-gw4"},
+			expected: false,
+		},
+		{
+			name:     "when slice1 is empty then return false",
+			slice1:   []string{},
+			slice2:   []string{"test-gw3", "test-gw4"},
+			expected: false,
+		},
+		{
+			name:     "when slice2 is empty then return false",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{},
+			expected: false,
+		},
+		{
+			name:     "when both slices are empty then return false",
+			slice1:   []string{},
+			slice2:   []string{},
+			expected: false,
+		},
+		{
+			name:     "when slice1 is nil then return false",
+			slice2:   []string{"test-gw3", "test-gw4"},
+			expected: false,
+		},
+		{
+			name:     "when slice2 is nil then return false",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			expected: false,
+		},
+		{
+			name:     "when both slices are nil then return false",
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if Intersect(tc.slice1, tc.slice2) != tc.expected {
+				t.Errorf("when slice1=%v and slice2=%v, expected=%v, but got=%v", tc.slice1, tc.slice2, tc.expected, !tc.expected)
+			}
+		})
+	}
+}
+
+func TestIntersectWithInts(t *testing.T) {
+	testCases := []struct {
+		name     string
+		slice1   []int
+		slice2   []int
+		expected bool
+	}{
+		{
+			name:     "when slice1 and slice2 have one common item then return true",
+			slice1:   []int{1, 2},
+			slice2:   []int{1, 3, 4},
+			expected: true,
+		},
+		{
+			name:     "when slice1 and slice2 have no common item then return false",
+			slice1:   []int{1, 2},
+			slice2:   []int{3, 4},
+			expected: false,
+		},
+		{
+			name:     "when slice1 is empty then return false",
+			slice1:   []int{},
+			slice2:   []int{3, 4},
+			expected: false,
+		},
+		{
+			name:     "when slice2 is empty then return false",
+			slice1:   []int{1, 2},
+			slice2:   []int{},
+			expected: false,
+		},
+		{
+			name:     "when both slices are empty then return false",
+			slice1:   []int{},
+			slice2:   []int{},
+			expected: false,
+		},
+		{
+			name:     "when slice1 is nil then return false",
+			slice2:   []int{3, 4},
+			expected: false,
+		},
+		{
+			name:     "when slice2 is nil then return false",
+			slice1:   []int{1, 2},
+			expected: false,
+		},
+		{
+			name:     "when both slices are nil then return false",
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if Intersect(tc.slice1, tc.slice2) != tc.expected {
+				t.Errorf("when slice1=%v and slice2=%v, expected=%v, but got=%v", tc.slice1, tc.slice2, tc.expected, !tc.expected)
+			}
+		})
+	}
+}
+
 func TestMap(t *testing.T) {
 	slice1 := []int{1, 2, 3, 4}
 	f1 := func(x int) int { return x + 1 }
@@ -353,6 +559,24 @@ func TestReverseSlice(t *testing.T) {
 	t.Run("when given an empty slice then return empty slice", func(t *testing.T) {
 		if !reflect.DeepEqual(output3, expected3) {
 			t.Errorf("ReverseSlice(%v) = %v; expected %v", input3, output3, expected3)
+		}
+	})
+}
+
+func TestMapValues(t *testing.T) {
+	t.Run("when given a map of strings to string then return a slice of the string values", func(t *testing.T) {
+		stos := map[string]string{"a": "foo", "b": "bar", "c": "baz"}
+		expected := []string{"foo", "bar", "baz"}
+		if r := MapValues(stos); len(r) != len(expected) || !SameElements(r, expected) {
+			t.Errorf("expected: %v; got: %v", expected, r)
+		}
+	})
+
+	t.Run("when given a map of strings to ints then return a slice of the int values", func(t *testing.T) {
+		stos := map[string]int{"a": 1, "b": 2, "c": 3}
+		expected := []int{1, 2, 3}
+		if r := MapValues(stos); len(r) != len(expected) || !SameElements(r, expected) {
+			t.Errorf("expected: %v; got: %v", expected, r)
 		}
 	})
 }

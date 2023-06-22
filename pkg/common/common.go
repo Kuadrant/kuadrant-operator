@@ -87,9 +87,31 @@ func NamespacedNameToObjectKey(namespacedName, defaultNamespace string) client.O
 
 // Contains checks if the given target string is present in the slice of strings 'slice'.
 // It returns true if the target string is found in the slice, false otherwise.
-func Contains(slice []string, target string) bool {
+func Contains[T comparable](slice []T, target T) bool {
 	for idx := range slice {
 		if slice[idx] == target {
+			return true
+		}
+	}
+	return false
+}
+
+// SameElements checks if the two slices contain the exact same elements. Order does not matter.
+func SameElements[T comparable](s1, s2 []T) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+	for _, v := range s1 {
+		if !Contains(s2, v) {
+			return false
+		}
+	}
+	return true
+}
+
+func Intersect[T comparable](slice1, slice2 []T) bool {
+	for _, item := range slice1 {
+		if Contains(slice2, item) {
 			return true
 		}
 	}
@@ -133,6 +155,16 @@ func ReverseSlice[T any](input []T) []T {
 	}
 
 	return output
+}
+
+func MapValues[T comparable, U any](m map[T]U) []U {
+	values := make([]U, len(m))
+	i := 0
+	for k := range m {
+		values[i] = m[k]
+		i++
+	}
+	return values
 }
 
 // MergeMapStringString Merge desired into existing.

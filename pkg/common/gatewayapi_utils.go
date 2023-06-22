@@ -91,6 +91,117 @@ func RulesFromHTTPRoute(route *gatewayapiv1beta1.HTTPRoute) []HTTPRouteRule {
 	return rules
 }
 
+type HTTPRouteRuleSelector struct {
+	*gatewayapiv1beta1.HTTPRouteMatch
+}
+
+func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1beta1.HTTPRouteRule) bool {
+	if s.HTTPRouteMatch == nil {
+		return true
+	}
+
+	_, found := Find(rule.Matches, func(ruleMatch gatewayapiv1beta1.HTTPRouteMatch) bool {
+		// path
+		if s.Path != nil && !reflect.DeepEqual(s.Path, ruleMatch.Path) {
+			return false
+		}
+
+		// headers
+		for _, header := range s.Headers {
+			if _, found := Find(ruleMatch.Headers, func(otherHeader gatewayapiv1beta1.HTTPHeaderMatch) bool {
+				return reflect.DeepEqual(header, otherHeader)
+			}); !found {
+				return false
+			}
+		}
+
+		// query params
+		for _, param := range s.QueryParams {
+			if _, found := Find(ruleMatch.QueryParams, func(otherParam gatewayapiv1beta1.HTTPQueryParamMatch) bool {
+				return reflect.DeepEqual(param, otherParam)
+			}); !found {
+				return false
+			}
+		}
+
+		// method
+		if s.Method != nil && !reflect.DeepEqual(s.Method, ruleMatch.Method) {
+			return false
+		}
+
+		return true
+	})
+
+	return found
+}
+
+// HTTPRouteRuleToString prints the matches of a  HTTPRouteRule as string
+func HTTPRouteRuleToString(rule gatewayapiv1beta1.HTTPRouteRule) string {
+	matches := Map(rule.Matches, HTTPRouteMatchToString)
+	return fmt.Sprintf("{matches:[%s]}", strings.Join(matches, ","))
+}
+
+func HTTPRouteMatchToString(match gatewayapiv1beta1.HTTPRouteMatch) string {
+	var patterns []string
+	if method := match.Method; method != nil {
+		patterns = append(patterns, fmt.Sprintf("method:%v", HTTPMethodToString(method)))
+	}
+	if path := match.Path; path != nil {
+		patterns = append(patterns, fmt.Sprintf("path:%s", HTTPPathMatchToString(path)))
+	}
+	if len(match.QueryParams) > 0 {
+		queryParams := Map(match.QueryParams, HTTPQueryParamMatchToString)
+		patterns = append(patterns, fmt.Sprintf("queryParams:[%s]", strings.Join(queryParams, ",")))
+	}
+	if len(match.Headers) > 0 {
+		headers := Map(match.Headers, HTTPHeaderMatchToString)
+		patterns = append(patterns, fmt.Sprintf("headers:[%s]", strings.Join(headers, ",")))
+	}
+	return fmt.Sprintf("{%s}", strings.Join(patterns, ","))
+}
+
+func HTTPPathMatchToString(path *gatewayapiv1beta1.HTTPPathMatch) string {
+	if path == nil {
+		return "*"
+	}
+	if path.Type != nil {
+		switch *path.Type {
+		case gatewayapiv1beta1.PathMatchExact:
+			return fmt.Sprintf("%s", *path.Value)
+		case gatewayapiv1beta1.PathMatchRegularExpression:
+			return fmt.Sprintf("~/%s/", *path.Value)
+		}
+	}
+	return fmt.Sprintf("%s*", *path.Value)
+}
+
+func HTTPHeaderMatchToString(header gatewayapiv1beta1.HTTPHeaderMatch) string {
+	if header.Type != nil {
+		switch *header.Type {
+		case gatewayapiv1beta1.HeaderMatchRegularExpression:
+			return fmt.Sprintf("{%s:~/%s/}", header.Name, header.Value)
+		}
+	}
+	return fmt.Sprintf("{%s:%s}", header.Name, header.Value)
+}
+
+func HTTPQueryParamMatchToString(queryParam gatewayapiv1beta1.HTTPQueryParamMatch) string {
+	if queryParam.Type != nil {
+		switch *queryParam.Type {
+		case gatewayapiv1beta1.QueryParamMatchRegularExpression:
+			return fmt.Sprintf("{%s:~/%s/}", queryParam.Name, queryParam.Value)
+		}
+	}
+	return fmt.Sprintf("{%s:%s}", queryParam.Name, queryParam.Value)
+}
+
+func HTTPMethodToString(method *gatewayapiv1beta1.HTTPMethod) string {
+	if method == nil {
+		return "*"
+	}
+	return string(*method)
+}
+
 func GetNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, policy KuadrantPolicy) (string, error) {
 	targetRef := policy.GetTargetRef()
 	gwNamespacedName := types.NamespacedName{Namespace: string(GetDefaultIfNil(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)}

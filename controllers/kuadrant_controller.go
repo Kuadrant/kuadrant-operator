@@ -179,29 +179,13 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context, k
 
 func (r *KuadrantReconciler) unregisterExternalAuthorizerIstio(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (bool, error) {
 	logger, _ := logr.FromContext(ctx)
-	var configsToUpdate []common.ConfigWrapper
+	configsToUpdate, err := r.getIstioConfigObjects(ctx, logger)
+	isIstioInstalled := configsToUpdate != nil
 
-	iop := &iopv1alpha1.IstioOperator{}
-	iopKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
-	if err := r.GetResource(ctx, iopKey, iop); err != nil {
-		logger.V(1).Info("failed to get istiooperator object", "key", iopKey, "err", err)
-		if apimeta.IsNoMatchError(err) {
-			// return false and nil if there's no istiooperator CRD, means istio is not installed
-			return false, nil
-		} else if err.Error() != fmt.Sprintf("IstioOperator.install.istio.io \"%s\" not found", controlPlaneProviderName()) {
-			// return true and err if there's an error other than not found (no istiooperator CR)
-			return true, err
-		}
-	} else {
-		configsToUpdate = append(configsToUpdate, istio.NewOperatorWrapper(iop))
+	if !isIstioInstalled || err != nil {
+		return isIstioInstalled, err
 	}
 
-	istioConfigMap := &corev1.ConfigMap{}
-	if err := r.GetResource(ctx, client.ObjectKey{Name: "istio", Namespace: controlPlaneProviderNamespace()}, istioConfigMap); err != nil {
-		logger.V(1).Info("failed to get istio configMap", "key", iopKey, "err", err)
-		return true, err
-	}
-	configsToUpdate = append(configsToUpdate, istio.NewConfigMapWrapper(istioConfigMap))
 	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
 
 	for _, config := range configsToUpdate {
@@ -273,30 +257,13 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 
 func (r *KuadrantReconciler) registerExternalAuthorizerIstio(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (bool, error) {
 	logger, _ := logr.FromContext(ctx)
-	var configsToUpdate []common.ConfigWrapper
+	configsToUpdate, err := r.getIstioConfigObjects(ctx, logger)
+	isIstioInstalled := configsToUpdate != nil
 
-	iop := &iopv1alpha1.IstioOperator{}
-	iopKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
-	if err := r.GetResource(ctx, iopKey, iop); err != nil {
-		logger.V(1).Info("failed to get istiooperator object", "key", iopKey, "err", err)
-		if apimeta.IsNoMatchError(err) {
-			logger.V(1).Info("there's no istiooperator CRD", "key", iopKey, "err", err)
-			// return false and nil if there's no istiooperator CRD, means istio is not installed
-			return false, nil
-		} else if err.Error() != fmt.Sprintf("IstioOperator.install.istio.io \"%s\" not found", controlPlaneProviderName()) {
-			// return true and err if there's an error other than not found (no istiooperator CR)
-			return true, err
-		}
-	} else {
-		configsToUpdate = append(configsToUpdate, istio.NewOperatorWrapper(iop))
+	if !isIstioInstalled || err != nil {
+		return isIstioInstalled, err
 	}
 
-	istioConfigMap := &corev1.ConfigMap{}
-	if err := r.GetResource(ctx, client.ObjectKey{Name: "istio", Namespace: controlPlaneProviderNamespace()}, istioConfigMap); err != nil {
-		logger.V(1).Info("failed to get istio configMap", "key", iopKey, "err", err)
-		return true, err
-	}
-	configsToUpdate = append(configsToUpdate, istio.NewConfigMapWrapper(istioConfigMap))
 	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
 	for _, config := range configsToUpdate {
 		hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(config, *kuadrantAuthorizer)
@@ -353,6 +320,33 @@ func (r *KuadrantReconciler) registerExternalAuthorizerOSSM(ctx context.Context,
 	return nil
 }
 
+func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context, logger logr.Logger) ([]common.ConfigWrapper, error) {
+	var configsToUpdate []common.ConfigWrapper
+
+	iop := &iopv1alpha1.IstioOperator{}
+	iopKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
+	if err := r.GetResource(ctx, iopKey, iop); err != nil {
+		logger.V(1).Info("failed to get istiooperator object", "key", iopKey, "err", err)
+		if apimeta.IsNoMatchError(err) {
+			// return nil and nil if there's no istiooperator CRD, means istio is not installed
+			return nil, nil
+		} else if err.Error() != fmt.Sprintf("IstioOperator.install.istio.io \"%s\" not found", controlPlaneProviderName()) {
+			// return nil and err if there's an error other than not found (no istiooperator CR)
+			return nil, err
+		}
+	} else {
+		configsToUpdate = append(configsToUpdate, istio.NewOperatorWrapper(iop))
+	}
+
+	istioConfigMap := &corev1.ConfigMap{}
+	if err := r.GetResource(ctx, client.ObjectKey{Name: controlPlaneConfigMapName(), Namespace: controlPlaneProviderNamespace()}, istioConfigMap); err != nil {
+		logger.V(1).Info("failed to get istio configMap", "key", iopKey, "err", err)
+		return configsToUpdate, err
+	}
+	configsToUpdate = append(configsToUpdate, istio.NewConfigMapWrapper(istioConfigMap))
+	return configsToUpdate, nil
+}
+
 func (r *KuadrantReconciler) registerServiceMeshMember(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	member := buildServiceMeshMember(kObj)
 	err := r.SetOwnerReference(kObj, member)
@@ -381,6 +375,10 @@ func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1
 
 func controlPlaneProviderName() string {
 	return common.FetchEnv("ISTIOOPERATOR_NAME", "istiocontrolplane")
+}
+
+func controlPlaneConfigMapName() string {
+	return common.FetchEnv("ISTIOCONFIGMAP_NAME", "istio")
 }
 
 func controlPlaneProviderNamespace() string {

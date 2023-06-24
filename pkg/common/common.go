@@ -47,6 +47,10 @@ type KuadrantPolicy interface {
 	GetRulesHostnames() []string
 }
 
+func Ptr[T any](t T) *T {
+	return &t
+}
+
 // FetchEnv fetches the value of the environment variable with the specified key,
 // or returns the default value if the variable is not found or has an empty value.
 // If an error occurs during the lookup, the function returns the default value.

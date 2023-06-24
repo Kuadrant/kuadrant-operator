@@ -52,17 +52,7 @@ func testBuildBasicGateway(gwName, ns string) *gatewayapiv1beta1.Gateway {
 	}
 }
 
-func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnamesStrSlice []string) *gatewayapiv1beta1.HTTPRoute {
-	tmpMatchPathPrefix := gatewayapiv1beta1.PathMatchPathPrefix
-	tmpMatchValue := "/toy"
-	tmpMatchMethod := gatewayapiv1beta1.HTTPMethod("GET")
-	gwNamespace := gatewayapiv1beta1.Namespace(ns)
-
-	var hostnames []gatewayapiv1beta1.Hostname
-	for _, str := range hostnamesStrSlice {
-		hostnames = append(hostnames, gatewayapiv1beta1.Hostname(str))
-	}
-
+func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string) *gatewayapiv1beta1.HTTPRoute {
 	return &gatewayapiv1beta1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "HTTPRoute",
@@ -78,78 +68,20 @@ func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnamesStrSlice []s
 				ParentRefs: []gatewayapiv1beta1.ParentReference{
 					{
 						Name:      gatewayapiv1beta1.ObjectName(gwName),
-						Namespace: &gwNamespace,
+						Namespace: common.Ptr(gatewayapiv1beta1.Namespace(ns)),
 					},
 				},
 			},
-			Hostnames: hostnames,
+			Hostnames: common.Map(hostnames, func(hostname string) gatewayapiv1beta1.Hostname { return gatewayapiv1beta1.Hostname(hostname) }),
 			Rules: []gatewayapiv1beta1.HTTPRouteRule{
 				{
 					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 						{
 							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  &tmpMatchPathPrefix,
-								Value: &tmpMatchValue,
+								Type:  common.Ptr(gatewayapiv1beta1.PathMatchPathPrefix),
+								Value: common.Ptr("/toy"),
 							},
-							Method: &tmpMatchMethod,
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func testBuildBasicRoutePolicy(policyName, ns, routeName string) *kuadrantv1beta2.RateLimitPolicy {
-	return &kuadrantv1beta2.RateLimitPolicy{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "RateLimitPolicy",
-			APIVersion: kuadrantv1beta2.GroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      policyName,
-			Namespace: ns,
-		},
-		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-				Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
-				Kind:  "HTTPRoute",
-				Name:  gatewayapiv1beta1.ObjectName(routeName),
-			},
-			Limits: map[string]kuadrantv1beta2.Limit{
-				"l1": {
-					Rates: []kuadrantv1beta2.Rate{
-						{
-							Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func testBuildGatewayPolicy(policyName, ns, gwName string) *kuadrantv1beta2.RateLimitPolicy {
-	return &kuadrantv1beta2.RateLimitPolicy{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "RateLimitPolicy",
-			APIVersion: kuadrantv1beta2.GroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      policyName,
-			Namespace: ns,
-		},
-		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-				Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
-				Kind:  "Gateway",
-				Name:  gatewayapiv1beta1.ObjectName(gwName),
-			},
-			Limits: map[string]kuadrantv1beta2.Limit{
-				"l1": {
-					Rates: []kuadrantv1beta2.Rate{
-						{
-							Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+							Method: common.Ptr(gatewayapiv1beta1.HTTPMethod("GET")),
 						},
 					},
 				},
@@ -190,48 +122,64 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		}, 15*time.Second, 5*time.Second).Should(BeTrue())
 
 		ApplyKuadrantCR(testNamespace)
+
+		// Check Limitador Status is Ready
+		Eventually(func() bool {
+			limitador := &limitadorv1alpha1.Limitador{}
+			err := k8sClient.Get(context.Background(), client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, limitador)
+			if err != nil {
+				return false
+			}
+			if !meta.IsStatusConditionTrue(limitador.Status.Conditions, "Ready") {
+				return false
+			}
+			return true
+		}, time.Minute, 5*time.Second).Should(BeTrue())
 	}
 
 	BeforeEach(beforeEachCallback)
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
-	Context("Basic: RLP targeting HTTPRoute", func() {
-		It("check created resources", func() {
-			// Check Limitador Status is Ready
-			Eventually(func() bool {
-				limitador := &limitadorv1alpha1.Limitador{}
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, limitador)
-				if err != nil {
-					return false
-				}
-				if !meta.IsStatusConditionTrue(limitador.Status.Conditions, "Ready") {
-					return false
-				}
-				return true
-			}, time.Minute, 5*time.Second).Should(BeTrue())
-
+	Context("RLP targeting HTTPRoute", func() {
+		It("Creates all the resources for a basic HTTPRoute and RateLimitPolicy", func() {
+			// create httproute
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
 			err := k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
 
-			rlp := testBuildBasicRoutePolicy(rlpName, testNamespace, routeName)
-			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
+			// create ratelimitpolicy
+			rlp := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "RateLimitPolicy",
+					APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rlpName,
+					Namespace: testNamespace,
+				},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
+						Kind:  "HTTPRoute",
+						Name:  gatewayapiv1beta1.ObjectName(routeName),
+					},
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
+							},
+						},
+					},
+				},
+			}
 			err = k8sClient.Create(context.Background(), rlp)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Check RLP status is available
-			Eventually(func() bool {
-				existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
-				err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
-				if err != nil {
-					return false
-				}
-				if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, "Available") {
-					return false
-				}
-
-				return true
-			}, time.Minute, 5*time.Second).Should(BeTrue())
+			rlpKey := client.ObjectKeyFromObject(rlp)
+			Eventually(testRLPIsAvailable(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check HTTPRoute direct back reference
 			routeKey := client.ObjectKey{Name: routeName, Namespace: testNamespace}
@@ -330,41 +278,390 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
 				common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
 		})
+
+		It("Creates the correct WasmPlugin for a complex HTTPRoute and a RateLimitPolicy", func() {
+			// create httproute
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.toystore.acme.com", "*.toystore.io"})
+			httpRoute.Spec.Rules = []gatewayapiv1beta1.HTTPRouteRule{
+				{
+					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+						{ // get /toys*
+							Path: &gatewayapiv1beta1.HTTPPathMatch{
+								Type:  common.Ptr(gatewayapiv1beta1.PathMatchPathPrefix),
+								Value: common.Ptr("/toys"),
+							},
+							Method: common.Ptr(gatewayapiv1beta1.HTTPMethod("GET")),
+						},
+						{ // post /toys*
+							Path: &gatewayapiv1beta1.HTTPPathMatch{
+								Type:  common.Ptr(gatewayapiv1beta1.PathMatchPathPrefix),
+								Value: common.Ptr("/toys"),
+							},
+							Method: common.Ptr(gatewayapiv1beta1.HTTPMethod("POST")),
+						},
+					},
+				},
+				{
+					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+						{ // /assets*
+							Path: &gatewayapiv1beta1.HTTPPathMatch{
+								Type:  common.Ptr(gatewayapiv1beta1.PathMatchPathPrefix),
+								Value: common.Ptr("/assets"),
+							},
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+
+			// create ratelimitpolicy
+			rlp := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "RateLimitPolicy",
+					APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rlpName,
+					Namespace: testNamespace,
+				},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
+						Kind:  "HTTPRoute",
+						Name:  gatewayapiv1beta1.ObjectName(routeName),
+					},
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"toys": {
+							Rates: []kuadrantv1beta2.Rate{
+								{Limit: 50, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
+							},
+							Counters: []kuadrantv1beta2.ContextSelector{"auth.identity.username"},
+							RouteSelectors: []kuadrantv1beta2.RouteSelector{
+								{ // selects the 1st HTTPRouteRule (i.e. get|post /toys*) for one of the hostnames
+									Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+										{
+											Path: &gatewayapiv1beta1.HTTPPathMatch{
+												Type:  common.Ptr(gatewayapiv1beta1.PathMatchPathPrefix),
+												Value: common.Ptr("/toys"),
+											},
+										},
+									},
+									Hostnames: []gatewayapiv1beta1.Hostname{"*.toystore.acme.com"},
+								},
+							},
+							When: []kuadrantv1beta2.WhenCondition{
+								{
+									Selector: "auth.identity.group",
+									Operator: kuadrantv1beta2.WhenConditionOperator("neq"),
+									Value:    "admin",
+								},
+							},
+						},
+						"assets": {
+							Rates: []kuadrantv1beta2.Rate{
+								{Limit: 5, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
+								{Limit: 100, Duration: 12, Unit: kuadrantv1beta2.TimeUnit("hour")},
+							},
+							RouteSelectors: []kuadrantv1beta2.RouteSelector{
+								{ // selects the 2nd HTTPRouteRule (i.e. /assets*) for all hostnames
+									Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+										{
+											Path: &gatewayapiv1beta1.HTTPPathMatch{
+												Type:  common.Ptr(gatewayapiv1beta1.PathMatchPathPrefix),
+												Value: common.Ptr("/assets"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check RLP status is available
+			rlpKey := client.ObjectKeyFromObject(rlp)
+			Eventually(testRLPIsAvailable(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check wasm plugin
+			wpName := fmt.Sprintf("kuadrant-%s", gwName)
+			wasmPluginKey := client.ObjectKey{Name: wpName, Namespace: testNamespace}
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+			// must exist
+			Expect(err).ToNot(HaveOccurred())
+			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingWASMConfig.FailureMode).To(Equal(wasm.FailureModeDeny))
+			Expect(existingWASMConfig.RateLimitPolicies).To(HaveLen(2))
+			// check the wasm rlp configs for each hostname in a verbose way because we cannot guarantee the order of the rules in each rlp config
+			// check wasm rlp config for the 1st hostname
+			wasmRLP, found := common.Find(existingWASMConfig.RateLimitPolicies, func(wasmRLP wasm.RateLimitPolicy) bool {
+				return wasmRLP.Name == "*.toystore.acme.com"
+			})
+			Expect(found).To(BeTrue())
+			Expect(wasmRLP.Domain).To(Equal(common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*.toystore.acme.com")))
+			Expect(wasmRLP.Service).To(Equal(common.KuadrantRateLimitClusterName))
+			Expect(wasmRLP.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
+			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{
+				Conditions: []wasm.Condition{
+					{
+						AllOf: []wasm.PatternExpression{
+							{
+								Selector: "request.url_path",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+								Value:    "/toys",
+							},
+							{
+								Selector: "request.method",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+								Value:    "GET",
+							},
+							{
+								Selector: "request.host",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+								Value:    "*.toystore.acme.com",
+							},
+							{
+								Selector: "auth.identity.group",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.NotEqualOperator),
+								Value:    "admin",
+							},
+						},
+					},
+					{
+						AllOf: []wasm.PatternExpression{
+							{
+								Selector: "request.url_path",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+								Value:    "/toys",
+							},
+							{
+								Selector: "request.method",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+								Value:    "POST",
+							},
+							{
+								Selector: "request.host",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+								Value:    "*.toystore.acme.com",
+							},
+							{
+								Selector: "auth.identity.group",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.NotEqualOperator),
+								Value:    "admin",
+							},
+						},
+					},
+				},
+				Data: []wasm.DataItem{
+					{
+						Static: &wasm.StaticSpec{
+							Key:   fmt.Sprintf("%s/%s/toys", testNamespace, rlpName),
+							Value: "1",
+						},
+					},
+					{
+						Selector: &wasm.SelectorSpec{
+							Selector: kuadrantv1beta2.ContextSelector("auth.identity.username"),
+						},
+					},
+				},
+			}))
+			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{
+				Conditions: []wasm.Condition{
+					{
+						AllOf: []wasm.PatternExpression{
+							{
+								Selector: "request.url_path",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+								Value:    "/assets",
+							},
+							{
+								Selector: "request.host",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+								Value:    "*.toystore.acme.com",
+							},
+						},
+					},
+					{ // FIXME(guicassolato): this condition should not be generated
+						AllOf: []wasm.PatternExpression{
+							{
+								Selector: "request.url_path",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+								Value:    "/assets",
+							},
+							{
+								Selector: "request.host",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+								Value:    "*.toystore.io",
+							},
+						},
+					},
+				},
+				Data: []wasm.DataItem{
+					{
+						Static: &wasm.StaticSpec{
+							Key:   fmt.Sprintf("%s/%s/assets", testNamespace, rlpName),
+							Value: "1",
+						},
+					},
+				},
+			}))
+			// check wasm rlp config for the 2nd hostname
+			wasmRLP, found = common.Find(existingWASMConfig.RateLimitPolicies, func(wasmRLP wasm.RateLimitPolicy) bool {
+				return wasmRLP.Name == "*.toystore.io"
+			})
+			Expect(found).To(BeTrue())
+			Expect(wasmRLP.Domain).To(Equal(common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*.toystore.io")))
+			Expect(wasmRLP.Service).To(Equal(common.KuadrantRateLimitClusterName))
+			Expect(wasmRLP.Hostnames).To(Equal([]string{"*.toystore.io"}))
+			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{ // FIXME(guicassolato): this entire rule should not be generated
+				Conditions: []wasm.Condition{
+					{
+						AllOf: []wasm.PatternExpression{
+							{
+								Selector: "request.url_path",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+								Value:    "/toys",
+							},
+							{
+								Selector: "request.method",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+								Value:    "GET",
+							},
+							{
+								Selector: "request.host",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+								Value:    "*.toystore.acme.com",
+							},
+							{
+								Selector: "auth.identity.group",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.NotEqualOperator),
+								Value:    "admin",
+							},
+						},
+					},
+					{
+						AllOf: []wasm.PatternExpression{
+							{
+								Selector: "request.url_path",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+								Value:    "/toys",
+							},
+							{
+								Selector: "request.method",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+								Value:    "POST",
+							},
+							{
+								Selector: "request.host",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+								Value:    "*.toystore.acme.com",
+							},
+							{
+								Selector: "auth.identity.group",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.NotEqualOperator),
+								Value:    "admin",
+							},
+						},
+					},
+				},
+				Data: []wasm.DataItem{
+					{
+						Static: &wasm.StaticSpec{
+							Key:   fmt.Sprintf("%s/%s/toys", testNamespace, rlpName),
+							Value: "1",
+						},
+					},
+					{
+						Selector: &wasm.SelectorSpec{
+							Selector: kuadrantv1beta2.ContextSelector("auth.identity.username"),
+						},
+					},
+				},
+			}))
+			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{
+				Conditions: []wasm.Condition{
+					{ // FIXME(guicassolato): this condition should not be generated
+						AllOf: []wasm.PatternExpression{
+							{
+								Selector: "request.url_path",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+								Value:    "/assets",
+							},
+							{
+								Selector: "request.host",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+								Value:    "*.toystore.acme.com",
+							},
+						},
+					},
+					{
+						AllOf: []wasm.PatternExpression{
+							{
+								Selector: "request.url_path",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+								Value:    "/assets",
+							},
+							{
+								Selector: "request.host",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+								Value:    "*.toystore.io",
+							},
+						},
+					},
+				},
+				Data: []wasm.DataItem{
+					{
+						Static: &wasm.StaticSpec{
+							Key:   fmt.Sprintf("%s/%s/assets", testNamespace, rlpName),
+							Value: "1",
+						},
+					},
+				},
+			}))
+		})
 	})
 
-	Context("Basic: RLP targeting Gateway", func() {
-		It("check created resources", func() {
-			// Check Limitador Status is Ready
-			Eventually(func() bool {
-				limitador := &limitadorv1alpha1.Limitador{}
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, limitador)
-				if err != nil {
-					return false
-				}
-				if !meta.IsStatusConditionTrue(limitador.Status.Conditions, "Ready") {
-					return false
-				}
-				return true
-			}, time.Minute, 5*time.Second).Should(BeTrue())
-
-			rlp := testBuildGatewayPolicy(rlpName, testNamespace, gwName)
-			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
+	Context("RLP targeting Gateway", func() {
+		It("Creates all the resources for a basic Gateway and RateLimitPolicy", func() {
+			// create ratelimitpolicy
+			rlp := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "RateLimitPolicy",
+					APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rlpName,
+					Namespace: testNamespace,
+				},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
+						Kind:  "Gateway",
+						Name:  gatewayapiv1beta1.ObjectName(gwName),
+					},
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
+							},
+						},
+					},
+				},
+			}
 			err := k8sClient.Create(context.Background(), rlp)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Check RLP status is available
-			Eventually(func() bool {
-				existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
-				err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
-				if err != nil {
-					return false
-				}
-				if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, "Available") {
-					return false
-				}
-
-				return true
-			}, time.Minute, 5*time.Second).Should(BeTrue())
+			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
+			Eventually(testRLPIsAvailable(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
@@ -453,3 +750,18 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		})
 	})
 })
+
+func testRLPIsAvailable(rlpKey client.ObjectKey) func() bool {
+	return func() bool {
+		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+		if err != nil {
+			return false
+		}
+		if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, "Available") {
+			return false
+		}
+
+		return true
+	}
+}

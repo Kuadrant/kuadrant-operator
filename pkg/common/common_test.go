@@ -456,6 +456,68 @@ func TestIntersectWithInts(t *testing.T) {
 	}
 }
 
+func TestIntersection(t *testing.T) {
+	testCases := []struct {
+		name     string
+		slice1   []string
+		slice2   []string
+		expected []string
+	}{
+		{
+			name:     "when slice1 and slice2 have one common item then return that item",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{"test-gw1", "test-gw3", "test-gw4"},
+			expected: []string{"test-gw1"},
+		},
+		{
+			name:     "when slice1 and slice2 have no common item then return nil",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{"test-gw3", "test-gw4"},
+			expected: nil,
+		},
+		{
+			name:     "when slice1 is empty then return nil",
+			slice1:   []string{},
+			slice2:   []string{"test-gw3", "test-gw4"},
+			expected: nil,
+		},
+		{
+			name:     "when slice2 is empty then return nil",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{},
+			expected: nil,
+		},
+		{
+			name:     "when both slices are empty then return nil",
+			slice1:   []string{},
+			slice2:   []string{},
+			expected: nil,
+		},
+		{
+			name:     "when slice1 is nil then return nil",
+			slice2:   []string{"test-gw3", "test-gw4"},
+			expected: nil,
+		},
+		{
+			name:     "when slice2 is nil then return nil",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			expected: nil,
+		},
+		{
+			name:     "when both slices are nil then return nil",
+			expected: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if r := Intersection(tc.slice1, tc.slice2); !reflect.DeepEqual(r, tc.expected) {
+				t.Errorf("expected=%v; got=%v", tc.expected, r)
+			}
+		})
+	}
+}
+
 func TestMap(t *testing.T) {
 	slice1 := []int{1, 2, 3, 4}
 	f1 := func(x int) int { return x + 1 }

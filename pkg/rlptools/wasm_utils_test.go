@@ -58,6 +58,14 @@ func TestWasmRules(t *testing.T) {
 								Unit:     kuadrantv1beta2.TimeUnit("minute"),
 							},
 						},
+						RouteSelectors: []kuadrantv1beta2.RouteSelector{
+							{
+								Hostnames: []gatewayapiv1beta1.Hostname{
+									"*.example.com",
+									"myapp.apps.example.com", // ignored
+								},
+							},
+						},
 					},
 				},
 			},

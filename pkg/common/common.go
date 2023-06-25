@@ -122,6 +122,22 @@ func Intersect[T comparable](slice1, slice2 []T) bool {
 	return false
 }
 
+func Intersection[T comparable](slice1, slice2 []T) []T {
+	smallerSlice := slice1
+	largerSlice := slice2
+	if len(slice1) > len(slice2) {
+		smallerSlice = slice2
+		largerSlice = slice1
+	}
+	var result []T
+	for _, item := range smallerSlice {
+		if Contains(largerSlice, item) {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
 func Find[T any](slice []T, match func(T) bool) (*T, bool) {
 	for _, item := range slice {
 		if match(item) {

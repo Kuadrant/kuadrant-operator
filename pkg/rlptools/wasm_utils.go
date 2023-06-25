@@ -65,8 +65,10 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.
 	// build conditions from the rules selected by the route selectors
 	for _, routeSelector := range limit.RouteSelectors {
 		for _, rule := range HTTPRouteRulesFromRouteSelector(routeSelector, route) {
-			hostnames := routeSelector.Hostnames // FIXME(guicassolato): it should be the intersection between routeSelector.Hostnames and route.Spec.Hostnames
-			if len(hostnames) == 0 {
+			var hostnames []gatewayapiv1beta1.Hostname
+			if len(routeSelector.Hostnames) > 0 {
+				hostnames = common.Intersection(routeSelector.Hostnames, route.Spec.Hostnames)
+			} else {
 				hostnames = route.Spec.Hostnames
 			}
 			routeConditions = append(routeConditions, conditionsFromRule(rule, hostnames)...)

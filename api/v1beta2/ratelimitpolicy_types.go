@@ -40,13 +40,14 @@ import (
 // +kubebuilder:validation:MaxLength=253
 type ContextSelector string
 
-// +kubebuilder:validation:Enum:=eq;neq;startswith;incl;excl;matches
+// +kubebuilder:validation:Enum:=eq;neq;startswith;endswith;incl;excl;matches
 type WhenConditionOperator string
 
 const (
 	EqualOperator      WhenConditionOperator = "eq"
 	NotEqualOperator   WhenConditionOperator = "neq"
 	StartsWithOperator WhenConditionOperator = "startswith"
+	EndsWithOperator   WhenConditionOperator = "endswith"
 	IncludeOperator    WhenConditionOperator = "incl"
 	ExcludeOperator    WhenConditionOperator = "excl"
 	MatchesOperator    WhenConditionOperator = "matches"

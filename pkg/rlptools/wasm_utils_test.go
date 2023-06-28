@@ -87,8 +87,8 @@ func TestWasmRules(t *testing.T) {
 						},
 						{
 							Selector: "request.host",
-							Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-							Value:    "*.example.com",
+							Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
+							Value:    ".example.com",
 						},
 					},
 				},

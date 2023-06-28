@@ -246,8 +246,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 											},
 											{
 												Selector: "request.host",
-												Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-												Value:    "*.example.com",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
+												Value:    ".example.com",
 											},
 										},
 									},
@@ -281,7 +281,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 		It("Creates the correct WasmPlugin for a complex HTTPRoute and a RateLimitPolicy", func() {
 			// create httproute
-			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.toystore.acme.com", "*.toystore.io"})
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.toystore.acme.com", "api.toystore.io"})
 			httpRoute.Spec.Rules = []gatewayapiv1beta1.HTTPRouteRule{
 				{
 					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
@@ -422,8 +422,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							},
 							{
 								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-								Value:    "*.toystore.acme.com",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
+								Value:    ".toystore.acme.com",
 							},
 							{
 								Selector: "auth.identity.group",
@@ -446,8 +446,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							},
 							{
 								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-								Value:    "*.toystore.acme.com",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
+								Value:    ".toystore.acme.com",
 							},
 							{
 								Selector: "auth.identity.group",
@@ -482,8 +482,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							},
 							{
 								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-								Value:    "*.toystore.acme.com",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
+								Value:    ".toystore.acme.com",
 							},
 						},
 					},
@@ -497,7 +497,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							{
 								Selector: "request.host",
 								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-								Value:    "*.toystore.io",
+								Value:    "api.toystore.io",
 							},
 						},
 					},
@@ -513,12 +513,12 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			}))
 			// check wasm rlp config for the 2nd hostname
 			wasmRLP, found = common.Find(existingWASMConfig.RateLimitPolicies, func(wasmRLP wasm.RateLimitPolicy) bool {
-				return wasmRLP.Name == "*.toystore.io"
+				return wasmRLP.Name == "api.toystore.io"
 			})
 			Expect(found).To(BeTrue())
-			Expect(wasmRLP.Domain).To(Equal(common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*.toystore.io")))
+			Expect(wasmRLP.Domain).To(Equal(common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "api.toystore.io")))
 			Expect(wasmRLP.Service).To(Equal(common.KuadrantRateLimitClusterName))
-			Expect(wasmRLP.Hostnames).To(Equal([]string{"*.toystore.io"}))
+			Expect(wasmRLP.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{ // FIXME(guicassolato): this entire rule should not be generated
 				Conditions: []wasm.Condition{
 					{
@@ -535,8 +535,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							},
 							{
 								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-								Value:    "*.toystore.acme.com",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
+								Value:    ".toystore.acme.com",
 							},
 							{
 								Selector: "auth.identity.group",
@@ -559,8 +559,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							},
 							{
 								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-								Value:    "*.toystore.acme.com",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
+								Value:    ".toystore.acme.com",
 							},
 							{
 								Selector: "auth.identity.group",
@@ -595,8 +595,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							},
 							{
 								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-								Value:    "*.toystore.acme.com",
+								Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
+								Value:    ".toystore.acme.com",
 							},
 						},
 					},
@@ -610,7 +610,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							{
 								Selector: "request.host",
 								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-								Value:    "*.toystore.io",
+								Value:    "api.toystore.io",
 							},
 						},
 					},
@@ -713,17 +713,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 						Hostnames: []string{"*"},
 						Rules: []wasm.Rule{
 							{
-								Conditions: []wasm.Condition{
-									{
-										AllOf: []wasm.PatternExpression{
-											{
-												Selector: "request.host",
-												Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-												Value:    "*",
-											},
-										},
-									},
-								},
+								Conditions: nil,
 								Data: []wasm.DataItem{
 									{
 										Static: &wasm.StaticSpec{

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 
 	_struct "github.com/golang/protobuf/ptypes/struct"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
@@ -114,6 +115,9 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.
 func conditionsFromRule(rule gatewayapiv1beta1.HTTPRouteRule, hostnames []gatewayapiv1beta1.Hostname) (conditions []wasm.Condition) {
 	if len(rule.Matches) == 0 {
 		for _, hostname := range hostnames {
+			if hostname == "*" {
+				continue
+			}
 			condition := wasm.Condition{AllOf: []wasm.PatternExpression{patternExpresionFromHostname(hostname)}}
 			conditions = append(conditions, condition)
 		}
@@ -125,6 +129,9 @@ func conditionsFromRule(rule gatewayapiv1beta1.HTTPRouteRule, hostnames []gatewa
 
 		if len(hostnames) > 0 {
 			for _, hostname := range hostnames {
+				if hostname == "*" {
+					continue
+				}
 				mergedCondition := condition
 				mergedCondition.AllOf = append(mergedCondition.AllOf, patternExpresionFromHostname(hostname))
 				conditions = append(conditions, mergedCondition)
@@ -186,10 +193,16 @@ func patternExpresionFromMethod(method gatewayapiv1beta1.HTTPMethod) wasm.Patter
 }
 
 func patternExpresionFromHostname(hostname gatewayapiv1beta1.Hostname) wasm.PatternExpression {
+	value := string(hostname)
+	operator := "eq"
+	if strings.HasPrefix(value, "*.") {
+		operator = "endswith"
+		value = value[1:]
+	}
 	return wasm.PatternExpression{
 		Selector: "request.host",
-		Operator: "eq", // FIXME(guicassolato): won't work for wildcard domains
-		Value:    string(hostname),
+		Operator: wasm.PatternOperator(operator),
+		Value:    string(value),
 	}
 }
 

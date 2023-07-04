@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -330,7 +329,7 @@ func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context, logger l
 		if apimeta.IsNoMatchError(err) {
 			// return nil and nil if there's no istiooperator CRD, means istio is not installed
 			return nil, nil
-		} else if err.Error() != fmt.Sprintf("IstioOperator.install.istio.io \"%s\" not found", controlPlaneProviderName()) {
+		} else if !apierrors.IsNotFound(err) {
 			// return nil and err if there's an error other than not found (no istiooperator CR)
 			return nil, err
 		}

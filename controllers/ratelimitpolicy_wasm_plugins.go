@@ -147,21 +147,22 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 	wasmRulesByDomain := make(rlptools.WasmRulesByDomain)
 	var gwWasmRules []wasm.Rule
 
+	gwHostnames := gw.Hostnames()
+	if len(gwHostnames) == 0 {
+		gwHostnames = []gatewayapiv1beta1.Hostname{"*"}
+	}
+
 	if gwRLP != nil {
-		hostnames := gw.Hostnames()
-		if len(hostnames) == 0 {
-			hostnames = []string{"*"}
-		}
 		// FIXME(guicassolato): this is a hack until we start going through all the httproutes that are children of the gateway and build the rules for each httproute
 		route := &gatewayapiv1beta1.HTTPRoute{
 			Spec: gatewayapiv1beta1.HTTPRouteSpec{
-				Hostnames: common.Map(hostnames, func(h string) gatewayapiv1beta1.Hostname { return gatewayapiv1beta1.Hostname(h) }),
+				Hostnames: gwHostnames,
 				Rules:     []gatewayapiv1beta1.HTTPRouteRule{{}},
 			},
 		}
-		gwWasmRules = rlptools.WasmRules(gwRLP, route) // FIXME(guicassolato): this is not correct. We need to go through all the httproutes that are children of the gateway and build the rules for each httproute instead
-		for _, gwHostname := range hostnames {
-			wasmRulesByDomain[gwHostname] = append(wasmRulesByDomain[gwHostname], gwWasmRules...)
+		gwWasmRules = rlptools.WasmRules(gwRLP, route, gwHostnames) // FIXME(guicassolato): this is not correct. We need to go through all the httproutes that are children of the gateway and build the rules for each httproute instead
+		for _, gwHostname := range gwHostnames {
+			wasmRulesByDomain[string(gwHostname)] = append(wasmRulesByDomain[string(gwHostname)], gwWasmRules...)
 		}
 	}
 
@@ -170,10 +171,17 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 		if err != nil {
 			return nil, err
 		}
+
+		// filter the route hostnames to only the ones that are children of the gateway
+		hostnames := common.FilterValidSubdomains(gwHostnames, httpRoute.Spec.Hostnames)
+		if len(hostnames) == 0 { // should never happen
+			hostnames = gwHostnames
+		}
+
 		// gateways limits merged with the route level limits
-		wasmRules := append(rlptools.WasmRules(httpRouteRLP, httpRoute), gwWasmRules...) // FIXME(guicassolato): there will be no need to merge gwRLP rules when targeting a gateway == shortcut for targeting all the routes of a gateway
+		wasmRules := append(rlptools.WasmRules(httpRouteRLP, httpRoute, hostnames), gwWasmRules...) // FIXME(guicassolato): there will be no need to merge gwRLP rules when targeting a gateway == shortcut for targeting all the routes of a gateway
 		// routeLimits referenced by multiple hostnames
-		for _, hostname := range httpRoute.Spec.Hostnames {
+		for _, hostname := range hostnames {
 			wasmRulesByDomain[string(hostname)] = append(wasmRulesByDomain[string(hostname)], wasmRules...)
 		}
 	}

@@ -156,6 +156,17 @@ func Map[T, U any](slice []T, f func(T) U) []U {
 	return arr
 }
 
+// Filter filters the input slice using the given predicate function and returns a new slice with the results.
+func Filter[T any](slice []T, f func(T) bool) []T {
+	arr := make([]T, 0)
+	for _, e := range slice {
+		if f(e) {
+			arr = append(arr, e)
+		}
+	}
+	return arr
+}
+
 // SliceCopy copies the elements from the input slice into the output slice, and returns the output slice.
 func SliceCopy[T any](s1 []T) []T {
 	s2 := make([]T, len(s1))
@@ -272,4 +283,17 @@ func ValidSubdomains(domains, subdomains []string) (bool, string) {
 		}
 	}
 	return true, ""
+}
+
+// FilterValidSubdomains returns every subdomain that is a subset of at least one of the (super) domains specified in the first argument.
+func FilterValidSubdomains(domains, subdomains []gatewayapiv1beta1.Hostname) []gatewayapiv1beta1.Hostname {
+	arr := make([]gatewayapiv1beta1.Hostname, 0)
+	for _, subsubdomain := range subdomains {
+		if _, found := Find(domains, func(domain gatewayapiv1beta1.Hostname) bool {
+			return Name(subsubdomain).SubsetOf(Name(domain))
+		}); found {
+			arr = append(arr, subsubdomain)
+		}
+	}
+	return arr
 }

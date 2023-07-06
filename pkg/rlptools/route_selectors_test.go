@@ -79,6 +79,7 @@ func TestRouteSelectors(t *testing.T) {
 		name          string
 		routeSelector kuadrantv1beta2.RouteSelector
 		route         *gatewayapiv1beta1.HTTPRoute
+		hostnames     []gatewayapiv1beta1.Hostname
 		expected      []gatewayapiv1beta1.HTTPRouteRule
 	}{
 		{
@@ -200,7 +201,7 @@ func TestRouteSelectors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			rules := HTTPRouteRulesFromRouteSelector(tc.routeSelector, tc.route)
+			rules := HTTPRouteRulesFromRouteSelector(tc.routeSelector, tc.route, tc.hostnames)
 			rulesToStringSlice := func(rules []gatewayapiv1beta1.HTTPRouteRule) []string {
 				return common.Map(common.Map(rules, common.HTTPRouteRuleToString), func(r string) string { return fmt.Sprintf("{%s}", r) })
 			}

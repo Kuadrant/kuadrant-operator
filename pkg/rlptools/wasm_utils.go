@@ -21,8 +21,11 @@ var (
 	WASMFilterImageURL = common.FetchEnv("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
 )
 
-// WasmRules computes WASM rules from the policy and the targeted Route (which can be nil when a gateway is targeted)
-func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []wasm.Rule {
+// WasmRules computes WASM rules from the policy and the targeted route.
+// Pass a list of hostnames to ensure that only rules targeting these hostnames are computed;
+// otherwise, the hostnames specified in the route will set the boundaries for the rules.
+// This is useful to compute rules for a specific gateway.
+func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute, hostnames []gatewayapiv1beta1.Hostname) []wasm.Rule {
 	rules := make([]wasm.Rule, 0)
 	if rlp == nil {
 		return rules
@@ -31,21 +34,23 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HT
 	for limitName, limit := range rlp.Spec.Limits {
 		// 1 RLP limit <---> 1 WASM rule
 		limitFullName := FullLimitName(rlp, limitName)
-		rule := ruleFromLimit(limitFullName, &limit, route)
-		rules = append(rules, rule)
+		rule, err := ruleFromLimit(limitFullName, &limit, route, hostnames)
+		if err == nil {
+			rules = append(rules, rule)
+		} else {
+			// TODO(guicassolato): log the error
+		}
 	}
 
 	return rules
 }
 
-func ruleFromLimit(limitFullName string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute) wasm.Rule {
-	if limit == nil {
-		return wasm.Rule{}
-	}
-
+func ruleFromLimit(limitFullName string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute, hostnames []gatewayapiv1beta1.Hostname) (wasm.Rule, error) {
 	rule := wasm.Rule{}
 
-	if conditions := conditionsFromLimit(limit, route); conditions != nil {
+	if conditions, err := conditionsFromLimit(limit, route, hostnames); err != nil {
+		return rule, err
+	} else {
 		rule.Conditions = conditions
 	}
 
@@ -53,38 +58,43 @@ func ruleFromLimit(limitFullName string, limit *kuadrantv1beta2.Limit, route *ga
 		rule.Data = data
 	}
 
-	return rule
+	return rule, nil
 }
 
-func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute) []wasm.Condition {
-	routeConditions := make([]wasm.Condition, 0)
-
+func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute, hostnames []gatewayapiv1beta1.Hostname) ([]wasm.Condition, error) {
 	if limit == nil {
-		return routeConditions
+		return nil, errors.New("limit should not be nil")
 	}
 
-	// build conditions from the rules selected by the route selectors
-	for _, routeSelector := range limit.RouteSelectors {
-		for _, rule := range HTTPRouteRulesFromRouteSelector(routeSelector, route) {
-			var hostnames []gatewayapiv1beta1.Hostname
-			if len(routeSelector.Hostnames) > 0 {
-				hostnames = common.Intersection(routeSelector.Hostnames, route.Spec.Hostnames)
-			} else {
-				hostnames = route.Spec.Hostnames
+	routeConditions := make([]wasm.Condition, 0)
+
+	if len(hostnames) == 0 {
+		hostnames = route.Spec.Hostnames
+	}
+
+	if len(limit.RouteSelectors) > 0 {
+		// build conditions from the rules selected by the route selectors
+		for _, routeSelector := range limit.RouteSelectors {
+			for _, rule := range HTTPRouteRulesFromRouteSelector(routeSelector, route, hostnames) {
+				hostnamesForCondition := hostnames
+				if len(routeSelector.Hostnames) > 0 {
+					hostnamesForCondition = common.Intersection(routeSelector.Hostnames, hostnames)
+				}
+				routeConditions = append(routeConditions, conditionsFromRule(rule, hostnamesForCondition)...)
 			}
+		}
+		if len(routeConditions) == 0 {
+			return nil, errors.New("cannot match any route rules, check for invalid route selectors in the policy")
+		}
+	} else {
+		// build conditions from the route if no route selectors are defined
+		for _, rule := range route.Spec.Rules {
 			routeConditions = append(routeConditions, conditionsFromRule(rule, hostnames)...)
 		}
 	}
 
-	// build conditions from the route if no route selectors are defined
-	if len(routeConditions) == 0 {
-		for _, rule := range route.Spec.Rules {
-			routeConditions = append(routeConditions, conditionsFromRule(rule, route.Spec.Hostnames)...)
-		}
-	}
-
 	if len(limit.When) == 0 {
-		return routeConditions
+		return routeConditions, nil
 	}
 
 	if len(routeConditions) > 0 {
@@ -97,7 +107,7 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.
 				mergedConditions[idx] = mergedCondition
 			}
 		}
-		return mergedConditions
+		return mergedConditions, nil
 	}
 
 	// build conditions only from the 'when' field
@@ -105,7 +115,7 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.
 	for idx, when := range limit.When {
 		whenConditions[idx] = wasm.Condition{AllOf: []wasm.PatternExpression{patternExpresionFromWhen(when)}}
 	}
-	return whenConditions
+	return whenConditions, nil
 }
 
 // conditionsFromRule builds a list of conditions from a rule and a list of hostnames

@@ -7,9 +7,12 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
-func HTTPRouteRulesFromRouteSelector(routeSelector kuadrantv1beta2.RouteSelector, route *gatewayapiv1beta1.HTTPRoute) []gatewayapiv1beta1.HTTPRouteRule {
+func HTTPRouteRulesFromRouteSelector(routeSelector kuadrantv1beta2.RouteSelector, route *gatewayapiv1beta1.HTTPRoute, hostnames []gatewayapiv1beta1.Hostname) []gatewayapiv1beta1.HTTPRouteRule {
 	rulesIndices := make(map[int]gatewayapiv1beta1.HTTPRouteRule, 0)
-	if len(routeSelector.Hostnames) > 0 && !common.Intersect(routeSelector.Hostnames, route.Spec.Hostnames) {
+	if len(hostnames) == 0 {
+		hostnames = route.Spec.Hostnames
+	}
+	if len(routeSelector.Hostnames) > 0 && !common.Intersect(routeSelector.Hostnames, hostnames) {
 		return nil
 	}
 	if len(routeSelector.Matches) == 0 {

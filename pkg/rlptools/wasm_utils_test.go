@@ -67,11 +67,11 @@ func TestWasmRules(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name          string
-		rlp           *kuadrantv1beta2.RateLimitPolicy
-		route         *gatewayapiv1beta1.HTTPRoute
-		hostnames     []gatewayapiv1beta1.Hostname
-		expectedRules []wasm.Rule
+		name            string
+		rlp             *kuadrantv1beta2.RateLimitPolicy
+		route           *gatewayapiv1beta1.HTTPRoute
+		targetHostnames []gatewayapiv1beta1.Hostname
+		expectedRules   []wasm.Rule
 	}{
 		{
 			name: "minimal RLP",
@@ -95,30 +95,6 @@ func TestWasmRules(t *testing.T) {
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
 									Value:    "GET",
-								},
-								{
-									Selector: "request.host",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
-									Value:    ".example.com",
-								},
-							},
-						},
-						{
-							AllOf: []wasm.PatternExpression{
-								{
-									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
-									Value:    "/toy",
-								},
-								{
-									Selector: "request.method",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-									Value:    "GET",
-								},
-								{
-									Selector: "request.host",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
-									Value:    ".apps.example.internal",
 								},
 							},
 						},
@@ -220,30 +196,6 @@ func TestWasmRules(t *testing.T) {
 									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
 									Value:    "GET",
 								},
-								{
-									Selector: "request.host",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
-									Value:    ".example.com",
-								},
-							},
-						},
-						{
-							AllOf: []wasm.PatternExpression{
-								{
-									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
-									Value:    "/toy",
-								},
-								{
-									Selector: "request.method",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-									Value:    "GET",
-								},
-								{
-									Selector: "request.host",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
-									Value:    ".apps.example.internal",
-								},
 							},
 						},
 					},
@@ -292,30 +244,6 @@ func TestWasmRules(t *testing.T) {
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
 									Value:    "GET",
-								},
-								{
-									Selector: "request.host",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
-									Value:    ".example.com",
-								},
-							},
-						},
-						{
-							AllOf: []wasm.PatternExpression{
-								{
-									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
-									Value:    "/toy",
-								},
-								{
-									Selector: "request.method",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-									Value:    "GET",
-								},
-								{
-									Selector: "request.host",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
-									Value:    ".apps.example.internal",
 								},
 							},
 						},
@@ -379,8 +307,8 @@ func TestWasmRules(t *testing.T) {
 					Rates: []kuadrantv1beta2.Rate{counter50rps},
 				},
 			}),
-			route:     httpRoute,
-			hostnames: []gatewayapiv1beta1.Hostname{"*.example.com"}, // intentionally excluding "*.apps.example.internal"
+			route:           httpRoute,
+			targetHostnames: []gatewayapiv1beta1.Hostname{"*.example.com"}, // intentionally excluding "*.apps.example.internal"
 			expectedRules: []wasm.Rule{
 				{
 					Conditions: []wasm.Condition{
@@ -395,11 +323,6 @@ func TestWasmRules(t *testing.T) {
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
 									Value:    "GET",
-								},
-								{
-									Selector: "request.host",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
-									Value:    ".example.com",
 								},
 							},
 						},
@@ -447,7 +370,7 @@ func TestWasmRules(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			computedRules := WasmRules(tc.rlp, tc.route, tc.hostnames)
+			computedRules := WasmRules(tc.rlp, tc.route, tc.targetHostnames)
 
 			if len(tc.expectedRules) != len(computedRules) {
 				t.Errorf("expected %d wasm rules, got (%d)", len(tc.expectedRules), len(computedRules))

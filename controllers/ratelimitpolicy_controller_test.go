@@ -244,11 +244,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 												Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
 												Value:    "GET",
 											},
-											{
-												Selector: "request.host",
-												Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
-												Value:    ".example.com",
-											},
 										},
 									},
 								},
@@ -480,25 +475,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
 								Value:    "/assets",
 							},
-							{
-								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
-								Value:    ".toystore.acme.com",
-							},
-						},
-					},
-					{ // FIXME(guicassolato): this condition should not be generated
-						AllOf: []wasm.PatternExpression{
-							{
-								Selector: "request.url_path",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
-								Value:    "/assets",
-							},
-							{
-								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-								Value:    "api.toystore.io",
-							},
 						},
 					},
 				},
@@ -586,31 +562,12 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			}))
 			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{
 				Conditions: []wasm.Condition{
-					{ // FIXME(guicassolato): this condition should not be generated
-						AllOf: []wasm.PatternExpression{
-							{
-								Selector: "request.url_path",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
-								Value:    "/assets",
-							},
-							{
-								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
-								Value:    ".toystore.acme.com",
-							},
-						},
-					},
 					{
 						AllOf: []wasm.PatternExpression{
 							{
 								Selector: "request.url_path",
 								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
 								Value:    "/assets",
-							},
-							{
-								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-								Value:    "api.toystore.io",
 							},
 						},
 					},

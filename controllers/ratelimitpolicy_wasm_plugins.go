@@ -166,7 +166,7 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 		wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, wasm.RateLimitPolicy{
 			Name:      client.ObjectKeyFromObject(gwRLP).String(),
 			Domain:    common.MarshallNamespace(gw.Key(), string(gwHostnames[0])), // TODO(guicassolato): https://github.com/Kuadrant/kuadrant-operator/issues/201. Meanwhile, we are using the first hostname so it matches at least one set of limit definitions in the Limitador CR
-			Rules:     rlptools.WasmRules(gwRLP, route, gwHostnames),
+			Rules:     rlptools.WasmRules(gwRLP, route),
 			Hostnames: common.HostnamesToStrings(gwHostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
 			Service:   common.KuadrantRateLimitClusterName,
 		})
@@ -178,16 +178,17 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 			return nil, err
 		}
 
-		// filter the route hostnames to only the ones that are children of the gateway
+		// modifies (in memory) the list of hostnames specified in the route so we don't generate rules that only apply to other gateways
 		hostnames := common.FilterValidSubdomains(gwHostnames, httpRoute.Spec.Hostnames)
-		if len(hostnames) == 0 {
+		if len(hostnames) == 0 { // it should only happen when the route specifies no hostnames
 			hostnames = gwHostnames
 		}
+		httpRoute.Spec.Hostnames = hostnames
 
 		wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, wasm.RateLimitPolicy{
 			Name:      client.ObjectKeyFromObject(httpRouteRLP).String(),
 			Domain:    common.MarshallNamespace(gw.Key(), string(hostnames[0])), // TODO(guicassolato): https://github.com/Kuadrant/kuadrant-operator/issues/201. Meanwhile, we are using the first hostname so it matches at least one set of limit definitions in the Limitador CR
-			Rules:     rlptools.WasmRules(httpRouteRLP, httpRoute, hostnames),
+			Rules:     rlptools.WasmRules(httpRouteRLP, httpRoute),
 			Hostnames: common.HostnamesToStrings(hostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
 			Service:   common.KuadrantRateLimitClusterName,
 		})

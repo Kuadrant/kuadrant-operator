@@ -1,6 +1,6 @@
 //go:build unit
 
-package rlptools
+package v1beta2
 
 import (
 	"fmt"
@@ -10,7 +10,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
@@ -77,20 +76,19 @@ func TestRouteSelectors(t *testing.T) {
 
 	testCases := []struct {
 		name          string
-		routeSelector kuadrantv1beta2.RouteSelector
+		routeSelector RouteSelector
 		route         *gatewayapiv1beta1.HTTPRoute
-		hostnames     []gatewayapiv1beta1.Hostname
 		expected      []gatewayapiv1beta1.HTTPRouteRule
 	}{
 		{
 			name:          "empty route selector selects all HTTPRouteRules",
-			routeSelector: kuadrantv1beta2.RouteSelector{},
+			routeSelector: RouteSelector{},
 			route:         route,
 			expected:      route.Spec.Rules,
 		},
 		{
 			name: "route selector selects the HTTPRouteRules whose set of HTTPRouteMatch is a perfect match",
-			routeSelector: kuadrantv1beta2.RouteSelector{
+			routeSelector: RouteSelector{
 				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 					{
 						Path: &gatewayapiv1beta1.HTTPPathMatch{
@@ -105,7 +103,7 @@ func TestRouteSelectors(t *testing.T) {
 		},
 		{
 			name: "route selector selects the HTTPRouteRules whose set of HTTPRouteMatch contains at least one match",
-			routeSelector: kuadrantv1beta2.RouteSelector{
+			routeSelector: RouteSelector{
 				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 					{
 						Path: &gatewayapiv1beta1.HTTPPathMatch{
@@ -121,7 +119,7 @@ func TestRouteSelectors(t *testing.T) {
 		},
 		{
 			name: "route selector with missing part of a HTTPRouteMatch still selects the HTTPRouteRules that match",
-			routeSelector: kuadrantv1beta2.RouteSelector{
+			routeSelector: RouteSelector{
 				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 					{
 						Path: &gatewayapiv1beta1.HTTPPathMatch{
@@ -136,7 +134,7 @@ func TestRouteSelectors(t *testing.T) {
 		},
 		{
 			name: "route selector selects no HTTPRouteRule when no criterion matches",
-			routeSelector: kuadrantv1beta2.RouteSelector{
+			routeSelector: RouteSelector{
 				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 					{
 						Path: &gatewayapiv1beta1.HTTPPathMatch{
@@ -151,7 +149,7 @@ func TestRouteSelectors(t *testing.T) {
 		},
 		{
 			name: "route selector selects the HTTPRouteRules whose HTTPRoute's hostnames match the selector",
-			routeSelector: kuadrantv1beta2.RouteSelector{
+			routeSelector: RouteSelector{
 				Hostnames: []gatewayapiv1beta1.Hostname{"api.toystore.com"},
 			},
 			route:    route,
@@ -159,7 +157,7 @@ func TestRouteSelectors(t *testing.T) {
 		},
 		{
 			name: "route selector selects the HTTPRouteRules whose HTTPRoute's hostnames match the selector additionally to other criteria",
-			routeSelector: kuadrantv1beta2.RouteSelector{
+			routeSelector: RouteSelector{
 				Hostnames: []gatewayapiv1beta1.Hostname{"api.toystore.com"},
 				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 					{
@@ -175,7 +173,7 @@ func TestRouteSelectors(t *testing.T) {
 		},
 		{
 			name: "route selector does not select HTTPRouteRules whose HTTPRoute's hostnames do not match the selector",
-			routeSelector: kuadrantv1beta2.RouteSelector{
+			routeSelector: RouteSelector{
 				Hostnames: []gatewayapiv1beta1.Hostname{"www.toystore.com"},
 			},
 			route:    route,
@@ -183,7 +181,7 @@ func TestRouteSelectors(t *testing.T) {
 		},
 		{
 			name: "route selector does not select HTTPRouteRules whose HTTPRoute's hostnames do not match the selector even when other criteria match",
-			routeSelector: kuadrantv1beta2.RouteSelector{
+			routeSelector: RouteSelector{
 				Hostnames: []gatewayapiv1beta1.Hostname{"www.toystore.com"},
 				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 					{
@@ -201,7 +199,7 @@ func TestRouteSelectors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			rules := HTTPRouteRulesFromRouteSelector(tc.routeSelector, tc.route, tc.hostnames)
+			rules := tc.routeSelector.SelectRules(tc.route)
 			rulesToStringSlice := func(rules []gatewayapiv1beta1.HTTPRouteRule) []string {
 				return common.Map(common.Map(rules, common.HTTPRouteRuleToString), func(r string) string { return fmt.Sprintf("{%s}", r) })
 			}

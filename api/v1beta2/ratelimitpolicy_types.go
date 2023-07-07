@@ -25,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -82,20 +81,6 @@ type WhenCondition struct {
 
 	// The value of reference for the comparison.
 	Value string `json:"value"`
-}
-
-// RouteSelector defines semantics for matching an HTTP request based on conditions
-// https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
-type RouteSelector struct {
-	// Hostnames defines a set of hostname that should match against the HTTP Host header to select a HTTPRoute to process the request
-	// https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
-	// +optional
-	Hostnames []gatewayapiv1beta1.Hostname `json:"hostnames,omitempty"`
-
-	// Matches define conditions used for matching the rule against incoming HTTP requests.
-	// https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
-	// +optional
-	Matches []gatewayapiv1beta1.HTTPRouteMatch `json:"matches,omitempty"`
 }
 
 // Limit represents a complete rate limit configuration

@@ -67,11 +67,10 @@ func TestWasmRules(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name            string
-		rlp             *kuadrantv1beta2.RateLimitPolicy
-		route           *gatewayapiv1beta1.HTTPRoute
-		targetHostnames []gatewayapiv1beta1.Hostname
-		expectedRules   []wasm.Rule
+		name          string
+		rlp           *kuadrantv1beta2.RateLimitPolicy
+		route         *gatewayapiv1beta1.HTTPRoute
+		expectedRules []wasm.Rule
 	}{
 		{
 			name: "minimal RLP",
@@ -301,44 +300,6 @@ func TestWasmRules(t *testing.T) {
 			},
 		},
 		{
-			name: "RLP for when one of the hostnames in the httproute is from a different gateway",
-			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
-				"50rps": {
-					Rates: []kuadrantv1beta2.Rate{counter50rps},
-				},
-			}),
-			route:           httpRoute,
-			targetHostnames: []gatewayapiv1beta1.Hostname{"*.example.com"}, // intentionally excluding "*.apps.example.internal"
-			expectedRules: []wasm.Rule{
-				{
-					Conditions: []wasm.Condition{
-						{
-							AllOf: []wasm.PatternExpression{
-								{
-									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
-									Value:    "/toy",
-								},
-								{
-									Selector: "request.method",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-									Value:    "GET",
-								},
-							},
-						},
-					},
-					Data: []wasm.DataItem{
-						{
-							Static: &wasm.StaticSpec{
-								Key:   "my-app/my-rlp/50rps",
-								Value: "1",
-							},
-						},
-					},
-				},
-			},
-		},
-		{
 			name: "RLP with counter qualifier",
 			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
 				"50rps-per-username": {
@@ -370,7 +331,7 @@ func TestWasmRules(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			computedRules := WasmRules(tc.rlp, tc.route, tc.targetHostnames)
+			computedRules := WasmRules(tc.rlp, tc.route)
 
 			if len(tc.expectedRules) != len(computedRules) {
 				t.Errorf("expected %d wasm rules, got (%d)", len(tc.expectedRules), len(computedRules))

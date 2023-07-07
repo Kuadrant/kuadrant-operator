@@ -225,10 +225,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				FailureMode: wasm.FailureModeDeny,
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
-						Name:      "*.example.com",
-						Domain:    common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*.example.com"),
-						Service:   common.KuadrantRateLimitClusterName,
-						Hostnames: []string{"*.example.com"},
+						Name:   rlpKey.String(),
+						Domain: fmt.Sprintf("%s/%s#%s", testNamespace, gwName, "*.example.com"),
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{
@@ -257,6 +255,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 								},
 							},
 						},
+						Hostnames: []string{"*.example.com"},
+						Service:   common.KuadrantRateLimitClusterName,
 					},
 				},
 			}))
@@ -391,17 +391,11 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig.FailureMode).To(Equal(wasm.FailureModeDeny))
-			Expect(existingWASMConfig.RateLimitPolicies).To(HaveLen(2))
-			// check the wasm rlp configs for each hostname in a verbose way because we cannot guarantee the order of the rules in each rlp config
-			// check wasm rlp config for the 1st hostname
-			wasmRLP, found := common.Find(existingWASMConfig.RateLimitPolicies, func(wasmRLP wasm.RateLimitPolicy) bool {
-				return wasmRLP.Name == "*.toystore.acme.com"
-			})
-			Expect(found).To(BeTrue())
-			Expect(wasmRLP.Domain).To(Equal(common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*.toystore.acme.com")))
-			Expect(wasmRLP.Service).To(Equal(common.KuadrantRateLimitClusterName))
-			Expect(wasmRLP.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
-			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{
+			Expect(existingWASMConfig.RateLimitPolicies).To(HaveLen(1))
+			wasmRLP := existingWASMConfig.RateLimitPolicies[0]
+			Expect(wasmRLP.Name).To(Equal(rlpKey.String()))
+			Expect(wasmRLP.Domain).To(Equal(fmt.Sprintf("%s/%s#%s", testNamespace, gwName, "*.toystore.acme.com")))
+			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'toys' limit defintion
 				Conditions: []wasm.Condition{
 					{
 						AllOf: []wasm.PatternExpression{
@@ -466,7 +460,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					},
 				},
 			}))
-			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{
+			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'assets' limit defintion
 				Conditions: []wasm.Condition{
 					{
 						AllOf: []wasm.PatternExpression{
@@ -487,100 +481,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					},
 				},
 			}))
-			// check wasm rlp config for the 2nd hostname
-			wasmRLP, found = common.Find(existingWASMConfig.RateLimitPolicies, func(wasmRLP wasm.RateLimitPolicy) bool {
-				return wasmRLP.Name == "api.toystore.io"
-			})
-			Expect(found).To(BeTrue())
-			Expect(wasmRLP.Domain).To(Equal(common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "api.toystore.io")))
+			Expect(wasmRLP.Hostnames).To(Equal([]string{"*.toystore.acme.com", "api.toystore.io"}))
 			Expect(wasmRLP.Service).To(Equal(common.KuadrantRateLimitClusterName))
-			Expect(wasmRLP.Hostnames).To(Equal([]string{"api.toystore.io"}))
-			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{ // FIXME(guicassolato): this entire rule should not be generated
-				Conditions: []wasm.Condition{
-					{
-						AllOf: []wasm.PatternExpression{
-							{
-								Selector: "request.url_path",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
-								Value:    "/toys",
-							},
-							{
-								Selector: "request.method",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-								Value:    "GET",
-							},
-							{
-								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
-								Value:    ".toystore.acme.com",
-							},
-							{
-								Selector: "auth.identity.group",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.NotEqualOperator),
-								Value:    "admin",
-							},
-						},
-					},
-					{
-						AllOf: []wasm.PatternExpression{
-							{
-								Selector: "request.url_path",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
-								Value:    "/toys",
-							},
-							{
-								Selector: "request.method",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-								Value:    "POST",
-							},
-							{
-								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
-								Value:    ".toystore.acme.com",
-							},
-							{
-								Selector: "auth.identity.group",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.NotEqualOperator),
-								Value:    "admin",
-							},
-						},
-					},
-				},
-				Data: []wasm.DataItem{
-					{
-						Static: &wasm.StaticSpec{
-							Key:   fmt.Sprintf("%s/%s/toys", testNamespace, rlpName),
-							Value: "1",
-						},
-					},
-					{
-						Selector: &wasm.SelectorSpec{
-							Selector: kuadrantv1beta2.ContextSelector("auth.identity.username"),
-						},
-					},
-				},
-			}))
-			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{
-				Conditions: []wasm.Condition{
-					{
-						AllOf: []wasm.PatternExpression{
-							{
-								Selector: "request.url_path",
-								Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
-								Value:    "/assets",
-							},
-						},
-					},
-				},
-				Data: []wasm.DataItem{
-					{
-						Static: &wasm.StaticSpec{
-							Key:   fmt.Sprintf("%s/%s/assets", testNamespace, rlpName),
-							Value: "1",
-						},
-					},
-				},
-			}))
 		})
 	})
 
@@ -664,10 +566,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				FailureMode: wasm.FailureModeDeny,
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
-						Name:      "*",
-						Domain:    common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*"),
-						Service:   common.KuadrantRateLimitClusterName,
-						Hostnames: []string{"*"},
+						Name:   rlpKey.String(),
+						Domain: fmt.Sprintf("%s/%s#%s", testNamespace, gwName, "*"),
 						Rules: []wasm.Rule{
 							{
 								Conditions: nil,
@@ -681,6 +581,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 								},
 							},
 						},
+						Hostnames: []string{"*"},
+						Service:   common.KuadrantRateLimitClusterName,
 					},
 				},
 			}))

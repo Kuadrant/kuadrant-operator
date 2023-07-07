@@ -144,8 +144,10 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 		}
 	}
 
-	wasmRulesByDomain := make(rlptools.WasmRulesByDomain)
-	var gwWasmRules []wasm.Rule
+	wasmPlugin := &wasm.WASMPlugin{
+		FailureMode:       wasm.FailureModeDeny,
+		RateLimitPolicies: make([]wasm.RateLimitPolicy, 0),
+	}
 
 	gwHostnames := gw.Hostnames()
 	if len(gwHostnames) == 0 {
@@ -153,17 +155,21 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 	}
 
 	if gwRLP != nil {
-		// FIXME(guicassolato): this is a hack until we start going through all the httproutes that are children of the gateway and build the rules for each httproute
+		// TODO(guicassolato): this is a hack until we start going through all the httproutes that are children of the gateway and build the rules for each httproute
 		route := &gatewayapiv1beta1.HTTPRoute{
 			Spec: gatewayapiv1beta1.HTTPRouteSpec{
 				Hostnames: gwHostnames,
 				Rules:     []gatewayapiv1beta1.HTTPRouteRule{{}},
 			},
 		}
-		gwWasmRules = rlptools.WasmRules(gwRLP, route, gwHostnames) // FIXME(guicassolato): this is not correct. We need to go through all the httproutes that are children of the gateway and build the rules for each httproute instead
-		for _, gwHostname := range gwHostnames {
-			wasmRulesByDomain[string(gwHostname)] = append(wasmRulesByDomain[string(gwHostname)], gwWasmRules...)
-		}
+
+		wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, wasm.RateLimitPolicy{
+			Name:      client.ObjectKeyFromObject(gwRLP).String(),
+			Domain:    common.MarshallNamespace(gw.Key(), string(gwHostnames[0])), // TODO(guicassolato): https://github.com/Kuadrant/kuadrant-operator/issues/201. Meanwhile, we are using the first hostname so it matches at least one set of limit definitions in the Limitador CR
+			Rules:     rlptools.WasmRules(gwRLP, route, gwHostnames),
+			Hostnames: common.HostnamesToStrings(gwHostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
+			Service:   common.KuadrantRateLimitClusterName,
+		})
 	}
 
 	for _, httpRouteRLP := range routeRLPList {
@@ -174,34 +180,17 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 
 		// filter the route hostnames to only the ones that are children of the gateway
 		hostnames := common.FilterValidSubdomains(gwHostnames, httpRoute.Spec.Hostnames)
-		if len(hostnames) == 0 { // should never happen
+		if len(hostnames) == 0 {
 			hostnames = gwHostnames
 		}
 
-		// gateways limits merged with the route level limits
-		wasmRules := append(rlptools.WasmRules(httpRouteRLP, httpRoute, hostnames), gwWasmRules...) // FIXME(guicassolato): there will be no need to merge gwRLP rules when targeting a gateway == shortcut for targeting all the routes of a gateway
-		// routeLimits referenced by multiple hostnames
-		for _, hostname := range hostnames {
-			wasmRulesByDomain[string(hostname)] = append(wasmRulesByDomain[string(hostname)], wasmRules...)
-		}
-	}
-
-	wasmPlugin := &wasm.WASMPlugin{
-		FailureMode:       wasm.FailureModeDeny,
-		RateLimitPolicies: make([]wasm.RateLimitPolicy, 0),
-	}
-
-	// One RateLimitPolicy per domain
-	// FIXME(guicassolato): Why do we map per domain? Is it so the wasm-shim can index the config per domain and improve perfomance in the data plane? If so, this will occasionally generate incongruent entries of domain keys combined with rules that have no relation with that domain.
-	for domain, rules := range wasmRulesByDomain {
-		rateLimitPolicy := wasm.RateLimitPolicy{
-			Name:      domain,                                     // FIXME(guicassolato): can't we use the name of the policy instead?
-			Domain:    common.MarshallNamespace(gw.Key(), domain), // FIXME(guicassolato) https://github.com/Kuadrant/kuadrant-operator/issues/201
+		wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, wasm.RateLimitPolicy{
+			Name:      client.ObjectKeyFromObject(httpRouteRLP).String(),
+			Domain:    common.MarshallNamespace(gw.Key(), string(hostnames[0])), // TODO(guicassolato): https://github.com/Kuadrant/kuadrant-operator/issues/201. Meanwhile, we are using the first hostname so it matches at least one set of limit definitions in the Limitador CR
+			Rules:     rlptools.WasmRules(httpRouteRLP, httpRoute, hostnames),
+			Hostnames: common.HostnamesToStrings(hostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
 			Service:   common.KuadrantRateLimitClusterName,
-			Hostnames: []string{domain},
-			Rules:     rules,
-		}
-		wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, rateLimitPolicy)
+		})
 	}
 
 	return wasmPlugin, nil

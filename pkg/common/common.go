@@ -255,11 +255,9 @@ func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 
 // HostnamesToStrings converts []gatewayapi_v1alpha2.Hostname to []string
 func HostnamesToStrings(hostnames []gatewayapiv1beta1.Hostname) []string {
-	hosts := make([]string, len(hostnames))
-	for i, h := range hostnames {
-		hosts[i] = string(h)
-	}
-	return hosts
+	return Map(hostnames, func(hostname gatewayapiv1beta1.Hostname) string {
+		return string(hostname)
+	})
 }
 
 // ValidSubdomains returns (true, "") when every single subdomains item

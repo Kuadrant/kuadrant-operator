@@ -572,7 +572,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
 						Name:   rlpKey.String(),
-						Domain: fmt.Sprintf("%s/%s#%s", testNamespace, gwName, "*.example.com"),
+						Domain: fmt.Sprintf("%s/%s#%s", testNamespace, gwName, "*"),
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{
@@ -601,7 +601,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 								},
 							},
 						},
-						Hostnames: []string{"*.example.com"},
+						Hostnames: []string{"*"},
 						Service:   common.KuadrantRateLimitClusterName,
 					},
 				},

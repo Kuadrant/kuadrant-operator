@@ -129,11 +129,11 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 		gwHostnames = []gatewayapiv1beta1.Hostname{"*"}
 	}
 
-	type routesPerRLP struct {
-		rlp    kuadrantv1beta2.RateLimitPolicy
-		routes []gatewayapiv1beta1.HTTPRoute
+	type objects struct {
+		rlp       kuadrantv1beta2.RateLimitPolicy
+		httpRoute gatewayapiv1beta1.HTTPRoute
 	}
-	rlps := make(map[string]*routesPerRLP, 0)
+	rlps := make(map[string]*objects, 0)
 
 	for _, rlpKey := range rlpRefs {
 		rlp := &kuadrantv1beta2.RateLimitPolicy{}
@@ -149,7 +149,7 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 			if err != nil {
 				return nil, err
 			}
-			rlps[rlpKey.String()] = &routesPerRLP{rlp: *rlp, routes: []gatewayapiv1beta1.HTTPRoute{*httpRoute}}
+			rlps[rlpKey.String()] = &objects{rlp: *rlp, httpRoute: *httpRoute}
 			continue
 		}
 
@@ -157,11 +157,28 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 		if rlps[rlpKey.String()] != nil {
 			return nil, fmt.Errorf("wasmPluginConfig: multiple gateway RLP found and only one expected. rlp keys: %v", rlpRefs)
 		}
-		rlps[rlpKey.String()] = &routesPerRLP{rlp: *rlp, routes: r.FetchAcceptedGatewayHTTPRoutes(ctx, rlp.TargetKey())}
-		// should we reset the hostnames in the route with the hostnames of the gateway? otherwise the rlp that targets
-		// the gateway can only specify hostnames for route selection exactly as they are stated in the routes, not as they
-		// stated in the gateway, and this would be counterintuitive for the user, because, unlike other types of route
-		// selection (e.g. by path), the hostname is part of the gateway spec.
+		// build a single httproute with all rules from all httproutes attached to the gateway and the hostnames of the gateway.
+		// the hostnames of the gateway are used because, otherwise, the rlp that targets the gateway would have to specify
+		// hostnames for route selection exactly as they are stated in the httproutes, not as they stated in the gateway,
+		// and this would be counterintuitive for the user, because, unlike other types of route selection (e.g. by path),
+		// the hostnames are part of the gateway spec.
+		rules := make([]gatewayapiv1beta1.HTTPRouteRule, 0)
+		for _, route := range r.FetchAcceptedGatewayHTTPRoutes(ctx, rlp.TargetKey()) {
+			rules = append(rules, route.Spec.Rules...)
+		}
+		if len(rules) == 0 {
+			logger.V(1).Info("no httproutes attached to the targeted gateway, skipping wasm config for the rlp", "ratelimitpolicy", rlpKey)
+			continue
+		}
+		rlps[rlpKey.String()] = &objects{
+			rlp: *rlp,
+			httpRoute: gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
+					Hostnames: gwHostnames,
+					Rules:     rules,
+				},
+			},
+		}
 	}
 
 	wasmPlugin := &wasm.WASMPlugin{
@@ -169,34 +186,23 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 		RateLimitPolicies: make([]wasm.RateLimitPolicy, 0),
 	}
 
-	if logger.V(1).Enabled() {
-		numRoutes := 0
-		for _, rlp := range rlps {
-			numRoutes += len(rlp.routes)
+	for rlpKey, objs := range rlps {
+		// modifies (in memory) the list of hostnames specified in the route so we don't generate rules that only apply to other gateways
+		// this is a no-op for the rlp that targets the gateway
+		httpRoute := objs.httpRoute
+		hostnames := common.FilterValidSubdomains(gwHostnames, httpRoute.Spec.Hostnames)
+		if len(hostnames) == 0 { // it should only happen when the route specifies no hostnames
+			hostnames = gwHostnames
 		}
-		logger.V(1).Info("build configs for rlps and routes", "#rlps", len(rlps), "#routes", numRoutes)
-	}
+		httpRoute.Spec.Hostnames = hostnames
 
-	for _, routesPerRLP := range rlps {
-		rlp := routesPerRLP.rlp
-		for _, httpRoute := range routesPerRLP.routes {
-			logger.V(1).Info("building config for rlp and route", "ratelimitpolicy", client.ObjectKeyFromObject(&rlp), "httproute", client.ObjectKeyFromObject(&httpRoute))
-
-			// modifies (in memory) the list of hostnames specified in the route so we don't generate rules that only apply to other gateways
-			hostnames := common.FilterValidSubdomains(gwHostnames, httpRoute.Spec.Hostnames)
-			if len(hostnames) == 0 { // it should only happen when the route specifies no hostnames
-				hostnames = gwHostnames
-			}
-			httpRoute.Spec.Hostnames = hostnames
-
-			wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, wasm.RateLimitPolicy{
-				Name:      client.ObjectKeyFromObject(&rlp).String(),
-				Domain:    common.MarshallNamespace(gw.Key(), string(hostnames[0])), // TODO(guicassolato): https://github.com/Kuadrant/kuadrant-operator/issues/201. Meanwhile, we are using the first hostname so it matches at least one set of limit definitions in the Limitador CR
-				Rules:     rlptools.WasmRules(&rlp, &httpRoute),
-				Hostnames: common.HostnamesToStrings(hostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
-				Service:   common.KuadrantRateLimitClusterName,
-			})
-		}
+		wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, wasm.RateLimitPolicy{
+			Name:      rlpKey,
+			Domain:    common.MarshallNamespace(gw.Key(), string(hostnames[0])), // TODO(guicassolato): https://github.com/Kuadrant/kuadrant-operator/issues/201. Meanwhile, we are using the first hostname so it matches at least one set of limit definitions in the Limitador CR
+			Rules:     rlptools.WasmRules(&objs.rlp, &httpRoute),
+			Hostnames: common.HostnamesToStrings(hostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
+			Service:   common.KuadrantRateLimitClusterName,
+		})
 	}
 
 	return wasmPlugin, nil

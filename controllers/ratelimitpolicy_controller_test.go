@@ -488,6 +488,136 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 	Context("RLP targeting Gateway", func() {
 		It("Creates all the resources for a basic Gateway and RateLimitPolicy", func() {
+			// create httproute
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
+			err := k8sClient.Create(context.Background(), httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+
+			// create ratelimitpolicy
+			rlp := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "RateLimitPolicy",
+					APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rlpName,
+					Namespace: testNamespace,
+				},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
+						Kind:  "Gateway",
+						Name:  gatewayapiv1beta1.ObjectName(gwName),
+					},
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check RLP status is available
+			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
+			Eventually(testRLPIsAvailable(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check Gateway direct back reference
+			gwKey := client.ObjectKeyFromObject(gateway)
+			existingGateway := &gatewayapiv1beta1.Gateway{}
+			err = k8sClient.Get(context.Background(), gwKey, existingGateway)
+			// must exist
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
+				common.RateLimitPolicyBackRefAnnotation, client.ObjectKeyFromObject(rlp).String()))
+
+			// check limits
+			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+			existingLimitador := &limitadorv1alpha1.Limitador{}
+			err = k8sClient.Get(context.Background(), limitadorKey, existingLimitador)
+			// must exist
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+				MaxValue:   1,
+				Seconds:    3 * 60,
+				Namespace:  common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*"),
+				Conditions: []string{fmt.Sprintf("%s/%s/l1 == \"1\"", testNamespace, rlpName)},
+				Variables:  []string{},
+			}))
+
+			// Check envoy filter
+			efName := fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", gwName)
+			efKey := client.ObjectKey{Name: efName, Namespace: testNamespace}
+			existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
+			err = k8sClient.Get(context.Background(), efKey, existingEF)
+			// must exist
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check wasm plugin
+			wpName := fmt.Sprintf("kuadrant-%s", gwName)
+			wasmPluginKey := client.ObjectKey{Name: wpName, Namespace: testNamespace}
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+			// must exist
+			Expect(err).ToNot(HaveOccurred())
+			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingWASMConfig).To(Equal(&wasm.WASMPlugin{
+				FailureMode: wasm.FailureModeDeny,
+				RateLimitPolicies: []wasm.RateLimitPolicy{
+					{
+						Name:   rlpKey.String(),
+						Domain: fmt.Sprintf("%s/%s#%s", testNamespace, gwName, "*.example.com"),
+						Rules: []wasm.Rule{
+							{
+								Conditions: []wasm.Condition{
+									{
+										AllOf: []wasm.PatternExpression{
+											{
+												Selector: "request.url_path",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+												Value:    "/toy",
+											},
+											{
+												Selector: "request.method",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+												Value:    "GET",
+											},
+										},
+									},
+								},
+								Data: []wasm.DataItem{
+									{
+										Static: &wasm.StaticSpec{
+											Key:   fmt.Sprintf("%s/%s/l1", testNamespace, rlpName),
+											Value: "1",
+										},
+									},
+								},
+							},
+						},
+						Hostnames: []string{"*.example.com"},
+						Service:   common.KuadrantRateLimitClusterName,
+					},
+				},
+			}))
+
+			// Check gateway back references
+			err = k8sClient.Get(context.Background(), gwKey, existingGateway)
+			// must exist
+			Expect(err).ToNot(HaveOccurred())
+			refs := []client.ObjectKey{rlpKey}
+			serialized, err := json.Marshal(refs)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
+		})
+
+		It("Creates all the resources for a basic Gateway and RateLimitPolicy when missing a HTTPRoute attached to the Gateway", func() {
 			// create ratelimitpolicy
 			rlp := &kuadrantv1beta2.RateLimitPolicy{
 				TypeMeta: metav1.TypeMeta{
@@ -563,28 +693,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.WASMPlugin{
-				FailureMode: wasm.FailureModeDeny,
-				RateLimitPolicies: []wasm.RateLimitPolicy{
-					{
-						Name:   rlpKey.String(),
-						Domain: fmt.Sprintf("%s/%s#%s", testNamespace, gwName, "*"),
-						Rules: []wasm.Rule{
-							{
-								Conditions: nil,
-								Data: []wasm.DataItem{
-									{
-										Static: &wasm.StaticSpec{
-											Key:   fmt.Sprintf("%s/%s/l1", testNamespace, rlpName),
-											Value: "1",
-										},
-									},
-								},
-							},
-						},
-						Hostnames: []string{"*"},
-						Service:   common.KuadrantRateLimitClusterName,
-					},
-				},
+				FailureMode:       wasm.FailureModeDeny,
+				RateLimitPolicies: []wasm.RateLimitPolicy{},
 			}))
 
 			// Check gateway back references
@@ -594,8 +704,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			refs := []client.ObjectKey{rlpKey}
 			serialized, err := json.Marshal(refs)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
+			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
 		})
 	})
 })

@@ -94,6 +94,35 @@ func (r *TargetRefReconciler) FetchValidTargetRef(ctx context.Context, targetRef
 	return nil, fmt.Errorf("FetchValidTargetRef: targetRef (%v) to unknown network resource", targetRef)
 }
 
+// FetchAcceptedGatewayHTTPRoutes returns the list of HTTPRoutes that have been accepted as children of a gateway.
+func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context, gwKey client.ObjectKey) (routeKeys []gatewayapiv1beta1.HTTPRoute) {
+	logger, _ := logr.FromContext(ctx)
+	logger = logger.WithName("FetchAcceptedGatewayHTTPRoutes").WithValues("gateway", gwKey)
+
+	routeList := &gatewayapiv1beta1.HTTPRouteList{}
+	err := r.Client().List(ctx, routeList)
+	if err != nil {
+		logger.V(1).Info("failed to list httproutes", "err", err)
+		return
+	}
+
+	for _, route := range routeList.Items {
+		routeParentStatus, found := common.Find(route.Status.RouteStatus.Parents, func(p gatewayapiv1beta1.RouteParentStatus) bool {
+			return *p.ParentRef.Kind == ("Gateway") &&
+				((p.ParentRef.Namespace == nil && route.GetNamespace() == gwKey.Namespace) || string(*p.ParentRef.Namespace) == gwKey.Namespace) &&
+				string(p.ParentRef.Name) == gwKey.Name
+		})
+		if found && meta.IsStatusConditionTrue(routeParentStatus.Conditions, "Accepted") {
+			logger.V(1).Info("found route attached to gateway", "httproute", client.ObjectKeyFromObject(&route))
+			routeKeys = append(routeKeys, route)
+			continue
+		}
+		logger.V(1).Info("skipping route, not attached to gateway", "httproute", client.ObjectKeyFromObject(&route))
+	}
+
+	return
+}
+
 // TargetedGatewayKeys returns the list of gateways that are being referenced from the target.
 func (r *TargetRefReconciler) TargetedGatewayKeys(ctx context.Context, targetNetworkObject client.Object) []client.ObjectKey {
 	switch obj := targetNetworkObject.(type) {

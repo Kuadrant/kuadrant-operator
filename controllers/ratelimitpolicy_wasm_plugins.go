@@ -122,26 +122,46 @@ func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw co
 // returns nil when there is no rate limit policy to apply
 func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (*wasm.WASMPlugin, error) {
 	logger, _ := logr.FromContext(ctx)
+	logger = logger.WithName("wasmPluginConfig").WithValues("gateway", gw.Key())
 
-	routeRLPList := make([]*kuadrantv1beta2.RateLimitPolicy, 0)
-	var gwRLP *kuadrantv1beta2.RateLimitPolicy
+	gwHostnames := gw.Hostnames()
+	if len(gwHostnames) == 0 {
+		gwHostnames = []gatewayapiv1beta1.Hostname{"*"}
+	}
+
+	type routesPerRLP struct {
+		rlp    kuadrantv1beta2.RateLimitPolicy
+		routes []gatewayapiv1beta1.HTTPRoute
+	}
+	rlps := make(map[string]*routesPerRLP, 0)
+
 	for _, rlpKey := range rlpRefs {
 		rlp := &kuadrantv1beta2.RateLimitPolicy{}
 		err := r.Client().Get(ctx, rlpKey, rlp)
-		logger.V(1).Info("wasmPluginConfig", "get rlp", rlpKey, "err", err)
+		logger.V(1).Info("get rlp", "ratelimitpolicy", rlpKey, "err", err)
 		if err != nil {
 			return nil, err
 		}
 
+		// target ref is a HTTPRoute
 		if common.IsTargetRefHTTPRoute(rlp.Spec.TargetRef) {
-			routeRLPList = append(routeRLPList, rlp)
-		} else if common.IsTargetRefGateway(rlp.Spec.TargetRef) {
-			if gwRLP == nil {
-				gwRLP = rlp
-			} else {
-				return nil, fmt.Errorf("wasmPluginConfig: multiple gateway RLP found and only one expected. rlp keys: %v", rlpRefs)
+			httpRoute, err := r.FetchValidHTTPRoute(ctx, rlp.TargetKey())
+			if err != nil {
+				return nil, err
 			}
+			rlps[rlpKey.String()] = &routesPerRLP{rlp: *rlp, routes: []gatewayapiv1beta1.HTTPRoute{*httpRoute}}
+			continue
 		}
+
+		// target ref is a Gateway
+		if rlps[rlpKey.String()] != nil {
+			return nil, fmt.Errorf("wasmPluginConfig: multiple gateway RLP found and only one expected. rlp keys: %v", rlpRefs)
+		}
+		rlps[rlpKey.String()] = &routesPerRLP{rlp: *rlp, routes: r.FetchAcceptedGatewayHTTPRoutes(ctx, rlp.TargetKey())}
+		// should we reset the hostnames in the route with the hostnames of the gateway? otherwise the rlp that targets
+		// the gateway can only specify hostnames for route selection exactly as they are stated in the routes, not as they
+		// stated in the gateway, and this would be counterintuitive for the user, because, unlike other types of route
+		// selection (e.g. by path), the hostname is part of the gateway spec.
 	}
 
 	wasmPlugin := &wasm.WASMPlugin{
@@ -149,49 +169,34 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 		RateLimitPolicies: make([]wasm.RateLimitPolicy, 0),
 	}
 
-	gwHostnames := gw.Hostnames()
-	if len(gwHostnames) == 0 {
-		gwHostnames = []gatewayapiv1beta1.Hostname{"*"}
+	if logger.V(1).Enabled() {
+		numRoutes := 0
+		for _, rlp := range rlps {
+			numRoutes += len(rlp.routes)
+		}
+		logger.V(1).Info("build configs for rlps and routes", "#rlps", len(rlps), "#routes", numRoutes)
 	}
 
-	if gwRLP != nil {
-		// TODO(guicassolato): this is a hack until we start going through all the httproutes that are children of the gateway and build the rules for each httproute
-		route := &gatewayapiv1beta1.HTTPRoute{
-			Spec: gatewayapiv1beta1.HTTPRouteSpec{
-				Hostnames: gwHostnames,
-				Rules:     []gatewayapiv1beta1.HTTPRouteRule{{}},
-			},
+	for _, routesPerRLP := range rlps {
+		rlp := routesPerRLP.rlp
+		for _, httpRoute := range routesPerRLP.routes {
+			logger.V(1).Info("building config for rlp and route", "ratelimitpolicy", client.ObjectKeyFromObject(&rlp), "httproute", client.ObjectKeyFromObject(&httpRoute))
+
+			// modifies (in memory) the list of hostnames specified in the route so we don't generate rules that only apply to other gateways
+			hostnames := common.FilterValidSubdomains(gwHostnames, httpRoute.Spec.Hostnames)
+			if len(hostnames) == 0 { // it should only happen when the route specifies no hostnames
+				hostnames = gwHostnames
+			}
+			httpRoute.Spec.Hostnames = hostnames
+
+			wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, wasm.RateLimitPolicy{
+				Name:      client.ObjectKeyFromObject(&rlp).String(),
+				Domain:    common.MarshallNamespace(gw.Key(), string(hostnames[0])), // TODO(guicassolato): https://github.com/Kuadrant/kuadrant-operator/issues/201. Meanwhile, we are using the first hostname so it matches at least one set of limit definitions in the Limitador CR
+				Rules:     rlptools.WasmRules(&rlp, &httpRoute),
+				Hostnames: common.HostnamesToStrings(hostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
+				Service:   common.KuadrantRateLimitClusterName,
+			})
 		}
-
-		wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, wasm.RateLimitPolicy{
-			Name:      client.ObjectKeyFromObject(gwRLP).String(),
-			Domain:    common.MarshallNamespace(gw.Key(), string(gwHostnames[0])), // TODO(guicassolato): https://github.com/Kuadrant/kuadrant-operator/issues/201. Meanwhile, we are using the first hostname so it matches at least one set of limit definitions in the Limitador CR
-			Rules:     rlptools.WasmRules(gwRLP, route),
-			Hostnames: common.HostnamesToStrings(gwHostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
-			Service:   common.KuadrantRateLimitClusterName,
-		})
-	}
-
-	for _, httpRouteRLP := range routeRLPList {
-		httpRoute, err := r.FetchValidHTTPRoute(ctx, httpRouteRLP.TargetKey())
-		if err != nil {
-			return nil, err
-		}
-
-		// modifies (in memory) the list of hostnames specified in the route so we don't generate rules that only apply to other gateways
-		hostnames := common.FilterValidSubdomains(gwHostnames, httpRoute.Spec.Hostnames)
-		if len(hostnames) == 0 { // it should only happen when the route specifies no hostnames
-			hostnames = gwHostnames
-		}
-		httpRoute.Spec.Hostnames = hostnames
-
-		wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, wasm.RateLimitPolicy{
-			Name:      client.ObjectKeyFromObject(httpRouteRLP).String(),
-			Domain:    common.MarshallNamespace(gw.Key(), string(hostnames[0])), // TODO(guicassolato): https://github.com/Kuadrant/kuadrant-operator/issues/201. Meanwhile, we are using the first hostname so it matches at least one set of limit definitions in the Limitador CR
-			Rules:     rlptools.WasmRules(httpRouteRLP, httpRoute),
-			Hostnames: common.HostnamesToStrings(hostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
-			Service:   common.KuadrantRateLimitClusterName,
-		})
 	}
 
 	return wasmPlugin, nil

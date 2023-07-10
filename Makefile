@@ -207,7 +207,7 @@ $(OPM):
 opm: $(OPM) ## Download opm locally if necessary.
 
 KIND = $(PROJECT_PATH)/bin/kind
-KIND_VERSION = v0.17.0
+KIND_VERSION = v0.20.0
 $(KIND):
 	$(call go-install-tool,$(KIND),sigs.k8s.io/kind@$(KIND_VERSION))
 

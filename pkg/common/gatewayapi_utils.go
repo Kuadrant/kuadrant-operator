@@ -106,6 +106,11 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1beta1.HTTPRouteRule) bo
 			return false
 		}
 
+		// method
+		if s.Method != nil && !reflect.DeepEqual(s.Method, ruleMatch.Method) {
+			return false
+		}
+
 		// headers
 		for _, header := range s.Headers {
 			if _, found := Find(ruleMatch.Headers, func(otherHeader gatewayapiv1beta1.HTTPHeaderMatch) bool {
@@ -122,11 +127,6 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1beta1.HTTPRouteRule) bo
 			}); !found {
 				return false
 			}
-		}
-
-		// method
-		if s.Method != nil && !reflect.DeepEqual(s.Method, ruleMatch.Method) {
-			return false
 		}
 
 		return true

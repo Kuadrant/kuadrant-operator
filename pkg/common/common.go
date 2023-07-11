@@ -188,16 +188,6 @@ func ReverseSlice[T any](input []T) []T {
 	return output
 }
 
-func MapValues[T comparable, U any](m map[T]U) []U {
-	values := make([]U, len(m))
-	i := 0
-	for k := range m {
-		values[i] = m[k]
-		i++
-	}
-	return values
-}
-
 // MergeMapStringString Merge desired into existing.
 // Not Thread-Safe. Does it matter?
 func MergeMapStringString(existing *map[string]string, desired map[string]string) bool {

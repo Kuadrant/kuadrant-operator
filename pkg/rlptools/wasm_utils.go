@@ -84,6 +84,9 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.
 	}
 
 	if len(limit.When) == 0 {
+		if len(routeConditions) == 0 {
+			return nil, nil
+		}
 		return routeConditions, nil
 	}
 

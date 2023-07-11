@@ -3,16 +3,14 @@
 package rlptools
 
 import (
-	"encoding/json"
-	"reflect"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
@@ -332,43 +330,8 @@ func TestWasmRules(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			computedRules := WasmRules(tc.rlp, tc.route)
-
-			if len(tc.expectedRules) != len(computedRules) {
-				t.Errorf("expected %d wasm rules, got (%d)", len(tc.expectedRules), len(computedRules))
-			}
-
-			for _, expectedRule := range tc.expectedRules {
-				if _, ruleFound := common.Find(computedRules, func(computedRule wasm.Rule) bool {
-					if len(expectedRule.Conditions) != len(computedRule.Conditions) {
-						return false
-					}
-
-					// we cannot guarantee the order of the conditions, so we need to find each one
-					for _, expectedCondition := range expectedRule.Conditions {
-						if _, conditionFound := common.Find(computedRule.Conditions, func(computedCondition wasm.Condition) bool {
-							return reflect.DeepEqual(expectedCondition, computedCondition)
-						}); !conditionFound {
-							return false
-						}
-					}
-
-					if len(expectedRule.Data) != len(computedRule.Data) {
-						return false
-					}
-
-					// unlike the conditions, we can guarantee the order of the data items
-					for i := range expectedRule.Data {
-						if !reflect.DeepEqual(expectedRule.Data[i], computedRule.Data[i]) {
-							return false
-						}
-					}
-
-					return true
-				}); !ruleFound {
-					expectedRuleJSON, _ := json.Marshal(expectedRule)
-					computedRulesJSON, _ := json.Marshal(computedRules)
-					t.Errorf("cannot find expected wasm rule: %s in %s", string(expectedRuleJSON), string(computedRulesJSON))
-				}
+			if diff := cmp.Diff(tc.expectedRules, computedRules); diff != "" {
+				t.Errorf("unexpected wasm rules (-want +got):\n%s", diff)
 			}
 		})
 	}

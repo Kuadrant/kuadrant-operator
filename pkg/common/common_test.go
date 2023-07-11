@@ -625,24 +625,6 @@ func TestReverseSlice(t *testing.T) {
 	})
 }
 
-func TestMapValues(t *testing.T) {
-	t.Run("when given a map of strings to string then return a slice of the string values", func(t *testing.T) {
-		stos := map[string]string{"a": "foo", "b": "bar", "c": "baz"}
-		expected := []string{"foo", "bar", "baz"}
-		if r := MapValues(stos); len(r) != len(expected) || !SameElements(r, expected) {
-			t.Errorf("expected: %v; got: %v", expected, r)
-		}
-	})
-
-	t.Run("when given a map of strings to ints then return a slice of the int values", func(t *testing.T) {
-		stos := map[string]int{"a": 1, "b": 2, "c": 3}
-		expected := []int{1, 2, 3}
-		if r := MapValues(stos); len(r) != len(expected) || !SameElements(r, expected) {
-			t.Errorf("expected: %v; got: %v", expected, r)
-		}
-	})
-}
-
 func TestMergeMapStringString(t *testing.T) {
 	testCases := []struct {
 		name          string

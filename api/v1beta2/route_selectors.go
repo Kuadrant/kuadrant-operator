@@ -3,6 +3,8 @@ package v1beta2
 import (
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
+	orderedmap "github.com/elliotchance/orderedmap/v2"
+
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
@@ -25,10 +27,10 @@ type RouteSelector struct {
 // the matches of the selector. If the selector does not specify any matches, then all HTTPRouteRules are selected.
 //
 // Additionally, if the selector specifies a non-empty list of hostnames, a non-empty intersection between the literal
-// hostnames of the selector and set of hostnames specified in the HTTPRoute must be exist. Otherwise, the function
+// hostnames of the selector and set of hostnames specified in the HTTPRoute must exist. Otherwise, the function
 // returns nil.
-func (s *RouteSelector) SelectRules(route *gatewayapiv1beta1.HTTPRoute) []gatewayapiv1beta1.HTTPRouteRule {
-	rulesIndices := make(map[int]gatewayapiv1beta1.HTTPRouteRule, 0) // using a map is an easy way to avoid repeated rules but it may not preserve the order
+func (s *RouteSelector) SelectRules(route *gatewayapiv1beta1.HTTPRoute) (rules []gatewayapiv1beta1.HTTPRouteRule) {
+	rulesIndices := orderedmap.NewOrderedMap[int, gatewayapiv1beta1.HTTPRouteRule]()
 	if len(s.Hostnames) > 0 && !common.Intersect(s.Hostnames, route.Spec.Hostnames) {
 		return nil
 	}
@@ -39,9 +41,12 @@ func (s *RouteSelector) SelectRules(route *gatewayapiv1beta1.HTTPRoute) []gatewa
 		for idx, rule := range route.Spec.Rules {
 			rs := common.HTTPRouteRuleSelector{HTTPRouteMatch: &routeSelectorMatch}
 			if rs.Selects(rule) {
-				rulesIndices[idx] = rule
+				rulesIndices.Set(idx, rule)
 			}
 		}
 	}
-	return common.MapValues(rulesIndices)
+	for el := rulesIndices.Front(); el != nil; el = el.Next() {
+		rules = append(rules, el.Value)
+	}
+	return
 }

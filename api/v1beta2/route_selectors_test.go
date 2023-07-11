@@ -145,7 +145,7 @@ func TestRouteSelectors(t *testing.T) {
 				},
 			},
 			route:    route,
-			expected: []gatewayapiv1beta1.HTTPRouteRule{},
+			expected: nil,
 		},
 		{
 			name: "route selector selects the HTTPRouteRules whose HTTPRoute's hostnames match the selector",

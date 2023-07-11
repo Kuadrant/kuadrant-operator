@@ -183,6 +183,15 @@ func (r *RateLimitPolicy) Validate() error {
 		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *r.Spec.TargetRef.Namespace)
 	}
 
+	// prevents usage of routeSelectors in a gateway RLP
+	if r.Spec.TargetRef.Kind == gatewayapiv1alpha2.Kind("Gateway") {
+		for _, limit := range r.Spec.Limits {
+			if len(limit.RouteSelectors) > 0 {
+				return fmt.Errorf("route selectors not supported when targetting a Gateway")
+			}
+		}
+	}
+
 	return nil
 }
 

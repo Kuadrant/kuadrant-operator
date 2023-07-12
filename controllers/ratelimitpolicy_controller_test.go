@@ -13,6 +13,7 @@ import (
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -687,15 +688,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			wpName := fmt.Sprintf("kuadrant-%s", gwName)
 			wasmPluginKey := client.ObjectKey{Name: wpName, Namespace: testNamespace}
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			// must not exist
 			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(&wasm.WASMPlugin{
-				FailureMode:       wasm.FailureModeDeny,
-				RateLimitPolicies: []wasm.RateLimitPolicy{},
-			}))
+			Expect(apierrors.IsNotFound(err)).To(BeTrue())
 
 			// Check gateway back references
 			err = k8sClient.Get(context.Background(), gwKey, existingGateway)

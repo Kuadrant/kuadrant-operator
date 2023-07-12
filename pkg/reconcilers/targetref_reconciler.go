@@ -95,7 +95,7 @@ func (r *TargetRefReconciler) FetchValidTargetRef(ctx context.Context, targetRef
 }
 
 // FetchAcceptedGatewayHTTPRoutes returns the list of HTTPRoutes that have been accepted as children of a gateway.
-func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context, gwKey client.ObjectKey) (routeKeys []gatewayapiv1beta1.HTTPRoute) {
+func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context, gwKey client.ObjectKey) (routes []gatewayapiv1beta1.HTTPRoute) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("FetchAcceptedGatewayHTTPRoutes").WithValues("gateway", gwKey)
 
@@ -114,7 +114,7 @@ func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context
 		})
 		if found && meta.IsStatusConditionTrue(routeParentStatus.Conditions, "Accepted") {
 			logger.V(1).Info("found route attached to gateway", "httproute", client.ObjectKeyFromObject(&route))
-			routeKeys = append(routeKeys, route)
+			routes = append(routes, route)
 			continue
 		}
 		logger.V(1).Info("skipping route, not attached to gateway", "httproute", client.ObjectKeyFromObject(&route))

@@ -19,7 +19,8 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
@@ -27,10 +28,6 @@ import (
 	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
-	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
-	istioapiv1alpha1 "istio.io/api/operator/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -44,13 +41,13 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
 const (
 	kuadrantFinalizer = "kuadrant.io/finalizer"
-	extAuthorizerName = "kuadrant-authorization"
 )
 
 // KuadrantReconciler reconciles a Kuadrant object
@@ -105,7 +102,7 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 	if kObj.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(kObj, kuadrantFinalizer) {
 		logger.V(1).Info("Handling removal of kuadrant object")
 
-		if err := r.unregisterExternalAuthorizer(ctx); err != nil {
+		if err := r.unregisterExternalAuthorizer(ctx, kObj); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -163,13 +160,13 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) error {
+func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	logger, _ := logr.FromContext(ctx)
 
-	err := r.unregisterExternalAuthorizerIstio(ctx)
+	isIstioInstalled, err := r.unregisterExternalAuthorizerIstio(ctx, kObj)
 
-	if err != nil && apimeta.IsNoMatchError(err) {
-		err = r.unregisterExternalAuthorizerOSSM(ctx)
+	if err == nil && !isIstioInstalled {
+		err = r.unregisterExternalAuthorizerOSSM(ctx, kObj)
 	}
 
 	if err != nil {
@@ -179,50 +176,37 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context) e
 	return err
 }
 
-func (r *KuadrantReconciler) unregisterExternalAuthorizerIstio(ctx context.Context) error {
+func (r *KuadrantReconciler) unregisterExternalAuthorizerIstio(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (bool, error) {
 	logger, _ := logr.FromContext(ctx)
-	iop := &iopv1alpha1.IstioOperator{}
+	configsToUpdate, err := r.getIstioConfigObjects(ctx, logger)
+	isIstioInstalled := configsToUpdate != nil
 
-	iopKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
-	if err := r.Client().Get(ctx, iopKey, iop); err != nil {
-		logger.V(1).Info("failed to get istiooperator object", "key", iopKey, "err", err)
-		return err
+	if !isIstioInstalled || err != nil {
+		return isIstioInstalled, err
 	}
 
-	meshConfig, err := meshConfigFromStruct(iop.Spec.MeshConfig)
-	if err != nil {
-		return err
-	}
-	extensionProviders := extensionProvidersFromMeshConfig(meshConfig)
+	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
 
-	if !hasKuadrantAuthorizer(extensionProviders) {
-		return nil
-	}
-
-	for idx, extensionProvider := range extensionProviders {
-		name := extensionProvider.Name
-		if name == extAuthorizerName {
-			// deletes the element in the array
-			extensionProviders = append(extensionProviders[:idx], extensionProviders[idx+1:]...)
-			meshConfig.ExtensionProviders = extensionProviders
-			meshConfigStruct, err := meshConfigToStruct(meshConfig)
-			if err != nil {
-				return err
+	for _, config := range configsToUpdate {
+		hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(config, *kuadrantAuthorizer)
+		if err != nil {
+			return true, err
+		}
+		if hasKuadrantAuthorizer {
+			if err = common.UnregisterKuadrantAuthorizer(config, kuadrantAuthorizer); err != nil {
+				return true, err
 			}
-			iop.Spec.MeshConfig = meshConfigStruct
-			break
+
+			logger.Info("remove external authorizer from istio meshconfig")
+			if err = r.UpdateResource(ctx, config.GetConfigObject()); err != nil {
+				return true, err
+			}
 		}
 	}
-
-	logger.Info("remove external authorizer from meshconfig")
-	if err := r.Client().Update(ctx, iop); err != nil {
-		return err
-	}
-
-	return nil
+	return true, nil
 }
 
-func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Context) error {
+func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	logger, _ := logr.FromContext(ctx)
 
 	smcp := &maistrav2.ServiceMeshControlPlane{}
@@ -233,47 +217,22 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Contex
 		return err
 	}
 
-	if smcp.Spec.TechPreview == nil {
-		smcp.Spec.TechPreview = maistrav1.NewHelmValues(nil)
-	}
+	smcpWrapper := istio.NewOSSMControlPlaneWrapper(smcp)
+	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
 
-	var meshConfig *istiomeshv1alpha1.MeshConfig
-
-	if conf, found, err := smcp.Spec.TechPreview.GetMap("meshConfig"); err != nil {
+	hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(smcpWrapper, *kuadrantAuthorizer)
+	if err != nil {
 		return err
-	} else if found {
-		meshConfigStruct, err := structpb.NewStruct(conf)
+	}
+	if hasKuadrantAuthorizer {
+		err = common.UnregisterKuadrantAuthorizer(smcpWrapper, kuadrantAuthorizer)
 		if err != nil {
 			return err
 		}
-		meshConfig, _ = meshConfigFromStruct(meshConfigStruct)
-	} else {
-		meshConfig = &istiomeshv1alpha1.MeshConfig{}
-	}
-	extensionProviders := extensionProvidersFromMeshConfig(meshConfig)
-
-	if !hasKuadrantAuthorizer(extensionProviders) {
-		return nil
-	}
-
-	for idx, extensionProvider := range extensionProviders {
-		name := extensionProvider.Name
-		if name == extAuthorizerName {
-			// deletes the element in the array
-			extensionProviders = append(extensionProviders[:idx], extensionProviders[idx+1:]...)
-			meshConfig.ExtensionProviders = extensionProviders
-			meshConfigStruct, err := meshConfigToStruct(meshConfig)
-			if err != nil {
-				return err
-			}
-			smcp.Spec.TechPreview.SetField("meshConfig", meshConfigStruct.AsMap())
-			break
+		logger.Info("removing external authorizer from  OSSM meshconfig")
+		if err := r.UpdateResource(ctx, smcpWrapper.GetConfigObject()); err != nil {
+			return err
 		}
-	}
-
-	logger.Info("remove external authorizer from meshconfig")
-	if err := r.Client().Update(ctx, smcp); err != nil {
-		return err
 	}
 
 	return nil
@@ -282,9 +241,9 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Contex
 func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	logger, _ := logr.FromContext(ctx)
 
-	err := r.registerExternalAuthorizerIstio(ctx, kObj)
+	isIstioInstalled, err := r.registerExternalAuthorizerIstio(ctx, kObj)
 
-	if err != nil && apimeta.IsNoMatchError(err) {
+	if err == nil && !isIstioInstalled {
 		err = r.registerExternalAuthorizerOSSM(ctx, kObj)
 	}
 
@@ -295,42 +254,34 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 	return err
 }
 
-func (r *KuadrantReconciler) registerExternalAuthorizerIstio(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
+func (r *KuadrantReconciler) registerExternalAuthorizerIstio(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (bool, error) {
 	logger, _ := logr.FromContext(ctx)
-	iop := &iopv1alpha1.IstioOperator{}
+	configsToUpdate, err := r.getIstioConfigObjects(ctx, logger)
+	isIstioInstalled := configsToUpdate != nil
 
-	iopKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
-	if err := r.Client().Get(ctx, iopKey, iop); err != nil {
-		logger.V(1).Info("failed to get istiooperator object", "key", iopKey, "err", err)
-		return err
+	if !isIstioInstalled || err != nil {
+		return isIstioInstalled, err
 	}
 
-	if iop.Spec == nil {
-		iop.Spec = &istioapiv1alpha1.IstioOperatorSpec{}
+	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
+	for _, config := range configsToUpdate {
+		hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(config, *kuadrantAuthorizer)
+		if err != nil {
+			return true, err
+		}
+		if !hasKuadrantAuthorizer {
+			err = common.RegisterKuadrantAuthorizer(config, kuadrantAuthorizer)
+			if err != nil {
+				return true, err
+			}
+			logger.Info("adding external authorizer to istio meshconfig")
+			if err = r.UpdateResource(ctx, config.GetConfigObject()); err != nil {
+				return true, err
+			}
+		}
 	}
 
-	meshConfig, err := meshConfigFromStruct(iop.Spec.MeshConfig)
-	if err != nil {
-		return err
-	}
-	extensionProviders := extensionProvidersFromMeshConfig(meshConfig)
-
-	if hasKuadrantAuthorizer(extensionProviders) {
-		return nil
-	}
-
-	meshConfig.ExtensionProviders = append(meshConfig.ExtensionProviders, createKuadrantAuthorizer(kObj.Namespace))
-	meshConfigStruct, err := meshConfigToStruct(meshConfig)
-	if err != nil {
-		return err
-	}
-	iop.Spec.MeshConfig = meshConfigStruct
-	logger.Info("adding external authorizer to meshconfig")
-	if err := r.Client().Update(ctx, iop); err != nil {
-		return err
-	}
-
-	return nil
+	return true, nil
 }
 
 func (r *KuadrantReconciler) registerExternalAuthorizerOSSM(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
@@ -343,46 +294,56 @@ func (r *KuadrantReconciler) registerExternalAuthorizerOSSM(ctx context.Context,
 	smcp := &maistrav2.ServiceMeshControlPlane{}
 
 	smcpKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
-	if err := r.Client().Get(ctx, smcpKey, smcp); err != nil {
+	if err := r.GetResource(ctx, smcpKey, smcp); err != nil {
 		logger.V(1).Info("failed to get servicemeshcontrolplane object", "key", smcp, "err", err)
 		return err
 	}
+	smcpWrapper := istio.NewOSSMControlPlaneWrapper(smcp)
+	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
 
-	if smcp.Spec.TechPreview == nil {
-		smcp.Spec.TechPreview = maistrav1.NewHelmValues(nil)
-	}
-
-	var meshConfig *istiomeshv1alpha1.MeshConfig
-
-	if conf, found, err := smcp.Spec.TechPreview.GetMap("meshConfig"); err != nil {
-		return err
-	} else if found {
-		meshConfigStruct, err := structpb.NewStruct(conf)
-		if err != nil {
-			return err
-		}
-		meshConfig, _ = meshConfigFromStruct(meshConfigStruct)
-	} else {
-		meshConfig = &istiomeshv1alpha1.MeshConfig{}
-	}
-	extensionProviders := extensionProvidersFromMeshConfig(meshConfig)
-
-	if hasKuadrantAuthorizer(extensionProviders) {
-		return nil
-	}
-
-	meshConfig.ExtensionProviders = append(meshConfig.ExtensionProviders, createKuadrantAuthorizer(kObj.Namespace))
-	meshConfigStruct, err := meshConfigToStruct(meshConfig)
+	hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(smcpWrapper, *kuadrantAuthorizer)
 	if err != nil {
 		return err
 	}
-	smcp.Spec.TechPreview.SetField("meshConfig", meshConfigStruct.AsMap())
-	logger.Info("adding external authorizer to meshconfig")
-	if err := r.Client().Update(ctx, smcp); err != nil {
-		return err
+	if !hasKuadrantAuthorizer {
+		err = common.RegisterKuadrantAuthorizer(smcpWrapper, kuadrantAuthorizer)
+		if err != nil {
+			return err
+		}
+		logger.Info("adding external authorizer to OSSM meshconfig")
+		if err := r.UpdateResource(ctx, smcpWrapper.GetConfigObject()); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context, logger logr.Logger) ([]common.ConfigWrapper, error) {
+	var configsToUpdate []common.ConfigWrapper
+
+	iop := &iopv1alpha1.IstioOperator{}
+	iopKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
+	if err := r.GetResource(ctx, iopKey, iop); err != nil {
+		logger.V(1).Info("failed to get istiooperator object", "key", iopKey, "err", err)
+		if apimeta.IsNoMatchError(err) {
+			// return nil and nil if there's no istiooperator CRD, means istio is not installed
+			return nil, nil
+		} else if !apierrors.IsNotFound(err) {
+			// return nil and err if there's an error other than not found (no istiooperator CR)
+			return nil, err
+		}
+	} else {
+		configsToUpdate = append(configsToUpdate, istio.NewOperatorWrapper(iop))
+	}
+
+	istioConfigMap := &corev1.ConfigMap{}
+	if err := r.GetResource(ctx, client.ObjectKey{Name: controlPlaneConfigMapName(), Namespace: controlPlaneProviderNamespace()}, istioConfigMap); err != nil {
+		logger.V(1).Info("failed to get istio configMap", "key", iopKey, "err", err)
+		return configsToUpdate, err
+	}
+	configsToUpdate = append(configsToUpdate, istio.NewConfigMapWrapper(istioConfigMap))
+	return configsToUpdate, nil
 }
 
 func (r *KuadrantReconciler) registerServiceMeshMember(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
@@ -415,6 +376,10 @@ func controlPlaneProviderName() string {
 	return common.FetchEnv("ISTIOOPERATOR_NAME", "istiocontrolplane")
 }
 
+func controlPlaneConfigMapName() string {
+	return common.FetchEnv("ISTIOCONFIGMAP_NAME", "istio")
+}
+
 func controlPlaneProviderNamespace() string {
 	return common.FetchEnv("ISTIOOPERATOR_NAMESPACE", "istio-system")
 }
@@ -435,29 +400,6 @@ func buildServiceMeshMember(kObj *kuadrantv1beta1.Kuadrant) *maistrav1.ServiceMe
 				Namespace: controlPlaneProviderNamespace(),
 			},
 		},
-	}
-}
-
-func hasKuadrantAuthorizer(extensionProviders []*istiomeshv1alpha1.MeshConfig_ExtensionProvider) bool {
-	for _, extensionProvider := range extensionProviders {
-		if extensionProvider.Name == extAuthorizerName {
-			return true
-		}
-	}
-
-	return false
-}
-
-func createKuadrantAuthorizer(namespace string) *istiomeshv1alpha1.MeshConfig_ExtensionProvider {
-	envoyExtAuthGRPC := &istiomeshv1alpha1.MeshConfig_ExtensionProvider_EnvoyExtAuthzGrpc{
-		EnvoyExtAuthzGrpc: &istiomeshv1alpha1.MeshConfig_ExtensionProvider_EnvoyExternalAuthorizationGrpcProvider{
-			Port:    50051,
-			Service: fmt.Sprintf("authorino-authorino-authorization.%s.svc.cluster.local", namespace),
-		},
-	}
-	return &istiomeshv1alpha1.MeshConfig_ExtensionProvider{
-		Name:     extAuthorizerName,
-		Provider: envoyExtAuthGRPC,
 	}
 }
 
@@ -578,53 +520,6 @@ func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadr
 	}
 
 	return r.ReconcileResource(ctx, &authorinov1beta1.Authorino{}, authorino, reconcilers.CreateOnlyMutator)
-}
-
-// Builds the Istio/OSSM MeshConfig from a compatible structure:
-//
-//	meshConfig:
-//	  extensionProviders:
-//	    - envoyExtAuthzGrpc:
-//	        port: <port>
-//	        service: <authorino-service>
-//	      name: kuadrant-authorization
-func meshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshConfig, error) {
-	if structure == nil {
-		return &istiomeshv1alpha1.MeshConfig{}, nil
-	}
-
-	meshConfigJSON, err := structure.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-	meshConfig := &istiomeshv1alpha1.MeshConfig{}
-	// istiomeshv1alpha1.MeshConfig doesn't implement JSON/Yaml marshalling, only protobuf
-	if err = protojson.Unmarshal(meshConfigJSON, meshConfig); err != nil {
-		return nil, err
-	}
-
-	return meshConfig, nil
-}
-
-func meshConfigToStruct(config *istiomeshv1alpha1.MeshConfig) (*structpb.Struct, error) {
-	configJSON, err := protojson.Marshal(config)
-	if err != nil {
-		return nil, err
-	}
-	configStruct := &structpb.Struct{}
-
-	if err = configStruct.UnmarshalJSON(configJSON); err != nil {
-		return nil, err
-	}
-	return configStruct, nil
-}
-
-func extensionProvidersFromMeshConfig(config *istiomeshv1alpha1.MeshConfig) (extensionProviders []*istiomeshv1alpha1.MeshConfig_ExtensionProvider) {
-	extensionProviders = config.ExtensionProviders
-	if len(extensionProviders) == 0 {
-		extensionProviders = make([]*istiomeshv1alpha1.MeshConfig_ExtensionProvider, 0)
-	}
-	return
 }
 
 // SetupWithManager sets up the controller with the Manager.

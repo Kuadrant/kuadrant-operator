@@ -202,7 +202,7 @@ func HTTPMethodToString(method *gatewayapiv1beta1.HTTPMethod) string {
 	return string(*method)
 }
 
-func GetNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, policy KuadrantPolicy) (string, error) {
+func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, policy KuadrantPolicy) (string, error) {
 	targetRef := policy.GetTargetRef()
 	gwNamespacedName := types.NamespacedName{Namespace: string(GetDefaultIfNil(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)}
 	if IsTargetRefHTTPRoute(targetRef) {
@@ -225,7 +225,7 @@ func GetNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, pol
 	return GetKuadrantNamespace(gw)
 }
 
-func GetNamespaceFromPolicy(policy KuadrantPolicy) (string, bool) {
+func GetKuadrantNamespaceFromPolicy(policy KuadrantPolicy) (string, bool) {
 	if kuadrantNamespace, isSet := policy.GetAnnotations()[KuadrantNamespaceLabel]; isSet {
 		return kuadrantNamespace, true
 	}
@@ -498,6 +498,21 @@ func (g GatewayWrapper) Hostnames() []gatewayapiv1beta1.Hostname {
 	}
 
 	return hostnames
+}
+
+// GatewayWrapperList is a list of GatewayWrappers that implements sort.Interface
+type GatewayWrapperList []GatewayWrapper
+
+func (g GatewayWrapperList) Len() int {
+	return len(g)
+}
+
+func (g GatewayWrapperList) Less(i, j int) bool {
+	return g[i].CreationTimestamp.Before(&g[j].CreationTimestamp)
+}
+
+func (g GatewayWrapperList) Swap(i, j int) {
+	g[i], g[j] = g[j], g[i]
 }
 
 // TargetHostnames returns an array of hostnames coming from the network object (HTTPRoute, Gateway)

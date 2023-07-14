@@ -200,7 +200,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
 				MaxValue:   1,
 				Seconds:    3 * 60,
-				Namespace:  common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*.example.com"),
+				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
 				Conditions: []string{fmt.Sprintf("%s/%s/l1 == \"1\"", testNamespace, rlpName)},
 				Variables:  []string{},
 			}))
@@ -227,7 +227,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
 						Name:   rlpKey.String(),
-						Domain: fmt.Sprintf("%s/%s#%s", testNamespace, gwName, "*.example.com"),
+						Domain: rlptools.LimitsNamespaceFromRLP(rlp),
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{
@@ -395,7 +395,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(existingWASMConfig.RateLimitPolicies).To(HaveLen(1))
 			wasmRLP := existingWASMConfig.RateLimitPolicies[0]
 			Expect(wasmRLP.Name).To(Equal(rlpKey.String()))
-			Expect(wasmRLP.Domain).To(Equal(fmt.Sprintf("%s/%s#%s", testNamespace, gwName, "*.toystore.acme.com")))
+			Expect(wasmRLP.Domain).To(Equal(rlptools.LimitsNamespaceFromRLP(rlp)))
 			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'toys' limit defintion
 				Conditions: []wasm.Condition{
 					{
@@ -546,7 +546,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
 				MaxValue:   1,
 				Seconds:    3 * 60,
-				Namespace:  common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*"),
+				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
 				Conditions: []string{fmt.Sprintf("%s/%s/l1 == \"1\"", testNamespace, rlpName)},
 				Variables:  []string{},
 			}))
@@ -573,7 +573,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
 						Name:   rlpKey.String(),
-						Domain: fmt.Sprintf("%s/%s#%s", testNamespace, gwName, "*"),
+						Domain: rlptools.LimitsNamespaceFromRLP(rlp),
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{
@@ -671,7 +671,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
 				MaxValue:   1,
 				Seconds:    3 * 60,
-				Namespace:  common.MarshallNamespace(client.ObjectKeyFromObject(gateway), "*"),
+				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
 				Conditions: []string{fmt.Sprintf("%s/%s/l1 == \"1\"", testNamespace, rlpName)},
 				Variables:  []string{},
 			}))

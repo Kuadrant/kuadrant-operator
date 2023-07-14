@@ -18,7 +18,7 @@ jobs:
     name: Unit Tests
     strategy:
       matrix:
-        go-version: [ 1.18.x ]
+        go-version: [ 1.19.x ]
         platform: [ ubuntu-latest ]
     runs-on: ${{ matrix.platform }}
     defaults:
@@ -46,10 +46,10 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: Set up Go 1.18.x
+      - name: Set up Go 1.19.x
         uses: actions/setup-go@v2
         with:
-          go-version: 1.18.x
+          go-version: 1.19.x
         id: go
       - name: Check out code
         uses: actions/checkout@v2
@@ -59,7 +59,7 @@ jobs:
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1.2.0
         with:
-          version: v0.11.0
+          version: v0.20.0
           config: utils/kind-cluster.yaml
           cluster_name: ${{ env.KIND_CLUSTER_NAME }}
           wait: 120s
@@ -80,10 +80,10 @@ jobs:
     name: Verify manifests
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go 1.18.x
+      - name: Set up Go 1.19.x
         uses: actions/setup-go@v2
         with:
-          go-version: 1.18.x
+          go-version: 1.19.x
         id: go
       - name: Check out code
         uses: actions/checkout@v2
@@ -95,10 +95,10 @@ jobs:
     name: Verify bundle
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go 1.18.x
+      - name: Set up Go 1.19.x
         uses: actions/setup-go@v2
         with:
-          go-version: 1.18.x
+          go-version: 1.19.x
         id: go
       - name: Check out code
         uses: actions/checkout@v2
@@ -110,10 +110,10 @@ jobs:
     name: Verify fmt
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go 1.18.x
+      - name: Set up Go 1.19.x
         uses: actions/setup-go@v2
         with:
-          go-version: 1.18.x
+          go-version: 1.19.x
         id: go
       - name: Check out code
         uses: actions/checkout@v2
@@ -125,7 +125,7 @@ jobs:
     name: Test Scripts
     strategy:
       matrix:
-        go-version: [ 1.18.x ]
+        go-version: [ 1.19.x ]
         platform: [ ubuntu-latest, macos-latest ]
     runs-on: ${{ matrix.platform }}
     defaults:

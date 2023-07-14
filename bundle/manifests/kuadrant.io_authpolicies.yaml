@@ -47,6 +47,183 @@ spec:
                         one of the following parameters is allowed: "opa", "json"
                         or "kubernetes".'
                       properties:
+                        authzed:
+                          description: Authzed authorization
+                          properties:
+                            endpoint:
+                              description: Endpoint of the Authzed service.
+                              type: string
+                            insecure:
+                              description: Insecure HTTP connection (i.e. disables
+                                TLS verification)
+                              type: boolean
+                            permission:
+                              description: The name of the permission (or relation)
+                                on which to execute the check.
+                              properties:
+                                value:
+                                  description: Static value
+                                  type: string
+                                valueFrom:
+                                  description: Dynamic value
+                                  properties:
+                                    authJSON:
+                                      description: 'Selector to fetch a value from
+                                        the authorization JSON. It can be any path
+                                        pattern to fetch from the authorization JSON
+                                        (e.g. ''context.request.http.host'') or a
+                                        string template with variable placeholders
+                                        that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
+                                        Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
+                                        can be used. The following string modifiers
+                                        are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
+                                        @case:upper|lower, @base64:encode|decode and
+                                        @strip.'
+                                      type: string
+                                  type: object
+                              type: object
+                            resource:
+                              description: The resource on which to check the permission
+                                or relation.
+                              properties:
+                                kind:
+                                  description: StaticOrDynamicValue is either a constant
+                                    static string value or a config for fetching a
+                                    value from a dynamic source (e.g. a path pattern
+                                    of authorization JSON)
+                                  properties:
+                                    value:
+                                      description: Static value
+                                      type: string
+                                    valueFrom:
+                                      description: Dynamic value
+                                      properties:
+                                        authJSON:
+                                          description: 'Selector to fetch a value
+                                            from the authorization JSON. It can be
+                                            any path pattern to fetch from the authorization
+                                            JSON (e.g. ''context.request.http.host'')
+                                            or a string template with variable placeholders
+                                            that resolve to patterns (e.g. "Hello,
+                                            {auth.identity.name}!"). Any patterns
+                                            supported by https://pkg.go.dev/github.com/tidwall/gjson
+                                            can be used. The following string modifiers
+                                            are available: @extract:{sep:" ",pos:0},
+                                            @replace{old:"",new:""}, @case:upper|lower,
+                                            @base64:encode|decode and @strip.'
+                                          type: string
+                                      type: object
+                                  type: object
+                                name:
+                                  description: StaticOrDynamicValue is either a constant
+                                    static string value or a config for fetching a
+                                    value from a dynamic source (e.g. a path pattern
+                                    of authorization JSON)
+                                  properties:
+                                    value:
+                                      description: Static value
+                                      type: string
+                                    valueFrom:
+                                      description: Dynamic value
+                                      properties:
+                                        authJSON:
+                                          description: 'Selector to fetch a value
+                                            from the authorization JSON. It can be
+                                            any path pattern to fetch from the authorization
+                                            JSON (e.g. ''context.request.http.host'')
+                                            or a string template with variable placeholders
+                                            that resolve to patterns (e.g. "Hello,
+                                            {auth.identity.name}!"). Any patterns
+                                            supported by https://pkg.go.dev/github.com/tidwall/gjson
+                                            can be used. The following string modifiers
+                                            are available: @extract:{sep:" ",pos:0},
+                                            @replace{old:"",new:""}, @case:upper|lower,
+                                            @base64:encode|decode and @strip.'
+                                          type: string
+                                      type: object
+                                  type: object
+                              type: object
+                            sharedSecretRef:
+                              description: Reference to a Secret key whose value will
+                                be used by Authorino to authenticate with the Authzed
+                                service.
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must
+                                    be a valid secret key.
+                                  type: string
+                                name:
+                                  description: The name of the secret in the Authorino's
+                                    namespace to select from.
+                                  type: string
+                              required:
+                              - key
+                              - name
+                              type: object
+                            subject:
+                              description: The subject that will be checked for the
+                                permission or relation.
+                              properties:
+                                kind:
+                                  description: StaticOrDynamicValue is either a constant
+                                    static string value or a config for fetching a
+                                    value from a dynamic source (e.g. a path pattern
+                                    of authorization JSON)
+                                  properties:
+                                    value:
+                                      description: Static value
+                                      type: string
+                                    valueFrom:
+                                      description: Dynamic value
+                                      properties:
+                                        authJSON:
+                                          description: 'Selector to fetch a value
+                                            from the authorization JSON. It can be
+                                            any path pattern to fetch from the authorization
+                                            JSON (e.g. ''context.request.http.host'')
+                                            or a string template with variable placeholders
+                                            that resolve to patterns (e.g. "Hello,
+                                            {auth.identity.name}!"). Any patterns
+                                            supported by https://pkg.go.dev/github.com/tidwall/gjson
+                                            can be used. The following string modifiers
+                                            are available: @extract:{sep:" ",pos:0},
+                                            @replace{old:"",new:""}, @case:upper|lower,
+                                            @base64:encode|decode and @strip.'
+                                          type: string
+                                      type: object
+                                  type: object
+                                name:
+                                  description: StaticOrDynamicValue is either a constant
+                                    static string value or a config for fetching a
+                                    value from a dynamic source (e.g. a path pattern
+                                    of authorization JSON)
+                                  properties:
+                                    value:
+                                      description: Static value
+                                      type: string
+                                    valueFrom:
+                                      description: Dynamic value
+                                      properties:
+                                        authJSON:
+                                          description: 'Selector to fetch a value
+                                            from the authorization JSON. It can be
+                                            any path pattern to fetch from the authorization
+                                            JSON (e.g. ''context.request.http.host'')
+                                            or a string template with variable placeholders
+                                            that resolve to patterns (e.g. "Hello,
+                                            {auth.identity.name}!"). Any patterns
+                                            supported by https://pkg.go.dev/github.com/tidwall/gjson
+                                            can be used. The following string modifiers
+                                            are available: @extract:{sep:" ",pos:0},
+                                            @replace{old:"",new:""}, @case:upper|lower,
+                                            @base64:encode|decode and @strip.'
+                                          type: string
+                                      type: object
+                                  type: object
+                              type: object
+                          required:
+                          - endpoint
+                          type: object
                         cache:
                           description: Caching options for the policy evaluation results
                             when enforcing this config. Omit it to avoid caching policy
@@ -73,7 +250,8 @@ spec:
                                         Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                         can be used. The following string modifiers
                                         are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                        @case:upper|lower, and @base64:encode|decode.'
+                                        @case:upper|lower, @base64:encode|decode and
+                                        @strip.'
                                       type: string
                                   type: object
                               type: object
@@ -166,7 +344,7 @@ spec:
                                             can be used. The following string modifiers
                                             are available: @extract:{sep:" ",pos:0},
                                             @replace{old:"",new:""}, @case:upper|lower,
-                                            and @base64:encode|decode.'
+                                            @base64:encode|decode and @strip.'
                                           type: string
                                       type: object
                                   type: object
@@ -194,7 +372,7 @@ spec:
                                             can be used. The following string modifiers
                                             are available: @extract:{sep:" ",pos:0},
                                             @replace{old:"",new:""}, @case:upper|lower,
-                                            and @base64:encode|decode.'
+                                            @base64:encode|decode and @strip.'
                                           type: string
                                       type: object
                                   type: object
@@ -222,7 +400,7 @@ spec:
                                             can be used. The following string modifiers
                                             are available: @extract:{sep:" ",pos:0},
                                             @replace{old:"",new:""}, @case:upper|lower,
-                                            and @base64:encode|decode.'
+                                            @base64:encode|decode and @strip.'
                                           type: string
                                       type: object
                                   type: object
@@ -250,7 +428,7 @@ spec:
                                             can be used. The following string modifiers
                                             are available: @extract:{sep:" ",pos:0},
                                             @replace{old:"",new:""}, @case:upper|lower,
-                                            and @base64:encode|decode.'
+                                            @base64:encode|decode and @strip.'
                                           type: string
                                       type: object
                                   type: object
@@ -278,7 +456,7 @@ spec:
                                             can be used. The following string modifiers
                                             are available: @extract:{sep:" ",pos:0},
                                             @replace{old:"",new:""}, @case:upper|lower,
-                                            and @base64:encode|decode.'
+                                            @base64:encode|decode and @strip.'
                                           type: string
                                       type: object
                                   type: object
@@ -306,7 +484,7 @@ spec:
                                             can be used. The following string modifiers
                                             are available: @extract:{sep:" ",pos:0},
                                             @replace{old:"",new:""}, @case:upper|lower,
-                                            and @base64:encode|decode.'
+                                            @base64:encode|decode and @strip.'
                                           type: string
                                       type: object
                                   type: object
@@ -332,7 +510,8 @@ spec:
                                         Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                         can be used. The following string modifiers
                                         are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                        @case:upper|lower, and @base64:encode|decode.'
+                                        @case:upper|lower, @base64:encode|decode and
+                                        @strip.'
                                       type: string
                                   type: object
                               type: object
@@ -514,7 +693,8 @@ spec:
                                       Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                       can be used. The following string modifiers
                                       are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                      @case:upper|lower, and @base64:encode|decode.'
+                                      @case:upper|lower, @base64:encode|decode and
+                                      @strip.'
                                     type: string
                                 type: object
                             type: object
@@ -549,7 +729,8 @@ spec:
                                         Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                         can be used. The following string modifiers
                                         are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                        @case:upper|lower, and @base64:encode|decode.'
+                                        @case:upper|lower, @base64:encode|decode and
+                                        @strip.'
                                       type: string
                                   type: object
                               required:
@@ -575,7 +756,8 @@ spec:
                                       Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                       can be used. The following string modifiers
                                       are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                      @case:upper|lower, and @base64:encode|decode.'
+                                      @case:upper|lower, @base64:encode|decode and
+                                      @strip.'
                                     type: string
                                 type: object
                             type: object
@@ -603,7 +785,8 @@ spec:
                                       Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                       can be used. The following string modifiers
                                       are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                      @case:upper|lower, and @base64:encode|decode.'
+                                      @case:upper|lower, @base64:encode|decode and
+                                      @strip.'
                                     type: string
                                 type: object
                             type: object
@@ -638,7 +821,8 @@ spec:
                                         Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                         can be used. The following string modifiers
                                         are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                        @case:upper|lower, and @base64:encode|decode.'
+                                        @case:upper|lower, @base64:encode|decode and
+                                        @strip.'
                                       type: string
                                   type: object
                               required:
@@ -664,7 +848,8 @@ spec:
                                       Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                       can be used. The following string modifiers
                                       are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                      @case:upper|lower, and @base64:encode|decode.'
+                                      @case:upper|lower, @base64:encode|decode and
+                                      @strip.'
                                     type: string
                                 type: object
                             type: object
@@ -770,7 +955,8 @@ spec:
                                         Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                         can be used. The following string modifiers
                                         are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                        @case:upper|lower, and @base64:encode|decode.'
+                                        @case:upper|lower, @base64:encode|decode and
+                                        @strip.'
                                       type: string
                                   type: object
                               type: object
@@ -825,6 +1011,11 @@ spec:
                               name:
                                 description: The name of the JSON property
                                 type: string
+                              overwrite:
+                                default: false
+                                description: Whether the value should overwrite the
+                                  value of an existing property with the same name.
+                                type: boolean
                               value:
                                 description: Static value of the JSON property
                                 x-kubernetes-preserve-unknown-fields: true
@@ -840,7 +1031,8 @@ spec:
                                       Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                       can be used. The following string modifiers
                                       are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                      @case:upper|lower, and @base64:encode|decode.'
+                                      @case:upper|lower, @base64:encode|decode and
+                                      @strip.'
                                     type: string
                                 type: object
                             required:
@@ -989,7 +1181,7 @@ spec:
                                 Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                 can be used. The following string modifiers are available:
                                 @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                @case:upper|lower, and @base64:encode|decode.'
+                                @case:upper|lower, @base64:encode|decode and @strip.'
                               type: string
                           type: object
                         priority:
@@ -1074,7 +1266,8 @@ spec:
                                         Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                         can be used. The following string modifiers
                                         are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                        @case:upper|lower, and @base64:encode|decode.'
+                                        @case:upper|lower, @base64:encode|decode and
+                                        @strip.'
                                       type: string
                                   type: object
                               type: object
@@ -1113,7 +1306,8 @@ spec:
                                         Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                         can be used. The following string modifiers
                                         are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                        @case:upper|lower, and @base64:encode|decode.'
+                                        @case:upper|lower, @base64:encode|decode and
+                                        @strip.'
                                       type: string
                                   type: object
                               type: object
@@ -1145,7 +1339,7 @@ spec:
                                           can be used. The following string modifiers
                                           are available: @extract:{sep:" ",pos:0},
                                           @replace{old:"",new:""}, @case:upper|lower,
-                                          and @base64:encode|decode.'
+                                          @base64:encode|decode and @strip.'
                                         type: string
                                     type: object
                                 required:
@@ -1224,7 +1418,7 @@ spec:
                                           can be used. The following string modifiers
                                           are available: @extract:{sep:" ",pos:0},
                                           @replace{old:"",new:""}, @case:upper|lower,
-                                          and @base64:encode|decode.'
+                                          @base64:encode|decode and @strip.'
                                         type: string
                                     type: object
                                 required:
@@ -1241,11 +1435,61 @@ spec:
                               - GET
                               - POST
                               type: string
+                            oauth2:
+                              description: Authentication with the HTTP service by
+                                OAuth2 Client Credentials grant.
+                              properties:
+                                cache:
+                                  default: true
+                                  description: Caches and reuses the token until expired.
+                                    Set it to false to force fetch the token at every
+                                    authorization request regardless of expiration.
+                                  type: boolean
+                                clientId:
+                                  description: OAuth2 Client ID.
+                                  type: string
+                                clientSecretRef:
+                                  description: Reference to a Kuberentes Secret key
+                                    that stores that OAuth2 Client Secret.
+                                  properties:
+                                    key:
+                                      description: The key of the secret to select
+                                        from.  Must be a valid secret key.
+                                      type: string
+                                    name:
+                                      description: The name of the secret in the Authorino's
+                                        namespace to select from.
+                                      type: string
+                                  required:
+                                  - key
+                                  - name
+                                  type: object
+                                extraParams:
+                                  additionalProperties:
+                                    type: string
+                                  description: Optional extra parameters for the requests
+                                    to the token URL.
+                                  type: object
+                                scopes:
+                                  description: Optional scopes for the client credentials
+                                    grant, if supported by he OAuth2 server.
+                                  items:
+                                    type: string
+                                  type: array
+                                tokenUrl:
+                                  description: Token endpoint URL of the OAuth2 resource
+                                    server.
+                                  type: string
+                              required:
+                              - clientId
+                              - clientSecretRef
+                              - tokenUrl
+                              type: object
                             sharedSecretRef:
                               description: Reference to a Secret key whose value will
                                 be passed by Authorino in the request. The HTTP service
                                 can use the shared secret to authenticate the origin
-                                of the request.
+                                of the request. Ignored if used together with oauth2.
                               properties:
                                 key:
                                   description: The key of the secret to select from.  Must
@@ -1427,7 +1671,8 @@ spec:
                                         Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
                                         can be used. The following string modifiers
                                         are available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
-                                        @case:upper|lower, and @base64:encode|decode.'
+                                        @case:upper|lower, @base64:encode|decode and
+                                        @strip.'
                                       type: string
                                   type: object
                               type: object
@@ -1466,7 +1711,7 @@ spec:
                                           can be used. The following string modifiers
                                           are available: @extract:{sep:" ",pos:0},
                                           @replace{old:"",new:""}, @case:upper|lower,
-                                          and @base64:encode|decode.'
+                                          @base64:encode|decode and @strip.'
                                         type: string
                                     type: object
                                 required:
@@ -1485,6 +1730,30 @@ spec:
                           description: Name of the custom response. It can be used
                             to refer to the resolved response object in other configs.
                           type: string
+                        plain:
+                          description: StaticOrDynamicValue is either a constant static
+                            string value or a config for fetching a value from a dynamic
+                            source (e.g. a path pattern of authorization JSON)
+                          properties:
+                            value:
+                              description: Static value
+                              type: string
+                            valueFrom:
+                              description: Dynamic value
+                              properties:
+                                authJSON:
+                                  description: 'Selector to fetch a value from the
+                                    authorization JSON. It can be any path pattern
+                                    to fetch from the authorization JSON (e.g. ''context.request.http.host'')
+                                    or a string template with variable placeholders
+                                    that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
+                                    Any patterns supported by https://pkg.go.dev/github.com/tidwall/gjson
+                                    can be used. The following string modifiers are
+                                    available: @extract:{sep:" ",pos:0}, @replace{old:"",new:""},
+                                    @case:upper|lower, @base64:encode|decode and @strip.'
+                                  type: string
+                              type: object
+                          type: object
                         priority:
                           default: 0
                           description: Priority group of the config. All configs in
@@ -1573,7 +1842,7 @@ spec:
                                           can be used. The following string modifiers
                                           are available: @extract:{sep:" ",pos:0},
                                           @replace{old:"",new:""}, @case:upper|lower,
-                                          and @base64:encode|decode.'
+                                          @base64:encode|decode and @strip.'
                                         type: string
                                     type: object
                                 required:

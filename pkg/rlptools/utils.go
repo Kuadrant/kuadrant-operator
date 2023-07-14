@@ -3,31 +3,40 @@ package rlptools
 import (
 	"fmt"
 
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
-func FullLimitName(rlp *kuadrantv1beta2.RateLimitPolicy, limitKey string) string {
+func UniqueLimitName(rlp *kuadrantv1beta2.RateLimitPolicy, limitKey string) string {
 	return fmt.Sprintf("%s/%s/%s", rlp.GetNamespace(), rlp.GetName(), limitKey)
 }
 
-// ReadLimitsFromRLP returns a list of Kuadrant limit objects that will be used as template
-// for limitador configuration
-func ReadLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []Limit {
-	limits := make([]Limit, 0)
+// LimitadorRateLimitsFromRLP converts rate limits from a Kuadrant RateLimitPolicy into a list of Limitador rate limit
+// objects
+func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []limitadorv1alpha1.RateLimit {
+	limitsNamespace := LimitsNamespaceFromRLP(rlp)
 
+	rateLimits := make([]limitadorv1alpha1.RateLimit, 0)
 	for limitKey, limit := range rlp.Spec.Limits {
-		for rateIdx := range limit.Rates {
-			maxValue, seconds := ConvertRateIntoSeconds(limit.Rates[rateIdx])
-			limits = append(limits, Limit{
+		uniqueLimitName := UniqueLimitName(rlp, limitKey)
+		for _, rate := range limit.Rates {
+			maxValue, seconds := rateToSeconds(rate)
+			rateLimits = append(rateLimits, limitadorv1alpha1.RateLimit{
+				Namespace:  limitsNamespace,
 				MaxValue:   maxValue,
 				Seconds:    seconds,
-				Conditions: []string{fmt.Sprintf("%s == \"1\"", FullLimitName(rlp, limitKey))},
-				Variables:  limit.CountersAsStringList(),
+				Conditions: []string{fmt.Sprintf("%s == \"1\"", uniqueLimitName)},
+				Variables:  common.GetEmptySliceIfNil(limit.CountersAsStringList()),
 			})
 		}
 	}
+	return rateLimits
+}
 
-	return limits
+func LimitsNamespaceFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) string {
+	return fmt.Sprintf("%s/%s", rlp.GetNamespace(), rlp.GetName())
 }
 
 var timeUnitMap = map[kuadrantv1beta2.TimeUnit]int{
@@ -37,9 +46,9 @@ var timeUnitMap = map[kuadrantv1beta2.TimeUnit]int{
 	kuadrantv1beta2.TimeUnit("day"):    60 * 60 * 24,
 }
 
-// ConvertRateIntoSeconds converts from RLP Rate API (limit, duration and unit)
+// rateToSeconds converts from RLP Rate API (limit, duration and unit)
 // to Limitador's Limit format (maxValue, Seconds)
-func ConvertRateIntoSeconds(rate kuadrantv1beta2.Rate) (maxValue int, seconds int) {
+func rateToSeconds(rate kuadrantv1beta2.Rate) (maxValue int, seconds int) {
 	maxValue = rate.Limit
 	seconds = 0
 

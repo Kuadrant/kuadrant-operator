@@ -714,7 +714,7 @@ func TestUnMarshallLimitNamespace(t *testing.T) {
 		{
 			name:           "when namespace has no domain name then return correct values",
 			namespace:      "exampleNS/exampleGW#",
-			expectedKey:    client.ObjectKey{"exampleNS", "exampleGW"},
+			expectedKey:    client.ObjectKey{Namespace: "exampleNS", Name: "exampleGW"},
 			expectedDomain: "",
 			expectedError:  false,
 		},
@@ -754,49 +754,6 @@ func TestUnMarshallLimitNamespace(t *testing.T) {
 				if domain != tc.expectedDomain {
 					t.Errorf("Expected %v, but got %v", tc.expectedDomain, domain)
 				}
-			}
-		})
-	}
-}
-
-func TestMarshallNamespace(t *testing.T) {
-	testCases := []struct {
-		name     string
-		gwKey    client.ObjectKey
-		domain   string
-		expected string
-	}{
-		{
-			name: "when input is valid then return expected output",
-			gwKey: client.ObjectKey{
-				Namespace: "test",
-				Name:      "myGwName",
-			},
-			domain:   "example.com",
-			expected: "test/myGwName#example.com",
-		},
-		{
-			name:     "when input is empty then return expected output",
-			gwKey:    client.ObjectKey{},
-			domain:   "",
-			expected: "/#",
-		},
-		{
-			name: "when input contains special characters then return expected output",
-			gwKey: client.ObjectKey{
-				Namespace: "test",
-				Name:      "myG.w-N*ame",
-			},
-			domain:   "example%-com",
-			expected: "test/myG.w-N*ame#example%-com",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := MarshallNamespace(tc.gwKey, tc.domain)
-			if !reflect.DeepEqual(result, tc.expected) {
-				t.Errorf("Expected %v, but got %v", tc.expected, result)
 			}
 		})
 	}

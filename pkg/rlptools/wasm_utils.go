@@ -32,7 +32,7 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HT
 
 	for limitName, limit := range rlp.Spec.Limits {
 		// 1 RLP limit <---> 1 WASM rule
-		limitFullName := FullLimitName(rlp, limitName)
+		limitFullName := UniqueLimitName(rlp, limitName)
 		rule, err := ruleFromLimit(limitFullName, &limit, route)
 		if err == nil {
 			rules = append(rules, rule)

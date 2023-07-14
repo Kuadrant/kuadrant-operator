@@ -225,11 +225,6 @@ func UnMarshallLimitNamespace(ns string) (client.ObjectKey, string, error) {
 	return objKey, domain, nil
 }
 
-// MarshallNamespace serializes limit namespace with format "gwNS/gwName#domain"
-func MarshallNamespace(gwKey client.ObjectKey, domain string) string {
-	return fmt.Sprintf("%s/%s#%s", gwKey.Namespace, gwKey.Name, domain)
-}
-
 // UnMarshallObjectKey takes a string input and converts it into an ObjectKey struct that
 // can be used to access a specific Kubernetes object. The input string is expected to be in the format "namespace/name".
 // If the input string does not contain a NamespaceSeparator (typically '/')

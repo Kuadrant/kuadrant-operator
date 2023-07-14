@@ -6,12 +6,14 @@ import (
 	"reflect"
 	"testing"
 
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func rlp_1limit_1rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
+func testRLP_1Limit_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 	return &kuadrantv1beta2.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
@@ -23,7 +25,7 @@ func rlp_1limit_1rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 		},
 		Spec: kuadrantv1beta2.RateLimitPolicySpec{
 			Limits: map[string]kuadrantv1beta2.Limit{
-				"l1": kuadrantv1beta2.Limit{
+				"l1": {
 					Rates: []kuadrantv1beta2.Rate{
 						{
 							Limit:    5,
@@ -37,7 +39,7 @@ func rlp_1limit_1rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 	}
 }
 
-func rlp_2limit_1rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
+func testRLP_2Limits_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 	return &kuadrantv1beta2.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
@@ -49,7 +51,7 @@ func rlp_2limit_1rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 		},
 		Spec: kuadrantv1beta2.RateLimitPolicySpec{
 			Limits: map[string]kuadrantv1beta2.Limit{
-				"l1": kuadrantv1beta2.Limit{
+				"l1": {
 					Rates: []kuadrantv1beta2.Rate{
 						{
 							Limit:    5,
@@ -58,7 +60,7 @@ func rlp_2limit_1rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 						},
 					},
 				},
-				"l2": kuadrantv1beta2.Limit{
+				"l2": {
 					Rates: []kuadrantv1beta2.Rate{
 						{
 							Limit:    3,
@@ -72,7 +74,7 @@ func rlp_2limit_1rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 	}
 }
 
-func rlp_1limit_2rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
+func testRLP_1Limit_2Rates(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 	return &kuadrantv1beta2.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
@@ -84,7 +86,7 @@ func rlp_1limit_2rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 		},
 		Spec: kuadrantv1beta2.RateLimitPolicySpec{
 			Limits: map[string]kuadrantv1beta2.Limit{
-				"l1": kuadrantv1beta2.Limit{
+				"l1": {
 					Rates: []kuadrantv1beta2.Rate{
 						{
 							Limit:    5,
@@ -103,7 +105,7 @@ func rlp_1limit_2rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 	}
 }
 
-func rlp_1limit_1rate_1counter(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
+func testRLP_1Limit_1Rate_1Counter(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 	return &kuadrantv1beta2.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
@@ -115,7 +117,7 @@ func rlp_1limit_1rate_1counter(ns, name string) *kuadrantv1beta2.RateLimitPolicy
 		},
 		Spec: kuadrantv1beta2.RateLimitPolicySpec{
 			Limits: map[string]kuadrantv1beta2.Limit{
-				"l1": kuadrantv1beta2.Limit{
+				"l1": {
 					Counters: []kuadrantv1beta2.ContextSelector{
 						kuadrantv1beta2.ContextSelector("request.path"),
 					},
@@ -132,57 +134,71 @@ func rlp_1limit_1rate_1counter(ns, name string) *kuadrantv1beta2.RateLimitPolicy
 	}
 }
 
-func TestReadLimitsFromRLP(t *testing.T) {
+func TestLimitadorRateLimitsFromRLP(t *testing.T) {
 	testCases := []struct {
-		name           string
-		rlp            *kuadrantv1beta2.RateLimitPolicy
-		expectedLimits []Limit
+		name     string
+		rlp      *kuadrantv1beta2.RateLimitPolicy
+		expected []limitadorv1alpha1.RateLimit
 	}{
 		{
-			"basic: 1 limit, 1 rate", rlp_1limit_1rate("testNS", "rlpA"), []Limit{
+			name: "basic: 1 limit, 1 rate",
+			rlp:  testRLP_1Limit_1Rate("testNS", "rlpA"),
+			expected: []limitadorv1alpha1.RateLimit{
 				{
+					Namespace:  "testNS/rlpA",
 					MaxValue:   5,
 					Seconds:    10,
 					Conditions: []string{`testNS/rlpA/l1 == "1"`},
-					Variables:  nil,
+					Variables:  []string{},
 				},
 			},
 		},
 		{
-			"multiple limits: 2 limits with 1 rate each", rlp_2limit_1rate("testNS", "rlpA"), []Limit{
+			name: "multiple limits: 2 limits with 1 rate each",
+			rlp:  testRLP_2Limits_1Rate("testNS", "rlpA"),
+			expected: []limitadorv1alpha1.RateLimit{
 				{
+					Namespace:  "testNS/rlpA",
 					MaxValue:   5,
 					Seconds:    10,
 					Conditions: []string{`testNS/rlpA/l1 == "1"`},
-					Variables:  nil,
+					Variables:  []string{},
 				},
 				{
+					Namespace:  "testNS/rlpA",
 					MaxValue:   3,
 					Seconds:    3600,
 					Conditions: []string{`testNS/rlpA/l2 == "1"`},
-					Variables:  nil,
+					Variables:  []string{},
 				},
 			},
 		},
 		{
-			"multiple rates: 1 limit with 2 rates", rlp_1limit_2rate("testNS", "rlpA"), []Limit{
+			name: "multiple rates: 1 limit with 2 rates",
+			rlp:  testRLP_1Limit_2Rates("testNS", "rlpA"),
+			expected: []limitadorv1alpha1.RateLimit{
 				{
+					Namespace:  "testNS/rlpA",
 					MaxValue:   5,
 					Seconds:    10,
 					Conditions: []string{`testNS/rlpA/l1 == "1"`},
-					Variables:  nil,
+					Variables:  []string{},
 				},
 				{
+					Namespace:  "testNS/rlpA",
 					MaxValue:   3,
 					Seconds:    60,
 					Conditions: []string{`testNS/rlpA/l1 == "1"`},
-					Variables:  nil,
+					Variables:  []string{},
 				},
 			},
 		},
 		{
-			"counters: 1 limit with 1 rate and 1 counter", rlp_1limit_1rate_1counter("testNS", "rlpA"), []Limit{
+			name: "basic: 1 limit, 1 rate",
+			rlp:  testRLP_1Limit_1Rate_1Counter("testNS", "rlpA"),
+			expected: []limitadorv1alpha1.RateLimit{
 				{
+					Namespace:  "testNS/rlpA",
 					MaxValue:   5,
 					Seconds:    10,
 					Conditions: []string{`testNS/rlpA/l1 == "1"`},
@@ -194,19 +210,17 @@ func TestReadLimitsFromRLP(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(subT *testing.T) {
-			limits := ReadLimitsFromRLP(tc.rlp)
+			rateLimits := LimitadorRateLimitsFromRLP(tc.rlp)
 			// Instead of sorting to compare, check len and then iterate
-			if len(limits) != len(tc.expectedLimits) {
-				subT.Errorf("expected limits len (%d), got (%d)", len(tc.expectedLimits), len(limits))
+			if len(rateLimits) != len(tc.expected) {
+				subT.Errorf("expected limits len (%d), got (%d)", len(tc.expected), len(rateLimits))
 			}
 			// When both slices have equal length, items can be checked one by one.
-			for idx := range limits {
-				_, ok := common.Find(tc.expectedLimits, func(expectedLimit Limit) bool {
-					return reflect.DeepEqual(limits[idx], expectedLimit)
-				})
-
-				if !ok {
-					subT.Errorf("returned limit (%+v) not in expected ones", limits[idx])
+			for _, rl := range rateLimits {
+				if _, found := common.Find(tc.expected, func(expectedRateLimit limitadorv1alpha1.RateLimit) bool {
+					return reflect.DeepEqual(rl, expectedRateLimit)
+				}); !found {
+					subT.Errorf("returned rate limit (%+v) not within expected ones, expected: %v", rl, tc.expected)
 				}
 			}
 		})
@@ -296,7 +310,7 @@ func TestConvertRateIntoSeconds(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(subT *testing.T) {
-			maxValue, seconds := ConvertRateIntoSeconds(tc.rate)
+			maxValue, seconds := rateToSeconds(tc.rate)
 			if maxValue != tc.expectedMaxValue {
 				subT.Errorf("maxValue does not match, expected(%d), got (%d)", tc.expectedMaxValue, maxValue)
 			}

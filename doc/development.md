@@ -9,7 +9,6 @@
    * [Build custom OLM catalog](#build-custom-olm-catalog)
       * [Build kuadrant operator bundle image](#build-kuadrant-operator-bundle-image)
       * [Build custom catalog](#build-custom-catalog)
-      * [Deploy kuadrant operator using OLM](#deploy-kuadrant-operator-using-olm-1)
    * [Cleaning up](#cleaning-up)
    * [Run tests](#run-tests)
       * [Unit tests](#unittests)
@@ -89,9 +88,9 @@ make install-olm
 
 Deploy kuadrant using OLM. The `make deploy-catalog` target accepts the following variables:
 
-| **Makefile Variable** | **Description** | **Default value** |
-| --- | --- | --- |
-| `CATALOG_IMG` | Kuadrant operator catalog image URL | `quay.io/kuadrant/kuadrant-operator-catalog:latest` |
+| **Makefile Variable** | **Description**                     | **Default value**                                   |
+|-----------------------|-------------------------------------|-----------------------------------------------------|
+| `CATALOG_IMG`         | Kuadrant operator catalog image URL | `quay.io/kuadrant/kuadrant-operator-catalog:latest` |
 
 ```sh
 make deploy-catalog [CATALOG_IMG=quay.io/kuadrant/kuadrant-operator-catalog:latest]
@@ -130,9 +129,9 @@ make bundle [IMG=quay.io/kuadrant/kuadrant-operator:latest] \
 
 * Build the bundle image from the manifests
 
-| **Makefile Variable** | **Description** | **Default value** |
-| --- | --- | --- |
-| `BUNDLE_IMG` | Kuadrant operator bundle image URL | `quay.io/kuadrant/kuadrant-operator-bundle:latest` |
+| **Makefile Variable** | **Description**                    | **Default value**                                  |
+|-----------------------|------------------------------------|----------------------------------------------------|
+| `BUNDLE_IMG`          | Kuadrant operator bundle image URL | `quay.io/kuadrant/kuadrant-operator-bundle:latest` |
 
 ```sh
 make bundle-build [BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest]
@@ -140,9 +139,9 @@ make bundle-build [BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest]
 
 * Push the bundle image to a registry
 
-| **Makefile Variable** | **Description** | **Default value** |
-| --- | --- | --- |
-| `BUNDLE_IMG` | Kuadrant operator bundle image URL | `quay.io/kuadrant/kuadrant-operator-bundle:latest` |
+| **Makefile Variable** | **Description**                    | **Default value**                                  |
+|-----------------------|------------------------------------|----------------------------------------------------|
+| `BUNDLE_IMG`          | Kuadrant operator bundle image URL | `quay.io/kuadrant/kuadrant-operator-bundle:latest` |
 
 ```sh
 make bundle-push [BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest]
@@ -150,7 +149,7 @@ make bundle-push [BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest]
 
 Frequently, you may need to build custom kuadrant bundle with the default (`latest`) Limitador and
 Authorino bundles. These are the example commands to build the manifests, build the bundle image
-and push to the regitry.
+and push to the registry.
 
 In the example, a new kuadrant operator bundle version `0.8.0` will be created that references
 the kuadrant operator image `quay.io/kuadrant/kuadrant-operator:v0.5.0` and latest Limitador and
@@ -169,17 +168,17 @@ make bundle-push BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:my-bundle
 
 ### Build custom catalog
 
-The catalog's format will be [File-based Catalg](https://olm.operatorframework.io/docs/reference/file-based-catalogs/).
+The catalog's format will be [File-based Catalog](https://olm.operatorframework.io/docs/reference/file-based-catalogs/).
 
 Make sure all the required bundles are pushed to the registry. It is required by the `opm` tool.
 
 The `make catalog` target accepts the following variables:
 
-| **Makefile Variable** | **Description** | **Default value** |
-| --- | --- | --- |
-| `BUNDLE_IMG` | Kuadrant operator bundle image URL | `quay.io/kuadrant/kuadrant-operator-bundle:latest` |
-| `LIMITADOR_OPERATOR_BUNDLE_IMG` | Limitador operator bundle URL | `quay.io/kuadrant/limitador-operator-bundle:latest` |
-| `AUTHORINO_OPERATOR_BUNDLE_IMG` | Authorino operator bundle URL | `quay.io/kuadrant/authorino-operator-bundle:latest` |
+| **Makefile Variable**           | **Description**                    | **Default value**                                   |
+|---------------------------------|------------------------------------|-----------------------------------------------------|
+| `BUNDLE_IMG`                    | Kuadrant operator bundle image URL | `quay.io/kuadrant/kuadrant-operator-bundle:latest`  |
+| `LIMITADOR_OPERATOR_BUNDLE_IMG` | Limitador operator bundle URL      | `quay.io/kuadrant/limitador-operator-bundle:latest` |
+| `AUTHORINO_OPERATOR_BUNDLE_IMG` | Authorino operator bundle URL      | `quay.io/kuadrant/authorino-operator-bundle:latest` |
 
 ```sh
 make catalog [BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest] \
@@ -189,9 +188,9 @@ make catalog [BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest] \
 
 * Build the catalog image from the manifests
 
-| **Makefile Variable** | **Description** | **Default value** |
-| --- | --- | --- |
-| `CATALOG_IMG` | Kuadrant operator catalog image URL | `quay.io/kuadrant/kuadrant-operator-catalog:latest` |
+| **Makefile Variable** | **Description**                     | **Default value**                                   |
+|-----------------------|-------------------------------------|-----------------------------------------------------|
+| `CATALOG_IMG`         | Kuadrant operator catalog image URL | `quay.io/kuadrant/kuadrant-operator-catalog:latest` |
 
 ```sh
 make catalog-build [CATALOG_IMG=quay.io/kuadrant/kuadrant-operator-catalog:latest]

@@ -4,7 +4,7 @@ This user guide shows how to configure rate limiting for one of the subdomains.
 
 ### Clone the project
 
-```
+```sh
 git clone https://github.com/Kuadrant/kuadrant-operator
 ```
 
@@ -13,13 +13,13 @@ git clone https://github.com/Kuadrant/kuadrant-operator
 This step creates a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
 then it installs Istio, Kubernetes Gateway API and kuadrant.
 
-```
+```sh
 make local-setup
 ```
 
 ### Apply Kuadrant CR
 
-```yaml
+```sh
 kubectl -n kuadrant-system apply -f - <<EOF
 ---
 apiVersion: kuadrant.io/v1beta1
@@ -32,7 +32,7 @@ EOF
 
 ### Deploy toystore example deployment
 
-```
+```sh
 kubectl apply -f examples/toystore/toystore.yaml
 ```
 
@@ -40,7 +40,7 @@ kubectl apply -f examples/toystore/toystore.yaml
 
 ![](https://i.imgur.com/rdN8lo3.png)
 
-```yaml
+```sh
 kubectl apply -f - <<EOF
 ---
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -68,7 +68,7 @@ EOF
 
 ### Check `toystore` HTTPRoute works
 
-```
+```sh
 curl -v -H 'Host: api.toystore.com' http://localhost:9080/toy
 ```
 
@@ -88,12 +88,12 @@ kubectl port-forward -n istio-system service/istio-ingressgateway 9080:80 &
 
 RateLimitPolicy applied for the `toystore` HTTPRoute.
 
-| Hostname | Rate Limits |
-| ------------- | -----: |
+| Hostname                    |                        Rate Limits |
+|-----------------------------|-----------------------------------:|
 | `rate-limited.toystore.com` | **5** reqs / **10** secs (0.5 rps) |
-| `*.toystore.com` | not rate limited |
+| `*.toystore.com`            |                   not rate limited |
 
-```yaml
+```sh
 kubectl apply -f - <<EOF
 ---
 apiVersion: kuadrant.io/v1beta1
@@ -126,12 +126,12 @@ EOF
 
 Only 5 requests every 10 secs on `rate-limited.toystore.com` allowed.
 
-```
+```sh
 curl -v -H 'Host: rate-limited.toystore.com' http://localhost:9080/toy
 ```
 
 Whereas `other.toystore.com` is not rate limited.
 
-```
+```sh
 curl -v -H 'Host: other.toystore.com' http://localhost:9080/toy
 ```

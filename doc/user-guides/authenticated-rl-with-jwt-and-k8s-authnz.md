@@ -10,32 +10,24 @@ based on Kubernetes RBAC, with permissions (bindings) stored as Kubernetes Roles
 - [kubectl](https://kubernetes.io/docs/reference/kubectl/) command-line tool
 - [jq](https://stedolan.github.io/jq/)
 
-## Run the guide ❶ → ❼
+## Run the guide ❶ → ❽
 
-### ❶ Setup the environment
-
-Clone the project:
+### ❶ Clone the project
 
 ```sh
 git clone https://github.com/Kuadrant/kuadrant-operator && cd kuadrant-operator
 ```
 
-Spin-up the cluster with all dependencies installed:
+### ❷ Setup environment
+
+This step creates a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
+then it installs Istio, Kubernetes Gateway API and kuadrant.
 
 ```sh
-make local-env-setup deploy
+make local-setup
 ```
 
-<details>
-  <summary>🤔 What exactly does the step above do?</summary>
-
-  1. Creates a containerized Kuberentes server using [Kind](https://kind.sigs.k8s.io/)
-  2. Installs [Istio](https://istio.io)
-  3. Installs Kuberentes [Gateway API](https://gateway-api.sigs.k8s.io/concepts/api-overview)
-  4. Installs the Kuadrant system (CRDs and operators)
-</details>
-
-### ❷ Deploy the API
+### ❸ Deploy the API
 
 Deploy the application in the `default` namespace:
 
@@ -49,12 +41,6 @@ Create the `HTTPRoute`:
 kubectl apply -f examples/toystore/httproute.yaml
 ```
 
-Expose the API:
-
-```sh
-kubectl port-forward -n istio-system service/istio-ingressgateway 9080:80 2>&1 >/dev/null &
-```
-
 #### API lifecycle
 
 ![Lifecycle](http://www.plantuml.com/plantuml/png/hP7DIWD1383l-nHXJ_PGtFuSIsaH1F5WGRtjPJgJjg6pcPB9WFNf7LrXV_Ickp0Gyf5yIJPHZMXgV17Fn1SZfW671vEylk2RRZqTkK5MiFb1wL4I4hkx88m2iwee1AqQFdg4ShLVprQt-tNDszq3K8J45mcQ0NGrj_yqVpNFgmgU7aim0sPKQzxMUaQRXFGAqPwmGJW40JqXv1urHpMA3eZ1C9JbDkbf5ppPQrdMV9CY2XmC-GWQmEGaif8rYfFEPLdDu9K_aq7e7TstLPyUcot-RERnI0fVVjxOSuGBIaCnKk21sWBkW-p9EUJMgnCTIot_Prs3kJFceEiu-VM2uLmKlIl2TFrZVQCu8yD9kg1Dvf8RP9SQ_m40)
@@ -66,19 +52,29 @@ curl -H 'Host: api.toystore.com' http://localhost:9080/toy -i
 # HTTP/1.1 200 OK
 ```
 
-### ❸ Request the Kuadrant instance
+It should return `200 OK`.
+
+**Note**: This only works out of the box on linux environments. If not on linux,
+you may need to forward ports
+
+```bash
+kubectl port-forward -n istio-system service/istio-ingressgateway 9080:80 &
+```
+
+### ❹ Request the Kuadrant instance
 
 ```sh
-kubectl apply -f -<<EOF
+kubectl -n kuadrant-system apply -f - <<EOF
+---
 apiVersion: kuadrant.io/v1beta1
 kind: Kuadrant
 metadata:
-  name: kuadrant
+  name: kuadrant-sample
 spec: {}
 EOF
 ```
 
-### ❹ Deploy Keycloak
+### ❺ Deploy Keycloak
 
 Create the namesapce:
 
@@ -94,12 +90,12 @@ kubectl apply -n keycloak -f https://raw.githubusercontent.com/Kuadrant/authorin
 
 The step above deploys Keycloak with a [preconfigured](https://github.com/kuadrant/authorino-examples#keycloak) realm and a couple of clients and users created.
 
-The Keycloak server may take a couple minutes to be ready.
+The Keycloak server may take a couple of minutes to be ready.
 
-### ❺ Create the `AuthPolicy`
+### ❻ Create the `AuthPolicy`
 
 ```sh
-kubectl apply -f -<<EOF
+kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta1
 kind: AuthPolicy
 metadata:
@@ -118,6 +114,10 @@ spec:
         kubernetes:
           audiences:
             - https://kubernetes.default.svc.cluster.local
+        extendedProperties:
+          - name: sub
+            valueFrom:
+              authJSON: auth.identity.user.username
     authorization:
       - name: k8s-rbac
         kubernetes:
@@ -164,7 +164,7 @@ curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http:/
 Create a Kubernetes Service Account to represent a user belonging to the other source of identities:
 
 ```sh
-kubectl apply -f -<<EOF
+kubectl apply -f - <<EOF
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -172,7 +172,7 @@ metadata:
 EOF
 ```
 
-Obtain an aaccess token for the `client-app-1` service account:
+Obtain an access token for the `client-app-1` service account:
 
 ```sh
 SA_TOKEN=$(kubectl create token client-app-1)
@@ -185,12 +185,12 @@ curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://loc
 # HTTP/1.1 403 Forbidden
 ```
 
-### ❻ Grant access to the API
+### ❼ Grant access to the API
 
 Create the `toystore-reader` and `toystore-writer` roles:
 
 ```sh
-kubectl apply -f -<<EOF
+kubectl apply -f - <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -212,7 +212,7 @@ EOF
 Add permissions to the users and service accounts:
 
 ```sh
-kubectl apply -f -<<EOF
+kubectl apply -f - <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -243,7 +243,7 @@ EOF
 ```
 
 <details>
-  <summary>🤔 Can I use <code>Roles</code> and <code>RoleBindings</code> instead of <code>ClusterRoles</code> and <code>ClusterRoleBindings</code>?</summary>
+  <summary>Can I use <code>Roles</code> and <code>RoleBindings</code> instead of <code>ClusterRoles</code> and <code>ClusterRoleBindings</code>?</summary>
 
   Yes, you can.
 
@@ -279,10 +279,10 @@ curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' -X POST ht
 # HTTP/1.1 403 Forbidden
 ```
 
-### ❼ Create the `RateLimitPolicy`
+### ❽ Create the `RateLimitPolicy`
 
 ```sh
-kubectl apply -f -<<EOF
+kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta1
 kind: RateLimitPolicy
 metadata:
@@ -314,7 +314,7 @@ spec:
 EOF
 ```
 
-> **Note:** It may take a couple minutes for the RateLimitPolicy to be applied depending on your cluster.
+> **Note:** It may take a couple of minutes for the RateLimitPolicy to be applied depending on your cluster.
 
 #### Try the API rate limited
 

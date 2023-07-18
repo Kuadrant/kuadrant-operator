@@ -211,10 +211,15 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 		}
 		route.Spec.Hostnames = hostnames
 
+		rules := rlptools.WasmRules(&rlp, &route)
+		if len(rules) == 0 {
+			continue // no need to add the policy if there are no rules; a rlp can return no rules if all its limits fail to match any route rule
+		}
+
 		wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, wasm.RateLimitPolicy{
 			Name:      rlpKey.String(),
 			Domain:    common.MarshallNamespace(gw.Key(), string(hostnames[0])), // TODO(guicassolato): https://github.com/Kuadrant/kuadrant-operator/issues/201. Meanwhile, we are using the first hostname so it matches at least one set of limit definitions in the Limitador CR
-			Rules:     rlptools.WasmRules(&rlp, &route),
+			Rules:     rules,
 			Hostnames: common.HostnamesToStrings(hostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
 			Service:   common.KuadrantRateLimitClusterName,
 		})

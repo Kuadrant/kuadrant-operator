@@ -22,6 +22,8 @@ var (
 )
 
 // WasmRules computes WASM rules from the policy and the targeted route.
+// It returns an empty list of wasm rules if the policy specifies no limits or if all limits specified in the policy
+// fail to match any route rule according to the limits route selectors.
 func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []wasm.Rule {
 	rules := make([]wasm.Rule, 0)
 	if rlp == nil {
@@ -34,8 +36,6 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HT
 		rule, err := ruleFromLimit(limitFullName, &limit, route)
 		if err == nil {
 			rules = append(rules, rule)
-		} else {
-			// TODO(guicassolato): log the error
 		}
 	}
 

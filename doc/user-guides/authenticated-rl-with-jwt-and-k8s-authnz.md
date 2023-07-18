@@ -114,6 +114,10 @@ spec:
         kubernetes:
           audiences:
             - https://kubernetes.default.svc.cluster.local
+        extendedProperties:
+          - name: sub
+            valueFrom:
+              authJSON: auth.identity.user.username
     authorization:
       - name: k8s-rbac
         kubernetes:

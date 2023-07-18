@@ -1,4 +1,4 @@
-## Authenticated Rate Limit For API Owners
+# Authenticated Rate Limit For API Owners
 
 This user guide shows how to configure authenticated rate limiting.
 Authenticated rate limiting allows to specify rate limiting configurations
@@ -7,8 +7,8 @@ Authentication method used will be the API key.
 
 ### Clone the project
 
-```
-git clone https://github.com/Kuadrant/kuadrant-operator
+```sh
+git clone https://github.com/Kuadrant/kuadrant-operator && cd kuadrant-operator
 ```
 
 ### Setup environment
@@ -22,7 +22,7 @@ make local-setup
 
 ### Apply Kuadrant CR
 
-```yaml
+```sh
 kubectl -n kuadrant-system apply -f - <<EOF
 ---
 apiVersion: kuadrant.io/v1beta1
@@ -43,7 +43,7 @@ kubectl apply -f examples/toystore/toystore.yaml
 
 ![](https://i.imgur.com/rdN8lo3.png)
 
-```yaml
+```sh
 kubectl apply -f - <<EOF
 ---
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -86,8 +86,8 @@ kubectl port-forward -n istio-system service/istio-ingressgateway 9080:80 &
 
 ### Create API keys for user `Bob` and `Alice`
 
-```yaml
-kubectl apply -f -<<EOF
+```sh
+kubectl apply -f - <<EOF
 ---
 apiVersion: v1
 kind: Secret
@@ -119,7 +119,7 @@ EOF
 
 ### Create Kuadrant's `AuthPolicy` to configure API key based authentication
 
-```yaml
+```sh
 kubectl apply -f - <<EOF
 ---
 apiVersion: kuadrant.io/v1beta1
@@ -161,13 +161,13 @@ EOF
 
 ![](https://i.imgur.com/2A9sXXs.png)
 
-| User | Rate Limits |
-| ------------- | -----: |
-| `Bob` | **2** reqs / **10** secs (0.2 rps) |
+| User    |                        Rate Limits |
+|---------|-----------------------------------:|
+| `Bob`   | **2** reqs / **10** secs (0.2 rps) |
 | `Alice` | **5** reqs / **10** secs (0.5 rps) |
 
-```yaml
-kubectl apply -f -<<EOF
+```sh
+kubectl apply -f - <<EOF
 ---
 apiVersion: kuadrant.io/v1beta1
 kind: RateLimitPolicy
@@ -209,12 +209,12 @@ EOF
 
 Only 2 requests every 10 allowed for Bob.
 
-```
+```sh
 curl -v -H 'Authorization: APIKEY IAMBOB' -H 'Host: api.toystore.com' http://localhost:9080/toy
 ```
 
 Only 5 requests every 10 allowed for Alice.
 
-```
+```sh
 curl -v -H 'Authorization: APIKEY IAMALICE' -H 'Host: api.toystore.com' http://localhost:9080/toy
 ```

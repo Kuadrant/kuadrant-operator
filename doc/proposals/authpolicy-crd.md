@@ -9,14 +9,14 @@ The new [GatewayAPI](https://gateway-api.sigs.k8s.io/) defines a standard [polic
 ## Goals
 
 With `targetRef`  from policy attachment concept, following are the goals:
-- Application developer should be able target [`HTTPRoute`](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.HTTPRoute) object in their own namespace. This will define authorization policy at the hostname/domain/vHost level.
+- Application developer should be able to target [`HTTPRoute`](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.HTTPRoute) object in their own namespace. This will define authorization policy at the hostname/domain/vHost level.
 - Cluster operator should be able to target [`Gateway`](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.Gateway) object along with HTTPRoute in the gateway's namespace. This will define policy at the <ins>listener</ins> level.
 - To reduce context sharing at the gateway and external authorization provider, action type and auth-provider are defaulted to `CUSTOM` and authorino respectively.
 
 ## Proposed Solution
 Following is the proposed new CRD that combines policy attachment concepts with Istio's AuthorizationPolicy:
 
-```yaml=
+```yaml
 apiVersion: kuadrant.io/v1beta1
 kind: AuthPolicy
 metadata:
@@ -50,7 +50,7 @@ status:
       reason: HTTPRouteProtected/GatewayProtected/Error
       status: "True" | "False"
       type: Available
-    observedGeneration: 1
+  observedGeneration: 1
 ```
 
 ### Target Reference
@@ -84,7 +84,7 @@ status:
 - `methods`: a method matches over request method like `DELETE`.
 
 Fields in a rule object are ANDed together but inner fields follow OR semantics. For example,
-```
+```yaml
 hosts: ["*.toystore.com"]
 methods: ["GET", "POST"]
 paths: ["/admin"]
@@ -100,7 +100,7 @@ AuthScheme is embedded form of [Authorino's AuthConfig](https://github.com/Kuadr
 
 The example AuthPolicy showed above will create the following AuthConfig:
 
-```yaml=
+```yaml
 apiVersion: authorino.kuadrant.io/v1beta1
 kind: AuthConfig
 metadata:

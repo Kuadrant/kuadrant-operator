@@ -3,13 +3,13 @@
 package rlptools
 
 import (
-	"reflect"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	"github.com/google/go-cmp/cmp"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
@@ -19,7 +19,10 @@ import (
 func TestWasmRules(t *testing.T) {
 	httpRoute := &gatewayapiv1beta1.HTTPRoute{
 		Spec: gatewayapiv1beta1.HTTPRouteSpec{
-			Hostnames: []gatewayapiv1beta1.Hostname{"*.example.com"},
+			Hostnames: []gatewayapiv1beta1.Hostname{
+				"*.example.com",
+				"*.apps.example.internal",
+			},
 			Rules: []gatewayapiv1beta1.HTTPRouteRule{
 				{
 					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
@@ -36,59 +39,300 @@ func TestWasmRules(t *testing.T) {
 		},
 	}
 
-	t.Run("minimal RLP", func(subT *testing.T) {
-		rlp := &kuadrantv1beta2.RateLimitPolicy{
-			TypeMeta: metav1.TypeMeta{
-				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String()},
-			ObjectMeta: metav1.ObjectMeta{Name: "rlpA", Namespace: "nsA"},
+	catchAllHTTPRoute := &gatewayapiv1beta1.HTTPRoute{
+		Spec: gatewayapiv1beta1.HTTPRouteSpec{
+			Hostnames: []gatewayapiv1beta1.Hostname{"*"},
+		},
+	}
+
+	rlp := func(name string, limits map[string]kuadrantv1beta2.Limit) *kuadrantv1beta2.RateLimitPolicy {
+		return &kuadrantv1beta2.RateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: "my-app",
+			},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				Limits: map[string]kuadrantv1beta2.Limit{
-					"l1": kuadrantv1beta2.Limit{
-						Rates: []kuadrantv1beta2.Rate{
-							{
-								Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+				Limits: limits,
+			},
+		}
+	}
+
+	// a simple 50rps counter, for convinience, to be used in tests
+	counter50rps := kuadrantv1beta2.Rate{
+		Limit:    50,
+		Duration: 1,
+		Unit:     kuadrantv1beta2.TimeUnit("second"),
+	}
+
+	testCases := []struct {
+		name          string
+		rlp           *kuadrantv1beta2.RateLimitPolicy
+		route         *gatewayapiv1beta1.HTTPRoute
+		expectedRules []wasm.Rule
+	}{
+		{
+			name: "minimal RLP",
+			rlp: rlp("minimal", map[string]kuadrantv1beta2.Limit{
+				"50rps": {
+					Rates: []kuadrantv1beta2.Rate{counter50rps},
+				},
+			}),
+			route: httpRoute,
+			expectedRules: []wasm.Rule{
+				{
+					Conditions: []wasm.Condition{
+						{
+							AllOf: []wasm.PatternExpression{
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Value:    "/toy",
+								},
+								{
+									Selector: "request.method",
+									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Value:    "GET",
+								},
+							},
+						},
+					},
+					Data: []wasm.DataItem{
+						{
+							Static: &wasm.StaticSpec{
+								Key:   "my-app/minimal/50rps",
+								Value: "1",
 							},
 						},
 					},
 				},
 			},
-		}
-
-		expectedRule := wasm.Rule{
-			Conditions: []wasm.Condition{
-				{
-					AllOf: []wasm.PatternExpression{
+		},
+		{
+			name: "RLP with route selector based on hostname",
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+				"50rps-for-selected-hostnames": {
+					Rates: []kuadrantv1beta2.Rate{counter50rps},
+					RouteSelectors: []kuadrantv1beta2.RouteSelector{
 						{
-							Selector: "request.url_path",
-							Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
-							Value:    "/toy",
+							Hostnames: []gatewayapiv1beta1.Hostname{
+								"*.example.com",
+								"myapp.apps.example.com", // ignored
+							},
 						},
+					},
+				},
+			}),
+			route: httpRoute,
+			expectedRules: []wasm.Rule{
+				{
+					Conditions: []wasm.Condition{
 						{
-							Selector: "request.method",
-							Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
-							Value:    "GET",
+							AllOf: []wasm.PatternExpression{
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Value:    "/toy",
+								},
+								{
+									Selector: "request.method",
+									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Value:    "GET",
+								},
+								{
+									Selector: "request.host",
+									Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
+									Value:    ".example.com",
+								},
+							},
+						},
+					},
+					Data: []wasm.DataItem{
+						{
+							Static: &wasm.StaticSpec{
+								Key:   "my-app/my-rlp/50rps-for-selected-hostnames",
+								Value: "1",
+							},
 						},
 					},
 				},
 			},
-			Data: []wasm.DataItem{
+		},
+		{
+			name: "RLP with route selector based on http route matches (full match)",
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+				"50rps-for-selected-route": {
+					Rates: []kuadrantv1beta2.Rate{counter50rps},
+					RouteSelectors: []kuadrantv1beta2.RouteSelector{
+						{
+							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+								{
+									Path: &gatewayapiv1beta1.HTTPPathMatch{
+										Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
+										Value: &[]string{"/toy"}[0],
+									},
+									Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethod("GET")}[0],
+								},
+							},
+						},
+					},
+				},
+			}),
+			route: httpRoute,
+			expectedRules: []wasm.Rule{
 				{
-					Static: &wasm.StaticSpec{
-						Key:   "nsA/rlpA/l1",
-						Value: "1",
+					Conditions: []wasm.Condition{
+						{
+							AllOf: []wasm.PatternExpression{
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Value:    "/toy",
+								},
+								{
+									Selector: "request.method",
+									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Value:    "GET",
+								},
+							},
+						},
+					},
+					Data: []wasm.DataItem{
+						{
+							Static: &wasm.StaticSpec{
+								Key:   "my-app/my-rlp/50rps-for-selected-route",
+								Value: "1",
+							},
+						},
 					},
 				},
 			},
-		}
+		},
+		{
+			name: "RLP with route selector based on http route matches (partial match)",
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+				"50rps-for-selected-path": {
+					Rates: []kuadrantv1beta2.Rate{counter50rps},
+					RouteSelectors: []kuadrantv1beta2.RouteSelector{
+						{
+							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+								{
+									Path: &gatewayapiv1beta1.HTTPPathMatch{
+										Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
+										Value: &[]string{"/toy"}[0],
+									},
+								},
+							},
+						},
+					},
+				},
+			}),
+			route: httpRoute,
+			expectedRules: []wasm.Rule{
+				{
+					Conditions: []wasm.Condition{
+						{
+							AllOf: []wasm.PatternExpression{
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Value:    "/toy",
+								},
+								{
+									Selector: "request.method",
+									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Value:    "GET",
+								},
+							},
+						},
+					},
+					Data: []wasm.DataItem{
+						{
+							Static: &wasm.StaticSpec{
+								Key:   "my-app/my-rlp/50rps-for-selected-path",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "RLP with mismatching route selectors",
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+				"50rps-for-non-existent-route": {
+					Rates: []kuadrantv1beta2.Rate{counter50rps},
+					RouteSelectors: []kuadrantv1beta2.RouteSelector{
+						{
+							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+								{
+									Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethod("POST")}[0],
+								},
+							},
+						},
+					},
+				},
+			}),
+			route:         httpRoute,
+			expectedRules: []wasm.Rule{},
+		},
+		{
+			name: "HTTPRouteRules without rule matches",
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+				"50rps": {
+					Rates: []kuadrantv1beta2.Rate{counter50rps},
+				},
+			}),
+			route: catchAllHTTPRoute,
+			expectedRules: []wasm.Rule{
+				{
+					Conditions: nil,
+					Data: []wasm.DataItem{
+						{
+							Static: &wasm.StaticSpec{
+								Key:   "my-app/my-rlp/50rps",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "RLP with counter qualifier",
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+				"50rps-per-username": {
+					Rates:    []kuadrantv1beta2.Rate{counter50rps},
+					Counters: []kuadrantv1beta2.ContextSelector{"auth.identity.username"},
+				},
+			}),
+			route: catchAllHTTPRoute,
+			expectedRules: []wasm.Rule{
+				{
+					Conditions: nil,
+					Data: []wasm.DataItem{
+						{
+							Static: &wasm.StaticSpec{
+								Key:   "my-app/my-rlp/50rps-per-username",
+								Value: "1",
+							},
+						},
+						{
+							Selector: &wasm.SelectorSpec{
+								Selector: "auth.identity.username",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 
-		rules := WasmRules(rlp, httpRoute)
-		if len(rules) != 1 {
-			subT.Errorf("expected 1 rule, got (%d)", len(rules))
-		}
-
-		if !reflect.DeepEqual(rules[0], expectedRule) {
-			diff := cmp.Diff(rules[0], expectedRule)
-			subT.Errorf("expected rule not found: %s", diff)
-		}
-	})
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			computedRules := WasmRules(tc.rlp, tc.route)
+			if diff := cmp.Diff(tc.expectedRules, computedRules); diff != "" {
+				t.Errorf("unexpected wasm rules (-want +got):\n%s", diff)
+			}
+		})
+	}
 }

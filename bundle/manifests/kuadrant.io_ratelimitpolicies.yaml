@@ -270,6 +270,7 @@ spec:
                             - eq
                             - neq
                             - startswith
+                            - endswith
                             - incl
                             - excl
                             - matches

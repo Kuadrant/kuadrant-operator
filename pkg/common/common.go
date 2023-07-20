@@ -47,6 +47,10 @@ type KuadrantPolicy interface {
 	GetRulesHostnames() []string
 }
 
+func Ptr[T any](t T) *T {
+	return &t
+}
+
 // FetchEnv fetches the value of the environment variable with the specified key,
 // or returns the default value if the variable is not found or has an empty value.
 // If an error occurs during the lookup, the function returns the default value.
@@ -87,13 +91,51 @@ func NamespacedNameToObjectKey(namespacedName, defaultNamespace string) client.O
 
 // Contains checks if the given target string is present in the slice of strings 'slice'.
 // It returns true if the target string is found in the slice, false otherwise.
-func Contains(slice []string, target string) bool {
+func Contains[T comparable](slice []T, target T) bool {
 	for idx := range slice {
 		if slice[idx] == target {
 			return true
 		}
 	}
 	return false
+}
+
+// SameElements checks if the two slices contain the exact same elements. Order does not matter.
+func SameElements[T comparable](s1, s2 []T) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+	for _, v := range s1 {
+		if !Contains(s2, v) {
+			return false
+		}
+	}
+	return true
+}
+
+func Intersect[T comparable](slice1, slice2 []T) bool {
+	for _, item := range slice1 {
+		if Contains(slice2, item) {
+			return true
+		}
+	}
+	return false
+}
+
+func Intersection[T comparable](slice1, slice2 []T) []T {
+	smallerSlice := slice1
+	largerSlice := slice2
+	if len(slice1) > len(slice2) {
+		smallerSlice = slice2
+		largerSlice = slice1
+	}
+	var result []T
+	for _, item := range smallerSlice {
+		if Contains(largerSlice, item) {
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 func Find[T any](slice []T, match func(T) bool) (*T, bool) {
@@ -110,6 +152,17 @@ func Map[T, U any](slice []T, f func(T) U) []U {
 	arr := make([]U, len(slice))
 	for i, e := range slice {
 		arr[i] = f(e)
+	}
+	return arr
+}
+
+// Filter filters the input slice using the given predicate function and returns a new slice with the results.
+func Filter[T any](slice []T, f func(T) bool) []T {
+	arr := make([]T, 0)
+	for _, e := range slice {
+		if f(e) {
+			arr = append(arr, e)
+		}
 	}
 	return arr
 }
@@ -192,11 +245,9 @@ func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 
 // HostnamesToStrings converts []gatewayapi_v1alpha2.Hostname to []string
 func HostnamesToStrings(hostnames []gatewayapiv1beta1.Hostname) []string {
-	hosts := make([]string, len(hostnames))
-	for i, h := range hostnames {
-		hosts[i] = string(h)
-	}
-	return hosts
+	return Map(hostnames, func(hostname gatewayapiv1beta1.Hostname) string {
+		return string(hostname)
+	})
 }
 
 // ValidSubdomains returns (true, "") when every single subdomains item
@@ -220,4 +271,17 @@ func ValidSubdomains(domains, subdomains []string) (bool, string) {
 		}
 	}
 	return true, ""
+}
+
+// FilterValidSubdomains returns every subdomain that is a subset of at least one of the (super) domains specified in the first argument.
+func FilterValidSubdomains(domains, subdomains []gatewayapiv1beta1.Hostname) []gatewayapiv1beta1.Hostname {
+	arr := make([]gatewayapiv1beta1.Hostname, 0)
+	for _, subsubdomain := range subdomains {
+		if _, found := Find(domains, func(domain gatewayapiv1beta1.Hostname) bool {
+			return Name(subsubdomain).SubsetOf(Name(domain))
+		}); found {
+			arr = append(arr, subsubdomain)
+		}
+	}
+	return arr
 }

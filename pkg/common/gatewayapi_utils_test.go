@@ -241,6 +241,443 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 	}
 }
 
+func TestHTTPRouteRuleSelectorSelects(t *testing.T) {
+	testCases := []struct {
+		name     string
+		selector HTTPRouteRuleSelector
+		rule     gatewayapiv1beta1.HTTPRouteRule
+		expected bool
+	}{
+		{
+			name: "when the httproutrule contains the exact match then return true",
+			selector: HTTPRouteRuleSelector{
+				HTTPRouteMatch: &gatewayapiv1beta1.HTTPRouteMatch{
+					Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodGet}[0],
+					Headers: []gatewayapiv1beta1.HTTPHeaderMatch{
+						{
+							Type:  &[]gatewayapiv1beta1.HeaderMatchType{gatewayapiv1beta1.HeaderMatchExact}[0],
+							Name:  "someheader",
+							Value: "somevalue",
+						},
+					},
+				},
+			},
+			rule: gatewayapiv1beta1.HTTPRouteRule{
+				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+					{
+						Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodGet}[0],
+						Headers: []gatewayapiv1beta1.HTTPHeaderMatch{
+							{
+								Type:  &[]gatewayapiv1beta1.HeaderMatchType{gatewayapiv1beta1.HeaderMatchExact}[0],
+								Name:  "someheader",
+								Value: "somevalue",
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "when the httproutrule contains the exact match and more then return true",
+			selector: HTTPRouteRuleSelector{
+				HTTPRouteMatch: &gatewayapiv1beta1.HTTPRouteMatch{
+					Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodGet}[0],
+				},
+			},
+			rule: gatewayapiv1beta1.HTTPRouteRule{
+				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+					{
+						Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodGet}[0],
+						Headers: []gatewayapiv1beta1.HTTPHeaderMatch{
+							{
+								Type:  &[]gatewayapiv1beta1.HeaderMatchType{gatewayapiv1beta1.HeaderMatchExact}[0],
+								Name:  "someheader",
+								Value: "somevalue",
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "when the httproutrule contains all the matching headers and more then return true",
+			selector: HTTPRouteRuleSelector{
+				HTTPRouteMatch: &gatewayapiv1beta1.HTTPRouteMatch{
+					Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodGet}[0],
+					Headers: []gatewayapiv1beta1.HTTPHeaderMatch{
+						{
+							Type:  &[]gatewayapiv1beta1.HeaderMatchType{gatewayapiv1beta1.HeaderMatchExact}[0],
+							Name:  "someheader",
+							Value: "somevalue",
+						},
+					},
+				},
+			},
+			rule: gatewayapiv1beta1.HTTPRouteRule{
+				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+					{
+						Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodGet}[0],
+						Headers: []gatewayapiv1beta1.HTTPHeaderMatch{
+							{
+								Type:  &[]gatewayapiv1beta1.HeaderMatchType{gatewayapiv1beta1.HeaderMatchExact}[0],
+								Name:  "someheader",
+								Value: "somevalue",
+							},
+							{
+								Type:  &[]gatewayapiv1beta1.HeaderMatchType{gatewayapiv1beta1.HeaderMatchRegularExpression}[0],
+								Name:  "someotherheader",
+								Value: "someregex.*",
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "when the httproutrule contains an inexact match then return false",
+			selector: HTTPRouteRuleSelector{
+				HTTPRouteMatch: &gatewayapiv1beta1.HTTPRouteMatch{
+					Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodGet}[0],
+					Headers: []gatewayapiv1beta1.HTTPHeaderMatch{
+						{
+							Type:  &[]gatewayapiv1beta1.HeaderMatchType{gatewayapiv1beta1.HeaderMatchExact}[0],
+							Name:  "someheader",
+							Value: "somevalue",
+						},
+					},
+				},
+			},
+			rule: gatewayapiv1beta1.HTTPRouteRule{
+				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+					{
+						Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodPost}[0],
+						Headers: []gatewayapiv1beta1.HTTPHeaderMatch{
+							{
+								Type:  &[]gatewayapiv1beta1.HeaderMatchType{gatewayapiv1beta1.HeaderMatchExact}[0],
+								Name:  "someheader",
+								Value: "somevalue",
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "when the httproutrule is empty then return false",
+			rule: gatewayapiv1beta1.HTTPRouteRule{},
+			selector: HTTPRouteRuleSelector{
+				HTTPRouteMatch: &gatewayapiv1beta1.HTTPRouteMatch{
+					Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodGet}[0],
+				},
+			},
+			expected: false,
+		},
+		{
+			name:     "when the selector is empty then return true",
+			selector: HTTPRouteRuleSelector{},
+			rule: gatewayapiv1beta1.HTTPRouteRule{
+				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+					{
+						Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodGet}[0],
+						Headers: []gatewayapiv1beta1.HTTPHeaderMatch{
+							{
+								Type:  &[]gatewayapiv1beta1.HeaderMatchType{gatewayapiv1beta1.HeaderMatchExact}[0],
+								Name:  "someheader",
+								Value: "somevalue",
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if r := tc.selector.Selects(tc.rule); r != tc.expected {
+				expectedStr := ""
+				resultStr := "not"
+				if !tc.expected {
+					expectedStr = "not"
+					resultStr = ""
+				}
+				t.Error("expected selector", HTTPRouteMatchToString(*tc.selector.HTTPRouteMatch), expectedStr, "to select rule", HTTPRouteRuleToString(tc.rule), "but it does", resultStr)
+			}
+		})
+	}
+}
+
+func TestHTTPPathMatchToString(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    *gatewayapiv1beta1.HTTPPathMatch
+		expected string
+	}{
+		{
+			name: "exact path match",
+			input: &[]gatewayapiv1beta1.HTTPPathMatch{
+				{
+					Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchExact}[0],
+					Value: &[]string{"/foo"}[0],
+				},
+			}[0],
+			expected: "/foo",
+		},
+		{
+			name: "regex path match",
+			input: &[]gatewayapiv1beta1.HTTPPathMatch{
+				{
+					Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchRegularExpression}[0],
+					Value: &[]string{"^\\/foo.*"}[0],
+				},
+			}[0],
+			expected: "~/^\\/foo.*/",
+		},
+		{
+			name: "path prefix match",
+			input: &[]gatewayapiv1beta1.HTTPPathMatch{
+				{
+					Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
+					Value: &[]string{"/foo"}[0],
+				},
+			}[0],
+			expected: "/foo*",
+		},
+		{
+			name: "path match with default type",
+			input: &[]gatewayapiv1beta1.HTTPPathMatch{
+				{
+					Value: &[]string{"/foo"}[0],
+				},
+			}[0],
+			expected: "/foo*",
+		},
+		{
+			name:     "nil path match",
+			input:    nil,
+			expected: "*",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if r := HTTPPathMatchToString(tc.input); r != tc.expected {
+				t.Errorf("expected: %s, got: %s", tc.expected, r)
+			}
+		})
+	}
+}
+
+func TestHTTPHeaderMatchToString(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    gatewayapiv1beta1.HTTPHeaderMatch
+		expected string
+	}{
+		{
+			name: "exact header match",
+			input: gatewayapiv1beta1.HTTPHeaderMatch{
+				Type:  &[]gatewayapiv1beta1.HeaderMatchType{gatewayapiv1beta1.HeaderMatchExact}[0],
+				Name:  "some-header",
+				Value: "foo",
+			},
+			expected: "{some-header:foo}",
+		},
+		{
+			name: "regex header match",
+			input: gatewayapiv1beta1.HTTPHeaderMatch{
+				Type:  &[]gatewayapiv1beta1.HeaderMatchType{gatewayapiv1beta1.HeaderMatchRegularExpression}[0],
+				Name:  "some-header",
+				Value: "^foo.*",
+			},
+			expected: "{some-header:~/^foo.*/}",
+		},
+		{
+			name: "header match with default type",
+			input: gatewayapiv1beta1.HTTPHeaderMatch{
+				Name:  "some-header",
+				Value: "foo",
+			},
+			expected: "{some-header:foo}",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if r := HTTPHeaderMatchToString(tc.input); r != tc.expected {
+				t.Errorf("expected: %s, got: %s", tc.expected, r)
+			}
+		})
+	}
+}
+
+func TestHTTPQueryParamMatchToString(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    gatewayapiv1beta1.HTTPQueryParamMatch
+		expected string
+	}{
+		{
+			name: "exact query param match",
+			input: gatewayapiv1beta1.HTTPQueryParamMatch{
+				Type:  &[]gatewayapiv1beta1.QueryParamMatchType{gatewayapiv1beta1.QueryParamMatchExact}[0],
+				Name:  "some-param",
+				Value: "foo",
+			},
+			expected: "{some-param:foo}",
+		},
+		{
+			name: "regex query param match",
+			input: gatewayapiv1beta1.HTTPQueryParamMatch{
+				Type:  &[]gatewayapiv1beta1.QueryParamMatchType{gatewayapiv1beta1.QueryParamMatchRegularExpression}[0],
+				Name:  "some-param",
+				Value: "^foo.*",
+			},
+			expected: "{some-param:~/^foo.*/}",
+		},
+		{
+			name: "query param match with default type",
+			input: gatewayapiv1beta1.HTTPQueryParamMatch{
+				Name:  "some-param",
+				Value: "foo",
+			},
+			expected: "{some-param:foo}",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if r := HTTPQueryParamMatchToString(tc.input); r != tc.expected {
+				t.Errorf("expected: %s, got: %s", tc.expected, r)
+			}
+		})
+	}
+}
+
+func TestHTTPMethodToString(t *testing.T) {
+	testCases := []struct {
+		input    *gatewayapiv1beta1.HTTPMethod
+		expected string
+	}{
+		{
+			input:    &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodGet}[0],
+			expected: "GET",
+		},
+		{
+			input:    &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodHead}[0],
+			expected: "HEAD",
+		},
+		{
+			input:    &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodPost}[0],
+			expected: "POST",
+		},
+		{
+			input:    &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodPut}[0],
+			expected: "PUT",
+		},
+		{
+			input:    &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodPatch}[0],
+			expected: "PATCH",
+		},
+		{
+			input:    &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodDelete}[0],
+			expected: "DELETE",
+		},
+		{
+			input:    &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodConnect}[0],
+			expected: "CONNECT",
+		},
+		{
+			input:    &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodOptions}[0],
+			expected: "OPTIONS",
+		},
+		{
+			input:    &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodTrace}[0],
+			expected: "TRACE",
+		},
+		{
+			input:    nil,
+			expected: "*",
+		},
+	}
+	for _, tc := range testCases {
+		if r := HTTPMethodToString(tc.input); r != tc.expected {
+			t.Errorf("expected: %s, got: %s", tc.expected, r)
+		}
+	}
+}
+
+func TestHTTPRouteMatchToString(t *testing.T) {
+	match := gatewayapiv1beta1.HTTPRouteMatch{
+		Path: &gatewayapiv1beta1.HTTPPathMatch{
+			Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchExact}[0],
+			Value: &[]string{"/foo"}[0],
+		},
+		Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodGet}[0],
+		QueryParams: []gatewayapiv1beta1.HTTPQueryParamMatch{
+			{
+				Type:  &[]gatewayapiv1beta1.QueryParamMatchType{gatewayapiv1beta1.QueryParamMatchRegularExpression}[0],
+				Name:  "page",
+				Value: "\\d+",
+			},
+		},
+	}
+
+	expected := "{method:GET,path:/foo,queryParams:[{page:~/\\d+/}]}"
+
+	if r := HTTPRouteMatchToString(match); r != expected {
+		t.Errorf("expected: %s, got: %s", expected, r)
+	}
+
+	match.Headers = []gatewayapiv1beta1.HTTPHeaderMatch{
+		{
+			Name:  "x-foo",
+			Value: "bar",
+		},
+	}
+
+	expected = "{method:GET,path:/foo,queryParams:[{page:~/\\d+/}],headers:[{x-foo:bar}]}"
+
+	if r := HTTPRouteMatchToString(match); r != expected {
+		t.Errorf("expected: %s, got: %s", expected, r)
+	}
+}
+
+func TestHTTPRouteRuleToString(t *testing.T) {
+	rule := gatewayapiv1beta1.HTTPRouteRule{}
+
+	expected := "{matches:[]}"
+
+	if r := HTTPRouteRuleToString(rule); r != expected {
+		t.Errorf("expected: %s, got: %s", expected, r)
+	}
+
+	rule.Matches = []gatewayapiv1beta1.HTTPRouteMatch{
+		{
+			Path: &gatewayapiv1beta1.HTTPPathMatch{
+				Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchExact}[0],
+				Value: &[]string{"/foo"}[0],
+			},
+			Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethodGet}[0],
+			QueryParams: []gatewayapiv1beta1.HTTPQueryParamMatch{
+				{
+					Type:  &[]gatewayapiv1beta1.QueryParamMatchType{gatewayapiv1beta1.QueryParamMatchRegularExpression}[0],
+					Name:  "page",
+					Value: "\\d+",
+				},
+			},
+		},
+	}
+
+	expected = "{matches:[{method:GET,path:/foo,queryParams:[{page:~/\\d+/}]}]}"
+
+	if r := HTTPRouteRuleToString(rule); r != expected {
+		t.Errorf("expected: %s, got: %s", expected, r)
+	}
+}
+
 func TestGatewaysMissingPolicyRef(t *testing.T) {
 	gwList := &gatewayapiv1beta1.GatewayList{
 		Items: []gatewayapiv1beta1.Gateway{

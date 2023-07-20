@@ -25,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -40,13 +39,14 @@ import (
 // +kubebuilder:validation:MaxLength=253
 type ContextSelector string
 
-// +kubebuilder:validation:Enum:=eq;neq;startswith;incl;excl;matches
+// +kubebuilder:validation:Enum:=eq;neq;startswith;endswith;incl;excl;matches
 type WhenConditionOperator string
 
 const (
 	EqualOperator      WhenConditionOperator = "eq"
 	NotEqualOperator   WhenConditionOperator = "neq"
 	StartsWithOperator WhenConditionOperator = "startswith"
+	EndsWithOperator   WhenConditionOperator = "endswith"
 	IncludeOperator    WhenConditionOperator = "incl"
 	ExcludeOperator    WhenConditionOperator = "excl"
 	MatchesOperator    WhenConditionOperator = "matches"
@@ -81,20 +81,6 @@ type WhenCondition struct {
 
 	// The value of reference for the comparison.
 	Value string `json:"value"`
-}
-
-// RouteSelector defines semantics for matching an HTTP request based on conditions
-// https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
-type RouteSelector struct {
-	// Hostnames defines a set of hostname that should match against the HTTP Host header to select a HTTPRoute to process the request
-	// https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
-	// +optional
-	Hostnames []gatewayapiv1beta1.Hostname `json:"hostnames,omitempty"`
-
-	// Matches define conditions used for matching the rule against incoming HTTP requests.
-	// https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
-	// +optional
-	Matches []gatewayapiv1beta1.HTTPRouteMatch `json:"matches,omitempty"`
 }
 
 // Limit represents a complete rate limit configuration
@@ -195,6 +181,15 @@ func (r *RateLimitPolicy) Validate() error {
 
 	if r.Spec.TargetRef.Namespace != nil && string(*r.Spec.TargetRef.Namespace) != r.Namespace {
 		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *r.Spec.TargetRef.Namespace)
+	}
+
+	// prevents usage of routeSelectors in a gateway RLP
+	if r.Spec.TargetRef.Kind == gatewayapiv1alpha2.Kind("Gateway") {
+		for _, limit := range r.Spec.Limits {
+			if len(limit.RouteSelectors) > 0 {
+				return fmt.Errorf("route selectors not supported when targetting a Gateway")
+			}
+		}
 	}
 
 	return nil

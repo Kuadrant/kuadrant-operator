@@ -155,7 +155,7 @@ func (r *RateLimitPolicyReconciler) gatewayLimits(ctx context.Context,
 			limits["*"] = append(limits["*"], rlptools.ReadLimitsFromRLP(gwRLP)...)
 		} else {
 			for _, gwHostname := range gw.Hostnames() {
-				limits[gwHostname] = append(limits[gwHostname], rlptools.ReadLimitsFromRLP(gwRLP)...)
+				limits[string(gwHostname)] = append(limits[string(gwHostname)], rlptools.ReadLimitsFromRLP(gwRLP)...)
 			}
 		}
 	}

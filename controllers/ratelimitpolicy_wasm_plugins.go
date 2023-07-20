@@ -120,55 +120,73 @@ func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw co
 }
 
 // returns nil when there is no rate limit policy to apply
-func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
-	gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (*wasm.WASMPlugin, error) {
+func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (*wasm.WASMPlugin, error) {
 	logger, _ := logr.FromContext(ctx)
+	logger = logger.WithName("wasmPluginConfig").WithValues("gateway", gw.Key())
 
-	routeRLPList := make([]*kuadrantv1beta2.RateLimitPolicy, 0)
-	var gwRLP *kuadrantv1beta2.RateLimitPolicy
+	type store struct {
+		rlp   kuadrantv1beta2.RateLimitPolicy
+		route gatewayapiv1beta1.HTTPRoute
+		skip  bool
+	}
+	rlps := make(map[string]*store, len(rlpRefs))
+	routeKeys := make(map[string]struct{}, 0)
+	var gwRLPKey string
+
+	// store all rlps and find the one that targets the gateway (if there is one)
 	for _, rlpKey := range rlpRefs {
 		rlp := &kuadrantv1beta2.RateLimitPolicy{}
 		err := r.Client().Get(ctx, rlpKey, rlp)
-		logger.V(1).Info("wasmPluginConfig", "get rlp", rlpKey, "err", err)
+		logger.V(1).Info("get rlp", "ratelimitpolicy", rlpKey, "err", err)
 		if err != nil {
 			return nil, err
 		}
 
+		// target ref is a HTTPRoute
 		if common.IsTargetRefHTTPRoute(rlp.Spec.TargetRef) {
-			routeRLPList = append(routeRLPList, rlp)
-		} else if common.IsTargetRefGateway(rlp.Spec.TargetRef) {
-			if gwRLP == nil {
-				gwRLP = rlp
-			} else {
-				return nil, fmt.Errorf("wasmPluginConfig: multiple gateway RLP found and only one expected. rlp keys: %v", rlpRefs)
+			route, err := r.FetchValidHTTPRoute(ctx, rlp.TargetKey())
+			if err != nil {
+				return nil, err
 			}
+			rlps[rlpKey.String()] = &store{rlp: *rlp, route: *route}
+			routeKeys[client.ObjectKeyFromObject(route).String()] = struct{}{}
+			continue
 		}
+
+		// target ref is a Gateway
+		if rlps[rlpKey.String()] != nil {
+			return nil, fmt.Errorf("wasmPluginConfig: multiple gateway RLP found and only one expected. rlp keys: %v", rlpRefs)
+		}
+		gwRLPKey = rlpKey.String()
+		rlps[gwRLPKey] = &store{rlp: *rlp}
 	}
 
-	wasmRulesByDomain := make(rlptools.WasmRulesByDomain)
+	gwHostnames := gw.Hostnames()
+	if len(gwHostnames) == 0 {
+		gwHostnames = []gatewayapiv1beta1.Hostname{"*"}
+	}
 
-	if gwRLP != nil {
-		if len(gw.Hostnames()) == 0 {
-			// wildcard domain
-			wasmRulesByDomain["*"] = append(wasmRulesByDomain["*"], rlptools.WasmRules(gwRLP, nil)...)
+	// if there is a gateway rlp, fake a single httproute with all rules from all httproutes accepted by the gateway,
+	// that do not have a rlp of its own, so we can generate wasm rules for those cases
+	if gwRLPKey != "" {
+		rules := make([]gatewayapiv1beta1.HTTPRouteRule, 0)
+		for _, route := range r.FetchAcceptedGatewayHTTPRoutes(ctx, rlps[gwRLPKey].rlp.TargetKey()) {
+			// skip routes that have a rlp of its own
+			if _, found := routeKeys[client.ObjectKeyFromObject(&route).String()]; found {
+				continue
+			}
+			rules = append(rules, route.Spec.Rules...)
+		}
+		if len(rules) == 0 {
+			logger.V(1).Info("no httproutes attached to the targeted gateway, skipping wasm config for the gateway rlp", "ratelimitpolicy", gwRLPKey)
+			rlps[gwRLPKey].skip = true
 		} else {
-			for _, gwHostname := range gw.Hostnames() {
-				wasmRulesByDomain[gwHostname] = append(wasmRulesByDomain[gwHostname], rlptools.WasmRules(gwRLP, nil)...)
+			rlps[gwRLPKey].route = gatewayapiv1beta1.HTTPRoute{
+				Spec: gatewayapiv1beta1.HTTPRouteSpec{
+					Hostnames: gwHostnames,
+					Rules:     rules,
+				},
 			}
-		}
-	}
-
-	for _, httpRouteRLP := range routeRLPList {
-		httpRoute, err := r.FetchValidHTTPRoute(ctx, httpRouteRLP.TargetKey())
-		if err != nil {
-			return nil, err
-		}
-
-		// gateways limits merged with the route level limits
-		mergedGatewayActions := mergeRules(httpRouteRLP, gwRLP, httpRoute)
-		// routeLimits referenced by multiple hostnames
-		for _, hostname := range httpRoute.Spec.Hostnames {
-			wasmRulesByDomain[string(hostname)] = append(wasmRulesByDomain[string(hostname)], mergedGatewayActions...)
 		}
 	}
 
@@ -177,29 +195,40 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context,
 		RateLimitPolicies: make([]wasm.RateLimitPolicy, 0),
 	}
 
-	// One RateLimitPolicy per domain
-	for domain, rules := range wasmRulesByDomain {
-		rateLimitPolicy := wasm.RateLimitPolicy{
-			Name:      domain,
-			Domain:    common.MarshallNamespace(gw.Key(), domain),
-			Service:   common.KuadrantRateLimitClusterName,
-			Hostnames: []string{domain},
-			Rules:     rules,
+	for _, rlpKey := range rlpRefs {
+		s := rlps[rlpKey.String()]
+		if s.skip {
+			continue
 		}
-		wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, rateLimitPolicy)
+		rlp := s.rlp
+		route := s.route
+
+		// narrow the list of hostnames specified in the route so we don't generate wasm rules that only apply to other gateways
+		// this is a no-op for the gateway rlp
+		hostnames := common.FilterValidSubdomains(gwHostnames, route.Spec.Hostnames)
+		if len(hostnames) == 0 { // it should only happen when the route specifies no hostnames
+			hostnames = gwHostnames
+		}
+		route.Spec.Hostnames = hostnames
+
+		rules := rlptools.WasmRules(&rlp, &route)
+		if len(rules) == 0 {
+			continue // no need to add the policy if there are no rules; a rlp can return no rules if all its limits fail to match any route rule
+		}
+
+		wasmPlugin.RateLimitPolicies = append(wasmPlugin.RateLimitPolicies, wasm.RateLimitPolicy{
+			Name:      rlpKey.String(),
+			Domain:    common.MarshallNamespace(gw.Key(), string(hostnames[0])), // TODO(guicassolato): https://github.com/Kuadrant/kuadrant-operator/issues/201. Meanwhile, we are using the first hostname so it matches at least one set of limit definitions in the Limitador CR
+			Rules:     rules,
+			Hostnames: common.HostnamesToStrings(hostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
+			Service:   common.KuadrantRateLimitClusterName,
+		})
+	}
+
+	// avoid building a wasm plugin config if there are no rules to apply
+	if len(wasmPlugin.RateLimitPolicies) == 0 {
+		return nil, nil
 	}
 
 	return wasmPlugin, nil
-}
-
-// merge operations currently implemented with list append operation
-func mergeRules(routeRLP *kuadrantv1beta2.RateLimitPolicy, gwRLP *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []wasm.Rule {
-	routeRules := rlptools.WasmRules(routeRLP, route)
-
-	if gwRLP == nil {
-		return routeRules
-	}
-
-	// add gateway level actions
-	return append(routeRules, rlptools.WasmRules(gwRLP, nil)...)
 }

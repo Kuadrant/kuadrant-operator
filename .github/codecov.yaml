@@ -1,0 +1,51 @@
+# Find more at https://docs.codecov.com/docs/codecovyml-reference
+codecov:
+  token: ${{ secrets.CODECOV_TOKEN }}
+  bot: "Codecov Bot"
+  max_report_age: 12
+  require_ci_to_pass: yes
+  notify:
+    after_n_builds: 1
+    wait_for_ci: yes
+
+# Layout of the PR comment produced by Codecov bot
+comment:
+  layout: "header, diff, flags, components, files"
+
+flag_management:
+  individual_flags:
+    - name: unit
+      paths:
+        - pkg/**
+      carryforward: true
+    - name: integration
+      paths:
+        - controllers/**
+      carryforward: true
+
+component_management:
+  individual_components:
+    - component_id: common
+      name: pkg/common (u)
+      paths:
+        - pkg/common
+    - component_id: istio
+      name: pkg/istio (u)
+      paths:
+        - pkg/istio
+    - component_id: log
+      name: pkg/log (u)
+      paths:
+        - pkg/log
+    - component_id: reconcilers
+      name: pkg/reconcilers (u)
+      paths:
+        - pkg/reconcilers
+    - component_id: rlptools
+      name: pkg/rlptools (u)
+      paths:
+        - pkg/rlptools
+    - component_id: controllers
+      name: controllers (i)
+      paths:
+        - controllers

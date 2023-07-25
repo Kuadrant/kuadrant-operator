@@ -38,7 +38,6 @@ jobs:
       - name: Upload unit-test coverage reports to CodeCov # more at https://github.com/codecov/codecov-action
         uses: codecov/codecov-action@v3
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
           flags: unit
           fail_ci_if_error: true
           verbose: true
@@ -85,7 +84,6 @@ jobs:
       - name: Upload integration-test coverage reports to CodeCov # more at https://github.com/codecov/codecov-action
         uses: codecov/codecov-action@v3
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
           flags: integration
           fail_ci_if_error: true
           verbose: true

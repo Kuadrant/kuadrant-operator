@@ -1,6 +1,5 @@
 # Find more at https://docs.codecov.com/docs/codecovyml-reference
 codecov:
-  token: ${{ secrets.CODECOV_TOKEN }}
   bot: "Codecov Bot"
   max_report_age: 12
   require_ci_to_pass: yes

@@ -32,8 +32,8 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HT
 
 	for limitName, limit := range rlp.Spec.Limits {
 		// 1 RLP limit <---> 1 WASM rule
-		limitFullName := UniqueLimitName(rlp, limitName)
-		rule, err := ruleFromLimit(limitFullName, &limit, route)
+		limitIdentifier := LimitNameToLimitadorIdentifier(limitName)
+		rule, err := ruleFromLimit(limitIdentifier, &limit, route)
 		if err == nil {
 			rules = append(rules, rule)
 		}
@@ -42,7 +42,7 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HT
 	return rules
 }
 
-func ruleFromLimit(limitFullName string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute) (wasm.Rule, error) {
+func ruleFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute) (wasm.Rule, error) {
 	rule := wasm.Rule{}
 
 	if conditions, err := conditionsFromLimit(limit, route); err != nil {
@@ -51,7 +51,7 @@ func ruleFromLimit(limitFullName string, limit *kuadrantv1beta2.Limit, route *ga
 		rule.Conditions = conditions
 	}
 
-	if data := dataFromLimt(limitFullName, limit); data != nil {
+	if data := dataFromLimt(limitIdentifier, limit); data != nil {
 		rule.Data = data
 	}
 
@@ -234,13 +234,13 @@ func patternExpresionFromWhen(when kuadrantv1beta2.WhenCondition) wasm.PatternEx
 	}
 }
 
-func dataFromLimt(limitFullName string, limit *kuadrantv1beta2.Limit) (data []wasm.DataItem) {
+func dataFromLimt(limitIdentifier string, limit *kuadrantv1beta2.Limit) (data []wasm.DataItem) {
 	if limit == nil {
 		return
 	}
 
 	// static key representing the limit
-	data = append(data, wasm.DataItem{Static: &wasm.StaticSpec{Key: limitFullName, Value: "1"}})
+	data = append(data, wasm.DataItem{Static: &wasm.StaticSpec{Key: limitIdentifier, Value: "1"}})
 
 	for _, counter := range limit.Counters {
 		data = append(data, wasm.DataItem{Selector: &wasm.SelectorSpec{Selector: counter}})

@@ -99,7 +99,7 @@ func TestWasmRules(t *testing.T) {
 					Data: []wasm.DataItem{
 						{
 							Static: &wasm.StaticSpec{
-								Key:   "my-app/minimal/50rps",
+								Key:   "limit.50rps__770adfd9",
 								Value: "1",
 							},
 						},
@@ -149,7 +149,7 @@ func TestWasmRules(t *testing.T) {
 					Data: []wasm.DataItem{
 						{
 							Static: &wasm.StaticSpec{
-								Key:   "my-app/my-rlp/50rps-for-selected-hostnames",
+								Key:   "limit.50rps_for_selected_hostnames__5af2c820",
 								Value: "1",
 							},
 						},
@@ -199,7 +199,7 @@ func TestWasmRules(t *testing.T) {
 					Data: []wasm.DataItem{
 						{
 							Static: &wasm.StaticSpec{
-								Key:   "my-app/my-rlp/50rps-for-selected-route",
+								Key:   "limit.50rps_for_selected_route__b6640119",
 								Value: "1",
 							},
 						},
@@ -248,7 +248,7 @@ func TestWasmRules(t *testing.T) {
 					Data: []wasm.DataItem{
 						{
 							Static: &wasm.StaticSpec{
-								Key:   "my-app/my-rlp/50rps-for-selected-path",
+								Key:   "limit.50rps_for_selected_path__4088dcf9",
 								Value: "1",
 							},
 						},
@@ -289,7 +289,7 @@ func TestWasmRules(t *testing.T) {
 					Data: []wasm.DataItem{
 						{
 							Static: &wasm.StaticSpec{
-								Key:   "my-app/my-rlp/50rps",
+								Key:   "limit.50rps__770adfd9",
 								Value: "1",
 							},
 						},
@@ -312,7 +312,7 @@ func TestWasmRules(t *testing.T) {
 					Data: []wasm.DataItem{
 						{
 							Static: &wasm.StaticSpec{
-								Key:   "my-app/my-rlp/50rps-per-username",
+								Key:   "limit.50rps_per_username__f5bebfb8",
 								Value: "1",
 							},
 						},

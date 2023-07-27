@@ -201,7 +201,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				MaxValue:   1,
 				Seconds:    3 * 60,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
-				Conditions: []string{fmt.Sprintf("%s/%s/l1 == \"1\"", testNamespace, rlpName)},
+				Conditions: []string{`limit.l1__2804bad6 == "1"`},
 				Variables:  []string{},
 			}))
 
@@ -249,7 +249,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 								Data: []wasm.DataItem{
 									{
 										Static: &wasm.StaticSpec{
-											Key:   fmt.Sprintf("%s/%s/l1", testNamespace, rlpName),
+											Key:   `limit.l1__2804bad6`,
 											Value: "1",
 										},
 									},
@@ -450,7 +450,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Data: []wasm.DataItem{
 					{
 						Static: &wasm.StaticSpec{
-							Key:   fmt.Sprintf("%s/%s/toys", testNamespace, rlpName),
+							Key:   "limit.toys__3bfcbeee",
 							Value: "1",
 						},
 					},
@@ -476,7 +476,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Data: []wasm.DataItem{
 					{
 						Static: &wasm.StaticSpec{
-							Key:   fmt.Sprintf("%s/%s/assets", testNamespace, rlpName),
+							Key:   "limit.assets__8bf729ff",
 							Value: "1",
 						},
 					},
@@ -547,7 +547,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				MaxValue:   1,
 				Seconds:    3 * 60,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
-				Conditions: []string{fmt.Sprintf("%s/%s/l1 == \"1\"", testNamespace, rlpName)},
+				Conditions: []string{`limit.l1__2804bad6 == "1"`},
 				Variables:  []string{},
 			}))
 
@@ -595,7 +595,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 								Data: []wasm.DataItem{
 									{
 										Static: &wasm.StaticSpec{
-											Key:   fmt.Sprintf("%s/%s/l1", testNamespace, rlpName),
+											Key:   `limit.l1__2804bad6`,
 											Value: "1",
 										},
 									},
@@ -672,7 +672,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				MaxValue:   1,
 				Seconds:    3 * 60,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
-				Conditions: []string{fmt.Sprintf("%s/%s/l1 == \"1\"", testNamespace, rlpName)},
+				Conditions: []string{`limit.l1__2804bad6 == "1"`},
 				Variables:  []string{},
 			}))
 

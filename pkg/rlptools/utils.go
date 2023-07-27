@@ -1,7 +1,10 @@
 package rlptools
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"unicode"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 
@@ -9,8 +12,27 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
-func UniqueLimitName(rlp *kuadrantv1beta2.RateLimitPolicy, limitKey string) string {
-	return fmt.Sprintf("%s/%s/%s", rlp.GetNamespace(), rlp.GetName(), limitKey)
+const (
+	LimitadorRateLimitIdentitiferPrefix = "limit."
+)
+
+func LimitNameToLimitadorIdentifier(uniqueLimitName string) string {
+	identifier := LimitadorRateLimitIdentitiferPrefix
+
+	// sanitize chars that are not allowed in limitador identifiers
+	for _, c := range uniqueLimitName {
+		if unicode.IsLetter(c) || unicode.IsDigit(c) || c == '_' {
+			identifier += string(c)
+		} else {
+			identifier += "_"
+		}
+	}
+
+	// to avoid breaking the uniqueness of the limit name after sanitization, we add a hash of the original name
+	hash := sha256.Sum256([]byte(uniqueLimitName))
+	identifier += "__" + hex.EncodeToString(hash[:4])
+
+	return identifier
 }
 
 // LimitadorRateLimitsFromRLP converts rate limits from a Kuadrant RateLimitPolicy into a list of Limitador rate limit
@@ -20,14 +42,14 @@ func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []limitado
 
 	rateLimits := make([]limitadorv1alpha1.RateLimit, 0)
 	for limitKey, limit := range rlp.Spec.Limits {
-		uniqueLimitName := UniqueLimitName(rlp, limitKey)
+		limitIdentifier := LimitNameToLimitadorIdentifier(limitKey)
 		for _, rate := range limit.Rates {
 			maxValue, seconds := rateToSeconds(rate)
 			rateLimits = append(rateLimits, limitadorv1alpha1.RateLimit{
 				Namespace:  limitsNamespace,
 				MaxValue:   maxValue,
 				Seconds:    seconds,
-				Conditions: []string{fmt.Sprintf("%s == \"1\"", uniqueLimitName)},
+				Conditions: []string{fmt.Sprintf("%s == \"1\"", limitIdentifier)},
 				Variables:  common.GetEmptySliceIfNil(limit.CountersAsStringList()),
 			})
 		}

@@ -84,8 +84,8 @@ IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
 ENVTEST_K8S_VERSION = 1.22
 
 # Directories containing unit & integration test packages
-UNIT_DIRS := pkg/common pkg/istio pkg/log pkg/reconcilers pkg/rlptools
-INTEGRATION_DIRS := controllers
+UNIT_DIRS := ./pkg/... ./api/...
+INTEGRATION_DIRS := ./controllers...
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))

@@ -11,11 +11,15 @@ codecov:
 comment:
   layout: "header, diff, flags, components, files"
 
+ignore:
+  - api/external/** #  ignoring external vendor code
+
 flag_management:
   individual_flags:
     - name: unit
       paths:
         - pkg/**
+        - api/**
       carryforward: true
     - name: integration
       paths:
@@ -24,6 +28,10 @@ flag_management:
 
 component_management:
   individual_components:
+    - component_id: api-v1beta1
+      name: api/v1beta1
+      paths:
+        - api/v1beta1
     - component_id: common
       name: pkg/common (u)
       paths:
@@ -48,3 +56,4 @@ component_management:
       name: controllers (i)
       paths:
         - controllers
+

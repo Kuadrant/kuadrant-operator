@@ -261,22 +261,15 @@ clean-cov: ## Remove coverage reports
 test: test-unit test-integration ## Run all tests
 
 test-integration: clean-cov generate fmt vet envtest ## Run Integration tests.
-	@export KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)"; export USE_EXISTING_CLUSTER=true; \
-	for dir in $(INTEGRATION_DIRS); do \
-		echo "Running integration tests in $$dir..."; \
-		mkdir -p coverage/integration/$$dir; \
-		go test ./$$dir -coverprofile $(PROJECT_PATH)/coverage/integration/$$dir/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0; \
-		done
+	mkdir -p coverage/integration
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)" USE_EXISTING_CLUSTER=true go test $(INTEGRATION_DIRS) -coverprofile $(PROJECT_PATH)/coverage/integration/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
 
 ifdef TEST_NAME
 test-unit: TEST_PATTERN := --run $(TEST_NAME)
 endif
 test-unit: clean-cov generate fmt vet ## Run Unit tests.
-	@for dir in $(UNIT_DIRS); do \
-		echo "Running unit tests in $$dir..."; \
-		mkdir -p coverage/unit/$$dir; \
-		go test ./$$dir -coverprofile $(PROJECT_PATH)/coverage/unit/$$dir/cover.out -tags unit -v -timeout 0 $(TEST_PATTERN); \
-	done
+	mkdir -p coverage/unit
+	go test $(UNIT_DIRS) -coverprofile $(PROJECT_PATH)/coverage/unit/cover.out -tags unit -v -timeout 0 $(TEST_PATTERN)
 
 .PHONY: namespace
 namespace: ## Creates a namespace where to deploy Kuadrant Operator

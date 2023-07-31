@@ -29,7 +29,7 @@ flag_management:
 component_management:
   individual_components:
     - component_id: api-v1beta1
-      name: api/v1beta1
+      name: api/v1beta1 (u)
       paths:
         - api/v1beta1
     - component_id: common

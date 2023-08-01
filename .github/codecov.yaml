@@ -11,9 +11,10 @@ codecov:
 comment:
   layout: "header, diff, flags, components, files"
 
+# Find more at https://docs.codecov.com/docs/ignoring-paths
 ignore:
   - api/external/** #  ignoring external vendor code
-  - **/*.deepcopy.go # ignore controller-gen generated code 
+  - "**/*.deepcopy.go" # ignore controller-gen generated code
 
 flag_management:
   individual_flags:

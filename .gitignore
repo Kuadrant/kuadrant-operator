@@ -29,6 +29,7 @@ tmp
 
 /catalog/kuadrant-operator-catalog
 /catalog/kuadrant-operator-catalog.Dockerfile
+/coverage/
 
 # Vendor dependencies
 vendor

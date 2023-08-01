@@ -83,6 +83,10 @@ IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.22
 
+# Directories containing unit & integration test packages
+UNIT_DIRS := ./pkg/... ./api/...
+INTEGRATION_DIRS := ./controllers...
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -250,20 +254,22 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: clean-cov
-clean-cov: ## Remove coverage report
-	rm -rf cover.out
+clean-cov: ## Remove coverage reports
+	rm -rf coverage
 
 .PHONY: test
 test: test-unit test-integration ## Run all tests
 
 test-integration: clean-cov generate fmt vet envtest ## Run Integration tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)" USE_EXISTING_CLUSTER=true go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
+	mkdir -p coverage/integration
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)" USE_EXISTING_CLUSTER=true go test $(INTEGRATION_DIRS) -coverprofile $(PROJECT_PATH)/coverage/integration/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
 
 ifdef TEST_NAME
 test-unit: TEST_PATTERN := --run $(TEST_NAME)
 endif
 test-unit: clean-cov generate fmt vet ## Run Unit tests.
-	go test ./... -coverprofile $(PROJECT_PATH)/cover.out -tags unit -v -timeout 0 $(TEST_PATTERN)
+	mkdir -p coverage/unit
+	go test $(UNIT_DIRS) -coverprofile $(PROJECT_PATH)/coverage/unit/cover.out -tags unit -v -timeout 0 $(TEST_PATTERN)
 
 .PHONY: namespace
 namespace: ## Creates a namespace where to deploy Kuadrant Operator

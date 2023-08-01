@@ -13,6 +13,7 @@ comment:
 
 ignore:
   - api/external/** #  ignoring external vendor code
+  - **/*.deepcopy.go # ignore controller-gen generated code 
 
 flag_management:
   individual_flags:

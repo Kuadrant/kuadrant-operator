@@ -68,7 +68,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Install qemu dependency
         run: |
           sudo apt-get update
@@ -101,12 +101,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go 1.19.x
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
           go-version: 1.19.x
         id: go
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Install qemu dependency
         run: |
           sudo apt-get update
@@ -148,12 +148,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go 1.19.x
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
           go-version: 1.19.x
         id: go
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Generate Catalog Content
         run: |
           make catalog REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} \

@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -164,7 +163,7 @@ func TestWasmRules(t *testing.T) {
 					Rates: []kuadrantv1beta2.Rate{counter50rps},
 					RouteSelectors: []kuadrantv1beta2.RouteSelector{
 						{
-							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 								{
 									Path: &gatewayapiv1beta1.HTTPPathMatch{
 										Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
@@ -214,7 +213,7 @@ func TestWasmRules(t *testing.T) {
 					Rates: []kuadrantv1beta2.Rate{counter50rps},
 					RouteSelectors: []kuadrantv1beta2.RouteSelector{
 						{
-							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 								{
 									Path: &gatewayapiv1beta1.HTTPPathMatch{
 										Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
@@ -263,7 +262,7 @@ func TestWasmRules(t *testing.T) {
 					Rates: []kuadrantv1beta2.Rate{counter50rps},
 					RouteSelectors: []kuadrantv1beta2.RouteSelector{
 						{
-							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 								{
 									Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethod("POST")}[0],
 								},

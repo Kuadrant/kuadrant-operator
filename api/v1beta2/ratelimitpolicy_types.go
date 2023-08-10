@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -184,10 +185,10 @@ func (r *RateLimitPolicy) Validate() error {
 	}
 
 	// prevents usage of routeSelectors in a gateway RLP
-	if r.Spec.TargetRef.Kind == gatewayapiv1alpha2.Kind("Gateway") {
+	if r.Spec.TargetRef.Kind == ("Gateway") {
 		for _, limit := range r.Spec.Limits {
 			if len(limit.RouteSelectors) > 0 {
-				return fmt.Errorf("route selectors not supported when targetting a Gateway")
+				return fmt.Errorf("route selectors not supported when targeting a Gateway")
 			}
 		}
 	}
@@ -228,7 +229,7 @@ func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 	ruleHosts = make([]string, 0)
 	for _, limit := range r.Spec.Limits {
 		for _, routeSelector := range limit.RouteSelectors {
-			convertHostnamesToString := func(gwHostnames []gatewayapiv1alpha2.Hostname) []string {
+			convertHostnamesToString := func(gwHostnames []gatewayapiv1beta1.Hostname) []string {
 				hostnames := make([]string, 0, len(gwHostnames))
 				for _, gwHostName := range gwHostnames {
 					hostnames = append(hostnames, string(gwHostName))

@@ -396,7 +396,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			wasmRLP := existingWASMConfig.RateLimitPolicies[0]
 			Expect(wasmRLP.Name).To(Equal(rlpKey.String()))
 			Expect(wasmRLP.Domain).To(Equal(rlptools.LimitsNamespaceFromRLP(rlp)))
-			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'toys' limit defintion
+			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'toys' limit definition
 				Conditions: []wasm.Condition{
 					{
 						AllOf: []wasm.PatternExpression{
@@ -461,7 +461,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					},
 				},
 			}))
-			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'assets' limit defintion
+			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'assets' limit definition
 				Conditions: []wasm.Condition{
 					{
 						AllOf: []wasm.PatternExpression{

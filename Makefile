@@ -190,8 +190,9 @@ $(KUSTOMIZE):
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 
 YQ=$(PROJECT_PATH)/bin/yq
+YQ_VERSION := v4.34.2
 $(YQ):
-	$(call go-install-tool,$(YQ),github.com/mikefarah/yq/v4@latest)
+	$(call go-install-tool,$(YQ),github.com/mikefarah/yq/v4@$(YQ_VERSION))
 
 .PHONY: yq
 yq: $(YQ) ## Download yq locally if necessary.

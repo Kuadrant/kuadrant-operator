@@ -40,7 +40,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: unit
-          fail_ci_if_error: true
+          fail_ci_if_error: false
           verbose: true
 
   integration-tests:
@@ -87,7 +87,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: integration
-          fail_ci_if_error: true
+          fail_ci_if_error: false
           verbose: true
 
   verify-manifests:

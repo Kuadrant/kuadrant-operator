@@ -167,7 +167,7 @@ func HTTPPathMatchToString(path *gatewayapiv1beta1.HTTPPathMatch) string {
 	if path.Type != nil {
 		switch *path.Type {
 		case gatewayapiv1beta1.PathMatchExact:
-			return fmt.Sprintf("%s", *path.Value)
+			return *path.Value
 		case gatewayapiv1beta1.PathMatchRegularExpression:
 			return fmt.Sprintf("~/%s/", *path.Value)
 		}

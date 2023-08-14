@@ -222,7 +222,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(&wasm.WASMPlugin{
+			Expect(existingWASMConfig).To(Equal(&wasm.Plugin{
 				FailureMode: wasm.FailureModeDeny,
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
@@ -568,7 +568,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(&wasm.WASMPlugin{
+			Expect(existingWASMConfig).To(Equal(&wasm.Plugin{
 				FailureMode: wasm.FailureModeDeny,
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{

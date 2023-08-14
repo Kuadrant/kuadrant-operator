@@ -30,8 +30,9 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HT
 		return rules
 	}
 
-	for limitName, limit := range rlp.Spec.Limits {
+	for limitName := range rlp.Spec.Limits {
 		// 1 RLP limit <---> 1 WASM rule
+		limit := rlp.Spec.Limits[limitName]
 		limitIdentifier := LimitNameToLimitadorIdentifier(limitName)
 		rule, err := ruleFromLimit(limitIdentifier, &limit, route)
 		if err == nil {
@@ -45,11 +46,12 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HT
 func ruleFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute) (wasm.Rule, error) {
 	rule := wasm.Rule{}
 
-	if conditions, err := conditionsFromLimit(limit, route); err != nil {
+	conditions, err := conditionsFromLimit(limit, route)
+	if err != nil {
 		return rule, err
-	} else {
-		rule.Conditions = conditions
 	}
+
+	rule.Conditions = conditions
 
 	if data := dataFromLimt(limitIdentifier, limit); data != nil {
 		rule.Data = data
@@ -67,7 +69,8 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.
 
 	if len(limit.RouteSelectors) > 0 {
 		// build conditions from the rules selected by the route selectors
-		for _, routeSelector := range limit.RouteSelectors {
+		for idx := range limit.RouteSelectors {
+			routeSelector := limit.RouteSelectors[idx]
 			hostnamesForConditions := hostnamesForConditions(route, &routeSelector)
 			for _, rule := range routeSelector.SelectRules(route) {
 				routeConditions = append(routeConditions, conditionsFromRule(rule, hostnamesForConditions)...)
@@ -181,10 +184,9 @@ func patternExpresionsFromMatch(match gatewayapiv1beta1.HTTPRouteMatch) []wasm.P
 }
 
 func patternExpresionFromPathMatch(pathMatch gatewayapiv1beta1.HTTPPathMatch) wasm.PatternExpression {
-
 	var (
-		operator wasm.PatternOperator = wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator) // default value
-		value    string               = "/"                                                      // default value
+		operator = wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator) // default value
+		value    = "/"                                                      // default value
 	)
 
 	if pathMatch.Value != nil {
@@ -222,7 +224,7 @@ func patternExpresionFromHostname(hostname gatewayapiv1beta1.Hostname) wasm.Patt
 	return wasm.PatternExpression{
 		Selector: "request.host",
 		Operator: wasm.PatternOperator(operator),
-		Value:    string(value),
+		Value:    value,
 	}
 }
 
@@ -249,7 +251,7 @@ func dataFromLimt(limitIdentifier string, limit *kuadrantv1beta2.Limit) (data []
 	return data
 }
 
-func WASMPluginFromStruct(structure *_struct.Struct) (*wasm.WASMPlugin, error) {
+func WASMPluginFromStruct(structure *_struct.Struct) (*wasm.Plugin, error) {
 	if structure == nil {
 		return nil, errors.New("cannot desestructure WASMPlugin from nil")
 	}
@@ -259,7 +261,7 @@ func WASMPluginFromStruct(structure *_struct.Struct) (*wasm.WASMPlugin, error) {
 		return nil, err
 	}
 	// Deserialize struct into PluginConfig struct
-	wasmPlugin := &wasm.WASMPlugin{}
+	wasmPlugin := &wasm.Plugin{}
 	if err := json.Unmarshal(configJSON, wasmPlugin); err != nil {
 		return nil, err
 	}

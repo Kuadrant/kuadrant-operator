@@ -9,7 +9,6 @@ import (
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -20,12 +19,9 @@ const (
 	RLPAvailableConditionType string = "Available"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object, specErr error) (ctrl.Result, error) {
+func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, specErr error) (ctrl.Result, error) {
 	logger, _ := logr.FromContext(ctx)
-	newStatus, err := r.calculateStatus(ctx, rlp, targetNetworkObject, specErr)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
+	newStatus := r.calculateStatus(ctx, rlp, specErr)
 
 	equalStatus := rlp.Status.Equals(newStatus, logger)
 	logger.V(1).Info("Status", "status is different", !equalStatus)
@@ -59,7 +55,7 @@ func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *ku
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyReconciler) calculateStatus(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object, specErr error) (*kuadrantv1beta2.RateLimitPolicyStatus, error) {
+func (r *RateLimitPolicyReconciler) calculateStatus(_ context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, specErr error) *kuadrantv1beta2.RateLimitPolicyStatus {
 	newStatus := &kuadrantv1beta2.RateLimitPolicyStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions:         common.CopyConditions(rlp.Status.Conditions),
@@ -70,7 +66,7 @@ func (r *RateLimitPolicyReconciler) calculateStatus(ctx context.Context, rlp *ku
 
 	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
 
-	return newStatus, nil
+	return newStatus
 }
 
 func (r *RateLimitPolicyReconciler) availableCondition(specErr error) *metav1.Condition {

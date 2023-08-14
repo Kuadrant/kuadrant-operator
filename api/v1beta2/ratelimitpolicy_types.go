@@ -106,7 +106,7 @@ type Limit struct {
 }
 
 func (l Limit) CountersAsStringList() []string {
-	var ret []string
+	ret := make([]string, 0)
 	for idx := range l.Counters {
 		ret = append(ret, string(l.Counters[idx]))
 	}

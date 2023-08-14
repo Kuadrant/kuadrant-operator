@@ -34,9 +34,7 @@ func (l *RateLimitIndex) Set(key RateLimitIndexKey, rateLimits RateLimitList) {
 func (l *RateLimitIndex) ToRateLimits() RateLimitList {
 	limitadorRateLimits := make(RateLimitList, 0)
 	for rlSet := l.Front(); rlSet != nil; rlSet = rlSet.Next() {
-		for _, rl := range rlSet.Value {
-			limitadorRateLimits = append(limitadorRateLimits, rl)
-		}
+		limitadorRateLimits = append(limitadorRateLimits, rlSet.Value...)
 	}
 	return limitadorRateLimits
 }
@@ -125,8 +123,8 @@ func Equal(a, b RateLimitList) bool {
 		sort.Strings(bCopy[idx].Variables)
 	}
 
-	sort.Sort(RateLimitList(aCopy))
-	sort.Sort(RateLimitList(bCopy))
+	sort.Sort(aCopy)
+	sort.Sort(bCopy)
 
 	return reflect.DeepEqual(aCopy, bCopy)
 }

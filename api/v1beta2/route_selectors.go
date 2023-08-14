@@ -37,7 +37,8 @@ func (s *RouteSelector) SelectRules(route *gatewayapiv1beta1.HTTPRoute) (rules [
 	if len(s.Matches) == 0 {
 		return route.Spec.Rules
 	}
-	for _, routeSelectorMatch := range s.Matches {
+	for idx := range s.Matches {
+		routeSelectorMatch := s.Matches[idx]
 		for idx, rule := range route.Spec.Rules {
 			rs := common.HTTPRouteRuleSelector{HTTPRouteMatch: &routeSelectorMatch}
 			if rs.Selects(rule) {

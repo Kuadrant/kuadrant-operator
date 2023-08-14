@@ -97,12 +97,12 @@ const (
 	FailureModeAllow FailureModeType = "allow"
 )
 
-type WASMPlugin struct {
+type Plugin struct {
 	FailureMode       FailureModeType   `json:"failureMode"`
 	RateLimitPolicies []RateLimitPolicy `json:"rateLimitPolicies"`
 }
 
-func (w *WASMPlugin) ToStruct() (*_struct.Struct, error) {
+func (w *Plugin) ToStruct() (*_struct.Struct, error) {
 	wasmPluginJSON, err := json.Marshal(w)
 	if err != nil {
 		return nil, err

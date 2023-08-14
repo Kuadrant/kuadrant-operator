@@ -120,7 +120,7 @@ func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw co
 }
 
 // returns nil when there is no rate limit policy to apply
-func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (*wasm.WASMPlugin, error) {
+func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (*wasm.Plugin, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("wasmPluginConfig").WithValues("gateway", gw.Key())
 
@@ -170,7 +170,9 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 	// that do not have a rlp of its own, so we can generate wasm rules for those cases
 	if gwRLPKey != "" {
 		rules := make([]gatewayapiv1beta1.HTTPRouteRule, 0)
-		for _, route := range r.FetchAcceptedGatewayHTTPRoutes(ctx, rlps[gwRLPKey].rlp.TargetKey()) {
+		routes := r.FetchAcceptedGatewayHTTPRoutes(ctx, rlps[gwRLPKey].rlp.TargetKey())
+		for idx := range routes {
+			route := routes[idx]
 			// skip routes that have a rlp of its own
 			if _, found := routeKeys[client.ObjectKeyFromObject(&route).String()]; found {
 				continue
@@ -190,7 +192,7 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 		}
 	}
 
-	wasmPlugin := &wasm.WASMPlugin{
+	wasmPlugin := &wasm.Plugin{
 		FailureMode:       wasm.FailureModeDeny,
 		RateLimitPolicies: make([]wasm.RateLimitPolicy, 0),
 	}

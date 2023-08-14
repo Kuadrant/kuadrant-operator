@@ -95,7 +95,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, rlp, nil, delResErr)
+				return r.reconcileStatus(ctx, rlp, delResErr)
 			}
 			return ctrl.Result{}, err
 		}
@@ -132,7 +132,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	specErr := r.reconcileResources(ctx, rlp, targetNetworkObject)
 
 	// reconcile ratelimitpolicy status
-	statusResult, statusErr := r.reconcileStatus(ctx, rlp, targetNetworkObject, specErr)
+	statusResult, statusErr := r.reconcileStatus(ctx, rlp, specErr)
 
 	if specErr != nil {
 		return ctrl.Result{}, specErr

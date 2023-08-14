@@ -25,7 +25,7 @@ func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadr
 	if err != nil {
 		return err
 	}
-	var rlpRefsWithoutRLP []client.ObjectKey
+	rlpRefsWithoutRLP := make([]client.ObjectKey, 0)
 	for _, rlpRef := range rlpRefs {
 		if rlpRef.Name == rlp.Name && rlpRef.Namespace == rlp.Namespace {
 			continue

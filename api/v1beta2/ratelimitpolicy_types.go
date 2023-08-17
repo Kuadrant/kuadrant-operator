@@ -106,11 +106,10 @@ type Limit struct {
 }
 
 func (l Limit) CountersAsStringList() []string {
-	ret := make([]string, 0)
-	for idx := range l.Counters {
-		ret = append(ret, string(l.Counters[idx]))
+	if len(l.Counters) == 0 {
+		return nil
 	}
-	return ret
+	return common.Map(l.Counters, func(counter ContextSelector) string { return string(counter) })
 }
 
 // RateLimitPolicySpec defines the desired state of RateLimitPolicy

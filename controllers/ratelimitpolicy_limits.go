@@ -25,13 +25,11 @@ func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadr
 	if err != nil {
 		return err
 	}
-	rlpRefsWithoutRLP := make([]client.ObjectKey, 0)
-	for _, rlpRef := range rlpRefs {
-		if rlpRef.Name == rlp.Name && rlpRef.Namespace == rlp.Namespace {
-			continue
-		}
-		rlpRefsWithoutRLP = append(rlpRefsWithoutRLP, rlpRef)
-	}
+
+	rlpRefsWithoutRLP := common.Filter(rlpRefs, func(rlpRef client.ObjectKey) bool {
+		return rlpRef.Name != rlp.Name || rlpRef.Namespace != rlp.Namespace
+	})
+
 	return r.reconcileLimitador(ctx, rlp, rlpRefsWithoutRLP)
 }
 

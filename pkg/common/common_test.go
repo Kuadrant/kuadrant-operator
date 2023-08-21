@@ -250,6 +250,274 @@ func TestContains(t *testing.T) {
 	}
 }
 
+func TestContainsWithInts(t *testing.T) {
+	testCases := []struct {
+		name     string
+		slice    []int
+		target   int
+		expected bool
+	}{
+		{
+			name:     "when slice has one target item then return true",
+			slice:    []int{1},
+			target:   1,
+			expected: true,
+		},
+		{
+			name:     "when slice is empty then return false",
+			slice:    []int{},
+			target:   2,
+			expected: false,
+		},
+		{
+			name:     "when target is in a slice then return true",
+			slice:    []int{1, 2, 3},
+			target:   2,
+			expected: true,
+		},
+		{
+			name:     "when no target in a slice then return false",
+			slice:    []int{1, 2, 3},
+			target:   4,
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if Contains(tc.slice, tc.target) != tc.expected {
+				t.Errorf("when slice=%v and target=%d, expected=%v, but got=%v", tc.slice, tc.target, tc.expected, !tc.expected)
+			}
+		})
+	}
+}
+
+func TestSameElements(t *testing.T) {
+	testCases := []struct {
+		name     string
+		slice1   []string
+		slice2   []string
+		expected bool
+	}{
+		{
+			name:     "when slice1 and slice2 contain the same elements then return true",
+			slice1:   []string{"test-gw1", "test-gw2", "test-gw3"},
+			slice2:   []string{"test-gw1", "test-gw2", "test-gw3"},
+			expected: true,
+		},
+		{
+			name:     "when slice1 and slice2 contain unique elements then return false",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{"test-gw1", "test-gw3"},
+			expected: false,
+		},
+		{
+			name:     "when both slices are empty then return true",
+			slice1:   []string{},
+			slice2:   []string{},
+			expected: true,
+		},
+		{
+			name:     "when both slices are nil then return true",
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if SameElements(tc.slice1, tc.slice2) != tc.expected {
+				t.Errorf("when slice1=%v and slice2=%v, expected=%v, but got=%v", tc.slice1, tc.slice2, tc.expected, !tc.expected)
+			}
+		})
+	}
+}
+
+func TestIntersect(t *testing.T) {
+	testCases := []struct {
+		name     string
+		slice1   []string
+		slice2   []string
+		expected bool
+	}{
+		{
+			name:     "when slice1 and slice2 have one common item then return true",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{"test-gw1", "test-gw3", "test-gw4"},
+			expected: true,
+		},
+		{
+			name:     "when slice1 and slice2 have no common item then return false",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{"test-gw3", "test-gw4"},
+			expected: false,
+		},
+		{
+			name:     "when slice1 is empty then return false",
+			slice1:   []string{},
+			slice2:   []string{"test-gw3", "test-gw4"},
+			expected: false,
+		},
+		{
+			name:     "when slice2 is empty then return false",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{},
+			expected: false,
+		},
+		{
+			name:     "when both slices are empty then return false",
+			slice1:   []string{},
+			slice2:   []string{},
+			expected: false,
+		},
+		{
+			name:     "when slice1 is nil then return false",
+			slice2:   []string{"test-gw3", "test-gw4"},
+			expected: false,
+		},
+		{
+			name:     "when slice2 is nil then return false",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			expected: false,
+		},
+		{
+			name:     "when both slices are nil then return false",
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if Intersect(tc.slice1, tc.slice2) != tc.expected {
+				t.Errorf("when slice1=%v and slice2=%v, expected=%v, but got=%v", tc.slice1, tc.slice2, tc.expected, !tc.expected)
+			}
+		})
+	}
+}
+
+func TestIntersectWithInts(t *testing.T) {
+	testCases := []struct {
+		name     string
+		slice1   []int
+		slice2   []int
+		expected bool
+	}{
+		{
+			name:     "when slice1 and slice2 have one common item then return true",
+			slice1:   []int{1, 2},
+			slice2:   []int{1, 3, 4},
+			expected: true,
+		},
+		{
+			name:     "when slice1 and slice2 have no common item then return false",
+			slice1:   []int{1, 2},
+			slice2:   []int{3, 4},
+			expected: false,
+		},
+		{
+			name:     "when slice1 is empty then return false",
+			slice1:   []int{},
+			slice2:   []int{3, 4},
+			expected: false,
+		},
+		{
+			name:     "when slice2 is empty then return false",
+			slice1:   []int{1, 2},
+			slice2:   []int{},
+			expected: false,
+		},
+		{
+			name:     "when both slices are empty then return false",
+			slice1:   []int{},
+			slice2:   []int{},
+			expected: false,
+		},
+		{
+			name:     "when slice1 is nil then return false",
+			slice2:   []int{3, 4},
+			expected: false,
+		},
+		{
+			name:     "when slice2 is nil then return false",
+			slice1:   []int{1, 2},
+			expected: false,
+		},
+		{
+			name:     "when both slices are nil then return false",
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if Intersect(tc.slice1, tc.slice2) != tc.expected {
+				t.Errorf("when slice1=%v and slice2=%v, expected=%v, but got=%v", tc.slice1, tc.slice2, tc.expected, !tc.expected)
+			}
+		})
+	}
+}
+
+func TestIntersection(t *testing.T) {
+	testCases := []struct {
+		name     string
+		slice1   []string
+		slice2   []string
+		expected []string
+	}{
+		{
+			name:     "when slice1 and slice2 have one common item then return that item",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{"test-gw1", "test-gw3", "test-gw4"},
+			expected: []string{"test-gw1"},
+		},
+		{
+			name:     "when slice1 and slice2 have no common item then return nil",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{"test-gw3", "test-gw4"},
+			expected: nil,
+		},
+		{
+			name:     "when slice1 is empty then return nil",
+			slice1:   []string{},
+			slice2:   []string{"test-gw3", "test-gw4"},
+			expected: nil,
+		},
+		{
+			name:     "when slice2 is empty then return nil",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			slice2:   []string{},
+			expected: nil,
+		},
+		{
+			name:     "when both slices are empty then return nil",
+			slice1:   []string{},
+			slice2:   []string{},
+			expected: nil,
+		},
+		{
+			name:     "when slice1 is nil then return nil",
+			slice2:   []string{"test-gw3", "test-gw4"},
+			expected: nil,
+		},
+		{
+			name:     "when slice2 is nil then return nil",
+			slice1:   []string{"test-gw1", "test-gw2"},
+			expected: nil,
+		},
+		{
+			name:     "when both slices are nil then return nil",
+			expected: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if r := Intersection(tc.slice1, tc.slice2); !reflect.DeepEqual(r, tc.expected) {
+				t.Errorf("expected=%v; got=%v", tc.expected, r)
+			}
+		})
+	}
+}
+
 func TestMap(t *testing.T) {
 	slice1 := []int{1, 2, 3, 4}
 	f1 := func(x int) int { return x + 1 }
@@ -446,7 +714,7 @@ func TestUnMarshallLimitNamespace(t *testing.T) {
 		{
 			name:           "when namespace has no domain name then return correct values",
 			namespace:      "exampleNS/exampleGW#",
-			expectedKey:    client.ObjectKey{"exampleNS", "exampleGW"},
+			expectedKey:    client.ObjectKey{Namespace: "exampleNS", Name: "exampleGW"},
 			expectedDomain: "",
 			expectedError:  false,
 		},
@@ -486,49 +754,6 @@ func TestUnMarshallLimitNamespace(t *testing.T) {
 				if domain != tc.expectedDomain {
 					t.Errorf("Expected %v, but got %v", tc.expectedDomain, domain)
 				}
-			}
-		})
-	}
-}
-
-func TestMarshallNamespace(t *testing.T) {
-	testCases := []struct {
-		name     string
-		gwKey    client.ObjectKey
-		domain   string
-		expected string
-	}{
-		{
-			name: "when input is valid then return expected output",
-			gwKey: client.ObjectKey{
-				Namespace: "test",
-				Name:      "myGwName",
-			},
-			domain:   "example.com",
-			expected: "test/myGwName#example.com",
-		},
-		{
-			name:     "when input is empty then return expected output",
-			gwKey:    client.ObjectKey{},
-			domain:   "",
-			expected: "/#",
-		},
-		{
-			name: "when input contains special characters then return expected output",
-			gwKey: client.ObjectKey{
-				Namespace: "test",
-				Name:      "myG.w-N*ame",
-			},
-			domain:   "example%-com",
-			expected: "test/myG.w-N*ame#example%-com",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := MarshallNamespace(tc.gwKey, tc.domain)
-			if !reflect.DeepEqual(result, tc.expected) {
-				t.Errorf("Expected %v, but got %v", tc.expected, result)
 			}
 		})
 	}
@@ -648,6 +873,54 @@ func TestHostnamesToStrings(t *testing.T) {
 			output := HostnamesToStrings(tc.inputHostnames)
 			if !reflect.DeepEqual(tc.expectedOutput, output) {
 				t.Errorf("Unexpected output. Expected %v but got %v", tc.expectedOutput, output)
+			}
+		})
+	}
+}
+
+func TestFilterValidSubdomains(t *testing.T) {
+	testCases := []struct {
+		name       string
+		domains    []gatewayapiv1beta1.Hostname
+		subdomains []gatewayapiv1beta1.Hostname
+		expected   []gatewayapiv1beta1.Hostname
+	}{
+		{
+			name:       "when all subdomains are valid",
+			domains:    []gatewayapiv1beta1.Hostname{"my-app.apps.io", "*.acme.com"},
+			subdomains: []gatewayapiv1beta1.Hostname{"toystore.acme.com", "my-app.apps.io", "carstore.acme.com"},
+			expected:   []gatewayapiv1beta1.Hostname{"toystore.acme.com", "my-app.apps.io", "carstore.acme.com"},
+		},
+		{
+			name:       "when some subdomains are valid and some are not",
+			domains:    []gatewayapiv1beta1.Hostname{"my-app.apps.io", "*.acme.com"},
+			subdomains: []gatewayapiv1beta1.Hostname{"toystore.acme.com", "my-app.apps.io", "other-app.apps.io"},
+			expected:   []gatewayapiv1beta1.Hostname{"toystore.acme.com", "my-app.apps.io"},
+		},
+		{
+			name:       "when none of subdomains are valid",
+			domains:    []gatewayapiv1beta1.Hostname{"my-app.apps.io", "*.acme.com"},
+			subdomains: []gatewayapiv1beta1.Hostname{"other-app.apps.io"},
+			expected:   []gatewayapiv1beta1.Hostname{},
+		},
+		{
+			name:       "when the set of super domains is empty",
+			domains:    []gatewayapiv1beta1.Hostname{},
+			subdomains: []gatewayapiv1beta1.Hostname{"toystore.acme.com"},
+			expected:   []gatewayapiv1beta1.Hostname{},
+		},
+		{
+			name:       "when the set of subdomains is empty",
+			domains:    []gatewayapiv1beta1.Hostname{"my-app.apps.io", "*.acme.com"},
+			subdomains: []gatewayapiv1beta1.Hostname{},
+			expected:   []gatewayapiv1beta1.Hostname{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if r := FilterValidSubdomains(tc.domains, tc.subdomains); !reflect.DeepEqual(r, tc.expected) {
+				t.Errorf("expected=%v; got=%v", tc.expected, r)
 			}
 		})
 	}

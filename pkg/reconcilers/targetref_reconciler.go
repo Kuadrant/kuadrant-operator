@@ -19,6 +19,7 @@ package reconcilers
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -94,6 +95,36 @@ func (r *TargetRefReconciler) FetchValidTargetRef(ctx context.Context, targetRef
 	return nil, fmt.Errorf("FetchValidTargetRef: targetRef (%v) to unknown network resource", targetRef)
 }
 
+// FetchAcceptedGatewayHTTPRoutes returns the list of HTTPRoutes that have been accepted as children of a gateway.
+func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context, gwKey client.ObjectKey) (routes []gatewayapiv1beta1.HTTPRoute) {
+	logger, _ := logr.FromContext(ctx)
+	logger = logger.WithName("FetchAcceptedGatewayHTTPRoutes").WithValues("gateway", gwKey)
+
+	routeList := &gatewayapiv1beta1.HTTPRouteList{}
+	err := r.Client().List(ctx, routeList)
+	if err != nil {
+		logger.V(1).Info("failed to list httproutes", "err", err)
+		return
+	}
+
+	for idx := range routeList.Items {
+		route := routeList.Items[idx]
+		routeParentStatus, found := common.Find(route.Status.RouteStatus.Parents, func(p gatewayapiv1beta1.RouteParentStatus) bool {
+			return *p.ParentRef.Kind == ("Gateway") &&
+				((p.ParentRef.Namespace == nil && route.GetNamespace() == gwKey.Namespace) || string(*p.ParentRef.Namespace) == gwKey.Namespace) &&
+				string(p.ParentRef.Name) == gwKey.Name
+		})
+		if found && meta.IsStatusConditionTrue(routeParentStatus.Conditions, "Accepted") {
+			logger.V(1).Info("found route attached to gateway", "httproute", client.ObjectKeyFromObject(&route))
+			routes = append(routes, route)
+			continue
+		}
+		logger.V(1).Info("skipping route, not attached to gateway", "httproute", client.ObjectKeyFromObject(&route))
+	}
+
+	return
+}
+
 // TargetedGatewayKeys returns the list of gateways that are being referenced from the target.
 func (r *TargetRefReconciler) TargetedGatewayKeys(ctx context.Context, targetNetworkObject client.Object) []client.ObjectKey {
 	switch obj := targetNetworkObject.(type) {
@@ -165,6 +196,44 @@ func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, pol
 	}
 
 	return nil
+}
+
+// GetAllGatewayPolicyRefs returns the policy refs of a given policy kind from all gateways managed by kuadrant.
+// The gateway objects are handled in order of creation to mitigate the risk of non-idenpotent reconciliations based on
+// this list of policy refs; nevertheless, the actual order of returned policy refs depends on the order the policy refs
+// appear in the annotations of the gateways.
+// Only gateways with status programmed are considered.
+func (r *TargetRefReconciler) GetAllGatewayPolicyRefs(ctx context.Context, policyRefsConfig common.PolicyRefsConfig) ([]client.ObjectKey, error) {
+	var uniquePolicyRefs map[string]struct{}
+	var policyRefs []client.ObjectKey
+
+	gwList := &gatewayapiv1beta1.GatewayList{}
+	if err := r.Client().List(ctx, gwList); err != nil {
+		return nil, err
+	}
+
+	// sort the gateways by creation timestamp to mitigate the risk of non-idenpotent reconciliations
+	var gateways common.GatewayWrapperList
+	for i := range gwList.Items {
+		gateway := gwList.Items[i]
+		// skip gateways that are not managed by kuadrant or that are not ready
+		if !common.IsKuadrantManaged(&gateway) || meta.IsStatusConditionFalse(gateway.Status.Conditions, common.GatewayProgrammedConditionType) {
+			continue
+		}
+		gateways = append(gateways, common.GatewayWrapper{Gateway: &gateway, PolicyRefsConfig: policyRefsConfig})
+	}
+	sort.Sort(gateways)
+
+	for _, gw := range gateways {
+		for _, policyRef := range gw.PolicyRefs() {
+			if _, ok := uniquePolicyRefs[policyRef.String()]; ok {
+				continue
+			}
+			policyRefs = append(policyRefs, policyRef)
+		}
+	}
+
+	return policyRefs, nil
 }
 
 // Returns:

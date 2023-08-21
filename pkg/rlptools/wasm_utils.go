@@ -5,124 +5,253 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 
 	_struct "github.com/golang/protobuf/ptypes/struct"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
 var (
 	WASMFilterImageURL = common.FetchEnv("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
 )
 
-type GatewayAction struct {
-	Configurations []kuadrantv1beta1.Configuration `json:"configurations"`
-
-	// +optional
-	Rules []kuadrantv1beta1.Rule `json:"rules,omitempty"`
-}
-
-func DefaultGatewayConfiguration(key client.ObjectKey) []kuadrantv1beta1.Configuration {
-	return []kuadrantv1beta1.Configuration{
-		{
-			Actions: []kuadrantv1beta1.ActionSpecifier{
-				{
-					GenericKey: &kuadrantv1beta1.GenericKeySpec{
-						DescriptorValue: key.String(),
-						// using default value as specified in Envoy spec
-						// https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-ratelimit-action-generickey
-						DescriptorKey: &[]string{"ratelimitpolicy"}[0],
-					},
-				},
-			},
-		},
-	}
-}
-
-// GatewayActionsFromRateLimitPolicy return flatten list from GatewayAction from the RLP
-func GatewayActionsFromRateLimitPolicy(rlp *kuadrantv1beta1.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []GatewayAction {
-	flattenActions := make([]GatewayAction, 0)
+// WasmRules computes WASM rules from the policy and the targeted route.
+// It returns an empty list of wasm rules if the policy specifies no limits or if all limits specified in the policy
+// fail to match any route rule according to the limits route selectors.
+func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []wasm.Rule {
+	rules := make([]wasm.Rule, 0)
 	if rlp == nil {
-		return flattenActions
+		return rules
 	}
 
-	for idx := range rlp.Spec.RateLimits {
-		// Skip those RateLimit objects with empty configurations, even if they have rules defined
-		if len(rlp.Spec.RateLimits[idx].Configurations) == 0 {
+	for limitName := range rlp.Spec.Limits {
+		// 1 RLP limit <---> 1 WASM rule
+		limit := rlp.Spec.Limits[limitName]
+		limitIdentifier := LimitNameToLimitadorIdentifier(limitName)
+		rule, err := ruleFromLimit(limitIdentifier, &limit, route)
+		if err == nil {
+			rules = append(rules, rule)
+		}
+	}
+
+	return rules
+}
+
+func ruleFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute) (wasm.Rule, error) {
+	rule := wasm.Rule{}
+
+	conditions, err := conditionsFromLimit(limit, route)
+	if err != nil {
+		return rule, err
+	}
+
+	rule.Conditions = conditions
+
+	if data := dataFromLimt(limitIdentifier, limit); data != nil {
+		rule.Data = data
+	}
+
+	return rule, nil
+}
+
+func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute) ([]wasm.Condition, error) {
+	if limit == nil {
+		return nil, errors.New("limit should not be nil")
+	}
+
+	routeConditions := make([]wasm.Condition, 0)
+
+	if len(limit.RouteSelectors) > 0 {
+		// build conditions from the rules selected by the route selectors
+		for idx := range limit.RouteSelectors {
+			routeSelector := limit.RouteSelectors[idx]
+			hostnamesForConditions := hostnamesForConditions(route, &routeSelector)
+			for _, rule := range routeSelector.SelectRules(route) {
+				routeConditions = append(routeConditions, conditionsFromRule(rule, hostnamesForConditions)...)
+			}
+		}
+		if len(routeConditions) == 0 {
+			return nil, errors.New("cannot match any route rules, check for invalid route selectors in the policy")
+		}
+	} else {
+		// build conditions from all rules if no route selectors are defined
+		for _, rule := range route.Spec.Rules {
+			routeConditions = append(routeConditions, conditionsFromRule(rule, hostnamesForConditions(route, nil))...)
+		}
+	}
+
+	if len(limit.When) == 0 {
+		if len(routeConditions) == 0 {
+			return nil, nil
+		}
+		return routeConditions, nil
+	}
+
+	if len(routeConditions) > 0 {
+		// merge the 'when' conditions into each route level one
+		mergedConditions := make([]wasm.Condition, len(routeConditions))
+		for _, when := range limit.When {
+			for idx := range routeConditions {
+				mergedCondition := routeConditions[idx]
+				mergedCondition.AllOf = append(mergedCondition.AllOf, patternExpresionFromWhen(when))
+				mergedConditions[idx] = mergedCondition
+			}
+		}
+		return mergedConditions, nil
+	}
+
+	// build conditions only from the 'when' field
+	whenConditions := make([]wasm.Condition, len(limit.When))
+	for idx, when := range limit.When {
+		whenConditions[idx] = wasm.Condition{AllOf: []wasm.PatternExpression{patternExpresionFromWhen(when)}}
+	}
+	return whenConditions, nil
+}
+
+// hostnamesForConditions allows avoiding building conditions for hostnames that are excluded by the selector
+// or when the hostname is irrelevant (i.e. matches all hostnames)
+func hostnamesForConditions(route *gatewayapiv1beta1.HTTPRoute, routeSelector *kuadrantv1beta2.RouteSelector) []gatewayapiv1beta1.Hostname {
+	hostnames := route.Spec.Hostnames
+
+	if routeSelector != nil && len(routeSelector.Hostnames) > 0 {
+		hostnames = common.Intersection(routeSelector.Hostnames, hostnames)
+	}
+
+	if common.SameElements(hostnames, route.Spec.Hostnames) {
+		return []gatewayapiv1beta1.Hostname{"*"}
+	}
+
+	return hostnames
+}
+
+// conditionsFromRule builds a list of conditions from a rule and a list of hostnames
+// each combination of a rule match and hostname yields one condition
+// rules that specify no explicit match are assumed to match all request (i.e. implicit catch-all rule)
+// empty list of hostnames yields a condition without a hostname pattern expression
+func conditionsFromRule(rule gatewayapiv1beta1.HTTPRouteRule, hostnames []gatewayapiv1beta1.Hostname) (conditions []wasm.Condition) {
+	if len(rule.Matches) == 0 {
+		for _, hostname := range hostnames {
+			if hostname == "*" {
+				continue
+			}
+			condition := wasm.Condition{AllOf: []wasm.PatternExpression{patternExpresionFromHostname(hostname)}}
+			conditions = append(conditions, condition)
+		}
+		return
+	}
+
+	for _, match := range rule.Matches {
+		condition := wasm.Condition{AllOf: patternExpresionsFromMatch(match)}
+
+		if len(hostnames) > 0 {
+			for _, hostname := range hostnames {
+				if hostname == "*" {
+					conditions = append(conditions, condition)
+					continue
+				}
+				mergedCondition := condition
+				mergedCondition.AllOf = append(mergedCondition.AllOf, patternExpresionFromHostname(hostname))
+				conditions = append(conditions, mergedCondition)
+			}
 			continue
 		}
-		// if HTTPRoute is available, fill empty rules with defaults from the route
-		rules := rlp.Spec.RateLimits[idx].Rules
-		if route != nil && len(rules) == 0 {
-			rules = HTTPRouteRulesToRLPRules(common.RulesFromHTTPRoute(route))
+
+		conditions = append(conditions, condition)
+	}
+	return
+}
+
+func patternExpresionsFromMatch(match gatewayapiv1beta1.HTTPRouteMatch) []wasm.PatternExpression {
+	expressions := make([]wasm.PatternExpression, 0)
+
+	if match.Path != nil {
+		expressions = append(expressions, patternExpresionFromPathMatch(*match.Path))
+	}
+
+	if match.Method != nil {
+		expressions = append(expressions, patternExpresionFromMethod(*match.Method))
+	}
+
+	// TODO(eastizle): only paths and methods implemented
+
+	return expressions
+}
+
+func patternExpresionFromPathMatch(pathMatch gatewayapiv1beta1.HTTPPathMatch) wasm.PatternExpression {
+	var (
+		operator = wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator) // default value
+		value    = "/"                                                      // default value
+	)
+
+	if pathMatch.Value != nil {
+		value = *pathMatch.Value
+	}
+
+	if pathMatch.Type != nil {
+		if val, ok := wasm.PathMatchTypeMap[*pathMatch.Type]; ok {
+			operator = val
 		}
-
-		flattenActions = append(flattenActions, GatewayAction{
-			Configurations: rlp.Spec.RateLimits[idx].Configurations,
-			Rules:          rules,
-		})
 	}
 
-	if len(rlp.Spec.RateLimits) > 0 && len(flattenActions) == 0 {
-		// no configurations specified in the rlp,
-		// then apply the default configuration (action list) and default rules from the route
-		flattenActions = []GatewayAction{
-			{
-				Configurations: DefaultGatewayConfiguration(client.ObjectKeyFromObject(rlp)),
-				Rules:          HTTPRouteRulesToRLPRules(common.RulesFromHTTPRoute(route)),
-			},
-		}
+	return wasm.PatternExpression{
+		Selector: "request.url_path",
+		Operator: operator,
+		Value:    value,
+	}
+}
+
+func patternExpresionFromMethod(method gatewayapiv1beta1.HTTPMethod) wasm.PatternExpression {
+	return wasm.PatternExpression{
+		Selector: "request.method",
+		Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+		Value:    string(method),
+	}
+}
+
+func patternExpresionFromHostname(hostname gatewayapiv1beta1.Hostname) wasm.PatternExpression {
+	value := string(hostname)
+	operator := "eq"
+	if strings.HasPrefix(value, "*.") {
+		operator = "endswith"
+		value = value[1:]
+	}
+	return wasm.PatternExpression{
+		Selector: "request.host",
+		Operator: wasm.PatternOperator(operator),
+		Value:    value,
+	}
+}
+
+func patternExpresionFromWhen(when kuadrantv1beta2.WhenCondition) wasm.PatternExpression {
+	return wasm.PatternExpression{
+		Selector: when.Selector,
+		Operator: wasm.PatternOperator(when.Operator),
+		Value:    when.Value,
+	}
+}
+
+func dataFromLimt(limitIdentifier string, limit *kuadrantv1beta2.Limit) (data []wasm.DataItem) {
+	if limit == nil {
+		return
 	}
 
-	return flattenActions
-}
+	// static key representing the limit
+	data = append(data, wasm.DataItem{Static: &wasm.StaticSpec{Key: limitIdentifier, Value: "1"}})
 
-func HTTPRouteRulesToRLPRules(httpRouteRules []common.HTTPRouteRule) []kuadrantv1beta1.Rule {
-	rlpRules := make([]kuadrantv1beta1.Rule, 0, len(httpRouteRules))
-	for idx := range httpRouteRules {
-		var tmp []string
-		rlpRules = append(rlpRules, kuadrantv1beta1.Rule{
-			// copy slice
-			Paths:   append(tmp, httpRouteRules[idx].Paths...),
-			Methods: append(tmp, httpRouteRules[idx].Methods...),
-			Hosts:   append(tmp, httpRouteRules[idx].Hosts...),
-		})
-	}
-	return rlpRules
-}
-
-type RateLimitPolicy struct {
-	Name            string   `json:"name"`
-	RateLimitDomain string   `json:"rate_limit_domain"`
-	UpstreamCluster string   `json:"upstream_cluster"`
-	Hostnames       []string `json:"hostnames"`
-	// +optional
-	GatewayActions []GatewayAction `json:"gateway_actions,omitempty"`
-}
-
-type WASMPlugin struct {
-	FailureModeDeny   bool              `json:"failure_mode_deny"`
-	RateLimitPolicies []RateLimitPolicy `json:"rate_limit_policies"`
-}
-
-func (w *WASMPlugin) ToStruct() (*_struct.Struct, error) {
-	wasmPluginJSON, err := json.Marshal(w)
-	if err != nil {
-		return nil, err
+	for _, counter := range limit.Counters {
+		data = append(data, wasm.DataItem{Selector: &wasm.SelectorSpec{Selector: counter}})
 	}
 
-	pluginConfigStruct := &_struct.Struct{}
-	if err := pluginConfigStruct.UnmarshalJSON(wasmPluginJSON); err != nil {
-		return nil, err
-	}
-	return pluginConfigStruct, nil
+	return data
 }
 
-func WASMPluginFromStruct(structure *_struct.Struct) (*WASMPlugin, error) {
+func WASMPluginFromStruct(structure *_struct.Struct) (*wasm.Plugin, error) {
 	if structure == nil {
 		return nil, errors.New("cannot desestructure WASMPlugin from nil")
 	}
@@ -132,7 +261,7 @@ func WASMPluginFromStruct(structure *_struct.Struct) (*WASMPlugin, error) {
 		return nil, err
 	}
 	// Deserialize struct into PluginConfig struct
-	wasmPlugin := &WASMPlugin{}
+	wasmPlugin := &wasm.Plugin{}
 	if err := json.Unmarshal(configJSON, wasmPlugin); err != nil {
 		return nil, err
 	}
@@ -140,12 +269,7 @@ func WASMPluginFromStruct(structure *_struct.Struct) (*WASMPlugin, error) {
 	return wasmPlugin, nil
 }
 
-type GatewayActionsByDomain map[string][]GatewayAction
-
-func (g GatewayActionsByDomain) String() string {
-	jsonData, _ := json.MarshalIndent(g, "", "  ")
-	return string(jsonData)
-}
+type WasmRulesByDomain map[string][]wasm.Rule
 
 func WASMPluginMutator(existingObj, desiredObj client.Object) (bool, error) {
 	update := false

@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
@@ -65,7 +65,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	ctx := logr.NewContext(eventCtx, logger)
 
 	// fetch the ratelimitpolicy
-	rlp := &kuadrantv1beta1.RateLimitPolicy{}
+	rlp := &kuadrantv1beta2.RateLimitPolicy{}
 	if err := r.Client().Get(ctx, req.NamespacedName, rlp); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("no RateLimitPolicy found")
@@ -95,7 +95,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, rlp, nil, delResErr)
+				return r.reconcileStatus(ctx, rlp, delResErr)
 			}
 			return ctrl.Result{}, err
 		}
@@ -132,7 +132,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	specErr := r.reconcileResources(ctx, rlp, targetNetworkObject)
 
 	// reconcile ratelimitpolicy status
-	statusResult, statusErr := r.reconcileStatus(ctx, rlp, targetNetworkObject, specErr)
+	statusResult, statusErr := r.reconcileStatus(ctx, rlp, specErr)
 
 	if specErr != nil {
 		return ctrl.Result{}, specErr
@@ -151,7 +151,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetNetworkObject client.Object) error {
+func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
 	// validate
 	err := rlp.Validate()
 	if err != nil {
@@ -169,7 +169,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 		return err
 	}
 
-	if err := r.reconcileLimits(ctx, rlp, gatewayDiffObj); err != nil {
+	if err := r.reconcileLimits(ctx, rlp); err != nil {
 		return err
 	}
 
@@ -190,7 +190,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 	return r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
 }
 
-func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetNetworkObject client.Object) error {
+func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
 	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, targetNetworkObject, &common.KuadrantRateLimitPolicyRefsConfig{})
 	if err != nil {
@@ -205,7 +205,7 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 		return err
 	}
 
-	if err := r.reconcileLimits(ctx, rlp, gatewayDiffObj); err != nil && !apierrors.IsNotFound(err) {
+	if err := r.deleteLimits(ctx, rlp); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 
@@ -225,7 +225,7 @@ func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(
 	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(policy), targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
 }
 
-func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, rlp *kuadrantv1beta1.RateLimitPolicy, targetNetworkObject client.Object) error {
+func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
 	return r.DeleteTargetBackReference(ctx, client.ObjectKeyFromObject(rlp), targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
 }
 
@@ -242,7 +242,7 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Client: r.Client(),
 	}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&kuadrantv1beta1.RateLimitPolicy{}).
+		For(&kuadrantv1beta2.RateLimitPolicy{}).
 		Watches(
 			&source.Kind{Type: &gatewayapiv1beta1.HTTPRoute{}},
 			handler.EnqueueRequestsFromMapFunc(httpRouteEventMapper.MapToRateLimitPolicy),
@@ -255,7 +255,7 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		// When gateway level RLP changes, notify route level RLP's
 		Watches(
-			&source.Kind{Type: &kuadrantv1beta1.RateLimitPolicy{}},
+			&source.Kind{Type: &kuadrantv1beta2.RateLimitPolicy{}},
 			handler.EnqueueRequestsFromMapFunc(gatewayRateLimtPolicyEventMapper.MapRouteRateLimitPolicy),
 		).
 		Complete(r)

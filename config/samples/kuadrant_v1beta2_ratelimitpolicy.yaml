@@ -1,0 +1,16 @@
+---
+apiVersion: kuadrant.io/v1beta2
+kind: RateLimitPolicy
+metadata:
+  name: toystore
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
+  limits:
+    toys:
+      rates:
+      - limit: 50
+        duration: 1
+        unit: minute

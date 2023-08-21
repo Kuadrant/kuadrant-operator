@@ -46,6 +46,7 @@ import (
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
@@ -73,6 +74,7 @@ func init() {
 	utilruntime.Must(istioapis.AddToScheme(scheme))
 	utilruntime.Must(maistraapis.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta1.AddToScheme(scheme))
+	utilruntime.Must(kuadrantv1beta2.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
 

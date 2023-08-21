@@ -64,53 +64,23 @@ metadata:
           "spec": {}
         },
         {
-          "apiVersion": "kuadrant.io/v1beta1",
+          "apiVersion": "kuadrant.io/v1beta2",
           "kind": "RateLimitPolicy",
           "metadata": {
             "name": "toystore"
           },
           "spec": {
-            "rateLimits": [
-              {
-                "configurations": [
+            "limits": {
+              "toys": {
+                "rates": [
                   {
-                    "actions": [
-                      {
-                        "metadata": {
-                          "default_value": "no-user",
-                          "descriptor_key": "userID",
-                          "metadata_key": {
-                            "key": "envoy.filters.http.ext_authz",
-                            "path": [
-                              {
-                                "segment": {
-                                  "key": "ext_auth_data"
-                                }
-                              },
-                              {
-                                "segment": {
-                                  "key": "userID"
-                                }
-                              }
-                            ]
-                          }
-                        }
-                      }
-                    ]
-                  }
-                ],
-                "limits": [
-                  {
-                    "conditions": [],
-                    "maxValue": 2,
-                    "seconds": 10,
-                    "variables": [
-                      "userID"
-                    ]
+                    "duration": 1,
+                    "limit": 50,
+                    "unit": "minute"
                   }
                 ]
               }
-            ],
+            },
             "targetRef": {
               "group": "gateway.networking.k8s.io",
               "kind": "HTTPRoute",
@@ -143,11 +113,9 @@ spec:
       kind: Kuadrant
       name: kuadrants.kuadrant.io
       version: v1beta1
-    - description: Enable access control on workloads based on HTTP rate limiting
-      displayName: RateLimitPolicy
-      kind: RateLimitPolicy
+    - kind: RateLimitPolicy
       name: ratelimitpolicies.kuadrant.io
-      version: v1beta1
+      version: v1beta2
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
   displayName: Kuadrant Operator
   icon:

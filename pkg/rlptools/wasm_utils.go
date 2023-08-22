@@ -245,7 +245,7 @@ func dataFromLimt(limitIdentifier string, limit *kuadrantv1beta2.Limit) (data []
 	data = append(data, wasm.DataItem{Static: &wasm.StaticSpec{Key: limitIdentifier, Value: "1"}})
 
 	for _, counter := range limit.Counters {
-		data = append(data, wasm.DataItem{Selector: &wasm.SelectorSpec{Selector: counter}})
+		data = append(data, wasm.DataItem{Selector: &wasm.SelectorSpec{Selector: counter, Default: common.Ptr("")}})
 	}
 
 	return data

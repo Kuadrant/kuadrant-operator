@@ -457,6 +457,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					{
 						Selector: &wasm.SelectorSpec{
 							Selector: kuadrantv1beta2.ContextSelector("auth.identity.username"),
+							Default:  common.Ptr(""),
 						},
 					},
 				},

@@ -10,6 +10,7 @@ import (
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
@@ -318,6 +319,7 @@ func TestWasmRules(t *testing.T) {
 						{
 							Selector: &wasm.SelectorSpec{
 								Selector: "auth.identity.username",
+								Default:  common.Ptr(""),
 							},
 						},
 					},

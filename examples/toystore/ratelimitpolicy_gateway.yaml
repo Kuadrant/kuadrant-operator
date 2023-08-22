@@ -1,5 +1,4 @@
----
-apiVersion: kuadrant.io/v1beta1
+apiVersion: kuadrant.io/v1beta2
 kind: RateLimitPolicy
 metadata:
   name: toystore-gw
@@ -9,25 +8,23 @@ spec:
     group: gateway.networking.k8s.io
     kind: Gateway
     name: istio-ingressgateway
-  rateLimits:
-    - rules:
-      - methods: ["POST"]
-      - methods: ["PUT"]
-      configurations:
-        - actions:
-            - generic_key:
-                descriptor_key: expensive_op
-                descriptor_value: "1"
-      limits:
-        - conditions: ["expensive_op == '1'"]
-          maxValue: 2
-          seconds: 30
-          variables: []
-    - configurations:
-        - actions:
-            - remote_address: {}
-      limits:
-        - conditions: []
-          maxValue: 5
-          seconds: 30
-          variables: ["remote_address"]
+  limits:
+    "expensive-operation":
+      rates:
+      - limit: 2
+        duration: 30
+        unit: second
+      when:
+      - selector: request.method
+        operator: eq
+        value: POST
+
+    "limit-per-ip":
+      rates:
+      - limit: 5
+        duration: 30
+        unit: second
+      when:
+      - selector: source.ip
+        operator: eq
+        value: source.address

@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"strings"
 
-	_struct "github.com/golang/protobuf/ptypes/struct"
+	_struct "google.golang.org/protobuf/types/known/structpb"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"

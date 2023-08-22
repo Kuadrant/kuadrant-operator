@@ -3,7 +3,7 @@ package wasm
 import (
 	"encoding/json"
 
-	_struct "github.com/golang/protobuf/ptypes/struct"
+	_struct "google.golang.org/protobuf/types/known/structpb"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"

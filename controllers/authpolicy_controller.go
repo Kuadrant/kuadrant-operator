@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta1"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -199,6 +200,10 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Logger: r.Logger().WithName("gatewayEventMapper"),
 	}
 
+	authConfigEventMapper := &AuthConfigEventMapper{
+		Logger: r.Logger().WithName("authConfigEventMapper"),
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.AuthPolicy{}).
 		Watches(
@@ -207,5 +212,7 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		Watches(&source.Kind{Type: &gatewayapiv1beta1.Gateway{}},
 			handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.MapToAuthPolicy)).
+		Watches(&source.Kind{Type: &authorinoapi.AuthConfig{}},
+			handler.EnqueueRequestsFromMapFunc(authConfigEventMapper.MapToAuthPolicy)).
 		Complete(r)
 }

@@ -67,6 +67,8 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ap *api.AuthPolicy, targetNetwo
 		return nil, err
 	}
 
+	policyKey := client.ObjectKeyFromObject(ap)
+
 	return &authorinoapi.AuthConfig{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "AuthConfig",
@@ -75,6 +77,9 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ap *api.AuthPolicy, targetNetwo
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      authConfigName(client.ObjectKeyFromObject(ap)),
 			Namespace: ap.Namespace,
+			Annotations: map[string]string{
+				common.AuthPoliciesBackRefAnnotation: policyKey.String(),
+			},
 		},
 		Spec: authorinoapi.AuthConfigSpec{
 			Hosts:         hosts,

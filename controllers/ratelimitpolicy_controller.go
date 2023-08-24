@@ -19,8 +19,8 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-
 	"github.com/go-logr/logr"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -186,7 +186,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 		return err
 	}
 
-	// set annotation of policies afftecting the gateway - should be the last step, only when all the reconciliation steps succeed
+	// set annotation of policies affecting the gateway - should be the last step, only when all the reconciliation steps succeed
 	return r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
 }
 
@@ -216,7 +216,13 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 		}
 	}
 
-	// update annotation of policies afftecting the gateway
+	// remove direct back ref from limitador CR
+	err = r.deleteLimitadorBackReference(ctx, rlp)
+	if err != nil {
+		return err
+	}
+
+	// update annotation of policies affecting the gateway
 	return r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
 }
 
@@ -241,6 +247,11 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Logger: r.Logger().WithName("gatewayRateLimitPolicyEventMapper"),
 		Client: r.Client(),
 	}
+
+	limitadorEventMapper := &LimitadorEventMapper{
+		Logger: r.Logger().WithName("limitadorEventMapper"),
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta2.RateLimitPolicy{}).
 		Watches(
@@ -257,6 +268,9 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &kuadrantv1beta2.RateLimitPolicy{}},
 			handler.EnqueueRequestsFromMapFunc(gatewayRateLimtPolicyEventMapper.MapRouteRateLimitPolicy),
+		).
+		Watches(&source.Kind{Type: &limitadorv1alpha1.Limitador{}},
+			handler.EnqueueRequestsFromMapFunc(limitadorEventMapper.MapToRateLimitPolicy),
 		).
 		Complete(r)
 }

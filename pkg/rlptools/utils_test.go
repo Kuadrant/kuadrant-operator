@@ -5,6 +5,7 @@ package rlptools
 import (
 	"reflect"
 	"regexp"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"testing"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
@@ -359,6 +360,214 @@ func TestConvertRateIntoSeconds(t *testing.T) {
 			}
 			if seconds != tc.expectedSeconds {
 				subT.Errorf("seconds does not match, expected(%d), got (%d)", tc.expectedSeconds, seconds)
+			}
+		})
+	}
+}
+
+func TestRemoveRLPLabelsFromLimitadorList(t *testing.T) {
+	policyKey := client.ObjectKey{Name: "test-RLP", Namespace: "test"}
+
+	type args struct {
+		limitadorList limitadorv1alpha1.LimitadorList
+		policyKey     client.ObjectKey
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    limitadorv1alpha1.LimitadorList
+		wantErr bool
+	}{
+		{
+			name:    "LimitadorList is empty",
+			wantErr: false,
+			want:    limitadorv1alpha1.LimitadorList{},
+			args: args{
+				limitadorList: limitadorv1alpha1.LimitadorList{},
+				policyKey:     policyKey,
+			},
+		},
+		{
+			name:    "LimitadorList has one entry with no labels",
+			wantErr: false,
+			want:    limitadorv1alpha1.LimitadorList{},
+			args: args{
+				limitadorList: limitadorv1alpha1.LimitadorList{
+					Items: []limitadorv1alpha1.Limitador{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:        "test1",
+								Namespace:   "test",
+								Annotations: map[string]string{"other": "label"},
+							},
+						},
+					},
+				},
+				policyKey: policyKey,
+			},
+		},
+		{
+			name:    "LimitadorList is has two entries, second entry with RLP labels",
+			wantErr: false,
+			want: limitadorv1alpha1.LimitadorList{
+				Items: []limitadorv1alpha1.Limitador{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "test2",
+							Namespace:   "test",
+							Annotations: map[string]string{"other": "label"},
+						},
+					},
+				},
+			},
+			args: args{
+				limitadorList: limitadorv1alpha1.LimitadorList{
+					Items: []limitadorv1alpha1.Limitador{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:        "test1",
+								Namespace:   "test",
+								Annotations: map[string]string{"other": "label"},
+							},
+						},
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "test2",
+								Namespace: "test",
+								Annotations: map[string]string{
+									"other": "label",
+									common.RateLimitPoliciesBackRefAnnotation: "[{\"Name\": \"test-RLP\", \"Namespace\": \"test\"}]",
+								},
+							},
+						},
+					},
+				},
+				policyKey: policyKey,
+			},
+		},
+		{
+			name:    "LimitadorList is has three entries, first and second with RLP labels",
+			wantErr: false,
+			want: limitadorv1alpha1.LimitadorList{
+				Items: []limitadorv1alpha1.Limitador{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "test1",
+							Namespace:   "test",
+							Annotations: map[string]string{"other": "label"},
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        "test3",
+							Namespace:   "test",
+							Annotations: map[string]string{"other": "label"},
+						},
+					},
+				},
+			},
+			args: args{
+				limitadorList: limitadorv1alpha1.LimitadorList{
+					Items: []limitadorv1alpha1.Limitador{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "test1",
+								Namespace: "test",
+								Annotations: map[string]string{
+									"other": "label",
+									common.RateLimitPoliciesBackRefAnnotation: "[{\"Name\": \"test-RLP\", \"Namespace\": \"test\"}]",
+								},
+							},
+						},
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:        "test2",
+								Namespace:   "test",
+								Annotations: map[string]string{"other": "label"},
+							},
+						},
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "test3",
+								Namespace: "test",
+								Annotations: map[string]string{
+									"other": "label",
+									common.RateLimitPoliciesBackRefAnnotation: "[{\"Name\": \"test-RLP\", \"Namespace\": \"test\"}]",
+								},
+							},
+						},
+					},
+				},
+				policyKey: policyKey,
+			},
+		},
+		{
+			name:    "LimitadorList, limitador CR had many RLP attached",
+			wantErr: false,
+			want: limitadorv1alpha1.LimitadorList{
+				Items: []limitadorv1alpha1.Limitador{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test1",
+							Namespace: "test",
+							Annotations: map[string]string{
+								"other": "label",
+								common.RateLimitPoliciesBackRefAnnotation: "[{\"Namespace\":\"test\",\"Name\":\"other-RLP\"}]",
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				limitadorList: limitadorv1alpha1.LimitadorList{
+					Items: []limitadorv1alpha1.Limitador{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "test1",
+								Namespace: "test",
+								Annotations: map[string]string{
+									"other": "label",
+									common.RateLimitPoliciesBackRefAnnotation: "[{\"Name\": \"other-RLP\", \"Namespace\": \"test\"}, {\"Name\": \"test-RLP\", \"Namespace\": \"test\"}]",
+								},
+							},
+						},
+					},
+				},
+				policyKey: policyKey,
+			},
+		},
+		{
+			name:    "LimitadorList, get unmarshal error",
+			wantErr: true,
+			want:    limitadorv1alpha1.LimitadorList{},
+			args: args{
+				limitadorList: limitadorv1alpha1.LimitadorList{
+					Items: []limitadorv1alpha1.Limitador{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "test1",
+								Namespace: "test",
+								Annotations: map[string]string{
+									"other": "label",
+									common.RateLimitPoliciesBackRefAnnotation: "[{Name: other-RLP, Namespace: test}]",
+								},
+							},
+						},
+					},
+				},
+				policyKey: policyKey,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := RemoveRLPLabelsFromLimitadorList(tt.args.limitadorList, tt.args.policyKey)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("RemoveRLPLabelsFromLimitadorList() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("RemoveRLPLabelsFromLimitadorList() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

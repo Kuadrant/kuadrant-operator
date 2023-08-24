@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/go-logr/logr"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
@@ -68,8 +69,12 @@ func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp 
 		return err
 	}
 
-	// return if limitador is up to date
-	if rlptools.Equal(rateLimitIndex.ToRateLimits(), limitador.Spec.Limits) {
+	updated, err := r.reconcileLimitadorBackRef(limitador, rlp)
+	if err != nil {
+		return err
+	}
+	// return if limitador is up-to-date
+	if rlptools.Equal(rateLimitIndex.ToRateLimits(), limitador.Spec.Limits) && !updated {
 		logger.V(1).Info("limitador is up to date, skipping update")
 		return nil
 	}
@@ -107,4 +112,73 @@ func (r *RateLimitPolicyReconciler) buildRateLimitIndex(ctx context.Context, rlp
 	}
 
 	return rateLimitIndex, nil
+}
+
+func (r *RateLimitPolicyReconciler) reconcileLimitadorBackRef(limitador *limitadorv1alpha1.Limitador, policyKey client.Object) (updated bool, err error) {
+	policy := client.ObjectKeyFromObject(policyKey)
+	objAnnotations := common.ReadAnnotationsFromObject(limitador)
+	var refs []client.ObjectKey
+
+	val, ok := objAnnotations[common.RateLimitPoliciesBackRefAnnotation]
+	if ok {
+		err := json.Unmarshal([]byte(val), &refs)
+		if err != nil {
+			return false, err
+		}
+		if common.ContainsObjectKey(refs, policy) {
+			r.Logger().V(1).Info("policy references in annotations", "policy", policy)
+			return false, nil
+		}
+	}
+
+	refs = append(refs, policy)
+	serialized, err := json.Marshal(refs)
+	if err != nil {
+		return false, err
+	}
+	objAnnotations[common.RateLimitPoliciesBackRefAnnotation] = string(serialized)
+	limitador.SetAnnotations(objAnnotations)
+	return true, nil
+}
+
+func (r *RateLimitPolicyReconciler) deleteLimitadorBackReference(ctx context.Context, policy client.Object) error {
+	policyKey := client.ObjectKeyFromObject(policy)
+
+	limitadorList, err := r.listLimitadorByNamespace(ctx, policyKey.Namespace)
+	if err != nil {
+		return err
+	}
+
+	updateList, err := rlptools.RemoveRLPLabelsFromLimitadorList(limitadorList, policyKey)
+	if err != nil {
+		return err
+	}
+
+	err = r.updateLimitadorCRs(ctx, updateList)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *RateLimitPolicyReconciler) updateLimitadorCRs(ctx context.Context, updateList limitadorv1alpha1.LimitadorList) error {
+	for index := range updateList.Items {
+		err := r.Client().Update(ctx, &updateList.Items[index])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *RateLimitPolicyReconciler) listLimitadorByNamespace(ctx context.Context, namespace string) (limitadorv1alpha1.LimitadorList, error) {
+	limitadorList := limitadorv1alpha1.LimitadorList{}
+	listOptions := &client.ListOptions{Namespace: namespace}
+
+	err := r.Client().List(ctx, &limitadorList, listOptions)
+	if err != nil {
+		return limitadorv1alpha1.LimitadorList{}, err
+	}
+	return limitadorList, nil
 }

@@ -3,7 +3,9 @@ package rlptools
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"unicode"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
@@ -87,4 +89,41 @@ func rateToSeconds(rate kuadrantv1beta2.Rate) (maxValue int, seconds int) {
 	}
 
 	return
+}
+
+func RemoveRLPLabelsFromLimitadorList(limitadorList limitadorv1alpha1.LimitadorList, policyKey client.ObjectKey) (limitadorv1alpha1.LimitadorList, error) {
+	var updateList limitadorv1alpha1.LimitadorList
+	for index := range limitadorList.Items {
+		limitador := limitadorList.Items[index]
+		objAnnotations := limitador.GetAnnotations()
+		val, ok := objAnnotations[common.RateLimitPoliciesBackRefAnnotation]
+		if !ok {
+			continue
+		}
+
+		var refs []client.ObjectKey
+		err := json.Unmarshal([]byte(val), &refs)
+		if err != nil {
+			return updateList, err
+		}
+		refID := common.FindObjectKey(refs, policyKey)
+		if refID != len(refs) {
+			// remove index
+			refs = append(refs[:refID], refs[refID+1:]...)
+
+			if len(refs) > 0 {
+				serialized, err := json.Marshal(refs)
+				if err != nil {
+					return updateList, err
+				}
+				objAnnotations[common.RateLimitPoliciesBackRefAnnotation] = string(serialized)
+			} else {
+				delete(objAnnotations, common.RateLimitPoliciesBackRefAnnotation)
+			}
+
+			limitador.SetAnnotations(objAnnotations)
+			updateList.Items = append(updateList.Items, limitador)
+		}
+	}
+	return updateList, nil
 }

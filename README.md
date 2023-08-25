@@ -161,7 +161,7 @@ EOF
 
 The user guides section of the docs gathers several use-cases as well as the instructions to implement them using kuadrant.
 
-* [Simple rate limiting for API owners](doc/user-guides/simple-rl-for-api-owners.md)
+* [Simple Rate Limiting for Application Developers](doc/user-guides/simple-rl-for-app-developers.md)
 * [Authenticated Rate Limiting for Application Developers](doc/user-guides/authenticated-rl-for-app-developers.md)
 * [Gateway rate limiting for cluster operators](doc/user-guides/gateway-rl-for-cluster-operators.md)
 * [Authenticated rate limiting with JWTs and Kubernetes authnz](doc/user-guides/authenticated-rl-with-jwt-and-k8s-authnz.md)

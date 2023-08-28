@@ -1,244 +1,204 @@
-# Gateway Rate Limit For Cluster Operators
+# Gateway Rate Limiting for Cluster Operators
 
-This user guide shows how the kuadrant's control plane applies rate limit policy at
-[Gateway API's Gateway](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.Gateway)
-level.
+This user guide walks you through an example of how to configure rate limiting for all routes attached to an ingress gateway.
 
-### Clone the project
+<br/>
+
+## Run the steps ① → ④
+
+### ① Setup
+
+This step uses tooling from the Kuadrant Operator component to create a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
+where it installs Istio, Kubernetes Gateway API and Kuadrant itself.
+
+> **Note:** In production environment, these steps are usually performed by a cluster operator with administrator privileges over the Kubernetes cluster.
+
+Clone the project:
 
 ```sh
 git clone https://github.com/Kuadrant/kuadrant-operator && cd kuadrant-operator
 ```
 
-### Setup environment
-
-This step creates a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
-then it installs Istio, Kubernetes Gateway API and kuadrant.
+Setup the environment:
 
 ```sh
 make local-setup
 ```
 
-### Apply Kuadrant CR
+Request an instance of Kuadrant:
 
 ```sh
 kubectl -n kuadrant-system apply -f - <<EOF
----
 apiVersion: kuadrant.io/v1beta1
 kind: Kuadrant
 metadata:
-  name: kuadrant-sample
+  name: kuadrant
 spec: {}
 EOF
 ```
 
-### Deploy toystore example deployment
+### ② Create the ingress gateways
+
+```sh
+kubectl -n istio-system apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  name: external
+  annotations:
+    kuadrant.io/namespace: kuadrant-system
+    networking.istio.io/service-type: ClusterIP
+spec:
+  gatewayClassName: istio
+  listeners:
+  - name: external
+    port: 80
+    protocol: HTTP
+    hostname: '*.io'
+    allowedRoutes:
+      namespaces:
+        from: All
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  name: internal
+  annotations:
+    kuadrant.io/namespace: kuadrant-system
+    networking.istio.io/service-type: ClusterIP
+spec:
+  gatewayClassName: istio
+  listeners:
+  - name: local
+    port: 80
+    protocol: HTTP
+    hostname: '*.local'
+    allowedRoutes:
+      namespaces:
+        from: All
+EOF
+```
+
+### ③ Enforce rate limiting on requests incoming through the `external` gateway
+
+```
+    ┌───────────┐      ┌───────────┐
+    │ (Gateway) │      │ (Gateway) │
+    │  external │      │  internal │
+    │           │      │           │
+    │   *.io    │      │  *.local  │
+    └───────────┘      └───────────┘
+          ▲
+          │
+┌─────────┴─────────┐
+│ (RateLimitPolicy) │
+│       gw-rlp      │
+└───────────────────┘
+```
+
+Create a Kuadrant `RateLimitPolicy` to configure rate limiting:
+
+```sh
+kubectl apply -n istio-system -f - <<EOF
+apiVersion: kuadrant.io/v1beta2
+kind: RateLimitPolicy
+metadata:
+  name: gw-rlp
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: external
+  limits:
+    "global":
+      rates:
+      - limit: 5
+        duration: 10
+        unit: second
+EOF
+```
+
+> **Note:** It may take a couple of minutes for the RateLimitPolicy to be applied depending on your cluster.
+
+### ④ Deploy a sample API to test rate limiting enforced at the level of the gateway
+
+```
+                           ┌───────────┐      ┌───────────┐
+┌───────────────────┐      │ (Gateway) │      │ (Gateway) │
+│ (RateLimitPolicy) │      │  external │      │  internal │
+│       gw-rlp      ├─────►│           │      │           │
+└───────────────────┘      │   *.io    │      │  *.local  │
+                           └─────┬─────┘      └─────┬─────┘
+                                 │                  │
+                                 └─────────┬────────┘
+                                           │
+                                 ┌─────────┴────────┐
+                                 │   (HTTPRoute)    │
+                                 │     toystore     │
+                                 │                  │
+                                 │ *.toystore.io    │
+                                 │ *.toystore.local │
+                                 └────────┬─────────┘
+                                          │
+                                   ┌──────┴───────┐
+                                   │   (Service)  │
+                                   │   toystore   │
+                                   └──────────────┘
+```
+
+Deploy the sample API:
 
 ```sh
 kubectl apply -f examples/toystore/toystore.yaml
 ```
 
-### Create HTTPRoute to configure routing to the toystore service
-
-![](https://i.imgur.com/rdN8lo3.png)
+Route traffic to the API from both gateways:
 
 ```sh
 kubectl apply -f - <<EOF
----
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
   name: toystore
-  labels:
-    app: toystore
 spec:
   parentRefs:
-    - name: istio-ingressgateway
-      namespace: istio-system
-  hostnames: ["*.toystore.com"]
+  - name: external
+    namespace: istio-system
+  - name: internal
+    namespace: istio-system
+  hostnames:
+  - "*.toystore.io"
+  - "*.toystore.local"
   rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: "/toy"
-          method: GET
-        - path:
-            type: PathPrefix
-            value: "/free"
-          method: GET
-        - path:
-            type: Exact
-            value: "/admin/toy"
-          method: POST
-      backendRefs:
-        - name: toystore
-          port: 80
+  - backendRefs:
+    - name: toystore
+      port: 80
 EOF
 ```
 
-### Check `toystore` HTTPRoute works
+### ⑤ Verify the rate limiting works by sending requests in a loop
 
-`GET /toy`: no rate limiting
-```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host: api.toystore.com" http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
-```
-
-`POST /admin/toy`: no rate limiting
-```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host: api.toystore.com" -X POST http://localhost:9080/admin/toy | egrep --color "\b(429)\b|$"; sleep 1; done
-```
-
-**Note**: This only works out of the box on linux environments. If not on linux,
-you may need to forward ports
-
-```bash
-kubectl port-forward -n istio-system service/istio-ingressgateway 9080:80
-```
-
-### Rate limiting `toystore` HTTPRoute traffic
-
-![](https://i.imgur.com/2A9sXXs.png)
-
-RateLimitPolicy applied for the `toystore` HTTPRoute.
-
-| Endpoints         |                         Rate Limits |
-|-------------------|------------------------------------:|
-| `POST /admin/toy` |  **5** reqs / **10** secs (0.5 rps) |
-| `GET /toy`        |  **8** reqs / **10** secs (0.8 rps) |
-| `*`               | **30** reqs / **10** secs (3.0 rps) |
+Expose the gateways, respectively at the port numbers `9080` and `9081` of the local host:
 
 ```sh
-kubectl apply -f - <<EOF
----
-apiVersion: kuadrant.io/v1beta1
-kind: RateLimitPolicy
-metadata:
-  name: toystore
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: toystore
-  rateLimits:
-    - rules:
-        - paths: ["/admin/toy"]
-          methods: ["POST"]
-      configurations:
-        - actions:
-            - generic_key:
-                descriptor_key: admin_operation
-                descriptor_value: "1"
-      limits:
-        - conditions:
-            - "admin_operation == '1'"
-          maxValue: 5
-          seconds: 10
-          variables: []
-    - rules:
-        - paths: ["/toy"]
-          methods: ["GET"]
-      configurations:
-        - actions:
-            - generic_key:
-                descriptor_key: get_operation
-                descriptor_value: "1"
-      limits:
-        - conditions:
-            - "get_operation == '1'"
-          maxValue: 8
-          seconds: 10
-          variables: []
-    - configurations:
-        - actions:
-            - generic_key:
-                descriptor_key: toystore
-                descriptor_value: "1"
-      limits:
-        - conditions: ["toystore == '1'"]
-          maxValue: 30
-          seconds: 10
-          variables: []
-EOF
+kubectl port-forward -n istio-system service/external-istio 9080:80 2>&1 >/dev/null &
+kubectl port-forward -n istio-system service/internal-istio 9081:80 2>&1 >/dev/null &
 ```
 
-Validating the rate limit policy.
+Up to 5 successful (`200 OK`) requests every 10 seconds through the `external` ingress gateway (`*.io`), then `429 Too Many Requests`:
 
-`GET /toy` @ **1** rps (expected to be rate limited @ **8** reqs / **10** secs (0.8 rps))
 ```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host: api.toystore.com" http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H 'Host: api.toystore.io' http://localhost:9080 | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
-`POST /admin/toy` @ **1** rps (expected to be rate limited @ **5** reqs / **10** secs (0.5 rps))
+Unlimited successful (`200 OK`) through the `internal` ingress gateway (`*.local`):
+
 ```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host: api.toystore.com" -X POST http://localhost:9080/admin/toy | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H 'Host: api.toystore.local' http://localhost:9081 | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
-### Rate limiting Gateway traffic
-
-![](https://i.imgur.com/0o3yQzP.png)
-
-RateLimitPolicy applied for the Gateway.
-
-| Policy        |                         Rate Limits |
-|---------------|------------------------------------:|
-| `POST /*`     |  **2** reqs / **10** secs (0.2 rps) |
-| Per remote IP | **25** reqs / **10** secs (2.5 rps) |
+## Cleanup
 
 ```sh
-kubectl apply -f - <<EOF
----
-apiVersion: kuadrant.io/v1beta1
-kind: RateLimitPolicy
-metadata:
-  name: kuadrant-gw
-  namespace: istio-system
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: Gateway
-    name: istio-ingressgateway
-  rateLimits:
-    - rules:
-      - methods: ["POST"]
-      configurations:
-        - actions:
-            - generic_key:
-                descriptor_key: expensive_op
-                descriptor_value: "1"
-      limits:
-        - conditions: ["expensive_op == '1'"]
-          maxValue: 2
-          seconds: 10
-          variables: []
-    - configurations:
-        - actions:
-            - remote_address: {}
-      limits:
-        - conditions: []
-          maxValue: 25
-          seconds: 10
-          variables: ["remote_address"]
-EOF
-```
-
-### Validating the rate limit policies (HTTPRoute and Gateway).
-
-`GET /toy` @ **1** rps (expected to be rate limited @ **8** reqs / **10** secs (0.8 rps))
-```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host: api.toystore.com" http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
-```
-
-`POST /admin/toy` @ **1** rps (expected to be rate limited @ **2** reqs / **10** secs (0.2 rps))
-```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Host: api.toystore.com" -X POST http://localhost:9080/admin/toy | egrep --color "\b(429)\b|$"; sleep 1; done
-```
-
-### Validating Gateway "Per Remote IP" policy
-
-Stop all traffic.
-
-`GET /free` @ **3** rps (expected to be rate limited @ **25** reqs / **10** secs (2.5 rps))
-
-```sh
-while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H "Host: api.toystore.com" http://localhost:9080/free -: --write-out '%{http_code}\n' --silent --output /dev/null -H "Host: api.toystore.com" http://localhost:9080/free -: --write-out '%{http_code}\n' --silent --output /dev/null -H "Host: api.toystore.com" http://localhost:9080/free | egrep --color "\b(429)\b|$"; sleep 1; done
+make local-cleanup
 ```

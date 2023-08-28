@@ -1095,7 +1095,7 @@ func TestGetGatewayWorkloadSelector(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = gatewayapiv1beta1.AddToScheme(scheme)
-	k8sClient := fake.NewFakeClientWithScheme(scheme, gateway, service)
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(gateway, service).Build()
 
 	var selector map[string]string
 	var err error
@@ -1136,7 +1136,7 @@ func TestGetGatewayWorkloadSelectorWithoutHostnameAddress(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = gatewayapiv1beta1.AddToScheme(scheme)
-	k8sClient := fake.NewFakeClientWithScheme(scheme, gateway, service)
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(gateway, service).Build()
 
 	var selector map[string]string
 	var err error
@@ -1157,7 +1157,7 @@ func (p *FakePolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 }
 
 func (p *FakePolicy) GetWrappedNamespace() gatewayapiv1beta1.Namespace {
-	return gatewayapiv1beta1.Namespace("")
+	return ""
 }
 
 func (p *FakePolicy) GetRulesHostnames() []string {
@@ -1193,9 +1193,7 @@ func TestValidateHierarchicalRules(t *testing.T) {
 	)
 
 	if err := ValidateHierarchicalRules(&policy2, gateway); err.Error() != expectedError.Error() {
-		t.Fatal("the error message does not match the expected error one")
-		fmt.Println(expectedError.Error())
-		fmt.Println(err.Error())
+		t.Fatal("the error message does not match the expected error one", expectedError.Error(), err.Error())
 	}
 
 }

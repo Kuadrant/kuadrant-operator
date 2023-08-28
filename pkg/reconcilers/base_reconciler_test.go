@@ -1,5 +1,4 @@
 //go:build unit
-// +build unit
 
 /*
 Copyright 2021 Red Hat, Inc.
@@ -73,11 +72,11 @@ func TestBaseReconcilerCreate(t *testing.T) {
 	}
 
 	// Objects to track in the fake client.
-	objs := []runtime.Object{}
+	var objs []runtime.Object
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewFakeClient(objs...)
-	clientAPIReader := fake.NewFakeClient(objs...)
+	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
+	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 	recorder := record.NewFakeRecorder(10000)
 
 	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
@@ -143,8 +142,8 @@ func TestBaseReconcilerUpdateNeeded(t *testing.T) {
 	objs := []runtime.Object{existingConfigmap}
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewFakeClient(objs...)
-	clientAPIReader := fake.NewFakeClient(objs...)
+	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
+	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 	recorder := record.NewFakeRecorder(10000)
 
 	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
@@ -229,8 +228,8 @@ func TestBaseReconcilerDelete(t *testing.T) {
 	objs := []runtime.Object{existing}
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewFakeClient(objs...)
-	clientAPIReader := fake.NewFakeClient(objs...)
+	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
+	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 	recorder := record.NewFakeRecorder(10000)
 
 	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)

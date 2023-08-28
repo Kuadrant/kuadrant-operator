@@ -65,7 +65,7 @@ type PatternExpression struct {
 
 // Condition defines traffic matching rules
 type Condition struct {
-	// All of the expressions defined must match to match this condition
+	// All the expressions defined must match to match this condition
 	// +optional
 	AllOf []PatternExpression `json:"allOf,omitempty"`
 }

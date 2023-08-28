@@ -37,7 +37,7 @@ import (
 // MutateFn is a function which mutates the existing object into it's desired state.
 type MutateFn func(existing, desired client.Object) (bool, error)
 
-func CreateOnlyMutator(existing, desired client.Object) (bool, error) {
+func CreateOnlyMutator(_, _ client.Object) (bool, error) {
 	return false, nil
 }
 

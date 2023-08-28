@@ -41,12 +41,12 @@ func testBuildBasicGateway(gwName, ns string) *gatewayapiv1beta1.Gateway {
 			Annotations: map[string]string{"networking.istio.io/service-type": string(corev1.ServiceTypeClusterIP)},
 		},
 		Spec: gatewayapiv1beta1.GatewaySpec{
-			GatewayClassName: gatewayapiv1beta1.ObjectName("istio"),
+			GatewayClassName: "istio",
 			Listeners: []gatewayapiv1beta1.Listener{
 				{
-					Name:     gatewayapiv1beta1.SectionName("default"),
+					Name:     "default",
 					Port:     gatewayapiv1beta1.PortNumber(80),
-					Protocol: gatewayapiv1beta1.ProtocolType("HTTP"),
+					Protocol: "HTTP",
 				},
 			},
 		},

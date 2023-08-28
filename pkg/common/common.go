@@ -30,7 +30,6 @@ import (
 // TODO: move the const to a proper place, or get it from config
 const (
 	KuadrantRateLimitClusterName       = "kuadrant-rate-limiting-service"
-	HTTPRouteKind                      = "HTTPRoute"
 	RateLimitPoliciesBackRefAnnotation = "kuadrant.io/ratelimitpolicies"
 	RateLimitPolicyBackRefAnnotation   = "kuadrant.io/ratelimitpolicy"
 	AuthPoliciesBackRefAnnotation      = "kuadrant.io/authpolicies"
@@ -238,7 +237,7 @@ func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 	return client.ObjectKey{Namespace: keyStr[:namespaceEndIndex], Name: keyStr[namespaceEndIndex+1:]}, nil
 }
 
-// HostnamesToStrings converts []gatewayapi_v1alpha2.Hostname to []string
+// HostnamesToStrings converts []gatewayapiv1beta1.Hostname to []string
 func HostnamesToStrings(hostnames []gatewayapiv1beta1.Hostname) []string {
 	return Map(hostnames, func(hostname gatewayapiv1beta1.Hostname) string {
 		return string(hostname)
@@ -249,8 +248,8 @@ func HostnamesToStrings(hostnames []gatewayapiv1beta1.Hostname) []string {
 // is a subset of at least one of the domains.
 // Domains and subdomains may be prefixed with a wildcard label (*.).
 // The wildcard label must appear by itself as the first label.
-// When one of the subdomains is not a subset of any of the domains, it returns false and
-// the subdomain not being subset of any of the domains
+// When one of the subdomains is not a subset of the domains, it returns false and
+// the subdomain not being subset of the domains
 func ValidSubdomains(domains, subdomains []string) (bool, string) {
 	for _, subdomain := range subdomains {
 		validSubdomain := false

@@ -135,11 +135,7 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 		logger.V(1).Error(gwErr, "Reconciling cluster gateways failed")
 	}
 
-	specResult, specErr := r.reconcileSpec(ctx, kObj)
-	if specErr == nil && specResult.Requeue {
-		logger.V(1).Info("Reconciling spec not finished. Requeueing.")
-		return specResult, nil
-	}
+	specErr := r.reconcileSpec(ctx, kObj)
 
 	statusResult, statusErr := r.reconcileStatus(ctx, kObj, specErr)
 
@@ -356,20 +352,16 @@ func (r *KuadrantReconciler) registerServiceMeshMember(ctx context.Context, kObj
 	return r.ReconcileResource(ctx, &maistrav1.ServiceMeshMember{}, member, reconcilers.CreateOnlyMutator)
 }
 
-func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (ctrl.Result, error) {
+func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	if err := r.registerExternalAuthorizer(ctx, kObj); err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 
 	if err := r.reconcileLimitador(ctx, kObj); err != nil {
-		return ctrl.Result{}, err
+		return err
 	}
 
-	if err := r.reconcileAuthorino(ctx, kObj); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	return ctrl.Result{}, nil
+	return r.reconcileAuthorino(ctx, kObj)
 }
 
 func controlPlaneProviderName() string {
@@ -430,10 +422,7 @@ func (r *KuadrantReconciler) reconcileClusterGateways(ctx context.Context, kObj 
 		}
 	}
 
-	if err := errGroup.Wait(); err != nil {
-		return err
-	}
-	return nil
+	return errGroup.Wait()
 }
 
 func (r *KuadrantReconciler) removeAnnotationFromGateways(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
@@ -461,10 +450,7 @@ func (r *KuadrantReconciler) removeAnnotationFromGateways(ctx context.Context, k
 		})
 	}
 
-	if err := errGroup.Wait(); err != nil {
-		return err
-	}
-	return nil
+	return errGroup.Wait()
 }
 
 func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {

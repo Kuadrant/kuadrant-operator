@@ -8,7 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	meta "k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -88,7 +88,7 @@ func (r *KuadrantReconciler) readyCondition(ctx context.Context, kObj *kuadrantv
 
 	if specErr != nil {
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = "ReconcilliationError"
+		cond.Reason = "ReconciliationError"
 		cond.Message = specErr.Error()
 		return cond, nil
 	}

@@ -63,7 +63,7 @@ func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Cont
 	}
 
 	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
-		listOptions := &client.ListOptions{LabelSelector: labels.SelectorFromSet(labels.Set(istioAuthorizationPolicyLabels(client.ObjectKeyFromObject(gw.Gateway), client.ObjectKeyFromObject(ap))))}
+		listOptions := &client.ListOptions{LabelSelector: labels.SelectorFromSet(istioAuthorizationPolicyLabels(client.ObjectKeyFromObject(gw.Gateway), client.ObjectKeyFromObject(ap)))}
 		iapList := &istio.AuthorizationPolicyList{}
 		if err := r.Client().List(ctx, iapList, listOptions); err != nil {
 			return err
@@ -71,7 +71,7 @@ func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Cont
 
 		for _, iap := range iapList.Items {
 			// it's OK to just go ahead and delete because we only create one IAP per target network object,
-			// and a network object can be target by no more than one AuthPolicy
+			// and a network object can be targeted by no more than one AuthPolicy
 			if err := r.DeleteResource(ctx, iap); err != nil && !apierrors.IsNotFound(err) {
 				logger.Error(err, "failed to delete IstioAuthorizationPolicy")
 				return err

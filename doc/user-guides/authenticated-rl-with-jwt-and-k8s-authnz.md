@@ -1,33 +1,69 @@
-# Rate-limiting and protecting an API with JSON Web Tokens (JWTs) and Kubernetes authnz using Kuadrant
+# Authenticated Rate Limiting with JWTs and Kubernetes RBAC
 
-Example of rate-limiting and protecting an API (the Toy Store API) with authentication based on ID tokens (signed JWTs)
-issued by an OpenId Connect (OIDC) server (Keycloak) and alternative Kubernetes Service Account tokens, and authorization
-based on Kubernetes RBAC, with permissions (bindings) stored as Kubernetes Roles and RoleBindings.
+This user guide walks you through an example of how to use Kuadrant to protect an application with policies to enforce:
+- authentication based OpenId Connect (OIDC) ID tokens (signed JWTs), issued by a Keycloak server;
+- alternative authentication method by Kubernetes Service Account tokens;
+- authorization delegated to Kubernetes RBAC system;
+- rate limiting by user ID.
 
-## Pre-requisites
+<br/>
+
+In this example, we will protect a sample REST API called **Toy Store**. In reality, this API is just an echo service that echoes back to the user whatever attributes it gets in the request.
+
+The API listens to requests at the hostnames `*.toystore.com`, where it exposes the endpoints `GET /toy*`, `POST /admin/toy` and `DELETE /amind/toy`, respectively, to mimic operations of reading, creating, and deleting toy records.
+
+Any authenticated user/service account can send requests to the Toy Store API, by providing either a valid Keycloak-issued access token or Kubernetes token.
+
+Privileges to execute the requested operation (read, create or delete) will be granted according to the following RBAC rules, stored in the Kubernetes authorization system:
+
+| Operation | Endpoint            | Required role     |
+|-----------|---------------------|-------------------|
+| Read      | `GET /toy*`         | `toystore-reader` |
+| Create    | `POST /admin/toy`   | `toystore-write`  |
+| Delete    | `DELETE /admin/toy` | `toystore-write`  |
+
+Each user will be entitled to a maximum of 5rp10s (5 requests every 10 seconds).
+
+## Requirements
 
 - [Docker](https://www.docker.com/)
 - [kubectl](https://kubernetes.io/docs/reference/kubectl/) command-line tool
 - [jq](https://stedolan.github.io/jq/)
 
-## Run the guide ❶ → ❽
+## Run the guide ① → ⑥
 
-### ❶ Clone the project
+### ① Setup a cluster with Kuadrant
+
+This step uses tooling from the Kuadrant Operator component to create a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
+where it installs Istio, Kubernetes Gateway API and Kuadrant itself.
+
+> **Note:** In production environment, these steps are usually performed by a cluster operator with administrator privileges over the Kubernetes cluster.
+
+Clone the project:
 
 ```sh
 git clone https://github.com/Kuadrant/kuadrant-operator && cd kuadrant-operator
 ```
 
-### ❷ Setup environment
-
-This step creates a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
-then it installs Istio, Kubernetes Gateway API and kuadrant.
+Setup the environment:
 
 ```sh
 make local-setup
 ```
 
-### ❸ Deploy the API
+Request an instance of Kuadrant:
+
+```sh
+kubectl -n kuadrant-system apply -f - <<EOF
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant
+spec: {}
+EOF
+```
+
+### ② Deploy the Toy Store API
 
 Deploy the application in the `default` namespace:
 
@@ -35,7 +71,7 @@ Deploy the application in the `default` namespace:
 kubectl apply -f examples/toystore/toystore.yaml
 ```
 
-Create the `HTTPRoute`:
+Route traffic to the application:
 
 ```sh
 kubectl apply -f examples/toystore/httproute.yaml
@@ -54,27 +90,13 @@ curl -H 'Host: api.toystore.com' http://localhost:9080/toy -i
 
 It should return `200 OK`.
 
-**Note**: This only works out of the box on linux environments. If not on linux,
-you may need to forward ports
+> **Note**: If the command above fails to hit the Toy Store API on your environment, try forwarding requests to the service:
+>
+> ```sh
+> kubectl port-forward -n istio-system service/istio-ingressgateway 9080:80 2>&1 >/dev/null &
+> ```
 
-```bash
-kubectl port-forward -n istio-system service/istio-ingressgateway 9080:80 &
-```
-
-### ❹ Request the Kuadrant instance
-
-```sh
-kubectl -n kuadrant-system apply -f - <<EOF
----
-apiVersion: kuadrant.io/v1beta1
-kind: Kuadrant
-metadata:
-  name: kuadrant-sample
-spec: {}
-EOF
-```
-
-### ❺ Deploy Keycloak
+### ③ Deploy Keycloak
 
 Create the namesapce:
 
@@ -82,17 +104,17 @@ Create the namesapce:
 kubectl create namespace keycloak
 ```
 
-Deploy Keycloak:
+Deploy Keycloak with a [bootstrap](https://github.com/kuadrant/authorino-examples#keycloak) realm, users, and clients:
 
 ```sh
 kubectl apply -n keycloak -f https://raw.githubusercontent.com/Kuadrant/authorino-examples/main/keycloak/keycloak-deploy.yaml
 ```
 
-The step above deploys Keycloak with a [preconfigured](https://github.com/kuadrant/authorino-examples#keycloak) realm and a couple of clients and users created.
+> **Note:** The Keycloak server may take a couple of minutes to be ready.
 
-The Keycloak server may take a couple of minutes to be ready.
+### ④ Enforce authentication and authorization for the Toy Store API
 
-### ❻ Create the `AuthPolicy`
+Create a Kuadrant `AuthPolicy` to configure authentication and authorization:
 
 ```sh
 kubectl apply -f - <<EOF
@@ -107,32 +129,31 @@ spec:
     name: toystore
   authScheme:
     identity:
-      - name: keycloak-users
-        oidc:
-          endpoint: http://keycloak.keycloak.svc.cluster.local:8080/auth/realms/kuadrant
-      - name: k8s-service-accounts
-        kubernetes:
-          audiences:
-            - https://kubernetes.default.svc.cluster.local
-        extendedProperties:
-          - name: sub
-            valueFrom:
-              authJSON: auth.identity.user.username
+    - name: keycloak-users
+      oidc:
+        endpoint: http://keycloak.keycloak.svc.cluster.local:8080/auth/realms/kuadrant
+    - name: k8s-service-accounts
+      kubernetes:
+        audiences:
+        - https://kubernetes.default.svc.cluster.local
+      extendedProperties:
+      - name: sub
+        valueFrom:
+          authJSON: auth.identity.user.username
     authorization:
-      - name: k8s-rbac
-        kubernetes:
-          user:
-            valueFrom:
-              authJSON: auth.identity.sub
+    - name: k8s-rbac
+      kubernetes:
+        user:
+          valueFrom:
+            authJSON: auth.identity.sub
     response:
-      - name: rate-limit
-        json:
-          properties:
-            - name: userID
-              valueFrom:
-                authJSON: auth.identity.sub
-        wrapper: envoyDynamicMetadata
-        wrapperKey: ext_auth_data
+    - name: identity
+      json:
+        properties:
+        - name: userid
+          valueFrom:
+            authJSON: auth.identity.sub
+      wrapper: envoyDynamicMetadata
 EOF
 ```
 
@@ -154,14 +175,14 @@ Obtain an access token with the Keycloak server:
 ACCESS_TOKEN=$(kubectl run token --attach --rm --restart=Never -q --image=curlimages/curl -- http://keycloak.keycloak.svc.cluster.local:8080/auth/realms/kuadrant/protocol/openid-connect/token -s -d 'grant_type=password' -d 'client_id=demo' -d 'username=john' -d 'password=p' | jq -r .access_token)
 ```
 
-Send requests to the API as the Keycloak-authenticated user (missing permission):
+Send a request to the API as the Keycloak-authenticated user while still missing permissions:
 
 ```sh
 curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy -i
 # HTTP/1.1 403 Forbidden
 ```
 
-Create a Kubernetes Service Account to represent a user belonging to the other source of identities:
+Create a Kubernetes Service Account to represent a consumer of the API associated with the alternative source of identities `k8s-service-accounts`:
 
 ```sh
 kubectl apply -f - <<EOF
@@ -178,14 +199,14 @@ Obtain an access token for the `client-app-1` service account:
 SA_TOKEN=$(kubectl create token client-app-1)
 ```
 
-Send requests to the API as the service account (missing permission):
+Send a request to the API as the service account while still missing permissions:
 
 ```sh
 curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy -i
 # HTTP/1.1 403 Forbidden
 ```
 
-### ❼ Grant access to the API
+### ⑤ Grant access to the Toy Store API for user and service account
 
 Create the `toystore-reader` and `toystore-writer` roles:
 
@@ -209,7 +230,12 @@ rules:
 EOF
 ```
 
-Add permissions to the users and service accounts:
+Add permissions to the user and service account:
+
+| User         | Kind                        | Roles                                |
+|--------------|-----------------------------|--------------------------------------|
+| john         | User registered in Keycloak | `toystore-reader`, `toystore-writer` |
+| client-app-1 | Kuberentes Service Account  | `toystore-reader`                    |
 
 ```sh
 kubectl apply -f - <<EOF
@@ -243,7 +269,7 @@ EOF
 ```
 
 <details>
-  <summary>Can I use <code>Roles</code> and <code>RoleBindings</code> instead of <code>ClusterRoles</code> and <code>ClusterRoleBindings</code>?</summary>
+  <summary><i>Q:</i> Can I use <code>Roles</code> and <code>RoleBindings</code> instead of <code>ClusterRoles</code> and <code>ClusterRoleBindings</code>?</summary>
 
   Yes, you can.
 
@@ -267,7 +293,7 @@ curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' -X POS
 # HTTP/1.1 200 OK
 ```
 
-Send requests to the API as the service account (missing permission):
+Send requests to the API as the Kubernetes service account:
 
 ```sh
 curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy -i
@@ -279,38 +305,29 @@ curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' -X POST ht
 # HTTP/1.1 403 Forbidden
 ```
 
-### ❽ Create the `RateLimitPolicy`
+### ⑥ Enforce rate limiting on requests to the Toy Store API
+
+Create a Kuadrant `RateLimitPolicy` to configure rate limiting:
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta1
+apiVersion: kuadrant.io/v1beta2
 kind: RateLimitPolicy
 metadata:
-  name: toystore-rate-limit
+  name: toystore
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
-  rateLimits:
-    - configurations:
-        - actions:
-            - metadata:
-                descriptor_key: "userID"
-                default_value: "no-user"
-                metadata_key:
-                  key: "envoy.filters.http.ext_authz"
-                  path:
-                    - segment:
-                        key: "ext_auth_data"
-                    - segment:
-                        key: "userID"
-      limits:
-        - conditions: []
-          maxValue: 5
-          seconds: 10
-          variables:
-            - userID
+  limits:
+    "per-user":
+      rates:
+      - limit: 5
+        duration: 10
+        unit: second
+      counters:
+      - metadata.filter_metadata.envoy\.filters\.http\.ext_authz.identity.userid
 EOF
 ```
 
@@ -318,21 +335,21 @@ EOF
 
 #### Try the API rate limited
 
+Each user should be entitled to a maximum of 5 requests every 10 seconds.
+
+> **Note:** If the tokens have expired, you may need to refresh them first.
+
 Send requests as the Keycloak-authenticated user:
 
 ```sh
 while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
-Send requests as the service account:
+Send requests as the Kubernetes service account:
 
 ```sh
 while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
-
-Each user should be entitled to a maximum of 5 requests to the API every 10 seconds.
-
-> **Note:** You may need to refresh the tokens if they are expired.
 
 ## Cleanup
 

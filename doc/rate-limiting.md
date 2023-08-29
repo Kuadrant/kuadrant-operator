@@ -263,6 +263,10 @@ Use the `when` conditions to conditionally activate limits based on attributes t
 * One Gateway can only be targeted by one RLP.
 * RLPs can only target HTTPRoutes/Gateways defined within the same namespace of the RLP.
 
-## Example
+## Examples
 
-TODO
+Check out the following user guides for examples of rate limiting services with Kuadrant:
+* [Simple Rate Limiting for Application Developers](user-guides/simple-rl-for-app-developers.md)
+* [Authenticated Rate Limiting for Application Developers](user-guides/authenticated-rl-for-app-developers.md)
+* [Gateway Rate Limiting for Cluster Operators](user-guides/gateway-rl-for-cluster-operators.md)
+* [Authenticated Rate Limiting with JWTs and Kubernetes RBAC](user-guides/authenticated-rl-with-jwt-and-k8s-authnz.md)

@@ -4,7 +4,6 @@ package common
 
 import (
 	"fmt"
-	"os"
 	"reflect"
 	"testing"
 
@@ -72,55 +71,6 @@ func TestFind(t *testing.T) {
 	if r, found := Find(i, func(el int) bool { return el == 75 }); found || r != nil {
 		t.Error("should not have found anything in the slice")
 	}
-}
-
-func TestFetchEnv(t *testing.T) {
-	t.Run("when env var exists & has a value different from the default value then return the env var value", func(t *testing.T) {
-		key := "LOG_LEVEL"
-		defaultVal := "info"
-		val := "debug"
-		os.Setenv(key, val)
-		defer os.Unsetenv(key)
-
-		result := FetchEnv(key, defaultVal)
-
-		if result != val {
-			t.Errorf("Expected %v, but got %v", val, result)
-		}
-	})
-	t.Run("when env var exists but has an empty value then return the empty value", func(t *testing.T) {
-		key := "LOG_MODE"
-		defaultVal := "production"
-		val := ""
-		os.Setenv(key, val)
-		defer os.Unsetenv(key)
-
-		result := FetchEnv(key, defaultVal)
-
-		if result != val {
-			t.Errorf("Expected %v, but got %v", val, result)
-		}
-	})
-	t.Run("when env var does not exist & the default value is used then return the default value", func(t *testing.T) {
-		key := "LOG_MODE"
-		defaultVal := "production"
-
-		result := FetchEnv(key, defaultVal)
-
-		if result != defaultVal {
-			t.Errorf("Expected %v, but got %v", defaultVal, result)
-		}
-	})
-	t.Run("when default value is an empty string then return an empty string", func(t *testing.T) {
-		key := "LOG_MODE"
-		defaultVal := ""
-
-		result := FetchEnv(key, defaultVal)
-
-		if result != defaultVal {
-			t.Errorf("Expected %v, but got %v", defaultVal, result)
-		}
-	})
 }
 
 func TestGetDefaultIfNil(t *testing.T) {
@@ -206,90 +156,6 @@ func TestNamespacedNameToObjectKey(t *testing.T) {
 			t.Errorf("Expected %v, but got %v", expected, result)
 		}
 	})
-}
-
-func TestContains(t *testing.T) {
-	testCases := []struct {
-		name     string
-		slice    []string
-		target   string
-		expected bool
-	}{
-		{
-			name:     "when slice has one target item then return true",
-			slice:    []string{"test-gw"},
-			target:   "test-gw",
-			expected: true,
-		},
-		{
-			name:     "when slice is empty then return false",
-			slice:    []string{},
-			target:   "test-gw",
-			expected: false,
-		},
-		{
-			name:     "when target is in a slice then return true",
-			slice:    []string{"test-gw1", "test-gw2", "test-gw3"},
-			target:   "test-gw2",
-			expected: true,
-		},
-		{
-			name:     "when no target in a slice then return false",
-			slice:    []string{"test-gw1", "test-gw2", "test-gw3"},
-			target:   "test-gw4",
-			expected: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			if Contains(tc.slice, tc.target) != tc.expected {
-				t.Errorf("when slice=%v and target=%s, expected=%v, but got=%v", tc.slice, tc.target, tc.expected, !tc.expected)
-			}
-		})
-	}
-}
-
-func TestContainsWithInts(t *testing.T) {
-	testCases := []struct {
-		name     string
-		slice    []int
-		target   int
-		expected bool
-	}{
-		{
-			name:     "when slice has one target item then return true",
-			slice:    []int{1},
-			target:   1,
-			expected: true,
-		},
-		{
-			name:     "when slice is empty then return false",
-			slice:    []int{},
-			target:   2,
-			expected: false,
-		},
-		{
-			name:     "when target is in a slice then return true",
-			slice:    []int{1, 2, 3},
-			target:   2,
-			expected: true,
-		},
-		{
-			name:     "when no target in a slice then return false",
-			slice:    []int{1, 2, 3},
-			target:   4,
-			expected: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			if Contains(tc.slice, tc.target) != tc.expected {
-				t.Errorf("when slice=%v and target=%d, expected=%v, but got=%v", tc.slice, tc.target, tc.expected, !tc.expected)
-			}
-		})
-	}
 }
 
 func TestSameElements(t *testing.T) {
@@ -546,81 +412,6 @@ func TestMap(t *testing.T) {
 	t.Run("when mapping an empty int slice then return an empty slice", func(t *testing.T) {
 		if !reflect.DeepEqual(result3, expected3) {
 			t.Errorf("result3 = %v; expected %v", result3, expected3)
-		}
-	})
-}
-
-func TestSliceCopy(t *testing.T) {
-	input1 := []int{1, 2, 3}
-	expected1 := []int{1, 2, 3}
-	output1 := SliceCopy(input1)
-	t.Run("when given slice of integers then return a copy of the input slice", func(t *testing.T) {
-		if !reflect.DeepEqual(output1, expected1) {
-			t.Errorf("SliceCopy(%v) = %v; expected %v", input1, output1, expected1)
-		}
-	})
-
-	input2 := []string{"foo", "bar", "baz"}
-	expected2 := []string{"foo", "bar", "baz"}
-	output2 := SliceCopy(input2)
-	t.Run("when given slice of strings then return a copy of the input slice", func(t *testing.T) {
-		if !reflect.DeepEqual(output2, expected2) {
-			t.Errorf("SliceCopy(%v) = %v; expected %v", input2, output2, expected2)
-		}
-	})
-
-	type person struct {
-		name string
-		age  int
-	}
-	input3 := []person{{"Artem", 65}, {"DD", 18}, {"Charlie", 23}}
-	expected3 := []person{{"Artem", 65}, {"DD", 18}, {"Charlie", 23}}
-	output3 := SliceCopy(input3)
-	t.Run("when given slice of structs then return a copy of the input slice", func(t *testing.T) {
-		if !reflect.DeepEqual(output3, expected3) {
-			t.Errorf("SliceCopy(%v) = %v; expected %v", input3, output3, expected3)
-		}
-	})
-
-	input4 := []int{1, 2, 3}
-	expected4 := []int{1, 2, 3}
-	output4 := SliceCopy(input4)
-	t.Run("when modifying the original input slice then does not affect the returned copy", func(t *testing.T) {
-		if !reflect.DeepEqual(output4, expected4) {
-			t.Errorf("SliceCopy(%v) = %v; expected %v", input4, output4, expected4)
-		}
-		input4[0] = 4
-		if reflect.DeepEqual(output4, input4) {
-			t.Errorf("modifying the original input slice should not change the output slice")
-		}
-	})
-}
-
-func TestReverseSlice(t *testing.T) {
-	input1 := []int{1, 2, 3}
-	expected1 := []int{3, 2, 1}
-	output1 := ReverseSlice(input1)
-	t.Run("when given slice of integers then return reversed copy of the input slice", func(t *testing.T) {
-		if !reflect.DeepEqual(output1, expected1) {
-			t.Errorf("ReverseSlice(%v) = %v; expected %v", input1, output1, expected1)
-		}
-	})
-
-	input2 := []string{"foo", "bar", "baz"}
-	expected2 := []string{"baz", "bar", "foo"}
-	output2 := ReverseSlice(input2)
-	t.Run("when given slice of strings then return reversed copy of the input slice", func(t *testing.T) {
-		if !reflect.DeepEqual(output2, expected2) {
-			t.Errorf("ReverseSlice(%v) = %v; expected %v", input2, output2, expected2)
-		}
-	})
-
-	input3 := []int{}
-	expected3 := []int{}
-	output3 := ReverseSlice(input3)
-	t.Run("when given an empty slice then return empty slice", func(t *testing.T) {
-		if !reflect.DeepEqual(output3, expected3) {
-			t.Errorf("ReverseSlice(%v) = %v; expected %v", input3, output3, expected3)
 		}
 	})
 }

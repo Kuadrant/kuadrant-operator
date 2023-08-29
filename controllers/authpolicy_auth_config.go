@@ -94,7 +94,7 @@ func (r *AuthPolicyReconciler) policyHosts(ap *api.AuthPolicy, targetNetworkObje
 		return common.TargetHostnames(targetNetworkObject)
 	}
 
-	uniqueHostnamesMap := make(map[string]interface{})
+	uniqueHostnamesMap := make(map[string]any)
 	for idx := range ap.Spec.AuthRules {
 		if len(ap.Spec.AuthRules[idx].Hosts) == 0 {
 			// When one of the rules does not have hosts, just return target hostnames

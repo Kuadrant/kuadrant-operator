@@ -13,24 +13,24 @@ import (
 // +kubebuilder:validation:Type=object
 // +kubebuilder:validation:XPreserveUnknownFields
 type HelmValues struct {
-	data map[string]interface{} `json:"-"`
+	data map[string]any `json:"-"`
 }
 
-func NewHelmValues(values map[string]interface{}) *HelmValues {
+func NewHelmValues(values map[string]any) *HelmValues {
 	if values == nil {
-		values = make(map[string]interface{})
+		values = make(map[string]any)
 	}
 	return &HelmValues{data: values}
 }
 
-func (h *HelmValues) GetContent() map[string]interface{} {
+func (h *HelmValues) GetContent() map[string]any {
 	if h == nil {
 		return nil
 	}
 	return h.data
 }
 
-func (h *HelmValues) GetFieldNoCopy(path string) (interface{}, bool, error) {
+func (h *HelmValues) GetFieldNoCopy(path string) (any, bool, error) {
 	if h == nil || h.data == nil {
 		return nil, false, nil
 	}
@@ -193,7 +193,7 @@ func (h *HelmValues) GetAndRemoveStringSlice(path string) ([]string, bool, error
 	return value, ok, err
 }
 
-func (h *HelmValues) GetSlice(path string) ([]interface{}, bool, error) {
+func (h *HelmValues) GetSlice(path string) ([]any, bool, error) {
 	if h == nil || h.data == nil {
 		return nil, false, nil
 	}
@@ -206,7 +206,7 @@ func (h *HelmValues) GetSlice(path string) ([]interface{}, bool, error) {
 	return slice, ok, err
 }
 
-func (h *HelmValues) GetAndRemoveSlice(path string) ([]interface{}, bool, error) {
+func (h *HelmValues) GetAndRemoveSlice(path string) ([]any, bool, error) {
 	value, ok, err := h.GetSlice(path)
 	if err == nil {
 		h.RemoveField(path)
@@ -245,7 +245,7 @@ func (h *HelmValues) GetAndRemoveStringToStringMap(path string) (map[string]stri
 	return stringToStringMap, found, nil
 }
 
-func (h *HelmValues) GetMap(path string) (map[string]interface{}, bool, error) {
+func (h *HelmValues) GetMap(path string) (map[string]any, bool, error) {
 	if h == nil || h.data == nil {
 		return nil, false, nil
 	}
@@ -254,15 +254,15 @@ func (h *HelmValues) GetMap(path string) (map[string]interface{}, bool, error) {
 		if rawval == nil {
 			return nil, ok, err
 		}
-		if mapval, ok := rawval.(map[string]interface{}); ok {
+		if mapval, ok := rawval.(map[string]any); ok {
 			return mapval, ok, err
 		}
-		return nil, false, fmt.Errorf("%v accessor error: %v is of the type %T, expected map[string]interface{}", path, rawval, rawval)
+		return nil, false, fmt.Errorf("%v accessor error: %v is of the type %T, expected map[string]any", path, rawval, rawval)
 	}
 	return nil, ok, err
 }
 
-func (h *HelmValues) GetAndRemoveMap(path string) (map[string]interface{}, bool, error) {
+func (h *HelmValues) GetAndRemoveMap(path string) (map[string]any, bool, error) {
 	value, ok, err := h.GetMap(path)
 	if err == nil {
 		h.RemoveField(path)
@@ -289,12 +289,12 @@ func (h *HelmValues) GetAndRemoveStringMap(path string) (map[string]string, bool
 	return value, ok, err
 }
 
-func (h *HelmValues) SetField(path string, value interface{}) error {
+func (h *HelmValues) SetField(path string, value any) error {
 	if h == nil {
 		panic("Tried to invoke SetField on nil *HelmValues")
 	}
 	if h.data == nil {
-		h.data = map[string]interface{}{}
+		h.data = map[string]any{}
 	}
 	return unstructured.SetNestedField(h.data, value, strings.Split(path, ".")...)
 }
@@ -304,7 +304,7 @@ func (h *HelmValues) SetStringSlice(path string, value []string) error {
 		panic("Tried to invoke SetField on nil *HelmValues")
 	}
 	if h.data == nil {
-		h.data = map[string]interface{}{}
+		h.data = map[string]any{}
 	}
 	return unstructured.SetNestedStringSlice(h.data, value, strings.Split(path, ".")...)
 }

@@ -9,6 +9,7 @@ import (
 
 	_struct "google.golang.org/protobuf/types/known/structpb"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
+	"k8s.io/utils/env"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
@@ -18,7 +19,7 @@ import (
 )
 
 var (
-	WASMFilterImageURL = common.FetchEnv("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
+	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
 )
 
 // WasmRules computes WASM rules from the policy and the targeted route.

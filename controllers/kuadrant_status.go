@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/exp/slices"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -64,7 +65,7 @@ func (r *KuadrantReconciler) reconcileStatus(ctx context.Context, kObj *kuadrant
 func (r *KuadrantReconciler) calculateStatus(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant, specErr error) (*kuadrantv1beta1.KuadrantStatus, error) {
 	newStatus := &kuadrantv1beta1.KuadrantStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
-		Conditions:         common.CopyConditions(kObj.Status.Conditions),
+		Conditions:         slices.Clone(kObj.Status.Conditions),
 		ObservedGeneration: kObj.Status.ObservedGeneration,
 	}
 

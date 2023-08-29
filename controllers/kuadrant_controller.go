@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/env"
 
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
@@ -365,15 +366,15 @@ func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1
 }
 
 func controlPlaneProviderName() string {
-	return common.FetchEnv("ISTIOOPERATOR_NAME", "istiocontrolplane")
+	return env.GetString("ISTIOOPERATOR_NAME", "istiocontrolplane")
 }
 
 func controlPlaneConfigMapName() string {
-	return common.FetchEnv("ISTIOCONFIGMAP_NAME", "istio")
+	return env.GetString("ISTIOCONFIGMAP_NAME", "istio")
 }
 
 func controlPlaneProviderNamespace() string {
-	return common.FetchEnv("ISTIOOPERATOR_NAMESPACE", "istio-system")
+	return env.GetString("ISTIOOPERATOR_NAMESPACE", "istio-system")
 }
 
 func buildServiceMeshMember(kObj *kuadrantv1beta1.Kuadrant) *maistrav1.ServiceMeshMember {

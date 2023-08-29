@@ -15,23 +15,23 @@ import (
 // Note: This should be removed once the mentioned issue is fixed but that will take some time.
 func LimitadorClusterPatch(limitadorSvcHost string, limitadorGRPCPort int) ([]*istioapiv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
 	// The patch defines the rate_limit_cluster, which provides the endpoint location of the external rate limit service.
-	patchUnstructured := map[string]interface{}{
+	patchUnstructured := map[string]any{
 		"operation": "ADD",
-		"value": map[string]interface{}{
+		"value": map[string]any{
 			"name":                   common.KuadrantRateLimitClusterName,
 			"type":                   "STRICT_DNS",
 			"connect_timeout":        "1s",
 			"lb_policy":              "ROUND_ROBIN",
-			"http2_protocol_options": map[string]interface{}{},
-			"load_assignment": map[string]interface{}{
+			"http2_protocol_options": map[string]any{},
+			"load_assignment": map[string]any{
 				"cluster_name": common.KuadrantRateLimitClusterName,
-				"endpoints": []map[string]interface{}{
+				"endpoints": []map[string]any{
 					{
-						"lb_endpoints": []map[string]interface{}{
+						"lb_endpoints": []map[string]any{
 							{
-								"endpoint": map[string]interface{}{
-									"address": map[string]interface{}{
-										"socket_address": map[string]interface{}{
+								"endpoint": map[string]any{
+									"address": map[string]any{
+										"socket_address": map[string]any{
 											"address":    limitadorSvcHost,
 											"port_value": limitadorGRPCPort,
 										},

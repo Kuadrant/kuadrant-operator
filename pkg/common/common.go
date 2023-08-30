@@ -18,7 +18,6 @@ package common
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 
 	"golang.org/x/exp/slices"
@@ -44,14 +43,6 @@ type KuadrantPolicy interface {
 	GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference
 	GetWrappedNamespace() gatewayapiv1beta1.Namespace
 	GetRulesHostnames() []string
-}
-
-// GetDefaultIfNil returns the value of a pointer argument, or a default value if the pointer is nil.
-func GetDefaultIfNil[T any](val *T, def T) T {
-	if reflect.ValueOf(val).IsNil() {
-		return def
-	}
-	return *val
 }
 
 // GetEmptySliceIfNil returns a provided slice, or an empty slice of the same type if the input slice is nil.

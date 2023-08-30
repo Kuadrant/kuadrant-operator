@@ -731,48 +731,6 @@ func TestGetServicePortNumber(t *testing.T) {
 	}
 }
 
-func TestContainsObjectKey(t *testing.T) {
-	key1 := client.ObjectKey{Namespace: "ns1", Name: "obj1"}
-	key2 := client.ObjectKey{Namespace: "ns2", Name: "obj2"}
-	key3 := client.ObjectKey{Namespace: "ns3", Name: "obj3"}
-	key4 := client.ObjectKey{Namespace: "ns4", Name: "obj4"}
-
-	testCases := []struct {
-		name     string
-		list     []client.ObjectKey
-		key      client.ObjectKey
-		expected bool
-	}{
-		{
-			name:     "when list contains key then return true",
-			list:     []client.ObjectKey{key1, key2, key3},
-			key:      key2,
-			expected: true,
-		},
-		{
-			name:     "when list does not contain key then return false",
-			list:     []client.ObjectKey{key1, key2, key3},
-			key:      key4,
-			expected: false,
-		},
-		{
-			name:     "when list is empty then return false",
-			list:     []client.ObjectKey{},
-			key:      key4,
-			expected: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := ContainsObjectKey(tc.list, tc.key)
-			if result != tc.expected {
-				t.Errorf("unexpected result: got %t, want %t", result, tc.expected)
-			}
-		})
-	}
-}
-
 func TestFindObjectKey(t *testing.T) {
 	key1 := client.ObjectKey{Namespace: "ns1", Name: "obj1"}
 	key2 := client.ObjectKey{Namespace: "ns2", Name: "obj2"}

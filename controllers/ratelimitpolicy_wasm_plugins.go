@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/exp/slices"
 	istioextensionsv1alpha1 "istio.io/api/extensions/v1alpha1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,7 +58,7 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 		rlpRefs := gw.PolicyRefs()
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Add the RLP key to the reference list. Only if it does not exist (it should not)
-		if !common.ContainsObjectKey(rlpRefs, rlpKey) {
+		if !slices.Contains(rlpRefs, rlpKey) {
 			rlpRefs = append(gw.PolicyRefs(), rlpKey)
 		}
 		wp, err := r.gatewayWASMPlugin(ctx, gw, rlpRefs)

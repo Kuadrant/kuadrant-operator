@@ -4,7 +4,7 @@ This user guide walks you through an example of how to configure rate limiting f
 
 <br/>
 
-## Run the steps ① → ④
+## Run the steps ① → ⑤
 
 ### ① Setup
 
@@ -178,23 +178,23 @@ EOF
 
 ### ⑤ Verify the rate limiting works by sending requests in a loop
 
-Expose the gateways, respectively at the port numbers `9080` and `9081` of the local host:
+Expose the gateways, respectively at the port numbers `9081` and `9082` of the local host:
 
 ```sh
-kubectl port-forward -n istio-system service/external-istio 9080:80 2>&1 >/dev/null &
-kubectl port-forward -n istio-system service/internal-istio 9081:80 2>&1 >/dev/null &
+kubectl port-forward -n istio-system service/external-istio 9081:80 2>&1 >/dev/null &
+kubectl port-forward -n istio-system service/internal-istio 9082:80 2>&1 >/dev/null &
 ```
 
 Up to 5 successful (`200 OK`) requests every 10 seconds through the `external` ingress gateway (`*.io`), then `429 Too Many Requests`:
 
 ```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H 'Host: api.toystore.io' http://localhost:9080 | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H 'Host: api.toystore.io' http://localhost:9081 | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
 Unlimited successful (`200 OK`) through the `internal` ingress gateway (`*.local`):
 
 ```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H 'Host: api.toystore.local' http://localhost:9081 | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H 'Host: api.toystore.local' http://localhost:9082 | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
 ## Cleanup

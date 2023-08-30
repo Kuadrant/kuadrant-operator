@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/json"
+
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
@@ -37,6 +38,7 @@ func (m LimitadorEventMapper) MapToRateLimitPolicy(obj client.Object) []reconcil
 		requests = append(requests, reconcile.Request{
 			NamespacedName: ref,
 		})
+		break
 	}
 	return requests
 }

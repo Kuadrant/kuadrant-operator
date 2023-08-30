@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/go-logr/logr"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
@@ -43,6 +42,11 @@ func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp 
 		return err
 	}
 
+	rplsBackref, err := common.BuildBackRefs(rlpRefs)
+	if err != nil {
+		return err
+	}
+
 	// get the current limitador cr for the kuadrant instance so we can compare if it needs to be updated
 	logger.V(1).Info("get kuadrant namespace")
 	var kuadrantNamespace string
@@ -69,17 +73,17 @@ func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp 
 		return err
 	}
 
-	updated, err := r.reconcileLimitadorBackRef(limitador, rlp)
-	if err != nil {
-		return err
-	}
+	update := false
+	update = update || !common.AnnotationEqual(common.RateLimitPoliciesBackRefAnnotation, rplsBackref, limitador.Annotations)
+	update = update || !rlptools.Equal(rateLimitIndex.ToRateLimits(), limitador.Spec.Limits)
 	// return if limitador is up-to-date
-	if rlptools.Equal(rateLimitIndex.ToRateLimits(), limitador.Spec.Limits) && !updated {
+	if !update {
 		logger.V(1).Info("limitador is up to date, skipping update")
 		return nil
 	}
 
 	// update limitador
+	limitador.SetAnnotations(common.AddAnnotation(common.RateLimitPoliciesBackRefAnnotation, rplsBackref, limitador.Annotations))
 	limitador.Spec.Limits = rateLimitIndex.ToRateLimits()
 	err = r.UpdateResource(ctx, limitador)
 	logger.V(1).Info("update limitador", "limitador", limitadorKey, "err", err)
@@ -114,41 +118,18 @@ func (r *RateLimitPolicyReconciler) buildRateLimitIndex(ctx context.Context, rlp
 	return rateLimitIndex, nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileLimitadorBackRef(limitador *limitadorv1alpha1.Limitador, policyKey client.Object) (updated bool, err error) {
-	policy := client.ObjectKeyFromObject(policyKey)
-	objAnnotations := common.ReadAnnotationsFromObject(limitador)
-	var refs []client.ObjectKey
-
-	val, ok := objAnnotations[common.RateLimitPoliciesBackRefAnnotation]
-	if ok {
-		err := json.Unmarshal([]byte(val), &refs)
-		if err != nil {
-			return false, err
-		}
-		if common.ContainsObjectKey(refs, policy) {
-			r.Logger().V(1).Info("policy references in annotations", "policy", policy)
-			return false, nil
-		}
-	}
-
-	refs = append(refs, policy)
-	serialized, err := json.Marshal(refs)
-	if err != nil {
-		return false, err
-	}
-	objAnnotations[common.RateLimitPoliciesBackRefAnnotation] = string(serialized)
-	limitador.SetAnnotations(objAnnotations)
-	return true, nil
-}
-
 func (r *RateLimitPolicyReconciler) deleteLimitadorBackReference(ctx context.Context, policy client.Object) error {
-	policyKey := client.ObjectKeyFromObject(policy)
-
-	limitadorList, err := r.listLimitadorByNamespace(ctx, policyKey.Namespace)
+	kuadrantNamespace, err := common.GetKuadrantNamespace(policy)
 	if err != nil {
 		return err
 	}
 
+	limitadorList, err := r.listLimitadorByNamespace(ctx, kuadrantNamespace)
+	if err != nil {
+		return err
+	}
+
+	policyKey := client.ObjectKeyFromObject(policy)
 	updateList, err := rlptools.RemoveRLPLabelsFromLimitadorList(limitadorList, policyKey)
 	if err != nil {
 		return err

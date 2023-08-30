@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta1"
 
 	"github.com/go-logr/logr"

@@ -5,8 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"unicode"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 

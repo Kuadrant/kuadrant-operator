@@ -1,86 +1,70 @@
 # The RateLimitPolicy Custom Resource Definition (CRD)
 
-<!--ts-->
-* [The RateLimitPolicy Custom Resource Definition (CRD)](#the-ratelimitpolicy-custom-resource-definition-crd)
-   * [RateLimitPolicy](#ratelimitpolicy)
-   * [RateLimitPolicySpec](#ratelimitpolicyspec)
-      * [RateLimit](#ratelimit)
-         * [Configuration](#configuration)
-         * [ActionSpecifier](#actionspecifier)
-         * [Rule](#rule)
-         * [Limit](#limit)
-   * [RateLimitPolicyStatus](#ratelimitpolicystatus)
-      * [ConditionSpec](#conditionspec)
-
-<!--te-->
-
-Generated using [github-markdown-toc](https://github.com/ekalinin/github-markdown-toc)
+- [RateLimitPolicy](#ratelimitpolicy)
+- [RateLimitPolicySpec](#ratelimitpolicyspec)
+  - [Limit](#limit)
+    - [RateLimit](#ratelimit)
+    - [RouteSelector](#routeselector)
+    - [WhenCondition](#whencondition)
+- [RateLimitPolicyStatus](#ratelimitpolicystatus)
+  - [ConditionSpec](#conditionspec)
 
 ## RateLimitPolicy
 
-| **json/yaml field** | **Type**                                        | **Required** | **Description**                                      |
-|---------------------|-------------------------------------------------|--------------|------------------------------------------------------|
-| `spec`              | [RateLimitPolicySpec](#RateLimitPolicySpec)     | Yes          | The specfication for RateLimitPolicy custom resource |
-| `status`            | [RateLimitPolicyStatus](#RateLimitPolicyStatus) | No           | The status for the custom resource                   |
+| **Field** | **Type**                                        | **Required** | **Description**                                      |
+|-----------|-------------------------------------------------|:------------:|------------------------------------------------------|
+| `spec`    | [RateLimitPolicySpec](#ratelimitpolicyspec)     | Yes          | The specfication for RateLimitPolicy custom resource |
+| `status`  | [RateLimitPolicyStatus](#ratelimitpolicystatus) | No           | The status for the custom resource                   |
 
 ## RateLimitPolicySpec
 
-| **json/yaml field** | **Type**                                                                                                                           | **Required** | **Default value** | **Description**                             |
-|---------------------|------------------------------------------------------------------------------------------------------------------------------------|--------------|-------------------|---------------------------------------------|
-| `targetRef`         | [gatewayapiv1alpha2.PolicyTargetReference](https://github.com/kubernetes-sigs/gateway-api/blob/main/apis/v1alpha2/policy_types.go) | Yes          | N/A               | identifies an API object to apply policy to |
-| `rateLimits`        | [][RateLimit](#RateLimit)                                                                                                          | No           | empy list         | list of rate limit configurations           |
+| **Field**   | **Type**                                                                                                                                    | **Required** | **Description**                                                |
+|-------------|---------------------------------------------------------------------------------------------------------------------------------------------|--------------|----------------------------------------------------------------|
+| `targetRef` | [PolicyTargetReference](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.PolicyTargetReference) | Yes          | Reference to a Kuberentes resource that the policy attaches to |
+| `limits`    | Map<String: [Limit](#limit)>                                                                                                                | No           | Limit definitions                                              |
 
-### RateLimit
+### Limit
 
-| **json/yaml field** | **Type**                          | **Required** | **Default value**               | **Description**                                                                                                     |
-|---------------------|-----------------------------------|--------------|---------------------------------|---------------------------------------------------------------------------------------------------------------------|
-| `configurations`    | [][Configuration](#Configuration) | No           | Empty                           | list of action configurations                                                                                       |
-| `rules`             | [][Rule](#Rule)                   | No           | Empty. All configurations apply | list of action configurations rules. Rate limit configuration will apply when at least one rule matches the request |
-| `limits`            | [][Limit](#Limit)                 | No           | Empty                           | list of Limitador limit objects                                                                                     |
+| **Field**        | **Type**                          | **Required** | **Description**                                                                                                                                                                                                                                                                                                   |
+|------------------|-----------------------------------|:------------:|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `rates`          | [][RateLimit](#ratelimit)         | No           | List of rate limits associated with the limit definition                                                                                                                                                                                                                                                          |
+| `counters`       | []String                          | No           | List of rate limit counter qualifiers. Items must be a valid [Well-known attribute](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md). Each distinct value resolved in the data plane starts a separate counter for each rate limit.                                         |
+| `routeSelectors` | [][RouteSelector](#routeselector) | No           | List of selectors of HTTPRouteRules whose matching rules activate the limit. At least one HTTPRouteRule must be selected to activate the limit. If omitted, all HTTPRouteRules of the targeted HTTPRoute activate the limit. Do not use it in policies targeting a Gateway.                                       |
+| `when`           | [][WhenCondition](#whencondition) | No           | List of additional dynamic conditions (expressions) to activate the limit. All expression must evaluate to true for the limit to be applied. Use it for filterring attributes that cannot be expressed in the targeted HTTPRoute's `spec.hostnames` and `spec.rules.matches` fields, or when targeting a Gateway. |
 
-#### Configuration
+#### RateLimit
 
-| **json/yaml field** | **Type**                              | **Required** | **Default value** | **Description**                                                                   |
-|---------------------|---------------------------------------|--------------|-------------------|-----------------------------------------------------------------------------------|
-| `actions`           | [][ActionSpecifier](#ActionSpecifier) | No           | empty             | list of action specifiers. Each action specifier can only define one action type. |
+| **Field**        | **Type** | **Required** | **Description**                                                                        |
+|------------------|----------|:------------:|----------------------------------------------------------------------------------------|
+| `limit`          | Number   | Yes          | Maximum value allowed within the given period of time (duration)                       |
+| `duration`       | Number   | Yes          | The period of time in the specified unit that the limit applies                        |
+| `unit`           | String   | Yes          | Unit of time for the duration of the limit. One-of: "second", "minute", "hour", "day". |
 
-#### ActionSpecifier
+#### RouteSelector
 
-| **json/yaml field** | **Type**                                                                                                                                                                                     | **Required** | **Default value** | **Description**                                                                                                |
-|---------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|-------------------|----------------------------------------------------------------------------------------------------------------|
-| `generic_key`       | [config.route.v3.RateLimit.Action.GenericKey](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-ratelimit-action-generickey)         | No           | null              | generic key action                                                                                             |
-| `metadata`          | [config.route.v3.RateLimit.Action.MetaData](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-ratelimit-action-metadata)             | No           | null              | descriptor entry is appended when the metadata contains a key value                                            |
-| `remote_address`    | [config.route.v3.RateLimit.Action.RemoteAddress](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-ratelimit-action-remoteaddress)   | No           | null              | descriptor entry is appended to the descriptor and is populated using the trusted address from x-forwarded-for |
-| `request_headers`   | [config.route.v3.RateLimit.Action.RequestHeaders](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-ratelimit-action-requestheaders) | No           | null              | descriptor entry is appended when a header contains a key that matches the header_name                         |
+| **Field**   | **Type**                                                                                                                       | **Required** | **Description**                                                             |
+|-------------|--------------------------------------------------------------------------------------------------------------------------------|:------------:|-----------------------------------------------------------------------------|
+| `hostnames` | [][Hostname](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.Hostname)             | No           | List of hostnames of the HTTPRoute that activate the limit                  |
+| `matches`   | [][HTTPRouteMatch](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteMatch) | No           | List of selectors of HTTPRouteRules whose matching rules activate the limit |
 
-#### Rule
+Check out _Kuadrant Rate Limiting > [Route selectors](rate-limiting.md#route-selectors)_ for the semantics of how route selectors work.
 
-| **json/yaml field** | **Type** | **Required** | **Default value** | **Description**                                                                                                                                                                                                 |
-|---------------------|----------|--------------|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `paths`             | []string | No           | null              | list of paths. Request matches when one from the list matches                                                                                                                                                   |
-| `methods`           | []string | No           | null              | list of methods to match. Request matches when one from the list matches                                                                                                                                        |
-| `hosts`             | []string | No           | null              | list of hostnames to match. Wildcard hostnames are valid. Request matches when one from the list matches. Each defined hostname must be subset of one of the hostnames defined by the targeted network resource |
+#### WhenCondition
 
-#### Limit
-
-| **json/yaml field** | **Type** | **Required** | **Default value** | **Description**                                                                                 |
-|---------------------|----------|--------------|-------------------|-------------------------------------------------------------------------------------------------|
-| `maxValue`          | int      | Yes          | N/A               | max number of request for the specified time period                                             |
-| `seconds`           | int      | Yes          | N/A               | time period in seconds                                                                          |
-| `conditions`        | []string | No           | Empty list        | Limit conditions. Check [Limitador](https://github.com/Kuadrant/limitador) for more information |
-| `variables`         | []string | No           | Empty list        | Limit variables. Check [Limitador](https://github.com/Kuadrant/limitador) for more information  |
+| **Field**  | **Type** | **Required** | **Description**                                                                                                                                                                                                 |
+|------------|----------|:------------:|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `selector` | String   | Yes          | A valid [Well-known attribute](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md) whose resolved value in the data plane will be compared to `value`, using the `operator`. |
+| `operator` | String   | Yes          | The binary operator to be applied to the resolved value specified by the selector. One-of: "eq" (equal to), "neq" (not equal to)                                                                                |
+| `value`    | String   | Yes          | The static value to be compared to the one resolved from the selector.                                                                                                                                          |
 
 ## RateLimitPolicyStatus
 
-| **json field**       | **Type**                              | **Info**                                                                   |
-|----------------------|---------------------------------------|----------------------------------------------------------------------------|
-| `observedGeneration` | string                                | helper field to see if status info is up to date with latest resource spec |
-| `conditions`         | array of [condition](#ConditionSpec)s | resource conditions                                                        |
+| **Field**            | **Type**                          | **Description**                                                                                                                     |
+|----------------------|-----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `observedGeneration` | String                            | Number of the last observed generation of the resource. Use it to check if the status info is up to date with latest resource spec. |
+| `conditions`         | [][ConditionSpec](#conditionspec) | List of conditions that define that status of the resource.                                                                         |
 
 ### ConditionSpec
-
-The status object has an array of Conditions through which the resource has or has not passed.
-Each element of the Condition array has the following fields:
 
 * The *lastTransitionTime* field provides a timestamp for when the entity last transitioned from one status to another.
 * The *message* field is a human-readable message indicating details about the transition.
@@ -89,10 +73,10 @@ Each element of the Condition array has the following fields:
 * The *type* field is a string with the following possible values:
   * Available: the resource has successfully configured;
 
-| **Field**          | **json field**       | **Type**  | **Info**                     |
-|--------------------|----------------------|-----------|------------------------------|
-| Type               | `type`               | string    | Condition Type               |
-| Status             | `status`             | string    | Status: True, False, Unknown |
-| Reason             | `reason`             | string    | Condition state reason       |
-| Message            | `message`            | string    | Condition state description  |
-| LastTransitionTime | `lastTransitionTime` | timestamp | Last transition timestamp    |
+| **Field**            | **Type**  | **Description**              |
+|----------------------|-----------|------------------------------|
+| `type`               | String    | Condition Type               |
+| `status`             | String    | Status: True, False, Unknown |
+| `reason`             | String    | Condition state reason       |
+| `message`            | String    | Condition state description  |
+| `lastTransitionTime` | Timestamp | Last transition timestamp    |

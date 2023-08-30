@@ -169,6 +169,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	envoyFilterBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("envoyfilter"),
+		mgr.GetEventRecorderFor("EnvoyFilterController"),
+	)
+
+	if err = (&controllers.EnvoyFilterReconciler{
+		BaseReconciler: envoyFilterBaseReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "EnvoyFilter")
+		os.Exit(1)
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

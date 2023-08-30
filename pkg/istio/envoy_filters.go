@@ -83,4 +83,5 @@ func AlwaysUpdateEnvoyFilter(existingObj, desiredObj client.Object) (bool, error
 		Priority:         desired.Spec.Priority,
 	}
 	return true, nil
+
 }

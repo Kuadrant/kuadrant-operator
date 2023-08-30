@@ -237,10 +237,6 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	gatewayEventMapper := &GatewayEventMapper{
 		Logger: r.Logger().WithName("gatewayEventMapper"),
 	}
-	gatewayRateLimtPolicyEventMapper := &GatewayRateLimitPolicyEventMapper{
-		Logger: r.Logger().WithName("gatewayRateLimitPolicyEventMapper"),
-		Client: r.Client(),
-	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta2.RateLimitPolicy{}).
 		Watches(
@@ -252,11 +248,6 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&source.Kind{Type: &gatewayapiv1beta1.Gateway{}},
 			handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.MapToRateLimitPolicy),
-		).
-		// When gateway level RLP changes, notify route level RLP's
-		Watches(
-			&source.Kind{Type: &kuadrantv1beta2.RateLimitPolicy{}},
-			handler.EnqueueRequestsFromMapFunc(gatewayRateLimtPolicyEventMapper.MapRouteRateLimitPolicy),
 		).
 		Complete(r)
 }

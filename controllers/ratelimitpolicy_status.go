@@ -5,14 +5,14 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/exp/slices"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	meta "k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 const (
@@ -58,7 +58,7 @@ func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *ku
 func (r *RateLimitPolicyReconciler) calculateStatus(_ context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, specErr error) *kuadrantv1beta2.RateLimitPolicyStatus {
 	newStatus := &kuadrantv1beta2.RateLimitPolicyStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
-		Conditions:         common.CopyConditions(rlp.Status.Conditions),
+		Conditions:         slices.Clone(rlp.Status.Conditions),
 		ObservedGeneration: rlp.Status.ObservedGeneration,
 	}
 

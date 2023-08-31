@@ -172,7 +172,7 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 
 	// remove direct back ref
 	if targetNetworkObject != nil {
-		if err := r.deleteNetworkResourceDirectBackReference(ctx, ap, targetNetworkObject); err != nil {
+		if err := r.deleteNetworkResourceDirectBackReference(ctx, targetNetworkObject); err != nil {
 			return err
 		}
 	}
@@ -186,8 +186,8 @@ func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx c
 	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(ap), targetNetworkObject, common.AuthPolicyBackRefAnnotation)
 }
 
-func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
-	return r.DeleteTargetBackReference(ctx, client.ObjectKeyFromObject(ap), targetNetworkObject, common.AuthPolicyBackRefAnnotation)
+func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object) error {
+	return r.DeleteTargetBackReference(ctx, targetNetworkObject, common.AuthPolicyBackRefAnnotation)
 }
 
 // SetupWithManager sets up the controller with the Manager.

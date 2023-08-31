@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-logr/logr"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	"golang.org/x/exp/slices"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -50,7 +51,7 @@ func (r *RateLimitPolicyReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx 
 		rlpRefs := gw.PolicyRefs()
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Add the RLP key to the reference list. Only if it does not exist (it should not)
-		if !common.ContainsObjectKey(rlpRefs, rlpKey) {
+		if !slices.Contains(rlpRefs, rlpKey) {
 			rlpRefs = append(gw.PolicyRefs(), rlpKey)
 		}
 		ef, err := r.gatewayRateLimitingClusterEnvoyFilter(ctx, gw.Gateway, rlpRefs)

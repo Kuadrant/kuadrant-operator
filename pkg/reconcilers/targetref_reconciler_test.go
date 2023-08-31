@@ -81,8 +81,8 @@ func TestFetchValidGateway(t *testing.T) {
 	objs := []runtime.Object{existingGateway}
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewFakeClient(objs...)
-	clientAPIReader := fake.NewFakeClient(objs...)
+	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
+	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 	recorder := record.NewFakeRecorder(1000)
 
 	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
@@ -165,8 +165,8 @@ func TestFetchValidHTTPRoute(t *testing.T) {
 	objs := []runtime.Object{existingRoute}
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewFakeClient(objs...)
-	clientAPIReader := fake.NewFakeClient(objs...)
+	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
+	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 	recorder := record.NewFakeRecorder(1000)
 
 	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
@@ -255,8 +255,8 @@ func TestFetchValidTargetRef(t *testing.T) {
 	objs := []runtime.Object{existingRoute}
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewFakeClient(objs...)
-	clientAPIReader := fake.NewFakeClient(objs...)
+	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
+	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 	recorder := record.NewFakeRecorder(1000)
 
 	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
@@ -285,9 +285,9 @@ func TestFetchValidTargetRef(t *testing.T) {
 
 func TestReconcileTargetBackReference(t *testing.T) {
 	var (
-		namespace             = "operator-unittest"
-		routeName             = "my-route"
-		annotationName string = "some-annotation"
+		namespace      = "operator-unittest"
+		routeName      = "my-route"
+		annotationName = "some-annotation"
 	)
 	baseCtx := context.Background()
 	ctx := logr.NewContext(baseCtx, log.Log)
@@ -345,8 +345,8 @@ func TestReconcileTargetBackReference(t *testing.T) {
 	objs := []runtime.Object{existingRoute}
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewFakeClient(objs...)
-	clientAPIReader := fake.NewFakeClient(objs...)
+	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
+	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 	recorder := record.NewFakeRecorder(1000)
 
 	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
@@ -442,8 +442,8 @@ func TestTargetedGatewayKeys(t *testing.T) {
 	objs := []runtime.Object{existingRoute}
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewFakeClient(objs...)
-	clientAPIReader := fake.NewFakeClient(objs...)
+	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
+	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 	recorder := record.NewFakeRecorder(1000)
 
 	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
@@ -466,9 +466,9 @@ func TestTargetedGatewayKeys(t *testing.T) {
 
 func TestDeleteTargetBackReference(t *testing.T) {
 	var (
-		namespace             = "operator-unittest"
-		routeName             = "my-route"
-		annotationName string = "some-annotation"
+		namespace      = "operator-unittest"
+		routeName      = "my-route"
+		annotationName = "some-annotation"
 	)
 	baseCtx := context.Background()
 	ctx := logr.NewContext(baseCtx, log.Log)
@@ -482,8 +482,6 @@ func TestDeleteTargetBackReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	policyKey := client.ObjectKey{Name: "someName", Namespace: "someNamespace"}
 
 	existingRoute := &gatewayapiv1beta1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
@@ -529,8 +527,8 @@ func TestDeleteTargetBackReference(t *testing.T) {
 	objs := []runtime.Object{existingRoute}
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewFakeClient(objs...)
-	clientAPIReader := fake.NewFakeClient(objs...)
+	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
+	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 	recorder := record.NewFakeRecorder(1000)
 
 	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
@@ -538,7 +536,7 @@ func TestDeleteTargetBackReference(t *testing.T) {
 		BaseReconciler: baseReconciler,
 	}
 
-	err = targetRefReconciler.DeleteTargetBackReference(ctx, policyKey, existingRoute, annotationName)
+	err = targetRefReconciler.DeleteTargetBackReference(ctx, existingRoute, annotationName)
 	if err != nil {
 		t.Fatal(err)
 	}

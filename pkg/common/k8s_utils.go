@@ -31,8 +31,7 @@ import (
 )
 
 const (
-	DeleteTagAnnotation      = "kuadrant.io/delete"
-	ReadyStatusConditionType = "Ready"
+	DeleteTagAnnotation = "kuadrant.io/delete"
 )
 
 // ObjectInfo generates a string representation of the provided Kubernetes object, including its kind and name.
@@ -80,9 +79,7 @@ func IsObjectTaggedToDelete(obj client.Object) bool {
 // condition type.
 func StatusConditionsMarshalJSON(input []metav1.Condition) ([]byte, error) {
 	conds := make([]metav1.Condition, 0, len(input))
-	for idx := range input {
-		conds = append(conds, input[idx])
-	}
+	conds = append(conds, input...)
 
 	sort.Slice(conds, func(a, b int) bool {
 		return conds[a].Type < conds[b].Type
@@ -168,16 +165,6 @@ func ObjectKeyListDifference(a, b []client.ObjectKey) []client.ObjectKey {
 	}
 
 	return result
-}
-
-// ContainsObjectKey tells whether a contains x
-func ContainsObjectKey(a []client.ObjectKey, x client.ObjectKey) bool {
-	for _, n := range a {
-		if x == n {
-			return true
-		}
-	}
-	return false
 }
 
 // FindObjectKey returns the smallest index i at which x == a[i],

@@ -428,9 +428,7 @@ func testBasicAuthScheme() kuadrantv1beta1.AuthSchemeSpec {
 					},
 				},
 				Credentials: authorinov1beta1.Credentials{
-					In: authorinov1beta1.Credentials_In(
-						"authorization_header",
-					),
+					In:          "authorization_header",
 					KeySelector: "APIKEY",
 				},
 			},

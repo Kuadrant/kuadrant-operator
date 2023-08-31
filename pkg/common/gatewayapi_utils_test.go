@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"testing"
 
+	"golang.org/x/exp/slices"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -713,13 +714,13 @@ func TestGatewaysMissingPolicyRef(t *testing.T) {
 		{Namespace: "gw-ns", Name: "gw-3"},
 	}, policyRefConfig), gwName)
 
-	if Contains(gws, "gw-1") {
+	if slices.Contains(gws, "gw-1") {
 		t.Error("gateway expected not to be listed as missing policy ref")
 	}
-	if Contains(gws, "gw-2") {
+	if slices.Contains(gws, "gw-2") {
 		t.Error("gateway expected not to be listed as missing policy ref")
 	}
-	if !Contains(gws, "gw-3") {
+	if !slices.Contains(gws, "gw-3") {
 		t.Error("gateway expected to be listed as missing policy ref")
 	}
 
@@ -727,13 +728,13 @@ func TestGatewaysMissingPolicyRef(t *testing.T) {
 		{Namespace: "gw-ns", Name: "gw-1"},
 	}, policyRefConfig), gwName)
 
-	if Contains(gws, "gw-1") {
+	if slices.Contains(gws, "gw-1") {
 		t.Error("gateway expected not to be listed as missing policy ref")
 	}
-	if Contains(gws, "gw-2") {
+	if slices.Contains(gws, "gw-2") {
 		t.Error("gateway expected not to be listed as missing policy ref")
 	}
-	if Contains(gws, "gw-3") {
+	if slices.Contains(gws, "gw-3") {
 		t.Error("gateway expected not to be listed as missing policy ref")
 	}
 
@@ -742,13 +743,13 @@ func TestGatewaysMissingPolicyRef(t *testing.T) {
 		{Namespace: "gw-ns", Name: "gw-3"},
 	}, policyRefConfig), gwName)
 
-	if !Contains(gws, "gw-1") {
+	if !slices.Contains(gws, "gw-1") {
 		t.Error("gateway expected to be listed as missing policy ref")
 	}
-	if Contains(gws, "gw-2") {
+	if slices.Contains(gws, "gw-2") {
 		t.Error("gateway expected not to be listed as missing policy ref")
 	}
-	if !Contains(gws, "gw-3") {
+	if !slices.Contains(gws, "gw-3") {
 		t.Error("gateway expected to be listed as missing policy ref")
 	}
 }
@@ -788,13 +789,13 @@ func TestGatewaysWithValidPolicyRef(t *testing.T) {
 		{Namespace: "gw-ns", Name: "gw-3"},
 	}, policyRefConfig), gwName)
 
-	if Contains(gws, "gw-1") {
+	if slices.Contains(gws, "gw-1") {
 		t.Error("gateway expected not to be listed as with valid policy ref")
 	}
-	if !Contains(gws, "gw-2") {
+	if !slices.Contains(gws, "gw-2") {
 		t.Error("gateway expected to be listed as with valid policy ref")
 	}
-	if Contains(gws, "gw-3") {
+	if slices.Contains(gws, "gw-3") {
 		t.Error("gateway expected not to be listed as with valid policy ref")
 	}
 
@@ -802,13 +803,13 @@ func TestGatewaysWithValidPolicyRef(t *testing.T) {
 		{Namespace: "gw-ns", Name: "gw-1"},
 	}, policyRefConfig), gwName)
 
-	if !Contains(gws, "gw-1") {
+	if !slices.Contains(gws, "gw-1") {
 		t.Error("gateway expected to be listed as with valid policy ref")
 	}
-	if Contains(gws, "gw-2") {
+	if slices.Contains(gws, "gw-2") {
 		t.Error("gateway expected not to be listed as with valid policy ref")
 	}
-	if Contains(gws, "gw-3") {
+	if slices.Contains(gws, "gw-3") {
 		t.Error("gateway expected not to be listed as with valid policy ref")
 	}
 
@@ -817,13 +818,13 @@ func TestGatewaysWithValidPolicyRef(t *testing.T) {
 		{Namespace: "gw-ns", Name: "gw-3"},
 	}, policyRefConfig), gwName)
 
-	if Contains(gws, "gw-1") {
+	if slices.Contains(gws, "gw-1") {
 		t.Error("gateway expected not to be listed as with valid policy ref")
 	}
-	if Contains(gws, "gw-2") {
+	if slices.Contains(gws, "gw-2") {
 		t.Error("gateway expected not to be listed as with valid policy ref")
 	}
-	if Contains(gws, "gw-3") {
+	if slices.Contains(gws, "gw-3") {
 		t.Error("gateway expected not to be listed as with valid policy ref")
 	}
 }
@@ -863,13 +864,13 @@ func TestGatewaysWithInvalidPolicyRef(t *testing.T) {
 		{Namespace: "gw-ns", Name: "gw-3"},
 	}, policyRefConfig), gwName)
 
-	if !Contains(gws, "gw-1") {
+	if !slices.Contains(gws, "gw-1") {
 		t.Error("gateway expected to be listed as with invalid policy ref")
 	}
-	if Contains(gws, "gw-2") {
+	if slices.Contains(gws, "gw-2") {
 		t.Error("gateway expected not to be listed as with invalid policy ref")
 	}
-	if Contains(gws, "gw-3") {
+	if slices.Contains(gws, "gw-3") {
 		t.Error("gateway expected not to be listed as with invalid policy ref")
 	}
 
@@ -877,13 +878,13 @@ func TestGatewaysWithInvalidPolicyRef(t *testing.T) {
 		{Namespace: "gw-ns", Name: "gw-1"},
 	}, policyRefConfig), gwName)
 
-	if Contains(gws, "gw-1") {
+	if slices.Contains(gws, "gw-1") {
 		t.Error("gateway expected not to be listed as with invalid policy ref")
 	}
-	if Contains(gws, "gw-2") {
+	if slices.Contains(gws, "gw-2") {
 		t.Error("gateway expected not to be listed as with invalid policy ref")
 	}
-	if Contains(gws, "gw-3") {
+	if slices.Contains(gws, "gw-3") {
 		t.Error("gateway expected not to be listed as with invalid policy ref")
 	}
 
@@ -892,13 +893,13 @@ func TestGatewaysWithInvalidPolicyRef(t *testing.T) {
 		{Namespace: "gw-ns", Name: "gw-3"},
 	}, policyRefConfig), gwName)
 
-	if Contains(gws, "gw-1") {
+	if slices.Contains(gws, "gw-1") {
 		t.Error("gateway expected not to be listed as with invalid policy ref")
 	}
-	if Contains(gws, "gw-2") {
+	if slices.Contains(gws, "gw-2") {
 		t.Error("gateway expected not to be listed as with invalid policy ref")
 	}
-	if Contains(gws, "gw-3") {
+	if slices.Contains(gws, "gw-3") {
 		t.Error("gateway expected not to be listed as with invalid policy ref")
 	}
 }
@@ -931,10 +932,10 @@ func TestGatewayWrapperPolicyRefs(t *testing.T) {
 		PolicyRefsConfig: &KuadrantRateLimitPolicyRefsConfig{},
 	}
 	refs := Map(gw.PolicyRefs(), func(ref k8stypes.NamespacedName) string { return ref.String() })
-	if !Contains(refs, "app-ns/policy-1") {
+	if !slices.Contains(refs, "app-ns/policy-1") {
 		t.Error("GatewayWrapper.PolicyRefs() should contain app-ns/policy-1")
 	}
-	if !Contains(refs, "app-ns/policy-2") {
+	if !slices.Contains(refs, "app-ns/policy-2") {
 		t.Error("GatewayWrapper.PolicyRefs() should contain app-ns/policy-2")
 	}
 	if len(refs) != 2 {
@@ -1032,7 +1033,7 @@ func TestGatewayHostnames(t *testing.T) {
 		PolicyRefsConfig: &KuadrantRateLimitPolicyRefsConfig{},
 	}
 	hostnames := gw.Hostnames()
-	if !Contains(hostnames, "toystore.com") {
+	if !slices.Contains(hostnames, "toystore.com") {
 		t.Error("GatewayWrapper.Hostnames() expected to contain 'toystore.com'")
 	}
 	if len(hostnames) != 1 {
@@ -1095,7 +1096,7 @@ func TestGetGatewayWorkloadSelector(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = gatewayapiv1beta1.AddToScheme(scheme)
-	k8sClient := fake.NewFakeClientWithScheme(scheme, gateway, service)
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(gateway, service).Build()
 
 	var selector map[string]string
 	var err error
@@ -1136,7 +1137,7 @@ func TestGetGatewayWorkloadSelectorWithoutHostnameAddress(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = gatewayapiv1beta1.AddToScheme(scheme)
-	k8sClient := fake.NewFakeClientWithScheme(scheme, gateway, service)
+	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(gateway, service).Build()
 
 	var selector map[string]string
 	var err error
@@ -1157,7 +1158,7 @@ func (p *FakePolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 }
 
 func (p *FakePolicy) GetWrappedNamespace() gatewayapiv1beta1.Namespace {
-	return gatewayapiv1beta1.Namespace("")
+	return ""
 }
 
 func (p *FakePolicy) GetRulesHostnames() []string {
@@ -1193,9 +1194,7 @@ func TestValidateHierarchicalRules(t *testing.T) {
 	)
 
 	if err := ValidateHierarchicalRules(&policy2, gateway); err.Error() != expectedError.Error() {
-		t.Fatal("the error message does not match the expected error one")
-		fmt.Println(expectedError.Error())
-		fmt.Println(err.Error())
+		t.Fatal("the error message does not match the expected error one", expectedError.Error(), err.Error())
 	}
 
 }

@@ -18,10 +18,9 @@ package common
 
 import (
 	"fmt"
-	"os"
-	"reflect"
 	"strings"
 
+	"golang.org/x/exp/slices"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -30,7 +29,6 @@ import (
 // TODO: move the const to a proper place, or get it from config
 const (
 	KuadrantRateLimitClusterName       = "kuadrant-rate-limiting-service"
-	HTTPRouteKind                      = "HTTPRoute"
 	RateLimitPoliciesBackRefAnnotation = "kuadrant.io/ratelimitpolicies"
 	RateLimitPolicyBackRefAnnotation   = "kuadrant.io/ratelimitpolicy"
 	AuthPoliciesBackRefAnnotation      = "kuadrant.io/authpolicies"
@@ -45,31 +43,6 @@ type KuadrantPolicy interface {
 	GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference
 	GetWrappedNamespace() gatewayapiv1beta1.Namespace
 	GetRulesHostnames() []string
-}
-
-func Ptr[T any](t T) *T {
-	return &t
-}
-
-// FetchEnv fetches the value of the environment variable with the specified key,
-// or returns the default value if the variable is not found or has an empty value.
-// If an error occurs during the lookup, the function returns the default value.
-// The key and default value parameters must be valid strings.
-func FetchEnv(key string, def string) string {
-	val, ok := os.LookupEnv(key)
-	if !ok {
-		return def
-	}
-
-	return val
-}
-
-// GetDefaultIfNil returns the value of a pointer argument, or a default value if the pointer is nil.
-func GetDefaultIfNil[T any](val *T, def T) T {
-	if reflect.ValueOf(val).IsNil() {
-		return def
-	}
-	return *val
 }
 
 // GetEmptySliceIfNil returns a provided slice, or an empty slice of the same type if the input slice is nil.
@@ -89,24 +62,13 @@ func NamespacedNameToObjectKey(namespacedName, defaultNamespace string) client.O
 	return client.ObjectKey{Namespace: defaultNamespace, Name: namespacedName}
 }
 
-// Contains checks if the given target string is present in the slice of strings 'slice'.
-// It returns true if the target string is found in the slice, false otherwise.
-func Contains[T comparable](slice []T, target T) bool {
-	for idx := range slice {
-		if slice[idx] == target {
-			return true
-		}
-	}
-	return false
-}
-
 // SameElements checks if the two slices contain the exact same elements. Order does not matter.
 func SameElements[T comparable](s1, s2 []T) bool {
 	if len(s1) != len(s2) {
 		return false
 	}
 	for _, v := range s1 {
-		if !Contains(s2, v) {
+		if !slices.Contains(s2, v) {
 			return false
 		}
 	}
@@ -115,7 +77,7 @@ func SameElements[T comparable](s1, s2 []T) bool {
 
 func Intersect[T comparable](slice1, slice2 []T) bool {
 	for _, item := range slice1 {
-		if Contains(slice2, item) {
+		if slices.Contains(slice2, item) {
 			return true
 		}
 	}
@@ -131,7 +93,7 @@ func Intersection[T comparable](slice1, slice2 []T) []T {
 	}
 	var result []T
 	for _, item := range smallerSlice {
-		if Contains(largerSlice, item) {
+		if slices.Contains(largerSlice, item) {
 			result = append(result, item)
 		}
 	}
@@ -165,27 +127,6 @@ func Filter[T any](slice []T, f func(T) bool) []T {
 		}
 	}
 	return arr
-}
-
-// SliceCopy copies the elements from the input slice into the output slice, and returns the output slice.
-func SliceCopy[T any](s1 []T) []T {
-	s2 := make([]T, len(s1))
-	copy(s2, s1)
-	return s2
-}
-
-// ReverseSlice creates a reversed copy of the input slice.
-func ReverseSlice[T any](input []T) []T {
-	inputLen := len(input)
-	output := make([]T, inputLen)
-
-	for i, n := range input {
-		j := inputLen - i - 1
-
-		output[j] = n
-	}
-
-	return output
 }
 
 // MergeMapStringString Merge desired into existing.
@@ -238,7 +179,7 @@ func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 	return client.ObjectKey{Namespace: keyStr[:namespaceEndIndex], Name: keyStr[namespaceEndIndex+1:]}, nil
 }
 
-// HostnamesToStrings converts []gatewayapi_v1alpha2.Hostname to []string
+// HostnamesToStrings converts []gatewayapiv1beta1.Hostname to []string
 func HostnamesToStrings(hostnames []gatewayapiv1beta1.Hostname) []string {
 	return Map(hostnames, func(hostname gatewayapiv1beta1.Hostname) string {
 		return string(hostname)
@@ -249,8 +190,8 @@ func HostnamesToStrings(hostnames []gatewayapiv1beta1.Hostname) []string {
 // is a subset of at least one of the domains.
 // Domains and subdomains may be prefixed with a wildcard label (*.).
 // The wildcard label must appear by itself as the first label.
-// When one of the subdomains is not a subset of any of the domains, it returns false and
-// the subdomain not being subset of any of the domains
+// When one of the subdomains is not a subset of the domains, it returns false and
+// the subdomain not being subset of the domains
 func ValidSubdomains(domains, subdomains []string) (bool, string) {
 	for _, subdomain := range subdomains {
 		validSubdomain := false

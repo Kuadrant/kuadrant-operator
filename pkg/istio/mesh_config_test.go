@@ -1,5 +1,4 @@
 //go:build unit
-// +build unit
 
 package istio
 
@@ -172,7 +171,8 @@ func TestOSSMControlPlaneWrapper_GetConfigObject(t *testing.T) {
 func TestOSSMControlPlaneWrapper_GetMeshConfig(t *testing.T) {
 	ossmControlPlane := &maistrav2.ServiceMeshControlPlane{}
 	ossmControlPlane.Spec.TechPreview = maistrav1.NewHelmValues(nil)
-	ossmControlPlane.Spec.TechPreview.SetField("meshConfig", getStubbedMeshConfigStruct().AsMap())
+	err := ossmControlPlane.Spec.TechPreview.SetField("meshConfig", getStubbedMeshConfigStruct().AsMap())
+	assert.NilError(t, err)
 
 	wrapper := NewOSSMControlPlaneWrapper(ossmControlPlane)
 	meshConfig, _ := wrapper.GetMeshConfig()
@@ -185,12 +185,13 @@ func TestOSSMControlPlaneWrapper_SetMeshConfig(t *testing.T) {
 	ossmControlPlane := &maistrav2.ServiceMeshControlPlane{}
 	ossmControlPlane.Spec.TechPreview = maistrav1.NewHelmValues(nil)
 	emptyConfig := &structpb.Struct{}
-	ossmControlPlane.Spec.TechPreview.SetField("meshConfig", emptyConfig.AsMap())
+	err := ossmControlPlane.Spec.TechPreview.SetField("meshConfig", emptyConfig.AsMap())
+	assert.NilError(t, err)
 
 	wrapper := NewOSSMControlPlaneWrapper(ossmControlPlane)
 
 	stubbedMeshConfig := getStubbedMeshConfig()
-	err := wrapper.SetMeshConfig(stubbedMeshConfig)
+	err = wrapper.SetMeshConfig(stubbedMeshConfig)
 	assert.NilError(t, err)
 
 	meshConfig, _ := wrapper.GetMeshConfig()

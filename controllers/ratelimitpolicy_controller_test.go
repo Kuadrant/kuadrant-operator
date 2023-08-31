@@ -26,6 +26,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	"k8s.io/utils/ptr"
 )
 
 func testBuildBasicGateway(gwName, ns string) *gatewayapiv1beta1.Gateway {
@@ -41,12 +42,12 @@ func testBuildBasicGateway(gwName, ns string) *gatewayapiv1beta1.Gateway {
 			Annotations: map[string]string{"networking.istio.io/service-type": string(corev1.ServiceTypeClusterIP)},
 		},
 		Spec: gatewayapiv1beta1.GatewaySpec{
-			GatewayClassName: gatewayapiv1beta1.ObjectName("istio"),
+			GatewayClassName: "istio",
 			Listeners: []gatewayapiv1beta1.Listener{
 				{
-					Name:     gatewayapiv1beta1.SectionName("default"),
+					Name:     "default",
 					Port:     gatewayapiv1beta1.PortNumber(80),
-					Protocol: gatewayapiv1beta1.ProtocolType("HTTP"),
+					Protocol: "HTTP",
 				},
 			},
 		},
@@ -69,7 +70,7 @@ func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string) *
 				ParentRefs: []gatewayapiv1beta1.ParentReference{
 					{
 						Name:      gatewayapiv1beta1.ObjectName(gwName),
-						Namespace: common.Ptr(gatewayapiv1beta1.Namespace(ns)),
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace(ns)),
 					},
 				},
 			},
@@ -79,10 +80,10 @@ func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string) *
 					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 						{
 							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  common.Ptr(gatewayapiv1beta1.PathMatchPathPrefix),
-								Value: common.Ptr("/toy"),
+								Type:  ptr.To(gatewayapiv1beta1.PathMatchPathPrefix),
+								Value: ptr.To("/toy"),
 							},
-							Method: common.Ptr(gatewayapiv1beta1.HTTPMethod("GET")),
+							Method: ptr.To(gatewayapiv1beta1.HTTPMethod("GET")),
 						},
 					},
 				},
@@ -283,17 +284,17 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 						{ // get /toys*
 							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  common.Ptr(gatewayapiv1beta1.PathMatchPathPrefix),
-								Value: common.Ptr("/toys"),
+								Type:  ptr.To(gatewayapiv1beta1.PathMatchPathPrefix),
+								Value: ptr.To("/toys"),
 							},
-							Method: common.Ptr(gatewayapiv1beta1.HTTPMethod("GET")),
+							Method: ptr.To(gatewayapiv1beta1.HTTPMethod("GET")),
 						},
 						{ // post /toys*
 							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  common.Ptr(gatewayapiv1beta1.PathMatchPathPrefix),
-								Value: common.Ptr("/toys"),
+								Type:  ptr.To(gatewayapiv1beta1.PathMatchPathPrefix),
+								Value: ptr.To("/toys"),
 							},
-							Method: common.Ptr(gatewayapiv1beta1.HTTPMethod("POST")),
+							Method: ptr.To(gatewayapiv1beta1.HTTPMethod("POST")),
 						},
 					},
 				},
@@ -301,8 +302,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 						{ // /assets*
 							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  common.Ptr(gatewayapiv1beta1.PathMatchPathPrefix),
-								Value: common.Ptr("/assets"),
+								Type:  ptr.To(gatewayapiv1beta1.PathMatchPathPrefix),
+								Value: ptr.To("/assets"),
 							},
 						},
 					},
@@ -338,8 +339,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 									Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 										{
 											Path: &gatewayapiv1beta1.HTTPPathMatch{
-												Type:  common.Ptr(gatewayapiv1beta1.PathMatchPathPrefix),
-												Value: common.Ptr("/toys"),
+												Type:  ptr.To(gatewayapiv1beta1.PathMatchPathPrefix),
+												Value: ptr.To("/toys"),
 											},
 										},
 									},
@@ -364,8 +365,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 									Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 										{
 											Path: &gatewayapiv1beta1.HTTPPathMatch{
-												Type:  common.Ptr(gatewayapiv1beta1.PathMatchPathPrefix),
-												Value: common.Ptr("/assets"),
+												Type:  ptr.To(gatewayapiv1beta1.PathMatchPathPrefix),
+												Value: ptr.To("/assets"),
 											},
 										},
 									},

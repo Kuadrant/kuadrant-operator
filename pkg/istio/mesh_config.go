@@ -127,10 +127,8 @@ func (w *OSSMControlPlaneWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshCo
 	if err != nil {
 		return err
 	}
-	if err := w.config.Spec.TechPreview.SetField("meshConfig", meshConfigStruct.AsMap()); err != nil {
-		return err
-	}
-	return nil
+
+	return w.config.Spec.TechPreview.SetField("meshConfig", meshConfigStruct.AsMap())
 }
 
 // meshConfigFromStruct Builds the Istio/OSSM MeshConfig from a compatible structure:

@@ -30,7 +30,7 @@ func TestWasmRules(t *testing.T) {
 								Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
 								Value: &[]string{"/toy"}[0],
 							},
-							Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethod("GET")}[0],
+							Method: &[]gatewayapiv1beta1.HTTPMethod{"GET"}[0],
 						},
 					},
 				},
@@ -169,7 +169,7 @@ func TestWasmRules(t *testing.T) {
 										Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
 										Value: &[]string{"/toy"}[0],
 									},
-									Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethod("GET")}[0],
+									Method: &[]gatewayapiv1beta1.HTTPMethod{"GET"}[0],
 								},
 							},
 						},
@@ -264,7 +264,7 @@ func TestWasmRules(t *testing.T) {
 						{
 							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 								{
-									Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethod("POST")}[0],
+									Method: &[]gatewayapiv1beta1.HTTPMethod{"POST"}[0],
 								},
 							},
 						},

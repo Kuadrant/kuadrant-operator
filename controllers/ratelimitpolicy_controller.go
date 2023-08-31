@@ -211,7 +211,7 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 
 	// remove direct back ref
 	if targetNetworkObject != nil {
-		if err := r.deleteNetworkResourceDirectBackReference(ctx, rlp, targetNetworkObject); err != nil {
+		if err := r.deleteNetworkResourceDirectBackReference(ctx, targetNetworkObject); err != nil {
 			return err
 		}
 	}
@@ -225,8 +225,8 @@ func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(
 	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(policy), targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
 }
 
-func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
-	return r.DeleteTargetBackReference(ctx, client.ObjectKeyFromObject(rlp), targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
+func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object) error {
+	return r.DeleteTargetBackReference(ctx, targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
 }
 
 // SetupWithManager sets up the controller with the Manager.

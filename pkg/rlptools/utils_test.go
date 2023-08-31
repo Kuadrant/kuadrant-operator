@@ -31,7 +31,7 @@ func testRLP_1Limit_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 						{
 							Limit:    5,
 							Duration: 10,
-							Unit:     kuadrantv1beta2.TimeUnit("second"),
+							Unit:     "second",
 						},
 					},
 				},
@@ -57,7 +57,7 @@ func testRLP_2Limits_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 						{
 							Limit:    5,
 							Duration: 10,
-							Unit:     kuadrantv1beta2.TimeUnit("second"),
+							Unit:     "second",
 						},
 					},
 				},
@@ -66,7 +66,7 @@ func testRLP_2Limits_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 						{
 							Limit:    3,
 							Duration: 1,
-							Unit:     kuadrantv1beta2.TimeUnit("hour"),
+							Unit:     "hour",
 						},
 					},
 				},
@@ -92,12 +92,12 @@ func testRLP_1Limit_2Rates(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 						{
 							Limit:    5,
 							Duration: 10,
-							Unit:     kuadrantv1beta2.TimeUnit("second"),
+							Unit:     "second",
 						},
 						{
 							Limit:    3,
 							Duration: 1,
-							Unit:     kuadrantv1beta2.TimeUnit("minute"),
+							Unit:     "minute",
 						},
 					},
 				},
@@ -120,13 +120,13 @@ func testRLP_1Limit_1Rate_1Counter(ns, name string) *kuadrantv1beta2.RateLimitPo
 			Limits: map[string]kuadrantv1beta2.Limit{
 				"l1": {
 					Counters: []kuadrantv1beta2.ContextSelector{
-						kuadrantv1beta2.ContextSelector("request.path"),
+						"request.path",
 					},
 					Rates: []kuadrantv1beta2.Rate{
 						{
 							Limit:    5,
 							Duration: 10,
-							Unit:     kuadrantv1beta2.TimeUnit("second"),
+							Unit:     "second",
 						},
 					},
 				},

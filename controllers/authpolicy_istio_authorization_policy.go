@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/exp/slices"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -19,9 +20,10 @@ import (
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
+	"k8s.io/utils/env"
 )
 
-var KuadrantExtAuthProviderName = common.FetchEnv("AUTH_PROVIDER", "kuadrant-authorization")
+var KuadrantExtAuthProviderName = env.GetString("AUTH_PROVIDER", "kuadrant-authorization")
 
 // reconcileIstioAuthorizationPolicies translates and reconciles `AuthRules` into an Istio AuthorizationPoilcy containing them.
 func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, gwDiffObj *reconcilers.GatewayDiff) error {
@@ -63,7 +65,7 @@ func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Cont
 	}
 
 	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
-		listOptions := &client.ListOptions{LabelSelector: labels.SelectorFromSet(labels.Set(istioAuthorizationPolicyLabels(client.ObjectKeyFromObject(gw.Gateway), client.ObjectKeyFromObject(ap))))}
+		listOptions := &client.ListOptions{LabelSelector: labels.SelectorFromSet(istioAuthorizationPolicyLabels(client.ObjectKeyFromObject(gw.Gateway), client.ObjectKeyFromObject(ap)))}
 		iapList := &istio.AuthorizationPolicyList{}
 		if err := r.Client().List(ctx, iapList, listOptions); err != nil {
 			return err
@@ -71,7 +73,7 @@ func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Cont
 
 		for _, iap := range iapList.Items {
 			// it's OK to just go ahead and delete because we only create one IAP per target network object,
-			// and a network object can be target by no more than one AuthPolicy
+			// and a network object can be targeted by no more than one AuthPolicy
 			if err := r.DeleteResource(ctx, iap); err != nil && !apierrors.IsNotFound(err) {
 				logger.Error(err, "failed to delete IstioAuthorizationPolicy")
 				return err
@@ -155,9 +157,9 @@ func istioAuthorizationPolicyRules(authRules []api.AuthRule, targetHostnames []s
 			for idx := range httpRouterules {
 				toRules = append(toRules, &istiosecurity.Rule_To{
 					Operation: &istiosecurity.Operation{
-						Hosts:   common.SliceCopy(httpRouterules[idx].Hosts),
-						Methods: common.SliceCopy(httpRouterules[idx].Methods),
-						Paths:   common.SliceCopy(httpRouterules[idx].Paths),
+						Hosts:   slices.Clone(httpRouterules[idx].Hosts),
+						Methods: slices.Clone(httpRouterules[idx].Methods),
+						Paths:   slices.Clone(httpRouterules[idx].Paths),
 					},
 				})
 			}

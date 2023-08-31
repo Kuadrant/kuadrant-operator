@@ -7,9 +7,11 @@ import (
 	"reflect"
 	"strings"
 
+	"golang.org/x/exp/slices"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -204,12 +206,12 @@ func HTTPMethodToString(method *gatewayapiv1beta1.HTTPMethod) string {
 
 func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, policy KuadrantPolicy) (string, error) {
 	targetRef := policy.GetTargetRef()
-	gwNamespacedName := types.NamespacedName{Namespace: string(GetDefaultIfNil(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)}
+	gwNamespacedName := types.NamespacedName{Namespace: string(ptr.Deref(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)}
 	if IsTargetRefHTTPRoute(targetRef) {
 		route := &gatewayapiv1beta1.HTTPRoute{}
 		if err := cli.Get(
 			ctx,
-			types.NamespacedName{Namespace: string(GetDefaultIfNil(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)},
+			types.NamespacedName{Namespace: string(ptr.Deref(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)},
 			route,
 		); err != nil {
 			return "", err
@@ -316,7 +318,7 @@ func GatewaysMissingPolicyRef(gwList *gatewayapiv1beta1.GatewayList, policyKey c
 	for i := range gwList.Items {
 		gateway := gwList.Items[i]
 		gw := GatewayWrapper{&gateway, config}
-		if ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && !gw.ContainsPolicy(policyKey) {
+		if slices.Contains(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && !gw.ContainsPolicy(policyKey) {
 			gateways = append(gateways, gw)
 		}
 	}
@@ -329,7 +331,7 @@ func GatewaysWithValidPolicyRef(gwList *gatewayapiv1beta1.GatewayList, policyKey
 	for i := range gwList.Items {
 		gateway := gwList.Items[i]
 		gw := GatewayWrapper{&gateway, config}
-		if ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && gw.ContainsPolicy(policyKey) {
+		if slices.Contains(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && gw.ContainsPolicy(policyKey) {
 			gateways = append(gateways, gw)
 		}
 	}
@@ -342,7 +344,7 @@ func GatewaysWithInvalidPolicyRef(gwList *gatewayapiv1beta1.GatewayList, policyK
 	for i := range gwList.Items {
 		gateway := gwList.Items[i]
 		gw := GatewayWrapper{&gateway, config}
-		if !ContainsObjectKey(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && gw.ContainsPolicy(policyKey) {
+		if !slices.Contains(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && gw.ContainsPolicy(policyKey) {
 			gateways = append(gateways, gw)
 		}
 	}
@@ -403,7 +405,7 @@ func (g GatewayWrapper) ContainsPolicy(policyKey client.ObjectKey) bool {
 		return false
 	}
 
-	return ContainsObjectKey(refs, policyKey)
+	return slices.Contains(refs, policyKey)
 }
 
 // AddPolicy tries to add a policy to the existing ref list.
@@ -434,7 +436,7 @@ func (g GatewayWrapper) AddPolicy(policyKey client.ObjectKey) bool {
 		return false
 	}
 
-	if ContainsObjectKey(refs, policyKey) {
+	if slices.Contains(refs, policyKey) {
 		return false
 	}
 

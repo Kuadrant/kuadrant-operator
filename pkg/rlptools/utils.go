@@ -13,11 +13,11 @@ import (
 )
 
 const (
-	LimitadorRateLimitIdentitiferPrefix = "limit."
+	LimitadorRateLimitIdentifierPrefix = "limit."
 )
 
 func LimitNameToLimitadorIdentifier(uniqueLimitName string) string {
-	identifier := LimitadorRateLimitIdentitiferPrefix
+	identifier := LimitadorRateLimitIdentifierPrefix
 
 	// sanitize chars that are not allowed in limitador identifiers
 	for _, c := range uniqueLimitName {

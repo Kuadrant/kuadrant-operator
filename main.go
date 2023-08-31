@@ -23,6 +23,7 @@ import (
 	"runtime"
 
 	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
+	"k8s.io/utils/env"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -48,7 +49,6 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	//+kubebuilder:scaffold:imports
@@ -56,8 +56,8 @@ import (
 
 var (
 	scheme   = k8sruntime.NewScheme()
-	logLevel = common.FetchEnv("LOG_LEVEL", "info")
-	logMode  = common.FetchEnv("LOG_MODE", "production")
+	logLevel = env.GetString("LOG_LEVEL", "info")
+	logMode  = env.GetString("LOG_MODE", "production")
 )
 
 func init() {

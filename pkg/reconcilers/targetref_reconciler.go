@@ -126,7 +126,7 @@ func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context
 }
 
 // TargetedGatewayKeys returns the list of gateways that are being referenced from the target.
-func (r *TargetRefReconciler) TargetedGatewayKeys(ctx context.Context, targetNetworkObject client.Object) []client.ObjectKey {
+func (r *TargetRefReconciler) TargetedGatewayKeys(_ context.Context, targetNetworkObject client.Object) []client.ObjectKey {
 	switch obj := targetNetworkObject.(type) {
 	case *gatewayapiv1beta1.HTTPRoute:
 		gwKeys := make([]client.ObjectKey, 0)
@@ -176,7 +176,7 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, 
 	return nil
 }
 
-func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, policyKey client.ObjectKey, targetNetworkObject client.Object, annotationName string) error {
+func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, targetNetworkObject client.Object, annotationName string) error {
 	logger, _ := logr.FromContext(ctx)
 
 	targetNetworkObjectKey := client.ObjectKeyFromObject(targetNetworkObject)

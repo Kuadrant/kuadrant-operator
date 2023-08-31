@@ -7,9 +7,9 @@ import (
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"golang.org/x/exp/slices"
 	"k8s.io/apimachinery/pkg/api/errors"
-	meta "k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -73,12 +73,12 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrant
 
 func (r *AuthPolicyReconciler) calculateStatus(ap *kuadrantv1beta1.AuthPolicy, specErr error, authConfigReady bool) *kuadrantv1beta1.AuthPolicyStatus {
 	newStatus := &kuadrantv1beta1.AuthPolicyStatus{
-		Conditions:         common.CopyConditions(ap.Status.Conditions),
+		Conditions:         slices.Clone(ap.Status.Conditions),
 		ObservedGeneration: ap.Status.ObservedGeneration,
 	}
 
-	targetNetworkObjectectKind := string(ap.Spec.TargetRef.Kind)
-	availableCond := r.availableCondition(targetNetworkObjectectKind, specErr, authConfigReady)
+	targetNetworkObjectKind := string(ap.Spec.TargetRef.Kind)
+	availableCond := r.availableCondition(targetNetworkObjectKind, specErr, authConfigReady)
 
 	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
 
@@ -86,7 +86,7 @@ func (r *AuthPolicyReconciler) calculateStatus(ap *kuadrantv1beta1.AuthPolicy, s
 }
 
 func (r *AuthPolicyReconciler) availableCondition(targetNetworkObjectectKind string, specErr error, authConfigReady bool) *metav1.Condition {
-	// Condition if there is not issue
+	// Condition if there is no issue
 	cond := &metav1.Condition{
 		Type:    APAvailableConditionType,
 		Status:  metav1.ConditionTrue,

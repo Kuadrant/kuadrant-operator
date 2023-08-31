@@ -363,7 +363,7 @@ spec:
             spec:
               containers:
               - args:
-                - --config=controller_manager_config.yaml
+                - --leader-elect
                 command:
                 - /manager
                 env:
@@ -395,18 +395,10 @@ spec:
                     memory: 200Mi
                 securityContext:
                   allowPrivilegeEscalation: false
-                volumeMounts:
-                - mountPath: /controller_manager_config.yaml
-                  name: manager-config
-                  subPath: controller_manager_config.yaml
               securityContext:
                 runAsNonRoot: true
               serviceAccountName: kuadrant-operator-controller-manager
               terminationGracePeriodSeconds: 10
-              volumes:
-              - configMap:
-                  name: kuadrant-operator-manager-config
-                name: manager-config
       permissions:
       - rules:
         - apiGroups:

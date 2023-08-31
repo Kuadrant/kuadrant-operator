@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -16,11 +17,11 @@ type GatewayEventMapper struct {
 	Logger logr.Logger
 }
 
-func (m *GatewayEventMapper) MapToRateLimitPolicy(obj client.Object) []reconcile.Request {
+func (m *GatewayEventMapper) MapToRateLimitPolicy(_ context.Context, obj client.Object) []reconcile.Request {
 	return m.mapToPolicyRequest(obj, "ratelimitpolicy", &common.KuadrantRateLimitPolicyRefsConfig{})
 }
 
-func (m *GatewayEventMapper) MapToAuthPolicy(obj client.Object) []reconcile.Request {
+func (m *GatewayEventMapper) MapToAuthPolicy(_ context.Context, obj client.Object) []reconcile.Request {
 	return m.mapToPolicyRequest(obj, "authpolicy", &common.KuadrantAuthPolicyRefsConfig{})
 }
 

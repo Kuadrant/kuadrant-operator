@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"context"
+
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -13,11 +15,11 @@ type HTTPRouteEventMapper struct {
 	Logger logr.Logger
 }
 
-func (m *HTTPRouteEventMapper) MapToRateLimitPolicy(obj client.Object) []reconcile.Request {
+func (m *HTTPRouteEventMapper) MapToRateLimitPolicy(_ context.Context, obj client.Object) []reconcile.Request {
 	return m.mapToPolicyRequest(obj, "ratelimitpolicy", common.RateLimitPolicyBackRefAnnotation)
 }
 
-func (m *HTTPRouteEventMapper) MapToAuthPolicy(obj client.Object) []reconcile.Request {
+func (m *HTTPRouteEventMapper) MapToAuthPolicy(_ context.Context, obj client.Object) []reconcile.Request {
 	return m.mapToPolicyRequest(obj, "authpolicy", common.AuthPolicyBackRefAnnotation)
 }
 

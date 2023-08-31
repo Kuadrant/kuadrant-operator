@@ -10,7 +10,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -228,10 +227,10 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.AuthPolicy{}).
 		Watches(
-			&source.Kind{Type: &gatewayapiv1beta1.HTTPRoute{}},
+			&gatewayapiv1beta1.HTTPRoute{},
 			handler.EnqueueRequestsFromMapFunc(httpRouteEventMapper.MapToAuthPolicy),
 		).
-		Watches(&source.Kind{Type: &gatewayapiv1beta1.Gateway{}},
+		Watches(&gatewayapiv1beta1.Gateway{},
 			handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.MapToAuthPolicy)).
 		Complete(r)
 }

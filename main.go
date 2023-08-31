@@ -169,14 +169,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	envoyFilterBaseReconciler := reconcilers.NewBaseReconciler(
+	limitadorClusterEnvoyFilterBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("ratelimitpolicy").WithName("envoyfilter"),
-		mgr.GetEventRecorderFor("EnvoyFilterController"),
+		mgr.GetEventRecorderFor("LimitadorClusterEnvoyFilter"),
 	)
 
-	if err = (&controllers.EnvoyFilterReconciler{
-		BaseReconciler: envoyFilterBaseReconciler,
+	if err = (&controllers.LimitadorClusterEnvoyFilterReconciler{
+		BaseReconciler: limitadorClusterEnvoyFilterBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "EnvoyFilter")
 		os.Exit(1)

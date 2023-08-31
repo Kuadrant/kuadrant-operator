@@ -22,23 +22,25 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 )
 
-// EnvoyFilterReconciler reconciles a EnvoyFilter object
-type EnvoyFilterReconciler struct {
+// LimitadorClusterEnvoyFilterReconciler reconciles a EnvoyFilter object with limitador's cluster
+type LimitadorClusterEnvoyFilterReconciler struct {
 	*reconcilers.BaseReconciler
 }
 
@@ -46,7 +48,7 @@ type EnvoyFilterReconciler struct {
 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
-func (r *EnvoyFilterReconciler) Reconcile(eventCtx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *LimitadorClusterEnvoyFilterReconciler) Reconcile(eventCtx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := r.Logger().WithValues("Gateway", req.NamespacedName)
 	logger.Info("Reconciling EnvoyFilter")
 	ctx := logr.NewContext(eventCtx, logger)
@@ -79,7 +81,7 @@ func (r *EnvoyFilterReconciler) Reconcile(eventCtx context.Context, req ctrl.Req
 	return ctrl.Result{}, nil
 }
 
-func (r *EnvoyFilterReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx context.Context, gw *gatewayapiv1beta1.Gateway) error {
+func (r *LimitadorClusterEnvoyFilterReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx context.Context, gw *gatewayapiv1beta1.Gateway) error {
 	desired, err := r.desiredRateLimitingClusterEnvoyFilter(ctx, gw)
 	if err != nil {
 		return err
@@ -93,7 +95,7 @@ func (r *EnvoyFilterReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx cont
 	return nil
 }
 
-func (r *EnvoyFilterReconciler) desiredRateLimitingClusterEnvoyFilter(ctx context.Context, gw *gatewayapiv1beta1.Gateway) (*istioclientnetworkingv1alpha3.EnvoyFilter, error) {
+func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyFilter(ctx context.Context, gw *gatewayapiv1beta1.Gateway) (*istioclientnetworkingv1alpha3.EnvoyFilter, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -157,9 +159,12 @@ func (r *EnvoyFilterReconciler) desiredRateLimitingClusterEnvoyFilter(ctx contex
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *EnvoyFilterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *LimitadorClusterEnvoyFilterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayapiv1beta1.Gateway{}).
+		// Limitador cluster EnvoyFilter controller only cares about
+		// the annotation having references to RLP's
+		// kuadrant.io/ratelimitpolicies
+		For(&gatewayapiv1beta1.Gateway{}, builder.WithPredicates(predicate.AnnotationChangedPredicate{})).
 		Owns(&istioclientnetworkingv1alpha3.EnvoyFilter{}).
 		Complete(r)
 }

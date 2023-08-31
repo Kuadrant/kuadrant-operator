@@ -11,7 +11,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
-	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -205,14 +204,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Conditions: []string{`limit.l1__2804bad6 == "1"`},
 				Variables:  []string{},
 			}))
-
-			// Check envoy filter
-			efName := fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", gwName)
-			efKey := client.ObjectKey{Name: efName, Namespace: testNamespace}
-			existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
-			err = k8sClient.Get(context.Background(), efKey, existingEF)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
 
 			// Check wasm plugin
 			wpName := fmt.Sprintf("kuadrant-%s", gwName)
@@ -552,14 +543,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Variables:  []string{},
 			}))
 
-			// Check envoy filter
-			efName := fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", gwName)
-			efKey := client.ObjectKey{Name: efName, Namespace: testNamespace}
-			existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
-			err = k8sClient.Get(context.Background(), efKey, existingEF)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-
 			// Check wasm plugin
 			wpName := fmt.Sprintf("kuadrant-%s", gwName)
 			wasmPluginKey := client.ObjectKey{Name: wpName, Namespace: testNamespace}
@@ -676,14 +659,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Conditions: []string{`limit.l1__2804bad6 == "1"`},
 				Variables:  []string{},
 			}))
-
-			// Check envoy filter
-			efName := fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", gwName)
-			efKey := client.ObjectKey{Name: efName, Namespace: testNamespace}
-			existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
-			err = k8sClient.Get(context.Background(), efKey, existingEF)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
 
 			// Check wasm plugin
 			wpName := fmt.Sprintf("kuadrant-%s", gwName)

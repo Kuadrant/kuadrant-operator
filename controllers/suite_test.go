@@ -156,6 +156,18 @@ var _ = BeforeSuite(func() {
 
 	Expect(err).NotTo(HaveOccurred())
 
+	limitadorClusterEnvoyFilterBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("envoyfilter"),
+		mgr.GetEventRecorderFor("LimitadorClusterEnvoyFilter"),
+	)
+
+	err = (&LimitadorClusterEnvoyFilterReconciler{
+		BaseReconciler: limitadorClusterEnvoyFilterBaseReconciler,
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		err = mgr.Start(ctrl.SetupSignalHandler())

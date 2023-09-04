@@ -1,59 +1,71 @@
-package v1beta1
+package v1beta2
 
 import (
 	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
-	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 type AuthSchemeSpec struct {
-	// Named sets of JSON patterns that can be referred in `when` conditionals and in JSON-pattern matching policy rules.
-	Patterns map[string]authorinov1beta1.JSONPatternExpressions `json:"patterns,omitempty"`
+	// Named sets of patterns that can be referred in `when` conditions and in pattern-matching authorization policy rules.
+	// +optional
+	NamedPatterns map[string]authorinoapi.PatternExpressions `json:"patterns,omitempty"`
 
-	// Conditions for the AuthConfig to be enforced.
-	// If omitted, the AuthConfig will be enforced for all requests.
-	// If present, all conditions must match for the AuthConfig to be enforced; otherwise, Authorino skips the AuthConfig and returns immediately with status OK.
-	Conditions []authorinov1beta1.JSONPattern `json:"when,omitempty"`
+	// Overall conditions for the AuthPolicy to be enforced.
+	// If omitted, the AuthPolicy will be enforced at all requests to the protected routes.
+	// If present, all conditions must match for the AuthPolicy to be enforced; otherwise, the authorization service skips the AuthPolicy and returns to the auth request with status OK.
+	// +optional
+	Conditions []authorinoapi.PatternExpressionOrRef `json:"when,omitempty"`
 
-	// List of identity sources/authentication modes.
-	// At least one config of this list MUST evaluate to a valid identity for a request to be successful in the identity verification phase.
-	Identity []*authorinov1beta1.Identity `json:"identity,omitempty"`
+	// TODO(@guicassolato): define top-level `routeSelectors`
 
-	// List of metadata source configs.
-	// Authorino fetches JSON content from sources on this list on every request.
-	Metadata []*authorinov1beta1.Metadata `json:"metadata,omitempty"`
+	// Authentication configs.
+	// At least one config MUST evaluate to a valid identity object for the auth request to be successful.
+	// +optional
+	Authentication map[string]authorinoapi.AuthenticationSpec `json:"authentication,omitempty"`
 
-	// Authorization is the list of authorization policies.
-	// All policies in this list MUST evaluate to "true" for a request be successful in the authorization phase.
-	Authorization []*authorinov1beta1.Authorization `json:"authorization,omitempty"`
+	// Metadata sources.
+	// Authorino fetches auth metadata as JSON from sources specified in this config.
+	// +optional
+	Metadata map[string]authorinoapi.MetadataSpec `json:"metadata,omitempty"`
 
-	// List of response configs.
-	// Authorino gathers data from the auth pipeline to build custom responses for the client.
-	Response []*authorinov1beta1.Response `json:"response,omitempty"`
+	// Authorization policies.
+	// All policies MUST evaluate to "allowed = true" for the auth request be successful.
+	// +optional
+	Authorization map[string]authorinoapi.AuthorizationSpec `json:"authorization,omitempty"`
 
-	// Custom denial response codes, statuses and headers to override default 40x's.
-	DenyWith *authorinov1beta1.DenyWith `json:"denyWith,omitempty"`
+	// Response items.
+	// Authorino builds custom responses to the client of the auth request.
+	// +optional
+	Response *authorinoapi.ResponseSpec `json:"response,omitempty"`
+
+	// Callback functions.
+	// Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
+	// +optional
+	Callbacks map[string]authorinoapi.CallbackSpec `json:"callbacks,omitempty"`
 }
 
 type AuthPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
 
-	// Rule describe the requests that will be routed to external authorization provider
-	AuthRules []AuthRule `json:"rules,omitempty"`
+	// Route rules specify the HTTP route attributes that trigger the external authorization service
+	// TODO(@guicassolato): remove – conditions to trigger the ext-authz service will be computed from `routeSelectors`
+	RouteRules []RouteRule `json:"routes,omitempty"`
 
-	// AuthSchemes are embedded Authorino's AuthConfigs
-	AuthScheme AuthSchemeSpec `json:"authScheme,omitempty"`
+	// The auth rules of the policy.
+	// See Authorino's AuthConfig CRD for more details.
+	AuthScheme AuthSchemeSpec `json:"rules,omitempty"`
 }
 
-type AuthRule struct {
+type RouteRule struct {
 	Hosts   []string `json:"hosts,omitempty"`
 	Methods []string `json:"methods,omitempty"`
 	Paths   []string `json:"paths,omitempty"`
@@ -144,7 +156,7 @@ func (ap *AuthPolicy) GetWrappedNamespace() gatewayapiv1beta1.Namespace {
 
 func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 	ruleHosts = make([]string, 0)
-	for _, rule := range ap.Spec.AuthRules {
+	for _, rule := range ap.Spec.RouteRules {
 		ruleHosts = append(ruleHosts, rule.Hosts...)
 	}
 	return

@@ -5,20 +5,21 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"golang.org/x/exp/slices"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
 
 const APAvailableConditionType string = "Available"
 
 // reconcileStatus makes sure status block of AuthPolicy is up-to-date.
-func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrantv1beta1.AuthPolicy, specErr error) (ctrl.Result, error) {
+func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *api.AuthPolicy, specErr error) (ctrl.Result, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger.V(1).Info("Reconciling AuthPolicy status", "spec error", specErr)
 
@@ -30,7 +31,7 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrant
 			Namespace: ap.Namespace,
 			Name:      authConfigName(apKey),
 		}
-		authConfig := &authorinov1beta1.AuthConfig{}
+		authConfig := &authorinoapi.AuthConfig{}
 		if err := r.GetResource(ctx, authConfigKey, authConfig); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -71,8 +72,8 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrant
 	return ctrl.Result{}, nil
 }
 
-func (r *AuthPolicyReconciler) calculateStatus(ap *kuadrantv1beta1.AuthPolicy, specErr error, authConfigReady bool) *kuadrantv1beta1.AuthPolicyStatus {
-	newStatus := &kuadrantv1beta1.AuthPolicyStatus{
+func (r *AuthPolicyReconciler) calculateStatus(ap *api.AuthPolicy, specErr error, authConfigReady bool) *api.AuthPolicyStatus {
+	newStatus := &api.AuthPolicyStatus{
 		Conditions:         slices.Clone(ap.Status.Conditions),
 		ObservedGeneration: ap.Status.ObservedGeneration,
 	}

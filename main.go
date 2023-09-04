@@ -22,7 +22,6 @@ import (
 	"os"
 	"runtime"
 
-	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
 	"k8s.io/utils/env"
 
 	corev1 "k8s.io/api/core/v1"
@@ -31,7 +30,8 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	authorinoopv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istioextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
@@ -64,8 +64,8 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(corev1.AddToScheme(scheme))
 	utilruntime.Must(limitadorv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(authorinoopv1beta1.AddToScheme(scheme))
-	utilruntime.Must(authorinov1beta1.AddToScheme(scheme))
+	utilruntime.Must(authorinoopapi.AddToScheme(scheme))
+	utilruntime.Must(authorinoapi.AddToScheme(scheme))
 	utilruntime.Must(istionetworkingv1alpha3.AddToScheme(scheme))
 	utilruntime.Must(istiosecurityv1beta1.AddToScheme(scheme))
 	utilruntime.Must(gatewayapiv1beta1.AddToScheme(scheme))

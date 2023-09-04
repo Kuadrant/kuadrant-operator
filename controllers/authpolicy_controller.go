@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )

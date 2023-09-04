@@ -6,57 +6,6 @@ metadata:
       [
         {
           "apiVersion": "kuadrant.io/v1beta1",
-          "kind": "AuthPolicy",
-          "metadata": {
-            "name": "toystore"
-          },
-          "spec": {
-            "authScheme": {
-              "identity": [
-                {
-                  "apiKey": {
-                    "allNamespaces": true,
-                    "selector": {
-                      "matchLabels": {
-                        "app": "toystore"
-                      }
-                    }
-                  },
-                  "credentials": {
-                    "in": "authorization_header",
-                    "keySelector": "APIKEY"
-                  },
-                  "name": "friends"
-                }
-              ],
-              "response": [
-                {
-                  "json": {
-                    "properties": [
-                      {
-                        "name": "userID",
-                        "valueFrom": {
-                          "authJSON": "auth.identity.metadata.annotations.secret\\.kuadrant\\.io/user-id"
-                        }
-                      }
-                    ]
-                  },
-                  "name": "rate-limit-apikey",
-                  "wrapper": "envoyDynamicMetadata",
-                  "wrapperKey": "ext_auth_data"
-                }
-              ]
-            },
-            "rules": null,
-            "targetRef": {
-              "group": "gateway.networking.k8s.io",
-              "kind": "HTTPRoute",
-              "name": "toystore"
-            }
-          }
-        },
-        {
-          "apiVersion": "kuadrant.io/v1beta1",
           "kind": "Kuadrant",
           "metadata": {
             "name": "kuadrant-sample"
@@ -92,7 +41,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2023-07-11T10:58:10Z"
+    createdAt: "2023-09-27T10:27:19Z"
     operators.operatorframework.io/builder: operator-sdk-v1.28.1
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator
@@ -103,11 +52,9 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: Enable AuthN and AuthZ based access control on workloads
-      displayName: AuthPolicy
-      kind: AuthPolicy
+    - kind: AuthPolicy
       name: authpolicies.kuadrant.io
-      version: v1beta1
+      version: v1beta2
     - description: Kuadrant is the Schema for the kuadrants API
       displayName: Kuadrant
       kind: Kuadrant

@@ -17,7 +17,7 @@ import (
 	istiosecurity "istio.io/api/security/v1beta1"
 	istio "istio.io/client-go/pkg/apis/security/v1beta1"
 
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	"k8s.io/utils/env"
@@ -42,7 +42,7 @@ func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.C
 	}
 
 	// TODO(guicassolato): should the rules filter only the hostnames valid for each gateway?
-	toRules := istioAuthorizationPolicyRules(ap.Spec.AuthRules, targetHostnames, targetNetworkObject)
+	toRules := istioAuthorizationPolicyRules(ap.Spec.RouteRules, targetHostnames, targetNetworkObject)
 
 	// Create IstioAuthorizationPolicy for each gateway directly or indirectly referred by the policy (existing and new)
 	for _, gw := range append(gwDiffObj.GatewaysWithValidPolicyRef, gwDiffObj.GatewaysMissingPolicyRef...) {
@@ -128,7 +128,7 @@ func istioAuthorizationPolicyLabels(gwKey, apKey client.ObjectKey) map[string]st
 	}
 }
 
-func istioAuthorizationPolicyRules(authRules []api.AuthRule, targetHostnames []string, targetNetworkObject client.Object) []*istiosecurity.Rule_To {
+func istioAuthorizationPolicyRules(authRules []api.RouteRule, targetHostnames []string, targetNetworkObject client.Object) []*istiosecurity.Rule_To {
 	toRules := []*istiosecurity.Rule_To{}
 
 	// Rules set in the AuthPolicy

@@ -23,8 +23,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	authorinoopv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
-	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
+	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -86,10 +86,10 @@ var _ = BeforeSuite(func() {
 	err = gatewayapiv1beta1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = authorinoopv1beta1.AddToScheme(scheme.Scheme)
+	err = authorinoopapi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = authorinov1beta1.AddToScheme(scheme.Scheme)
+	err = authorinoapi.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = istioapis.AddToScheme(scheme.Scheme)

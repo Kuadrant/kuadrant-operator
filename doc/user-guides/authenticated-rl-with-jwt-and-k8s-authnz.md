@@ -118,7 +118,7 @@ Create a Kuadrant `AuthPolicy` to configure authentication and authorization:
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta1
+apiVersion: kuadrant.io/v1beta2
 kind: AuthPolicy
 metadata:
   name: toystore-protection
@@ -127,33 +127,31 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
-  authScheme:
-    identity:
-    - name: keycloak-users
-      oidc:
-        endpoint: http://keycloak.keycloak.svc.cluster.local:8080/auth/realms/kuadrant
-    - name: k8s-service-accounts
-      kubernetes:
-        audiences:
-        - https://kubernetes.default.svc.cluster.local
-      extendedProperties:
-      - name: sub
-        valueFrom:
-          authJSON: auth.identity.user.username
+  rules:
+    authentication:
+      "keycloak-users":
+        jwt:
+          issuerUrl: http://keycloak.keycloak.svc.cluster.local:8080/auth/realms/kuadrant
+      "k8s-service-accounts":
+        kubernetesTokenReview:
+          audiences:
+          - https://kubernetes.default.svc.cluster.local
+      overrides:
+        "sub":
+          selector: auth.identity.user.username
     authorization:
-    - name: k8s-rbac
-      kubernetes:
-        user:
-          valueFrom:
-            authJSON: auth.identity.sub
+      "k8s-rbac":
+        kubernetesSubjectAccessReview:
+          user:
+            selector: auth.identity.sub
     response:
-    - name: identity
-      json:
-        properties:
-        - name: userid
-          valueFrom:
-            authJSON: auth.identity.sub
-      wrapper: envoyDynamicMetadata
+      success:
+        dynamicMetadata:
+          "identity":
+            json:
+              properties:
+                "userid":
+                  selector: auth.identity.sub
 EOF
 ```
 

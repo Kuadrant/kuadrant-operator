@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	secv1beta1resources "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -20,7 +19,8 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
@@ -98,7 +98,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 				// Check AuthPolicy is ready
 				Eventually(func() bool {
-					existingKAP := &kuadrantv1beta1.AuthPolicy{}
+					existingKAP := &api.AuthPolicy{}
 					err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(authpolicies[idx]), existingKAP)
 					if err != nil {
 						return false
@@ -132,7 +132,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Name:      authConfigName(client.ObjectKeyFromObject(authpolicies[idx])),
 						Namespace: testNamespace,
 					}
-					ac := &authorinov1beta1.AuthConfig{}
+					ac := &authorinoapi.AuthConfig{}
 					err := k8sClient.Get(context.Background(), acKey, ac)
 					logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", acKey.String(), "error", err)
 					if err != nil && !apierrors.IsAlreadyExists(err) {
@@ -173,7 +173,7 @@ var _ = Describe("AuthPolicy controller", func() {
 					Namespace: testNamespace,
 				}
 				Eventually(func() bool {
-					err := k8sClient.Get(context.Background(), acKey, &authorinov1beta1.AuthConfig{})
+					err := k8sClient.Get(context.Background(), acKey, &authorinoapi.AuthConfig{})
 					logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", acKey.String(), "error", err)
 					if err != nil && apierrors.IsNotFound(err) {
 						return true
@@ -192,19 +192,19 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			typedNamespace := gatewayapiv1beta1.Namespace(testNamespace)
-			policy := &kuadrantv1beta1.AuthPolicy{
+			policy := &api.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
 					Namespace: testNamespace,
 				},
-				Spec: kuadrantv1beta1.AuthPolicySpec{
+				Spec: api.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 						Group:     gatewayapiv1beta1.Group(gatewayapiv1beta1.GroupVersion.Group),
 						Kind:      "HTTPRoute",
 						Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
 						Namespace: &typedNamespace,
 					},
-					AuthRules: []kuadrantv1beta1.AuthRule{
+					RouteRules: []api.RouteRule{
 						{
 							Hosts:   []string{"*.admin.toystore.com"},
 							Methods: []string{"DELETE", "POST"},
@@ -225,7 +225,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
 			// Check KAP status is available
 			Eventually(func() bool {
-				existingKAP := &kuadrantv1beta1.AuthPolicy{}
+				existingKAP := &api.AuthPolicy{}
 				err := k8sClient.Get(context.Background(), kapKey, existingKAP)
 				if err != nil {
 					return false
@@ -241,7 +241,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		It("authconfig's hosts should be route's hostnames", func() {
 			// Check authconfig's hosts
 			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
-			existingAuthC := &authorinov1beta1.AuthConfig{}
+			existingAuthC := &authorinoapi.AuthConfig{}
 			authCKey := types.NamespacedName{Name: authConfigName(kapKey), Namespace: testNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), authCKey, existingAuthC)
@@ -293,19 +293,19 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			typedNamespace := gatewayapiv1beta1.Namespace(testNamespace)
-			policy := &kuadrantv1beta1.AuthPolicy{
+			policy := &api.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
 					Namespace: testNamespace,
 				},
-				Spec: kuadrantv1beta1.AuthPolicySpec{
+				Spec: api.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 						Group:     gatewayapiv1beta1.Group(gatewayapiv1beta1.GroupVersion.Group),
 						Kind:      "HTTPRoute",
 						Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
 						Namespace: &typedNamespace,
 					},
-					AuthRules: []kuadrantv1beta1.AuthRule{
+					RouteRules: []api.RouteRule{
 						{
 							Hosts:   []string{"*.a.toystore.com"},
 							Methods: []string{"DELETE", "POST"},
@@ -332,7 +332,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
 			// Check KAP status is available
 			Eventually(func() bool {
-				existingKAP := &kuadrantv1beta1.AuthPolicy{}
+				existingKAP := &api.AuthPolicy{}
 				err := k8sClient.Get(context.Background(), kapKey, existingKAP)
 				if err != nil {
 					return false
@@ -348,7 +348,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		It("authconfig's hosts should be the list of subdomains with unique elements", func() {
 			// Check authconfig's hosts
 			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
-			existingAuthC := &authorinov1beta1.AuthConfig{}
+			existingAuthC := &authorinoapi.AuthConfig{}
 			authCKey := types.NamespacedName{Name: authConfigName(kapKey), Namespace: testNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), authCKey, existingAuthC)
@@ -366,19 +366,19 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			typedNamespace := gatewayapiv1beta1.Namespace(testNamespace)
-			policy := &kuadrantv1beta1.AuthPolicy{
+			policy := &api.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
 					Namespace: testNamespace,
 				},
-				Spec: kuadrantv1beta1.AuthPolicySpec{
+				Spec: api.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 						Group:     gatewayapiv1beta1.Group(gatewayapiv1beta1.GroupVersion.Group),
 						Kind:      "HTTPRoute",
 						Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
 						Namespace: &typedNamespace,
 					},
-					AuthRules:  nil,
+					RouteRules: nil,
 					AuthScheme: testBasicAuthScheme(),
 				},
 			}
@@ -388,7 +388,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
 			// Check KAP status is available
 			Eventually(func() bool {
-				existingKAP := &kuadrantv1beta1.AuthPolicy{}
+				existingKAP := &api.AuthPolicy{}
 				err := k8sClient.Get(context.Background(), kapKey, existingKAP)
 				if err != nil {
 					return false
@@ -404,7 +404,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		It("authconfig's hosts should be route's hostnames", func() {
 			// Check authconfig's hosts
 			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
-			existingAuthC := &authorinov1beta1.AuthConfig{}
+			existingAuthC := &authorinoapi.AuthConfig{}
 			authCKey := types.NamespacedName{Name: authConfigName(kapKey), Namespace: testNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), authCKey, existingAuthC)
@@ -415,68 +415,51 @@ var _ = Describe("AuthPolicy controller", func() {
 	})
 })
 
-func testBasicAuthScheme() kuadrantv1beta1.AuthSchemeSpec {
-	return kuadrantv1beta1.AuthSchemeSpec{
-		Identity: []*authorinov1beta1.Identity{
-			{
-				Name: "apiKey",
-				APIKey: &authorinov1beta1.Identity_APIKey{
-					Selector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							"app": "toystore",
+func testBasicAuthScheme() api.AuthSchemeSpec {
+	return api.AuthSchemeSpec{
+		Authentication: map[string]authorinoapi.AuthenticationSpec{
+			"apiKey": {
+				AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+					ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"app": "toystore",
+							},
 						},
 					},
 				},
-				Credentials: authorinov1beta1.Credentials{
-					In:          "authorization_header",
-					KeySelector: "APIKEY",
+				Credentials: authorinoapi.Credentials{
+					AuthorizationHeader: &authorinoapi.Prefixed{
+						Prefix: "APIKEY",
+					},
 				},
 			},
 		},
 	}
 }
 
-func authPolicies(namespace string) []*kuadrantv1beta1.AuthPolicy {
+func authPolicies(namespace string) []*api.AuthPolicy {
 	typedNamespace := gatewayapiv1beta1.Namespace(namespace)
-	routePolicy := &kuadrantv1beta1.AuthPolicy{
+	routePolicy := &api.AuthPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "target-route",
 			Namespace: namespace,
 		},
-		Spec: kuadrantv1beta1.AuthPolicySpec{
+		Spec: api.AuthPolicySpec{
 			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 				Group:     "gateway.networking.k8s.io",
 				Kind:      "HTTPRoute",
 				Name:      CustomHTTPRouteName,
 				Namespace: &typedNamespace,
 			},
-			AuthRules: []kuadrantv1beta1.AuthRule{
+			RouteRules: []api.RouteRule{
 				{
 					Hosts:   []string{"*.toystore.com"},
 					Methods: []string{"DELETE", "POST"},
 					Paths:   []string{"/admin*"},
 				},
 			},
-			AuthScheme: kuadrantv1beta1.AuthSchemeSpec{
-				Identity: []*authorinov1beta1.Identity{
-					{
-						Name: "apiKey",
-						APIKey: &authorinov1beta1.Identity_APIKey{
-							Selector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{
-									"app": "toystore",
-								},
-							},
-						},
-						Credentials: authorinov1beta1.Credentials{
-							In: authorinov1beta1.Credentials_In(
-								"authorization_header",
-							),
-							KeySelector: "APIKEY",
-						},
-					},
-				},
-			},
+			AuthScheme: testBasicAuthScheme(),
 		},
 	}
 	gatewayPolicy := routePolicy.DeepCopy()
@@ -485,11 +468,11 @@ func authPolicies(namespace string) []*kuadrantv1beta1.AuthPolicy {
 	gatewayPolicy.Spec.TargetRef.Kind = "Gateway"
 	gatewayPolicy.Spec.TargetRef.Name = CustomGatewayName
 	gatewayPolicy.Spec.TargetRef.Namespace = &typedNamespace
-	gatewayPolicy.Spec.AuthRules = []kuadrantv1beta1.AuthRule{
+	gatewayPolicy.Spec.RouteRules = []api.RouteRule{
 		// Must be different from the other KAP targeting the route, otherwise authconfigs will not be ready
 		{Hosts: []string{"*.com"}},
 	}
-	gatewayPolicy.Spec.AuthScheme.Identity[0].APIKey.Selector.MatchLabels["admin"] = "yes"
+	gatewayPolicy.Spec.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
 
-	return []*kuadrantv1beta1.AuthPolicy{routePolicy, gatewayPolicy}
+	return []*api.AuthPolicy{routePolicy, gatewayPolicy}
 }

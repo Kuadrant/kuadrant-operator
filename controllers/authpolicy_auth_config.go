@@ -5,15 +5,14 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta1"
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
@@ -77,31 +76,30 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ap *api.AuthPolicy, targetNetwo
 			Namespace: ap.Namespace,
 		},
 		Spec: authorinoapi.AuthConfigSpec{
-			Hosts:         hosts,
-			Patterns:      ap.Spec.AuthScheme.Patterns,
-			Conditions:    ap.Spec.AuthScheme.Conditions,
-			Identity:      ap.Spec.AuthScheme.Identity,
-			Metadata:      ap.Spec.AuthScheme.Metadata,
-			Authorization: ap.Spec.AuthScheme.Authorization,
-			Response:      ap.Spec.AuthScheme.Response,
-			DenyWith:      ap.Spec.AuthScheme.DenyWith,
+			Hosts:          hosts,
+			NamedPatterns:  ap.Spec.AuthScheme.NamedPatterns,
+			Conditions:     ap.Spec.AuthScheme.Conditions,
+			Authentication: ap.Spec.AuthScheme.Authentication,
+			Metadata:       ap.Spec.AuthScheme.Metadata,
+			Authorization:  ap.Spec.AuthScheme.Authorization,
+			Response:       ap.Spec.AuthScheme.Response,
 		},
 	}, nil
 }
 
 func (r *AuthPolicyReconciler) policyHosts(ap *api.AuthPolicy, targetNetworkObject client.Object) ([]string, error) {
-	if len(ap.Spec.AuthRules) == 0 {
+	if len(ap.Spec.RouteRules) == 0 {
 		return common.TargetHostnames(targetNetworkObject)
 	}
 
 	uniqueHostnamesMap := make(map[string]any)
-	for idx := range ap.Spec.AuthRules {
-		if len(ap.Spec.AuthRules[idx].Hosts) == 0 {
+	for idx := range ap.Spec.RouteRules {
+		if len(ap.Spec.RouteRules[idx].Hosts) == 0 {
 			// When one of the rules does not have hosts, just return target hostnames
 			return common.TargetHostnames(targetNetworkObject)
 		}
 
-		for _, hostname := range ap.Spec.AuthRules[idx].Hosts {
+		for _, hostname := range ap.Spec.RouteRules[idx].Hosts {
 			uniqueHostnamesMap[hostname] = nil
 		}
 	}

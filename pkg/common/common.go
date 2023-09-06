@@ -53,15 +53,6 @@ func GetEmptySliceIfNil[T any](val []T) []T {
 	return val
 }
 
-// NamespacedNameToObjectKey converts <namespace/name> format string to k8s object key.
-// It's common for K8s to reference an object using this format. For e.g. gateways in VirtualService.
-func NamespacedNameToObjectKey(namespacedName, defaultNamespace string) client.ObjectKey {
-	if i := strings.IndexRune(namespacedName, '/'); i >= 0 {
-		return client.ObjectKey{Namespace: namespacedName[:i], Name: namespacedName[i+1:]}
-	}
-	return client.ObjectKey{Namespace: defaultNamespace, Name: namespacedName}
-}
-
 // SameElements checks if the two slices contain the exact same elements. Order does not matter.
 func SameElements[T comparable](s1, s2 []T) bool {
 	if len(s1) != len(s2) {

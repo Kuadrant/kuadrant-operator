@@ -27,6 +27,10 @@ on:
         description: Kuadrant Operator replaced version
         default: 0.0.0-alpha
         type: string
+      channels:
+        description: Bundle and catalog channels, comma separated
+        default: preview
+        type: string
   workflow_dispatch:
     inputs:
       kuadrantOperatorTag:
@@ -52,6 +56,10 @@ on:
       replacesVersion:
         description: Kuadrant Operator replaced version
         default: 0.0.0-alpha
+        type: string
+      channels:
+        description: Bundle and catalog channels, comma separated
+        default: preview
         type: string
 
 env:
@@ -119,7 +127,8 @@ jobs:
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
-            REPLACES_VERSION=${{ inputs.replacesVersion }}
+            REPLACES_VERSION=${{ inputs.replacesVersion }} \
+            CHANNELS=${{ inputs.channels }}
       - name: Build Image
         id: build-image
         uses: redhat-actions/buildah-build@v2

@@ -241,6 +241,14 @@ func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 	return
 }
 
+func (r *RateLimitPolicy) Kind() string {
+	return "ratelimitpolicy"
+}
+
+func (r *RateLimitPolicy) BackReferenceAnnotationName() string {
+	return "kuadrant.io/ratelimitpolicy"
+}
+
 func init() {
 	SchemeBuilder.Register(&RateLimitPolicy{}, &RateLimitPolicyList{})
 }

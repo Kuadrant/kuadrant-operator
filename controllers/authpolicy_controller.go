@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/kuadrant-operator/pkg/mappers"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -191,20 +193,21 @@ func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx cont
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	httpRouteEventMapper := &HTTPRouteEventMapper{
-		Logger: r.Logger().WithName("httpRouteEventMapper"),
-	}
-	gatewayEventMapper := &GatewayEventMapper{
-		Logger: r.Logger().WithName("gatewayEventMapper"),
-	}
+	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httpRouteEventMapper")))
+	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.AuthPolicy{}).
 		Watches(
 			&gatewayapiv1beta1.HTTPRoute{},
-			handler.EnqueueRequestsFromMapFunc(httpRouteEventMapper.MapToAuthPolicy),
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+				return httpRouteEventMapper.MapToPolicy(object, &api.AuthPolicy{})
+			}),
 		).
 		Watches(&gatewayapiv1beta1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.MapToAuthPolicy)).
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+				return gatewayEventMapper.MapToPolicy(object, &api.AuthPolicy{})
+			}),
+		).
 		Complete(r)
 }

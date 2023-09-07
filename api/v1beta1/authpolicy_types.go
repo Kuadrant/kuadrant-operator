@@ -149,3 +149,11 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 	}
 	return
 }
+
+func (ap *AuthPolicy) Kind() string {
+	return "authpolicy"
+}
+
+func (ap *AuthPolicy) BackReferenceAnnotationName() string {
+	return "kuadrant.io/authpolicy"
+}

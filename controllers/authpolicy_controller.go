@@ -59,7 +59,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	markedForDeletion := ap.GetDeletionTimestamp() != nil
 
 	// fetch the target network object
-	targetNetworkObject, err := r.FetchValidTargetRef(ctx, ap.GetTargetRef(), ap.Namespace)
+	targetNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), ap.GetTargetRef(), ap.Namespace)
 	if err != nil {
 		if !markedForDeletion {
 			if apierrors.IsNotFound(err) {
@@ -134,7 +134,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 	}
 
 	// reconcile based on gateway diffs
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, ap, targetNetworkObject, &common.KuadrantAuthPolicyRefsConfig{})
+	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 
 func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, ap, targetNetworkObject, &common.KuadrantAuthPolicyRefsConfig{})
+	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
 	if err != nil {
 		return err
 	}

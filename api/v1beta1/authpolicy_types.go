@@ -155,5 +155,5 @@ func (ap *AuthPolicy) Kind() string {
 }
 
 func (ap *AuthPolicy) BackReferenceAnnotationName() string {
-	return "kuadrant.io/authpolicy"
+	return "kuadrant.io/authpolicies"
 }

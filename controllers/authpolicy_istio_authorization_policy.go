@@ -26,7 +26,7 @@ import (
 var KuadrantExtAuthProviderName = env.GetString("AUTH_PROVIDER", "kuadrant-authorization")
 
 // reconcileIstioAuthorizationPolicies translates and reconciles `AuthRules` into an Istio AuthorizationPoilcy containing them.
-func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, gwDiffObj *reconcilers.GatewayDiff) error {
+func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, gwDiffObj *reconcilers.GatewayDiffs) error {
 	if err := r.deleteIstioAuthorizationPolicies(ctx, ap, gwDiffObj); err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.C
 }
 
 // deleteIstioAuthorizationPolicies deletes IstioAuthorizationPolicies previously created for gateways no longer targeted by the policy (directly or indirectly)
-func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Context, ap *api.AuthPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
+func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Context, ap *api.AuthPolicy, gwDiffObj *reconcilers.GatewayDiffs) error {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return err

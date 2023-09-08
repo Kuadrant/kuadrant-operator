@@ -246,7 +246,7 @@ func (r *RateLimitPolicy) Kind() string {
 }
 
 func (r *RateLimitPolicy) BackReferenceAnnotationName() string {
-	return "kuadrant.io/ratelimitpolicy"
+	return "kuadrant.io/ratelimitpolicies"
 }
 
 func init() {

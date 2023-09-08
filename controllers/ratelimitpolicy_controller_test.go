@@ -264,7 +264,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			serialized, err := json.Marshal(refs)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
+				rlp.BackReferenceAnnotationName(), string(serialized)))
 		})
 
 		It("Creates the correct WasmPlugin for a complex HTTPRoute and a RateLimitPolicy", func() {
@@ -599,7 +599,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			refs := []client.ObjectKey{rlpKey}
 			serialized, err := json.Marshal(refs)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
+			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(rlp.BackReferenceAnnotationName(), string(serialized)))
 		})
 
 		It("Creates all the resources for a basic Gateway and RateLimitPolicy when missing a HTTPRoute attached to the Gateway", func() {
@@ -675,7 +675,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			refs := []client.ObjectKey{rlpKey}
 			serialized, err := json.Marshal(refs)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
+			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(rlp.BackReferenceAnnotationName(), string(serialized)))
 		})
 	})
 })

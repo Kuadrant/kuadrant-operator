@@ -19,12 +19,12 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
+func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, gwDiffObj *reconcilers.GatewayDiffs) error {
 	logger, _ := logr.FromContext(ctx)
 
 	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
 		logger.V(1).Info("reconcileWASMPluginConf: gateway with invalid policy ref", "gw key", gw.Key())
-		rlpRefs := gw.PolicyRefs()
+		rlpRefs := common.BackReferencesFromObject(gw.Gateway, gw.Referrer)
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Remove the RLP key from the reference list. Only if it exists (it should)
 		if refID := common.FindObjectKey(rlpRefs, rlpKey); refID != len(rlpRefs) {
@@ -43,7 +43,7 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 
 	for _, gw := range gwDiffObj.GatewaysWithValidPolicyRef {
 		logger.V(1).Info("reconcileWASMPluginConf: gateway with valid policy ref", "gw key", gw.Key())
-		wp, err := r.gatewayWASMPlugin(ctx, gw, gw.PolicyRefs())
+		wp, err := r.gatewayWASMPlugin(ctx, gw, common.BackReferencesFromObject(gw.Gateway, gw.Referrer))
 		if err != nil {
 			return err
 		}
@@ -55,11 +55,11 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 
 	for _, gw := range gwDiffObj.GatewaysMissingPolicyRef {
 		logger.V(1).Info("reconcileWASMPluginConf: gateway missing policy ref", "gw key", gw.Key())
-		rlpRefs := gw.PolicyRefs()
+		rlpRefs := common.BackReferencesFromObject(gw.Gateway, gw.Referrer)
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Add the RLP key to the reference list. Only if it does not exist (it should not)
 		if !slices.Contains(rlpRefs, rlpKey) {
-			rlpRefs = append(gw.PolicyRefs(), rlpKey)
+			rlpRefs = append(common.BackReferencesFromObject(gw.Gateway, gw.Referrer), rlpKey)
 		}
 		wp, err := r.gatewayWASMPlugin(ctx, gw, rlpRefs)
 		if err != nil {
@@ -73,7 +73,7 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (*istioclientgoextensionv1alpha1.WasmPlugin, error) {
+func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw reconcilers.GatewayWrapper, rlpRefs []client.ObjectKey) (*istioclientgoextensionv1alpha1.WasmPlugin, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger.V(1).Info("gatewayWASMPlugin", "gwKey", gw.Key(), "rlpRefs", rlpRefs)
 
@@ -121,7 +121,7 @@ func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw co
 }
 
 // returns nil when there is no rate limit policy to apply
-func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw common.GatewayWrapper, rlpRefs []client.ObjectKey) (*wasm.Plugin, error) {
+func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw reconcilers.GatewayWrapper, rlpRefs []client.ObjectKey) (*wasm.Plugin, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("wasmPluginConfig").WithValues("gateway", gw.Key())
 
@@ -145,11 +145,14 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 
 		// target ref is a HTTPRoute
 		if common.IsTargetRefHTTPRoute(rlp.Spec.TargetRef) {
-			route, err := r.FetchValidHTTPRoute(ctx, rlp.TargetKey())
+			route, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), rlp.GetTargetRef(), rlp.Namespace)
 			if err != nil {
 				return nil, err
 			}
-			rlps[rlpKey.String()] = &store{rlp: *rlp, route: *route}
+			// Should only be HTTPRoute in this if block
+			httpRoute, _ := route.(*gatewayapiv1beta1.HTTPRoute)
+
+			rlps[rlpKey.String()] = &store{rlp: *rlp, route: *httpRoute}
 			routeKeys[client.ObjectKeyFromObject(route).String()] = struct{}{}
 			continue
 		}

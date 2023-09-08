@@ -13,7 +13,7 @@ import (
 )
 
 func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy) error {
-	rlpRefs, err := r.GetAllGatewayPolicyRefs(ctx, &common.KuadrantRateLimitPolicyRefsConfig{})
+	rlpRefs, err := r.GetAllGatewayPolicyRefs(ctx, rlp)
 	if err != nil {
 		return err
 	}
@@ -21,7 +21,7 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ku
 }
 
 func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy) error {
-	rlpRefs, err := r.GetAllGatewayPolicyRefs(ctx, &common.KuadrantRateLimitPolicyRefsConfig{})
+	rlpRefs, err := r.GetAllGatewayPolicyRefs(ctx, rlp)
 	if err != nil {
 		return err
 	}

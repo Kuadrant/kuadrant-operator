@@ -1,3 +1,5 @@
+// TODO: move to https://github.com/Kuadrant/gateway-api-machinery
+
 package common
 
 import "golang.org/x/exp/slices"

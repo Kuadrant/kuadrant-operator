@@ -27,14 +27,12 @@ import (
 
 // TODO: move the const to a proper place, or get it from config
 const (
-	KuadrantRateLimitClusterName       = "kuadrant-rate-limiting-service"
-	RateLimitPoliciesBackRefAnnotation = "kuadrant.io/ratelimitpolicies"
-	RateLimitPolicyBackRefAnnotation   = "kuadrant.io/ratelimitpolicy"
-	AuthPoliciesBackRefAnnotation      = "kuadrant.io/authpolicies"
-	AuthPolicyBackRefAnnotation        = "kuadrant.io/authpolicy"
-	KuadrantNamespaceLabel             = "kuadrant.io/namespace"
-	NamespaceSeparator                 = '/'
-	LimitadorName                      = "limitador"
+	KuadrantRateLimitClusterName     = "kuadrant-rate-limiting-service"
+	RateLimitPolicyBackRefAnnotation = "kuadrant.io/ratelimitpolicy"
+	AuthPolicyBackRefAnnotation      = "kuadrant.io/authpolicy"
+	KuadrantNamespaceLabel           = "kuadrant.io/namespace"
+	NamespaceSeparator               = '/'
+	LimitadorName                    = "limitador"
 )
 
 type KuadrantPolicy interface {

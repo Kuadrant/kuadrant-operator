@@ -6,7 +6,7 @@ set -euo pipefail
 
 ### CONSTANTS
 # Used as well in the subscription object
-CHANNEL_NAME=preview
+DEFAULT_CHANNEL=preview
 ###
 
 OPM="${1?:Error \$OPM not set. Bye}"
@@ -15,7 +15,8 @@ BUNDLE_IMG="${3?:Error \$BUNDLE_IMG not set. Bye}"
 REPLACES_VERSION="${4?:Error \$REPLACES_VERSION not set. Bye}"
 LIMITADOR_OPERATOR_BUNDLE_IMG="${5?:Error \$LIMITADOR_OPERATOR_BUNDLE_IMG not set. Bye}"
 AUTHORINO_OPERATOR_BUNDLE_IMG="${6?:Error \$AUTHORINO_OPERATOR_BUNDLE_IMG not set. Bye}"
-CATALOG_FILE="${7?:Error \$CATALOG_FILE not set. Bye}"
+CHANNELS="${7:-$DEFAULT_CHANNEL}"
+CATALOG_FILE="${8?:Error \$CATALOG_FILE not set. Bye}"
 
 CATALOG_FILE_BASEDIR="$( cd "$( dirname "$(realpath ${CATALOG_FILE})" )" && pwd )"
 CATALOG_BASEDIR="$( cd "$( dirname "$(realpath ${CATALOG_FILE_BASEDIR})" )" && pwd )"
@@ -52,34 +53,37 @@ touch ${CATALOG_FILE}
 # Limitador Operator
 ###
 # Add the package
-${OPM} init limitador-operator --default-channel=${CHANNEL_NAME} --output yaml >> ${CATALOG_FILE}
+${OPM} init limitador-operator --default-channel=${CHANNELS} --output yaml >> ${CATALOG_FILE}
 # Add a bundles to the Catalog
 cat ${TMP_DIR}/limitador-operator-bundle.yaml >> ${CATALOG_FILE}
 # Add a channel entry for the bundle
 V=`${YQ} eval '.name' ${TMP_DIR}/limitador-operator-bundle.yaml` \
-    ${YQ} eval '(.entries[0].name = strenv(V))' ${CATALOG_BASEDIR}/limitador-operator-channel-entry.yaml >> ${CATALOG_FILE}
+CHANNELS=${CHANNELS} \
+    ${YQ} eval '(.entries[0].name = strenv(V)) | (.name = strenv(CHANNELS))' ${CATALOG_BASEDIR}/limitador-operator-channel-entry.yaml >> ${CATALOG_FILE}
 
 ###
 # Authorino Operator
 ###
 # Add the package
-${OPM} init authorino-operator --default-channel=${CHANNEL_NAME} --output yaml >> ${CATALOG_FILE}
+${OPM} init authorino-operator --default-channel=${CHANNELS} --output yaml >> ${CATALOG_FILE}
 # Add a bundles to the Catalog
 cat ${TMP_DIR}/authorino-operator-bundle.yaml >> ${CATALOG_FILE}
 # Add a channel entry for the bundle
 V=`${YQ} eval '.name' ${TMP_DIR}/authorino-operator-bundle.yaml` \
-    ${YQ} eval '(.entries[0].name = strenv(V))' ${CATALOG_BASEDIR}/authorino-operator-channel-entry.yaml >> ${CATALOG_FILE}
+CHANNELS=${CHANNELS} \
+    ${YQ} eval '(.entries[0].name = strenv(V)) | (.name = strenv(CHANNELS))' ${CATALOG_BASEDIR}/authorino-operator-channel-entry.yaml >> ${CATALOG_FILE}
 
 ###
 # Kuadrant Operator
 ###
 # Add the package
-${OPM} init kuadrant-operator --default-channel=${CHANNEL_NAME} --output yaml >> ${CATALOG_FILE}
+${OPM} init kuadrant-operator --default-channel=${CHANNELS} --output yaml >> ${CATALOG_FILE}
 # Add a bundles to the Catalog
 cat ${TMP_DIR}/kuadrant-operator-bundle.yaml >> ${CATALOG_FILE}
 # Add a channel entry for the bundle
 NAME=`${YQ} eval '.name' ${TMP_DIR}/kuadrant-operator-bundle.yaml` \
 REPLACES=kuadrant-operator.v${REPLACES_VERSION} \
-    ${YQ} eval '(.entries[0].name = strenv(NAME)) | (.entries[0].replaces = strenv(REPLACES))' ${CATALOG_BASEDIR}/kuadrant-operator-channel-entry.yaml >> ${CATALOG_FILE}
+CHANNELS=${CHANNELS} \
+    ${YQ} eval '(.entries[0].name = strenv(NAME)) | (.entries[0].replaces = strenv(REPLACES)) | (.name = strenv(CHANNELS))' ${CATALOG_BASEDIR}/kuadrant-operator-channel-entry.yaml >> ${CATALOG_FILE}
 
 rm -rf $TMP_DIR

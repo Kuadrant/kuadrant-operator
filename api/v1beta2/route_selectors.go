@@ -51,3 +51,24 @@ func (s *RouteSelector) SelectRules(route *gatewayapiv1beta1.HTTPRoute) (rules [
 	}
 	return
 }
+
+// HostnamesForConditions allows avoiding building conditions for hostnames that are excluded by the selector
+// or when the hostname is irrelevant (i.e. matches all hostnames)
+func (s *RouteSelector) HostnamesForConditions(route *gatewayapiv1beta1.HTTPRoute) []gatewayapiv1beta1.Hostname {
+	hostnames := route.Spec.Hostnames
+
+	if len(s.Hostnames) > 0 {
+		hostnames = common.Intersection(s.Hostnames, hostnames)
+	}
+
+	if common.SameElements(hostnames, route.Spec.Hostnames) {
+		return []gatewayapiv1beta1.Hostname{"*"}
+	}
+
+	return hostnames
+}
+
+// +kubebuilder:object:generate=false
+type RouteSelectorsGetter interface {
+	GetRouteSelectors() []RouteSelector
+}

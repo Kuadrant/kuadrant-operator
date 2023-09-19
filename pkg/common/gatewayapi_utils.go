@@ -540,6 +540,33 @@ func TargetHostnames(targetNetworkObject client.Object) ([]string, error) {
 	return hosts, nil
 }
 
+// HostnamesFromHTTPRoute returns an array of all hostnames specified in a HTTPRoute or inherited from its parent Gateways
+func HostnamesFromHTTPRoute(ctx context.Context, route *gatewayapiv1beta1.HTTPRoute, cli client.Client) ([]string, error) {
+	if len(route.Spec.Hostnames) > 0 {
+		return RouteHostnames(route), nil
+	}
+
+	hosts := []string{}
+
+	for _, ref := range route.Spec.ParentRefs {
+		if (ref.Kind != nil && *ref.Kind != "Gateway") || (ref.Group != nil && *ref.Group != "gateway.networking.k8s.io") {
+			continue
+		}
+		gw := &gatewayapiv1beta1.Gateway{}
+		ns := route.Namespace
+		if ref.Namespace != nil {
+			ns = string(*ref.Namespace)
+		}
+		if err := cli.Get(ctx, types.NamespacedName{Namespace: ns, Name: string(ref.Name)}, gw); err != nil {
+			return nil, err
+		}
+		gwHostanmes := HostnamesToStrings(GatewayWrapper{Gateway: gw}.Hostnames())
+		hosts = append(hosts, gwHostanmes...)
+	}
+
+	return hosts, nil
+}
+
 // ValidateHierarchicalRules returns error if the policy rules hostnames fail to match the target network hosts
 func ValidateHierarchicalRules(policy KuadrantPolicy, targetNetworkObject client.Object) error {
 	targetHostnames, err := TargetHostnames(targetNetworkObject)

@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -185,7 +186,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 	})
 
-	Context("Some rules without hosts", func() {
+	Context("Some route selectors without hosts", func() {
 		BeforeEach(func() {
 			httpRoute := testBuildBasicHttpRoute(CustomHTTPRouteName, CustomGatewayName, testNamespace, []string{"*.toystore.com"})
 			err := k8sClient.Create(context.Background(), httpRoute)
@@ -204,18 +205,39 @@ var _ = Describe("AuthPolicy controller", func() {
 						Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
 						Namespace: &typedNamespace,
 					},
-					RouteRules: []api.RouteRule{
+					AuthScheme: testBasicAuthScheme(),
+				},
+			}
+			policy.Spec.RouteSelectors = []api.RouteSelector{
+				{ // POST|DELETE *.admin.toystore.com/admin*
+					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
 						{
-							Hosts:   []string{"*.admin.toystore.com"},
-							Methods: []string{"DELETE", "POST"},
-							Paths:   []string{"/admin*"},
+							Path: &gatewayapiv1alpha2.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+								Value: ptr.To("/admin"),
+							},
+							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("POST")),
 						},
 						{
-							Methods: []string{"GET"},
-							Paths:   []string{"/private*"},
+							Path: &gatewayapiv1alpha2.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+								Value: ptr.To("/admin"),
+							},
+							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
 						},
 					},
-					AuthScheme: testBasicAuthScheme(),
+					Hostnames: []gatewayapiv1beta1.Hostname{"*.admin.toystore.com"},
+				},
+				{ // GET /private*
+					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+						{
+							Path: &gatewayapiv1alpha2.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+								Value: ptr.To("/private"),
+							},
+							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("GET")),
+						},
+					},
 				},
 			}
 
@@ -286,7 +308,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 	})
 
-	Context("All rules with subdomains", func() {
+	Context("All route selectors with subdomains", func() {
 		BeforeEach(func() {
 			httpRoute := testBuildBasicHttpRoute(CustomHTTPRouteName, CustomGatewayName, testNamespace, []string{"*.toystore.com"})
 			err := k8sClient.Create(context.Background(), httpRoute)
@@ -305,24 +327,55 @@ var _ = Describe("AuthPolicy controller", func() {
 						Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
 						Namespace: &typedNamespace,
 					},
-					RouteRules: []api.RouteRule{
+					AuthScheme: testBasicAuthScheme(),
+				},
+			}
+			policy.Spec.RouteSelectors = []api.RouteSelector{
+				{ // POST|DELETE *.a.toystore.com/admin*
+					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
 						{
-							Hosts:   []string{"*.a.toystore.com"},
-							Methods: []string{"DELETE", "POST"},
-							Paths:   []string{"/admin*"},
+							Path: &gatewayapiv1alpha2.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+								Value: ptr.To("/admin"),
+							},
+							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("POST")),
 						},
 						{
-							Hosts:   []string{"*.b.toystore.com"},
-							Methods: []string{"POST"},
-							Paths:   []string{"/other*"},
-						},
-						{
-							Hosts:   []string{"*.a.toystore.com", "*.b.toystore.com"},
-							Methods: []string{"GET"},
-							Paths:   []string{"/private*"},
+							Path: &gatewayapiv1alpha2.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+								Value: ptr.To("/admin"),
+							},
+							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
 						},
 					},
-					AuthScheme: testBasicAuthScheme(),
+					Hostnames: []gatewayapiv1beta1.Hostname{"*.a.toystore.com"},
+				},
+				{ // POST *.b.toystore.com/other*
+					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+						{
+							Path: &gatewayapiv1alpha2.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+								Value: ptr.To("/other"),
+							},
+							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("POST")),
+						},
+					},
+					Hostnames: []gatewayapiv1beta1.Hostname{"*.b.toystore.com"},
+				},
+				{ // GET *.(a|b).toystore.com/private*
+					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+						{
+							Path: &gatewayapiv1alpha2.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+								Value: ptr.To("/private"),
+							},
+							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("GET")),
+						},
+					},
+					Hostnames: []gatewayapiv1beta1.Hostname{
+						"*.a.toystore.com",
+						"*.b.toystore.com",
+					},
 				},
 			}
 
@@ -359,7 +412,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 	})
 
-	Context("No rules", func() {
+	Context("No route selectors", func() {
 		BeforeEach(func() {
 			httpRoute := testBuildBasicHttpRoute(CustomHTTPRouteName, CustomGatewayName, testNamespace, []string{"*.toystore.com"})
 			err := k8sClient.Create(context.Background(), httpRoute)
@@ -378,7 +431,6 @@ var _ = Describe("AuthPolicy controller", func() {
 						Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
 						Namespace: &typedNamespace,
 					},
-					RouteRules: nil,
 					AuthScheme: testBasicAuthScheme(),
 				},
 			}
@@ -417,20 +469,22 @@ var _ = Describe("AuthPolicy controller", func() {
 
 func testBasicAuthScheme() api.AuthSchemeSpec {
 	return api.AuthSchemeSpec{
-		Authentication: map[string]authorinoapi.AuthenticationSpec{
+		Authentication: map[string]api.AuthenticationSpec{
 			"apiKey": {
-				AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-					ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
-						Selector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{
-								"app": "toystore",
+				AuthenticationSpec: authorinoapi.AuthenticationSpec{
+					AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+						ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+							Selector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app": "toystore",
+								},
 							},
 						},
 					},
-				},
-				Credentials: authorinoapi.Credentials{
-					AuthorizationHeader: &authorinoapi.Prefixed{
-						Prefix: "APIKEY",
+					Credentials: authorinoapi.Credentials{
+						AuthorizationHeader: &authorinoapi.Prefixed{
+							Prefix: "APIKEY",
+						},
 					},
 				},
 			},
@@ -452,14 +506,28 @@ func authPolicies(namespace string) []*api.AuthPolicy {
 				Name:      CustomHTTPRouteName,
 				Namespace: &typedNamespace,
 			},
-			RouteRules: []api.RouteRule{
+			AuthScheme: testBasicAuthScheme(),
+		},
+	}
+	routePolicy.Spec.RouteSelectors = []api.RouteSelector{
+		{ // POST|DELETE *.toystore.com/admin*
+			Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
 				{
-					Hosts:   []string{"*.toystore.com"},
-					Methods: []string{"DELETE", "POST"},
-					Paths:   []string{"/admin*"},
+					Path: &gatewayapiv1alpha2.HTTPPathMatch{
+						Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+						Value: ptr.To("/admin"),
+					},
+					Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("POST")),
+				},
+				{
+					Path: &gatewayapiv1alpha2.HTTPPathMatch{
+						Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+						Value: ptr.To("/admin"),
+					},
+					Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
 				},
 			},
-			AuthScheme: testBasicAuthScheme(),
+			Hostnames: []gatewayapiv1beta1.Hostname{"*.toystore.com"},
 		},
 	}
 	gatewayPolicy := routePolicy.DeepCopy()
@@ -468,9 +536,10 @@ func authPolicies(namespace string) []*api.AuthPolicy {
 	gatewayPolicy.Spec.TargetRef.Kind = "Gateway"
 	gatewayPolicy.Spec.TargetRef.Name = CustomGatewayName
 	gatewayPolicy.Spec.TargetRef.Namespace = &typedNamespace
-	gatewayPolicy.Spec.RouteRules = []api.RouteRule{
-		// Must be different from the other KAP targeting the route, otherwise authconfigs will not be ready
-		{Hosts: []string{"*.com"}},
+	gatewayPolicy.Spec.RouteSelectors = []api.RouteSelector{
+		{
+			Hostnames: []gatewayapiv1beta1.Hostname{"*.com"}, // must be different from the other authpolicy targeting the route, otherwise authconfigs will not be ready
+		},
 	}
 	gatewayPolicy.Spec.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
 

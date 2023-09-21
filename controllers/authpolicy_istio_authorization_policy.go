@@ -86,17 +86,23 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 	var route *gatewayapiv1beta1.HTTPRoute
 	gateway := gw.Gateway
 
+	gwHostnames := gw.Hostnames()
+	if len(gwHostnames) == 0 {
+		gwHostnames = []gatewayapiv1beta1.Hostname{"*"}
+	}
+	var routeHostnames []gatewayapiv1beta1.Hostname
+
 	switch obj := targetNetworkObject.(type) {
 	case *gatewayapiv1beta1.HTTPRoute:
 		route = obj
+		if len(route.Spec.Hostnames) > 0 {
+			routeHostnames = common.FilterValidSubdomains(gwHostnames, route.Spec.Hostnames)
+		} else {
+			routeHostnames = gwHostnames
+		}
 	case *gatewayapiv1beta1.Gateway:
 		// fake a single httproute with all rules from all httproutes accepted by the gateway,
 		// that do not have an authpolicy of its own, so we can generate wasm rules for those cases
-		gwHostnames := gw.Hostnames()
-		if len(gwHostnames) == 0 {
-			gwHostnames = []gatewayapiv1beta1.Hostname{"*"}
-		}
-
 		rules := make([]gatewayapiv1beta1.HTTPRouteRule, 0)
 		routes := r.FetchAcceptedGatewayHTTPRoutes(ctx, ap.TargetKey())
 		for idx := range routes {
@@ -117,6 +123,7 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 				Rules:     rules,
 			},
 		}
+		routeHostnames = gwHostnames
 	}
 
 	iap := &istio.AuthorizationPolicy{
@@ -142,6 +149,16 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 	}
 
 	if len(rules) > 0 {
+		// make sure all istio authorizationpolicy rules include the hosts so we don't send a request to authorino for hosts that are not in the scope of the policy
+		hosts := common.HostnamesToStrings(routeHostnames)
+		for i := range rules {
+			for j := range rules[i].To {
+				if len(rules[i].To[j].Operation.Hosts) > 0 {
+					continue
+				}
+				rules[i].To[j].Operation.Hosts = hosts
+			}
+		}
 		iap.Spec.Rules = rules
 	}
 
@@ -242,7 +259,6 @@ func istioAuthorizationPolicyRules(ap *api.AuthPolicy, route *gatewayapiv1beta1.
 		}
 		if r.all {
 			// some config has no route selectors → we can build an Istio AuthorizationPolicy rule that catches the entire HTTPRoute
-			// TODO(@guicassolato): add list of HTTPRoute hostnames (direct ones and ones inherited from the gateway) to the Istio AuthorizationPolicy rules
 			return istioAuthorizationPolicyRulesFromHTTPRoute(route), nil
 		}
 	}

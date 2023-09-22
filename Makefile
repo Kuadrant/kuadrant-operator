@@ -306,6 +306,7 @@ local-cluster-setup: ## Sets up Kind cluster with GatewayAPI manifests and istio
 	$(MAKE) namespace
 	$(MAKE) gateway-api-install
 	$(MAKE) istio-install
+	$(MAKE) install-cert-manager
 	$(MAKE) deploy-gateway
 
 # kuadrant is not deployed
@@ -320,6 +321,7 @@ test-env-setup: ## Deploys all services and manifests required by kuadrant to ru
 	$(MAKE) namespace
 	$(MAKE) gateway-api-install
 	$(MAKE) istio-install
+	$(MAKE) install-cert-manager
 	$(MAKE) deploy-gateway
 	$(MAKE) deploy-dependencies
 	$(MAKE) install

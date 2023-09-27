@@ -31,7 +31,6 @@ const (
 	KuadrantRateLimitClusterName     = "kuadrant-rate-limiting-service"
 	RateLimitPolicyBackRefAnnotation = "kuadrant.io/ratelimitpolicy"
 	AuthPolicyBackRefAnnotation      = "kuadrant.io/authpolicy"
-	KuadrantNamespaceLabel           = "kuadrant.io/namespace"
 	NamespaceSeparator               = '/'
 	LimitadorName                    = "limitador"
 )

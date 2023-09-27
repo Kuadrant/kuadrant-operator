@@ -22,14 +22,12 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
-	common3 "github.com/kuadrant/kuadrant-operator/pkg/library/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	"k8s.io/apimachinery/pkg/api/meta"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 type TargetRefReconciler struct {
@@ -57,7 +55,7 @@ func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context
 
 	for idx := range routeList.Items {
 		route := routeList.Items[idx]
-		routeParentStatus, found := common3.Find(route.Status.RouteStatus.Parents, func(p gatewayapiv1beta1.RouteParentStatus) bool {
+		routeParentStatus, found := common.Find(route.Status.RouteStatus.Parents, func(p gatewayapiv1beta1.RouteParentStatus) bool {
 			return *p.ParentRef.Kind == ("Gateway") &&
 				((p.ParentRef.Namespace == nil && route.GetNamespace() == gwKey.Namespace) || string(*p.ParentRef.Namespace) == gwKey.Namespace) &&
 				string(p.ParentRef.Name) == gwKey.Name
@@ -105,7 +103,7 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, 
 	targetNetworkObjectKind := targetNetworkObject.GetObjectKind().GroupVersionKind()
 
 	// Reconcile the back reference:
-	objAnnotations := common3.ReadAnnotationsFromObject(targetNetworkObject)
+	objAnnotations := common.ReadAnnotationsFromObject(targetNetworkObject)
 
 	if val, ok := objAnnotations[annotationName]; ok {
 		if val != policyKey.String() {
@@ -131,7 +129,7 @@ func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, tar
 	targetNetworkObjectKind := targetNetworkObject.GetObjectKind().GroupVersionKind()
 
 	// Reconcile the back reference:
-	objAnnotations := common3.ReadAnnotationsFromObject(targetNetworkObject)
+	objAnnotations := common.ReadAnnotationsFromObject(targetNetworkObject)
 
 	if _, ok := objAnnotations[annotationName]; ok {
 		delete(objAnnotations, annotationName)
@@ -151,7 +149,7 @@ func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, tar
 // this list of policy refs; nevertheless, the actual order of returned policy refs depends on the order the policy refs
 // appear in the annotations of the gateways.
 // Only gateways with status programmed are considered.
-func (r *TargetRefReconciler) GetAllGatewayPolicyRefs(ctx context.Context, policyRefsConfig common3.Referrer) ([]client.ObjectKey, error) {
+func (r *TargetRefReconciler) GetAllGatewayPolicyRefs(ctx context.Context, policyRefsConfig common.Referrer) ([]client.ObjectKey, error) {
 	var uniquePolicyRefs map[string]struct{}
 	var policyRefs []client.ObjectKey
 
@@ -173,7 +171,7 @@ func (r *TargetRefReconciler) GetAllGatewayPolicyRefs(ctx context.Context, polic
 	sort.Sort(gateways)
 
 	for _, gw := range gateways {
-		for _, policyRef := range common3.BackReferencesFromObject(gw.Gateway, gw.Referrer) {
+		for _, policyRef := range common.BackReferencesFromObject(gw.Gateway, gw.Referrer) {
 			if _, ok := uniquePolicyRefs[policyRef.String()]; ok {
 				continue
 			}

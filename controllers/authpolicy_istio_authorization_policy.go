@@ -83,8 +83,26 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("istioAuthorizationPolicy")
 
-	var route *gatewayapiv1beta1.HTTPRoute
 	gateway := gw.Gateway
+
+	iap := &istio.AuthorizationPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      istioAuthorizationPolicyName(gateway.Name, ap.GetTargetRef()),
+			Namespace: gateway.Namespace,
+			Labels:    istioAuthorizationPolicyLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(ap)),
+		},
+		Spec: istiosecurity.AuthorizationPolicy{
+			Action:   istiosecurity.AuthorizationPolicy_CUSTOM,
+			Selector: common.IstioWorkloadSelectorFromGateway(ctx, r.Client(), gateway),
+			ActionDetail: &istiosecurity.AuthorizationPolicy_Provider{
+				Provider: &istiosecurity.AuthorizationPolicy_ExtensionProvider{
+					Name: KuadrantExtAuthProviderName,
+				},
+			},
+		},
+	}
+
+	var route *gatewayapiv1beta1.HTTPRoute
 
 	gwHostnames := gw.Hostnames()
 	if len(gwHostnames) == 0 {
@@ -108,14 +126,15 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 		for idx := range routes {
 			route := routes[idx]
 			// skip routes that have an authpolicy of its own
-			if route.GetAnnotations()[common.AuthPoliciesBackRefAnnotation] != "" { // FIXME(@guicassolato): this approach considers the route targeted by a policy has been annotated already which might not be the case
+			if route.GetAnnotations()[common.AuthPolicyBackRefAnnotation] != "" {
 				continue
 			}
 			rules = append(rules, route.Spec.Rules...)
 		}
 		if len(rules) == 0 {
 			logger.V(1).Info("no httproutes attached to the targeted gateway, skipping istio authorizationpolicy for the gateway authpolicy")
-			return nil, nil
+			common.TagObjectToDelete(iap)
+			return iap, nil
 		}
 		route = &gatewayapiv1beta1.HTTPRoute{
 			Spec: gatewayapiv1beta1.HTTPRouteSpec{
@@ -124,23 +143,6 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 			},
 		}
 		routeHostnames = gwHostnames
-	}
-
-	iap := &istio.AuthorizationPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      istioAuthorizationPolicyName(gateway.Name, ap.GetTargetRef()),
-			Namespace: gateway.Namespace,
-			Labels:    istioAuthorizationPolicyLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(ap)),
-		},
-		Spec: istiosecurity.AuthorizationPolicy{
-			Action:   istiosecurity.AuthorizationPolicy_CUSTOM,
-			Selector: common.IstioWorkloadSelectorFromGateway(ctx, r.Client(), gateway),
-			ActionDetail: &istiosecurity.AuthorizationPolicy_Provider{
-				Provider: &istiosecurity.AuthorizationPolicy_ExtensionProvider{
-					Name: KuadrantExtAuthProviderName,
-				},
-			},
-		},
 	}
 
 	rules, err := istioAuthorizationPolicyRules(ap, route)

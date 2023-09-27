@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"golang.org/x/exp/slices"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,7 +33,7 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *api.Auth
 			Name:      authConfigName(apKey),
 		}
 		authConfig := &authorinoapi.AuthConfig{}
-		if err := r.GetResource(ctx, authConfigKey, authConfig); err != nil {
+		if err := r.GetResource(ctx, authConfigKey, authConfig); err != nil && !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
 

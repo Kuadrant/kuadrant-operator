@@ -67,6 +67,18 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("desiredAuthConfig")
 
+	authConfig := &authorinoapi.AuthConfig{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "AuthConfig",
+			APIVersion: authorinoapi.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      authConfigName(client.ObjectKeyFromObject(ap)),
+			Namespace: ap.Namespace,
+		},
+		Spec: authorinoapi.AuthConfigSpec{},
+	}
+
 	var route *gatewayapiv1beta1.HTTPRoute
 	var hosts []string
 
@@ -82,46 +94,37 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 		// fake a single httproute with all rules from all httproutes accepted by the gateway,
 		// that do not have an authpolicy of its own, so we can generate wasm rules for those cases
 		gw := common.GatewayWrapper{Gateway: obj}
-		hosts := gw.Hostnames()
+		gwHostnames := gw.Hostnames()
 		if len(hosts) == 0 {
-			hosts = []gatewayapiv1beta1.Hostname{"*"}
+			gwHostnames = []gatewayapiv1beta1.Hostname{"*"}
 		}
+		hosts = common.HostnamesToStrings(gwHostnames)
 
 		rules := make([]gatewayapiv1beta1.HTTPRouteRule, 0)
 		routes := r.FetchAcceptedGatewayHTTPRoutes(ctx, ap.TargetKey())
 		for idx := range routes {
 			route := routes[idx]
 			// skip routes that have an authpolicy of its own
-			if route.GetAnnotations()[common.AuthPoliciesBackRefAnnotation] != "" { // FIXME(@guicassolato): this approach considers the route targeted by a policy has been annotated already which might not be the case
+			if route.GetAnnotations()[common.AuthPolicyBackRefAnnotation] != "" {
 				continue
 			}
 			rules = append(rules, route.Spec.Rules...)
 		}
 		if len(rules) == 0 {
 			logger.V(1).Info("no httproutes attached to the targeted gateway, skipping authorino authconfig for the gateway authpolicy")
-			return nil, nil
+			common.TagObjectToDelete(authConfig)
+			return authConfig, nil
 		}
 		route = &gatewayapiv1beta1.HTTPRoute{
 			Spec: gatewayapiv1beta1.HTTPRouteSpec{
-				Hostnames: hosts,
+				Hostnames: gwHostnames,
 				Rules:     rules,
 			},
 		}
 	}
 
-	authConfig := &authorinoapi.AuthConfig{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "AuthConfig",
-			APIVersion: authorinoapi.GroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      authConfigName(client.ObjectKeyFromObject(ap)),
-			Namespace: ap.Namespace,
-		},
-		Spec: authorinoapi.AuthConfigSpec{
-			Hosts: hosts,
-		},
-	}
+	// hosts
+	authConfig.Spec.Hosts = hosts
 
 	// named patterns
 	if namedPatterns := ap.Spec.AuthScheme.NamedPatterns; len(namedPatterns) > 0 {

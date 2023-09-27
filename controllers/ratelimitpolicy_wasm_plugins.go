@@ -174,7 +174,7 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw rec
 	// that do not have a rlp of its own, so we can generate wasm rules for those cases
 	if gwRLPKey != "" {
 		rules := make([]gatewayapiv1beta1.HTTPRouteRule, 0)
-		routes := r.FetchAcceptedGatewayHTTPRoutes(ctx, rlps[gwRLPKey].rlp.TargetKey())
+		routes := r.TargetRefReconciler.FetchAcceptedGatewayHTTPRoutes(ctx, rlps[gwRLPKey].rlp.TargetKey())
 		for idx := range routes {
 			route := routes[idx]
 			// skip routes that have a rlp of its own

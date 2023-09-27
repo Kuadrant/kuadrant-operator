@@ -33,7 +33,7 @@ import (
 )
 
 type TargetRefReconciler struct {
-	*BaseReconciler
+	client.Client
 }
 
 // blank assignment to verify that BaseReconciler implements reconcile.Reconciler
@@ -49,7 +49,7 @@ func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context
 	logger = logger.WithName("FetchAcceptedGatewayHTTPRoutes").WithValues("gateway", gwKey)
 
 	routeList := &gatewayapiv1beta1.HTTPRouteList{}
-	err := r.Client().List(ctx, routeList)
+	err := r.Client.List(ctx, routeList)
 	if err != nil {
 		logger.V(1).Info("failed to list httproutes", "err", err)
 		return
@@ -114,7 +114,7 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, 
 	} else {
 		objAnnotations[annotationName] = policyKey.String()
 		targetNetworkObject.SetAnnotations(objAnnotations)
-		err := r.UpdateResource(ctx, targetNetworkObject)
+		err := r.Client.Update(ctx, targetNetworkObject)
 		logger.V(1).Info("ReconcileTargetBackReference: update target object", "kind", targetNetworkObjectKind, "name", targetNetworkObjectKey, "err", err)
 		if err != nil {
 			return err
@@ -136,7 +136,7 @@ func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, tar
 	if _, ok := objAnnotations[annotationName]; ok {
 		delete(objAnnotations, annotationName)
 		targetNetworkObject.SetAnnotations(objAnnotations)
-		err := r.UpdateResource(ctx, targetNetworkObject)
+		err := r.Client.Update(ctx, targetNetworkObject)
 		logger.V(1).Info("DeleteTargetBackReference: update network resource", "kind", targetNetworkObjectKind, "name", targetNetworkObjectKey, "err", err)
 		if err != nil {
 			return err
@@ -156,7 +156,7 @@ func (r *TargetRefReconciler) GetAllGatewayPolicyRefs(ctx context.Context, polic
 	var policyRefs []client.ObjectKey
 
 	gwList := &gatewayapiv1beta1.GatewayList{}
-	if err := r.Client().List(ctx, gwList); err != nil {
+	if err := r.Client.List(ctx, gwList); err != nil {
 		return nil, err
 	}
 
@@ -192,7 +192,7 @@ func (r *TargetRefReconciler) ReconcileGatewayPolicyReferences(ctx context.Conte
 	// delete the policy from the annotations of the gateways no longer target by the policy
 	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
 		if gw.DeletePolicy(client.ObjectKeyFromObject(policy)) {
-			err := r.UpdateResource(ctx, gw.Gateway)
+			err := r.Client.Update(ctx, gw.Gateway)
 			logger.V(1).Info("ReconcileGatewayPolicyReferences: update gateway", "gateway with invalid policy ref", gw.Key(), "err", err)
 			if err != nil {
 				return err
@@ -203,7 +203,7 @@ func (r *TargetRefReconciler) ReconcileGatewayPolicyReferences(ctx context.Conte
 	// add the policy to the annotations of the gateways target by the policy
 	for _, gw := range gwDiffObj.GatewaysMissingPolicyRef {
 		if gw.AddPolicy(client.ObjectKeyFromObject(policy)) {
-			err := r.UpdateResource(ctx, gw.Gateway)
+			err := r.Client.Update(ctx, gw.Gateway)
 			logger.V(1).Info("ReconcileGatewayPolicyReferences: update gateway", "gateway missinf policy ref", gw.Key(), "err", err)
 			if err != nil {
 				return err

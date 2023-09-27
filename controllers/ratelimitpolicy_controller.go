@@ -39,7 +39,8 @@ const rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
 
 // RateLimitPolicyReconciler reconciles a RateLimitPolicy object
 type RateLimitPolicyReconciler struct {
-	reconcilers.TargetRefReconciler
+	*reconcilers.BaseReconciler
+	TargetRefReconciler reconcilers.TargetRefReconciler
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -183,7 +184,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 	}
 
 	// set annotation of policies afftecting the gateway - should be the last step, only when all the reconciliation steps succeed
-	return r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
+	return r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
 }
 
 func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
@@ -209,16 +210,16 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 	}
 
 	// update annotation of policies afftecting the gateway
-	return r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
+	return r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
 }
 
 // Ensures only one RLP targets the network resource
 func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, policy common.KuadrantPolicy, targetNetworkObject client.Object) error {
-	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(policy), targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
+	return r.TargetRefReconciler.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(policy), targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
 }
 
 func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object) error {
-	return r.DeleteTargetBackReference(ctx, targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
+	return r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
 }
 
 // SetupWithManager sets up the controller with the Manager.

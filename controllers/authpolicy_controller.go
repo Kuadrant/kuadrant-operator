@@ -23,7 +23,8 @@ const authPolicyFinalizer = "authpolicy.kuadrant.io/finalizer"
 
 // AuthPolicyReconciler reconciles a AuthPolicy object
 type AuthPolicyReconciler struct {
-	reconcilers.TargetRefReconciler
+	*reconcilers.BaseReconciler
+	TargetRefReconciler reconcilers.TargetRefReconciler
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -153,7 +154,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 	}
 
 	// set annotation of policies afftecting the gateway - should be the last step, only when all the reconciliation steps succeed
-	return r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
+	return r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
 }
 
 func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
@@ -179,16 +180,16 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 	}
 
 	// update annotation of policies afftecting the gateway
-	return r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
+	return r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
 }
 
 // Ensures only one RLP targets the network resource
 func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
-	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(ap), targetNetworkObject, common.AuthPolicyBackRefAnnotation)
+	return r.TargetRefReconciler.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(ap), targetNetworkObject, common.AuthPolicyBackRefAnnotation)
 }
 
 func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object) error {
-	return r.DeleteTargetBackReference(ctx, targetNetworkObject, common.AuthPolicyBackRefAnnotation)
+	return r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, common.AuthPolicyBackRefAnnotation)
 }
 
 // SetupWithManager sets up the controller with the Manager.

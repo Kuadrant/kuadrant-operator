@@ -28,7 +28,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -99,13 +98,7 @@ func TestReconcileTargetBackReference(t *testing.T) {
 
 	// Create a fake client to mock API calls.
 	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
-	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
-	recorder := record.NewFakeRecorder(1000)
-
-	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
-	targetRefReconciler := TargetRefReconciler{
-		BaseReconciler: baseReconciler,
-	}
+	targetRefReconciler := TargetRefReconciler{Client: cl}
 
 	err = targetRefReconciler.ReconcileTargetBackReference(ctx, policyKey, existingRoute, annotationName)
 	if err != nil {
@@ -200,13 +193,7 @@ func TestDeleteTargetBackReference(t *testing.T) {
 
 	// Create a fake client to mock API calls.
 	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
-	clientAPIReader := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
-	recorder := record.NewFakeRecorder(1000)
-
-	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
-	targetRefReconciler := TargetRefReconciler{
-		BaseReconciler: baseReconciler,
-	}
+	targetRefReconciler := TargetRefReconciler{Client: cl}
 
 	err = targetRefReconciler.DeleteTargetBackReference(ctx, existingRoute, annotationName)
 	if err != nil {

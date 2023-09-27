@@ -26,11 +26,11 @@ type HTTPRouteRule struct {
 }
 
 func IsTargetRefHTTPRoute(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool {
-	return targetRef.Kind == ("HTTPRoute")
+	return targetRef.Group == ("gateway.networking.k8s.io") && targetRef.Kind == ("HTTPRoute")
 }
 
 func IsTargetRefGateway(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool {
-	return targetRef.Kind == ("Gateway")
+	return targetRef.Group == ("gateway.networking.k8s.io") && targetRef.Kind == ("Gateway")
 }
 
 func RouteHTTPMethodToRuleMethod(httpMethod *gatewayapiv1beta1.HTTPMethod) []string {

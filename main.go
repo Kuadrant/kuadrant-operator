@@ -182,6 +182,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("kuadrant").WithName("gateway"),
+		mgr.GetEventRecorderFor("GatewayKuadrant"),
+	)
+
+	if err = (&controllers.GatewayKuadrantReconciler{
+		BaseReconciler: gatewayKuadrantBaseReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GatewayKuadrant")
+		os.Exit(1)
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

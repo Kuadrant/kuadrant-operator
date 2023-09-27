@@ -168,6 +168,18 @@ var _ = BeforeSuite(func() {
 
 	Expect(err).NotTo(HaveOccurred())
 
+	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("kuadrant").WithName("gateway"),
+		mgr.GetEventRecorderFor("GatewayKuadrant"),
+	)
+
+	err = (&GatewayKuadrantReconciler{
+		BaseReconciler: gatewayKuadrantBaseReconciler,
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		err = mgr.Start(ctrl.SetupSignalHandler())

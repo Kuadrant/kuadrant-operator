@@ -165,7 +165,7 @@ func (r *TargetRefReconciler) GetAllGatewayPolicyRefs(ctx context.Context, polic
 	for i := range gwList.Items {
 		gateway := gwList.Items[i]
 		// skip gateways that are not managed by kuadrant or that are not ready
-		if !common.IsKuadrantManaged(&gateway) || meta.IsStatusConditionFalse(gateway.Status.Conditions, common.GatewayProgrammedConditionType) {
+		if !common.IsKuadrantManaged(&gateway) || meta.IsStatusConditionFalse(gateway.Status.Conditions, string(gatewayapiv1beta1.GatewayConditionProgrammed)) {
 			continue
 		}
 		gateways = append(gateways, GatewayWrapper{Gateway: &gateway, Referrer: policyRefsConfig})

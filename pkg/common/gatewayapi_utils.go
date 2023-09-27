@@ -16,8 +16,6 @@ import (
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
-const GatewayProgrammedConditionType = "Programmed"
-
 type HTTPRouteRule struct {
 	Paths   []string
 	Methods []string

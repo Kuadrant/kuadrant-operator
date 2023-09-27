@@ -1,15 +1,13 @@
-// TODO: move to https://github.com/Kuadrant/gateway-api-machinery
 package reconcilers
 
 import (
 	"testing"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	"golang.org/x/exp/slices"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 func TestGatewayWrapperKey(t *testing.T) {

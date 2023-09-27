@@ -23,6 +23,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	common2 "github.com/kuadrant/kuadrant-operator/pkg/library/common"
+	reconcilers2 "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
@@ -120,8 +122,8 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 		},
 	}
 
-	gateway := reconcilers.GatewayWrapper{Gateway: gw, Referrer: &v1beta2.RateLimitPolicy{}}
-	rlpRefs := common.BackReferencesFromObject(gateway.Gateway, gateway.Referrer)
+	gateway := reconcilers2.GatewayWrapper{Gateway: gw, Referrer: &v1beta2.RateLimitPolicy{}}
+	rlpRefs := common2.BackReferencesFromObject(gateway.Gateway, gateway.Referrer)
 	logger.V(1).Info("desiredRateLimitingClusterEnvoyFilter", "rlpRefs", rlpRefs)
 
 	if len(rlpRefs) < 1 {

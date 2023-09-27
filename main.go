@@ -23,6 +23,7 @@ import (
 	"runtime"
 
 	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
+	reconcilers2 "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"k8s.io/utils/env"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -151,7 +152,7 @@ func main() {
 	)
 
 	if err = (&controllers.RateLimitPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilers2.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      rateLimitPolicyBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicy")
@@ -165,7 +166,7 @@ func main() {
 	)
 
 	if err = (&controllers.AuthPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilers2.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      authPolicyBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicy")

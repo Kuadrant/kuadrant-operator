@@ -16,7 +16,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// TODO: move to https://github.com/Kuadrant/gateway-api-machinery
 package reconcilers
 
 import (

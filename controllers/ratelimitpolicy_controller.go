@@ -21,7 +21,8 @@ import (
 	"encoding/json"
 
 	"github.com/go-logr/logr"
-	"github.com/kuadrant/kuadrant-operator/pkg/mappers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
+	reconcilers3 "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,7 +41,7 @@ const rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
 // RateLimitPolicyReconciler reconciles a RateLimitPolicy object
 type RateLimitPolicyReconciler struct {
 	*reconcilers.BaseReconciler
-	TargetRefReconciler reconcilers.TargetRefReconciler
+	TargetRefReconciler reconcilers3.TargetRefReconciler
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -87,7 +88,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	markedForDeletion := rlp.GetDeletionTimestamp() != nil
 
 	// fetch the target network object
-	targetNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), rlp.GetTargetRef(), rlp.Namespace)
+	targetNetworkObject, err := reconcilers3.FetchTargetRefObject(ctx, r.Client(), rlp.GetTargetRef(), rlp.Namespace)
 	if err != nil {
 		if !markedForDeletion {
 			if apierrors.IsNotFound(err) {
@@ -165,7 +166,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 	}
 
 	// reconcile based on gateway diffs
-	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
+	gatewayDiffObj, err := reconcilers3.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -189,7 +190,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 
 func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
-	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
+	gatewayDiffObj, err := reconcilers3.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
 	if err != nil {
 		return err
 	}

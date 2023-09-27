@@ -1,14 +1,12 @@
-// TODO: move to https://github.com/Kuadrant/gateway-api-machinery
 package reconcilers
 
 import (
 	"encoding/json"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	"golang.org/x/exp/slices"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 // GatewayWrapper wraps a Gateway API Gateway adding methods and configs to manage policy references in annotations

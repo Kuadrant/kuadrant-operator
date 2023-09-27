@@ -6,10 +6,9 @@ import (
 	"strings"
 
 	"github.com/elliotchance/orderedmap/v2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 type RateLimitIndexKey = client.ObjectKey

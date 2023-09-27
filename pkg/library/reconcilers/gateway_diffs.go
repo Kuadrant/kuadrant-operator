@@ -1,4 +1,3 @@
-// TODO: move to https://github.com/Kuadrant/gateway-api-machinery
 package reconcilers
 
 import (
@@ -6,11 +5,10 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	"golang.org/x/exp/slices"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 type GatewayDiffs struct {

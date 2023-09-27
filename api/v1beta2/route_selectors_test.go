@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	common2 "github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
@@ -201,7 +202,7 @@ func TestRouteSelectors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			rules := tc.routeSelector.SelectRules(tc.route)
 			rulesToStringSlice := func(rules []gatewayapiv1beta1.HTTPRouteRule) []string {
-				return common.Map(common.Map(rules, common.HTTPRouteRuleToString), func(r string) string { return fmt.Sprintf("{%s}", r) })
+				return common2.Map(common2.Map(rules, common.HTTPRouteRuleToString), func(r string) string { return fmt.Sprintf("{%s}", r) })
 			}
 			if !reflect.DeepEqual(rules, tc.expected) {
 				t.Errorf("expected %v, got %v", rulesToStringSlice(tc.expected), rulesToStringSlice(rules))

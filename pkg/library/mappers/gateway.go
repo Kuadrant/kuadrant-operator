@@ -1,14 +1,12 @@
-// TODO: move to https://github.com/Kuadrant/gateway-api-machinery
 package mappers
 
 import (
 	"fmt"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 // TODO(@guicassolato): unit test

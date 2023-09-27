@@ -1,4 +1,3 @@
-// TODO: move to https://github.com/Kuadrant/gateway-api-machinery
 package mappers
 
 import (

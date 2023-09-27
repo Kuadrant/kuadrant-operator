@@ -1,6 +1,7 @@
 package v1beta2
 
 import (
+	common2 "github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	orderedmap "github.com/elliotchance/orderedmap/v2"
@@ -31,7 +32,7 @@ type RouteSelector struct {
 // returns nil.
 func (s *RouteSelector) SelectRules(route *gatewayapiv1beta1.HTTPRoute) (rules []gatewayapiv1beta1.HTTPRouteRule) {
 	rulesIndices := orderedmap.NewOrderedMap[int, gatewayapiv1beta1.HTTPRouteRule]()
-	if len(s.Hostnames) > 0 && !common.Intersect(s.Hostnames, route.Spec.Hostnames) {
+	if len(s.Hostnames) > 0 && !common2.Intersect(s.Hostnames, route.Spec.Hostnames) {
 		return nil
 	}
 	if len(s.Matches) == 0 {

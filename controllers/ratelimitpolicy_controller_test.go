@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	common2 "github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
@@ -73,7 +74,7 @@ func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string) *
 					},
 				},
 			},
-			Hostnames: common.Map(hostnames, func(hostname string) gatewayapiv1beta1.Hostname { return gatewayapiv1beta1.Hostname(hostname) }),
+			Hostnames: common2.Map(hostnames, func(hostname string) gatewayapiv1beta1.Hostname { return gatewayapiv1beta1.Hostname(hostname) }),
 			Rules: []gatewayapiv1beta1.HTTPRouteRule{
 				{
 					Matches: []gatewayapiv1beta1.HTTPRouteMatch{

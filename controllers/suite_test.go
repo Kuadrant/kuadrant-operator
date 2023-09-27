@@ -25,6 +25,7 @@ import (
 
 	authorinoopv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
+	reconcilers2 "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -124,7 +125,7 @@ var _ = BeforeSuite(func() {
 	)
 
 	err = (&AuthPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilers2.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      authPolicyBaseReconciler,
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
@@ -136,7 +137,7 @@ var _ = BeforeSuite(func() {
 	)
 
 	err = (&RateLimitPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilers2.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      rateLimitPolicyBaseReconciler,
 	}).SetupWithManager(mgr)
 

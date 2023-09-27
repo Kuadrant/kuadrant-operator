@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -94,7 +95,7 @@ func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 
 // HostnamesToStrings converts []gatewayapiv1beta1.Hostname to []string
 func HostnamesToStrings(hostnames []gatewayapiv1beta1.Hostname) []string {
-	return Map(hostnames, func(hostname gatewayapiv1beta1.Hostname) string {
+	return common.Map(hostnames, func(hostname gatewayapiv1beta1.Hostname) string {
 		return string(hostname)
 	})
 }
@@ -126,7 +127,7 @@ func ValidSubdomains(domains, subdomains []string) (bool, string) {
 func FilterValidSubdomains(domains, subdomains []gatewayapiv1beta1.Hostname) []gatewayapiv1beta1.Hostname {
 	arr := make([]gatewayapiv1beta1.Hostname, 0)
 	for _, subsubdomain := range subdomains {
-		if _, found := Find(domains, func(domain gatewayapiv1beta1.Hostname) bool {
+		if _, found := common.Find(domains, func(domain gatewayapiv1beta1.Hostname) bool {
 			return Name(subsubdomain).SubsetOf(Name(domain))
 		}); found {
 			arr = append(arr, subsubdomain)

@@ -1,12 +1,10 @@
-// TODO: move to https://github.com/Kuadrant/gateway-api-machinery
 package mappers
 
 import (
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 type EventMapper interface {

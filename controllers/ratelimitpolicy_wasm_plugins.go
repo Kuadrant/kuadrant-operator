@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	common2 "github.com/kuadrant/kuadrant-operator/pkg/library/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"golang.org/x/exp/slices"
 	istioextensionsv1alpha1 "istio.io/api/extensions/v1alpha1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
@@ -14,7 +16,6 @@ import (
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
@@ -24,7 +25,7 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 
 	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
 		logger.V(1).Info("reconcileWASMPluginConf: gateway with invalid policy ref", "gw key", gw.Key())
-		rlpRefs := common.BackReferencesFromObject(gw.Gateway, gw.Referrer)
+		rlpRefs := common2.BackReferencesFromObject(gw.Gateway, gw.Referrer)
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Remove the RLP key from the reference list. Only if it exists (it should)
 		if refID := common.FindObjectKey(rlpRefs, rlpKey); refID != len(rlpRefs) {
@@ -43,7 +44,7 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 
 	for _, gw := range gwDiffObj.GatewaysWithValidPolicyRef {
 		logger.V(1).Info("reconcileWASMPluginConf: gateway with valid policy ref", "gw key", gw.Key())
-		wp, err := r.gatewayWASMPlugin(ctx, gw, common.BackReferencesFromObject(gw.Gateway, gw.Referrer))
+		wp, err := r.gatewayWASMPlugin(ctx, gw, common2.BackReferencesFromObject(gw.Gateway, gw.Referrer))
 		if err != nil {
 			return err
 		}
@@ -55,11 +56,11 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 
 	for _, gw := range gwDiffObj.GatewaysMissingPolicyRef {
 		logger.V(1).Info("reconcileWASMPluginConf: gateway missing policy ref", "gw key", gw.Key())
-		rlpRefs := common.BackReferencesFromObject(gw.Gateway, gw.Referrer)
+		rlpRefs := common2.BackReferencesFromObject(gw.Gateway, gw.Referrer)
 		rlpKey := client.ObjectKeyFromObject(rlp)
 		// Add the RLP key to the reference list. Only if it does not exist (it should not)
 		if !slices.Contains(rlpRefs, rlpKey) {
-			rlpRefs = append(common.BackReferencesFromObject(gw.Gateway, gw.Referrer), rlpKey)
+			rlpRefs = append(common2.BackReferencesFromObject(gw.Gateway, gw.Referrer), rlpKey)
 		}
 		wp, err := r.gatewayWASMPlugin(ctx, gw, rlpRefs)
 		if err != nil {

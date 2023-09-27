@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
@@ -100,7 +101,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1beta1.HTTPRouteRule) bo
 		return true
 	}
 
-	_, found := Find(rule.Matches, func(ruleMatch gatewayapiv1beta1.HTTPRouteMatch) bool {
+	_, found := common.Find(rule.Matches, func(ruleMatch gatewayapiv1beta1.HTTPRouteMatch) bool {
 		// path
 		if s.Path != nil && !reflect.DeepEqual(s.Path, ruleMatch.Path) {
 			return false
@@ -113,7 +114,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1beta1.HTTPRouteRule) bo
 
 		// headers
 		for _, header := range s.Headers {
-			if _, found := Find(ruleMatch.Headers, func(otherHeader gatewayapiv1beta1.HTTPHeaderMatch) bool {
+			if _, found := common.Find(ruleMatch.Headers, func(otherHeader gatewayapiv1beta1.HTTPHeaderMatch) bool {
 				return reflect.DeepEqual(header, otherHeader)
 			}); !found {
 				return false
@@ -122,7 +123,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1beta1.HTTPRouteRule) bo
 
 		// query params
 		for _, param := range s.QueryParams {
-			if _, found := Find(ruleMatch.QueryParams, func(otherParam gatewayapiv1beta1.HTTPQueryParamMatch) bool {
+			if _, found := common.Find(ruleMatch.QueryParams, func(otherParam gatewayapiv1beta1.HTTPQueryParamMatch) bool {
 				return reflect.DeepEqual(param, otherParam)
 			}); !found {
 				return false
@@ -137,7 +138,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1beta1.HTTPRouteRule) bo
 
 // HTTPRouteRuleToString prints the matches of a  HTTPRouteRule as string
 func HTTPRouteRuleToString(rule gatewayapiv1beta1.HTTPRouteRule) string {
-	matches := Map(rule.Matches, HTTPRouteMatchToString)
+	matches := common.Map(rule.Matches, HTTPRouteMatchToString)
 	return fmt.Sprintf("{matches:[%s]}", strings.Join(matches, ","))
 }
 
@@ -150,11 +151,11 @@ func HTTPRouteMatchToString(match gatewayapiv1beta1.HTTPRouteMatch) string {
 		patterns = append(patterns, fmt.Sprintf("path:%s", HTTPPathMatchToString(path)))
 	}
 	if len(match.QueryParams) > 0 {
-		queryParams := Map(match.QueryParams, HTTPQueryParamMatchToString)
+		queryParams := common.Map(match.QueryParams, HTTPQueryParamMatchToString)
 		patterns = append(patterns, fmt.Sprintf("queryParams:[%s]", strings.Join(queryParams, ",")))
 	}
 	if len(match.Headers) > 0 {
-		headers := Map(match.Headers, HTTPHeaderMatchToString)
+		headers := common.Map(match.Headers, HTTPHeaderMatchToString)
 		patterns = append(patterns, fmt.Sprintf("headers:[%s]", strings.Join(headers, ",")))
 	}
 	return fmt.Sprintf("{%s}", strings.Join(patterns, ","))
@@ -338,7 +339,7 @@ func ValidateHierarchicalRules(policy KuadrantPolicy, targetNetworkObject client
 }
 
 func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway *gatewayapiv1beta1.Gateway) (map[string]string, error) {
-	address, found := Find(
+	address, found := common.Find(
 		gateway.Status.Addresses,
 		func(address gatewayapiv1beta1.GatewayAddress) bool {
 			return address.Type != nil && *address.Type == gatewayapiv1beta1.HostnameAddressType

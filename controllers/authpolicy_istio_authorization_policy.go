@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"golang.org/x/exp/slices"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,7 +20,6 @@ import (
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	"k8s.io/utils/env"
 )
 

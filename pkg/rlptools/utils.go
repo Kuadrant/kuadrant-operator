@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"unicode"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 const (

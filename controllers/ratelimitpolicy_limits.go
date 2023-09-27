@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	common2 "github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -26,7 +27,7 @@ func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadr
 		return err
 	}
 
-	rlpRefsWithoutRLP := common.Filter(rlpRefs, func(rlpRef client.ObjectKey) bool {
+	rlpRefsWithoutRLP := common2.Filter(rlpRefs, func(rlpRef client.ObjectKey) bool {
 		return rlpRef.Name != rlp.Name || rlpRef.Namespace != rlp.Namespace
 	})
 
@@ -35,7 +36,7 @@ func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadr
 
 func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, rlpRefs []client.ObjectKey) error {
 	logger, _ := logr.FromContext(ctx)
-	logger = logger.WithName("reconcileLimitador").WithValues("rlp refs", common.Map(rlpRefs, func(ref client.ObjectKey) string { return ref.String() }))
+	logger = logger.WithName("reconcileLimitador").WithValues("rlp refs", common2.Map(rlpRefs, func(ref client.ObjectKey) string { return ref.String() }))
 
 	rateLimitIndex, err := r.buildRateLimitIndex(ctx, rlpRefs)
 	if err != nil {

@@ -133,10 +133,9 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	if err != nil {
 		return nil, err
 	}
-	// TODO(@guicassolato): uncomment below when we fix the OR'ing of conditions
-	// if len(topLevelConditionsFromRouteSelectors) == 0 {
-	// 	topLevelConditionsFromRouteSelectors = authorinoConditionsFromHTTPRoute(route)
-	// }
+	if len(topLevelConditionsFromRouteSelectors) == 0 {
+		topLevelConditionsFromRouteSelectors = authorinoConditionsFromHTTPRoute(route)
+	}
 	if len(topLevelConditionsFromRouteSelectors) > 0 || len(ap.Spec.AuthScheme.Conditions) > 0 {
 		authConfig.Spec.Conditions = append(ap.Spec.AuthScheme.Conditions, topLevelConditionsFromRouteSelectors...)
 	}
@@ -285,46 +284,44 @@ func mergeConditionsFromRouteSelectorsIntoConfigs(ap *api.AuthPolicy, route *gat
 	return authConfig, nil
 }
 
-// authorinoConditionsFromRouteSelectors builds a list of Authorino conditions from a config that may specify route selectors
+// authorinoConditionFromRouteSelectors builds a list of Authorino conditions from a config that may specify route selectors
 func authorinoConditionsFromRouteSelectors(route *gatewayapiv1beta1.HTTPRoute, config api.RouteSelectorsGetter) ([]authorinoapi.PatternExpressionOrRef, error) {
-	conditions := []authorinoapi.PatternExpressionOrRef{}
-
 	routeSelectors := config.GetRouteSelectors()
 
-	if len(routeSelectors) > 0 {
-		// build conditions from the rules selected by the route selectors
-		for idx := range routeSelectors {
-			routeSelector := routeSelectors[idx]
-			hostnamesForConditions := routeSelector.HostnamesForConditions(route)
-			for _, rule := range routeSelector.SelectRules(route) {
-				conditions = append(conditions, authorinoConditionsFromHTTPRouteRule(rule, hostnamesForConditions)...) // FIXME(@guicassolato): this is not correct. Authorino conditions are AND'ed together when we actually want them to be OR'ed in this case
-			}
-		}
-		if len(conditions) == 0 {
-			return nil, errors.New("cannot match any route rules, check for invalid route selectors in the policy")
-		}
+	if len(routeSelectors) == 0 {
+		return nil, nil
 	}
 
-	return conditions, nil
+	// build conditions from the rules selected by the route selectors
+	conditions := []authorinoapi.PatternExpressionOrRef{}
+	for idx := range routeSelectors {
+		routeSelector := routeSelectors[idx]
+		hostnamesForConditions := routeSelector.HostnamesForConditions(route)
+		for _, rule := range routeSelector.SelectRules(route) {
+			conditions = append(conditions, authorinoConditionsFromHTTPRouteRule(rule, hostnamesForConditions)...)
+		}
+	}
+	if len(conditions) == 0 {
+		return nil, errors.New("cannot match any route rules, check for invalid route selectors in the policy")
+	}
+	return toAuthorinoOneOfPatternExpressionsOrRefs(conditions), nil
 }
 
 // authorinoConditionsFromHTTPRoute builds a list of Authorino conditions from an HTTPRoute, without using route selectors.
 func authorinoConditionsFromHTTPRoute(route *gatewayapiv1beta1.HTTPRoute) []authorinoapi.PatternExpressionOrRef {
 	conditions := []authorinoapi.PatternExpressionOrRef{}
-
 	hostnamesForConditions := (&api.RouteSelector{}).HostnamesForConditions(route)
 	for _, rule := range route.Spec.Rules {
-		conditions = append(conditions, authorinoConditionsFromHTTPRouteRule(rule, hostnamesForConditions)...) // FIXME(@guicassolato): this is not correct. Authorino conditions are AND'ed together when we actually want them to be OR'ed in this case
+		conditions = append(conditions, authorinoConditionsFromHTTPRouteRule(rule, hostnamesForConditions)...)
 	}
-
-	return conditions
+	return toAuthorinoOneOfPatternExpressionsOrRefs(conditions)
 }
 
 // authorinoConditionsFromHTTPRouteRule builds a list of Authorino conditions from a HTTPRouteRule and a list of hostnames
 // * Each combination of HTTPRouteMatch and hostname yields one condition.
 // * Rules that specify no explicit HTTPRouteMatch are assumed to match all requests (i.e. implicit catch-all rule.)
 // * Empty list of hostnames yields a condition without a hostname pattern expression.
-func authorinoConditionsFromHTTPRouteRule(rule gatewayapiv1beta1.HTTPRouteRule, hostnames []gatewayapiv1beta1.Hostname) (conditions []authorinoapi.PatternExpressionOrRef) {
+func authorinoConditionsFromHTTPRouteRule(rule gatewayapiv1beta1.HTTPRouteRule, hostnames []gatewayapiv1beta1.Hostname) []authorinoapi.PatternExpressionOrRef {
 	hosts := []string{}
 	for _, hostname := range hostnames {
 		if hostname == "*" {
@@ -336,40 +333,49 @@ func authorinoConditionsFromHTTPRouteRule(rule gatewayapiv1beta1.HTTPRouteRule, 
 	// no http route matches → we only need one simple authorino condition or even no condition at all
 	if len(rule.Matches) == 0 {
 		if len(hosts) == 0 {
-			return
+			return nil
 		}
-		conditions = append(conditions, hostnameRuleToAuthorinoCondition(hosts))
-		return
+		return []authorinoapi.PatternExpressionOrRef{hostnameRuleToAuthorinoCondition(hosts)}
 	}
+
+	var oneOf []authorinoapi.PatternExpressionOrRef
 
 	// http route matches and possibly hostnames → we need one authorino rule per http route match
 	for _, match := range rule.Matches {
+		var allOf []authorinoapi.PatternExpressionOrRef
+
 		// hosts
 		if len(hosts) > 0 {
-			conditions = append(conditions, hostnameRuleToAuthorinoCondition(hosts))
+			allOf = append(allOf, hostnameRuleToAuthorinoCondition(hosts))
 		}
 
 		// method
 		if method := match.Method; method != nil {
-			conditions = append(conditions, httpMethodRuleToAuthorinoCondition(*method))
+			allOf = append(allOf, httpMethodRuleToAuthorinoCondition(*method))
 		}
 
 		// path
 		if path := match.Path; path != nil {
-			conditions = append(conditions, httpPathRuleToAuthorinoCondition(*path))
+			allOf = append(allOf, httpPathRuleToAuthorinoCondition(*path))
 		}
 
 		// headers
 		if headers := match.Headers; len(headers) > 0 {
-			conditions = append(conditions, httpHeadersRuleToAuthorinoConditions(headers)...)
+			allOf = append(allOf, httpHeadersRuleToAuthorinoConditions(headers)...)
 		}
 
 		// query params
 		if queryParams := match.QueryParams; len(queryParams) > 0 {
-			conditions = append(conditions, httpQueryParamsRuleToAuthorinoConditions(queryParams)...)
+			allOf = append(allOf, httpQueryParamsRuleToAuthorinoConditions(queryParams)...)
+		}
+
+		if len(allOf) > 0 {
+			oneOf = append(oneOf, authorinoapi.PatternExpressionOrRef{
+				All: common.Map(allOf, toAuthorinoUnstructuredPatternExpressionOrRef),
+			})
 		}
 	}
-	return
+	return toAuthorinoOneOfPatternExpressionsOrRefs(oneOf)
 }
 
 func hostnameRuleToAuthorinoCondition(hostnames []string) authorinoapi.PatternExpressionOrRef {
@@ -471,6 +477,18 @@ func httpQueryParamRuleToAuthorinoCondition(queryParam gatewayapiv1beta1.HTTPQue
 			Selector: `context.request.http.path.@extract:{"sep":"?","pos":1}`,
 			Operator: "matches",
 			Value:    fmt.Sprintf(`^([^&]+&)?%s=%s(&.*)$`, queryParam.Name, queryParam.Value),
+		},
+	}
+}
+
+func toAuthorinoUnstructuredPatternExpressionOrRef(patternExpressionOrRef authorinoapi.PatternExpressionOrRef) authorinoapi.UnstructuredPatternExpressionOrRef {
+	return authorinoapi.UnstructuredPatternExpressionOrRef{PatternExpressionOrRef: patternExpressionOrRef}
+}
+
+func toAuthorinoOneOfPatternExpressionsOrRefs(oneOf []authorinoapi.PatternExpressionOrRef) []authorinoapi.PatternExpressionOrRef {
+	return []authorinoapi.PatternExpressionOrRef{
+		{
+			Any: common.Map(oneOf, toAuthorinoUnstructuredPatternExpressionOrRef),
 		},
 	}
 }

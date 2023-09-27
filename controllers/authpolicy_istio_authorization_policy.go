@@ -65,7 +65,7 @@ func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Cont
 	}
 
 	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
-		listOptions := &client.ListOptions{LabelSelector: labels.SelectorFromSet(istioAuthorizationPolicyLabels(client.ObjectKeyFromObject(gw.Gateway), client.ObjectKeyFromObject(ap)))}
+		listOptions := &client.ListOptions{LabelSelector: labels.SelectorFromSet(istioAuthorizationPolicyLabels(client.ObjectKeyFromObject(gw.Gateway), ap))}
 		iapList := &istio.AuthorizationPolicyList{}
 		if err := r.Client().List(ctx, iapList, listOptions); err != nil {
 			return err
@@ -89,7 +89,7 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, gat
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      istioAuthorizationPolicyName(gateway.Name, ap.GetTargetRef()),
 			Namespace: gateway.Namespace,
-			Labels:    istioAuthorizationPolicyLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(ap)),
+			Labels:    istioAuthorizationPolicyLabels(client.ObjectKeyFromObject(gateway), ap),
 		},
 		Spec: istiosecurity.AuthorizationPolicy{
 			Action: istiosecurity.AuthorizationPolicy_CUSTOM,
@@ -119,10 +119,10 @@ func istioAuthorizationPolicyName(gwName string, targetRef gatewayapiv1alpha2.Po
 	return ""
 }
 
-func istioAuthorizationPolicyLabels(gwKey, apKey client.ObjectKey) map[string]string {
+func istioAuthorizationPolicyLabels(gwKey client.ObjectKey, ap *api.AuthPolicy) map[string]string {
 	return map[string]string{
-		common.AuthPolicyBackRefAnnotation:                              apKey.Name,
-		fmt.Sprintf("%s-namespace", common.AuthPolicyBackRefAnnotation): apKey.Namespace,
+		ap.DirectReferenceAnnotationName():                              ap.Name,
+		fmt.Sprintf("%s-namespace", ap.DirectReferenceAnnotationName()): ap.Namespace,
 		"gateway-namespace":                                             gwKey.Namespace,
 		"gateway":                                                       gwKey.Name,
 	}

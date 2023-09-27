@@ -29,6 +29,8 @@ import (
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
+var _ common2.Referrer = &RateLimitPolicy{}
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -248,6 +250,10 @@ func (r *RateLimitPolicy) Kind() string {
 
 func (r *RateLimitPolicy) BackReferenceAnnotationName() string {
 	return "kuadrant.io/ratelimitpolicies"
+}
+
+func (r *RateLimitPolicy) DirectReferenceAnnotationName() string {
+	return "kuadrant.io/ratelimitpolicy"
 }
 
 func init() {

@@ -190,7 +190,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingRoute.GetAnnotations()).To(HaveKeyWithValue(
-				common.RateLimitPolicyBackRefAnnotation, client.ObjectKeyFromObject(rlp).String()))
+				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
 
 			// check limits
 			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
@@ -528,7 +528,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				common.RateLimitPolicyBackRefAnnotation, client.ObjectKeyFromObject(rlp).String()))
+				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
 
 			// check limits
 			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
@@ -645,7 +645,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				common.RateLimitPolicyBackRefAnnotation, client.ObjectKeyFromObject(rlp).String()))
+				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
 
 			// check limits
 			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}

@@ -6,12 +6,15 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	authorinov1beta1 "github.com/kuadrant/authorino/api/v1beta1"
+	common2 "github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
+
+var _ common2.Referrer = &AuthPolicy{}
 
 type AuthSchemeSpec struct {
 	// Named sets of JSON patterns that can be referred in `when` conditionals and in JSON-pattern matching policy rules.
@@ -156,4 +159,8 @@ func (ap *AuthPolicy) Kind() string {
 
 func (ap *AuthPolicy) BackReferenceAnnotationName() string {
 	return "kuadrant.io/authpolicies"
+}
+
+func (ap *AuthPolicy) DirectReferenceAnnotationName() string {
+	return "kuadrant.io/authpolicy"
 }

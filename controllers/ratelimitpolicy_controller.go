@@ -22,7 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
-	reconcilers3 "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	reconcilers2 "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,7 +41,7 @@ const rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
 // RateLimitPolicyReconciler reconciles a RateLimitPolicy object
 type RateLimitPolicyReconciler struct {
 	*reconcilers.BaseReconciler
-	TargetRefReconciler reconcilers3.TargetRefReconciler
+	TargetRefReconciler reconcilers2.TargetRefReconciler
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -88,7 +88,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	markedForDeletion := rlp.GetDeletionTimestamp() != nil
 
 	// fetch the target network object
-	targetNetworkObject, err := reconcilers3.FetchTargetRefObject(ctx, r.Client(), rlp.GetTargetRef(), rlp.Namespace)
+	targetNetworkObject, err := reconcilers2.FetchTargetRefObject(ctx, r.Client(), rlp.GetTargetRef(), rlp.Namespace)
 	if err != nil {
 		if !markedForDeletion {
 			if apierrors.IsNotFound(err) {
@@ -166,7 +166,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 	}
 
 	// reconcile based on gateway diffs
-	gatewayDiffObj, err := reconcilers3.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
+	gatewayDiffObj, err := reconcilers2.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 
 func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
-	gatewayDiffObj, err := reconcilers3.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
+	gatewayDiffObj, err := reconcilers2.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -205,7 +205,7 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 
 	// remove direct back ref
 	if targetNetworkObject != nil {
-		if err := r.deleteNetworkResourceDirectBackReference(ctx, targetNetworkObject); err != nil {
+		if err := r.deleteNetworkResourceDirectBackReference(ctx, rlp, targetNetworkObject); err != nil {
 			return err
 		}
 	}
@@ -215,12 +215,12 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 }
 
 // Ensures only one RLP targets the network resource
-func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, policy common.KuadrantPolicy, targetNetworkObject client.Object) error {
-	return r.TargetRefReconciler.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(policy), targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
+func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, policy *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
+	return r.TargetRefReconciler.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(policy), targetNetworkObject, policy.DirectReferenceAnnotationName())
 }
 
-func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object) error {
-	return r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
+func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, policy *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
+	return r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, policy.DirectReferenceAnnotationName())
 }
 
 // SetupWithManager sets up the controller with the Manager.

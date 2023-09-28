@@ -211,6 +211,12 @@ type AuthPolicyList struct {
 	Items           []AuthPolicy `json:"items"`
 }
 
+func (l *AuthPolicyList) GetItems() []common.KuadrantPolicy {
+	return common.Map(l.Items, func(item AuthPolicy) common.KuadrantPolicy {
+		return &item
+	})
+}
+
 func init() {
 	SchemeBuilder.Register(&AuthPolicy{}, &AuthPolicyList{})
 }

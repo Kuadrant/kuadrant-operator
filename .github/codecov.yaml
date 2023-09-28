@@ -2,10 +2,17 @@
 codecov:
   bot: "Codecov Bot"
   max_report_age: 12
-  require_ci_to_pass: yes
+  require_ci_to_pass: "yes"
   notify:
     after_n_builds: 1
-    wait_for_ci: yes
+    wait_for_ci: "yes"
+  status:
+    project:
+      default:
+        threshold: 1%
+    patch:
+      default:
+        threshold: 1%
 
 # Layout of the PR comment produced by Codecov bot
 comment:
@@ -13,8 +20,8 @@ comment:
 
 # Find more at https://docs.codecov.com/docs/ignoring-paths
 ignore:
-  - api/external/** #  ignoring external vendor code
-  - "**/*.deepcopy.go" # ignore controller-gen generated code
+  - api/external/**  #  ignoring external vendor code
+  - "**/*.deepcopy.go"  # ignore controller-gen generated code
 
 flag_management:
   individual_flags:

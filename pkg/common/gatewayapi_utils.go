@@ -201,7 +201,7 @@ func HTTPMethodToString(method *gatewayapiv1beta1.HTTPMethod) string {
 	return string(*method)
 }
 
-func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, policy KuadrantPolicy) (string, error) {
+func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, policy common.KuadrantPolicy) (string, error) {
 	targetRef := policy.GetTargetRef()
 	gwNamespacedName := types.NamespacedName{Namespace: string(ptr.Deref(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)}
 	if IsTargetRefHTTPRoute(targetRef) {
@@ -224,7 +224,7 @@ func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Cli
 	return GetKuadrantNamespace(gw)
 }
 
-func GetKuadrantNamespaceFromPolicy(policy KuadrantPolicy) (string, bool) {
+func GetKuadrantNamespaceFromPolicy(policy common.KuadrantPolicy) (string, bool) {
 	if kuadrantNamespace, isSet := policy.GetAnnotations()[common.KuadrantNamespaceLabel]; isSet {
 		return kuadrantNamespace, true
 	}
@@ -291,49 +291,6 @@ func routePathMatchToRulePath(pathMatch *gatewayapiv1beta1.HTTPPathMatch) []stri
 	}
 
 	return []string{val + suffix}
-}
-
-// TargetHostnames returns an array of hostnames coming from the network object (HTTPRoute, Gateway)
-func TargetHostnames(targetNetworkObject client.Object) ([]string, error) {
-	hosts := make([]string, 0)
-	switch obj := targetNetworkObject.(type) {
-	case *gatewayapiv1beta1.HTTPRoute:
-		for _, hostname := range obj.Spec.Hostnames {
-			hosts = append(hosts, string(hostname))
-		}
-	case *gatewayapiv1beta1.Gateway:
-		for idx := range obj.Spec.Listeners {
-			if obj.Spec.Listeners[idx].Hostname != nil {
-				hosts = append(hosts, string(*obj.Spec.Listeners[idx].Hostname))
-			}
-		}
-	}
-
-	if len(hosts) == 0 {
-		hosts = append(hosts, "*")
-	}
-
-	return hosts, nil
-}
-
-// ValidateHierarchicalRules returns error if the policy rules hostnames fail to match the target network hosts
-func ValidateHierarchicalRules(policy KuadrantPolicy, targetNetworkObject client.Object) error {
-	targetHostnames, err := TargetHostnames(targetNetworkObject)
-	if err != nil {
-		return err
-	}
-
-	if valid, invalidHost := ValidSubdomains(targetHostnames, policy.GetRulesHostnames()); !valid {
-		return fmt.Errorf(
-			"rule host (%s) does not follow any hierarchical constraints, "+
-				"for the %T to be validated, it must match with at least one of the target network hostnames %+q",
-			invalidHost,
-			policy,
-			targetHostnames,
-		)
-	}
-
-	return nil
 }
 
 func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway *gatewayapiv1beta1.Gateway) (map[string]string, error) {

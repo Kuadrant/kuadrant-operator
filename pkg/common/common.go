@@ -22,7 +22,6 @@ import (
 
 	"github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -32,13 +31,6 @@ const (
 	NamespaceSeparator           = '/'
 	LimitadorName                = "limitador"
 )
-
-type KuadrantPolicy interface {
-	client.Object
-	GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference
-	GetWrappedNamespace() gatewayapiv1beta1.Namespace
-	GetRulesHostnames() []string
-}
 
 // MergeMapStringString Merge desired into existing.
 // Not Thread-Safe. Does it matter?
@@ -97,35 +89,12 @@ func HostnamesToStrings(hostnames []gatewayapiv1beta1.Hostname) []string {
 	})
 }
 
-// ValidSubdomains returns (true, "") when every single subdomains item
-// is a subset of at least one of the domains.
-// Domains and subdomains may be prefixed with a wildcard label (*.).
-// The wildcard label must appear by itself as the first label.
-// When one of the subdomains is not a subset of the domains, it returns false and
-// the subdomain not being subset of the domains
-func ValidSubdomains(domains, subdomains []string) (bool, string) {
-	for _, subdomain := range subdomains {
-		validSubdomain := false
-		for _, domain := range domains {
-			if Name(subdomain).SubsetOf(Name(domain)) {
-				validSubdomain = true
-				break
-			}
-		}
-
-		if !validSubdomain {
-			return false, subdomain
-		}
-	}
-	return true, ""
-}
-
 // FilterValidSubdomains returns every subdomain that is a subset of at least one of the (super) domains specified in the first argument.
 func FilterValidSubdomains(domains, subdomains []gatewayapiv1beta1.Hostname) []gatewayapiv1beta1.Hostname {
 	arr := make([]gatewayapiv1beta1.Hostname, 0)
 	for _, subsubdomain := range subdomains {
 		if _, found := common.Find(domains, func(domain gatewayapiv1beta1.Hostname) bool {
-			return Name(subsubdomain).SubsetOf(Name(domain))
+			return common.Name(subsubdomain).SubsetOf(common.Name(domain))
 		}); found {
 			arr = append(arr, subsubdomain)
 		}

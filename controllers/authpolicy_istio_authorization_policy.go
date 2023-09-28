@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
+	common2 "github.com/kuadrant/kuadrant-operator/pkg/library/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"golang.org/x/exp/slices"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,7 +37,7 @@ func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.C
 		return err
 	}
 
-	targetHostnames, err := common.TargetHostnames(targetNetworkObject)
+	targetHostnames, err := common2.TargetHostnames(targetNetworkObject)
 	if err != nil {
 		return err
 	}

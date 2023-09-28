@@ -22,10 +22,7 @@ func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api
 		return err
 	}
 
-	authConfig, err := r.desiredAuthConfig(ap, targetNetworkObject)
-	if err != nil {
-		return err
-	}
+	authConfig := r.desiredAuthConfig(ap, targetNetworkObject)
 
 	err = r.ReconcileResource(ctx, &authorinoapi.AuthConfig{}, authConfig, alwaysUpdateAuthConfig)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
@@ -61,11 +58,8 @@ func (r *AuthPolicyReconciler) deleteAuthConfigs(ctx context.Context, ap *api.Au
 	return nil
 }
 
-func (r *AuthPolicyReconciler) desiredAuthConfig(ap *api.AuthPolicy, targetNetworkObject client.Object) (*authorinoapi.AuthConfig, error) {
-	hosts, err := r.policyHosts(ap, targetNetworkObject)
-	if err != nil {
-		return nil, err
-	}
+func (r *AuthPolicyReconciler) desiredAuthConfig(ap *api.AuthPolicy, targetNetworkObject client.Object) *authorinoapi.AuthConfig {
+	hosts := r.policyHosts(ap, targetNetworkObject)
 
 	return &authorinoapi.AuthConfig{
 		TypeMeta: metav1.TypeMeta{
@@ -86,10 +80,10 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ap *api.AuthPolicy, targetNetwo
 			Response:      ap.Spec.AuthScheme.Response,
 			DenyWith:      ap.Spec.AuthScheme.DenyWith,
 		},
-	}, nil
+	}
 }
 
-func (r *AuthPolicyReconciler) policyHosts(ap *api.AuthPolicy, targetNetworkObject client.Object) ([]string, error) {
+func (r *AuthPolicyReconciler) policyHosts(ap *api.AuthPolicy, targetNetworkObject client.Object) []string {
 	if len(ap.Spec.AuthRules) == 0 {
 		return common.TargetHostnames(targetNetworkObject)
 	}
@@ -111,7 +105,7 @@ func (r *AuthPolicyReconciler) policyHosts(ap *api.AuthPolicy, targetNetworkObje
 		hostnames = append(hostnames, k)
 	}
 
-	return hostnames, nil
+	return hostnames
 }
 
 // authConfigName returns the name of Authorino AuthConfig CR.

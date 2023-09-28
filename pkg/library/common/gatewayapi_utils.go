@@ -9,10 +9,7 @@ import (
 
 // ValidateHierarchicalRules returns error if the policy rules hostnames fail to match the target network hosts
 func ValidateHierarchicalRules(policy KuadrantPolicy, targetNetworkObject client.Object) error {
-	targetHostnames, err := TargetHostnames(targetNetworkObject)
-	if err != nil {
-		return err
-	}
+	targetHostnames := TargetHostnames(targetNetworkObject)
 
 	if valid, invalidHost := ValidSubdomains(targetHostnames, policy.GetRulesHostnames()); !valid {
 		return fmt.Errorf(
@@ -28,7 +25,7 @@ func ValidateHierarchicalRules(policy KuadrantPolicy, targetNetworkObject client
 }
 
 // TargetHostnames returns an array of hostnames coming from the network object (HTTPRoute, Gateway)
-func TargetHostnames(targetNetworkObject client.Object) ([]string, error) {
+func TargetHostnames(targetNetworkObject client.Object) []string {
 	hosts := make([]string, 0)
 	switch obj := targetNetworkObject.(type) {
 	case *gatewayapiv1beta1.HTTPRoute:
@@ -47,5 +44,5 @@ func TargetHostnames(targetNetworkObject client.Object) ([]string, error) {
 		hosts = append(hosts, "*")
 	}
 
-	return hosts, nil
+	return hosts
 }

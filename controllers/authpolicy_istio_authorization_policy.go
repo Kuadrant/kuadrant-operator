@@ -37,10 +37,7 @@ func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.C
 		return err
 	}
 
-	targetHostnames, err := common2.TargetHostnames(targetNetworkObject)
-	if err != nil {
-		return err
-	}
+	targetHostnames := common2.TargetHostnames(targetNetworkObject)
 
 	// TODO(guicassolato): should the rules filter only the hostnames valid for each gateway?
 	toRules := istioAuthorizationPolicyRules(ap.Spec.AuthRules, targetHostnames, targetNetworkObject)

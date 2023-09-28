@@ -200,36 +200,18 @@ func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx cont
 
 // reconcileRouteParentGatewayPolicies triggers the concurrent reconciliation of all policies that target gateways that are parents of a route
 func (r *AuthPolicyReconciler) reconcileRouteParentGatewayPolicies(ctx context.Context, route *gatewayapiv1beta1.HTTPRoute) error {
-	for _, parentRef := range route.Spec.ParentRefs {
-		// skips if parentRef is not a Gateway
-		if (parentRef.Group != nil && *parentRef.Group != "gateway.networking.k8s.io") || (parentRef.Kind != nil && *parentRef.Kind != "Gateway") {
-			continue
-		}
-		// list policies in the same namespace as the parent gateway of the route
-		parentRefNamespace := parentRef.Namespace
-		if parentRefNamespace == nil {
-			ns := gatewayapiv1beta1.Namespace(route.GetNamespace())
-			parentRefNamespace = &ns
-		}
-		policies := api.AuthPolicyList{}
-		if err := r.Client().List(ctx, &policies, &client.ListOptions{Namespace: string(*parentRefNamespace)}); err != nil {
-			return err
-		}
-		// triggers the reconciliation of any policy that targets the parent gateway of the route
-		for _, policy := range policies.Items {
-			targetRef := policy.Spec.TargetRef
-			if !common.IsTargetRefGateway(targetRef) {
-				continue
-			}
-			targetRefNamespace := targetRef.Namespace
-			if targetRefNamespace == nil {
-				ns := gatewayapiv1beta1.Namespace(policy.GetNamespace())
-				targetRefNamespace = &ns
-			}
-			if *parentRefNamespace == *targetRefNamespace && parentRef.Name == targetRef.Name {
-				go r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&policy)})
-			}
-		}
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return err
+	}
+	mapper := HTTPRouteParentRefsEventMapper{
+		Logger: logger,
+		Client: r.Client(),
+	}
+	requests := mapper.MapToAuthPolicy(route)
+	for i := range requests {
+		request := requests[i]
+		go r.Reconcile(context.Background(), request)
 	}
 	return nil
 }

@@ -9,7 +9,6 @@ import (
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
-// TODO(@guicassolato): unit test
 func NewHTTPRouteEventMapper(o ...mapperOption) EventMapper {
 	return &httpRouteEventMapper{opts: apply(o...)}
 }
@@ -18,7 +17,8 @@ type httpRouteEventMapper struct {
 	opts mapperOptions
 }
 
-// TODO(@guicassolato): unit test
+var _ EventMapper = &httpRouteEventMapper{}
+
 func (m *httpRouteEventMapper) MapToPolicy(obj client.Object, policyKind common.Referrer) []reconcile.Request {
 	logger := m.opts.logger.WithValues("httproute", client.ObjectKeyFromObject(obj))
 

@@ -9,7 +9,6 @@ import (
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
-// TODO(@guicassolato): unit test
 func NewGatewayEventMapper(o ...mapperOption) EventMapper {
 	return &gatewayEventMapper{opts: apply(o...)}
 }
@@ -18,7 +17,8 @@ type gatewayEventMapper struct {
 	opts mapperOptions
 }
 
-// TODO(@guicassolato): unit test
+var _ EventMapper = &gatewayEventMapper{}
+
 func (m *gatewayEventMapper) MapToPolicy(obj client.Object, policyKind common.Referrer) []reconcile.Request {
 	logger := m.opts.logger.WithValues("gateway", client.ObjectKeyFromObject(obj))
 

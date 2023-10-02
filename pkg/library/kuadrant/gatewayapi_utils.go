@@ -16,6 +16,9 @@ import (
 
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
+const (
+	GatewayProgrammedConditionType = "Programmed"
+)
 
 type HTTPRouteRule struct {
 	Paths   []string
@@ -29,6 +32,10 @@ func IsTargetRefHTTPRoute(targetRef gatewayapiv1alpha2.PolicyTargetReference) bo
 
 func IsTargetRefGateway(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool {
 	return targetRef.Group == (gatewayapiv1.GroupName) && targetRef.Kind == ("Gateway")
+}
+
+func IsParentGateway(ref gatewayapiv1.ParentReference) bool {
+	return (ref.Kind == nil || *ref.Kind == "Gateway") && (ref.Group == nil || *ref.Group == gatewayapiv1.GroupName)
 }
 
 func RouteHTTPMethodToRuleMethod(httpMethod *gatewayapiv1.HTTPMethod) []string {
@@ -290,7 +297,7 @@ func routePathMatchToRulePath(pathMatch *gatewayapiv1.HTTPPathMatch) []string {
 }
 
 // TargetHostnames returns an array of hostnames coming from the network object (HTTPRoute, Gateway)
-func TargetHostnames(targetNetworkObject client.Object) ([]string, error) {
+func TargetHostnames(targetNetworkObject client.Object) []string {
 	hosts := make([]string, 0)
 	switch obj := targetNetworkObject.(type) {
 	case *gatewayapiv1.HTTPRoute:
@@ -309,7 +316,7 @@ func TargetHostnames(targetNetworkObject client.Object) ([]string, error) {
 		hosts = append(hosts, "*")
 	}
 
-	return hosts, nil
+	return hosts
 }
 
 // HostnamesFromHTTPRoute returns an array of all hostnames specified in a HTTPRoute or inherited from its parent Gateways
@@ -341,10 +348,7 @@ func HostnamesFromHTTPRoute(ctx context.Context, route *gatewayapiv1.HTTPRoute, 
 
 // ValidateHierarchicalRules returns error if the policy rules hostnames fail to match the target network hosts
 func ValidateHierarchicalRules(policy Policy, targetNetworkObject client.Object) error {
-	targetHostnames, err := TargetHostnames(targetNetworkObject)
-	if err != nil {
-		return err
-	}
+	targetHostnames := TargetHostnames(targetNetworkObject)
 
 	if valid, invalidHost := utils.ValidSubdomains(targetHostnames, policy.GetRulesHostnames()); !valid {
 		return fmt.Errorf(
@@ -409,4 +413,31 @@ func IsHTTPRouteAccepted(httpRoute *gatewayapiv1.HTTPRoute) bool {
 	}
 
 	return true
+}
+
+func GetRouteAcceptedGatewayParentKeys(route *gatewayapiv1.HTTPRoute) []client.ObjectKey {
+	if route == nil {
+		return nil
+	}
+
+	acceptedRouteParentStatus := Filter(route.Status.RouteStatus.Parents, func(p gatewayapiv1.RouteParentStatus) bool {
+		// Only gateway parents
+		if !IsParentGateway(p.ParentRef) {
+			return false
+		}
+
+		// Only gateways that accepted this route
+		if meta.IsStatusConditionFalse(p.Conditions, "Accepted") {
+			return false
+		}
+
+		return true
+	})
+
+	return Map(acceptedRouteParentStatus, func(p gatewayapiv1.RouteParentStatus) client.ObjectKey {
+		return client.ObjectKey{
+			Name:      string(p.ParentRef.Name),
+			Namespace: string(ptr.Deref(p.ParentRef.Namespace, gatewayapiv1.Namespace(route.Namespace))),
+		}
+	})
 }

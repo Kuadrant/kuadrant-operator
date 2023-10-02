@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"sync"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -196,82 +195,7 @@ func istioAuthorizationPolicyRules(ap *api.AuthPolicy, route *gatewayapiv1beta1.
 	if topLevelRouteSelectors := ap.Spec.RouteSelectors; len(topLevelRouteSelectors) > 0 {
 		return istioAuthorizationPolicyRulesFromRouteSelectors(route, topLevelRouteSelectors)
 	}
-
-	istioRules := []*istiosecurity.Rule{}
-
-	type resp struct {
-		all bool
-		err error
-	}
-
-	w := new(sync.WaitGroup)
-	ch := make(chan resp)
-
-	computeIstioRulesFunc := func(config api.RouteSelectorsGetter) {
-		defer w.Done()
-		routeSelectors := config.GetRouteSelectors()
-		if len(routeSelectors) == 0 {
-			ch <- resp{all: true}
-			return
-		}
-		rules, err := istioAuthorizationPolicyRulesFromRouteSelectors(route, routeSelectors)
-		if err != nil {
-			ch <- resp{err: err}
-			return
-		}
-		istioRules = append(istioRules, rules...)
-	}
-
-	authScheme := ap.Spec.AuthScheme
-	w.Add(len(authScheme.Authentication))
-	for _, config := range authScheme.Authentication {
-		go computeIstioRulesFunc(config)
-	}
-	w.Add(len(authScheme.Metadata))
-	for _, config := range authScheme.Metadata {
-		go computeIstioRulesFunc(config)
-	}
-	w.Add(len(authScheme.Authorization))
-	for _, config := range authScheme.Authorization {
-		go computeIstioRulesFunc(config)
-	}
-	if response := authScheme.Response; response != nil {
-		w.Add(len(response.Success.Headers))
-		for _, config := range response.Success.Headers {
-			go computeIstioRulesFunc(config)
-		}
-		w.Add(len(response.Success.DynamicMetadata))
-		for _, config := range response.Success.DynamicMetadata {
-			go computeIstioRulesFunc(config)
-		}
-	}
-	w.Add(len(authScheme.Callbacks))
-	for _, config := range authScheme.Callbacks {
-		go computeIstioRulesFunc(config)
-	}
-
-	go func() {
-		w.Wait()
-		close(ch)
-	}()
-
-	for r := range ch {
-		if r.err != nil {
-			return nil, r.err
-		}
-		if r.all {
-			// some config has no route selectors → we can build an Istio AuthorizationPolicy rule that catches the entire HTTPRoute
-			return istioAuthorizationPolicyRulesFromHTTPRoute(route), nil
-		}
-	}
-
-	if len(istioRules) == 0 {
-		// this should never happen - if we got to this point is because we have at least one config with route selectors;
-		// if none of them matched any route rules, we should have returned an error already
-		return istioAuthorizationPolicyRulesFromHTTPRoute(route), nil
-	}
-
-	return istioRules, nil
+	return istioAuthorizationPolicyRulesFromHTTPRoute(route), nil
 }
 
 // istioAuthorizationPolicyRulesFromRouteSelectors builds a list of Istio AuthorizationPolicy rules from an HTTPRoute,

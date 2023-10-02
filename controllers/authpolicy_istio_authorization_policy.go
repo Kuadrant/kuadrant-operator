@@ -291,20 +291,23 @@ func istioAuthorizationPolicyRulesFromHTTPRouteRule(rule gatewayapiv1beta1.HTTPR
 		// path
 		if path != nil {
 			operator := "*" // gateway api defaults to PathMatchPathPrefix
+			skip := false
 			if path.Type != nil {
 				switch *path.Type {
 				case gatewayapiv1beta1.PathMatchExact:
 					operator = ""
 				case gatewayapiv1beta1.PathMatchRegularExpression:
-					// skip this rule as it is not supported by Istio - Authorino will check it anyway
-					continue
+					// ignore this rule as it is not supported by Istio - Authorino will check it anyway
+					skip = true
 				}
 			}
-			value := "/"
-			if path.Value != nil {
-				value = *path.Value
+			if !skip {
+				value := "/"
+				if path.Value != nil {
+					value = *path.Value
+				}
+				operation.Paths = []string{fmt.Sprintf("%s%s", value, operator)}
 			}
-			operation.Paths = []string{fmt.Sprintf("%s%s", value, operator)}
 		}
 
 		if operation != nil {

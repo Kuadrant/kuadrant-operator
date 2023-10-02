@@ -372,7 +372,7 @@ func istioAuthorizationPolicyRulesFromHTTPRouteRule(rule gatewayapiv1beta1.HTTPR
 				case gatewayapiv1beta1.PathMatchExact:
 					operator = ""
 				case gatewayapiv1beta1.PathMatchRegularExpression:
-					// TODO(@guicassolato): skip this rule as it is not supported by Istio
+					// skip this rule as it is not supported by Istio - Authorino will check it anyway
 					continue
 				}
 			}
@@ -396,7 +396,8 @@ func istioAuthorizationPolicyRulesFromHTTPRouteRule(rule gatewayapiv1beta1.HTTPR
 			for idx := range match.Headers {
 				header := match.Headers[idx]
 				if header.Type != nil && *header.Type == gatewayapiv1beta1.HeaderMatchRegularExpression {
-					// TODO(@guicassolato): skip this rule as it is not supported by Istio
+					// skip this rule as it is not supported by Istio - Authorino will check it anyway
+					continue
 				}
 				headerCondition := &istiosecurity.Condition{
 					Key:    fmt.Sprintf("request.headers[%s]", header.Name),

@@ -472,14 +472,30 @@ func httpQueryParamsRuleToAuthorinoConditions(queryParams []gatewayapiv1beta1.HT
 }
 
 func httpQueryParamRuleToAuthorinoCondition(queryParam gatewayapiv1beta1.HTTPQueryParamMatch) authorinoapi.PatternExpressionOrRef {
+	operator := "eq" // gateway api defaults to QueryParamMatchExact
 	if queryParam.Type != nil && *queryParam.Type == gatewayapiv1beta1.QueryParamMatchRegularExpression {
-		// TODO(@guicassolato): skip this rule as there is no safe way to merge a user-defined regex into another that we build
+		operator = "matches"
 	}
 	return authorinoapi.PatternExpressionOrRef{
-		PatternExpression: authorinoapi.PatternExpression{
-			Selector: `context.request.http.path.@extract:{"sep":"?","pos":1}`,
-			Operator: "matches",
-			Value:    fmt.Sprintf(`^([^&]+&)?%s=%s(&.*)$`, queryParam.Name, queryParam.Value),
+		Any: []authorinoapi.UnstructuredPatternExpressionOrRef{
+			{
+				PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
+					PatternExpression: authorinoapi.PatternExpression{
+						Selector: fmt.Sprintf(`context.request.http.path.@extract:{"sep":"?%s=","pos":1}.@extract:{"sep":"&"}`, queryParam.Name),
+						Operator: authorinoapi.PatternExpressionOperator(operator),
+						Value:    queryParam.Value,
+					},
+				},
+			},
+			{
+				PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
+					PatternExpression: authorinoapi.PatternExpression{
+						Selector: fmt.Sprintf(`context.request.http.path.@extract:{"sep":"&%s=","pos":1}.@extract:{"sep":"&"}`, queryParam.Name),
+						Operator: authorinoapi.PatternExpressionOperator(operator),
+						Value:    queryParam.Value,
+					},
+				},
+			},
 		},
 	}
 }

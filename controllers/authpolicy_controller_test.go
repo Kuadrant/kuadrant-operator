@@ -26,173 +26,110 @@ import (
 )
 
 const (
-	CustomGatewayName   = "toystore-gw"
-	CustomHTTPRouteName = "toystore-route"
+	testGatewayName   = "toystore-gw"
+	testHTTPRouteName = "toystore-route"
 )
 
 var _ = Describe("AuthPolicy controller", func() {
-	var (
-		testNamespace string
-	)
+	var testNamespace string
 
-	beforeEachCallback := func() {
+	BeforeEach(func() {
 		CreateNamespace(&testNamespace)
-		gateway := testBuildBasicGateway(CustomGatewayName, testNamespace)
+
+		gateway := testBuildBasicGateway(testGatewayName, testNamespace)
 		err := k8sClient.Create(context.Background(), gateway)
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(func() bool {
 			existingGateway := &gatewayapiv1beta1.Gateway{}
 			err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
-			if err != nil {
-				logf.Log.V(1).Info("[WARN] Creating gateway failed", "error", err)
-				return false
-			}
-
-			if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType) {
-				logf.Log.V(1).Info("[WARN] Gateway not ready")
-				return false
-			}
-
-			return true
+			return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType)
 		}, 15*time.Second, 5*time.Second).Should(BeTrue())
 
 		ApplyKuadrantCR(testNamespace)
-	}
-
-	BeforeEach(beforeEachCallback)
+	})
 
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
-	Context("Attach to HTTPRoute and Gateway", func() {
-		It("Should create and delete everything successfully", func() {
+	Context("Basic HTTPRoute", func() {
+		BeforeEach(func() {
 			err := ApplyResources(filepath.Join("..", "examples", "toystore", "toystore.yaml"), k8sClient, testNamespace)
 			Expect(err).ToNot(HaveOccurred())
 
-			httpRoute := testBuildBasicHttpRoute(CustomHTTPRouteName, CustomGatewayName, testNamespace, []string{"*.toystore.com"})
-			err = k8sClient.Create(context.Background(), httpRoute)
+			route := testBuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
+			err = k8sClient.Create(context.Background(), route)
 			Expect(err).ToNot(HaveOccurred())
 
 			Eventually(func() bool {
 				existingRoute := &gatewayapiv1beta1.HTTPRoute{}
-				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(httpRoute), existingRoute)
-				if err != nil {
-					logf.Log.V(1).Info("[WARN] Creating route failed", "error", err)
-					return false
-				}
-
-				if !common.IsHTTPRouteAccepted(existingRoute) {
-					logf.Log.V(1).Info("[WARN] route not accepted")
-					return false
-				}
-
-				return true
+				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(route), existingRoute)
+				return err == nil && common.IsHTTPRouteAccepted(existingRoute)
 			}, 15*time.Second, 5*time.Second).Should(BeTrue())
-
-			authpolicies := authPolicies(testNamespace)
-
-			// creating authpolicies
-			for idx := range authpolicies {
-				err = k8sClient.Create(context.Background(), authpolicies[idx])
-				logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(authpolicies[idx]).String(), "error", err)
-				Expect(err).ToNot(HaveOccurred())
-
-				// Check AuthPolicy is ready
-				Eventually(func() bool {
-					existingKAP := &api.AuthPolicy{}
-					err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(authpolicies[idx]), existingKAP)
-					if err != nil {
-						return false
-					}
-					if !meta.IsStatusConditionTrue(existingKAP.Status.Conditions, "Available") {
-						return false
-					}
-
-					return true
-				}, 30*time.Second, 5*time.Second).Should(BeTrue())
-
-				// check Istio's AuthorizationPolicy existence
-				iapKey := types.NamespacedName{
-					Name:      istioAuthorizationPolicyName(CustomGatewayName, authpolicies[idx].Spec.TargetRef),
-					Namespace: testNamespace,
-				}
-				Eventually(func() bool {
-					iap := &secv1beta1resources.AuthorizationPolicy{}
-					err := k8sClient.Get(context.Background(), iapKey, iap)
-					logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
-					if err != nil && !apierrors.IsAlreadyExists(err) {
-						return false
-					}
-
-					return true
-				}, 2*time.Minute, 5*time.Second).Should(BeTrue())
-
-				// check Authorino's AuthConfig existence
-				Eventually(func() bool {
-					acKey := types.NamespacedName{
-						Name:      authConfigName(client.ObjectKeyFromObject(authpolicies[idx])),
-						Namespace: testNamespace,
-					}
-					ac := &authorinoapi.AuthConfig{}
-					err := k8sClient.Get(context.Background(), acKey, ac)
-					logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", acKey.String(), "error", err)
-					if err != nil && !apierrors.IsAlreadyExists(err) {
-						return false
-					}
-					if !ac.Status.Ready() {
-						logf.Log.V(1).Info("authConfig not ready", "key", acKey.String())
-						return false
-					}
-
-					return true
-				}, 2*time.Minute, 5*time.Second).Should(BeTrue())
-			}
-
-			// deleting authpolicies
-			for idx := range authpolicies {
-				err = k8sClient.Delete(context.Background(), authpolicies[idx])
-				logf.Log.V(1).Info("Deleting AuthPolicy", "key", client.ObjectKeyFromObject(authpolicies[idx]).String(), "error", err)
-				Expect(err).ToNot(HaveOccurred())
-
-				// check Istio's AuthorizationPolicy existence
-				iapKey := types.NamespacedName{
-					Name:      istioAuthorizationPolicyName(CustomGatewayName, authpolicies[idx].Spec.TargetRef),
-					Namespace: testNamespace,
-				}
-				Eventually(func() bool {
-					err := k8sClient.Get(context.Background(), iapKey, &secv1beta1resources.AuthorizationPolicy{})
-					logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
-					if err != nil && apierrors.IsNotFound(err) {
-						return true
-					}
-					return false
-				}, 2*time.Minute, 5*time.Second).Should(BeTrue())
-
-				// check Authorino's AuthConfig existence
-				acKey := types.NamespacedName{
-					Name:      authConfigName(client.ObjectKeyFromObject(authpolicies[idx])),
-					Namespace: testNamespace,
-				}
-				Eventually(func() bool {
-					err := k8sClient.Get(context.Background(), acKey, &authorinoapi.AuthConfig{})
-					logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", acKey.String(), "error", err)
-					if err != nil && apierrors.IsNotFound(err) {
-						return true
-					}
-					return false
-				}, 2*time.Minute, 5*time.Second).Should(BeTrue())
-			}
 		})
 
-	})
+		It("Attaches policy to the Gateway", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gw-auth",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "Gateway",
+						Name:      testGatewayName,
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+					},
+					AuthScheme: testBasicAuthScheme(),
+				},
+			}
+			policy.Spec.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
 
-	Context("Some route selectors without hosts", func() {
-		BeforeEach(func() {
-			httpRoute := testBuildBasicHttpRoute(CustomHTTPRouteName, CustomGatewayName, testNamespace, []string{"*.toystore.com"})
-			err := k8sClient.Create(context.Background(), httpRoute)
+			err := k8sClient.Create(context.Background(), policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
-			typedNamespace := gatewayapiv1beta1.Namespace(testNamespace)
+			// check policy status
+			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// check istio authorizationpolicy
+			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
+			iap := &secv1beta1resources.AuthorizationPolicy{}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), iapKey, iap)
+				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
+				return err == nil
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			Expect(iap.Spec.Rules).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"GET"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/toy*"}))
+
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfig := &authorinoapi.AuthConfig{}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), authConfigKey, authConfig)
+				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
+				return err == nil || authConfig.Status.Ready()
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
+			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*"}))
+			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
+			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(1))        // 1 HTTPRouteRule in the HTTPRoute
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the HTTPRouteRule
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal("GET"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/toy.*"))
+		})
+
+		It("Attaches policy to the HTTPRoute", func() {
 			policy := &api.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
@@ -200,121 +137,449 @@ var _ = Describe("AuthPolicy controller", func() {
 				},
 				Spec: api.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     gatewayapiv1beta1.Group(gatewayapiv1beta1.GroupVersion.Group),
+						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
-						Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
-						Namespace: &typedNamespace,
+						Name:      testHTTPRouteName,
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
 			}
-			policy.Spec.RouteSelectors = []api.RouteSelector{
-				{ // POST|DELETE *.admin.toystore.com/admin*
+
+			err := k8sClient.Create(context.Background(), policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// check istio authorizationpolicy
+			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
+			iap := &secv1beta1resources.AuthorizationPolicy{}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), iapKey, iap)
+				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
+				return err == nil
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			Expect(iap.Spec.Rules).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"GET"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/toy*"}))
+
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfig := &authorinoapi.AuthConfig{}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), authConfigKey, authConfig)
+				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
+				return err == nil && authConfig.Status.Ready()
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
+			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*.toystore.com"}))
+			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(1))        // 1 HTTPRouteRule in the HTTPRoute
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the HTTPRouteRule
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal("GET"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/toy.*"))
+		})
+
+		It("Deletes resources when the policy is deleted", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "toystore",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "HTTPRoute",
+						Name:      testHTTPRouteName,
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+					},
+					AuthScheme: testBasicAuthScheme(),
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// delete policy
+			err = k8sClient.Delete(context.Background(), policy)
+			logf.Log.V(1).Info("Deleting AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check istio authorizationpolicy
+			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), iapKey, &secv1beta1resources.AuthorizationPolicy{})
+				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
+				return apierrors.IsNotFound(err)
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKey{Name: "toystore", Namespace: testNamespace}), Namespace: testNamespace}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), authConfigKey, &authorinoapi.AuthConfig{})
+				return apierrors.IsNotFound(err)
+			}, 30*time.Second, 5*time.Second).Should(BeTrue())
+		})
+	})
+
+	Context("Complex HTTPRoute with multiple rules and hostnames", func() {
+		BeforeEach(func() {
+			err := ApplyResources(filepath.Join("..", "examples", "toystore", "toystore.yaml"), k8sClient, testNamespace)
+			Expect(err).ToNot(HaveOccurred())
+
+			route := testBuildMultipleRulesHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com", "*.admin.toystore.com"})
+			err = k8sClient.Create(context.Background(), route)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(func() bool {
+				existingRoute := &gatewayapiv1beta1.HTTPRoute{}
+				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(route), existingRoute)
+				return err == nil && common.IsHTTPRouteAccepted(existingRoute)
+			}, 15*time.Second, 5*time.Second).Should(BeTrue())
+		})
+
+		It("Attaches simple policy to the HTTPRoute", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "toystore",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "HTTPRoute",
+						Name:      testHTTPRouteName,
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+					},
+					AuthScheme: testBasicAuthScheme(),
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// check istio authorizationpolicy
+			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
+			iap := &secv1beta1resources.AuthorizationPolicy{}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), iapKey, iap)
+				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
+				return err == nil
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			Expect(iap.Spec.Rules).To(HaveLen(3))
+			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"POST"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
+			Expect(iap.Spec.Rules[1].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[1].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[1].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[1].To[0].Operation.Methods).To(Equal([]string{"DELETE"}))
+			Expect(iap.Spec.Rules[1].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
+			Expect(iap.Spec.Rules[2].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[2].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Methods).To(Equal([]string{"GET"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Paths).To(Equal([]string{"/private*"}))
+
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfig := &authorinoapi.AuthConfig{}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), authConfigKey, authConfig)
+				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
+				return err == nil || authConfig.Status.Ready()
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
+			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
+			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(2))        // 2 HTTPRouteRules in the HTTPRoute
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(2)) // 2 HTTPRouteMatches in the 1st HTTPRouteRule
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal("POST"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/admin.*"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Value).To(Equal("DELETE"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Value).To(Equal("/admin.*"))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the 2nd HTTPRouteRule
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Value).To(Equal("GET"))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Value).To(Equal("/private.*"))
+		})
+
+		It("Attaches policy with top-level route selectors to the HTTPRoute", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "toystore",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "HTTPRoute",
+						Name:      testHTTPRouteName,
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+					},
+					RouteSelectors: []api.RouteSelector{
+						{ // Selects: POST|DELETE *.admin.toystore.com/admin*
+							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+								{
+									Path: &gatewayapiv1alpha2.HTTPPathMatch{
+										Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+										Value: ptr.To("/admin"),
+									},
+								},
+							},
+							Hostnames: []gatewayapiv1beta1.Hostname{"*.admin.toystore.com"},
+						},
+						{ // Selects: GET /private*
+							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+								{
+									Path: &gatewayapiv1alpha2.HTTPPathMatch{
+										Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+										Value: ptr.To("/private"),
+									},
+								},
+							},
+						},
+					},
+					AuthScheme: testBasicAuthScheme(),
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// check istio authorizationpolicy
+			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
+			iap := &secv1beta1resources.AuthorizationPolicy{}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), iapKey, iap)
+				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
+				return err == nil
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			Expect(iap.Spec.Rules).To(HaveLen(3))
+			// POST *.admin.toystore.com/admin*
+			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"POST"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
+			// DELETE *.admin.toystore.com/admin*
+			Expect(iap.Spec.Rules[1].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[1].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[1].To[0].Operation.Hosts).To(Equal([]string{"*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[1].To[0].Operation.Methods).To(Equal([]string{"DELETE"}))
+			Expect(iap.Spec.Rules[1].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
+			// GET (*.toystore.com|*.admin.toystore.com)/private*
+			Expect(iap.Spec.Rules[2].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[2].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Methods).To(Equal([]string{"GET"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Paths).To(Equal([]string{"/private*"}))
+
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfig := &authorinoapi.AuthConfig{}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), authConfigKey, authConfig)
+				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
+				return err == nil && authConfig.Status.Ready()
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
+			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
+			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(2))        // 2 HTTPRouteRules in the HTTPRoute
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(2)) // 2 HTTPRouteMatches in the 1st HTTPRouteRule
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(3))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("context.request.http.host"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal(`.*\.admin\.toystore\.com`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("POST"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[2].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[2].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[2].Value).To(Equal("/admin.*"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All).To(HaveLen(3))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Selector).To(Equal("context.request.http.host"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Value).To(Equal(`.*\.admin\.toystore\.com`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Value).To(Equal("DELETE"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[2].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[2].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[2].Value).To(Equal("/admin.*"))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the 2nd HTTPRouteRule
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Value).To(Equal("GET"))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Value).To(Equal("/private.*"))
+		})
+
+		It("Attaches policy with config-level route selectors to the HTTPRoute", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "toystore",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "HTTPRoute",
+						Name:      testHTTPRouteName,
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+					},
+					AuthScheme: testBasicAuthScheme(),
+				},
+			}
+			config := policy.Spec.AuthScheme.Authentication["apiKey"]
+			config.RouteSelectors = []api.RouteSelector{
+				{ // Selects: POST|DELETE *.admin.toystore.com/admin*
 					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
 						{
 							Path: &gatewayapiv1alpha2.HTTPPathMatch{
 								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
 								Value: ptr.To("/admin"),
 							},
-							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("POST")),
-						},
-						{
-							Path: &gatewayapiv1alpha2.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
-								Value: ptr.To("/admin"),
-							},
-							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
 						},
 					},
 					Hostnames: []gatewayapiv1beta1.Hostname{"*.admin.toystore.com"},
 				},
-				{ // GET /private*
-					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
-						{
-							Path: &gatewayapiv1alpha2.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
-								Value: ptr.To("/private"),
-							},
-							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("GET")),
-						},
-					},
-				},
 			}
+			policy.Spec.AuthScheme.Authentication["apiKey"] = config
 
-			err = k8sClient.Create(context.Background(), policy)
+			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).ToNot(HaveOccurred())
 
-			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
-			// Check KAP status is available
-			Eventually(func() bool {
-				existingKAP := &api.AuthPolicy{}
-				err := k8sClient.Get(context.Background(), kapKey, existingKAP)
-				if err != nil {
-					return false
-				}
-				if !meta.IsStatusConditionTrue(existingKAP.Status.Conditions, "Available") {
-					return false
-				}
+			// check policy status
+			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
-				return true
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
-
-		It("authconfig's hosts should be route's hostnames", func() {
-			// Check authconfig's hosts
-			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
-			existingAuthC := &authorinoapi.AuthConfig{}
-			authCKey := types.NamespacedName{Name: authConfigName(kapKey), Namespace: testNamespace}
+			// check istio authorizationpolicy
+			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
+			iap := &secv1beta1resources.AuthorizationPolicy{}
 			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), authCKey, existingAuthC)
+				err := k8sClient.Get(context.Background(), iapKey, iap)
+				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
 				return err == nil
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-			Expect(existingAuthC.Spec.Hosts).To(Equal([]string{"*.toystore.com"}))
-		})
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			Expect(iap.Spec.Rules).To(HaveLen(3))
+			// POST *.admin.toystore.com/admin*
+			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"POST"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
+			// DELETE *.admin.toystore.com/admin*
+			Expect(iap.Spec.Rules[1].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[1].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[1].To[0].Operation.Methods).To(Equal([]string{"DELETE"}))
+			Expect(iap.Spec.Rules[1].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
+			// GET (*.toystore.com|*.admin.toystore.com)/private*
+			Expect(iap.Spec.Rules[2].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[2].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Methods).To(Equal([]string{"GET"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Paths).To(Equal([]string{"/private*"}))
 
-		It("Istio's authorizationpolicy should include network resource hostnames on kuadrant rules without hosts", func() {
-			typedNamespace := gatewayapiv1beta1.Namespace(testNamespace)
-			targetRef := gatewayapiv1alpha2.PolicyTargetReference{
-				Group:     gatewayapiv1beta1.Group(gatewayapiv1beta1.GroupVersion.Group),
-				Kind:      "HTTPRoute",
-				Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
-				Namespace: &typedNamespace,
-			}
-
-			// Check Istio's authorization policy rules
-			existingIAP := &secv1beta1resources.AuthorizationPolicy{}
-			key := types.NamespacedName{
-				Name:      istioAuthorizationPolicyName(CustomGatewayName, targetRef),
-				Namespace: testNamespace,
-			}
-
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfig := &authorinoapi.AuthConfig{}
 			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), key, existingIAP)
-				return err == nil
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-
-			Expect(existingIAP.Spec.Rules).To(HaveLen(1))
-			Expect(existingIAP.Spec.Rules[0].To).To(HaveLen(2))
-			// operation 1
-			Expect(existingIAP.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(existingIAP.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*.admin.toystore.com"}))
-			Expect(existingIAP.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"DELETE", "POST"}))
-			Expect(existingIAP.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
-			// operation 2
-			Expect(existingIAP.Spec.Rules[0].To[1].Operation).ShouldNot(BeNil())
-			Expect(existingIAP.Spec.Rules[0].To[1].Operation.Hosts).To(Equal([]string{"*.toystore.com"}))
-			Expect(existingIAP.Spec.Rules[0].To[1].Operation.Methods).To(Equal([]string{"GET"}))
-			Expect(existingIAP.Spec.Rules[0].To[1].Operation.Paths).To(Equal([]string{"/private*"}))
+				err := k8sClient.Get(context.Background(), authConfigKey, authConfig)
+				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
+				return err == nil && authConfig.Status.Ready()
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			apiKeyConditions := authConfig.Spec.Authentication["apiKey"].Conditions
+			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions, "apiKey conditions", apiKeyConditions)
+			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
+			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(2))        // 2 HTTPRouteRules in the HTTPRoute
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(2)) // 2 HTTPRouteMatches in the 1st HTTPRouteRule
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal("POST"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/admin.*"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Value).To(Equal("DELETE"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Value).To(Equal("/admin.*"))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the 2nd HTTPRouteRule
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Value).To(Equal("GET"))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Value).To(Equal("/private.*"))
+			Expect(apiKeyConditions).To(HaveLen(1))
+			Expect(apiKeyConditions[0].Any).To(HaveLen(1))        // 1 HTTPRouteRule selected from the HTTPRoute
+			Expect(apiKeyConditions[0].Any[0].Any).To(HaveLen(2)) // 2 HTTPRouteMatches in the HTTPRouteRule
+			Expect(apiKeyConditions[0].Any[0].Any[0].All).To(HaveLen(3))
+			Expect(apiKeyConditions[0].Any[0].Any[0].All[0].Selector).To(Equal("context.request.http.host"))
+			Expect(apiKeyConditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(apiKeyConditions[0].Any[0].Any[0].All[0].Value).To(Equal(`.*\.admin\.toystore\.com`))
+			Expect(apiKeyConditions[0].Any[0].Any[0].All[1].Selector).To(Equal("context.request.http.method"))
+			Expect(apiKeyConditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(apiKeyConditions[0].Any[0].Any[0].All[1].Value).To(Equal("POST"))
+			Expect(apiKeyConditions[0].Any[0].Any[0].All[2].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(apiKeyConditions[0].Any[0].Any[0].All[2].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(apiKeyConditions[0].Any[0].Any[0].All[2].Value).To(Equal("/admin.*"))
+			Expect(apiKeyConditions[0].Any[0].Any[1].All).To(HaveLen(3))
+			Expect(apiKeyConditions[0].Any[0].Any[1].All[0].Selector).To(Equal("context.request.http.host"))
+			Expect(apiKeyConditions[0].Any[0].Any[1].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(apiKeyConditions[0].Any[0].Any[1].All[0].Value).To(Equal(`.*\.admin\.toystore\.com`))
+			Expect(apiKeyConditions[0].Any[0].Any[1].All[1].Selector).To(Equal("context.request.http.method"))
+			Expect(apiKeyConditions[0].Any[0].Any[1].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(apiKeyConditions[0].Any[0].Any[1].All[1].Value).To(Equal("DELETE"))
+			Expect(apiKeyConditions[0].Any[0].Any[1].All[2].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(apiKeyConditions[0].Any[0].Any[1].All[2].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(apiKeyConditions[0].Any[0].Any[1].All[2].Value).To(Equal("/admin.*"))
 		})
-	})
 
-	Context("All route selectors with subdomains", func() {
-		BeforeEach(func() {
-			httpRoute := testBuildBasicHttpRoute(CustomHTTPRouteName, CustomGatewayName, testNamespace, []string{"*.toystore.com"})
-			err := k8sClient.Create(context.Background(), httpRoute)
-			Expect(err).ToNot(HaveOccurred())
-
-			typedNamespace := gatewayapiv1beta1.Namespace(testNamespace)
+		It("Mixes route selectors into other conditions", func() {
 			policy := &api.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
@@ -322,149 +587,98 @@ var _ = Describe("AuthPolicy controller", func() {
 				},
 				Spec: api.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     gatewayapiv1beta1.Group(gatewayapiv1beta1.GroupVersion.Group),
+						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
-						Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
-						Namespace: &typedNamespace,
+						Name:      testHTTPRouteName,
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
 			}
-			policy.Spec.RouteSelectors = []api.RouteSelector{
-				{ // POST|DELETE *.a.toystore.com/admin*
-					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+			config := policy.Spec.AuthScheme.Authentication["apiKey"]
+			config.RouteSelectors = []api.RouteSelector{
+				{ // Selects: GET /private*
+					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
 						{
-							Path: &gatewayapiv1alpha2.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
-								Value: ptr.To("/admin"),
-							},
-							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("POST")),
-						},
-						{
-							Path: &gatewayapiv1alpha2.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
-								Value: ptr.To("/admin"),
-							},
-							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
-						},
-					},
-					Hostnames: []gatewayapiv1beta1.Hostname{"*.a.toystore.com"},
-				},
-				{ // POST *.b.toystore.com/other*
-					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
-						{
-							Path: &gatewayapiv1alpha2.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
-								Value: ptr.To("/other"),
-							},
-							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("POST")),
-						},
-					},
-					Hostnames: []gatewayapiv1beta1.Hostname{"*.b.toystore.com"},
-				},
-				{ // GET *.(a|b).toystore.com/private*
-					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
-						{
-							Path: &gatewayapiv1alpha2.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+							Path: &gatewayapiv1beta1.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1beta1.PathMatchType("PathPrefix")),
 								Value: ptr.To("/private"),
 							},
-							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("GET")),
+							Method: ptr.To(gatewayapiv1beta1.HTTPMethod("GET")),
 						},
 					},
-					Hostnames: []gatewayapiv1beta1.Hostname{
-						"*.a.toystore.com",
-						"*.b.toystore.com",
+				},
+			}
+			config.Conditions = []authorinoapi.PatternExpressionOrRef{
+				{
+					PatternExpression: authorinoapi.PatternExpression{
+						Selector: "context.source.address.Address.SocketAddress.address",
+						Operator: authorinoapi.PatternExpressionOperator("matches"),
+						Value:    `192\.168\.0\..*`,
 					},
 				},
 			}
+			policy.Spec.AuthScheme.Authentication["apiKey"] = config
 
-			err = k8sClient.Create(context.Background(), policy)
+			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).ToNot(HaveOccurred())
 
-			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
-			// Check KAP status is available
-			Eventually(func() bool {
-				existingKAP := &api.AuthPolicy{}
-				err := k8sClient.Get(context.Background(), kapKey, existingKAP)
-				if err != nil {
-					return false
-				}
-				if !meta.IsStatusConditionTrue(existingKAP.Status.Conditions, "Available") {
-					return false
-				}
+			// check policy status
+			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
-				return true
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
-
-		It("authconfig's hosts should be the list of subdomains with unique elements", func() {
-			// Check authconfig's hosts
-			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
-			existingAuthC := &authorinoapi.AuthConfig{}
-			authCKey := types.NamespacedName{Name: authConfigName(kapKey), Namespace: testNamespace}
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfig := &authorinoapi.AuthConfig{}
 			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), authCKey, existingAuthC)
-				return err == nil
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-			Expect(existingAuthC.Spec.Hosts).To(HaveLen(2))
-			Expect(existingAuthC.Spec.Hosts).To(ContainElements("*.a.toystore.com", "*.b.toystore.com"))
+				err := k8sClient.Get(context.Background(), authConfigKey, authConfig)
+				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
+				return err == nil && authConfig.Status.Ready()
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			apiKeyConditions := authConfig.Spec.Authentication["apiKey"].Conditions
+			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions, "apiKey conditions", apiKeyConditions)
+			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
+			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(2))        // 2 HTTPRouteRules in the HTTPRoute
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(2)) // 2 HTTPRouteMatches in the 1st HTTPRouteRule
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal("POST"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/admin.*"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Value).To(Equal("DELETE"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Value).To(Equal("/admin.*"))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the 2nd HTTPRouteRule
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Value).To(Equal("GET"))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Value).To(Equal("/private.*"))
+			Expect(apiKeyConditions).To(HaveLen(2)) // 1 existed condition + 1 HTTPRouteRule selected from the HTTPRoute
+			Expect(apiKeyConditions[0].Selector).To(Equal("context.source.address.Address.SocketAddress.address"))
+			Expect(apiKeyConditions[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(apiKeyConditions[0].Value).To(Equal(`192\.168\.0\..*`))
+			Expect(apiKeyConditions[1].Any).To(HaveLen(1))        // 1 HTTPRouteRule selected from the HTTPRoute
+			Expect(apiKeyConditions[1].Any[0].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the HTTPRouteRule
+			Expect(apiKeyConditions[1].Any[0].Any[0].All).To(HaveLen(2))
+			Expect(apiKeyConditions[1].Any[0].Any[0].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(apiKeyConditions[1].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(apiKeyConditions[1].Any[0].Any[0].All[0].Value).To(Equal("GET"))
+			Expect(apiKeyConditions[1].Any[0].Any[0].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(apiKeyConditions[1].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(apiKeyConditions[1].Any[0].Any[0].All[1].Value).To(Equal("/private.*"))
 		})
 	})
 
-	Context("No route selectors", func() {
-		BeforeEach(func() {
-			httpRoute := testBuildBasicHttpRoute(CustomHTTPRouteName, CustomGatewayName, testNamespace, []string{"*.toystore.com"})
-			err := k8sClient.Create(context.Background(), httpRoute)
-			Expect(err).ToNot(HaveOccurred())
-
-			typedNamespace := gatewayapiv1beta1.Namespace(testNamespace)
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "toystore",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     gatewayapiv1beta1.Group(gatewayapiv1beta1.GroupVersion.Group),
-						Kind:      "HTTPRoute",
-						Name:      gatewayapiv1beta1.ObjectName(CustomHTTPRouteName),
-						Namespace: &typedNamespace,
-					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
-
-			err = k8sClient.Create(context.Background(), policy)
-			Expect(err).ToNot(HaveOccurred())
-			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
-			// Check KAP status is available
-			Eventually(func() bool {
-				existingKAP := &api.AuthPolicy{}
-				err := k8sClient.Get(context.Background(), kapKey, existingKAP)
-				if err != nil {
-					return false
-				}
-				if !meta.IsStatusConditionTrue(existingKAP.Status.Conditions, "Available") {
-					return false
-				}
-
-				return true
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
-
-		It("authconfig's hosts should be route's hostnames", func() {
-			// Check authconfig's hosts
-			kapKey := client.ObjectKey{Name: "toystore", Namespace: testNamespace}
-			existingAuthC := &authorinoapi.AuthConfig{}
-			authCKey := types.NamespacedName{Name: authConfigName(kapKey), Namespace: testNamespace}
-			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), authCKey, existingAuthC)
-				return err == nil
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-			Expect(existingAuthC.Spec.Hosts).To(Equal([]string{"*.toystore.com"}))
-		})
-	})
+	Context("TODO: Targeted resource does not exist", func() {})
 })
 
 func testBasicAuthScheme() api.AuthSchemeSpec {
@@ -492,56 +706,10 @@ func testBasicAuthScheme() api.AuthSchemeSpec {
 	}
 }
 
-func authPolicies(namespace string) []*api.AuthPolicy {
-	typedNamespace := gatewayapiv1beta1.Namespace(namespace)
-	routePolicy := &api.AuthPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "target-route",
-			Namespace: namespace,
-		},
-		Spec: api.AuthPolicySpec{
-			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-				Group:     "gateway.networking.k8s.io",
-				Kind:      "HTTPRoute",
-				Name:      CustomHTTPRouteName,
-				Namespace: &typedNamespace,
-			},
-			AuthScheme: testBasicAuthScheme(),
-		},
+func testPolicyIsReady(policy *api.AuthPolicy) func() bool {
+	return func() bool {
+		existingPolicy := &api.AuthPolicy{}
+		err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(policy), existingPolicy)
+		return err == nil && meta.IsStatusConditionTrue(existingPolicy.Status.Conditions, "Available")
 	}
-	routePolicy.Spec.RouteSelectors = []api.RouteSelector{
-		{ // POST|DELETE *.toystore.com/admin*
-			Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
-				{
-					Path: &gatewayapiv1alpha2.HTTPPathMatch{
-						Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
-						Value: ptr.To("/admin"),
-					},
-					Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("POST")),
-				},
-				{
-					Path: &gatewayapiv1alpha2.HTTPPathMatch{
-						Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
-						Value: ptr.To("/admin"),
-					},
-					Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
-				},
-			},
-			Hostnames: []gatewayapiv1beta1.Hostname{"*.toystore.com"},
-		},
-	}
-	gatewayPolicy := routePolicy.DeepCopy()
-	gatewayPolicy.SetName("target-gateway")
-	gatewayPolicy.SetNamespace(namespace)
-	gatewayPolicy.Spec.TargetRef.Kind = "Gateway"
-	gatewayPolicy.Spec.TargetRef.Name = CustomGatewayName
-	gatewayPolicy.Spec.TargetRef.Namespace = &typedNamespace
-	gatewayPolicy.Spec.RouteSelectors = []api.RouteSelector{
-		{
-			Hostnames: []gatewayapiv1beta1.Hostname{"*.com"}, // must be different from the other authpolicy targeting the route, otherwise authconfigs will not be ready
-		},
-	}
-	gatewayPolicy.Spec.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
-
-	return []*api.AuthPolicy{routePolicy, gatewayPolicy}
 }

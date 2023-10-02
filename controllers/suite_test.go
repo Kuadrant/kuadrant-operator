@@ -227,6 +227,20 @@ var _ = BeforeSuite(func() {
 
 	Expect(err).NotTo(HaveOccurred())
 
+	rateLimitingWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("wasmplugin"),
+		mgr.GetEventRecorderFor("RateLimitingWASMPlugin"),
+	)
+
+	err = (&RateLimitingWASMPluginReconciler{
+		TargetRefReconciler: reconcilers.TargetRefReconciler{
+			BaseReconciler: rateLimitingWASMPluginBaseReconciler,
+		},
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		err = mgr.Start(ctrl.SetupSignalHandler())

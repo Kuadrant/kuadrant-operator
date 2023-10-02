@@ -44,7 +44,6 @@ type RateLimitPolicyReconciler struct {
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
 //+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;update;patch
 
@@ -177,10 +176,6 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 		return err
 	}
 
-	if err := r.reconcileWASMPluginConf(ctx, rlp, gatewayDiffObj); err != nil {
-		return err
-	}
-
 	// set direct back ref - i.e. claim the target network object as taken asap
 	if err := r.reconcileNetworkResourceDirectBackReference(ctx, rlp, targetNetworkObject); err != nil {
 		return err
@@ -194,10 +189,6 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 	// delete based on gateway diffs
 	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, targetNetworkObject, &common.KuadrantRateLimitPolicyRefsConfig{})
 	if err != nil {
-		return err
-	}
-
-	if err := r.reconcileWASMPluginConf(ctx, rlp, gatewayDiffObj); err != nil {
 		return err
 	}
 

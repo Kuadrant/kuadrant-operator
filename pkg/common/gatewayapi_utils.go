@@ -8,16 +8,21 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-const GatewayProgrammedConditionType = "Programmed"
+const (
+	GatewayProgrammedConditionType = "Programmed"
+	HTTPRouteParents               = ".metadata.parent"
+)
 
 type HTTPRouteRule struct {
 	Paths   []string
@@ -31,6 +36,10 @@ func IsTargetRefHTTPRoute(targetRef gatewayapiv1alpha2.PolicyTargetReference) bo
 
 func IsTargetRefGateway(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool {
 	return targetRef.Group == ("gateway.networking.k8s.io") && targetRef.Kind == ("Gateway")
+}
+
+func IsParentGateway(ref gatewayapiv1.ParentReference) bool {
+	return (ref.Kind == nil || *ref.Kind == "Gateway") && (ref.Group == nil || *ref.Group == "gateway.networking.k8s.io")
 }
 
 func RouteHTTPMethodToRuleMethod(httpMethod *gatewayapiv1.HTTPMethod) []string {
@@ -530,7 +539,7 @@ func (g GatewayWrapperList) Swap(i, j int) {
 }
 
 // TargetHostnames returns an array of hostnames coming from the network object (HTTPRoute, Gateway)
-func TargetHostnames(targetNetworkObject client.Object) ([]string, error) {
+func TargetHostnames(targetNetworkObject client.Object) []string {
 	hosts := make([]string, 0)
 	switch obj := targetNetworkObject.(type) {
 	case *gatewayapiv1.HTTPRoute:
@@ -549,7 +558,7 @@ func TargetHostnames(targetNetworkObject client.Object) ([]string, error) {
 		hosts = append(hosts, "*")
 	}
 
-	return hosts, nil
+	return hosts
 }
 
 // HostnamesFromHTTPRoute returns an array of all hostnames specified in a HTTPRoute or inherited from its parent Gateways
@@ -581,10 +590,7 @@ func HostnamesFromHTTPRoute(ctx context.Context, route *gatewayapiv1.HTTPRoute, 
 
 // ValidateHierarchicalRules returns error if the policy rules hostnames fail to match the target network hosts
 func ValidateHierarchicalRules(policy KuadrantPolicy, targetNetworkObject client.Object) error {
-	targetHostnames, err := TargetHostnames(targetNetworkObject)
-	if err != nil {
-		return err
-	}
+	targetHostnames := TargetHostnames(targetNetworkObject)
 
 	if valid, invalidHost := ValidSubdomains(targetHostnames, policy.GetRulesHostnames()); !valid {
 		return fmt.Errorf(
@@ -649,4 +655,71 @@ func IsHTTPRouteAccepted(httpRoute *gatewayapiv1.HTTPRoute) bool {
 	}
 
 	return true
+}
+
+// AddHTTPRouteByGatewayIndexer declares an index key that we can later use with the client as a pseudo-field name,
+// allowing to query all the routes parenting a given gateway
+func AddHTTPRouteByGatewayIndexer(mgr ctrl.Manager, logger logr.Logger) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &gatewayapiv1.HTTPRoute{}, HTTPRouteParents, func(rawObj client.Object) []string {
+		// grab the route object, extract the parents
+		route, assertionOk := rawObj.(*gatewayapiv1.HTTPRoute)
+		logger.Info("assertionOK", "ok", assertionOk)
+		if !assertionOk {
+			return nil
+		}
+
+		logger.Info("route", "name", client.ObjectKeyFromObject(route).String())
+
+		keys := make([]string, 0)
+
+		for _, parentRef := range route.Spec.CommonRouteSpec.ParentRefs {
+			if !IsParentGateway(parentRef) {
+				logger.Info("parent not gateway", "ParentRefs", parentRef)
+				continue
+			}
+
+			key := client.ObjectKey{
+				Name:      string(parentRef.Name),
+				Namespace: string(ptr.Deref(parentRef.Namespace, gatewayapiv1.Namespace(route.Namespace))),
+			}
+
+			logger.Info("new key", "key", key.String())
+
+			keys = append(keys, key.String())
+		}
+
+		// ...and if so, return it
+		return keys
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func GetRouteAcceptedGatewayParentKeys(route *gatewayapiv1.HTTPRoute) []client.ObjectKey {
+	if route == nil {
+		return nil
+	}
+
+	acceptedRouteParentStatus := Filter(route.Status.RouteStatus.Parents, func(p gatewayapiv1.RouteParentStatus) bool {
+		// Only gateway parents
+		if !IsParentGateway(p.ParentRef) {
+			return false
+		}
+
+		// Only gateways that accepted this route
+		if meta.IsStatusConditionFalse(p.Conditions, "Accepted") {
+			return false
+		}
+
+		return true
+	})
+
+	return Map(acceptedRouteParentStatus, func(p gatewayapiv1.RouteParentStatus) client.ObjectKey {
+		return client.ObjectKey{
+			Name:      string(p.ParentRef.Name),
+			Namespace: string(ptr.Deref(p.ParentRef.Namespace, gatewayapiv1.Namespace(route.Namespace))),
+		}
+	})
 }

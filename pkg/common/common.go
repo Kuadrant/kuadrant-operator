@@ -54,6 +54,14 @@ type KuadrantPolicyList interface {
 	GetItems() []KuadrantPolicy
 }
 
+type PolicyByKey []KuadrantPolicy
+
+func (a PolicyByKey) Len() int      { return len(a) }
+func (a PolicyByKey) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a PolicyByKey) Less(i, j int) bool {
+	return client.ObjectKeyFromObject(a[i]).String() < client.ObjectKeyFromObject(a[j]).String()
+}
+
 // GetEmptySliceIfNil returns a provided slice, or an empty slice of the same type if the input slice is nil.
 func GetEmptySliceIfNil[T any](val []T) []T {
 	if val == nil {

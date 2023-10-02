@@ -232,6 +232,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	rateLimitingWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("wasmplugin"),
+		mgr.GetEventRecorderFor("RateLimitingWASMPlugin"),
+	)
+
+	if err = (&controllers.RateLimitingWASMPluginReconciler{
+		TargetRefReconciler: reconcilers.TargetRefReconciler{
+			// TODO: TargetRefReconciler needed?
+			BaseReconciler: rateLimitingWASMPluginBaseReconciler,
+		},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RateLimitingWASMPlugin")
+		os.Exit(1)
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

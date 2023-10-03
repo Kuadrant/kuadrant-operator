@@ -9,6 +9,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 func testBuildBasicRLP(name string, kind gatewayapiv1beta1.Kind) *RateLimitPolicy {
@@ -90,5 +92,22 @@ func TestRateLimitPolicyValidation(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid targetRef.Namespace") {
 		t.Fatalf(`rlp.Validate() did not return expected error. Instead: %v`, err)
+	}
+}
+
+func TestRateLimitPolicyListGetItems(t *testing.T) {
+	list := &RateLimitPolicyList{}
+	if len(list.GetItems()) != 0 {
+		t.Errorf("Expected empty list of items")
+	}
+	policy := RateLimitPolicy{}
+	list.Items = []RateLimitPolicy{policy}
+	result := list.GetItems()
+	if len(result) != 1 {
+		t.Errorf("Expected 1 item, got %d", len(result))
+	}
+	_, ok := result[0].(common.KuadrantPolicy)
+	if !ok {
+		t.Errorf("Expected item to be a KuadrantPolicy")
 	}
 }

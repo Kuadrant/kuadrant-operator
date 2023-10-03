@@ -248,6 +248,7 @@ func (ap *AuthPolicy) GetWrappedNamespace() gatewayapiv1beta1.Namespace {
 	return gatewayapiv1beta1.Namespace(ap.Namespace)
 }
 
+// GetRulesHostnames returns all hostnames referenced in the route selectors of the policy.
 func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 	ruleHosts = make([]string, 0)
 

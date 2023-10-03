@@ -8,71 +8,14 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 func TestRouteSelectors(t *testing.T) {
-	gatewayHostnames := []gatewayapiv1beta1.Hostname{
-		"*.toystore.com",
-	}
-
-	gateway := &gatewayapiv1beta1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "my-gateway",
-		},
-	}
-
-	for _, hostname := range gatewayHostnames {
-		gateway.Spec.Listeners = append(gateway.Spec.Listeners, gatewayapiv1beta1.Listener{Hostname: &hostname})
-	}
-
-	route := &gatewayapiv1beta1.HTTPRoute{
-		Spec: gatewayapiv1beta1.HTTPRouteSpec{
-			CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1beta1.ParentReference{
-					{
-						Name: gatewayapiv1beta1.ObjectName(gateway.Name),
-					},
-				},
-			},
-			Hostnames: []gatewayapiv1beta1.Hostname{"api.toystore.com"},
-			Rules: []gatewayapiv1beta1.HTTPRouteRule{
-				{
-					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
-						// get /toys*
-						{
-							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
-								Value: &[]string{"/toy"}[0],
-							},
-							Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethod("GET")}[0],
-						},
-						// post /toys*
-						{
-							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
-								Value: &[]string{"/toy"}[0],
-							},
-							Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethod("POST")}[0],
-						},
-					},
-				},
-				{
-					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
-						// /assets*
-						{
-							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
-								Value: &[]string{"/assets"}[0],
-							},
-						},
-					},
-				},
-			},
-		},
-	}
+	route := testBuildHttpRoute(testBuildGateway())
 
 	testCases := []struct {
 		name          string
@@ -207,5 +150,136 @@ func TestRouteSelectors(t *testing.T) {
 				t.Errorf("expected %v, got %v", rulesToStringSlice(tc.expected), rulesToStringSlice(rules))
 			}
 		})
+	}
+}
+
+func TestRouteSelectorsHostnamesForConditions(t *testing.T) {
+	route := testBuildHttpRoute(testBuildGateway())
+	route.Spec.Hostnames = append(route.Spec.Hostnames, gatewayapiv1beta1.Hostname("www.toystore.com"))
+
+	// route and selector with exact same hostnames
+	selector := RouteSelector{
+		Hostnames: []gatewayapiv1beta1.Hostname{"api.toystore.com", "www.toystore.com"},
+	}
+	result := selector.HostnamesForConditions(route)
+	if expected := 1; len(result) != expected {
+		t.Errorf("Expected %d hostnames, got %d", expected, len(result))
+	}
+	if expected := "*"; string(result[0]) != expected {
+		t.Errorf("Expected hostname to be %s, got %s", expected, result[0])
+	}
+
+	// route and selector with some overlapping hostnames
+	selector = RouteSelector{
+		Hostnames: []gatewayapiv1beta1.Hostname{"api.toystore.com", "other.io"},
+	}
+	result = selector.HostnamesForConditions(route)
+	if expected := 1; len(result) != expected {
+		t.Errorf("Expected %d hostnames, got %d", expected, len(result))
+	}
+	if expected := "api.toystore.com"; string(result[0]) != expected {
+		t.Errorf("Expected hostname to be %s, got %s", expected, result[0])
+	}
+
+	// route and selector with no overlapping hostnames
+	selector = RouteSelector{
+		Hostnames: []gatewayapiv1beta1.Hostname{"other.io"},
+	}
+	result = selector.HostnamesForConditions(route)
+	if expected := 0; len(result) != expected {
+		t.Errorf("Expected %d hostnames, got %d", expected, len(result))
+	}
+
+	// route with hostnames and selector without hostnames
+	selector = RouteSelector{}
+	result = selector.HostnamesForConditions(route)
+	if expected := 1; len(result) != expected {
+		t.Errorf("Expected %d hostnames, got %d", expected, len(result))
+	}
+	if expected := "*"; string(result[0]) != expected {
+		t.Errorf("Expected hostname to be %s, got %s", expected, result[0])
+	}
+
+	// route without hostnames and selector with hostnames
+	route.Spec.Hostnames = []gatewayapiv1beta1.Hostname{}
+	selector = RouteSelector{
+		Hostnames: []gatewayapiv1beta1.Hostname{"api.toystore.com"},
+	}
+	result = selector.HostnamesForConditions(route)
+	if expected := 1; len(result) != expected {
+		t.Errorf("Expected %d hostnames, got %d", expected, len(result))
+	}
+
+	// route and selector without hostnames
+	selector = RouteSelector{}
+	result = selector.HostnamesForConditions(route)
+	if expected := 1; len(result) != expected {
+		t.Errorf("Expected %d hostnames, got %d", expected, len(result))
+	}
+	if expected := "*"; string(result[0]) != expected {
+		t.Errorf("Expected hostname to be %s, got %s", expected, result[0])
+	}
+}
+
+func testBuildGateway() *gatewayapiv1beta1.Gateway {
+	return &gatewayapiv1beta1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "my-gateway",
+		},
+		Spec: gatewayapiv1beta1.GatewaySpec{
+			Listeners: []gatewayapiv1beta1.Listener{
+				{
+					Hostname: ptr.To(gatewayapiv1beta1.Hostname("*.toystore.com")),
+				},
+			},
+		},
+	}
+}
+
+func testBuildHttpRoute(parentGateway *gatewayapiv1beta1.Gateway) *gatewayapiv1beta1.HTTPRoute {
+	return &gatewayapiv1beta1.HTTPRoute{
+		Spec: gatewayapiv1beta1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
+				ParentRefs: []gatewayapiv1beta1.ParentReference{
+					{
+						Name: gatewayapiv1beta1.ObjectName(parentGateway.Name),
+					},
+				},
+			},
+			Hostnames: []gatewayapiv1beta1.Hostname{"api.toystore.com"},
+			Rules: []gatewayapiv1beta1.HTTPRouteRule{
+				{
+					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+						// get /toys*
+						{
+							Path: &gatewayapiv1beta1.HTTPPathMatch{
+								Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
+								Value: &[]string{"/toy"}[0],
+							},
+							Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethod("GET")}[0],
+						},
+						// post /toys*
+						{
+							Path: &gatewayapiv1beta1.HTTPPathMatch{
+								Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
+								Value: &[]string{"/toy"}[0],
+							},
+							Method: &[]gatewayapiv1beta1.HTTPMethod{gatewayapiv1beta1.HTTPMethod("POST")}[0],
+						},
+					},
+				},
+				{
+					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+						// /assets*
+						{
+							Path: &gatewayapiv1beta1.HTTPPathMatch{
+								Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
+								Value: &[]string{"/assets"}[0],
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 }

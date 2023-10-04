@@ -189,6 +189,105 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/toy.*"))
 		})
 
+		It("Attaches policy to the Gateway while having other policies attached to HTTPRoutes", func() {
+			routePolicy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "toystore",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "HTTPRoute",
+						Name:      testHTTPRouteName,
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+					},
+					AuthScheme: testBasicAuthScheme(),
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(testPolicyIsReady(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// create second (policyless) httproute
+			otherRoute := testBuildBasicHttpRoute("policyless-route", testGatewayName, testNamespace, []string{"*.other"})
+			otherRoute.Spec.Rules = []gatewayapiv1beta1.HTTPRouteRule{
+				{
+					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+						{
+							Method: ptr.To(gatewayapiv1beta1.HTTPMethod("POST")),
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(context.Background(), otherRoute)
+			Expect(err).ToNot(HaveOccurred())
+
+			// attach policy to the gatewaay
+			gwPolicy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gw-auth",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "Gateway",
+						Name:      testGatewayName,
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+					},
+					AuthScheme: testBasicAuthScheme(),
+				},
+			}
+
+			err = k8sClient.Create(context.Background(), gwPolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gwPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(testPolicyIsReady(gwPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// check istio authorizationpolicy
+			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, gwPolicy.Spec.TargetRef), Namespace: testNamespace}
+			iap := &secv1beta1resources.AuthorizationPolicy{}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), iapKey, iap)
+				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
+				return err == nil
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			Expect(iap.Spec.Rules).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"POST"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/*"}))
+
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(gwPolicy)), Namespace: testNamespace}
+			authConfig := &authorinoapi.AuthConfig{}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), authConfigKey, authConfig)
+				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
+				return err == nil || authConfig.Status.Ready()
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
+			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*"}))
+			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
+			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(1))        // 1 HTTPRouteRule in the policyless HTTPRoute
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the HTTPRouteRule
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("context.request.http.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal("POST"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`context.request.http.path.@extract:{"sep":"?"}`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/.*"))
+		})
+
 		It("Deletes resources when the policy is deleted", func() {
 			policy := &api.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{

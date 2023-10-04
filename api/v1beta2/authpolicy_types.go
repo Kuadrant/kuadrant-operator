@@ -112,12 +112,12 @@ type WrappedSuccessResponseSpec struct {
 }
 
 type HeaderSuccessResponseSpec struct {
-	SuccessResponseSpec `json:",omitempty"`
+	SuccessResponseSpec `json:""`
 }
 
 type SuccessResponseSpec struct {
-	SuccessResponseSpec authorinoapi.SuccessResponseSpec `json:""`
-	CommonAuthRuleSpec  `json:""`
+	authorinoapi.SuccessResponseSpec `json:""`
+	CommonAuthRuleSpec               `json:""`
 }
 
 type CallbackSpec struct {

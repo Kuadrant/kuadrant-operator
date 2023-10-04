@@ -4,6 +4,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -330,6 +332,250 @@ var _ = Describe("AuthPolicy controller", func() {
 				err := k8sClient.Get(context.Background(), authConfigKey, &authorinoapi.AuthConfig{})
 				return apierrors.IsNotFound(err)
 			}, 30*time.Second, 5*time.Second).Should(BeTrue())
+		})
+
+		It("Maps to all fields of the AuthConfig", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "toystore",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "HTTPRoute",
+						Name:      testHTTPRouteName,
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+					},
+					AuthScheme: api.AuthSchemeSpec{
+						NamedPatterns: map[string]authorinoapi.PatternExpressions{
+							"internal-source": []authorinoapi.PatternExpression{
+								{
+									Selector: "source.ip",
+									Operator: authorinoapi.PatternExpressionOperator("matches"),
+									Value:    `192\.168\..*`,
+								},
+							},
+							"authz-and-rl-required": []authorinoapi.PatternExpression{
+								{
+									Selector: "source.ip",
+									Operator: authorinoapi.PatternExpressionOperator("neq"),
+									Value:    "192.168.0.10",
+								},
+							},
+						},
+						Conditions: []authorinoapi.PatternExpressionOrRef{
+							{
+								PatternRef: authorinoapi.PatternRef{
+									Name: "internal-source",
+								},
+							},
+						},
+						Authentication: map[string]api.AuthenticationSpec{
+							"jwt": {
+								AuthenticationSpec: authorinoapi.AuthenticationSpec{
+									CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+										Conditions: []authorinoapi.PatternExpressionOrRef{
+											{
+												PatternExpression: authorinoapi.PatternExpression{
+													Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
+													Operator: "neq",
+													Value:    "",
+												},
+											},
+										},
+									},
+									AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+										Plain: &authorinoapi.PlainIdentitySpec{
+											Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
+										},
+									},
+								},
+							},
+						},
+						Metadata: map[string]api.MetadataSpec{
+							"user-groups": {
+								MetadataSpec: authorinoapi.MetadataSpec{
+									CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+										Conditions: []authorinoapi.PatternExpressionOrRef{
+											{
+												PatternExpression: authorinoapi.PatternExpression{
+													Selector: "auth.identity.admin",
+													Operator: authorinoapi.PatternExpressionOperator("neq"),
+													Value:    "true",
+												},
+											},
+										},
+									},
+									MetadataMethodSpec: authorinoapi.MetadataMethodSpec{
+										Http: &authorinoapi.HttpEndpointSpec{
+											Url: "http://user-groups/username={auth.identity.username}",
+										},
+									},
+								},
+							},
+						},
+						Authorization: map[string]api.AuthorizationSpec{
+							"admin-or-privileged": {
+								AuthorizationSpec: authorinoapi.AuthorizationSpec{
+									CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+										Conditions: []authorinoapi.PatternExpressionOrRef{
+											{
+												PatternRef: authorinoapi.PatternRef{
+													Name: "authz-and-rl-required",
+												},
+											},
+										},
+									},
+									AuthorizationMethodSpec: authorinoapi.AuthorizationMethodSpec{
+										PatternMatching: &authorinoapi.PatternMatchingAuthorizationSpec{
+											Patterns: []authorinoapi.PatternExpressionOrRef{
+												{
+													Any: []authorinoapi.UnstructuredPatternExpressionOrRef{
+														{
+															PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
+																PatternExpression: authorinoapi.PatternExpression{
+																	Selector: "auth.identity.admin",
+																	Operator: authorinoapi.PatternExpressionOperator("eq"),
+																	Value:    "true",
+																},
+															},
+														},
+														{
+															PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
+																PatternExpression: authorinoapi.PatternExpression{
+																	Selector: "auth.metadata.user-groups",
+																	Operator: authorinoapi.PatternExpressionOperator("incl"),
+																	Value:    "privileged",
+																},
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Response: &api.ResponseSpec{
+							Unauthenticated: &authorinoapi.DenyWithSpec{
+								Message: &authorinoapi.ValueOrSelector{
+									Value: k8sruntime.RawExtension{Raw: []byte(`"Missing verified JWT injected by the gateway"`)},
+								},
+							},
+							Unauthorized: &authorinoapi.DenyWithSpec{
+								Message: &authorinoapi.ValueOrSelector{
+									Value: k8sruntime.RawExtension{Raw: []byte(`"User must be admin or member of privileged group"`)},
+								},
+							},
+							Success: api.WrappedSuccessResponseSpec{
+								Headers: map[string]api.HeaderSuccessResponseSpec{
+									"x-username": {
+										SuccessResponseSpec: api.SuccessResponseSpec{
+											SuccessResponseSpec: authorinoapi.SuccessResponseSpec{
+												CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+													Conditions: []authorinoapi.PatternExpressionOrRef{
+														{
+															PatternExpression: authorinoapi.PatternExpression{
+																Selector: "request.headers.x-propagate-username.@case:lower",
+																Operator: authorinoapi.PatternExpressionOperator("matches"),
+																Value:    "1|yes|true",
+															},
+														},
+													},
+												},
+												AuthResponseMethodSpec: authorinoapi.AuthResponseMethodSpec{
+													Plain: &authorinoapi.PlainAuthResponseSpec{
+														Selector: "auth.identity.username",
+													},
+												},
+											},
+										},
+									},
+								},
+								DynamicMetadata: map[string]api.SuccessResponseSpec{
+									"x-auth-data": {
+										SuccessResponseSpec: authorinoapi.SuccessResponseSpec{
+											CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+												Conditions: []authorinoapi.PatternExpressionOrRef{
+													{
+														PatternRef: authorinoapi.PatternRef{
+															Name: "authz-and-rl-required",
+														},
+													},
+												},
+											},
+											AuthResponseMethodSpec: authorinoapi.AuthResponseMethodSpec{
+												Json: &authorinoapi.JsonAuthResponseSpec{
+													Properties: authorinoapi.NamedValuesOrSelectors{
+														"username": {
+															Selector: "auth.identity.username",
+														},
+														"groups": {
+															Selector: "auth.metadata.user-groups",
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						Callbacks: map[string]api.CallbackSpec{
+							"unauthorized-attempt": {
+								CallbackSpec: authorinoapi.CallbackSpec{
+									CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+										Conditions: []authorinoapi.PatternExpressionOrRef{
+											{
+												PatternRef: authorinoapi.PatternRef{
+													Name: "authz-and-rl-required",
+												},
+											},
+											{
+												PatternExpression: authorinoapi.PatternExpression{
+													Selector: "auth.authorization.admin-or-privileged",
+													Operator: authorinoapi.PatternExpressionOperator("neq"),
+													Value:    "true",
+												},
+											},
+										},
+									},
+									CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
+										Http: &authorinoapi.HttpEndpointSpec{
+											Url:         "http://events/unauthorized",
+											Method:      ptr.To(authorinoapi.HttpMethod("POST")),
+											ContentType: authorinoapi.HttpContentType("application/json"),
+											Body: &authorinoapi.ValueOrSelector{
+												Selector: `\{"identity":{auth.identity},"request-id":{request.id}\}`,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfig := &authorinoapi.AuthConfig{}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), authConfigKey, authConfig)
+				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
+				return err == nil && authConfig.Status.Ready()
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			authConfigSpecAsJSON, _ := json.Marshal(authConfig.Spec)
+			Expect(string(authConfigSpecAsJSON)).To(Equal(`{"hosts":["*.toystore.com"],"patterns":{"authz-and-rl-required":[{"selector":"source.ip","operator":"neq","value":"192.168.0.10"}],"internal-source":[{"selector":"source.ip","operator":"matches","value":"192\\.168\\..*"}]},"when":[{"patternRef":"internal-source"},{"any":[{"any":[{"all":[{"selector":"context.request.http.method","operator":"eq","value":"GET"},{"selector":"context.request.http.path.@extract:{\"sep\":\"?\"}","operator":"matches","value":"/toy.*"}]}]}]}],"authentication":{"jwt":{"when":[{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt","operator":"neq"}],"credentials":{"authorizationHeader":{}},"plain":{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt"}}},"metadata":{"user-groups":{"when":[{"selector":"auth.identity.admin","operator":"neq","value":"true"}],"http":{"url":"http://user-groups/username={auth.identity.username}","method":"GET","contentType":"application/x-www-form-urlencoded","credentials":{"authorizationHeader":{}}}}},"authorization":{"admin-or-privileged":{"when":[{"patternRef":"authz-and-rl-required"}],"patternMatching":{"patterns":[{"any":[{"selector":"auth.identity.admin","operator":"eq","value":"true"},{"selector":"auth.metadata.user-groups","operator":"incl","value":"privileged"}]}]}}},"response":{"unauthenticated":{"message":{"value":"Missing verified JWT injected by the gateway"}},"unauthorized":{"message":{"value":"User must be admin or member of privileged group"}},"success":{"headers":{"x-username":{"when":[{"selector":"request.headers.x-propagate-username.@case:lower","operator":"matches","value":"1|yes|true"}],"plain":{"value":null,"selector":"auth.identity.username"}}},"dynamicMetadata":{"x-auth-data":{"when":[{"patternRef":"authz-and-rl-required"}],"json":{"properties":{"groups":{"value":null,"selector":"auth.metadata.user-groups"},"username":{"value":null,"selector":"auth.identity.username"}}}}}}},"callbacks":{"unauthorized-attempt":{"when":[{"patternRef":"authz-and-rl-required"},{"selector":"auth.authorization.admin-or-privileged","operator":"neq","value":"true"}],"http":{"url":"http://events/unauthorized","method":"POST","body":{"value":null,"selector":"\\{\"identity\":{auth.identity},\"request-id\":{request.id}\\}"},"contentType":"application/json","credentials":{"authorizationHeader":{}}}}}}`))
 		})
 	})
 

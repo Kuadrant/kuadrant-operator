@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -356,6 +357,128 @@ var _ = Describe("AuthPolicy controller", func() {
 
 			// check authorino authconfig
 			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(gwPolicy)), Namespace: testNamespace}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), authConfigKey, &authorinoapi.AuthConfig{})
+				return apierrors.IsNotFound(err)
+			}, 30*time.Second, 5*time.Second).Should(BeTrue())
+		})
+
+		It("Rejects policy with only unmatching top-level route selectors while trying to configure the gateway", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "toystore",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "HTTPRoute",
+						Name:      testHTTPRouteName,
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+					},
+					RouteSelectors: []api.RouteSelector{
+						{ // does not select any HTTPRouteRule
+							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+								{
+									Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
+								},
+							},
+						},
+					},
+					AuthScheme: testBasicAuthScheme(),
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(func() bool {
+				existingPolicy := &api.AuthPolicy{}
+				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(policy), existingPolicy)
+				if err != nil {
+					return false
+				}
+				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, APAvailableConditionType)
+				return condition != nil && condition.Reason == "ReconciliationError" && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
+			}, 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// check istio authorizationpolicy
+			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), iapKey, &secv1beta1resources.AuthorizationPolicy{})
+				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
+				return apierrors.IsNotFound(err)
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), authConfigKey, &authorinoapi.AuthConfig{})
+				return apierrors.IsNotFound(err)
+			}, 30*time.Second, 5*time.Second).Should(BeTrue())
+		})
+
+		It("Rejects policy with only unmatching config-level route selectors post-configuring the gateway", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "toystore",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "HTTPRoute",
+						Name:      testHTTPRouteName,
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+					},
+					AuthScheme: testBasicAuthScheme(),
+				},
+			}
+			config := policy.Spec.AuthScheme.Authentication["apiKey"]
+			config.RouteSelectors = []api.RouteSelector{
+				{ // does not select any HTTPRouteRule
+					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+						{
+							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
+						},
+					},
+				},
+			}
+			policy.Spec.AuthScheme.Authentication["apiKey"] = config
+
+			err := k8sClient.Create(context.Background(), policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(func() bool {
+				existingPolicy := &api.AuthPolicy{}
+				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(policy), existingPolicy)
+				if err != nil {
+					return false
+				}
+				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, APAvailableConditionType)
+				return condition != nil && condition.Reason == "ReconciliationError" && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
+			}, 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
+			iap := &secv1beta1resources.AuthorizationPolicy{}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), iapKey, iap)
+				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
+				return err == nil
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+			Expect(iap.Spec.Rules).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"GET"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/toy*"}))
+
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), authConfigKey, &authorinoapi.AuthConfig{})
 				return apierrors.IsNotFound(err)

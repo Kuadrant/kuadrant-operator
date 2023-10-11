@@ -384,7 +384,7 @@ func authorinoConditionsFromHTTPRouteRule(rule gatewayapiv1beta1.HTTPRouteRule, 
 func hostnameRuleToAuthorinoCondition(hostnames []string) authorinoapi.PatternExpressionOrRef {
 	return authorinoapi.PatternExpressionOrRef{
 		PatternExpression: authorinoapi.PatternExpression{
-			Selector: "context.request.http.host",
+			Selector: "request.host",
 			Operator: "matches",
 			Value:    hostnamesToRegex(hostnames),
 		},
@@ -400,7 +400,7 @@ func hostnamesToRegex(hostnames []string) string {
 func httpMethodRuleToAuthorinoCondition(method gatewayapiv1beta1.HTTPMethod) authorinoapi.PatternExpressionOrRef {
 	return authorinoapi.PatternExpressionOrRef{
 		PatternExpression: authorinoapi.PatternExpression{
-			Selector: "context.request.http.method",
+			Selector: "request.method",
 			Operator: "eq",
 			Value:    string(method),
 		},
@@ -432,7 +432,7 @@ func httpPathRuleToAuthorinoCondition(path gatewayapiv1beta1.HTTPPathMatch) auth
 
 	return authorinoapi.PatternExpressionOrRef{
 		PatternExpression: authorinoapi.PatternExpression{
-			Selector: `context.request.http.path.@extract:{"sep":"?"}`,
+			Selector: `request.url_path`,
 			Operator: authorinoapi.PatternExpressionOperator(operator),
 			Value:    value,
 		},
@@ -455,7 +455,7 @@ func httpHeaderRuleToAuthorinoCondition(header gatewayapiv1beta1.HTTPHeaderMatch
 	}
 	return authorinoapi.PatternExpressionOrRef{
 		PatternExpression: authorinoapi.PatternExpression{
-			Selector: fmt.Sprintf("context.request.http.headers.%s", strings.ToLower(string(header.Name))),
+			Selector: fmt.Sprintf("request.headers.%s", strings.ToLower(string(header.Name))),
 			Operator: authorinoapi.PatternExpressionOperator(operator),
 			Value:    header.Value,
 		},
@@ -481,7 +481,7 @@ func httpQueryParamRuleToAuthorinoCondition(queryParam gatewayapiv1beta1.HTTPQue
 			{
 				PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
 					PatternExpression: authorinoapi.PatternExpression{
-						Selector: fmt.Sprintf(`context.request.http.path.@extract:{"sep":"?%s=","pos":1}.@extract:{"sep":"&"}`, queryParam.Name),
+						Selector: fmt.Sprintf(`request.path.@extract:{"sep":"?%s=","pos":1}|@extract:{"sep":"&"}`, queryParam.Name),
 						Operator: authorinoapi.PatternExpressionOperator(operator),
 						Value:    queryParam.Value,
 					},
@@ -490,7 +490,7 @@ func httpQueryParamRuleToAuthorinoCondition(queryParam gatewayapiv1beta1.HTTPQue
 			{
 				PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
 					PatternExpression: authorinoapi.PatternExpression{
-						Selector: fmt.Sprintf(`context.request.http.path.@extract:{"sep":"&%s=","pos":1}.@extract:{"sep":"&"}`, queryParam.Name),
+						Selector: fmt.Sprintf(`request.path.@extract:{"sep":"&%s=","pos":1}|@extract:{"sep":"&"}`, queryParam.Name),
 						Operator: authorinoapi.PatternExpressionOperator(operator),
 						Value:    queryParam.Value,
 					},

@@ -14,6 +14,14 @@ if [ ! -f "$1" ]; then
   TMP_DIR=$(mktemp -d)
   cd $TMP_DIR
 
+  # GPG can hit "no route for host" if using IPv6 on mac (https://github.com/rvm/rvm/issues/4215#issuecomment-486609350)
+  if [[ $OS == 'darwin' ]]; then
+    mkdir -p "/Users/runner/.gnupg"
+    echo "Disabling ipv6 for gpg on mac"
+    echo "disable-ipv6" >  /Users/runner/.gnupg/dirmngr.conf
+    gpgconf --kill all
+  fi
+
   echo "Downloading $OPERATOR_SDK_DL_BINARY"
   curl -sLO $OPERATOR_SDK_DL_BINARY
   gpg --keyserver keyserver.ubuntu.com --recv-keys 052996E2A20B5C7E

@@ -487,7 +487,8 @@ func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadr
 			Namespace: kObj.Namespace,
 		},
 		Spec: authorinov1beta1.AuthorinoSpec{
-			ClusterWide: true,
+			ClusterWide:            true,
+			SupersedingHostSubsets: true,
 			Listener: authorinov1beta1.Listener{
 				Tls: authorinov1beta1.Tls{
 					Enabled: &tmpFalse,

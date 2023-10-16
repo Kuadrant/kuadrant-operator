@@ -45,6 +45,10 @@ type KuadrantPolicy interface {
 	GetRulesHostnames() []string
 }
 
+type KuadrantPolicyList interface {
+	GetItems() []KuadrantPolicy
+}
+
 // GetEmptySliceIfNil returns a provided slice, or an empty slice of the same type if the input slice is nil.
 func GetEmptySliceIfNil[T any](val []T) []T {
 	if val == nil {

@@ -14,7 +14,6 @@ import (
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
@@ -72,7 +71,7 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.
 		// build conditions from the rules selected by the route selectors
 		for idx := range limit.RouteSelectors {
 			routeSelector := limit.RouteSelectors[idx]
-			hostnamesForConditions := hostnamesForConditions(route, &routeSelector)
+			hostnamesForConditions := routeSelector.HostnamesForConditions(route)
 			for _, rule := range routeSelector.SelectRules(route) {
 				routeConditions = append(routeConditions, conditionsFromRule(rule, hostnamesForConditions)...)
 			}
@@ -82,8 +81,9 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.
 		}
 	} else {
 		// build conditions from all rules if no route selectors are defined
+		hostnamesForConditions := (&kuadrantv1beta2.RouteSelector{}).HostnamesForConditions(route)
 		for _, rule := range route.Spec.Rules {
-			routeConditions = append(routeConditions, conditionsFromRule(rule, hostnamesForConditions(route, nil))...)
+			routeConditions = append(routeConditions, conditionsFromRule(rule, hostnamesForConditions)...)
 		}
 	}
 
@@ -113,22 +113,6 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.
 		whenConditions[idx] = wasm.Condition{AllOf: []wasm.PatternExpression{patternExpresionFromWhen(when)}}
 	}
 	return whenConditions, nil
-}
-
-// hostnamesForConditions allows avoiding building conditions for hostnames that are excluded by the selector
-// or when the hostname is irrelevant (i.e. matches all hostnames)
-func hostnamesForConditions(route *gatewayapiv1beta1.HTTPRoute, routeSelector *kuadrantv1beta2.RouteSelector) []gatewayapiv1beta1.Hostname {
-	hostnames := route.Spec.Hostnames
-
-	if routeSelector != nil && len(routeSelector.Hostnames) > 0 {
-		hostnames = common.Intersection(routeSelector.Hostnames, hostnames)
-	}
-
-	if common.SameElements(hostnames, route.Spec.Hostnames) {
-		return []gatewayapiv1beta1.Hostname{"*"}
-	}
-
-	return hostnames
 }
 
 // conditionsFromRule builds a list of conditions from a rule and a list of hostnames

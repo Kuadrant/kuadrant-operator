@@ -11,7 +11,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,69 +26,6 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"k8s.io/utils/ptr"
 )
-
-func testBuildBasicGateway(gwName, ns string) *gatewayapiv1beta1.Gateway {
-	return &gatewayapiv1beta1.Gateway{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Gateway",
-			APIVersion: gatewayapiv1beta1.GroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        gwName,
-			Namespace:   ns,
-			Labels:      map[string]string{"app": "rlptest"},
-			Annotations: map[string]string{"networking.istio.io/service-type": string(corev1.ServiceTypeClusterIP)},
-		},
-		Spec: gatewayapiv1beta1.GatewaySpec{
-			GatewayClassName: "istio",
-			Listeners: []gatewayapiv1beta1.Listener{
-				{
-					Name:     "default",
-					Port:     gatewayapiv1beta1.PortNumber(80),
-					Protocol: "HTTP",
-				},
-			},
-		},
-	}
-}
-
-func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string) *gatewayapiv1beta1.HTTPRoute {
-	return &gatewayapiv1beta1.HTTPRoute{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "HTTPRoute",
-			APIVersion: gatewayapiv1beta1.GroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      routeName,
-			Namespace: ns,
-			Labels:    map[string]string{"app": "rlptest"},
-		},
-		Spec: gatewayapiv1beta1.HTTPRouteSpec{
-			CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1beta1.ParentReference{
-					{
-						Name:      gatewayapiv1beta1.ObjectName(gwName),
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(ns)),
-					},
-				},
-			},
-			Hostnames: common.Map(hostnames, func(hostname string) gatewayapiv1beta1.Hostname { return gatewayapiv1beta1.Hostname(hostname) }),
-			Rules: []gatewayapiv1beta1.HTTPRouteRule{
-				{
-					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
-						{
-							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1beta1.PathMatchPathPrefix),
-								Value: ptr.To("/toy"),
-							},
-							Method: ptr.To(gatewayapiv1beta1.HTTPMethod("GET")),
-						},
-					},
-				},
-			},
-		},
-	}
-}
 
 var _ = Describe("RateLimitPolicy controller", func() {
 	var (

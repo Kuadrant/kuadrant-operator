@@ -216,6 +216,12 @@ type RateLimitPolicyList struct {
 	Items           []RateLimitPolicy `json:"items"`
 }
 
+func (l *RateLimitPolicyList) GetItems() []common.KuadrantPolicy {
+	return common.Map(l.Items, func(item RateLimitPolicy) common.KuadrantPolicy {
+		return &item
+	})
+}
+
 func (r *RateLimitPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 	return r.Spec.TargetRef
 }

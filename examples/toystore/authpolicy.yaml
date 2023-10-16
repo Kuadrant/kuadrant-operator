@@ -8,13 +8,13 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
-  routes: # TODO(@guicassolato): replace for routeSelectors when available
-  - methods:
-    - DELETE
-    - POST
-    paths:
-    - "/admin*"
   rules:
+    routeSelectors:
+    - matches:
+      - path:
+          type: Exact
+          value: "/admin/toy"
+        method: DELETE
     authentication:
       "apikey":
         apiKey:
@@ -43,9 +43,6 @@ spec:
     group: gateway.networking.k8s.io
     kind: Gateway
     name: istio-ingressgateway
-  routes: # TODO(@guicassolato): replace with routeSelectors when available
-  - hosts:
-    - "*.toystore.com"
   rules:
     authentication:
       "apikey":

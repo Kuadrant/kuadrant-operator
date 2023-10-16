@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"golang.org/x/exp/slices"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -63,7 +62,7 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *api.Auth
 	updateErr := r.Client().Status().Update(ctx, ap)
 	if updateErr != nil {
 		// Ignore conflicts, resource might just be outdated.
-		if errors.IsConflict(updateErr) {
+		if apierrors.IsConflict(updateErr) {
 			logger.Info("Failed to update status: resource might just be outdated")
 			return ctrl.Result{Requeue: true}, nil
 		}

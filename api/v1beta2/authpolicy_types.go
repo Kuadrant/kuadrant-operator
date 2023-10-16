@@ -6,6 +6,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
@@ -24,51 +25,126 @@ type AuthSchemeSpec struct {
 	// +optional
 	Conditions []authorinoapi.PatternExpressionOrRef `json:"when,omitempty"`
 
-	// TODO(@guicassolato): define top-level `routeSelectors`
-
 	// Authentication configs.
 	// At least one config MUST evaluate to a valid identity object for the auth request to be successful.
 	// +optional
-	Authentication map[string]authorinoapi.AuthenticationSpec `json:"authentication,omitempty"`
+	Authentication map[string]AuthenticationSpec `json:"authentication,omitempty"`
 
 	// Metadata sources.
 	// Authorino fetches auth metadata as JSON from sources specified in this config.
 	// +optional
-	Metadata map[string]authorinoapi.MetadataSpec `json:"metadata,omitempty"`
+	Metadata map[string]MetadataSpec `json:"metadata,omitempty"`
 
 	// Authorization policies.
 	// All policies MUST evaluate to "allowed = true" for the auth request be successful.
 	// +optional
-	Authorization map[string]authorinoapi.AuthorizationSpec `json:"authorization,omitempty"`
+	Authorization map[string]AuthorizationSpec `json:"authorization,omitempty"`
 
 	// Response items.
 	// Authorino builds custom responses to the client of the auth request.
 	// +optional
-	Response *authorinoapi.ResponseSpec `json:"response,omitempty"`
+	Response *ResponseSpec `json:"response,omitempty"`
 
 	// Callback functions.
 	// Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
 	// +optional
-	Callbacks map[string]authorinoapi.CallbackSpec `json:"callbacks,omitempty"`
+	Callbacks map[string]CallbackSpec `json:"callbacks,omitempty"`
+}
+
+type CommonAuthRuleSpec struct {
+	// Top-level route selectors.
+	// If present, the elements will be used to select HTTPRoute rules that, when activated, trigger the auth rule.
+	// At least one selected HTTPRoute rule must match to trigger the auth rule.
+	// If no route selectors are specified, the auth rule will be evaluated at all requests to the protected routes.
+	// +optional
+	RouteSelectors []RouteSelector `json:"routeSelectors,omitempty"`
+}
+
+// GetRouteSelectors returns the route selectors of the auth rule spec.
+// impl: RouteSelectorsGetter
+func (s CommonAuthRuleSpec) GetRouteSelectors() []RouteSelector {
+	return s.RouteSelectors
+}
+
+type AuthenticationSpec struct {
+	authorinoapi.AuthenticationSpec `json:""`
+	CommonAuthRuleSpec              `json:""`
+}
+
+type MetadataSpec struct {
+	authorinoapi.MetadataSpec `json:""`
+	CommonAuthRuleSpec        `json:""`
+}
+
+type AuthorizationSpec struct {
+	authorinoapi.AuthorizationSpec `json:""`
+	CommonAuthRuleSpec             `json:""`
+}
+
+type ResponseSpec struct {
+	// Customizations on the denial status attributes when the request is unauthenticated.
+	// For integration of Authorino via proxy, the proxy must honour the response status attributes specified in this config.
+	// Default: 401 Unauthorized
+	// +optional
+	Unauthenticated *authorinoapi.DenyWithSpec `json:"unauthenticated,omitempty"`
+
+	// Customizations on the denial status attributes when the request is unauthorized.
+	// For integration of Authorino via proxy, the proxy must honour the response status attributes specified in this config.
+	// Default: 403 Forbidden
+	// +optional
+	Unauthorized *authorinoapi.DenyWithSpec `json:"unauthorized,omitempty"`
+
+	// Response items to be included in the auth response when the request is authenticated and authorized.
+	// For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata and/or inject data in the request.
+	// +optional
+	Success WrappedSuccessResponseSpec `json:"success,omitempty"`
+}
+
+type WrappedSuccessResponseSpec struct {
+	// Custom success response items wrapped as HTTP headers.
+	// For integration of Authorino via proxy, the proxy must use these settings to inject data in the request.
+	Headers map[string]HeaderSuccessResponseSpec `json:"headers,omitempty"`
+
+	// Custom success response items wrapped as HTTP headers.
+	// For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata.
+	// See https://www.envoyproxy.io/docs/envoy/latest/configuration/advanced/well_known_dynamic_metadata
+	DynamicMetadata map[string]SuccessResponseSpec `json:"dynamicMetadata,omitempty"`
+}
+
+type HeaderSuccessResponseSpec struct {
+	SuccessResponseSpec `json:""`
+}
+
+type SuccessResponseSpec struct {
+	authorinoapi.SuccessResponseSpec `json:""`
+	CommonAuthRuleSpec               `json:""`
+}
+
+type CallbackSpec struct {
+	authorinoapi.CallbackSpec `json:""`
+	CommonAuthRuleSpec        `json:""`
 }
 
 type AuthPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
 
-	// Route rules specify the HTTP route attributes that trigger the external authorization service
-	// TODO(@guicassolato): remove – conditions to trigger the ext-authz service will be computed from `routeSelectors`
-	RouteRules []RouteRule `json:"routes,omitempty"`
+	// Top-level route selectors.
+	// If present, the elements will be used to select HTTPRoute rules that, when activated, trigger the external authorization service.
+	// At least one selected HTTPRoute rule must match to trigger the AuthPolicy.
+	// If no route selectors are specified, the AuthPolicy will be enforced at all requests to the protected routes.
+	// +optional
+	RouteSelectors []RouteSelector `json:"routeSelectors,omitempty"`
 
 	// The auth rules of the policy.
 	// See Authorino's AuthConfig CRD for more details.
 	AuthScheme AuthSchemeSpec `json:"rules,omitempty"`
 }
 
-type RouteRule struct {
-	Hosts   []string `json:"hosts,omitempty"`
-	Methods []string `json:"methods,omitempty"`
-	Paths   []string `json:"paths,omitempty"`
+// GetRouteSelectors returns the top-level route selectors of the auth scheme.
+// impl: RouteSelectorsGetter
+func (s AuthPolicySpec) GetRouteSelectors() []RouteSelector {
+	return s.RouteSelectors
 }
 
 type AuthPolicyStatus struct {
@@ -114,6 +190,18 @@ type AuthPolicy struct {
 	Status AuthPolicyStatus `json:"status,omitempty"`
 }
 
+func (ap *AuthPolicy) TargetKey() client.ObjectKey {
+	ns := ap.Namespace
+	if ap.Spec.TargetRef.Namespace != nil {
+		ns = string(*ap.Spec.TargetRef.Namespace)
+	}
+
+	return client.ObjectKey{
+		Name:      string(ap.Spec.TargetRef.Name),
+		Namespace: ns,
+	}
+}
+
 //+kubebuilder:object:root=true
 
 // AuthPolicyList contains a list of AuthPolicy
@@ -121,6 +209,12 @@ type AuthPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AuthPolicy `json:"items"`
+}
+
+func (l *AuthPolicyList) GetItems() []common.KuadrantPolicy {
+	return common.Map(l.Items, func(item AuthPolicy) common.KuadrantPolicy {
+		return &item
+	})
 }
 
 func init() {
@@ -154,10 +248,37 @@ func (ap *AuthPolicy) GetWrappedNamespace() gatewayapiv1beta1.Namespace {
 	return gatewayapiv1beta1.Namespace(ap.Namespace)
 }
 
+// GetRulesHostnames returns all hostnames referenced in the route selectors of the policy.
 func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 	ruleHosts = make([]string, 0)
-	for _, rule := range ap.Spec.RouteRules {
-		ruleHosts = append(ruleHosts, rule.Hosts...)
+
+	appendRuleHosts := func(obj RouteSelectorsGetter) {
+		for _, routeSelector := range obj.GetRouteSelectors() {
+			ruleHosts = append(ruleHosts, common.HostnamesToStrings(routeSelector.Hostnames)...)
+		}
 	}
+
+	appendRuleHosts(ap.Spec)
+	for _, config := range ap.Spec.AuthScheme.Authentication {
+		appendRuleHosts(config)
+	}
+	for _, config := range ap.Spec.AuthScheme.Metadata {
+		appendRuleHosts(config)
+	}
+	for _, config := range ap.Spec.AuthScheme.Authorization {
+		appendRuleHosts(config)
+	}
+	if response := ap.Spec.AuthScheme.Response; response != nil {
+		for _, config := range response.Success.Headers {
+			appendRuleHosts(config)
+		}
+		for _, config := range response.Success.DynamicMetadata {
+			appendRuleHosts(config)
+		}
+	}
+	for _, config := range ap.Spec.AuthScheme.Callbacks {
+		appendRuleHosts(config)
+	}
+
 	return
 }

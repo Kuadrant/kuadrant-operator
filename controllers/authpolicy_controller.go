@@ -118,6 +118,14 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 		return statusResult, nil
 	}
 
+	// trigger concurrent reconciliations of possibly affected gateway policies
+	switch route := targetNetworkObject.(type) {
+	case *gatewayapiv1beta1.HTTPRoute:
+		if err := r.reconcileRouteParentGatewayPolicies(ctx, route); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	logger.Info("AuthPolicy reconciled successfully")
 	return ctrl.Result{}, nil
 }
@@ -188,6 +196,24 @@ func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx c
 
 func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object) error {
 	return r.DeleteTargetBackReference(ctx, targetNetworkObject, common.AuthPolicyBackRefAnnotation)
+}
+
+// reconcileRouteParentGatewayPolicies triggers the concurrent reconciliation of all policies that target gateways that are parents of a route
+func (r *AuthPolicyReconciler) reconcileRouteParentGatewayPolicies(ctx context.Context, route *gatewayapiv1beta1.HTTPRoute) error {
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return err
+	}
+	mapper := HTTPRouteParentRefsEventMapper{
+		Logger: logger,
+		Client: r.Client(),
+	}
+	requests := mapper.MapToAuthPolicy(route)
+	for i := range requests {
+		request := requests[i]
+		go r.Reconcile(context.Background(), request)
+	}
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

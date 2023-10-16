@@ -32,24 +32,212 @@ spec:
             type: object
           spec:
             properties:
-              routes:
-                description: 'Route rules specify the HTTP route attributes that trigger
-                  the external authorization service TODO(@guicassolato): remove –
-                  conditions to trigger the ext-authz service will be computed from
-                  `routeSelectors`'
+              routeSelectors:
+                description: Top-level route selectors. If present, the elements will
+                  be used to select HTTPRoute rules that, when activated, trigger
+                  the external authorization service. At least one selected HTTPRoute
+                  rule must match to trigger the AuthPolicy. If no route selectors
+                  are specified, the AuthPolicy will be enforced at all requests to
+                  the protected routes.
                 items:
+                  description: RouteSelector defines semantics for matching an HTTP
+                    request based on conditions https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
                   properties:
-                    hosts:
+                    hostnames:
+                      description: Hostnames defines a set of hostname that should
+                        match against the HTTP Host header to select a HTTPRoute to
+                        process the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
                       items:
+                        description: "Hostname is the fully qualified domain name
+                          of a network host. This matches the RFC 1123 definition
+                          of a hostname with 2 notable exceptions: \n 1. IPs are not
+                          allowed. 2. A hostname may be prefixed with a wildcard label
+                          (`*.`). The wildcard label must appear by itself as the
+                          first label. \n Hostname can be \"precise\" which is a domain
+                          name without the terminating dot of a network host (e.g.
+                          \"foo.example.com\") or \"wildcard\", which is a domain
+                          name prefixed with a single wildcard label (e.g. `*.example.com`).
+                          \n Note that as per RFC1035 and RFC1123, a *label* must
+                          consist of lower case alphanumeric characters or '-', and
+                          must start and end with an alphanumeric character. No other
+                          punctuation is allowed."
+                        maxLength: 253
+                        minLength: 1
+                        pattern: ^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                         type: string
                       type: array
-                    methods:
+                    matches:
+                      description: Matches define conditions used for matching the
+                        rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
                       items:
-                        type: string
-                      type: array
-                    paths:
-                      items:
-                        type: string
+                        description: "HTTPRouteMatch defines the predicate used to
+                          match requests to a given action. Multiple match types are
+                          ANDed together, i.e. the match will evaluate to true only
+                          if all conditions are satisfied. \n For example, the match
+                          below will match a HTTP request only if its path starts
+                          with `/foo` AND it contains the `version: v1` header: \n
+                          ``` match: \n path: value: \"/foo\" headers: - name: \"version\"
+                          value \"v1\" \n ```"
+                        properties:
+                          headers:
+                            description: Headers specifies HTTP request header matchers.
+                              Multiple match values are ANDed together, meaning, a
+                              request must match all the specified headers to select
+                              the route.
+                            items:
+                              description: HTTPHeaderMatch describes how to select
+                                a HTTP route by matching HTTP request headers.
+                              properties:
+                                name:
+                                  description: "Name is the name of the HTTP Header
+                                    to be matched. Name matching MUST be case insensitive.
+                                    (See https://tools.ietf.org/html/rfc7230#section-3.2).
+                                    \n If multiple entries specify equivalent header
+                                    names, only the first entry with an equivalent
+                                    name MUST be considered for a match. Subsequent
+                                    entries with an equivalent header name MUST be
+                                    ignored. Due to the case-insensitivity of header
+                                    names, \"foo\" and \"Foo\" are considered equivalent.
+                                    \n When a header is repeated in an HTTP request,
+                                    it is implementation-specific behavior as to how
+                                    this is represented. Generally, proxies should
+                                    follow the guidance from the RFC: https://www.rfc-editor.org/rfc/rfc7230.html#section-3.2.2
+                                    regarding processing a repeated header, with special
+                                    handling for \"Set-Cookie\"."
+                                  maxLength: 256
+                                  minLength: 1
+                                  pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                                  type: string
+                                type:
+                                  default: Exact
+                                  description: "Type specifies how to match against
+                                    the value of the header. \n Support: Core (Exact)
+                                    \n Support: Implementation-specific (RegularExpression)
+                                    \n Since RegularExpression HeaderMatchType has
+                                    implementation-specific conformance, implementations
+                                    can support POSIX, PCRE or any other dialects
+                                    of regular expressions. Please read the implementation's
+                                    documentation to determine the supported dialect."
+                                  enum:
+                                  - Exact
+                                  - RegularExpression
+                                  type: string
+                                value:
+                                  description: Value is the value of HTTP Header to
+                                    be matched.
+                                  maxLength: 4096
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - name
+                              - value
+                              type: object
+                            maxItems: 16
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                          method:
+                            description: "Method specifies HTTP method matcher. When
+                              specified, this route will be matched only if the request
+                              has the specified method. \n Support: Extended"
+                            enum:
+                            - GET
+                            - HEAD
+                            - POST
+                            - PUT
+                            - DELETE
+                            - CONNECT
+                            - OPTIONS
+                            - TRACE
+                            - PATCH
+                            type: string
+                          path:
+                            default:
+                              type: PathPrefix
+                              value: /
+                            description: Path specifies a HTTP request path matcher.
+                              If this field is not specified, a default prefix match
+                              on the "/" path is provided.
+                            properties:
+                              type:
+                                default: PathPrefix
+                                description: "Type specifies how to match against
+                                  the path Value. \n Support: Core (Exact, PathPrefix)
+                                  \n Support: Implementation-specific (RegularExpression)"
+                                enum:
+                                - Exact
+                                - PathPrefix
+                                - RegularExpression
+                                type: string
+                              value:
+                                default: /
+                                description: Value of the HTTP path to match against.
+                                maxLength: 1024
+                                type: string
+                            type: object
+                          queryParams:
+                            description: "QueryParams specifies HTTP query parameter
+                              matchers. Multiple match values are ANDed together,
+                              meaning, a request must match all the specified query
+                              parameters to select the route. \n Support: Extended"
+                            items:
+                              description: HTTPQueryParamMatch describes how to select
+                                a HTTP route by matching HTTP query parameters.
+                              properties:
+                                name:
+                                  description: "Name is the name of the HTTP query
+                                    param to be matched. This must be an exact string
+                                    match. (See https://tools.ietf.org/html/rfc7230#section-2.7.3).
+                                    \n If multiple entries specify equivalent query
+                                    param names, only the first entry with an equivalent
+                                    name MUST be considered for a match. Subsequent
+                                    entries with an equivalent query param name MUST
+                                    be ignored. \n If a query param is repeated in
+                                    an HTTP request, the behavior is purposely left
+                                    undefined, since different data planes have different
+                                    capabilities. However, it is *recommended* that
+                                    implementations should match against the first
+                                    value of the param if the data plane supports
+                                    it, as this behavior is expected in other load
+                                    balancing contexts outside of the Gateway API.
+                                    \n Users SHOULD NOT route traffic based on repeated
+                                    query params to guard themselves against potential
+                                    differences in the implementations."
+                                  maxLength: 256
+                                  minLength: 1
+                                  type: string
+                                type:
+                                  default: Exact
+                                  description: "Type specifies how to match against
+                                    the value of the query parameter. \n Support:
+                                    Extended (Exact) \n Support: Implementation-specific
+                                    (RegularExpression) \n Since RegularExpression
+                                    QueryParamMatchType has Implementation-specific
+                                    conformance, implementations can support POSIX,
+                                    PCRE or any other dialects of regular expressions.
+                                    Please read the implementation's documentation
+                                    to determine the supported dialect."
+                                  enum:
+                                  - Exact
+                                  - RegularExpression
+                                  type: string
+                                value:
+                                  description: Value is the value of HTTP query param
+                                    to be matched.
+                                  maxLength: 1024
+                                  minLength: 1
+                                  type: string
+                              required:
+                              - name
+                              - value
+                              type: object
+                            maxItems: 16
+                            type: array
+                            x-kubernetes-list-map-keys:
+                            - name
+                            x-kubernetes-list-type: map
+                        type: object
                       type: array
                   type: object
                 type: array
@@ -331,6 +519,233 @@ spec:
                             the same priority group are evaluated concurrently; consecutive
                             priority groups are evaluated sequentially.
                           type: integer
+                        routeSelectors:
+                          description: Top-level route selectors. If present, the
+                            elements will be used to select HTTPRoute rules that,
+                            when activated, trigger the auth rule. At least one selected
+                            HTTPRoute rule must match to trigger the auth rule. If
+                            no route selectors are specified, the auth rule will be
+                            evaluated at all requests to the protected routes.
+                          items:
+                            description: RouteSelector defines semantics for matching
+                              an HTTP request based on conditions https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                            properties:
+                              hostnames:
+                                description: Hostnames defines a set of hostname that
+                                  should match against the HTTP Host header to select
+                                  a HTTPRoute to process the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                items:
+                                  description: "Hostname is the fully qualified domain
+                                    name of a network host. This matches the RFC 1123
+                                    definition of a hostname with 2 notable exceptions:
+                                    \n 1. IPs are not allowed. 2. A hostname may be
+                                    prefixed with a wildcard label (`*.`). The wildcard
+                                    label must appear by itself as the first label.
+                                    \n Hostname can be \"precise\" which is a domain
+                                    name without the terminating dot of a network
+                                    host (e.g. \"foo.example.com\") or \"wildcard\",
+                                    which is a domain name prefixed with a single
+                                    wildcard label (e.g. `*.example.com`). \n Note
+                                    that as per RFC1035 and RFC1123, a *label* must
+                                    consist of lower case alphanumeric characters
+                                    or '-', and must start and end with an alphanumeric
+                                    character. No other punctuation is allowed."
+                                  maxLength: 253
+                                  minLength: 1
+                                  pattern: ^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                                  type: string
+                                type: array
+                              matches:
+                                description: Matches define conditions used for matching
+                                  the rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                items:
+                                  description: "HTTPRouteMatch defines the predicate
+                                    used to match requests to a given action. Multiple
+                                    match types are ANDed together, i.e. the match
+                                    will evaluate to true only if all conditions are
+                                    satisfied. \n For example, the match below will
+                                    match a HTTP request only if its path starts with
+                                    `/foo` AND it contains the `version: v1` header:
+                                    \n ``` match: \n path: value: \"/foo\" headers:
+                                    - name: \"version\" value \"v1\" \n ```"
+                                  properties:
+                                    headers:
+                                      description: Headers specifies HTTP request
+                                        header matchers. Multiple match values are
+                                        ANDed together, meaning, a request must match
+                                        all the specified headers to select the route.
+                                      items:
+                                        description: HTTPHeaderMatch describes how
+                                          to select a HTTP route by matching HTTP
+                                          request headers.
+                                        properties:
+                                          name:
+                                            description: "Name is the name of the
+                                              HTTP Header to be matched. Name matching
+                                              MUST be case insensitive. (See https://tools.ietf.org/html/rfc7230#section-3.2).
+                                              \n If multiple entries specify equivalent
+                                              header names, only the first entry with
+                                              an equivalent name MUST be considered
+                                              for a match. Subsequent entries with
+                                              an equivalent header name MUST be ignored.
+                                              Due to the case-insensitivity of header
+                                              names, \"foo\" and \"Foo\" are considered
+                                              equivalent. \n When a header is repeated
+                                              in an HTTP request, it is implementation-specific
+                                              behavior as to how this is represented.
+                                              Generally, proxies should follow the
+                                              guidance from the RFC: https://www.rfc-editor.org/rfc/rfc7230.html#section-3.2.2
+                                              regarding processing a repeated header,
+                                              with special handling for \"Set-Cookie\"."
+                                            maxLength: 256
+                                            minLength: 1
+                                            pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                                            type: string
+                                          type:
+                                            default: Exact
+                                            description: "Type specifies how to match
+                                              against the value of the header. \n
+                                              Support: Core (Exact) \n Support: Implementation-specific
+                                              (RegularExpression) \n Since RegularExpression
+                                              HeaderMatchType has implementation-specific
+                                              conformance, implementations can support
+                                              POSIX, PCRE or any other dialects of
+                                              regular expressions. Please read the
+                                              implementation's documentation to determine
+                                              the supported dialect."
+                                            enum:
+                                            - Exact
+                                            - RegularExpression
+                                            type: string
+                                          value:
+                                            description: Value is the value of HTTP
+                                              Header to be matched.
+                                            maxLength: 4096
+                                            minLength: 1
+                                            type: string
+                                        required:
+                                        - name
+                                        - value
+                                        type: object
+                                      maxItems: 16
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                    method:
+                                      description: "Method specifies HTTP method matcher.
+                                        When specified, this route will be matched
+                                        only if the request has the specified method.
+                                        \n Support: Extended"
+                                      enum:
+                                      - GET
+                                      - HEAD
+                                      - POST
+                                      - PUT
+                                      - DELETE
+                                      - CONNECT
+                                      - OPTIONS
+                                      - TRACE
+                                      - PATCH
+                                      type: string
+                                    path:
+                                      default:
+                                        type: PathPrefix
+                                        value: /
+                                      description: Path specifies a HTTP request path
+                                        matcher. If this field is not specified, a
+                                        default prefix match on the "/" path is provided.
+                                      properties:
+                                        type:
+                                          default: PathPrefix
+                                          description: "Type specifies how to match
+                                            against the path Value. \n Support: Core
+                                            (Exact, PathPrefix) \n Support: Implementation-specific
+                                            (RegularExpression)"
+                                          enum:
+                                          - Exact
+                                          - PathPrefix
+                                          - RegularExpression
+                                          type: string
+                                        value:
+                                          default: /
+                                          description: Value of the HTTP path to match
+                                            against.
+                                          maxLength: 1024
+                                          type: string
+                                      type: object
+                                    queryParams:
+                                      description: "QueryParams specifies HTTP query
+                                        parameter matchers. Multiple match values
+                                        are ANDed together, meaning, a request must
+                                        match all the specified query parameters to
+                                        select the route. \n Support: Extended"
+                                      items:
+                                        description: HTTPQueryParamMatch describes
+                                          how to select a HTTP route by matching HTTP
+                                          query parameters.
+                                        properties:
+                                          name:
+                                            description: "Name is the name of the
+                                              HTTP query param to be matched. This
+                                              must be an exact string match. (See
+                                              https://tools.ietf.org/html/rfc7230#section-2.7.3).
+                                              \n If multiple entries specify equivalent
+                                              query param names, only the first entry
+                                              with an equivalent name MUST be considered
+                                              for a match. Subsequent entries with
+                                              an equivalent query param name MUST
+                                              be ignored. \n If a query param is repeated
+                                              in an HTTP request, the behavior is
+                                              purposely left undefined, since different
+                                              data planes have different capabilities.
+                                              However, it is *recommended* that implementations
+                                              should match against the first value
+                                              of the param if the data plane supports
+                                              it, as this behavior is expected in
+                                              other load balancing contexts outside
+                                              of the Gateway API. \n Users SHOULD
+                                              NOT route traffic based on repeated
+                                              query params to guard themselves against
+                                              potential differences in the implementations."
+                                            maxLength: 256
+                                            minLength: 1
+                                            type: string
+                                          type:
+                                            default: Exact
+                                            description: "Type specifies how to match
+                                              against the value of the query parameter.
+                                              \n Support: Extended (Exact) \n Support:
+                                              Implementation-specific (RegularExpression)
+                                              \n Since RegularExpression QueryParamMatchType
+                                              has Implementation-specific conformance,
+                                              implementations can support POSIX, PCRE
+                                              or any other dialects of regular expressions.
+                                              Please read the implementation's documentation
+                                              to determine the supported dialect."
+                                            enum:
+                                            - Exact
+                                            - RegularExpression
+                                            type: string
+                                          value:
+                                            description: Value is the value of HTTP
+                                              query param to be matched.
+                                            maxLength: 1024
+                                            minLength: 1
+                                            type: string
+                                        required:
+                                        - name
+                                        - value
+                                        type: object
+                                      maxItems: 16
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                  type: object
+                                type: array
+                            type: object
+                          type: array
                         when:
                           description: Conditions for Authorino to enforce this config.
                             If omitted, the config will be enforced for all requests.
@@ -961,6 +1376,233 @@ spec:
                             the same priority group are evaluated concurrently; consecutive
                             priority groups are evaluated sequentially.
                           type: integer
+                        routeSelectors:
+                          description: Top-level route selectors. If present, the
+                            elements will be used to select HTTPRoute rules that,
+                            when activated, trigger the auth rule. At least one selected
+                            HTTPRoute rule must match to trigger the auth rule. If
+                            no route selectors are specified, the auth rule will be
+                            evaluated at all requests to the protected routes.
+                          items:
+                            description: RouteSelector defines semantics for matching
+                              an HTTP request based on conditions https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                            properties:
+                              hostnames:
+                                description: Hostnames defines a set of hostname that
+                                  should match against the HTTP Host header to select
+                                  a HTTPRoute to process the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                items:
+                                  description: "Hostname is the fully qualified domain
+                                    name of a network host. This matches the RFC 1123
+                                    definition of a hostname with 2 notable exceptions:
+                                    \n 1. IPs are not allowed. 2. A hostname may be
+                                    prefixed with a wildcard label (`*.`). The wildcard
+                                    label must appear by itself as the first label.
+                                    \n Hostname can be \"precise\" which is a domain
+                                    name without the terminating dot of a network
+                                    host (e.g. \"foo.example.com\") or \"wildcard\",
+                                    which is a domain name prefixed with a single
+                                    wildcard label (e.g. `*.example.com`). \n Note
+                                    that as per RFC1035 and RFC1123, a *label* must
+                                    consist of lower case alphanumeric characters
+                                    or '-', and must start and end with an alphanumeric
+                                    character. No other punctuation is allowed."
+                                  maxLength: 253
+                                  minLength: 1
+                                  pattern: ^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                                  type: string
+                                type: array
+                              matches:
+                                description: Matches define conditions used for matching
+                                  the rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                items:
+                                  description: "HTTPRouteMatch defines the predicate
+                                    used to match requests to a given action. Multiple
+                                    match types are ANDed together, i.e. the match
+                                    will evaluate to true only if all conditions are
+                                    satisfied. \n For example, the match below will
+                                    match a HTTP request only if its path starts with
+                                    `/foo` AND it contains the `version: v1` header:
+                                    \n ``` match: \n path: value: \"/foo\" headers:
+                                    - name: \"version\" value \"v1\" \n ```"
+                                  properties:
+                                    headers:
+                                      description: Headers specifies HTTP request
+                                        header matchers. Multiple match values are
+                                        ANDed together, meaning, a request must match
+                                        all the specified headers to select the route.
+                                      items:
+                                        description: HTTPHeaderMatch describes how
+                                          to select a HTTP route by matching HTTP
+                                          request headers.
+                                        properties:
+                                          name:
+                                            description: "Name is the name of the
+                                              HTTP Header to be matched. Name matching
+                                              MUST be case insensitive. (See https://tools.ietf.org/html/rfc7230#section-3.2).
+                                              \n If multiple entries specify equivalent
+                                              header names, only the first entry with
+                                              an equivalent name MUST be considered
+                                              for a match. Subsequent entries with
+                                              an equivalent header name MUST be ignored.
+                                              Due to the case-insensitivity of header
+                                              names, \"foo\" and \"Foo\" are considered
+                                              equivalent. \n When a header is repeated
+                                              in an HTTP request, it is implementation-specific
+                                              behavior as to how this is represented.
+                                              Generally, proxies should follow the
+                                              guidance from the RFC: https://www.rfc-editor.org/rfc/rfc7230.html#section-3.2.2
+                                              regarding processing a repeated header,
+                                              with special handling for \"Set-Cookie\"."
+                                            maxLength: 256
+                                            minLength: 1
+                                            pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                                            type: string
+                                          type:
+                                            default: Exact
+                                            description: "Type specifies how to match
+                                              against the value of the header. \n
+                                              Support: Core (Exact) \n Support: Implementation-specific
+                                              (RegularExpression) \n Since RegularExpression
+                                              HeaderMatchType has implementation-specific
+                                              conformance, implementations can support
+                                              POSIX, PCRE or any other dialects of
+                                              regular expressions. Please read the
+                                              implementation's documentation to determine
+                                              the supported dialect."
+                                            enum:
+                                            - Exact
+                                            - RegularExpression
+                                            type: string
+                                          value:
+                                            description: Value is the value of HTTP
+                                              Header to be matched.
+                                            maxLength: 4096
+                                            minLength: 1
+                                            type: string
+                                        required:
+                                        - name
+                                        - value
+                                        type: object
+                                      maxItems: 16
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                    method:
+                                      description: "Method specifies HTTP method matcher.
+                                        When specified, this route will be matched
+                                        only if the request has the specified method.
+                                        \n Support: Extended"
+                                      enum:
+                                      - GET
+                                      - HEAD
+                                      - POST
+                                      - PUT
+                                      - DELETE
+                                      - CONNECT
+                                      - OPTIONS
+                                      - TRACE
+                                      - PATCH
+                                      type: string
+                                    path:
+                                      default:
+                                        type: PathPrefix
+                                        value: /
+                                      description: Path specifies a HTTP request path
+                                        matcher. If this field is not specified, a
+                                        default prefix match on the "/" path is provided.
+                                      properties:
+                                        type:
+                                          default: PathPrefix
+                                          description: "Type specifies how to match
+                                            against the path Value. \n Support: Core
+                                            (Exact, PathPrefix) \n Support: Implementation-specific
+                                            (RegularExpression)"
+                                          enum:
+                                          - Exact
+                                          - PathPrefix
+                                          - RegularExpression
+                                          type: string
+                                        value:
+                                          default: /
+                                          description: Value of the HTTP path to match
+                                            against.
+                                          maxLength: 1024
+                                          type: string
+                                      type: object
+                                    queryParams:
+                                      description: "QueryParams specifies HTTP query
+                                        parameter matchers. Multiple match values
+                                        are ANDed together, meaning, a request must
+                                        match all the specified query parameters to
+                                        select the route. \n Support: Extended"
+                                      items:
+                                        description: HTTPQueryParamMatch describes
+                                          how to select a HTTP route by matching HTTP
+                                          query parameters.
+                                        properties:
+                                          name:
+                                            description: "Name is the name of the
+                                              HTTP query param to be matched. This
+                                              must be an exact string match. (See
+                                              https://tools.ietf.org/html/rfc7230#section-2.7.3).
+                                              \n If multiple entries specify equivalent
+                                              query param names, only the first entry
+                                              with an equivalent name MUST be considered
+                                              for a match. Subsequent entries with
+                                              an equivalent query param name MUST
+                                              be ignored. \n If a query param is repeated
+                                              in an HTTP request, the behavior is
+                                              purposely left undefined, since different
+                                              data planes have different capabilities.
+                                              However, it is *recommended* that implementations
+                                              should match against the first value
+                                              of the param if the data plane supports
+                                              it, as this behavior is expected in
+                                              other load balancing contexts outside
+                                              of the Gateway API. \n Users SHOULD
+                                              NOT route traffic based on repeated
+                                              query params to guard themselves against
+                                              potential differences in the implementations."
+                                            maxLength: 256
+                                            minLength: 1
+                                            type: string
+                                          type:
+                                            default: Exact
+                                            description: "Type specifies how to match
+                                              against the value of the query parameter.
+                                              \n Support: Extended (Exact) \n Support:
+                                              Implementation-specific (RegularExpression)
+                                              \n Since RegularExpression QueryParamMatchType
+                                              has Implementation-specific conformance,
+                                              implementations can support POSIX, PCRE
+                                              or any other dialects of regular expressions.
+                                              Please read the implementation's documentation
+                                              to determine the supported dialect."
+                                            enum:
+                                            - Exact
+                                            - RegularExpression
+                                            type: string
+                                          value:
+                                            description: Value is the value of HTTP
+                                              query param to be matched.
+                                            maxLength: 1024
+                                            minLength: 1
+                                            type: string
+                                        required:
+                                        - name
+                                        - value
+                                        type: object
+                                      maxItems: 16
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                  type: object
+                                type: array
+                            type: object
+                          type: array
                         spicedb:
                           description: Authorization decision delegated to external
                             Authzed/SpiceDB server.
@@ -1403,6 +2045,233 @@ spec:
                             the same priority group are evaluated concurrently; consecutive
                             priority groups are evaluated sequentially.
                           type: integer
+                        routeSelectors:
+                          description: Top-level route selectors. If present, the
+                            elements will be used to select HTTPRoute rules that,
+                            when activated, trigger the auth rule. At least one selected
+                            HTTPRoute rule must match to trigger the auth rule. If
+                            no route selectors are specified, the auth rule will be
+                            evaluated at all requests to the protected routes.
+                          items:
+                            description: RouteSelector defines semantics for matching
+                              an HTTP request based on conditions https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                            properties:
+                              hostnames:
+                                description: Hostnames defines a set of hostname that
+                                  should match against the HTTP Host header to select
+                                  a HTTPRoute to process the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                items:
+                                  description: "Hostname is the fully qualified domain
+                                    name of a network host. This matches the RFC 1123
+                                    definition of a hostname with 2 notable exceptions:
+                                    \n 1. IPs are not allowed. 2. A hostname may be
+                                    prefixed with a wildcard label (`*.`). The wildcard
+                                    label must appear by itself as the first label.
+                                    \n Hostname can be \"precise\" which is a domain
+                                    name without the terminating dot of a network
+                                    host (e.g. \"foo.example.com\") or \"wildcard\",
+                                    which is a domain name prefixed with a single
+                                    wildcard label (e.g. `*.example.com`). \n Note
+                                    that as per RFC1035 and RFC1123, a *label* must
+                                    consist of lower case alphanumeric characters
+                                    or '-', and must start and end with an alphanumeric
+                                    character. No other punctuation is allowed."
+                                  maxLength: 253
+                                  minLength: 1
+                                  pattern: ^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                                  type: string
+                                type: array
+                              matches:
+                                description: Matches define conditions used for matching
+                                  the rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                items:
+                                  description: "HTTPRouteMatch defines the predicate
+                                    used to match requests to a given action. Multiple
+                                    match types are ANDed together, i.e. the match
+                                    will evaluate to true only if all conditions are
+                                    satisfied. \n For example, the match below will
+                                    match a HTTP request only if its path starts with
+                                    `/foo` AND it contains the `version: v1` header:
+                                    \n ``` match: \n path: value: \"/foo\" headers:
+                                    - name: \"version\" value \"v1\" \n ```"
+                                  properties:
+                                    headers:
+                                      description: Headers specifies HTTP request
+                                        header matchers. Multiple match values are
+                                        ANDed together, meaning, a request must match
+                                        all the specified headers to select the route.
+                                      items:
+                                        description: HTTPHeaderMatch describes how
+                                          to select a HTTP route by matching HTTP
+                                          request headers.
+                                        properties:
+                                          name:
+                                            description: "Name is the name of the
+                                              HTTP Header to be matched. Name matching
+                                              MUST be case insensitive. (See https://tools.ietf.org/html/rfc7230#section-3.2).
+                                              \n If multiple entries specify equivalent
+                                              header names, only the first entry with
+                                              an equivalent name MUST be considered
+                                              for a match. Subsequent entries with
+                                              an equivalent header name MUST be ignored.
+                                              Due to the case-insensitivity of header
+                                              names, \"foo\" and \"Foo\" are considered
+                                              equivalent. \n When a header is repeated
+                                              in an HTTP request, it is implementation-specific
+                                              behavior as to how this is represented.
+                                              Generally, proxies should follow the
+                                              guidance from the RFC: https://www.rfc-editor.org/rfc/rfc7230.html#section-3.2.2
+                                              regarding processing a repeated header,
+                                              with special handling for \"Set-Cookie\"."
+                                            maxLength: 256
+                                            minLength: 1
+                                            pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                                            type: string
+                                          type:
+                                            default: Exact
+                                            description: "Type specifies how to match
+                                              against the value of the header. \n
+                                              Support: Core (Exact) \n Support: Implementation-specific
+                                              (RegularExpression) \n Since RegularExpression
+                                              HeaderMatchType has implementation-specific
+                                              conformance, implementations can support
+                                              POSIX, PCRE or any other dialects of
+                                              regular expressions. Please read the
+                                              implementation's documentation to determine
+                                              the supported dialect."
+                                            enum:
+                                            - Exact
+                                            - RegularExpression
+                                            type: string
+                                          value:
+                                            description: Value is the value of HTTP
+                                              Header to be matched.
+                                            maxLength: 4096
+                                            minLength: 1
+                                            type: string
+                                        required:
+                                        - name
+                                        - value
+                                        type: object
+                                      maxItems: 16
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                    method:
+                                      description: "Method specifies HTTP method matcher.
+                                        When specified, this route will be matched
+                                        only if the request has the specified method.
+                                        \n Support: Extended"
+                                      enum:
+                                      - GET
+                                      - HEAD
+                                      - POST
+                                      - PUT
+                                      - DELETE
+                                      - CONNECT
+                                      - OPTIONS
+                                      - TRACE
+                                      - PATCH
+                                      type: string
+                                    path:
+                                      default:
+                                        type: PathPrefix
+                                        value: /
+                                      description: Path specifies a HTTP request path
+                                        matcher. If this field is not specified, a
+                                        default prefix match on the "/" path is provided.
+                                      properties:
+                                        type:
+                                          default: PathPrefix
+                                          description: "Type specifies how to match
+                                            against the path Value. \n Support: Core
+                                            (Exact, PathPrefix) \n Support: Implementation-specific
+                                            (RegularExpression)"
+                                          enum:
+                                          - Exact
+                                          - PathPrefix
+                                          - RegularExpression
+                                          type: string
+                                        value:
+                                          default: /
+                                          description: Value of the HTTP path to match
+                                            against.
+                                          maxLength: 1024
+                                          type: string
+                                      type: object
+                                    queryParams:
+                                      description: "QueryParams specifies HTTP query
+                                        parameter matchers. Multiple match values
+                                        are ANDed together, meaning, a request must
+                                        match all the specified query parameters to
+                                        select the route. \n Support: Extended"
+                                      items:
+                                        description: HTTPQueryParamMatch describes
+                                          how to select a HTTP route by matching HTTP
+                                          query parameters.
+                                        properties:
+                                          name:
+                                            description: "Name is the name of the
+                                              HTTP query param to be matched. This
+                                              must be an exact string match. (See
+                                              https://tools.ietf.org/html/rfc7230#section-2.7.3).
+                                              \n If multiple entries specify equivalent
+                                              query param names, only the first entry
+                                              with an equivalent name MUST be considered
+                                              for a match. Subsequent entries with
+                                              an equivalent query param name MUST
+                                              be ignored. \n If a query param is repeated
+                                              in an HTTP request, the behavior is
+                                              purposely left undefined, since different
+                                              data planes have different capabilities.
+                                              However, it is *recommended* that implementations
+                                              should match against the first value
+                                              of the param if the data plane supports
+                                              it, as this behavior is expected in
+                                              other load balancing contexts outside
+                                              of the Gateway API. \n Users SHOULD
+                                              NOT route traffic based on repeated
+                                              query params to guard themselves against
+                                              potential differences in the implementations."
+                                            maxLength: 256
+                                            minLength: 1
+                                            type: string
+                                          type:
+                                            default: Exact
+                                            description: "Type specifies how to match
+                                              against the value of the query parameter.
+                                              \n Support: Extended (Exact) \n Support:
+                                              Implementation-specific (RegularExpression)
+                                              \n Since RegularExpression QueryParamMatchType
+                                              has Implementation-specific conformance,
+                                              implementations can support POSIX, PCRE
+                                              or any other dialects of regular expressions.
+                                              Please read the implementation's documentation
+                                              to determine the supported dialect."
+                                            enum:
+                                            - Exact
+                                            - RegularExpression
+                                            type: string
+                                          value:
+                                            description: Value is the value of HTTP
+                                              query param to be matched.
+                                            maxLength: 1024
+                                            minLength: 1
+                                            type: string
+                                        required:
+                                        - name
+                                        - value
+                                        type: object
+                                      maxItems: 16
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                  type: object
+                                type: array
+                            type: object
+                          type: array
                         when:
                           description: Conditions for Authorino to enforce this config.
                             If omitted, the config will be enforced for all requests.
@@ -1716,6 +2585,233 @@ spec:
                             the same priority group are evaluated concurrently; consecutive
                             priority groups are evaluated sequentially.
                           type: integer
+                        routeSelectors:
+                          description: Top-level route selectors. If present, the
+                            elements will be used to select HTTPRoute rules that,
+                            when activated, trigger the auth rule. At least one selected
+                            HTTPRoute rule must match to trigger the auth rule. If
+                            no route selectors are specified, the auth rule will be
+                            evaluated at all requests to the protected routes.
+                          items:
+                            description: RouteSelector defines semantics for matching
+                              an HTTP request based on conditions https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                            properties:
+                              hostnames:
+                                description: Hostnames defines a set of hostname that
+                                  should match against the HTTP Host header to select
+                                  a HTTPRoute to process the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                items:
+                                  description: "Hostname is the fully qualified domain
+                                    name of a network host. This matches the RFC 1123
+                                    definition of a hostname with 2 notable exceptions:
+                                    \n 1. IPs are not allowed. 2. A hostname may be
+                                    prefixed with a wildcard label (`*.`). The wildcard
+                                    label must appear by itself as the first label.
+                                    \n Hostname can be \"precise\" which is a domain
+                                    name without the terminating dot of a network
+                                    host (e.g. \"foo.example.com\") or \"wildcard\",
+                                    which is a domain name prefixed with a single
+                                    wildcard label (e.g. `*.example.com`). \n Note
+                                    that as per RFC1035 and RFC1123, a *label* must
+                                    consist of lower case alphanumeric characters
+                                    or '-', and must start and end with an alphanumeric
+                                    character. No other punctuation is allowed."
+                                  maxLength: 253
+                                  minLength: 1
+                                  pattern: ^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                                  type: string
+                                type: array
+                              matches:
+                                description: Matches define conditions used for matching
+                                  the rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                items:
+                                  description: "HTTPRouteMatch defines the predicate
+                                    used to match requests to a given action. Multiple
+                                    match types are ANDed together, i.e. the match
+                                    will evaluate to true only if all conditions are
+                                    satisfied. \n For example, the match below will
+                                    match a HTTP request only if its path starts with
+                                    `/foo` AND it contains the `version: v1` header:
+                                    \n ``` match: \n path: value: \"/foo\" headers:
+                                    - name: \"version\" value \"v1\" \n ```"
+                                  properties:
+                                    headers:
+                                      description: Headers specifies HTTP request
+                                        header matchers. Multiple match values are
+                                        ANDed together, meaning, a request must match
+                                        all the specified headers to select the route.
+                                      items:
+                                        description: HTTPHeaderMatch describes how
+                                          to select a HTTP route by matching HTTP
+                                          request headers.
+                                        properties:
+                                          name:
+                                            description: "Name is the name of the
+                                              HTTP Header to be matched. Name matching
+                                              MUST be case insensitive. (See https://tools.ietf.org/html/rfc7230#section-3.2).
+                                              \n If multiple entries specify equivalent
+                                              header names, only the first entry with
+                                              an equivalent name MUST be considered
+                                              for a match. Subsequent entries with
+                                              an equivalent header name MUST be ignored.
+                                              Due to the case-insensitivity of header
+                                              names, \"foo\" and \"Foo\" are considered
+                                              equivalent. \n When a header is repeated
+                                              in an HTTP request, it is implementation-specific
+                                              behavior as to how this is represented.
+                                              Generally, proxies should follow the
+                                              guidance from the RFC: https://www.rfc-editor.org/rfc/rfc7230.html#section-3.2.2
+                                              regarding processing a repeated header,
+                                              with special handling for \"Set-Cookie\"."
+                                            maxLength: 256
+                                            minLength: 1
+                                            pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                                            type: string
+                                          type:
+                                            default: Exact
+                                            description: "Type specifies how to match
+                                              against the value of the header. \n
+                                              Support: Core (Exact) \n Support: Implementation-specific
+                                              (RegularExpression) \n Since RegularExpression
+                                              HeaderMatchType has implementation-specific
+                                              conformance, implementations can support
+                                              POSIX, PCRE or any other dialects of
+                                              regular expressions. Please read the
+                                              implementation's documentation to determine
+                                              the supported dialect."
+                                            enum:
+                                            - Exact
+                                            - RegularExpression
+                                            type: string
+                                          value:
+                                            description: Value is the value of HTTP
+                                              Header to be matched.
+                                            maxLength: 4096
+                                            minLength: 1
+                                            type: string
+                                        required:
+                                        - name
+                                        - value
+                                        type: object
+                                      maxItems: 16
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                    method:
+                                      description: "Method specifies HTTP method matcher.
+                                        When specified, this route will be matched
+                                        only if the request has the specified method.
+                                        \n Support: Extended"
+                                      enum:
+                                      - GET
+                                      - HEAD
+                                      - POST
+                                      - PUT
+                                      - DELETE
+                                      - CONNECT
+                                      - OPTIONS
+                                      - TRACE
+                                      - PATCH
+                                      type: string
+                                    path:
+                                      default:
+                                        type: PathPrefix
+                                        value: /
+                                      description: Path specifies a HTTP request path
+                                        matcher. If this field is not specified, a
+                                        default prefix match on the "/" path is provided.
+                                      properties:
+                                        type:
+                                          default: PathPrefix
+                                          description: "Type specifies how to match
+                                            against the path Value. \n Support: Core
+                                            (Exact, PathPrefix) \n Support: Implementation-specific
+                                            (RegularExpression)"
+                                          enum:
+                                          - Exact
+                                          - PathPrefix
+                                          - RegularExpression
+                                          type: string
+                                        value:
+                                          default: /
+                                          description: Value of the HTTP path to match
+                                            against.
+                                          maxLength: 1024
+                                          type: string
+                                      type: object
+                                    queryParams:
+                                      description: "QueryParams specifies HTTP query
+                                        parameter matchers. Multiple match values
+                                        are ANDed together, meaning, a request must
+                                        match all the specified query parameters to
+                                        select the route. \n Support: Extended"
+                                      items:
+                                        description: HTTPQueryParamMatch describes
+                                          how to select a HTTP route by matching HTTP
+                                          query parameters.
+                                        properties:
+                                          name:
+                                            description: "Name is the name of the
+                                              HTTP query param to be matched. This
+                                              must be an exact string match. (See
+                                              https://tools.ietf.org/html/rfc7230#section-2.7.3).
+                                              \n If multiple entries specify equivalent
+                                              query param names, only the first entry
+                                              with an equivalent name MUST be considered
+                                              for a match. Subsequent entries with
+                                              an equivalent query param name MUST
+                                              be ignored. \n If a query param is repeated
+                                              in an HTTP request, the behavior is
+                                              purposely left undefined, since different
+                                              data planes have different capabilities.
+                                              However, it is *recommended* that implementations
+                                              should match against the first value
+                                              of the param if the data plane supports
+                                              it, as this behavior is expected in
+                                              other load balancing contexts outside
+                                              of the Gateway API. \n Users SHOULD
+                                              NOT route traffic based on repeated
+                                              query params to guard themselves against
+                                              potential differences in the implementations."
+                                            maxLength: 256
+                                            minLength: 1
+                                            type: string
+                                          type:
+                                            default: Exact
+                                            description: "Type specifies how to match
+                                              against the value of the query parameter.
+                                              \n Support: Extended (Exact) \n Support:
+                                              Implementation-specific (RegularExpression)
+                                              \n Since RegularExpression QueryParamMatchType
+                                              has Implementation-specific conformance,
+                                              implementations can support POSIX, PCRE
+                                              or any other dialects of regular expressions.
+                                              Please read the implementation's documentation
+                                              to determine the supported dialect."
+                                            enum:
+                                            - Exact
+                                            - RegularExpression
+                                            type: string
+                                          value:
+                                            description: Value is the value of HTTP
+                                              query param to be matched.
+                                            maxLength: 1024
+                                            minLength: 1
+                                            type: string
+                                        required:
+                                        - name
+                                        - value
+                                        type: object
+                                      maxItems: 16
+                                      type: array
+                                      x-kubernetes-list-map-keys:
+                                      - name
+                                      x-kubernetes-list-type: map
+                                  type: object
+                                type: array
+                            type: object
+                          type: array
                         uma:
                           description: User-Managed Access (UMA) source of resource
                             data.
@@ -1858,8 +2954,6 @@ spec:
                         properties:
                           dynamicMetadata:
                             additionalProperties:
-                              description: Settings of the success custom response
-                                item.
                               properties:
                                 cache:
                                   description: Caching options for the resolved object
@@ -1961,6 +3055,264 @@ spec:
                                     in the same priority group are evaluated concurrently;
                                     consecutive priority groups are evaluated sequentially.
                                   type: integer
+                                routeSelectors:
+                                  description: Top-level route selectors. If present,
+                                    the elements will be used to select HTTPRoute
+                                    rules that, when activated, trigger the auth rule.
+                                    At least one selected HTTPRoute rule must match
+                                    to trigger the auth rule. If no route selectors
+                                    are specified, the auth rule will be evaluated
+                                    at all requests to the protected routes.
+                                  items:
+                                    description: RouteSelector defines semantics for
+                                      matching an HTTP request based on conditions
+                                      https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                    properties:
+                                      hostnames:
+                                        description: Hostnames defines a set of hostname
+                                          that should match against the HTTP Host
+                                          header to select a HTTPRoute to process
+                                          the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                        items:
+                                          description: "Hostname is the fully qualified
+                                            domain name of a network host. This matches
+                                            the RFC 1123 definition of a hostname
+                                            with 2 notable exceptions: \n 1. IPs are
+                                            not allowed. 2. A hostname may be prefixed
+                                            with a wildcard label (`*.`). The wildcard
+                                            label must appear by itself as the first
+                                            label. \n Hostname can be \"precise\"
+                                            which is a domain name without the terminating
+                                            dot of a network host (e.g. \"foo.example.com\")
+                                            or \"wildcard\", which is a domain name
+                                            prefixed with a single wildcard label
+                                            (e.g. `*.example.com`). \n Note that as
+                                            per RFC1035 and RFC1123, a *label* must
+                                            consist of lower case alphanumeric characters
+                                            or '-', and must start and end with an
+                                            alphanumeric character. No other punctuation
+                                            is allowed."
+                                          maxLength: 253
+                                          minLength: 1
+                                          pattern: ^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                                          type: string
+                                        type: array
+                                      matches:
+                                        description: Matches define conditions used
+                                          for matching the rule against incoming HTTP
+                                          requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                        items:
+                                          description: "HTTPRouteMatch defines the
+                                            predicate used to match requests to a
+                                            given action. Multiple match types are
+                                            ANDed together, i.e. the match will evaluate
+                                            to true only if all conditions are satisfied.
+                                            \n For example, the match below will match
+                                            a HTTP request only if its path starts
+                                            with `/foo` AND it contains the `version:
+                                            v1` header: \n ``` match: \n path: value:
+                                            \"/foo\" headers: - name: \"version\"
+                                            value \"v1\" \n ```"
+                                          properties:
+                                            headers:
+                                              description: Headers specifies HTTP
+                                                request header matchers. Multiple
+                                                match values are ANDed together, meaning,
+                                                a request must match all the specified
+                                                headers to select the route.
+                                              items:
+                                                description: HTTPHeaderMatch describes
+                                                  how to select a HTTP route by matching
+                                                  HTTP request headers.
+                                                properties:
+                                                  name:
+                                                    description: "Name is the name
+                                                      of the HTTP Header to be matched.
+                                                      Name matching MUST be case insensitive.
+                                                      (See https://tools.ietf.org/html/rfc7230#section-3.2).
+                                                      \n If multiple entries specify
+                                                      equivalent header names, only
+                                                      the first entry with an equivalent
+                                                      name MUST be considered for
+                                                      a match. Subsequent entries
+                                                      with an equivalent header name
+                                                      MUST be ignored. Due to the
+                                                      case-insensitivity of header
+                                                      names, \"foo\" and \"Foo\" are
+                                                      considered equivalent. \n When
+                                                      a header is repeated in an HTTP
+                                                      request, it is implementation-specific
+                                                      behavior as to how this is represented.
+                                                      Generally, proxies should follow
+                                                      the guidance from the RFC: https://www.rfc-editor.org/rfc/rfc7230.html#section-3.2.2
+                                                      regarding processing a repeated
+                                                      header, with special handling
+                                                      for \"Set-Cookie\"."
+                                                    maxLength: 256
+                                                    minLength: 1
+                                                    pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                                                    type: string
+                                                  type:
+                                                    default: Exact
+                                                    description: "Type specifies how
+                                                      to match against the value of
+                                                      the header. \n Support: Core
+                                                      (Exact) \n Support: Implementation-specific
+                                                      (RegularExpression) \n Since
+                                                      RegularExpression HeaderMatchType
+                                                      has implementation-specific
+                                                      conformance, implementations
+                                                      can support POSIX, PCRE or any
+                                                      other dialects of regular expressions.
+                                                      Please read the implementation's
+                                                      documentation to determine the
+                                                      supported dialect."
+                                                    enum:
+                                                    - Exact
+                                                    - RegularExpression
+                                                    type: string
+                                                  value:
+                                                    description: Value is the value
+                                                      of HTTP Header to be matched.
+                                                    maxLength: 4096
+                                                    minLength: 1
+                                                    type: string
+                                                required:
+                                                - name
+                                                - value
+                                                type: object
+                                              maxItems: 16
+                                              type: array
+                                              x-kubernetes-list-map-keys:
+                                              - name
+                                              x-kubernetes-list-type: map
+                                            method:
+                                              description: "Method specifies HTTP
+                                                method matcher. When specified, this
+                                                route will be matched only if the
+                                                request has the specified method.
+                                                \n Support: Extended"
+                                              enum:
+                                              - GET
+                                              - HEAD
+                                              - POST
+                                              - PUT
+                                              - DELETE
+                                              - CONNECT
+                                              - OPTIONS
+                                              - TRACE
+                                              - PATCH
+                                              type: string
+                                            path:
+                                              default:
+                                                type: PathPrefix
+                                                value: /
+                                              description: Path specifies a HTTP request
+                                                path matcher. If this field is not
+                                                specified, a default prefix match
+                                                on the "/" path is provided.
+                                              properties:
+                                                type:
+                                                  default: PathPrefix
+                                                  description: "Type specifies how
+                                                    to match against the path Value.
+                                                    \n Support: Core (Exact, PathPrefix)
+                                                    \n Support: Implementation-specific
+                                                    (RegularExpression)"
+                                                  enum:
+                                                  - Exact
+                                                  - PathPrefix
+                                                  - RegularExpression
+                                                  type: string
+                                                value:
+                                                  default: /
+                                                  description: Value of the HTTP path
+                                                    to match against.
+                                                  maxLength: 1024
+                                                  type: string
+                                              type: object
+                                            queryParams:
+                                              description: "QueryParams specifies
+                                                HTTP query parameter matchers. Multiple
+                                                match values are ANDed together, meaning,
+                                                a request must match all the specified
+                                                query parameters to select the route.
+                                                \n Support: Extended"
+                                              items:
+                                                description: HTTPQueryParamMatch describes
+                                                  how to select a HTTP route by matching
+                                                  HTTP query parameters.
+                                                properties:
+                                                  name:
+                                                    description: "Name is the name
+                                                      of the HTTP query param to be
+                                                      matched. This must be an exact
+                                                      string match. (See https://tools.ietf.org/html/rfc7230#section-2.7.3).
+                                                      \n If multiple entries specify
+                                                      equivalent query param names,
+                                                      only the first entry with an
+                                                      equivalent name MUST be considered
+                                                      for a match. Subsequent entries
+                                                      with an equivalent query param
+                                                      name MUST be ignored. \n If
+                                                      a query param is repeated in
+                                                      an HTTP request, the behavior
+                                                      is purposely left undefined,
+                                                      since different data planes
+                                                      have different capabilities.
+                                                      However, it is *recommended*
+                                                      that implementations should
+                                                      match against the first value
+                                                      of the param if the data plane
+                                                      supports it, as this behavior
+                                                      is expected in other load balancing
+                                                      contexts outside of the Gateway
+                                                      API. \n Users SHOULD NOT route
+                                                      traffic based on repeated query
+                                                      params to guard themselves against
+                                                      potential differences in the
+                                                      implementations."
+                                                    maxLength: 256
+                                                    minLength: 1
+                                                    type: string
+                                                  type:
+                                                    default: Exact
+                                                    description: "Type specifies how
+                                                      to match against the value of
+                                                      the query parameter. \n Support:
+                                                      Extended (Exact) \n Support:
+                                                      Implementation-specific (RegularExpression)
+                                                      \n Since RegularExpression QueryParamMatchType
+                                                      has Implementation-specific
+                                                      conformance, implementations
+                                                      can support POSIX, PCRE or any
+                                                      other dialects of regular expressions.
+                                                      Please read the implementation's
+                                                      documentation to determine the
+                                                      supported dialect."
+                                                    enum:
+                                                    - Exact
+                                                    - RegularExpression
+                                                    type: string
+                                                  value:
+                                                    description: Value is the value
+                                                      of HTTP query param to be matched.
+                                                    maxLength: 1024
+                                                    minLength: 1
+                                                    type: string
+                                                required:
+                                                - name
+                                                - value
+                                                type: object
+                                              maxItems: 16
+                                              type: array
+                                              x-kubernetes-list-map-keys:
+                                              - name
+                                              x-kubernetes-list-type: map
+                                          type: object
+                                        type: array
+                                    type: object
+                                  type: array
                                 when:
                                   description: Conditions for Authorino to enforce
                                     this config. If omitted, the config will be enforced
@@ -2198,6 +3550,264 @@ spec:
                                     in the same priority group are evaluated concurrently;
                                     consecutive priority groups are evaluated sequentially.
                                   type: integer
+                                routeSelectors:
+                                  description: Top-level route selectors. If present,
+                                    the elements will be used to select HTTPRoute
+                                    rules that, when activated, trigger the auth rule.
+                                    At least one selected HTTPRoute rule must match
+                                    to trigger the auth rule. If no route selectors
+                                    are specified, the auth rule will be evaluated
+                                    at all requests to the protected routes.
+                                  items:
+                                    description: RouteSelector defines semantics for
+                                      matching an HTTP request based on conditions
+                                      https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                    properties:
+                                      hostnames:
+                                        description: Hostnames defines a set of hostname
+                                          that should match against the HTTP Host
+                                          header to select a HTTPRoute to process
+                                          the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                        items:
+                                          description: "Hostname is the fully qualified
+                                            domain name of a network host. This matches
+                                            the RFC 1123 definition of a hostname
+                                            with 2 notable exceptions: \n 1. IPs are
+                                            not allowed. 2. A hostname may be prefixed
+                                            with a wildcard label (`*.`). The wildcard
+                                            label must appear by itself as the first
+                                            label. \n Hostname can be \"precise\"
+                                            which is a domain name without the terminating
+                                            dot of a network host (e.g. \"foo.example.com\")
+                                            or \"wildcard\", which is a domain name
+                                            prefixed with a single wildcard label
+                                            (e.g. `*.example.com`). \n Note that as
+                                            per RFC1035 and RFC1123, a *label* must
+                                            consist of lower case alphanumeric characters
+                                            or '-', and must start and end with an
+                                            alphanumeric character. No other punctuation
+                                            is allowed."
+                                          maxLength: 253
+                                          minLength: 1
+                                          pattern: ^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                                          type: string
+                                        type: array
+                                      matches:
+                                        description: Matches define conditions used
+                                          for matching the rule against incoming HTTP
+                                          requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                        items:
+                                          description: "HTTPRouteMatch defines the
+                                            predicate used to match requests to a
+                                            given action. Multiple match types are
+                                            ANDed together, i.e. the match will evaluate
+                                            to true only if all conditions are satisfied.
+                                            \n For example, the match below will match
+                                            a HTTP request only if its path starts
+                                            with `/foo` AND it contains the `version:
+                                            v1` header: \n ``` match: \n path: value:
+                                            \"/foo\" headers: - name: \"version\"
+                                            value \"v1\" \n ```"
+                                          properties:
+                                            headers:
+                                              description: Headers specifies HTTP
+                                                request header matchers. Multiple
+                                                match values are ANDed together, meaning,
+                                                a request must match all the specified
+                                                headers to select the route.
+                                              items:
+                                                description: HTTPHeaderMatch describes
+                                                  how to select a HTTP route by matching
+                                                  HTTP request headers.
+                                                properties:
+                                                  name:
+                                                    description: "Name is the name
+                                                      of the HTTP Header to be matched.
+                                                      Name matching MUST be case insensitive.
+                                                      (See https://tools.ietf.org/html/rfc7230#section-3.2).
+                                                      \n If multiple entries specify
+                                                      equivalent header names, only
+                                                      the first entry with an equivalent
+                                                      name MUST be considered for
+                                                      a match. Subsequent entries
+                                                      with an equivalent header name
+                                                      MUST be ignored. Due to the
+                                                      case-insensitivity of header
+                                                      names, \"foo\" and \"Foo\" are
+                                                      considered equivalent. \n When
+                                                      a header is repeated in an HTTP
+                                                      request, it is implementation-specific
+                                                      behavior as to how this is represented.
+                                                      Generally, proxies should follow
+                                                      the guidance from the RFC: https://www.rfc-editor.org/rfc/rfc7230.html#section-3.2.2
+                                                      regarding processing a repeated
+                                                      header, with special handling
+                                                      for \"Set-Cookie\"."
+                                                    maxLength: 256
+                                                    minLength: 1
+                                                    pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
+                                                    type: string
+                                                  type:
+                                                    default: Exact
+                                                    description: "Type specifies how
+                                                      to match against the value of
+                                                      the header. \n Support: Core
+                                                      (Exact) \n Support: Implementation-specific
+                                                      (RegularExpression) \n Since
+                                                      RegularExpression HeaderMatchType
+                                                      has implementation-specific
+                                                      conformance, implementations
+                                                      can support POSIX, PCRE or any
+                                                      other dialects of regular expressions.
+                                                      Please read the implementation's
+                                                      documentation to determine the
+                                                      supported dialect."
+                                                    enum:
+                                                    - Exact
+                                                    - RegularExpression
+                                                    type: string
+                                                  value:
+                                                    description: Value is the value
+                                                      of HTTP Header to be matched.
+                                                    maxLength: 4096
+                                                    minLength: 1
+                                                    type: string
+                                                required:
+                                                - name
+                                                - value
+                                                type: object
+                                              maxItems: 16
+                                              type: array
+                                              x-kubernetes-list-map-keys:
+                                              - name
+                                              x-kubernetes-list-type: map
+                                            method:
+                                              description: "Method specifies HTTP
+                                                method matcher. When specified, this
+                                                route will be matched only if the
+                                                request has the specified method.
+                                                \n Support: Extended"
+                                              enum:
+                                              - GET
+                                              - HEAD
+                                              - POST
+                                              - PUT
+                                              - DELETE
+                                              - CONNECT
+                                              - OPTIONS
+                                              - TRACE
+                                              - PATCH
+                                              type: string
+                                            path:
+                                              default:
+                                                type: PathPrefix
+                                                value: /
+                                              description: Path specifies a HTTP request
+                                                path matcher. If this field is not
+                                                specified, a default prefix match
+                                                on the "/" path is provided.
+                                              properties:
+                                                type:
+                                                  default: PathPrefix
+                                                  description: "Type specifies how
+                                                    to match against the path Value.
+                                                    \n Support: Core (Exact, PathPrefix)
+                                                    \n Support: Implementation-specific
+                                                    (RegularExpression)"
+                                                  enum:
+                                                  - Exact
+                                                  - PathPrefix
+                                                  - RegularExpression
+                                                  type: string
+                                                value:
+                                                  default: /
+                                                  description: Value of the HTTP path
+                                                    to match against.
+                                                  maxLength: 1024
+                                                  type: string
+                                              type: object
+                                            queryParams:
+                                              description: "QueryParams specifies
+                                                HTTP query parameter matchers. Multiple
+                                                match values are ANDed together, meaning,
+                                                a request must match all the specified
+                                                query parameters to select the route.
+                                                \n Support: Extended"
+                                              items:
+                                                description: HTTPQueryParamMatch describes
+                                                  how to select a HTTP route by matching
+                                                  HTTP query parameters.
+                                                properties:
+                                                  name:
+                                                    description: "Name is the name
+                                                      of the HTTP query param to be
+                                                      matched. This must be an exact
+                                                      string match. (See https://tools.ietf.org/html/rfc7230#section-2.7.3).
+                                                      \n If multiple entries specify
+                                                      equivalent query param names,
+                                                      only the first entry with an
+                                                      equivalent name MUST be considered
+                                                      for a match. Subsequent entries
+                                                      with an equivalent query param
+                                                      name MUST be ignored. \n If
+                                                      a query param is repeated in
+                                                      an HTTP request, the behavior
+                                                      is purposely left undefined,
+                                                      since different data planes
+                                                      have different capabilities.
+                                                      However, it is *recommended*
+                                                      that implementations should
+                                                      match against the first value
+                                                      of the param if the data plane
+                                                      supports it, as this behavior
+                                                      is expected in other load balancing
+                                                      contexts outside of the Gateway
+                                                      API. \n Users SHOULD NOT route
+                                                      traffic based on repeated query
+                                                      params to guard themselves against
+                                                      potential differences in the
+                                                      implementations."
+                                                    maxLength: 256
+                                                    minLength: 1
+                                                    type: string
+                                                  type:
+                                                    default: Exact
+                                                    description: "Type specifies how
+                                                      to match against the value of
+                                                      the query parameter. \n Support:
+                                                      Extended (Exact) \n Support:
+                                                      Implementation-specific (RegularExpression)
+                                                      \n Since RegularExpression QueryParamMatchType
+                                                      has Implementation-specific
+                                                      conformance, implementations
+                                                      can support POSIX, PCRE or any
+                                                      other dialects of regular expressions.
+                                                      Please read the implementation's
+                                                      documentation to determine the
+                                                      supported dialect."
+                                                    enum:
+                                                    - Exact
+                                                    - RegularExpression
+                                                    type: string
+                                                  value:
+                                                    description: Value is the value
+                                                      of HTTP query param to be matched.
+                                                    maxLength: 1024
+                                                    minLength: 1
+                                                    type: string
+                                                required:
+                                                - name
+                                                - value
+                                                type: object
+                                              maxItems: 16
+                                              type: array
+                                              x-kubernetes-list-map-keys:
+                                              - name
+                                              x-kubernetes-list-type: map
+                                          type: object
+                                        type: array
+                                    type: object
+                                  type: array
                                 when:
                                   description: Conditions for Authorino to enforce
                                     this config. If omitted, the config will be enforced

@@ -26,11 +26,11 @@ type HTTPRouteRule struct {
 }
 
 func IsTargetRefHTTPRoute(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool {
-	return targetRef.Kind == ("HTTPRoute")
+	return targetRef.Group == ("gateway.networking.k8s.io") && targetRef.Kind == ("HTTPRoute")
 }
 
 func IsTargetRefGateway(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool {
-	return targetRef.Kind == ("Gateway")
+	return targetRef.Group == ("gateway.networking.k8s.io") && targetRef.Kind == ("Gateway")
 }
 
 func RouteHTTPMethodToRuleMethod(httpMethod *gatewayapiv1beta1.HTTPMethod) []string {
@@ -535,6 +535,33 @@ func TargetHostnames(targetNetworkObject client.Object) ([]string, error) {
 
 	if len(hosts) == 0 {
 		hosts = append(hosts, "*")
+	}
+
+	return hosts, nil
+}
+
+// HostnamesFromHTTPRoute returns an array of all hostnames specified in a HTTPRoute or inherited from its parent Gateways
+func HostnamesFromHTTPRoute(ctx context.Context, route *gatewayapiv1beta1.HTTPRoute, cli client.Client) ([]string, error) {
+	if len(route.Spec.Hostnames) > 0 {
+		return RouteHostnames(route), nil
+	}
+
+	hosts := []string{}
+
+	for _, ref := range route.Spec.ParentRefs {
+		if (ref.Kind != nil && *ref.Kind != "Gateway") || (ref.Group != nil && *ref.Group != "gateway.networking.k8s.io") {
+			continue
+		}
+		gw := &gatewayapiv1beta1.Gateway{}
+		ns := route.Namespace
+		if ref.Namespace != nil {
+			ns = string(*ref.Namespace)
+		}
+		if err := cli.Get(ctx, types.NamespacedName{Namespace: ns, Name: string(ref.Name)}, gw); err != nil {
+			return nil, err
+		}
+		gwHostanmes := HostnamesToStrings(GatewayWrapper{Gateway: gw}.Hostnames())
+		hosts = append(hosts, gwHostanmes...)
 	}
 
 	return hosts, nil

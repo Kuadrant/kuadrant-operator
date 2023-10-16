@@ -62,17 +62,17 @@ to operate the cluster (Istio's) ingress gateway to provide API management with 
 
 The kuadrant control plane owns the following [Custom Resource Definitions, CRDs](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/):
 
-| CRD                                                                                                                                                                                                                 | Description                                                    | Example                                                                                                                               |
-|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| RateLimitPolicy CRD [\[doc\]](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/rate-limiting.md) [[reference]](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/ratelimitpolicy-reference.md) | Enable access control on workloads based on HTTP rate limiting | [RateLimitPolicy CR](https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/config/samples/kuadrant_v1beta1_kuadrant.yaml) |
-| [AuthPolicy CRD](https://github.com/Kuadrant/kuadrant-operator/blob/main/apis/apim/v1alpha1/authpolicy_types.go)                                                                                                    | Enable AuthN and AuthZ based access control on workloads       | [AuthPolicy CR](https://github.com/Kuadrant/kuadrant-operator/blob/main/config/samples/kuadrant_v1beta1_ratelimitpolicy.yaml)         |
+| CRD                                                                                                 | Description                                                    | Example                                                                                                                                  |
+|-----------------------------------------------------------------------------------------------------|----------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| AuthPolicy CRD [\[doc\]](doc/auth.md) [[reference]](doc/reference/authpolicy.md)                    | Enable AuthN and AuthZ based access control on workloads       | [AuthPolicy CR](https://github.com/Kuadrant/kuadrant-operator/blob/main/examples/toystore/authpolicy.yaml)                               |
+| RateLimitPolicy CRD [\[doc\]](doc/rate-limiting.md) [[reference]](doc/reference/ratelimitpolicy.md) | Enable access control on workloads based on HTTP rate limiting | [RateLimitPolicy CR](https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/examples/toystore/ratelimitpolicy_httproute.yaml) |
 
 Additionally, Kuadrant provides the following CRDs
 
 | CRD                                                                                                          | Owner                                                                | Description                         | Example                                                                                                                           |
 |--------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------|-------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
 | [Kuadrant CRD](https://github.com/Kuadrant/kuadrant-operator/blob/main/api/v1beta1/kuadrant_types.go)        | [Kuadrant Operator](https://github.com/Kuadrant/kuadrant-operator)   | Represents an instance of kuadrant  | [Kuadrant CR](https://github.com/Kuadrant/kuadrant-operator/blob/main/config/samples/kuadrant_v1beta1_kuadrant.yaml)              |
-| [Limitador CRD](doc/ratelimitpolicy-reference.md)                                                            | [Limitador Operator](https://github.com/Kuadrant/limitador-operator) | Represents an instance of Limitador | [Limitador CR](https://github.com/Kuadrant/limitador-operator/blob/main/config/samples/limitador_v1alpha1_limitador.yaml)         |
+| [Limitador CRD](https://github.com/Kuadrant/limitador-operator/blob/main/api/v1alpha1/limitador_types.go)    | [Limitador Operator](https://github.com/Kuadrant/limitador-operator) | Represents an instance of Limitador | [Limitador CR](https://github.com/Kuadrant/limitador-operator/blob/main/config/samples/limitador_v1alpha1_limitador.yaml)         |
 | [Authorino CRD](https://github.com/Kuadrant/authorino-operator#the-authorino-custom-resource-definition-crd) | [Authorino Operator](https://github.com/Kuadrant/authorino-operator) | Represents an instance of Authorino | [Authorino CR](https://github.com/Kuadrant/authorino-operator/blob/main/config/samples/authorino-operator_v1beta1_authorino.yaml) |
 
 <img alt="Kuadrant Architecture" src="doc/images/kuadrant-architecture.svg" />
@@ -146,7 +146,7 @@ EOF
 * Expose the service/API using the kubernetes Gateway API, ie
   [HTTPRoute](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRoute) object.
 * Write and apply the Kuadrant's [RateLimitPolicy](doc/rate-limiting.md) and/or
-  [AuthPolicy](api/v1beta1/authpolicy_types.go) custom resources targeting the HTTPRoute resource
+  [AuthPolicy](doc/auth.md) custom resources targeting the HTTPRoute resource
   to have your API protected.
 
 #### If you are a *Cluster Operator*
@@ -154,7 +154,7 @@ EOF
 * (Optionally) deploy istio ingress gateway using the
   [Gateway](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.Gateway) resource.
 * Write and apply the Kuadrant's [RateLimitPolicy](doc/rate-limiting.md) and/or
-  [AuthPolicy](api/v1beta1/authpolicy_types.go) custom resources targeting the Gateway resource
+  [AuthPolicy](doc/auth.md) custom resources targeting the Gateway resource
   to have your gateway traffic protected.
 
 ## User guides
@@ -177,7 +177,7 @@ Docs can be found on the [Kuadrant website](https://kuadrant.io/).
 The [Development guide](doc/development.md) describes how to build the kuadrant operator and
 how to test your changes before submitting a patch or opening a PR.
 
-Join us on the [#kuadrant](https://kubernetes.slack.com/archives/C05J0D0V525) channel in the Kubernetes Slack workspace, 
+Join us on the [#kuadrant](https://kubernetes.slack.com/archives/C05J0D0V525) channel in the Kubernetes Slack workspace,
 for live discussions about the roadmap and more.
 
 ## Licensing

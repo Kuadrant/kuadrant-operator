@@ -88,7 +88,7 @@ spec:
 
 When a RLP targets a HTTPRoute, the policy is enforced to all traffic routed according to the rules and hostnames specified in the HTTPRoute, across all Gateways referenced in the `spec.parentRefs` field of the HTTPRoute.
 
-The targeted HTTPRoute's rules and/or hostnames to which the policy must be enforced can be filtered to specific subsets, by specifying the `routeSelectors` field of the limit definition.
+The targeted HTTPRoute's rules and/or hostnames to which the policy must be enforced can be filtered to specific subsets, by specifying the [`routeSelectors`](reference/route-selectors.md#the-routeselectors-field) field of the limit definition.
 
 Target a HTTPRoute by setting the `spec.targetRef` field of the RLP as follows:
 
@@ -172,7 +172,7 @@ Expected behavior:
 ### Limit definition
 
 A limit will be activated whenever a request comes in and the request matches:
-- any of the route rules selected by the limit (via `routeSelectors` or implicit "catch-all" selector), and
+- any of the route rules selected by the limit (via [`routeSelectors`](reference/route-selectors.md#the-routeselectors-field) or implicit "catch-all" selector), and
 - all of the `when` conditions specified in the limit.
 
 A limit can define:
@@ -226,36 +226,19 @@ spec:
 | `admin.toystore.com` | 250rps                                                       |
 | `other.toystore.com` | 5000rps                                                      |
 
-#### Route selectors
+### Route selectors
 
-The `routeSelectors` field of the limit definition allows to specify **selectors of routes** (or parts of a route), that _transitively induce a set of conditions for a limit to be enforced_. It is defined as a set of route matching rules, where these rules must exist, partially or identically stated within the HTTPRouteRules of the HTTPRoute that is targeted by the RLP.
+Route selectors allow to target sections of a HTTPRoute, by specifying sets of HTTPRouteMatches and/or hostnames that make the policy controller look up within the HTTPRoute spec for compatible declarations, and select the corresponding HTTPRouteRules and hostnames, to then build conditions that activate the policy or policy rule.
 
-The field is typed as a list of objects based on a special type defined from Gateway API's [HTTPRouteMatch](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPPathMatch) type (`matches` subfield of the route selector object), and an additional field `hostnames`.
-
-Route selectors matches and the HTTPRoute's HTTPRouteMatches are pairwise compared to select or not select HTTPRouteRules that should activate a limit. To decide whether the route selector selects a HTTPRouteRule or not, for each pair of route selector HTTPRouteMatch and HTTPRoute HTTPRouteMatch:
-1. The route selector selects the HTTPRoute's HTTPRouteRule if the HTTPRouteRule contains at least one HTTPRouteMatch that specifies fields that are literally identical to all the fields specified by at least one HTTPRouteMatch of the route selector.
-2. A HTTPRouteMatch within a HTTPRouteRule may include other fields that are not specified in a route selector match, and yet the route selector match selects the HTTPRouteRule if all fields of the route selector match are identically included in the HTTPRouteRule's HTTPRouteMatch; the opposite is NOT true.
-3. Each field `path` of a HTTPRouteMatch, as well as each field `method` of a HTTPRouteMatch, as well as each element of the fields `headers` and `queryParams` of a HTTPRouteMatch, is atomic – this is true for the HTTPRouteMatches within a HTTPRouteRule, as well as for HTTPRouteMatches of a route selector.
-
-Additionally, at least one hostname specified in a route selector must identically match one of the hostnames specified (or inherited, when omitted) by the targeted HTTPRoute.
-
-The semantics of the route selectors allows to assertively relate limit definitions to routing rules, with benefits for identifying the subsets of the network that are covered by a limit, while preventing unreachable definitions, as well as the overhead associated with the maintenance of such rules across multiple resources throughout time, according to network topology beneath. Moreover, the requirement of not having to be a full copy of the targeted HTTPRouteRule matches, but only partially identical, helps prevent repetition to some degree, as well as it enables to more easily define limits that scope across multiple HTTPRouteRules (by specifying less rules in the selector).
-
-A few rules and corner cases to keep in mind while using the RLP's `routeSelectors`:
-1. **The golden rule –** The route selectors in a RLP are **not** to be read strictly as the route matching rules that activate a limit, but as selectors of the route rules that activate the limit.
-2. Due to (1) above, this can lead to cases, e.g., where a route selector that states `matches: [{ method: POST }]` selects a HTTPRouteRule that defines `matches: [{ method: POST },  { method: GET }]`, effectively causing the limit to be activated on requests to the HTTP method `POST`, but **also** to the HTTP method `GET`.
-3. The requirement for the route selector match to state patterns that are identical to the patterns stated by the HTTPRouteRule (partially or entirely) makes, e.g., a route selector such as `matches: { path: { type: PathPrefix, value: /foo } }` to select a HTTPRouteRule that defines `matches: { path: { type: PathPrefix, value: /foo }, method: GET }`, but **not** to select a HTTPRouteRule that only defines `matches: { method: GET }`, even though the latter includes technically all HTTP paths; **nor** it selects a HTTPRouteRule that only defines `matches: { path: { type: Exact, value: /foo } }`, even though all requests to the exact path `/foo` are also technically requests to `/foo*`.
-4. The atomicity property of fields of the route selectors makes, e.g., a route selector such as `matches: { path: { value: /foo } }` to select a HTTPRouteRule that defines `matches: { path: { value: /foo } }`, but **not** to select a HTTPRouteRule that only defines `matches: { path: { type: PathPrefix, value: /foo } }`. (This case may actually never happen because `PathPrefix` is the default value for `path.type` and will be set automatically by the Kubernetes API server.)
-
-Due to the nature of route selectors of defining pointers to HTTPRouteRules, the `routeSelectors` field is not supported in a RLP that targets a Gateway resource.
+Check out [Route selectors](reference/route-selectors.md) for a full description, semantics and API reference.
 
 #### `when` conditions
 
-`when` conditions can be used to scope a limit (i.e. to filter the traffic to which a limit definition applies) without any coupling to the underlying network topology, i.e. without making direct references to HTTPRouteRules via `routeSelectors`.
+`when` conditions can be used to scope a limit (i.e. to filter the traffic to which a limit definition applies) without any coupling to the underlying network topology, i.e. without making direct references to HTTPRouteRules via [`routeSelectors`](reference/route-selectors.md#the-routeselectors-field).
 
-The syntax of the `when` conditions selectors comply with Kuadrant's [Well-known Attributes (RFC 0002)](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md).
+Use `when` conditions to conditionally activate limits based on attributes that cannot be expressed in the HTTPRoutes' `spec.hostnames` and `spec.rules.matches` fields, or in general in RLPs that target a Gateway.
 
-Use the `when` conditions to conditionally activate limits based on attributes that cannot be expressed in the HTTPRoutes' `spec.hostnames` and `spec.rules.matches` fields, or in general in RLPs that target a Gateway.
+The selectors within the `when` conditions of a RateLimitPolicy are a subset of Kuadrant's Well-known Attributes ([RFC 0002](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md)). Check out the reference for the full list of supported selectors.
 
 ### Examples
 

@@ -16,9 +16,9 @@ if [ ! -f "$1" ]; then
 
   # GPG can hit "no route for host" if using IPv6 on mac (https://github.com/rvm/rvm/issues/4215#issuecomment-486609350)
   if [[ $OS == 'darwin' ]]; then
-    mkdir -p "/Users/runner/.gnupg"
+    mkdir -p "$HOME/.gnupg"
     echo "Disabling ipv6 for gpg on mac"
-    echo "disable-ipv6" >  /Users/runner/.gnupg/dirmngr.conf
+    echo "disable-ipv6" > $HOME/.gnupg/dirmngr.conf
     gpgconf --kill all
   fi
 

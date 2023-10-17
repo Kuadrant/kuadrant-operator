@@ -127,7 +127,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	authConfig.Spec.Hosts = hosts
 
 	// named patterns
-	if namedPatterns := ap.Spec.AuthScheme.NamedPatterns; len(namedPatterns) > 0 {
+	if namedPatterns := ap.Spec.NamedPatterns; len(namedPatterns) > 0 {
 		authConfig.Spec.NamedPatterns = namedPatterns
 	}
 
@@ -139,8 +139,8 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	if len(topLevelConditionsFromRouteSelectors) == 0 {
 		topLevelConditionsFromRouteSelectors = authorinoConditionsFromHTTPRoute(route)
 	}
-	if len(topLevelConditionsFromRouteSelectors) > 0 || len(ap.Spec.AuthScheme.Conditions) > 0 {
-		authConfig.Spec.Conditions = append(ap.Spec.AuthScheme.Conditions, topLevelConditionsFromRouteSelectors...)
+	if len(topLevelConditionsFromRouteSelectors) > 0 || len(ap.Spec.Conditions) > 0 {
+		authConfig.Spec.Conditions = append(ap.Spec.Conditions, topLevelConditionsFromRouteSelectors...)
 	}
 
 	// authentication

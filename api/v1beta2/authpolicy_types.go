@@ -15,16 +15,6 @@ import (
 )
 
 type AuthSchemeSpec struct {
-	// Named sets of patterns that can be referred in `when` conditions and in pattern-matching authorization policy rules.
-	// +optional
-	NamedPatterns map[string]authorinoapi.PatternExpressions `json:"patterns,omitempty"`
-
-	// Overall conditions for the AuthPolicy to be enforced.
-	// If omitted, the AuthPolicy will be enforced at all requests to the protected routes.
-	// If present, all conditions must match for the AuthPolicy to be enforced; otherwise, the authorization service skips the AuthPolicy and returns to the auth request with status OK.
-	// +optional
-	Conditions []authorinoapi.PatternExpressionOrRef `json:"when,omitempty"`
-
 	// Authentication configs.
 	// At least one config MUST evaluate to a valid identity object for the auth request to be successful.
 	// +optional
@@ -135,6 +125,16 @@ type AuthPolicySpec struct {
 	// If no route selectors are specified, the AuthPolicy will be enforced at all requests to the protected routes.
 	// +optional
 	RouteSelectors []RouteSelector `json:"routeSelectors,omitempty"`
+
+	// Named sets of patterns that can be referred in `when` conditions and in pattern-matching authorization policy rules.
+	// +optional
+	NamedPatterns map[string]authorinoapi.PatternExpressions `json:"patterns,omitempty"`
+
+	// Overall conditions for the AuthPolicy to be enforced.
+	// If omitted, the AuthPolicy will be enforced at all requests to the protected routes.
+	// If present, all conditions must match for the AuthPolicy to be enforced; otherwise, the authorization service skips the AuthPolicy and returns to the auth request with status OK.
+	// +optional
+	Conditions []authorinoapi.PatternExpressionOrRef `json:"when,omitempty"`
 
 	// The auth rules of the policy.
 	// See Authorino's AuthConfig CRD for more details.

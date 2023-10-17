@@ -542,30 +542,30 @@ var _ = Describe("AuthPolicy controller", func() {
 						Name:      testHTTPRouteName,
 						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
 					},
-					AuthScheme: api.AuthSchemeSpec{
-						NamedPatterns: map[string]authorinoapi.PatternExpressions{
-							"internal-source": []authorinoapi.PatternExpression{
-								{
-									Selector: "source.ip",
-									Operator: authorinoapi.PatternExpressionOperator("matches"),
-									Value:    `192\.168\..*`,
-								},
-							},
-							"authz-and-rl-required": []authorinoapi.PatternExpression{
-								{
-									Selector: "source.ip",
-									Operator: authorinoapi.PatternExpressionOperator("neq"),
-									Value:    "192.168.0.10",
-								},
-							},
-						},
-						Conditions: []authorinoapi.PatternExpressionOrRef{
+					NamedPatterns: map[string]authorinoapi.PatternExpressions{
+						"internal-source": []authorinoapi.PatternExpression{
 							{
-								PatternRef: authorinoapi.PatternRef{
-									Name: "internal-source",
-								},
+								Selector: "source.ip",
+								Operator: authorinoapi.PatternExpressionOperator("matches"),
+								Value:    `192\.168\..*`,
 							},
 						},
+						"authz-and-rl-required": []authorinoapi.PatternExpression{
+							{
+								Selector: "source.ip",
+								Operator: authorinoapi.PatternExpressionOperator("neq"),
+								Value:    "192.168.0.10",
+							},
+						},
+					},
+					Conditions: []authorinoapi.PatternExpressionOrRef{
+						{
+							PatternRef: authorinoapi.PatternRef{
+								Name: "internal-source",
+							},
+						},
+					},
+					AuthScheme: api.AuthSchemeSpec{
 						Authentication: map[string]api.AuthenticationSpec{
 							"jwt": {
 								AuthenticationSpec: authorinoapi.AuthenticationSpec{

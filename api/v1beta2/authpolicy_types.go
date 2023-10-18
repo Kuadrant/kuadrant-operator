@@ -182,6 +182,7 @@ func (s *AuthPolicyStatus) Equals(other *AuthPolicyStatus, logger logr.Logger) b
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=inherited"
 type AuthPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

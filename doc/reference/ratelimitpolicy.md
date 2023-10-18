@@ -4,7 +4,6 @@
 - [RateLimitPolicySpec](#ratelimitpolicyspec)
   - [Limit](#limit)
     - [RateLimit](#ratelimit)
-    - [RouteSelector](#routeselector)
     - [WhenCondition](#whencondition)
 - [RateLimitPolicyStatus](#ratelimitpolicystatus)
   - [ConditionSpec](#conditionspec)
@@ -25,12 +24,12 @@
 
 ### Limit
 
-| **Field**        | **Type**                          | **Required** | **Description**                                                                                                                                                                                                                                                                                                   |
-|------------------|-----------------------------------|:------------:|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `rates`          | [][RateLimit](#ratelimit)         | No           | List of rate limits associated with the limit definition                                                                                                                                                                                                                                                          |
-| `counters`       | []String                          | No           | List of rate limit counter qualifiers. Items must be a valid [Well-known attribute](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md). Each distinct value resolved in the data plane starts a separate counter for each rate limit.                                         |
-| `routeSelectors` | [][RouteSelector](#routeselector) | No           | List of selectors of HTTPRouteRules whose matching rules activate the limit. At least one HTTPRouteRule must be selected to activate the limit. If omitted, all HTTPRouteRules of the targeted HTTPRoute activate the limit. Do not use it in policies targeting a Gateway.                                       |
-| `when`           | [][WhenCondition](#whencondition) | No           | List of additional dynamic conditions (expressions) to activate the limit. All expression must evaluate to true for the limit to be applied. Use it for filterring attributes that cannot be expressed in the targeted HTTPRoute's `spec.hostnames` and `spec.rules.matches` fields, or when targeting a Gateway. |
+| **Field**        | **Type**                                            | **Required** | **Description**                                                                                                                                                                                                                                                                                                   |
+|------------------|-----------------------------------------------------|:------------:|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `rates`          | [][RateLimit](#ratelimit)                           | No           | List of rate limits associated with the limit definition                                                                                                                                                                                                                                                          |
+| `counters`       | []String                                            | No           | List of rate limit counter qualifiers. Items must be a valid [Well-known attribute](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md). Each distinct value resolved in the data plane starts a separate counter for each rate limit.                                         |
+| `routeSelectors` | [][RouteSelector](route-selectors.md#routeselector) | No           | List of selectors of HTTPRouteRules whose matching rules activate the limit. At least one HTTPRouteRule must be selected to activate the limit. If omitted, all HTTPRouteRules of the targeted HTTPRoute activate the limit. Do not use it in policies targeting a Gateway.                                       |
+| `when`           | [][WhenCondition](#whencondition)                   | No           | List of additional dynamic conditions (expressions) to activate the limit. All expression must evaluate to true for the limit to be applied. Use it for filterring attributes that cannot be expressed in the targeted HTTPRoute's `spec.hostnames` and `spec.rules.matches` fields, or when targeting a Gateway. |
 
 #### RateLimit
 
@@ -39,15 +38,6 @@
 | `limit`          | Number   | Yes          | Maximum value allowed within the given period of time (duration)                       |
 | `duration`       | Number   | Yes          | The period of time in the specified unit that the limit applies                        |
 | `unit`           | String   | Yes          | Unit of time for the duration of the limit. One-of: "second", "minute", "hour", "day". |
-
-#### RouteSelector
-
-| **Field**   | **Type**                                                                                                                       | **Required** | **Description**                                                             |
-|-------------|--------------------------------------------------------------------------------------------------------------------------------|:------------:|-----------------------------------------------------------------------------|
-| `hostnames` | [][Hostname](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.Hostname)             | No           | List of hostnames of the HTTPRoute that activate the limit                  |
-| `matches`   | [][HTTPRouteMatch](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteMatch) | No           | List of selectors of HTTPRouteRules whose matching rules activate the limit |
-
-Check out _Kuadrant Rate Limiting > [Route selectors](rate-limiting.md#route-selectors)_ for the semantics of how route selectors work.
 
 #### WhenCondition
 

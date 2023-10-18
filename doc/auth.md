@@ -2,10 +2,10 @@
 
 A Kuadrant AuthPolicy custom resource:
 
-1. Allows it to target Gateway API networking resources such as [HTTPRoutes](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRoute) and [Gateways](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1beta1.Gateway), using these resources to obtain additional context, i.e., which traffic workload (HTTP attributes, hostnames, user attributes, etc) to enforce auth.
-2. Allows to specify which specific subsets of the targeted network resource to apply the auth rules to.
+1. Targets Gateway API networking resources such as [HTTPRoutes](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRoute) and [Gateways](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1beta1.Gateway), using these resources to obtain additional context, i.e., which traffic workload (HTTP attributes, hostnames, user attributes, etc) to enforce auth.
+2. Supports targeting subsets (sections) of a network resource to apply the auth rules to.
 3. Abstracts the details of the underlying external authorization protocol and configuration resources, that have a much broader remit and surface area.
-4. Supports cluster operators to set overrides (soon) and defaults that govern what can be done at the lower levels.
+4. Enables cluster operators to set defaults that govern behavior at the lower levels of the network, until a more specific policy is applied.
 
 ## How it works
 
@@ -28,7 +28,7 @@ The `AuthPolicy` spec includes the following parts:
 * Authentication/authorization scheme (`spec.rules`)
 * Top-level route selectors (`spec.routeSelectors`)
 * Top-level additional conditions (`spec.when`)
-* List of stored named patterns (`spec.patterns`)
+* List of named patterns (`spec.patterns`)
 
 The auth scheme specify rules for:
 * Authentication (`spec.rules.authentication`)
@@ -37,7 +37,7 @@ The auth scheme specify rules for:
 * Custom response items (`spec.rules.response`)
 * Callbacks (`spec.rules.callbacks`)
 
-where each auth rule can declare specific `routeSelectors` and `when` conditions for the rule to apply.
+Each auth rule can declare specific `routeSelectors` and `when` conditions for the rule to apply.
 
 #### High-level example and field definition
 
@@ -47,94 +47,97 @@ kind: AuthPolicy
 metadata:
   name: my-auth-policy
 spec:
-  # reference to an existing networking resource to attach the policy to
-  # it can be a Gateway API HTTPRoute or Gateway resource
-  # it can only refer to objects in the same namespace as the AuthPolicy
+  # Reference to an existing networking resource to attach the policy to.
+  # It can be a Gateway API HTTPRoute or Gateway resource.
+  # It can only refer to objects in the same namespace as the AuthPolicy.
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute / Gateway
     name: myroute / mygateway
 
-  # (optional) selectors of HTTPRouteRules within the targeted HTTPRoute that activate the AuthPolicy
-  # each element contains a HTTPRouteMatch object that will be used to select HTTPRouteRules that include at least one identical HTTPRouteMatch
-  # the HTTPRouteMatch part does not have to be fully identical, but the what's stated in the selector must be identically stated in the HTTPRouteRule
-  # do not use it on AuthPolicies that target a Gateway
+  # Selectors of HTTPRouteRules within the targeted HTTPRoute that activate the AuthPolicy.
+  # Each element contains a HTTPRouteMatch object that will be used to select HTTPRouteRules that include at least
+  # one identical HTTPRouteMatch.
+  # The HTTPRouteMatch part does not have to be fully identical, but the what's stated in the selector must be
+  # identically stated in the HTTPRouteRule.
+  # Do not use it on AuthPolicies that target a Gateway.
   routeSelectors:
   - matches:
     - path:
         type: PathPrefix
         value: "/admin"
 
-  # (optional) additional dynamic conditions to trigger the AuthPolicy.
-  # use it for filterring attributes not supported by HTTPRouteRule or with AuthPolicies that target a Gateway
-  # check out Kuadrant RFC 0002 (https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md) to learn more about the Well-known Attributes that can be used in this field
+  # Additional dynamic conditions to trigger the AuthPolicy.
+  # Use it for filterring attributes not supported by HTTPRouteRule or with AuthPolicies that target a Gateway.
+  # Check out https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md to learn more
+  # about the Well-known Attributes that can be used in this field.
   when: […]
 
-  # the auth rules to apply to the network traffic routed through the targeted resource
+  # The auth rules to apply to the network traffic routed through the targeted resource
   rules:
-    # (optional) authentication rules to enforce.
-    # at least one config must evaluate to a valid identity object for the auth request to be successful.
-    # if omitted or empty, anonymous access is assumed.
+    # Authentication rules to enforce.
+    # At least one config must evaluate to a valid identity object for the auth request to be successful.
+    # If omitted or empty, anonymous access is assumed.
     authentication:
       "my-authn-rule":
-        # the authentication method of this rule
-        # one-of: apiKey, jwt, oauth2Introspection, kubernetesTokenReview, x509, plain, anonymous
+        # The authentication method of this rule.
+        # One-of: apiKey, jwt, oauth2Introspection, kubernetesTokenReview, x509, plain, anonymous.
         apiKey: {…}
 
-        # (optional) where credentials are required to be passed in the request for authentication based on this rule
-        # one-of: authorizationHeader, customHeader, queryString, cookie
+        # Where credentials are required to be passed in the request for authentication based on this rule.
+        # One-of: authorizationHeader, customHeader, queryString, cookie.
         credentials:
           authorizationHeader:
             prefix: APIKEY
 
-        # (optional) rule-level route selectors
+        # Rule-level route selectors.
         routeSelectors: […]
 
-        # (optional) rule-level additional conditions
+        # Rule-level additional conditions.
         when: […]
 
-        # (optional) configs for caching the resolved object returned out of evaluating this auth rule
+        # Configs for caching the resolved object returned out of evaluating this auth rule.
         cache: {…}
 
-    # (optional) rules for fetching auth metadata from external sources.
+    # Rules for fetching auth metadata from external sources.
     metadata:
       "my-external-source":
-        # the method for fetching metadata from the external source
-        # one-of: http: userInfo, uma
+        # The method for fetching metadata from the external source.
+        # One-of: http: userInfo, uma.
         http: {…}
 
-    # (optional) authorization rules to enforce.
-    # all policies must allow access for the auth request be successful.
+    # Authorization rules to enforce.
+    # All policies must allow access for the auth request be successful.
     authorization:
       "my-authz-rule":
-        # the authorization method of this rule
-        # one-of: patternMatching, opa, kubernetesSubjectAccessReview, spicedb
+        # The authorization method of this rule.
+        # One-of: patternMatching, opa, kubernetesSubjectAccessReview, spicedb.
         opa: {…}
 
-    # (optional) customizations to the authorization response
+    # Customizations to the authorization response.
     response:
-      # custom denial status and other HTTP attributes for unauthenticated requests.
+      # Custom denial status and other HTTP attributes for unauthenticated requests.
       unauthenticated: {…}
 
-      # custom denial status and other HTTP attributes for unauhtorized requests.
+      # Custom denial status and other HTTP attributes for unauhtorized requests.
       unauthorized: {…}
 
-      # custom response items when access is granted.
+      # Custom response items when access is granted.
       success:
-        # custom response items wrapped as HTTP headers to be injected in the request
+        # Custom response items wrapped as HTTP headers to be injected in the request
         headers:
           "my-custom-header":
-            # one-of: plain, json, wristband
+            # One-of: plain, json, wristband.
             plain: {…}
 
-        # custom response items wrapped as envoy dynamic metadata
+        # Custom response items wrapped as envoy dynamic metadata.
         dynamicMetadata:
-          # one-of: plain, json, wristband
+          # One-of: plain, json, wristband.
           "my-custom-dyn-metadata":
             json: {…}
 
-    # (optional) rules for post-authorization callback requests to external services.
-    # triggered regardless of the result of the authorization request.
+    # Rules for post-authorization callback requests to external services.
+    # Triggered regardless of the result of the authorization request.
     callbacks:
       "my-webhook":
         http: {…}
@@ -269,7 +272,7 @@ Expected behavior:
 
 ### Route selectors
 
-Route selectors allow to target sections of a HTTPRoute, by specifying sets of HTTPRouteMatches and/or hostnames that make the policy controller look up within the HTTPRoute spec for compatible declarations, and select the corresponding HTTPRouteRules and hostnames, to then build conditions that activate the policy or policy rule.
+Route selectors allow targeting sections of a HTTPRoute, by specifying sets of HTTPRouteMatches and/or hostnames that make the policy controller look up within the HTTPRoute spec for compatible declarations, and select the corresponding HTTPRouteRules and hostnames, to then build conditions that activate the policy or policy rule.
 
 Check out [Route selectors](reference/route-selectors.md) for a full description, semantics and API reference.
 

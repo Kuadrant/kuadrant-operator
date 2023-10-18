@@ -9,7 +9,7 @@
     - [AuthorizationRule](#authorizationrule)
     - [ResponseSpec](#responsespec)
       - [SuccessResponseSpec](#successresponsespec)
-      - [SuccessResponseItem](#successresponseitem)
+        - [SuccessResponseItem](#successresponseitem)
     - [CallbackRule](#callbackrule)
   - [NamedPattern](#namedpattern)
 - [AuthPolicyStatus](#authpolicystatus)
@@ -102,7 +102,7 @@
 | `headers`         | Map<String: [SuccessResponseItem](#successresponseitem)> | No           | Custom success response items wrapped as HTTP headers to be injected in the request.                                                              |
 | `dynamicMetadata` | Map<String: [SuccessResponseItem](#successresponseitem)> | No           | Custom success response items wrapped as Envoy Dynamic Metadata. Use it to pass data along to other proxy filters, such as the rate-limit filter. |
 
-##### SuccessResponseItem
+###### SuccessResponseItem
 
 | **Field**   | **Type**                                                                                                                                                             | **Required** | **Description**                                                                                                                                                               |
 |-------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------------:|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|

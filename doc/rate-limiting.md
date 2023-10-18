@@ -2,10 +2,10 @@
 
 A Kuadrant RateLimitPolicy custom resource, often abbreviated "RLP":
 
-1. Allows it to target Gateway API networking resources such as [HTTPRoutes](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRoute) and [Gateways](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1beta1.Gateway), using these resources to obtain additional context, i.e., which traffic workload (HTTP attributes, hostnames, user attributes, etc) to rate limit.
-2. Allows to specify which specific subsets of the targeted network resource to apply the limits to.
+1. Targets Gateway API networking resources such as [HTTPRoutes](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRoute) and [Gateways](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1beta1.Gateway), using these resources to obtain additional context, i.e., which traffic workload (HTTP attributes, hostnames, user attributes, etc) to rate limit.
+2. Supports targeting subsets (sections) of a network resource resource to apply the limits to.
 3. Abstracts the details of the underlying Rate Limit protocol and configuration resources, that have a much broader remit and surface area.
-4. Supports cluster operators to set overrides (soon) and defaults that govern what can be done at the lower levels.
+4. Enables cluster operators to set defaults that govern behavior at the lower levels of the network, until a more specific policy is applied.
 
 ## How it works
 
@@ -228,7 +228,7 @@ spec:
 
 ### Route selectors
 
-Route selectors allow to target sections of a HTTPRoute, by specifying sets of HTTPRouteMatches and/or hostnames that make the policy controller look up within the HTTPRoute spec for compatible declarations, and select the corresponding HTTPRouteRules and hostnames, to then build conditions that activate the policy or policy rule.
+Route selectors allow targeting sections of a HTTPRoute, by specifying sets of HTTPRouteMatches and/or hostnames that make the policy controller look up within the HTTPRoute spec for compatible declarations, and select the corresponding HTTPRouteRules and hostnames, to then build conditions that activate the policy or policy rule.
 
 Check out [Route selectors](reference/route-selectors.md) for a full description, semantics and API reference.
 

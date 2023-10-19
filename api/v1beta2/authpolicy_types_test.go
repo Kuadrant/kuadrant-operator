@@ -11,6 +11,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
@@ -236,6 +237,209 @@ func TestAuthPolicyGetRulesHostnames(t *testing.T) {
 	}
 	if expected := "toystore.kuadrant.io"; result[9] != expected {
 		t.Errorf("Expected hostname to be %s, got %s", expected, result[9])
+	}
+}
+
+func TestAuthPolicyValidate(t *testing.T) {
+	testCases := []struct {
+		name    string
+		policy  *AuthPolicy
+		valid   bool
+		message string
+	}{
+		{
+			name: "valid policy targeting a httproute",
+			policy: &AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: "my-namespace",
+				},
+				Spec: AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "HTTPRoute",
+						Name:  "my-route",
+					},
+				},
+			},
+			valid: true,
+		},
+		{
+			name: "valid policy targeting a gateway",
+			policy: &AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: "my-namespace",
+				},
+				Spec: AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+				},
+			},
+			valid: true,
+		},
+		{
+			name: "invalid targetRef group",
+			policy: &AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: "my-namespace",
+				},
+				Spec: AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "not-gateway.networking.k8s.io.group",
+						Kind:  "HTTPRoute",
+						Name:  "my-non-gwapi-route",
+					},
+				},
+			},
+			message: "invalid targetRef.Group not-gateway.networking.k8s.io.group. The only supported group is gateway.networking.k8s.io",
+		},
+		{
+			name: "invalid targetRef kind",
+			policy: &AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: "my-namespace",
+				},
+				Spec: AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "TCPRoute",
+						Name:  "my-tcp-route",
+					},
+				},
+			},
+			message: "invalid targetRef.Kind TCPRoute. The only supported kinds are HTTPRoute and Gateway",
+		},
+		{
+			name: "invalid usage of top-level route selectors with a gateway targetRef",
+			policy: &AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: "my-namespace",
+				},
+				Spec: AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					RouteSelectors: []RouteSelector{
+						{
+							Hostnames: []gatewayapiv1beta1.Hostname{"*.foo.io"},
+							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+								{
+									Path: &gatewayapiv1beta1.HTTPPathMatch{
+										Value: ptr.To("/foo"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			message: "route selectors not supported when targeting a Gateway",
+		},
+		{
+			name: "invalid usage of config-level route selectors with a gateway targetRef",
+			policy: &AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: "my-namespace",
+				},
+				Spec: AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					AuthScheme: AuthSchemeSpec{
+						Authentication: map[string]AuthenticationSpec{
+							"my-rule": {
+								AuthenticationSpec: authorinoapi.AuthenticationSpec{
+									AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+										AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
+									},
+								},
+								CommonAuthRuleSpec: CommonAuthRuleSpec{
+									RouteSelectors: []RouteSelector{
+										{
+											Hostnames: []gatewayapiv1beta1.Hostname{"*.foo.io"},
+											Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+												{
+													Path: &gatewayapiv1beta1.HTTPPathMatch{
+														Value: ptr.To("/foo"),
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			message: "route selectors not supported when targeting a Gateway",
+		},
+		{
+			name: "invalid targetRef namespace",
+			policy: &AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: "my-namespace",
+				},
+				Spec: AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "HTTPRoute",
+						Name:      "my-route",
+						Namespace: ptr.To(gatewayapiv1beta1.Namespace("other-namespace")),
+					},
+					AuthScheme: AuthSchemeSpec{
+						Authentication: map[string]AuthenticationSpec{
+							"my-rule": {
+								AuthenticationSpec: authorinoapi.AuthenticationSpec{
+									AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+										AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
+									},
+								},
+								CommonAuthRuleSpec: CommonAuthRuleSpec{
+									RouteSelectors: []RouteSelector{
+										{
+											Hostnames: []gatewayapiv1beta1.Hostname{"*.foo.io"},
+											Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+												{
+													Path: &gatewayapiv1beta1.HTTPPathMatch{
+														Value: ptr.To("/foo"),
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			message: "invalid targetRef.Namespace other-namespace. Currently only supporting references to the same namespace",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tc.policy.Validate()
+			if tc.valid && result != nil {
+				t.Errorf("Expected policy to be valid, got %t", result)
+			}
+			if !tc.valid && result == nil {
+				t.Error("Expected policy to be invalid, got no validation error")
+			}
+		})
 	}
 }
 

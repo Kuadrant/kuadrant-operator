@@ -203,25 +203,6 @@ func (ap *AuthPolicy) TargetKey() client.ObjectKey {
 	}
 }
 
-//+kubebuilder:object:root=true
-
-// AuthPolicyList contains a list of AuthPolicy
-type AuthPolicyList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []AuthPolicy `json:"items"`
-}
-
-func (l *AuthPolicyList) GetItems() []common.KuadrantPolicy {
-	return common.Map(l.Items, func(item AuthPolicy) common.KuadrantPolicy {
-		return &item
-	})
-}
-
-func init() {
-	SchemeBuilder.Register(&AuthPolicy{}, &AuthPolicyList{})
-}
-
 func (ap *AuthPolicy) Validate() error {
 	if ap.Spec.TargetRef.Group != ("gateway.networking.k8s.io") {
 		return fmt.Errorf("invalid targetRef.Group %s. The only supported group is gateway.networking.k8s.io", ap.Spec.TargetRef.Group)
@@ -238,6 +219,37 @@ func (ap *AuthPolicy) Validate() error {
 	if ap.Spec.TargetRef.Namespace != nil && string(*ap.Spec.TargetRef.Namespace) != ap.Namespace {
 		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *ap.Spec.TargetRef.Namespace)
 	}
+
+	// prevents usage of routeSelectors in a gateway AuthPolicy
+	if ap.Spec.TargetRef.Kind == ("Gateway") {
+		containRouteSelectors := func(config map[string]RouteSelectorsGetter) bool {
+			if config == nil {
+				return false
+			}
+			for _, config := range config {
+				if len(config.GetRouteSelectors()) > 0 {
+					return true
+				}
+			}
+			return false
+		}
+		configs := []map[string]RouteSelectorsGetter{
+			{"": ap.Spec},
+			toRouteSelectorGetterMap(ap.Spec.AuthScheme.Authentication),
+			toRouteSelectorGetterMap(ap.Spec.AuthScheme.Metadata),
+			toRouteSelectorGetterMap(ap.Spec.AuthScheme.Authorization),
+			toRouteSelectorGetterMap(ap.Spec.AuthScheme.Callbacks),
+		}
+		if r := ap.Spec.AuthScheme.Response; r != nil {
+			configs = append(configs, toRouteSelectorGetterMap(r.Success.Headers), toRouteSelectorGetterMap(r.Success.DynamicMetadata))
+		}
+		for _, config := range configs {
+			if containRouteSelectors(config) {
+				return fmt.Errorf("route selectors not supported when targeting a Gateway")
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -282,4 +294,31 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 	}
 
 	return
+}
+
+//+kubebuilder:object:root=true
+
+// AuthPolicyList contains a list of AuthPolicy
+type AuthPolicyList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []AuthPolicy `json:"items"`
+}
+
+func (l *AuthPolicyList) GetItems() []common.KuadrantPolicy {
+	return common.Map(l.Items, func(item AuthPolicy) common.KuadrantPolicy {
+		return &item
+	})
+}
+
+func init() {
+	SchemeBuilder.Register(&AuthPolicy{}, &AuthPolicyList{})
+}
+
+func toRouteSelectorGetterMap[T RouteSelectorsGetter](m map[string]T) map[string]RouteSelectorsGetter {
+	result := make(map[string]RouteSelectorsGetter)
+	for k, v := range m {
+		result[k] = v
+	}
+	return result
 }

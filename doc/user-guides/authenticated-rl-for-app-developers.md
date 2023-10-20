@@ -110,7 +110,7 @@ Create a Kuadrant `AuthPolicy` to configure the authentication:
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta1
+apiVersion: kuadrant.io/v1beta2
 kind: AuthPolicy
 metadata:
   name: toystore
@@ -119,27 +119,28 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
+  routes:
+  - paths:
+    - "/toy"
   rules:
-  - paths: ["/toy"]
-  authScheme:
-    identity:
-    - name: api-key-users
-      apiKey:
-        selector:
-          matchLabels:
-            app: toystore
-        allNamespaces: true
+    authentication:
+      "api-key-users":
+        apiKey:
+          selector:
+            matchLabels:
+              app: toystore
+          allNamespaces: true
       credentials:
-        in: authorization_header
-        keySelector: APIKEY
+        authorizationHeader:
+          prefix: APIKEY
     response:
-    - name: identity
-      json:
-        properties:
-        - name: userid
-          valueFrom:
-            authJSON: auth.identity.metadata.annotations.secret\.kuadrant\.io/user-id
-      wrapper: envoyDynamicMetadata
+      success:
+        dynamicMetadata:
+          "identity":
+            json:
+              properties:
+                "userid":
+                  selector: auth.identity.metadata.annotations.secret\.kuadrant\.io/user-id
 EOF
 ```
 

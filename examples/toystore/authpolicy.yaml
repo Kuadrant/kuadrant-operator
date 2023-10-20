@@ -1,5 +1,5 @@
 ---
-apiVersion: kuadrant.io/v1beta1
+apiVersion: kuadrant.io/v1beta2
 kind: AuthPolicy
 metadata:
   name: toystore
@@ -9,28 +9,29 @@ spec:
     kind: HTTPRoute
     name: toystore
   rules:
-  - methods: ["DELETE", "POST"]
-    paths: ["/admin*"]
-  authScheme:
-    identity:
-    - name: apikey
-      apiKey:
-        selector:
-          matchLabels:
-            app: toystore
+    routeSelectors:
+    - matches:
+      - path:
+          type: Exact
+          value: "/admin/toy"
+        method: DELETE
+    authentication:
+      "apikey":
+        apiKey:
+          selector:
+            matchLabels:
+              app: toystore
       credentials:
         in: authorization_header
         keySelector: APIKEY
     response:
-    - json:
-        properties:
-          - name: user-id
-            value: null
-            valueFrom:
-              authJSON: auth.identity.metadata.annotations.secret\.kuadrant\.io/user-id
-      name: rate-limit-apikey
-      wrapper: envoyDynamicMetadata
-      wrapperKey: ext_auth_data
+      success:
+        dynamicMetadata:
+          "ext_auth_data":
+            json:
+              properties:
+                "user-id":
+                  selector: auth.identity.metadata.annotations.secret\.kuadrant\.io/user-id
 ---
 apiVersion: kuadrant.io/v1beta1
 kind: AuthPolicy
@@ -43,15 +44,13 @@ spec:
     kind: Gateway
     name: istio-ingressgateway
   rules:
-  - hosts: ["*.toystore.com"]
-  authScheme:
-    identity:
-      - name: apikey
+    authentication:
+      "apikey":
         apiKey:
           selector:
             matchLabels:
               app: toystore
               admin: "yes"
         credentials:
-          in: authorization_header
-          keySelector: APIKEY
+          authorizationHeader:
+            prefix: APIKEY

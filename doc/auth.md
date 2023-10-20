@@ -68,7 +68,7 @@ spec:
         value: "/admin"
 
   # Additional dynamic conditions to trigger the AuthPolicy.
-  # Use it for filterring attributes not supported by HTTPRouteRule or with AuthPolicies that target a Gateway.
+  # Use it for filtering attributes not supported by HTTPRouteRule or with AuthPolicies that target a Gateway.
   # Check out https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md to learn more
   # about the Well-known Attributes that can be used in this field.
   when: […]

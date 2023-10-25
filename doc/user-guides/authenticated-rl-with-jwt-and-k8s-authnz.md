@@ -136,9 +136,9 @@ spec:
         kubernetesTokenReview:
           audiences:
           - https://kubernetes.default.svc.cluster.local
-      overrides:
-        "sub":
-          selector: auth.identity.user.username
+        overrides:
+          "sub":
+            selector: auth.identity.user.username
     authorization:
       "k8s-rbac":
         kubernetesSubjectAccessReview:

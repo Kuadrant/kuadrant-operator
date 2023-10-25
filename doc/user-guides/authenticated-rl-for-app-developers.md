@@ -119,9 +119,6 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
-  routes:
-  - paths:
-    - "/toy"
   rules:
     authentication:
       "api-key-users":
@@ -130,9 +127,9 @@ spec:
             matchLabels:
               app: toystore
           allNamespaces: true
-      credentials:
-        authorizationHeader:
-          prefix: APIKEY
+        credentials:
+          authorizationHeader:
+            prefix: APIKEY
     response:
       success:
         dynamicMetadata:
@@ -235,13 +232,13 @@ Verify the rate limiting works by sending requests as Alice and Bob.
 Up to 5 successful (`200 OK`) requests every 10 seconds allowed for Alice, then `429 Too Many Requests`:
 
 ```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H 'Authorization: APIKEY IAMALICE' -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Authorization: APIKEY IAMALICE' -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
 Up to 2 successful (`200 OK`) requests every 10 seconds allowed for Bob, then `429 Too Many Requests`:
 
 ```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H 'Authorization: APIKEY IAMBOB' -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Authorization: APIKEY IAMBOB' -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
 ## Cleanup

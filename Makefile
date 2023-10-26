@@ -412,7 +412,6 @@ bundle: $(OPM) $(YQ) manifests kustomize operator-sdk ## Generate bundle manifes
 	V="kuadrant-operator.v$(BUNDLE_VERSION)" $(YQ) eval '.metadata.name = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
 	V="$(BUNDLE_VERSION)" $(YQ) eval '.spec.version = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
 	V="$(IMG)" $(YQ) eval '.metadata.annotations.containerImage = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
-	V="kuadrant-operator.v$(REPLACES_VERSION)" $(YQ) eval '.spec.replaces = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
 	# Generate bundle
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)
 	# Update operator dependencies

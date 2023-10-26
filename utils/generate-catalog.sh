@@ -84,6 +84,6 @@ cat ${TMP_DIR}/kuadrant-operator-bundle.yaml >> ${CATALOG_FILE}
 NAME=`${YQ} eval '.name' ${TMP_DIR}/kuadrant-operator-bundle.yaml` \
 REPLACES=kuadrant-operator.v${REPLACES_VERSION} \
 CHANNELS=${CHANNELS} \
-    ${YQ} eval '(.entries[0].name = strenv(NAME)) | (.entries[0].replaces = strenv(REPLACES)) | (.name = strenv(CHANNELS))' ${CATALOG_BASEDIR}/kuadrant-operator-channel-entry.yaml >> ${CATALOG_FILE}
+    ${YQ} eval '(.entries[0].name = strenv(NAME)) | (.name = strenv(CHANNELS))' ${CATALOG_BASEDIR}/kuadrant-operator-channel-entry.yaml >> ${CATALOG_FILE}
 
 rm -rf $TMP_DIR

@@ -77,12 +77,12 @@ spec:
                   the protected routes.
                 items:
                   description: RouteSelector defines semantics for matching an HTTP
-                    request based on conditions https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                    request based on conditions https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                   properties:
                     hostnames:
                       description: Hostnames defines a set of hostname that should
                         match against the HTTP Host header to select a HTTPRoute to
-                        process the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                        process the request https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                       items:
                         description: "Hostname is the fully qualified domain name
                           of a network host. This matches the RFC 1123 definition
@@ -104,7 +104,7 @@ spec:
                       type: array
                     matches:
                       description: Matches define conditions used for matching the
-                        rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                        rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                       items:
                         description: "HTTPRouteMatch defines the predicate used to
                           match requests to a given action. Multiple match types are
@@ -212,6 +212,52 @@ spec:
                                 maxLength: 1024
                                 type: string
                             type: object
+                            x-kubernetes-validations:
+                            - message: value must be an absolute path and start with
+                                '/' when type one of ['Exact', 'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? self.value.startsWith(''/'')
+                                : true'
+                            - message: must not contain '//' when type one of ['Exact',
+                                'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? !self.value.contains(''//'')
+                                : true'
+                            - message: must not contain '/./' when type one of ['Exact',
+                                'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? !self.value.contains(''/./'')
+                                : true'
+                            - message: must not contain '/../' when type one of ['Exact',
+                                'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? !self.value.contains(''/../'')
+                                : true'
+                            - message: must not contain '%2f' when type one of ['Exact',
+                                'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? !self.value.contains(''%2f'')
+                                : true'
+                            - message: must not contain '%2F' when type one of ['Exact',
+                                'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? !self.value.contains(''%2F'')
+                                : true'
+                            - message: must not contain '#' when type one of ['Exact',
+                                'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? !self.value.contains(''#'')
+                                : true'
+                            - message: must not end with '/..' when type one of ['Exact',
+                                'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? !self.value.endsWith(''/..'')
+                                : true'
+                            - message: must not end with '/.' when type one of ['Exact',
+                                'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? !self.value.endsWith(''/.'')
+                                : true'
+                            - message: type must be one of ['Exact', 'PathPrefix',
+                                'RegularExpression']
+                              rule: self.type in ['Exact','PathPrefix'] || self.type
+                                == 'RegularExpression'
+                            - message: must only contain valid characters (matching
+                                ^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$)
+                                for types ['Exact', 'PathPrefix']
+                              rule: '(self.type in [''Exact'',''PathPrefix'']) ? self.value.matches(r"""^(?:[-A-Za-z0-9/._~!$&''()*+,;=:@]|[%][0-9a-fA-F]{2})+$""")
+                                : true'
                           queryParams:
                             description: "QueryParams specifies HTTP query parameter
                               matchers. Multiple match values are ANDed together,
@@ -242,6 +288,7 @@ spec:
                                     differences in the implementations."
                                   maxLength: 256
                                   minLength: 1
+                                  pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
                                   type: string
                                 type:
                                   default: Exact
@@ -564,12 +611,12 @@ spec:
                             evaluated at all requests to the protected routes.
                           items:
                             description: RouteSelector defines semantics for matching
-                              an HTTP request based on conditions https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                              an HTTP request based on conditions https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                             properties:
                               hostnames:
                                 description: Hostnames defines a set of hostname that
                                   should match against the HTTP Host header to select
-                                  a HTTPRoute to process the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                  a HTTPRoute to process the request https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                 items:
                                   description: "Hostname is the fully qualified domain
                                     name of a network host. This matches the RFC 1123
@@ -593,7 +640,7 @@ spec:
                                 type: array
                               matches:
                                 description: Matches define conditions used for matching
-                                  the rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                  the rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                 items:
                                   description: "HTTPRouteMatch defines the predicate
                                     used to match requests to a given action. Multiple
@@ -710,6 +757,54 @@ spec:
                                           maxLength: 1024
                                           type: string
                                       type: object
+                                      x-kubernetes-validations:
+                                      - message: value must be an absolute path and
+                                          start with '/' when type one of ['Exact',
+                                          'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? self.value.startsWith(''/'') : true'
+                                      - message: must not contain '//' when type one
+                                          of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''//'') : true'
+                                      - message: must not contain '/./' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''/./'') : true'
+                                      - message: must not contain '/../' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''/../'') : true'
+                                      - message: must not contain '%2f' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''%2f'') : true'
+                                      - message: must not contain '%2F' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''%2F'') : true'
+                                      - message: must not contain '#' when type one
+                                          of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''#'') : true'
+                                      - message: must not end with '/..' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.endsWith(''/..'') : true'
+                                      - message: must not end with '/.' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.endsWith(''/.'') : true'
+                                      - message: type must be one of ['Exact', 'PathPrefix',
+                                          'RegularExpression']
+                                        rule: self.type in ['Exact','PathPrefix']
+                                          || self.type == 'RegularExpression'
+                                      - message: must only contain valid characters
+                                          (matching ^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$)
+                                          for types ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? self.value.matches(r"""^(?:[-A-Za-z0-9/._~!$&''()*+,;=:@]|[%][0-9a-fA-F]{2})+$""")
+                                          : true'
                                     queryParams:
                                       description: "QueryParams specifies HTTP query
                                         parameter matchers. Multiple match values
@@ -746,6 +841,7 @@ spec:
                                               potential differences in the implementations."
                                             maxLength: 256
                                             minLength: 1
+                                            pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
                                             type: string
                                           type:
                                             default: Exact
@@ -1421,12 +1517,12 @@ spec:
                             evaluated at all requests to the protected routes.
                           items:
                             description: RouteSelector defines semantics for matching
-                              an HTTP request based on conditions https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                              an HTTP request based on conditions https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                             properties:
                               hostnames:
                                 description: Hostnames defines a set of hostname that
                                   should match against the HTTP Host header to select
-                                  a HTTPRoute to process the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                  a HTTPRoute to process the request https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                 items:
                                   description: "Hostname is the fully qualified domain
                                     name of a network host. This matches the RFC 1123
@@ -1450,7 +1546,7 @@ spec:
                                 type: array
                               matches:
                                 description: Matches define conditions used for matching
-                                  the rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                  the rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                 items:
                                   description: "HTTPRouteMatch defines the predicate
                                     used to match requests to a given action. Multiple
@@ -1567,6 +1663,54 @@ spec:
                                           maxLength: 1024
                                           type: string
                                       type: object
+                                      x-kubernetes-validations:
+                                      - message: value must be an absolute path and
+                                          start with '/' when type one of ['Exact',
+                                          'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? self.value.startsWith(''/'') : true'
+                                      - message: must not contain '//' when type one
+                                          of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''//'') : true'
+                                      - message: must not contain '/./' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''/./'') : true'
+                                      - message: must not contain '/../' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''/../'') : true'
+                                      - message: must not contain '%2f' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''%2f'') : true'
+                                      - message: must not contain '%2F' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''%2F'') : true'
+                                      - message: must not contain '#' when type one
+                                          of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''#'') : true'
+                                      - message: must not end with '/..' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.endsWith(''/..'') : true'
+                                      - message: must not end with '/.' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.endsWith(''/.'') : true'
+                                      - message: type must be one of ['Exact', 'PathPrefix',
+                                          'RegularExpression']
+                                        rule: self.type in ['Exact','PathPrefix']
+                                          || self.type == 'RegularExpression'
+                                      - message: must only contain valid characters
+                                          (matching ^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$)
+                                          for types ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? self.value.matches(r"""^(?:[-A-Za-z0-9/._~!$&''()*+,;=:@]|[%][0-9a-fA-F]{2})+$""")
+                                          : true'
                                     queryParams:
                                       description: "QueryParams specifies HTTP query
                                         parameter matchers. Multiple match values
@@ -1603,6 +1747,7 @@ spec:
                                               potential differences in the implementations."
                                             maxLength: 256
                                             minLength: 1
+                                            pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
                                             type: string
                                           type:
                                             default: Exact
@@ -2090,12 +2235,12 @@ spec:
                             evaluated at all requests to the protected routes.
                           items:
                             description: RouteSelector defines semantics for matching
-                              an HTTP request based on conditions https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                              an HTTP request based on conditions https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                             properties:
                               hostnames:
                                 description: Hostnames defines a set of hostname that
                                   should match against the HTTP Host header to select
-                                  a HTTPRoute to process the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                  a HTTPRoute to process the request https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                 items:
                                   description: "Hostname is the fully qualified domain
                                     name of a network host. This matches the RFC 1123
@@ -2119,7 +2264,7 @@ spec:
                                 type: array
                               matches:
                                 description: Matches define conditions used for matching
-                                  the rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                  the rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                 items:
                                   description: "HTTPRouteMatch defines the predicate
                                     used to match requests to a given action. Multiple
@@ -2236,6 +2381,54 @@ spec:
                                           maxLength: 1024
                                           type: string
                                       type: object
+                                      x-kubernetes-validations:
+                                      - message: value must be an absolute path and
+                                          start with '/' when type one of ['Exact',
+                                          'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? self.value.startsWith(''/'') : true'
+                                      - message: must not contain '//' when type one
+                                          of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''//'') : true'
+                                      - message: must not contain '/./' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''/./'') : true'
+                                      - message: must not contain '/../' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''/../'') : true'
+                                      - message: must not contain '%2f' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''%2f'') : true'
+                                      - message: must not contain '%2F' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''%2F'') : true'
+                                      - message: must not contain '#' when type one
+                                          of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''#'') : true'
+                                      - message: must not end with '/..' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.endsWith(''/..'') : true'
+                                      - message: must not end with '/.' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.endsWith(''/.'') : true'
+                                      - message: type must be one of ['Exact', 'PathPrefix',
+                                          'RegularExpression']
+                                        rule: self.type in ['Exact','PathPrefix']
+                                          || self.type == 'RegularExpression'
+                                      - message: must only contain valid characters
+                                          (matching ^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$)
+                                          for types ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? self.value.matches(r"""^(?:[-A-Za-z0-9/._~!$&''()*+,;=:@]|[%][0-9a-fA-F]{2})+$""")
+                                          : true'
                                     queryParams:
                                       description: "QueryParams specifies HTTP query
                                         parameter matchers. Multiple match values
@@ -2272,6 +2465,7 @@ spec:
                                               potential differences in the implementations."
                                             maxLength: 256
                                             minLength: 1
+                                            pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
                                             type: string
                                           type:
                                             default: Exact
@@ -2630,12 +2824,12 @@ spec:
                             evaluated at all requests to the protected routes.
                           items:
                             description: RouteSelector defines semantics for matching
-                              an HTTP request based on conditions https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                              an HTTP request based on conditions https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                             properties:
                               hostnames:
                                 description: Hostnames defines a set of hostname that
                                   should match against the HTTP Host header to select
-                                  a HTTPRoute to process the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                  a HTTPRoute to process the request https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                 items:
                                   description: "Hostname is the fully qualified domain
                                     name of a network host. This matches the RFC 1123
@@ -2659,7 +2853,7 @@ spec:
                                 type: array
                               matches:
                                 description: Matches define conditions used for matching
-                                  the rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                  the rule against incoming HTTP requests. https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                 items:
                                   description: "HTTPRouteMatch defines the predicate
                                     used to match requests to a given action. Multiple
@@ -2776,6 +2970,54 @@ spec:
                                           maxLength: 1024
                                           type: string
                                       type: object
+                                      x-kubernetes-validations:
+                                      - message: value must be an absolute path and
+                                          start with '/' when type one of ['Exact',
+                                          'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? self.value.startsWith(''/'') : true'
+                                      - message: must not contain '//' when type one
+                                          of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''//'') : true'
+                                      - message: must not contain '/./' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''/./'') : true'
+                                      - message: must not contain '/../' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''/../'') : true'
+                                      - message: must not contain '%2f' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''%2f'') : true'
+                                      - message: must not contain '%2F' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''%2F'') : true'
+                                      - message: must not contain '#' when type one
+                                          of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.contains(''#'') : true'
+                                      - message: must not end with '/..' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.endsWith(''/..'') : true'
+                                      - message: must not end with '/.' when type
+                                          one of ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? !self.value.endsWith(''/.'') : true'
+                                      - message: type must be one of ['Exact', 'PathPrefix',
+                                          'RegularExpression']
+                                        rule: self.type in ['Exact','PathPrefix']
+                                          || self.type == 'RegularExpression'
+                                      - message: must only contain valid characters
+                                          (matching ^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$)
+                                          for types ['Exact', 'PathPrefix']
+                                        rule: '(self.type in [''Exact'',''PathPrefix''])
+                                          ? self.value.matches(r"""^(?:[-A-Za-z0-9/._~!$&''()*+,;=:@]|[%][0-9a-fA-F]{2})+$""")
+                                          : true'
                                     queryParams:
                                       description: "QueryParams specifies HTTP query
                                         parameter matchers. Multiple match values
@@ -2812,6 +3054,7 @@ spec:
                                               potential differences in the implementations."
                                             maxLength: 256
                                             minLength: 1
+                                            pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
                                             type: string
                                           type:
                                             default: Exact
@@ -3067,13 +3310,13 @@ spec:
                                   items:
                                     description: RouteSelector defines semantics for
                                       matching an HTTP request based on conditions
-                                      https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                      https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                     properties:
                                       hostnames:
                                         description: Hostnames defines a set of hostname
                                           that should match against the HTTP Host
                                           header to select a HTTPRoute to process
-                                          the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                          the request https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                         items:
                                           description: "Hostname is the fully qualified
                                             domain name of a network host. This matches
@@ -3101,7 +3344,7 @@ spec:
                                       matches:
                                         description: Matches define conditions used
                                           for matching the rule against incoming HTTP
-                                          requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                          requests. https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                         items:
                                           description: "HTTPRouteMatch defines the
                                             predicate used to match requests to a
@@ -3232,6 +3475,63 @@ spec:
                                                   maxLength: 1024
                                                   type: string
                                               type: object
+                                              x-kubernetes-validations:
+                                              - message: value must be an absolute
+                                                  path and start with '/' when type
+                                                  one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? self.value.startsWith(''/'') :
+                                                  true'
+                                              - message: must not contain '//' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.contains(''//'') :
+                                                  true'
+                                              - message: must not contain '/./' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.contains(''/./'')
+                                                  : true'
+                                              - message: must not contain '/../' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.contains(''/../'')
+                                                  : true'
+                                              - message: must not contain '%2f' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.contains(''%2f'')
+                                                  : true'
+                                              - message: must not contain '%2F' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.contains(''%2F'')
+                                                  : true'
+                                              - message: must not contain '#' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.contains(''#'') :
+                                                  true'
+                                              - message: must not end with '/..' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.endsWith(''/..'')
+                                                  : true'
+                                              - message: must not end with '/.' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.endsWith(''/.'') :
+                                                  true'
+                                              - message: type must be one of ['Exact',
+                                                  'PathPrefix', 'RegularExpression']
+                                                rule: self.type in ['Exact','PathPrefix']
+                                                  || self.type == 'RegularExpression'
+                                              - message: must only contain valid characters
+                                                  (matching ^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$)
+                                                  for types ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? self.value.matches(r"""^(?:[-A-Za-z0-9/._~!$&''()*+,;=:@]|[%][0-9a-fA-F]{2})+$""")
+                                                  : true'
                                             queryParams:
                                               description: "QueryParams specifies
                                                 HTTP query parameter matchers. Multiple
@@ -3275,6 +3575,7 @@ spec:
                                                       implementations."
                                                     maxLength: 256
                                                     minLength: 1
+                                                    pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
                                                     type: string
                                                   type:
                                                     default: Exact
@@ -3562,13 +3863,13 @@ spec:
                                   items:
                                     description: RouteSelector defines semantics for
                                       matching an HTTP request based on conditions
-                                      https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                      https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                     properties:
                                       hostnames:
                                         description: Hostnames defines a set of hostname
                                           that should match against the HTTP Host
                                           header to select a HTTPRoute to process
-                                          the request https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                          the request https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                         items:
                                           description: "Hostname is the fully qualified
                                             domain name of a network host. This matches
@@ -3596,7 +3897,7 @@ spec:
                                       matches:
                                         description: Matches define conditions used
                                           for matching the rule against incoming HTTP
-                                          requests. https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+                                          requests. https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
                                         items:
                                           description: "HTTPRouteMatch defines the
                                             predicate used to match requests to a
@@ -3727,6 +4028,63 @@ spec:
                                                   maxLength: 1024
                                                   type: string
                                               type: object
+                                              x-kubernetes-validations:
+                                              - message: value must be an absolute
+                                                  path and start with '/' when type
+                                                  one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? self.value.startsWith(''/'') :
+                                                  true'
+                                              - message: must not contain '//' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.contains(''//'') :
+                                                  true'
+                                              - message: must not contain '/./' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.contains(''/./'')
+                                                  : true'
+                                              - message: must not contain '/../' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.contains(''/../'')
+                                                  : true'
+                                              - message: must not contain '%2f' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.contains(''%2f'')
+                                                  : true'
+                                              - message: must not contain '%2F' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.contains(''%2F'')
+                                                  : true'
+                                              - message: must not contain '#' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.contains(''#'') :
+                                                  true'
+                                              - message: must not end with '/..' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.endsWith(''/..'')
+                                                  : true'
+                                              - message: must not end with '/.' when
+                                                  type one of ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? !self.value.endsWith(''/.'') :
+                                                  true'
+                                              - message: type must be one of ['Exact',
+                                                  'PathPrefix', 'RegularExpression']
+                                                rule: self.type in ['Exact','PathPrefix']
+                                                  || self.type == 'RegularExpression'
+                                              - message: must only contain valid characters
+                                                  (matching ^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$)
+                                                  for types ['Exact', 'PathPrefix']
+                                                rule: '(self.type in [''Exact'',''PathPrefix''])
+                                                  ? self.value.matches(r"""^(?:[-A-Za-z0-9/._~!$&''()*+,;=:@]|[%][0-9a-fA-F]{2})+$""")
+                                                  : true'
                                             queryParams:
                                               description: "QueryParams specifies
                                                 HTTP query parameter matchers. Multiple
@@ -3770,6 +4128,7 @@ spec:
                                                       implementations."
                                                     maxLength: 256
                                                     minLength: 1
+                                                    pattern: ^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$
                                                     type: string
                                                   type:
                                                     default: Exact

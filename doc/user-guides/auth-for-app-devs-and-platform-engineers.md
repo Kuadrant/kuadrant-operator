@@ -77,7 +77,7 @@ EOF
 kubectl apply -f examples/toystore/toystore.yaml
 
 kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: toystore
@@ -258,7 +258,7 @@ Create a route that will inherit the default policy attached to the gateway:
 
 ```sh
 kubectl apply -f -<<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: other

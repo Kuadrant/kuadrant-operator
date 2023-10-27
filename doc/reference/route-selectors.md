@@ -12,12 +12,12 @@ The `routeSelectors` field can be found in policy specs and policy rules (limit 
 
 ### RouteSelector
 
-Each `RouteSelector` is an object composed of a set of [HTTPRouteMatch](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPPathMatch) objects (from Gateway API), and an additional `hostnames` field.
+Each `RouteSelector` is an object composed of a set of [HTTPRouteMatch](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPPathMatch) objects (from Gateway API), and an additional `hostnames` field.
 
 | **Field**   | **Type**                                                                                                                       | **Required** | **Description**                                                                             |
 |-------------|--------------------------------------------------------------------------------------------------------------------------------|:------------:|---------------------------------------------------------------------------------------------|
-| `matches`   | [][HTTPRouteMatch](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteMatch) | No           | List of selectors of HTTPRouteRules whose matching rules activate the policy or policy rule |
-| `hostnames` | [][Hostname](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.Hostname)             | No           | List of hostnames of the HTTPRoute that activate the policy or policy rule                  |
+| `matches`   | [][HTTPRouteMatch](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteMatch) | No           | List of selectors of HTTPRouteRules whose matching rules activate the policy or policy rule |
+| `hostnames` | [][Hostname](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.Hostname)             | No           | List of hostnames of the HTTPRoute that activate the policy or policy rule                  |
 
 ## Mechanics of the route selectors
 

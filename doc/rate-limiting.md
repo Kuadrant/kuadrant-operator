@@ -2,7 +2,7 @@
 
 A Kuadrant RateLimitPolicy custom resource, often abbreviated "RLP":
 
-1. Targets Gateway API networking resources such as [HTTPRoutes](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRoute) and [Gateways](https://gateway-api.sigs.k8s.io/references/spec/#gateway.networking.k8s.io/v1beta1.Gateway), using these resources to obtain additional context, i.e., which traffic workload (HTTP attributes, hostnames, user attributes, etc) to rate limit.
+1. Targets Gateway API networking resources such as [HTTPRoutes](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRoute) and [Gateways](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.Gateway), using these resources to obtain additional context, i.e., which traffic workload (HTTP attributes, hostnames, user attributes, etc) to rate limit.
 2. Supports targeting subsets (sections) of a network resource to apply the limits to.
 3. Abstracts the details of the underlying Rate Limit protocol and configuration resources, that have a much broader remit and surface area.
 4. Enables cluster operators to set defaults that govern behavior at the lower levels of the network, until a more specific policy is applied.

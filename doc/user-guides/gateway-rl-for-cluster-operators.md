@@ -41,7 +41,7 @@ EOF
 
 ```sh
 kubectl -n istio-system apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: external
@@ -59,7 +59,7 @@ spec:
       namespaces:
         from: All
 ---
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: internal
@@ -156,7 +156,7 @@ Route traffic to the API from both gateways:
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: toystore

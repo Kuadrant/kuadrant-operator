@@ -13,8 +13,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 const GatewayProgrammedConditionType = "Programmed"
@@ -33,7 +33,7 @@ func IsTargetRefGateway(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool
 	return targetRef.Group == ("gateway.networking.k8s.io") && targetRef.Kind == ("Gateway")
 }
 
-func RouteHTTPMethodToRuleMethod(httpMethod *gatewayapiv1beta1.HTTPMethod) []string {
+func RouteHTTPMethodToRuleMethod(httpMethod *gatewayapiv1.HTTPMethod) []string {
 	if httpMethod == nil {
 		return nil
 	}
@@ -41,7 +41,7 @@ func RouteHTTPMethodToRuleMethod(httpMethod *gatewayapiv1beta1.HTTPMethod) []str
 	return []string{string(*httpMethod)}
 }
 
-func RouteHostnames(route *gatewayapiv1beta1.HTTPRoute) []string {
+func RouteHostnames(route *gatewayapiv1.HTTPRoute) []string {
 	if route == nil {
 		return nil
 	}
@@ -60,7 +60,7 @@ func RouteHostnames(route *gatewayapiv1beta1.HTTPRoute) []string {
 }
 
 // RulesFromHTTPRoute computes a list of rules from the HTTPRoute object
-func RulesFromHTTPRoute(route *gatewayapiv1beta1.HTTPRoute) []HTTPRouteRule {
+func RulesFromHTTPRoute(route *gatewayapiv1.HTTPRoute) []HTTPRouteRule {
 	if route == nil {
 		return nil
 	}
@@ -94,15 +94,15 @@ func RulesFromHTTPRoute(route *gatewayapiv1beta1.HTTPRoute) []HTTPRouteRule {
 }
 
 type HTTPRouteRuleSelector struct {
-	*gatewayapiv1beta1.HTTPRouteMatch
+	*gatewayapiv1.HTTPRouteMatch
 }
 
-func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1beta1.HTTPRouteRule) bool {
+func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1.HTTPRouteRule) bool {
 	if s.HTTPRouteMatch == nil {
 		return true
 	}
 
-	_, found := Find(rule.Matches, func(ruleMatch gatewayapiv1beta1.HTTPRouteMatch) bool {
+	_, found := Find(rule.Matches, func(ruleMatch gatewayapiv1.HTTPRouteMatch) bool {
 		// path
 		if s.Path != nil && !reflect.DeepEqual(s.Path, ruleMatch.Path) {
 			return false
@@ -115,7 +115,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1beta1.HTTPRouteRule) bo
 
 		// headers
 		for _, header := range s.Headers {
-			if _, found := Find(ruleMatch.Headers, func(otherHeader gatewayapiv1beta1.HTTPHeaderMatch) bool {
+			if _, found := Find(ruleMatch.Headers, func(otherHeader gatewayapiv1.HTTPHeaderMatch) bool {
 				return reflect.DeepEqual(header, otherHeader)
 			}); !found {
 				return false
@@ -124,7 +124,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1beta1.HTTPRouteRule) bo
 
 		// query params
 		for _, param := range s.QueryParams {
-			if _, found := Find(ruleMatch.QueryParams, func(otherParam gatewayapiv1beta1.HTTPQueryParamMatch) bool {
+			if _, found := Find(ruleMatch.QueryParams, func(otherParam gatewayapiv1.HTTPQueryParamMatch) bool {
 				return reflect.DeepEqual(param, otherParam)
 			}); !found {
 				return false
@@ -138,12 +138,12 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1beta1.HTTPRouteRule) bo
 }
 
 // HTTPRouteRuleToString prints the matches of a  HTTPRouteRule as string
-func HTTPRouteRuleToString(rule gatewayapiv1beta1.HTTPRouteRule) string {
+func HTTPRouteRuleToString(rule gatewayapiv1.HTTPRouteRule) string {
 	matches := Map(rule.Matches, HTTPRouteMatchToString)
 	return fmt.Sprintf("{matches:[%s]}", strings.Join(matches, ","))
 }
 
-func HTTPRouteMatchToString(match gatewayapiv1beta1.HTTPRouteMatch) string {
+func HTTPRouteMatchToString(match gatewayapiv1.HTTPRouteMatch) string {
 	var patterns []string
 	if method := match.Method; method != nil {
 		patterns = append(patterns, fmt.Sprintf("method:%v", HTTPMethodToString(method)))
@@ -162,42 +162,42 @@ func HTTPRouteMatchToString(match gatewayapiv1beta1.HTTPRouteMatch) string {
 	return fmt.Sprintf("{%s}", strings.Join(patterns, ","))
 }
 
-func HTTPPathMatchToString(path *gatewayapiv1beta1.HTTPPathMatch) string {
+func HTTPPathMatchToString(path *gatewayapiv1.HTTPPathMatch) string {
 	if path == nil {
 		return "*"
 	}
 	if path.Type != nil {
 		switch *path.Type {
-		case gatewayapiv1beta1.PathMatchExact:
+		case gatewayapiv1.PathMatchExact:
 			return *path.Value
-		case gatewayapiv1beta1.PathMatchRegularExpression:
+		case gatewayapiv1.PathMatchRegularExpression:
 			return fmt.Sprintf("~/%s/", *path.Value)
 		}
 	}
 	return fmt.Sprintf("%s*", *path.Value)
 }
 
-func HTTPHeaderMatchToString(header gatewayapiv1beta1.HTTPHeaderMatch) string {
+func HTTPHeaderMatchToString(header gatewayapiv1.HTTPHeaderMatch) string {
 	if header.Type != nil {
 		switch *header.Type {
-		case gatewayapiv1beta1.HeaderMatchRegularExpression:
+		case gatewayapiv1.HeaderMatchRegularExpression:
 			return fmt.Sprintf("{%s:~/%s/}", header.Name, header.Value)
 		}
 	}
 	return fmt.Sprintf("{%s:%s}", header.Name, header.Value)
 }
 
-func HTTPQueryParamMatchToString(queryParam gatewayapiv1beta1.HTTPQueryParamMatch) string {
+func HTTPQueryParamMatchToString(queryParam gatewayapiv1.HTTPQueryParamMatch) string {
 	if queryParam.Type != nil {
 		switch *queryParam.Type {
-		case gatewayapiv1beta1.QueryParamMatchRegularExpression:
+		case gatewayapiv1.QueryParamMatchRegularExpression:
 			return fmt.Sprintf("{%s:~/%s/}", queryParam.Name, queryParam.Value)
 		}
 	}
 	return fmt.Sprintf("{%s:%s}", queryParam.Name, queryParam.Value)
 }
 
-func HTTPMethodToString(method *gatewayapiv1beta1.HTTPMethod) string {
+func HTTPMethodToString(method *gatewayapiv1.HTTPMethod) string {
 	if method == nil {
 		return "*"
 	}
@@ -208,7 +208,7 @@ func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Cli
 	targetRef := policy.GetTargetRef()
 	gwNamespacedName := types.NamespacedName{Namespace: string(ptr.Deref(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)}
 	if IsTargetRefHTTPRoute(targetRef) {
-		route := &gatewayapiv1beta1.HTTPRoute{}
+		route := &gatewayapiv1.HTTPRoute{}
 		if err := cli.Get(
 			ctx,
 			types.NamespacedName{Namespace: string(ptr.Deref(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)},
@@ -220,7 +220,7 @@ func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Cli
 		parentRef := route.Spec.ParentRefs[0]
 		gwNamespacedName = types.NamespacedName{Namespace: string(*parentRef.Namespace), Name: string(parentRef.Name)}
 	}
-	gw := &gatewayapiv1beta1.Gateway{}
+	gw := &gatewayapiv1.Gateway{}
 	if err := cli.Get(ctx, gwNamespacedName, gw); err != nil {
 		return "", err
 	}
@@ -262,7 +262,7 @@ func AnnotateObject(obj client.Object, namespace string) {
 	}
 }
 
-func DeleteKuadrantAnnotationFromGateway(gw *gatewayapiv1beta1.Gateway, namespace string) {
+func DeleteKuadrantAnnotationFromGateway(gw *gatewayapiv1.Gateway, namespace string) {
 	annotations := gw.GetAnnotations()
 	if IsKuadrantManaged(gw) && annotations[KuadrantNamespaceLabel] == namespace {
 		delete(gw.Annotations, KuadrantNamespaceLabel)
@@ -270,20 +270,20 @@ func DeleteKuadrantAnnotationFromGateway(gw *gatewayapiv1beta1.Gateway, namespac
 }
 
 // routePathMatchToRulePath converts HTTPRoute pathmatch rule to kuadrant's rule path
-func routePathMatchToRulePath(pathMatch *gatewayapiv1beta1.HTTPPathMatch) []string {
+func routePathMatchToRulePath(pathMatch *gatewayapiv1.HTTPPathMatch) []string {
 	if pathMatch == nil {
 		return nil
 	}
 
 	// Only support for Exact and Prefix match
-	if pathMatch.Type != nil && *pathMatch.Type != gatewayapiv1beta1.PathMatchPathPrefix &&
-		*pathMatch.Type != gatewayapiv1beta1.PathMatchExact {
+	if pathMatch.Type != nil && *pathMatch.Type != gatewayapiv1.PathMatchPathPrefix &&
+		*pathMatch.Type != gatewayapiv1.PathMatchExact {
 		return nil
 	}
 
 	// Exact path match
 	suffix := ""
-	if pathMatch.Type == nil || *pathMatch.Type == gatewayapiv1beta1.PathMatchPathPrefix {
+	if pathMatch.Type == nil || *pathMatch.Type == gatewayapiv1.PathMatchPathPrefix {
 		// defaults to path prefix match type
 		suffix = "*"
 	}
@@ -312,7 +312,7 @@ func (c *KuadrantAuthPolicyRefsConfig) PolicyRefsAnnotation() string {
 	return AuthPoliciesBackRefAnnotation
 }
 
-func GatewaysMissingPolicyRef(gwList *gatewayapiv1beta1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
+func GatewaysMissingPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
 	// gateways referenced by the policy but do not have reference to it in the annotations
 	gateways := make([]GatewayWrapper, 0)
 	for i := range gwList.Items {
@@ -325,7 +325,7 @@ func GatewaysMissingPolicyRef(gwList *gatewayapiv1beta1.GatewayList, policyKey c
 	return gateways
 }
 
-func GatewaysWithValidPolicyRef(gwList *gatewayapiv1beta1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
+func GatewaysWithValidPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
 	// gateways referenced by the policy but also have reference to it in the annotations
 	gateways := make([]GatewayWrapper, 0)
 	for i := range gwList.Items {
@@ -338,7 +338,7 @@ func GatewaysWithValidPolicyRef(gwList *gatewayapiv1beta1.GatewayList, policyKey
 	return gateways
 }
 
-func GatewaysWithInvalidPolicyRef(gwList *gatewayapiv1beta1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
+func GatewaysWithInvalidPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
 	// gateways not referenced by the policy but still have reference in the annotations
 	gateways := make([]GatewayWrapper, 0)
 	for i := range gwList.Items {
@@ -353,7 +353,7 @@ func GatewaysWithInvalidPolicyRef(gwList *gatewayapiv1beta1.GatewayList, policyK
 
 // GatewayWrapper wraps a Gateway API Gateway adding methods and configs to manage policy references in annotations
 type GatewayWrapper struct {
-	*gatewayapiv1beta1.Gateway
+	*gatewayapiv1.Gateway
 	PolicyRefsConfig
 }
 
@@ -487,8 +487,8 @@ func (g GatewayWrapper) DeletePolicy(policyKey client.ObjectKey) bool {
 }
 
 // Hostnames builds a list of hostnames from the listeners.
-func (g GatewayWrapper) Hostnames() []gatewayapiv1beta1.Hostname {
-	hostnames := make([]gatewayapiv1beta1.Hostname, 0)
+func (g GatewayWrapper) Hostnames() []gatewayapiv1.Hostname {
+	hostnames := make([]gatewayapiv1.Hostname, 0)
 	if g.Gateway == nil {
 		return hostnames
 	}
@@ -521,11 +521,11 @@ func (g GatewayWrapperList) Swap(i, j int) {
 func TargetHostnames(targetNetworkObject client.Object) ([]string, error) {
 	hosts := make([]string, 0)
 	switch obj := targetNetworkObject.(type) {
-	case *gatewayapiv1beta1.HTTPRoute:
+	case *gatewayapiv1.HTTPRoute:
 		for _, hostname := range obj.Spec.Hostnames {
 			hosts = append(hosts, string(hostname))
 		}
-	case *gatewayapiv1beta1.Gateway:
+	case *gatewayapiv1.Gateway:
 		for idx := range obj.Spec.Listeners {
 			if obj.Spec.Listeners[idx].Hostname != nil {
 				hosts = append(hosts, string(*obj.Spec.Listeners[idx].Hostname))
@@ -541,7 +541,7 @@ func TargetHostnames(targetNetworkObject client.Object) ([]string, error) {
 }
 
 // HostnamesFromHTTPRoute returns an array of all hostnames specified in a HTTPRoute or inherited from its parent Gateways
-func HostnamesFromHTTPRoute(ctx context.Context, route *gatewayapiv1beta1.HTTPRoute, cli client.Client) ([]string, error) {
+func HostnamesFromHTTPRoute(ctx context.Context, route *gatewayapiv1.HTTPRoute, cli client.Client) ([]string, error) {
 	if len(route.Spec.Hostnames) > 0 {
 		return RouteHostnames(route), nil
 	}
@@ -552,7 +552,7 @@ func HostnamesFromHTTPRoute(ctx context.Context, route *gatewayapiv1beta1.HTTPRo
 		if (ref.Kind != nil && *ref.Kind != "Gateway") || (ref.Group != nil && *ref.Group != "gateway.networking.k8s.io") {
 			continue
 		}
-		gw := &gatewayapiv1beta1.Gateway{}
+		gw := &gatewayapiv1.Gateway{}
 		ns := route.Namespace
 		if ref.Namespace != nil {
 			ns = string(*ref.Namespace)
@@ -587,11 +587,11 @@ func ValidateHierarchicalRules(policy KuadrantPolicy, targetNetworkObject client
 	return nil
 }
 
-func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway *gatewayapiv1beta1.Gateway) (map[string]string, error) {
+func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway *gatewayapiv1.Gateway) (map[string]string, error) {
 	address, found := Find(
 		gateway.Status.Addresses,
-		func(address gatewayapiv1beta1.GatewayAddress) bool {
-			return address.Type != nil && *address.Type == gatewayapiv1beta1.HostnameAddressType
+		func(address gatewayapiv1.GatewayStatusAddress) bool {
+			return address.Type != nil && *address.Type == gatewayapiv1.HostnameAddressType
 		},
 	)
 	if !found {
@@ -605,7 +605,7 @@ func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway 
 	return GetServiceWorkloadSelector(ctx, cli, serviceKey)
 }
 
-func IsHTTPRouteAccepted(httpRoute *gatewayapiv1beta1.HTTPRoute) bool {
+func IsHTTPRouteAccepted(httpRoute *gatewayapiv1.HTTPRoute) bool {
 	if httpRoute == nil {
 		return false
 	}
@@ -617,7 +617,7 @@ func IsHTTPRouteAccepted(httpRoute *gatewayapiv1beta1.HTTPRoute) bool {
 	// Check HTTProute parents (gateways) in the status object
 	// if any of the current parent gateways reports not "Admitted", return false
 	for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
-		routeParentStatus := func(pRef gatewayapiv1beta1.ParentReference) *gatewayapiv1beta1.RouteParentStatus {
+		routeParentStatus := func(pRef gatewayapiv1.ParentReference) *gatewayapiv1.RouteParentStatus {
 			for idx := range httpRoute.Status.RouteStatus.Parents {
 				if reflect.DeepEqual(pRef, httpRoute.Status.RouteStatus.Parents[idx].ParentRef) {
 					return &httpRoute.Status.RouteStatus.Parents[idx]

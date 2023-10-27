@@ -8,8 +8,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -68,7 +68,7 @@ func TestAuthPolicyTargetKey(t *testing.T) {
 	}
 
 	// targetRef with namespace
-	policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1beta1.Namespace("route-namespace"))
+	policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace("route-namespace"))
 	expected = "route-namespace/my-route"
 	if result := policy.TargetKey().String(); result != expected {
 		t.Errorf("Expected target key %s, got %s", expected, result)
@@ -113,7 +113,7 @@ func TestAuthPolicyGetRulesHostnames(t *testing.T) {
 	}
 	policy.Spec.RouteSelectors = []RouteSelector{
 		{
-			Hostnames: []gatewayapiv1beta1.Hostname{"*.kuadrant.io", "toystore.kuadrant.io"},
+			Hostnames: []gatewayapiv1.Hostname{"*.kuadrant.io", "toystore.kuadrant.io"},
 		},
 	}
 	// 1 top-level route selectors with 2 hostnames
@@ -190,7 +190,7 @@ func TestAuthPolicyGetRulesHostnames(t *testing.T) {
 						CommonAuthRuleSpec: CommonAuthRuleSpec{
 							RouteSelectors: []RouteSelector{
 								{
-									Hostnames: []gatewayapiv1beta1.Hostname{"*.kuadrant.io", "toystore.kuadrant.io"},
+									Hostnames: []gatewayapiv1.Hostname{"*.kuadrant.io", "toystore.kuadrant.io"},
 								},
 							},
 						},
@@ -202,7 +202,7 @@ func TestAuthPolicyGetRulesHostnames(t *testing.T) {
 					CommonAuthRuleSpec: CommonAuthRuleSpec{
 						RouteSelectors: []RouteSelector{
 							{
-								Hostnames: []gatewayapiv1beta1.Hostname{"*.kuadrant.io"},
+								Hostnames: []gatewayapiv1.Hostname{"*.kuadrant.io"},
 							},
 						},
 					},
@@ -330,10 +330,10 @@ func TestAuthPolicyValidate(t *testing.T) {
 					},
 					RouteSelectors: []RouteSelector{
 						{
-							Hostnames: []gatewayapiv1beta1.Hostname{"*.foo.io"},
-							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+							Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
+							Matches: []gatewayapiv1.HTTPRouteMatch{
 								{
-									Path: &gatewayapiv1beta1.HTTPPathMatch{
+									Path: &gatewayapiv1.HTTPPathMatch{
 										Value: ptr.To("/foo"),
 									},
 								},
@@ -368,10 +368,10 @@ func TestAuthPolicyValidate(t *testing.T) {
 								CommonAuthRuleSpec: CommonAuthRuleSpec{
 									RouteSelectors: []RouteSelector{
 										{
-											Hostnames: []gatewayapiv1beta1.Hostname{"*.foo.io"},
-											Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+											Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
+											Matches: []gatewayapiv1.HTTPRouteMatch{
 												{
-													Path: &gatewayapiv1beta1.HTTPPathMatch{
+													Path: &gatewayapiv1.HTTPPathMatch{
 														Value: ptr.To("/foo"),
 													},
 												},
@@ -398,7 +398,7 @@ func TestAuthPolicyValidate(t *testing.T) {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
 						Name:      "my-route",
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace("other-namespace")),
+						Namespace: ptr.To(gatewayapiv1.Namespace("other-namespace")),
 					},
 					AuthScheme: AuthSchemeSpec{
 						Authentication: map[string]AuthenticationSpec{
@@ -411,10 +411,10 @@ func TestAuthPolicyValidate(t *testing.T) {
 								CommonAuthRuleSpec: CommonAuthRuleSpec{
 									RouteSelectors: []RouteSelector{
 										{
-											Hostnames: []gatewayapiv1beta1.Hostname{"*.foo.io"},
-											Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+											Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
+											Matches: []gatewayapiv1.HTTPRouteMatch{
 												{
-													Path: &gatewayapiv1beta1.HTTPPathMatch{
+													Path: &gatewayapiv1.HTTPPathMatch{
 														Value: ptr.To("/foo"),
 													},
 												},
@@ -445,10 +445,10 @@ func TestAuthPolicyValidate(t *testing.T) {
 
 func testBuildRouteSelector() RouteSelector {
 	return RouteSelector{
-		Hostnames: []gatewayapiv1beta1.Hostname{"toystore.kuadrant.io"},
-		Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+		Hostnames: []gatewayapiv1.Hostname{"toystore.kuadrant.io"},
+		Matches: []gatewayapiv1.HTTPRouteMatch{
 			{
-				Path: &gatewayapiv1beta1.HTTPPathMatch{
+				Path: &gatewayapiv1.HTTPPathMatch{
 					Value: ptr.To("/toy"),
 				},
 			},

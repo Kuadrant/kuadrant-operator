@@ -26,8 +26,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
@@ -43,10 +43,10 @@ func (r *TargetRefReconciler) Reconcile(context.Context, ctrl.Request) (ctrl.Res
 	return reconcile.Result{}, nil
 }
 
-func (r *TargetRefReconciler) FetchValidGateway(ctx context.Context, key client.ObjectKey) (*gatewayapiv1beta1.Gateway, error) {
+func (r *TargetRefReconciler) FetchValidGateway(ctx context.Context, key client.ObjectKey) (*gatewayapiv1.Gateway, error) {
 	logger, _ := logr.FromContext(ctx)
 
-	gw := &gatewayapiv1beta1.Gateway{}
+	gw := &gatewayapiv1.Gateway{}
 	err := r.Client().Get(ctx, key, gw)
 	logger.V(1).Info("FetchValidGateway", "gateway", key, "err", err)
 	if err != nil {
@@ -60,10 +60,10 @@ func (r *TargetRefReconciler) FetchValidGateway(ctx context.Context, key client.
 	return gw, nil
 }
 
-func (r *TargetRefReconciler) FetchValidHTTPRoute(ctx context.Context, key client.ObjectKey) (*gatewayapiv1beta1.HTTPRoute, error) {
+func (r *TargetRefReconciler) FetchValidHTTPRoute(ctx context.Context, key client.ObjectKey) (*gatewayapiv1.HTTPRoute, error) {
 	logger, _ := logr.FromContext(ctx)
 
-	httpRoute := &gatewayapiv1beta1.HTTPRoute{}
+	httpRoute := &gatewayapiv1.HTTPRoute{}
 	err := r.Client().Get(ctx, key, httpRoute)
 	logger.V(1).Info("FetchValidHTTPRoute", "httpRoute", key, "err", err)
 	if err != nil {
@@ -96,11 +96,11 @@ func (r *TargetRefReconciler) FetchValidTargetRef(ctx context.Context, targetRef
 }
 
 // FetchAcceptedGatewayHTTPRoutes returns the list of HTTPRoutes that have been accepted as children of a gateway.
-func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context, gwKey client.ObjectKey) (routes []gatewayapiv1beta1.HTTPRoute) {
+func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context, gwKey client.ObjectKey) (routes []gatewayapiv1.HTTPRoute) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("FetchAcceptedGatewayHTTPRoutes").WithValues("gateway", gwKey)
 
-	routeList := &gatewayapiv1beta1.HTTPRouteList{}
+	routeList := &gatewayapiv1.HTTPRouteList{}
 	err := r.Client().List(ctx, routeList)
 	if err != nil {
 		logger.V(1).Info("failed to list httproutes", "err", err)
@@ -109,7 +109,7 @@ func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context
 
 	for idx := range routeList.Items {
 		route := routeList.Items[idx]
-		routeParentStatus, found := common.Find(route.Status.RouteStatus.Parents, func(p gatewayapiv1beta1.RouteParentStatus) bool {
+		routeParentStatus, found := common.Find(route.Status.RouteStatus.Parents, func(p gatewayapiv1.RouteParentStatus) bool {
 			return *p.ParentRef.Kind == ("Gateway") &&
 				((p.ParentRef.Namespace == nil && route.GetNamespace() == gwKey.Namespace) || string(*p.ParentRef.Namespace) == gwKey.Namespace) &&
 				string(p.ParentRef.Name) == gwKey.Name
@@ -128,7 +128,7 @@ func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context
 // TargetedGatewayKeys returns the list of gateways that are being referenced from the target.
 func (r *TargetRefReconciler) TargetedGatewayKeys(_ context.Context, targetNetworkObject client.Object) []client.ObjectKey {
 	switch obj := targetNetworkObject.(type) {
-	case *gatewayapiv1beta1.HTTPRoute:
+	case *gatewayapiv1.HTTPRoute:
 		gwKeys := make([]client.ObjectKey, 0)
 		for _, parentRef := range obj.Spec.CommonRouteSpec.ParentRefs {
 			gwKey := client.ObjectKey{Name: string(parentRef.Name), Namespace: obj.Namespace}
@@ -139,7 +139,7 @@ func (r *TargetRefReconciler) TargetedGatewayKeys(_ context.Context, targetNetwo
 		}
 		return gwKeys
 
-	case *gatewayapiv1beta1.Gateway:
+	case *gatewayapiv1.Gateway:
 		return []client.ObjectKey{client.ObjectKeyFromObject(targetNetworkObject)}
 
 	// If the targetNetworkObject is nil, we don't fail; instead, we return an empty slice of gateway keys.
@@ -207,7 +207,7 @@ func (r *TargetRefReconciler) GetAllGatewayPolicyRefs(ctx context.Context, polic
 	var uniquePolicyRefs map[string]struct{}
 	var policyRefs []client.ObjectKey
 
-	gwList := &gatewayapiv1beta1.GatewayList{}
+	gwList := &gatewayapiv1.GatewayList{}
 	if err := r.Client().List(ctx, gwList); err != nil {
 		return nil, err
 	}
@@ -249,7 +249,7 @@ func (r *TargetRefReconciler) ComputeGatewayDiffs(ctx context.Context, policy co
 	}
 
 	// TODO(rahulanand16nov): maybe think about optimizing it with a label later
-	allGwList := &gatewayapiv1beta1.GatewayList{}
+	allGwList := &gatewayapiv1.GatewayList{}
 	err := r.Client().List(ctx, allGwList)
 	if err != nil {
 		return nil, err

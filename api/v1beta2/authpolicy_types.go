@@ -7,8 +7,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -266,8 +266,8 @@ func (ap *AuthPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 	return ap.Spec.TargetRef
 }
 
-func (ap *AuthPolicy) GetWrappedNamespace() gatewayapiv1beta1.Namespace {
-	return gatewayapiv1beta1.Namespace(ap.Namespace)
+func (ap *AuthPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
+	return gatewayapiv1.Namespace(ap.Namespace)
 }
 
 // GetRulesHostnames returns all hostnames referenced in the route selectors of the policy.

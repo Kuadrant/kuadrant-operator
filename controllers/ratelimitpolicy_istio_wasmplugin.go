@@ -10,7 +10,7 @@ import (
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -127,7 +127,7 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 
 	type store struct {
 		rlp   kuadrantv1beta2.RateLimitPolicy
-		route gatewayapiv1beta1.HTTPRoute
+		route gatewayapiv1.HTTPRoute
 		skip  bool
 	}
 	rlps := make(map[string]*store, len(rlpRefs))
@@ -164,13 +164,13 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 
 	gwHostnames := gw.Hostnames()
 	if len(gwHostnames) == 0 {
-		gwHostnames = []gatewayapiv1beta1.Hostname{"*"}
+		gwHostnames = []gatewayapiv1.Hostname{"*"}
 	}
 
 	// if there is a gateway rlp, fake a single httproute with all rules from all httproutes accepted by the gateway,
 	// that do not have a rlp of its own, so we can generate wasm rules for those cases
 	if gwRLPKey != "" {
-		rules := make([]gatewayapiv1beta1.HTTPRouteRule, 0)
+		rules := make([]gatewayapiv1.HTTPRouteRule, 0)
 		routes := r.FetchAcceptedGatewayHTTPRoutes(ctx, rlps[gwRLPKey].rlp.TargetKey())
 		for idx := range routes {
 			route := routes[idx]
@@ -184,8 +184,8 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw com
 			logger.V(1).Info("no httproutes attached to the targeted gateway, skipping wasm config for the gateway rlp", "ratelimitpolicy", gwRLPKey)
 			rlps[gwRLPKey].skip = true
 		} else {
-			rlps[gwRLPKey].route = gatewayapiv1beta1.HTTPRoute{
-				Spec: gatewayapiv1beta1.HTTPRouteSpec{
+			rlps[gwRLPKey].route = gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{
 					Hostnames: gwHostnames,
 					Rules:     rules,
 				},

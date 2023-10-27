@@ -6,10 +6,10 @@ import (
 	"github.com/go-logr/logr"
 	istiocommon "istio.io/api/type/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-func IstioWorkloadSelectorFromGateway(ctx context.Context, k8sClient client.Client, gateway *gatewayapiv1beta1.Gateway) *istiocommon.WorkloadSelector {
+func IstioWorkloadSelectorFromGateway(ctx context.Context, k8sClient client.Client, gateway *gatewayapiv1.Gateway) *istiocommon.WorkloadSelector {
 	logger, _ := logr.FromContext(ctx)
 	gatewayWorkloadSelector, err := GetGatewayWorkloadSelector(ctx, k8sClient, gateway)
 	if err != nil {

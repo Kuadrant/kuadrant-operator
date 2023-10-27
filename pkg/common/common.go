@@ -22,8 +22,8 @@ import (
 
 	"golang.org/x/exp/slices"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 // TODO: move the const to a proper place, or get it from config
@@ -41,7 +41,7 @@ const (
 type KuadrantPolicy interface {
 	client.Object
 	GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference
-	GetWrappedNamespace() gatewayapiv1beta1.Namespace
+	GetWrappedNamespace() gatewayapiv1.Namespace
 	GetRulesHostnames() []string
 }
 
@@ -183,9 +183,9 @@ func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 	return client.ObjectKey{Namespace: keyStr[:namespaceEndIndex], Name: keyStr[namespaceEndIndex+1:]}, nil
 }
 
-// HostnamesToStrings converts []gatewayapiv1beta1.Hostname to []string
-func HostnamesToStrings(hostnames []gatewayapiv1beta1.Hostname) []string {
-	return Map(hostnames, func(hostname gatewayapiv1beta1.Hostname) string {
+// HostnamesToStrings converts []gatewayapiv1.Hostname to []string
+func HostnamesToStrings(hostnames []gatewayapiv1.Hostname) []string {
+	return Map(hostnames, func(hostname gatewayapiv1.Hostname) string {
 		return string(hostname)
 	})
 }
@@ -214,10 +214,10 @@ func ValidSubdomains(domains, subdomains []string) (bool, string) {
 }
 
 // FilterValidSubdomains returns every subdomain that is a subset of at least one of the (super) domains specified in the first argument.
-func FilterValidSubdomains(domains, subdomains []gatewayapiv1beta1.Hostname) []gatewayapiv1beta1.Hostname {
-	arr := make([]gatewayapiv1beta1.Hostname, 0)
+func FilterValidSubdomains(domains, subdomains []gatewayapiv1.Hostname) []gatewayapiv1.Hostname {
+	arr := make([]gatewayapiv1.Hostname, 0)
 	for _, subsubdomain := range subdomains {
-		if _, found := Find(domains, func(domain gatewayapiv1beta1.Hostname) bool {
+		if _, found := Find(domains, func(domain gatewayapiv1.Hostname) bool {
 			return Name(subsubdomain).SubsetOf(Name(domain))
 		}); found {
 			arr = append(arr, subsubdomain)

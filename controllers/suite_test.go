@@ -37,7 +37,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -83,7 +83,7 @@ var _ = BeforeSuite(func() {
 	err = kuadrantv1beta2.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	err = gatewayapiv1beta1.AddToScheme(scheme.Scheme)
+	err = gatewayapiv1.Install(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	err = authorinoopapi.AddToScheme(scheme.Scheme)

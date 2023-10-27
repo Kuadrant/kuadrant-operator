@@ -4,16 +4,16 @@ import (
 	"encoding/json"
 
 	_struct "google.golang.org/protobuf/types/known/structpb"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
 
 var (
-	PathMatchTypeMap = map[gatewayapiv1beta1.PathMatchType]PatternOperator{
-		gatewayapiv1beta1.PathMatchExact:             PatternOperator(kuadrantv1beta2.EqualOperator),
-		gatewayapiv1beta1.PathMatchPathPrefix:        PatternOperator(kuadrantv1beta2.StartsWithOperator),
-		gatewayapiv1beta1.PathMatchRegularExpression: PatternOperator(kuadrantv1beta2.MatchesOperator),
+	PathMatchTypeMap = map[gatewayapiv1.PathMatchType]PatternOperator{
+		gatewayapiv1.PathMatchExact:             PatternOperator(kuadrantv1beta2.EqualOperator),
+		gatewayapiv1.PathMatchPathPrefix:        PatternOperator(kuadrantv1beta2.StartsWithOperator),
+		gatewayapiv1.PathMatchRegularExpression: PatternOperator(kuadrantv1beta2.MatchesOperator),
 	}
 )
 

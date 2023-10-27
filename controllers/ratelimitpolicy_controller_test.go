@@ -16,8 +16,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -33,7 +33,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		routeName     = "toystore-route"
 		gwName        = "toystore-gw"
 		rlpName       = "toystore-rlp"
-		gateway       *gatewayapiv1beta1.Gateway
+		gateway       *gatewayapiv1.Gateway
 	)
 
 	beforeEachCallback := func() {
@@ -43,7 +43,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(func() bool {
-			existingGateway := &gatewayapiv1beta1.Gateway{}
+			existingGateway := &gatewayapiv1.Gateway{}
 			err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
 			if err != nil {
 				logf.Log.V(1).Info("[WARN] Creating gateway failed", "error", err)
@@ -96,9 +96,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
 						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1beta1.ObjectName(routeName),
+						Name:  gatewayapiv1.ObjectName(routeName),
 					},
 					Limits: map[string]kuadrantv1beta2.Limit{
 						"l1": {
@@ -120,7 +120,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check HTTPRoute direct back reference
 			routeKey := client.ObjectKey{Name: routeName, Namespace: testNamespace}
-			existingRoute := &gatewayapiv1beta1.HTTPRoute{}
+			existingRoute := &gatewayapiv1.HTTPRoute{}
 			err = k8sClient.Get(context.Background(), routeKey, existingRoute)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
@@ -192,7 +192,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check gateway back references
 			gwKey := client.ObjectKey{Name: gwName, Namespace: testNamespace}
-			existingGateway := &gatewayapiv1beta1.Gateway{}
+			existingGateway := &gatewayapiv1.Gateway{}
 			err = k8sClient.Get(context.Background(), gwKey, existingGateway)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
@@ -206,30 +206,30 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		It("Creates the correct WasmPlugin for a complex HTTPRoute and a RateLimitPolicy", func() {
 			// create httproute
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.toystore.acme.com", "api.toystore.io"})
-			httpRoute.Spec.Rules = []gatewayapiv1beta1.HTTPRouteRule{
+			httpRoute.Spec.Rules = []gatewayapiv1.HTTPRouteRule{
 				{
-					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+					Matches: []gatewayapiv1.HTTPRouteMatch{
 						{ // get /toys*
-							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1beta1.PathMatchPathPrefix),
+							Path: &gatewayapiv1.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
 								Value: ptr.To("/toys"),
 							},
-							Method: ptr.To(gatewayapiv1beta1.HTTPMethod("GET")),
+							Method: ptr.To(gatewayapiv1.HTTPMethod("GET")),
 						},
 						{ // post /toys*
-							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1beta1.PathMatchPathPrefix),
+							Path: &gatewayapiv1.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
 								Value: ptr.To("/toys"),
 							},
-							Method: ptr.To(gatewayapiv1beta1.HTTPMethod("POST")),
+							Method: ptr.To(gatewayapiv1.HTTPMethod("POST")),
 						},
 					},
 				},
 				{
-					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+					Matches: []gatewayapiv1.HTTPRouteMatch{
 						{ // /assets*
-							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1beta1.PathMatchPathPrefix),
+							Path: &gatewayapiv1.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
 								Value: ptr.To("/assets"),
 							},
 						},
@@ -251,9 +251,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
 						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1beta1.ObjectName(routeName),
+						Name:  gatewayapiv1.ObjectName(routeName),
 					},
 					Limits: map[string]kuadrantv1beta2.Limit{
 						"toys": {
@@ -263,15 +263,15 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							Counters: []kuadrantv1beta2.ContextSelector{"auth.identity.username"},
 							RouteSelectors: []kuadrantv1beta2.RouteSelector{
 								{ // selects the 1st HTTPRouteRule (i.e. get|post /toys*) for one of the hostnames
-									Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+									Matches: []gatewayapiv1.HTTPRouteMatch{
 										{
-											Path: &gatewayapiv1beta1.HTTPPathMatch{
-												Type:  ptr.To(gatewayapiv1beta1.PathMatchPathPrefix),
+											Path: &gatewayapiv1.HTTPPathMatch{
+												Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
 												Value: ptr.To("/toys"),
 											},
 										},
 									},
-									Hostnames: []gatewayapiv1beta1.Hostname{"*.toystore.acme.com"},
+									Hostnames: []gatewayapiv1.Hostname{"*.toystore.acme.com"},
 								},
 							},
 							When: []kuadrantv1beta2.WhenCondition{
@@ -289,10 +289,10 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							},
 							RouteSelectors: []kuadrantv1beta2.RouteSelector{
 								{ // selects the 2nd HTTPRouteRule (i.e. /assets*) for all hostnames
-									Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+									Matches: []gatewayapiv1.HTTPRouteMatch{
 										{
-											Path: &gatewayapiv1beta1.HTTPPathMatch{
-												Type:  ptr.To(gatewayapiv1beta1.PathMatchPathPrefix),
+											Path: &gatewayapiv1.HTTPPathMatch{
+												Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
 												Value: ptr.To("/assets"),
 											},
 										},
@@ -434,9 +434,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
 						Kind:  "Gateway",
-						Name:  gatewayapiv1beta1.ObjectName(gwName),
+						Name:  gatewayapiv1.ObjectName(gwName),
 					},
 					Limits: map[string]kuadrantv1beta2.Limit{
 						"l1": {
@@ -458,7 +458,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
-			existingGateway := &gatewayapiv1beta1.Gateway{}
+			existingGateway := &gatewayapiv1.Gateway{}
 			err = k8sClient.Get(context.Background(), gwKey, existingGateway)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
@@ -551,9 +551,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
 						Kind:  "Gateway",
-						Name:  gatewayapiv1beta1.ObjectName(gwName),
+						Name:  gatewayapiv1.ObjectName(gwName),
 					},
 					Limits: map[string]kuadrantv1beta2.Limit{
 						"l1": {
@@ -575,7 +575,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
-			existingGateway := &gatewayapiv1beta1.Gateway{}
+			existingGateway := &gatewayapiv1.Gateway{}
 			err = k8sClient.Get(context.Background(), gwKey, existingGateway)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())

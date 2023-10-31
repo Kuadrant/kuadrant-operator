@@ -18,16 +18,19 @@ type AuthSchemeSpec struct {
 	// Authentication configs.
 	// At least one config MUST evaluate to a valid identity object for the auth request to be successful.
 	// +optional
+	// +kubebuilder:validation:MaxProperties=14
 	Authentication map[string]AuthenticationSpec `json:"authentication,omitempty"`
 
 	// Metadata sources.
 	// Authorino fetches auth metadata as JSON from sources specified in this config.
 	// +optional
+	// +kubebuilder:validation:MaxProperties=14
 	Metadata map[string]MetadataSpec `json:"metadata,omitempty"`
 
 	// Authorization policies.
 	// All policies MUST evaluate to "allowed = true" for the auth request be successful.
 	// +optional
+	// +kubebuilder:validation:MaxProperties=14
 	Authorization map[string]AuthorizationSpec `json:"authorization,omitempty"`
 
 	// Response items.
@@ -38,6 +41,7 @@ type AuthSchemeSpec struct {
 	// Callback functions.
 	// Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
 	// +optional
+	// +kubebuilder:validation:MaxProperties=14
 	Callbacks map[string]CallbackSpec `json:"callbacks,omitempty"`
 }
 
@@ -47,6 +51,7 @@ type CommonAuthRuleSpec struct {
 	// At least one selected HTTPRoute rule must match to trigger the auth rule.
 	// If no route selectors are specified, the auth rule will be evaluated at all requests to the protected routes.
 	// +optional
+	// +kubebuilder:validation:MaxItems=15
 	RouteSelectors []RouteSelector `json:"routeSelectors,omitempty"`
 }
 
@@ -93,11 +98,13 @@ type ResponseSpec struct {
 type WrappedSuccessResponseSpec struct {
 	// Custom success response items wrapped as HTTP headers.
 	// For integration of Authorino via proxy, the proxy must use these settings to inject data in the request.
+	// +kubebuilder:validation:MaxProperties=14
 	Headers map[string]HeaderSuccessResponseSpec `json:"headers,omitempty"`
 
 	// Custom success response items wrapped as HTTP headers.
 	// For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata.
 	// See https://www.envoyproxy.io/docs/envoy/latest/configuration/advanced/well_known_dynamic_metadata
+	// +kubebuilder:validation:MaxProperties=14
 	DynamicMetadata map[string]SuccessResponseSpec `json:"dynamicMetadata,omitempty"`
 }
 
@@ -133,6 +140,7 @@ type AuthPolicySpec struct {
 	// At least one selected HTTPRoute rule must match to trigger the AuthPolicy.
 	// If no route selectors are specified, the AuthPolicy will be enforced at all requests to the protected routes.
 	// +optional
+	// +kubebuilder:validation:MaxItems=15
 	RouteSelectors []RouteSelector `json:"routeSelectors,omitempty"`
 
 	// Named sets of patterns that can be referred in `when` conditions and in pattern-matching authorization policy rules.

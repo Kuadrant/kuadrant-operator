@@ -88,6 +88,7 @@ type WhenCondition struct {
 type Limit struct {
 	// RouteSelectors defines semantics for matching an HTTP request based on conditions
 	// +optional
+	// +kubebuilder:validation:MaxItems=15
 	RouteSelectors []RouteSelector `json:"routeSelectors,omitempty"`
 
 	// When holds the list of conditions for the policy to be enforced.
@@ -119,6 +120,7 @@ type RateLimitPolicySpec struct {
 
 	// Limits holds the struct of limits indexed by a unique name
 	// +optional
+	// +kubebuilder:validation:MaxProperties=14
 	Limits map[string]Limit `json:"limits,omitempty"`
 }
 

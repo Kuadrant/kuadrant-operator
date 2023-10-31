@@ -321,8 +321,10 @@ spec:
                             - name
                             x-kubernetes-list-type: map
                         type: object
+                      maxItems: 8
                       type: array
                   type: object
+                maxItems: 15
                 type: array
               rules:
                 description: The auth rules of the policy. See Authorino's AuthConfig
@@ -875,8 +877,10 @@ spec:
                                       - name
                                       x-kubernetes-list-type: map
                                   type: object
+                                maxItems: 8
                                 type: array
                             type: object
+                          maxItems: 15
                           type: array
                         when:
                           description: Conditions for Authorino to enforce this config.
@@ -1001,6 +1005,7 @@ spec:
                     description: Authentication configs. At least one config MUST
                       evaluate to a valid identity object for the auth request to
                       be successful.
+                    maxProperties: 14
                     type: object
                   authorization:
                     additionalProperties:
@@ -1781,8 +1786,10 @@ spec:
                                       - name
                                       x-kubernetes-list-type: map
                                   type: object
+                                maxItems: 8
                                 type: array
                             type: object
+                          maxItems: 15
                           type: array
                         spicedb:
                           description: Authorization decision delegated to external
@@ -1972,6 +1979,7 @@ spec:
                       type: object
                     description: Authorization policies. All policies MUST evaluate
                       to "allowed = true" for the auth request be successful.
+                    maxProperties: 14
                     type: object
                   callbacks:
                     additionalProperties:
@@ -2499,8 +2507,10 @@ spec:
                                       - name
                                       x-kubernetes-list-type: map
                                   type: object
+                                maxItems: 8
                                 type: array
                             type: object
+                          maxItems: 15
                           type: array
                         when:
                           description: Conditions for Authorino to enforce this config.
@@ -2561,6 +2571,7 @@ spec:
                     description: Callback functions. Authorino sends callbacks at
                       the end of the auth pipeline to the endpoints specified in this
                       config.
+                    maxProperties: 14
                     type: object
                   metadata:
                     additionalProperties:
@@ -3088,8 +3099,10 @@ spec:
                                       - name
                                       x-kubernetes-list-type: map
                                   type: object
+                                maxItems: 8
                                 type: array
                             type: object
+                          maxItems: 15
                           type: array
                         uma:
                           description: User-Managed Access (UMA) source of resource
@@ -3184,6 +3197,7 @@ spec:
                       type: object
                     description: Metadata sources. Authorino fetches auth metadata
                       as JSON from sources specified in this config.
+                    maxProperties: 14
                     type: object
                   response:
                     description: Response items. Authorino builds custom responses
@@ -3612,8 +3626,10 @@ spec:
                                               - name
                                               x-kubernetes-list-type: map
                                           type: object
+                                        maxItems: 8
                                         type: array
                                     type: object
+                                  maxItems: 15
                                   type: array
                                 when:
                                   description: Conditions for Authorino to enforce
@@ -3748,6 +3764,7 @@ spec:
                               HTTP headers. For integration of Authorino via proxy,
                               the proxy must use these settings to propagate dynamic
                               metadata. See https://www.envoyproxy.io/docs/envoy/latest/configuration/advanced/well_known_dynamic_metadata
+                            maxProperties: 14
                             type: object
                           headers:
                             additionalProperties:
@@ -4165,8 +4182,10 @@ spec:
                                               - name
                                               x-kubernetes-list-type: map
                                           type: object
+                                        maxItems: 8
                                         type: array
                                     type: object
+                                  maxItems: 15
                                   type: array
                                 when:
                                   description: Conditions for Authorino to enforce
@@ -4301,6 +4320,7 @@ spec:
                               HTTP headers. For integration of Authorino via proxy,
                               the proxy must use these settings to inject data in
                               the request.
+                            maxProperties: 14
                             type: object
                         type: object
                       unauthenticated:

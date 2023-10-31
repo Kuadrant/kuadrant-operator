@@ -19,6 +19,7 @@ type RouteSelector struct {
 	// Matches define conditions used for matching the rule against incoming HTTP requests.
 	// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
 	// +optional
+	// +kubebuilder:validation:MaxItems=8
 	Matches []gatewayapiv1.HTTPRouteMatch `json:"matches,omitempty"`
 }
 

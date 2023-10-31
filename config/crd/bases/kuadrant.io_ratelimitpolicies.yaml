@@ -345,8 +345,10 @@ spec:
                                   - name
                                   x-kubernetes-list-type: map
                               type: object
+                            maxItems: 8
                             type: array
                         type: object
+                      maxItems: 15
                       type: array
                     when:
                       description: When holds the list of conditions for the policy
@@ -388,6 +390,7 @@ spec:
                   type: object
                 description: Limits holds the struct of limits indexed by a unique
                   name
+                maxProperties: 14
                 type: object
               targetRef:
                 description: TargetRef identifies an API object to apply policy to.

@@ -36,7 +36,8 @@ catalog: $(OPM) ## Generate catalog content and validate.
 	$(MAKE) $(CATALOG_DOCKERFILE)
 	$(MAKE) $(CATALOG_FILE) LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) \
 		AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG) \
-		BUNDLE_IMG=$(BUNDLE_IMG)
+		BUNDLE_IMG=$(BUNDLE_IMG) \
+		REPLACES_VERSION=$(REPLACES_VERSION)
 	cd $(PROJECT_PATH)/catalog && $(OPM) validate kuadrant-operator-catalog
 
 # Build a catalog image by adding bundle images to an empty catalog using the operator package manager tool, 'opm'.

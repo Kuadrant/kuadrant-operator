@@ -23,6 +23,7 @@ import (
 	"runtime"
 
 	"k8s.io/utils/env"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -44,6 +45,8 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -100,23 +103,25 @@ func main() {
 	setupLog := log.Log
 
 	var (
-		configFile string
-		err        error
+		metricsAddr          string
+		enableLeaderElection bool
+		probeAddr            string
+		err                  error
 	)
-	flag.StringVar(&configFile, "config", "",
-		"The operator will load its initial configuration from this file. "+
-			"Omit this flag to use the default configuration values. "+
-			"Command-line flags override configuration from this file.")
+	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
+		"Enable leader election for controller manager. "+
+			"Enabling this will ensure there is only one active controller manager.")
 	flag.Parse()
 
-	options := ctrl.Options{Scheme: scheme}
-
-	if configFile != "" {
-		options, err = options.AndFrom(ctrl.ConfigFile().AtPath(configFile))
-		if err != nil {
-			setupLog.Error(err, "unable to load the config file")
-			os.Exit(1)
-		}
+	options := ctrl.Options{
+		Scheme:                 scheme,
+		Metrics:                metricsserver.Options{BindAddress: metricsAddr},
+		WebhookServer:          webhook.NewServer(webhook.Options{Port: 9443}),
+		HealthProbeBindAddress: probeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       "f139389e.kuadrant.io",
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)

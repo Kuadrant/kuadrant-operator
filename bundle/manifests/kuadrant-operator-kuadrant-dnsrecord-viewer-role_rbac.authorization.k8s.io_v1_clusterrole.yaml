@@ -1,0 +1,28 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  labels:
+    app: kuadrant
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: multicluster-gateway-controller
+    app.kubernetes.io/instance: dnsrecord-viewer-role
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/part-of: multicluster-gateway-controller
+  name: kuadrant-operator-kuadrant-dnsrecord-viewer-role
+rules:
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - dnsrecords
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - dnsrecords/status
+  verbs:
+  - get

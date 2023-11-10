@@ -2,14 +2,11 @@
 
 This user guide walks you through an example of how to configure authenticated rate limiting for an application using Kuadrant.
 
-<br/>
-
 Authenticated rate limiting rate limits the traffic directed to an application based on attributes of the client user, who is authenticated by some authentication method. A few examples of authenticated rate limiting use cases are:
+
 - User A can send up to 50rps ("requests per second"), while User B can send up to 100rps.
 - Each user can send up to 20rpm ("request per minute").
 - Admin users (members of the 'admin' group) can send up to 100rps, while regular users (non-admins) can send up to 20rpm and no more than 5rps.
-
-<br/>
 
 In this guide, we will rate limit a sample REST API called **Toy Store**. In reality, this API is just an echo service that echoes back to the user whatever attributes it gets in the request. The API exposes an endpoint at `GET http://api.toystore.com/toy`, to mimic an operation of reading toy records.
 
@@ -19,8 +16,6 @@ We will define 2 users of the API, which can send requests to the API at differe
 |---------|----------------------------------------|
 | alice   | 5rp10s ("5 requests every 10 seconds") |
 | bob     | 2rp10s ("2 requests every 10 seconds") |
-
-<br/>
 
 ## Run the steps ① → ④
 
@@ -224,8 +219,6 @@ EOF
 ```
 
 > **Note:** It may take a couple of minutes for the RateLimitPolicy to be applied depending on your cluster.
-
-<br/>
 
 Verify the rate limiting works by sending requests as Alice and Bob.
 

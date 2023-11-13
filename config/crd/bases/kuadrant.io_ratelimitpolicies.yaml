@@ -4,6 +4,8 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.13.0
+  labels:
+    gateway.networking.k8s.io/policy: inherited
   name: ratelimitpolicies.kuadrant.io
 spec:
   group: kuadrant.io

@@ -1,6 +1,6 @@
 module github.com/kuadrant/kuadrant-operator
 
-go 1.20
+go 1.21
 
 require (
 	github.com/elliotchance/orderedmap/v2 v2.2.0

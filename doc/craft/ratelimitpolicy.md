@@ -1,6 +1,6 @@
 # Crafting A RateLimitPolicy
 A detail explanation of the fields in the RateLimitPolicy is outlined here.
-For a quick reference refer to [Reference](/kuadrant-operator/doc/reference/ratelimitpolicy/) section.
+For a quick reference refer to [Reference](https://docs.kuadrant.io/kuadrant-operator/reference/ratelimitpolicy/) section.
 
 ## apiVersion and kind
 The latest version of the RateLimitPolicy is `kuadrant.io/v1beta2`.
@@ -11,70 +11,75 @@ kind: RatelimitPplicy
 ```
 
 ## Metadata
-When creating the RateLimitPolicy the policy must be crated in the same namespace as the resource being targeted.
+The RateLimitPolicy must be created in the same namespace as the resource being targeted.
 ```yaml
 metadata:
-    name: toystore
-    namespace: default
+  name: toystore
+  namespace: default
 ```
-Once created Kuadrant may add and manage additional annotations and labels.
+Once created, Kuadrant may add additional annotations and labels to the policy.
 For example:
 ```yaml
 metadata:
-    annotations:
-        kuadrant.io/namespace: default
+  annotations:
+    kuadrant.io/namespace: default
 ```
 
 ## Spec
 
 ### limits
-`spec.limits` is a list of named limits, which describe what limits should be placed on a resource.
+`spec.limits` is a list of named limits, which describe the limits that target a Gateway or HTTProute.
 Many named limits are allowed.
 Limit names do require to be valid yaml keys.
 ```yaml
 spec:
-    limits:
-        limit_1:
-            ...
-        limit_2:
-            ...
+  limits:
+    limit_1:
+      ...
+    limit_2:
+      ...
 ```
 
 #### counters
-`counters` defines additional rate limit counters based on context qualifiers and well known selectors.
-The full list of well known attributes can be found [here](/architecture/rfcs/0002-well-known-attributes/#request-attributes).
+`counters` define rate limit qualifier counters based on dynamic values of a well known attribute.
+The well known attributes categories are listed below.
+
+* [Request attributes](https://docs.kuadrant.io/architecture/rfcs/0002-well-known-attributes/#request-attributes).
+* [Connection attributes](https://docs.kuadrant.io/architecture/rfcs/0002-well-known-attributes/#connection-attributes).
+* [Metadata and filter state attributes](https://docs.kuadrant.io/architecture/rfcs/0002-well-known-attributes/#metadata-and-filter-state-attributes).
+* [Rate-limit attributes](https://docs.kuadrant.io/architecture/rfcs/0002-well-known-attributes/#rate-limit-attributes).
+
 All defined counters are ANDed together.
 ```yaml
 spec: 
-    limits:
-        limit_1:
-            counters:
-                - request.url_path
+  limits:
+    limit_1:
+      counters:
+        - request.url_path
 ```
 The above example creates a new counter for every url_path that is requested.
 
-A more concrete example of why creating new counters base off the well known attributes may relate to comments on social network.
-It might be business policy to only allow users to update comments once pre day. 
+A more concrete example of why to create new counters base off the well known attributes may relate to comments in an application where a business policy may only allow users to update comments once pre day. 
 The example limit is defined below.
 Comments are updated at a URI like "/comment/<UUID\>".
 ```yaml
 spec: 
-    limits:
-        comments_update:
-            counters:
-                - request.url_path
-            rates:
-                - duration: 1
-                  limit: 1
-                  unit: day
-            routeSelectors:
-                - hostnames:
-                    - 'api.toystore.com'
-                  matches:
-                    - method: POST
-                      path:
-                        type: PathPrefix
-                        value: /comment
+  limits:
+    comments_update:
+      counters:
+        - request.url_path
+      rates:
+        - duration: 1
+          limit: 1
+          unit: day
+      routeSelectors:
+        - hostnames:
+          - 'api.toystore.com'
+          matches:
+          - method: POST
+            path:
+              type: PathPrefix
+              value: /comment
 ```
 
 #### rates
@@ -89,15 +94,15 @@ Possible values are second, minute, hour and day.
 
 ```yaml
 spec:
-    limits:
-        limit_1:
-            rates:
-                - duration: 10
-                  limit: 5
-                  unit: second
-                - duration: 1
-                  limit: 1500
-                  unit: hour
+  limits:
+    limit_1:
+      rates:
+        - duration: 10
+          limit: 5
+          unit: second
+        - duration: 1
+          limit: 1500
+          unit: hour
 ```
 The above example restricts "limit_1" to 5 requests every 10 seconds or 1500 requests every hour.
 1500 requests an hour is more restrictive than 5 requests every 10 seconds.
@@ -114,20 +119,20 @@ A `match` is a complex object, see [match](#match) for more detail.
 
 ```yaml
 spec:
-    limits:
-        limit_1:
-            routeSelectors:
-                - hostnames:
-                    - 'api.toystore.com'
-                    - 'admin.toystore.com'
-                    - '*.example.com'
-                  matches:
-                    - method: GET
-                      path:
-                        type: PathPrefix
-                        value: /
+  limits:
+    limit_1:
+      routeSelectors:
+        - hostnames:
+          - 'api.toystore.com'
+          - 'admin.toystore.com'
+          - '*.example.com'
+          matches:
+          - method: GET
+            path:
+              type: PathPrefix
+              value: /
 ```
-The above example selects an number of hostnames to protect, and the `matches` refines the selection to GET requests on any URI that is prefix with `/`.
+The above example selects a number of hostnames to protect, and the `matches` refines the selection to GET requests on any URI that is prefix with `/`.
 
 ##### match
 `matches` defines the predicate used to match requests to a given action.
@@ -150,20 +155,20 @@ The object is formatted like `{name: <param name>, value: <param value>, type: <
 
 ```yaml
 spec:
-    limits:
-        limit_1:
-            routeSelectors:
-                  matches:
-                    - method: GET
-                      path:
-                        type: PathPrefix
-                        value: /admin
-                      headers:
-                        - name: "version"
-                          value: "v1"
-                      queryParam:
-                        - name: "search"
-                          value: "release"
+  limits:
+    limit_1:
+      routeSelectors:
+        matches:
+        - method: GET
+          path:
+            type: PathPrefix
+            value: /admin
+          headers:
+          - name: "version"
+            value: "v1"
+          queryParam:
+          - name: "search"
+            value: "release"
 ```
 The above example selects all HTTP requests that have a method of GET, and the URI starts with "/admin".
 Also the request must have a header entry of `version:v1` and a queryParam of `search=release`.
@@ -181,12 +186,12 @@ The full list of well known attributes can be found [here](/architecture/rfcs/00
 - `value`: reference for the comparison.
 ```yaml
 spec:
-    limits:
-        limit_1:
-            when:
-                - operator: "eq"
-                  selector: "request.useragent"
-                  value: "curl/8.0.1"
+  limits:
+    limit_1:
+      when:
+        - operator: "eq"
+          selector: "request.useragent"
+          value: "curl/8.0.1"
 ```
 The above example will match HTTP requests that are sent with the header HTTP_USER_AGENT set with a value of "curl/8.0.1". 
 
@@ -200,10 +205,10 @@ There are three required fields: `group`, `kind` and `name`.
 
 ```yaml
 spec:
-    targetref:
-        group: gateway.networking.k8s.io
-        kind: HTTPRoute
-        name: toystore
+  targetref:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
 ```
 The above example targets the HTTPRoute named toystore.
 
@@ -212,42 +217,42 @@ The above example targets the HTTPRoute named toystore.
 apiVersion: kuadrant.io/v1beta2
 kind: RatelimitPplicy
 metadata:
-    name: toystore
-    namespace: default
+  name: toystore
+  namespace: default
 spec: 
-    limits:
-        toystore:
-            rates:
-                - duration: 10
-                  limit: 5
-                  unit: secound
-            routeSelectors:
-                - host:
-                    - '*.toystore.com'
-                  matches:
-                    - method: GET
-                      path:
-                        type: PathPrefix
-                        value: /toy
-        comments_update:
-            counters:
-                - request.url_path
-            rates:
-                - duration: 1
-                  limit: 1
-                  unit: day
-            routeSelectors:
-                - hostnames:
-                    - 'api.toystore.com'
-                  matches:
-                    - method: POST
-                      path:
-                        type: PathPrefix
-                        value: /comment
-    targetref:
-        group: gateway.networking.k8s.io
-        kind: HTTPRoute
-        name: toystore
+  limits:
+    toystore:
+      rates:
+        - duration: 10
+          limit: 5
+          unit: second
+      routeSelectors:
+        - host:
+          - '*.toystore.com'
+          matches:
+          - method: GET
+            path:
+              type: PathPrefix
+              value: /toy
+    comments_update:
+      counters:
+        - request.url_path
+      rates:
+        - duration: 1
+          limit: 1
+          unit: day
+      routeSelectors:
+        - hostnames:
+          - 'api.toystore.com'
+          matches:
+          - method: POST
+            path:
+              type: PathPrefix
+              value: /comment
+  targetref:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
 ```
 The above example defines two sets of limits, `toystore` and `comments_update` which are targeting the HTTP route called toystore.
 `toystore` limits every subdomain of toystore.com to 5 requests in a 10-second period that does a GET request on URI's starting with /toy.

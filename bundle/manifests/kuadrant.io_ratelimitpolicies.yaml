@@ -6,7 +6,7 @@ metadata:
   creationTimestamp: null
   labels:
     app: kuadrant
-    gateway.networking.k8s.io/policy: inherited
+    gateway.networking.k8s.io/policy: direct
   name: ratelimitpolicies.kuadrant.io
 spec:
   group: kuadrant.io

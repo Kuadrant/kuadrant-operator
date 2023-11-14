@@ -5,7 +5,7 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.13.0
   labels:
-    gateway.networking.k8s.io/policy: inherited
+    gateway.networking.k8s.io/policy: direct
   name: authpolicies.kuadrant.io
 spec:
   group: kuadrant.io

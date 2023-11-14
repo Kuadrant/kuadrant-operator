@@ -163,7 +163,7 @@ func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr
 // RateLimitPolicy is the Schema for the ratelimitpolicies API
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=inherited"
+// +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=direct"
 type RateLimitPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

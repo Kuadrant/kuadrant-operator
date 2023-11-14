@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
-func testBuildBasicRLP(name string, kind gatewayapiv1beta1.Kind) *RateLimitPolicy {
+func testBuildBasicRLP(name string, kind gatewayapiv1.Kind) *RateLimitPolicy {
 	return &RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
@@ -34,11 +34,11 @@ func testBuildBasicRLP(name string, kind gatewayapiv1beta1.Kind) *RateLimitPolic
 }
 
 func testBuildBasicGatewayRLP(name string) *RateLimitPolicy {
-	return testBuildBasicRLP(name, gatewayapiv1beta1.Kind("Gateway"))
+	return testBuildBasicRLP(name, gatewayapiv1.Kind("Gateway"))
 }
 
 func testBuildBasicHTTPRouteRLP(name string) *RateLimitPolicy {
-	return testBuildBasicRLP(name, gatewayapiv1beta1.Kind("HTTPRoute"))
+	return testBuildBasicRLP(name, gatewayapiv1.Kind("HTTPRoute"))
 }
 
 // TestRateLimitPolicyValidation calls rlp.Validate()
@@ -62,7 +62,7 @@ func TestRateLimitPolicyValidation(t *testing.T) {
 
 	// invalid group
 	rlp = testBuildBasicHTTPRouteRLP(name)
-	rlp.Spec.TargetRef.Group = gatewayapiv1beta1.Group("foo.example.com")
+	rlp.Spec.TargetRef.Group = gatewayapiv1.Group("foo.example.com")
 	err = rlp.Validate()
 	if err == nil {
 		t.Fatal(`rlp.Validate() did not return error and should`)
@@ -73,7 +73,7 @@ func TestRateLimitPolicyValidation(t *testing.T) {
 
 	// invalid kind
 	rlp = testBuildBasicHTTPRouteRLP(name)
-	rlp.Spec.TargetRef.Kind = gatewayapiv1beta1.Kind("Foo")
+	rlp.Spec.TargetRef.Kind = gatewayapiv1.Kind("Foo")
 	err = rlp.Validate()
 	if err == nil {
 		t.Fatal(`rlp.Validate() did not return error and should`)
@@ -84,7 +84,7 @@ func TestRateLimitPolicyValidation(t *testing.T) {
 
 	// Different namespace
 	rlp = testBuildBasicHTTPRouteRLP(name)
-	otherNS := gatewayapiv1beta1.Namespace(rlp.GetNamespace() + "other")
+	otherNS := gatewayapiv1.Namespace(rlp.GetNamespace() + "other")
 	rlp.Spec.TargetRef.Namespace = &otherNS
 	err = rlp.Validate()
 	if err == nil {

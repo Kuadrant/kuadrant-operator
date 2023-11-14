@@ -31,8 +31,8 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
@@ -50,24 +50,24 @@ func TestFetchValidGateway(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = gatewayapiv1beta1.AddToScheme(s)
+	err = gatewayapiv1.AddToScheme(s)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	existingGateway := &gatewayapiv1beta1.Gateway{
+	existingGateway := &gatewayapiv1.Gateway{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gateway.networking.k8s.io/v1beta1",
+			APIVersion: gatewayapiv1.GroupName,
 			Kind:       "Gateway",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      gwName,
 			Namespace: namespace,
 		},
-		Spec: gatewayapiv1beta1.GatewaySpec{
+		Spec: gatewayapiv1.GatewaySpec{
 			GatewayClassName: "istio",
 		},
-		Status: gatewayapiv1beta1.GatewayStatus{
+		Status: gatewayapiv1.GatewayStatus{
 			Conditions: []metav1.Condition{
 				{
 					Type:   "Ready",
@@ -119,34 +119,34 @@ func TestFetchValidHTTPRoute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = gatewayapiv1beta1.AddToScheme(s)
+	err = gatewayapiv1.AddToScheme(s)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	existingRoute := &gatewayapiv1beta1.HTTPRoute{
+	existingRoute := &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gateway.networking.k8s.io/v1beta1",
+			APIVersion: gatewayapiv1.GroupName,
 			Kind:       "HTTPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      routeName,
 			Namespace: namespace,
 		},
-		Spec: gatewayapiv1beta1.HTTPRouteSpec{
-			CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1beta1.ParentReference{
+		Spec: gatewayapiv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+				ParentRefs: []gatewayapiv1.ParentReference{
 					{
 						Name: "gwName",
 					},
 				},
 			},
 		},
-		Status: gatewayapiv1beta1.HTTPRouteStatus{
-			RouteStatus: gatewayapiv1beta1.RouteStatus{
-				Parents: []gatewayapiv1beta1.RouteParentStatus{
+		Status: gatewayapiv1.HTTPRouteStatus{
+			RouteStatus: gatewayapiv1.RouteStatus{
+				Parents: []gatewayapiv1.RouteParentStatus{
 					{
-						ParentRef: gatewayapiv1beta1.ParentReference{
+						ParentRef: gatewayapiv1.ParentReference{
 							Name: "gwName",
 						},
 						Conditions: []metav1.Condition{
@@ -203,40 +203,40 @@ func TestFetchValidTargetRef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = gatewayapiv1beta1.AddToScheme(s)
+	err = gatewayapiv1.AddToScheme(s)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	targetRef := gatewayapiv1alpha2.PolicyTargetReference{
-		Group: "gateway.networking.k8s.io",
+		Group: gatewayapiv1.GroupName,
 		Kind:  "HTTPRoute",
-		Name:  gatewayapiv1beta1.ObjectName(routeName),
+		Name:  gatewayapiv1.ObjectName(routeName),
 	}
 
-	existingRoute := &gatewayapiv1beta1.HTTPRoute{
+	existingRoute := &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gateway.networking.k8s.io/v1beta1",
+			APIVersion: gatewayapiv1.GroupName,
 			Kind:       "HTTPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      routeName,
 			Namespace: namespace,
 		},
-		Spec: gatewayapiv1beta1.HTTPRouteSpec{
-			CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1beta1.ParentReference{
+		Spec: gatewayapiv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+				ParentRefs: []gatewayapiv1.ParentReference{
 					{
 						Name: "gwName",
 					},
 				},
 			},
 		},
-		Status: gatewayapiv1beta1.HTTPRouteStatus{
-			RouteStatus: gatewayapiv1beta1.RouteStatus{
-				Parents: []gatewayapiv1beta1.RouteParentStatus{
+		Status: gatewayapiv1.HTTPRouteStatus{
+			RouteStatus: gatewayapiv1.RouteStatus{
+				Parents: []gatewayapiv1.RouteParentStatus{
 					{
-						ParentRef: gatewayapiv1beta1.ParentReference{
+						ParentRef: gatewayapiv1.ParentReference{
 							Name: "gwName",
 						},
 						Conditions: []metav1.Condition{
@@ -274,7 +274,7 @@ func TestFetchValidTargetRef(t *testing.T) {
 	}
 
 	switch obj := res.(type) {
-	case *gatewayapiv1beta1.HTTPRoute:
+	case *gatewayapiv1.HTTPRoute:
 		if !reflect.DeepEqual(obj.Spec, existingRoute.Spec) {
 			t.Fatal("res spec not as expected")
 		}
@@ -297,36 +297,36 @@ func TestReconcileTargetBackReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = gatewayapiv1beta1.AddToScheme(s)
+	err = gatewayapiv1.AddToScheme(s)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	policyKey := client.ObjectKey{Name: "someName", Namespace: "someNamespace"}
 
-	existingRoute := &gatewayapiv1beta1.HTTPRoute{
+	existingRoute := &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gateway.networking.k8s.io/v1beta1",
+			APIVersion: gatewayapiv1.GroupName,
 			Kind:       "HTTPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      routeName,
 			Namespace: namespace,
 		},
-		Spec: gatewayapiv1beta1.HTTPRouteSpec{
-			CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1beta1.ParentReference{
+		Spec: gatewayapiv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+				ParentRefs: []gatewayapiv1.ParentReference{
 					{
 						Name: "gwName",
 					},
 				},
 			},
 		},
-		Status: gatewayapiv1beta1.HTTPRouteStatus{
-			RouteStatus: gatewayapiv1beta1.RouteStatus{
-				Parents: []gatewayapiv1beta1.RouteParentStatus{
+		Status: gatewayapiv1.HTTPRouteStatus{
+			RouteStatus: gatewayapiv1.RouteStatus{
+				Parents: []gatewayapiv1.RouteParentStatus{
 					{
-						ParentRef: gatewayapiv1beta1.ParentReference{
+						ParentRef: gatewayapiv1.ParentReference{
 							Name: "gwName",
 						},
 						Conditions: []metav1.Condition{
@@ -359,7 +359,7 @@ func TestReconcileTargetBackReference(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res := &gatewayapiv1beta1.HTTPRoute{}
+	res := &gatewayapiv1.HTTPRoute{}
 	err = cl.Get(ctx, client.ObjectKey{Name: routeName, Namespace: namespace}, res)
 	if err != nil {
 		t.Fatal(err)
@@ -396,34 +396,34 @@ func TestTargetedGatewayKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = gatewayapiv1beta1.AddToScheme(s)
+	err = gatewayapiv1.AddToScheme(s)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	existingRoute := &gatewayapiv1beta1.HTTPRoute{
+	existingRoute := &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gateway.networking.k8s.io/v1beta1",
+			APIVersion: gatewayapiv1.GroupName,
 			Kind:       "HTTPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      routeName,
 			Namespace: namespace,
 		},
-		Spec: gatewayapiv1beta1.HTTPRouteSpec{
-			CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1beta1.ParentReference{
+		Spec: gatewayapiv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+				ParentRefs: []gatewayapiv1.ParentReference{
 					{
 						Name: "gwName",
 					},
 				},
 			},
 		},
-		Status: gatewayapiv1beta1.HTTPRouteStatus{
-			RouteStatus: gatewayapiv1beta1.RouteStatus{
-				Parents: []gatewayapiv1beta1.RouteParentStatus{
+		Status: gatewayapiv1.HTTPRouteStatus{
+			RouteStatus: gatewayapiv1.RouteStatus{
+				Parents: []gatewayapiv1.RouteParentStatus{
 					{
-						ParentRef: gatewayapiv1beta1.ParentReference{
+						ParentRef: gatewayapiv1.ParentReference{
 							Name: "gwName",
 						},
 						Conditions: []metav1.Condition{
@@ -478,14 +478,14 @@ func TestDeleteTargetBackReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = gatewayapiv1beta1.AddToScheme(s)
+	err = gatewayapiv1.AddToScheme(s)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	existingRoute := &gatewayapiv1beta1.HTTPRoute{
+	existingRoute := &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gateway.networking.k8s.io/v1beta1",
+			APIVersion: gatewayapiv1.GroupName,
 			Kind:       "HTTPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -495,20 +495,20 @@ func TestDeleteTargetBackReference(t *testing.T) {
 				annotationName: "annotationValue",
 			},
 		},
-		Spec: gatewayapiv1beta1.HTTPRouteSpec{
-			CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
-				ParentRefs: []gatewayapiv1beta1.ParentReference{
+		Spec: gatewayapiv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+				ParentRefs: []gatewayapiv1.ParentReference{
 					{
 						Name: "gwName",
 					},
 				},
 			},
 		},
-		Status: gatewayapiv1beta1.HTTPRouteStatus{
-			RouteStatus: gatewayapiv1beta1.RouteStatus{
-				Parents: []gatewayapiv1beta1.RouteParentStatus{
+		Status: gatewayapiv1.HTTPRouteStatus{
+			RouteStatus: gatewayapiv1.RouteStatus{
+				Parents: []gatewayapiv1.RouteParentStatus{
 					{
-						ParentRef: gatewayapiv1beta1.ParentReference{
+						ParentRef: gatewayapiv1.ParentReference{
 							Name: "gwName",
 						},
 						Conditions: []metav1.Condition{
@@ -541,7 +541,7 @@ func TestDeleteTargetBackReference(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res := &gatewayapiv1beta1.HTTPRoute{}
+	res := &gatewayapiv1.HTTPRoute{}
 	err = cl.Get(ctx, client.ObjectKey{Name: routeName, Namespace: namespace}, res)
 	if err != nil {
 		t.Fatal(err)

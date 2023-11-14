@@ -11,7 +11,7 @@ import (
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	"k8s.io/utils/env"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
@@ -24,7 +24,7 @@ var (
 // WasmRules computes WASM rules from the policy and the targeted route.
 // It returns an empty list of wasm rules if the policy specifies no limits or if all limits specified in the policy
 // fail to match any route rule according to the limits route selectors.
-func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HTTPRoute) []wasm.Rule {
+func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1.HTTPRoute) []wasm.Rule {
 	rules := make([]wasm.Rule, 0)
 	if rlp == nil {
 		return rules
@@ -43,7 +43,7 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1beta1.HT
 	return rules
 }
 
-func ruleFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute) (wasm.Rule, error) {
+func ruleFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPRoute) (wasm.Rule, error) {
 	rule := wasm.Rule{}
 
 	conditions, err := conditionsFromLimit(limit, route)
@@ -60,7 +60,7 @@ func ruleFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit, route *
 	return rule, nil
 }
 
-func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.HTTPRoute) ([]wasm.Condition, error) {
+func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPRoute) ([]wasm.Condition, error) {
 	if limit == nil {
 		return nil, errors.New("limit should not be nil")
 	}
@@ -119,7 +119,7 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1beta1.
 // each combination of a rule match and hostname yields one condition
 // rules that specify no explicit match are assumed to match all request (i.e. implicit catch-all rule)
 // empty list of hostnames yields a condition without a hostname pattern expression
-func conditionsFromRule(rule gatewayapiv1beta1.HTTPRouteRule, hostnames []gatewayapiv1beta1.Hostname) (conditions []wasm.Condition) {
+func conditionsFromRule(rule gatewayapiv1.HTTPRouteRule, hostnames []gatewayapiv1.Hostname) (conditions []wasm.Condition) {
 	if len(rule.Matches) == 0 {
 		for _, hostname := range hostnames {
 			if hostname == "*" {
@@ -152,7 +152,7 @@ func conditionsFromRule(rule gatewayapiv1beta1.HTTPRouteRule, hostnames []gatewa
 	return
 }
 
-func patternExpresionsFromMatch(match gatewayapiv1beta1.HTTPRouteMatch) []wasm.PatternExpression {
+func patternExpresionsFromMatch(match gatewayapiv1.HTTPRouteMatch) []wasm.PatternExpression {
 	expressions := make([]wasm.PatternExpression, 0)
 
 	if match.Path != nil {
@@ -168,7 +168,7 @@ func patternExpresionsFromMatch(match gatewayapiv1beta1.HTTPRouteMatch) []wasm.P
 	return expressions
 }
 
-func patternExpresionFromPathMatch(pathMatch gatewayapiv1beta1.HTTPPathMatch) wasm.PatternExpression {
+func patternExpresionFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) wasm.PatternExpression {
 	var (
 		operator = wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator) // default value
 		value    = "/"                                                      // default value
@@ -191,7 +191,7 @@ func patternExpresionFromPathMatch(pathMatch gatewayapiv1beta1.HTTPPathMatch) wa
 	}
 }
 
-func patternExpresionFromMethod(method gatewayapiv1beta1.HTTPMethod) wasm.PatternExpression {
+func patternExpresionFromMethod(method gatewayapiv1.HTTPMethod) wasm.PatternExpression {
 	return wasm.PatternExpression{
 		Selector: "request.method",
 		Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
@@ -199,7 +199,7 @@ func patternExpresionFromMethod(method gatewayapiv1beta1.HTTPMethod) wasm.Patter
 	}
 }
 
-func patternExpresionFromHostname(hostname gatewayapiv1beta1.Hostname) wasm.PatternExpression {
+func patternExpresionFromHostname(hostname gatewayapiv1.Hostname) wasm.PatternExpression {
 	value := string(hostname)
 	operator := "eq"
 	if strings.HasPrefix(value, "*.") {

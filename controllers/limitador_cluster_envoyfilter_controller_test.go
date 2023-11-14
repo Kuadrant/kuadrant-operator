@@ -15,8 +15,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -38,7 +38,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(func() bool {
-			existingGateway := &gatewayapiv1beta1.Gateway{}
+			existingGateway := &gatewayapiv1.Gateway{}
 			err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
 			if err != nil {
 				logf.Log.V(1).Info("[WARN] Creating gateway failed", "error", err)
@@ -86,9 +86,9 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
 						Kind:  "Gateway",
-						Name:  gatewayapiv1beta1.ObjectName(gwName),
+						Name:  gatewayapiv1.ObjectName(gwName),
 					},
 					Limits: map[string]kuadrantv1beta2.Limit{
 						"l1": {

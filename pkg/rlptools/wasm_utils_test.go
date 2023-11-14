@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
@@ -16,21 +16,21 @@ import (
 // TODO(eastizle): missing WASMPluginMutator tests
 // TODO(eastizle): missing TestWasmRules use cases tests. Only happy path
 func TestWasmRules(t *testing.T) {
-	httpRoute := &gatewayapiv1beta1.HTTPRoute{
-		Spec: gatewayapiv1beta1.HTTPRouteSpec{
-			Hostnames: []gatewayapiv1beta1.Hostname{
+	httpRoute := &gatewayapiv1.HTTPRoute{
+		Spec: gatewayapiv1.HTTPRouteSpec{
+			Hostnames: []gatewayapiv1.Hostname{
 				"*.example.com",
 				"*.apps.example.internal",
 			},
-			Rules: []gatewayapiv1beta1.HTTPRouteRule{
+			Rules: []gatewayapiv1.HTTPRouteRule{
 				{
-					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+					Matches: []gatewayapiv1.HTTPRouteMatch{
 						{
-							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
+							Path: &gatewayapiv1.HTTPPathMatch{
+								Type:  &[]gatewayapiv1.PathMatchType{gatewayapiv1.PathMatchPathPrefix}[0],
 								Value: &[]string{"/toy"}[0],
 							},
-							Method: &[]gatewayapiv1beta1.HTTPMethod{"GET"}[0],
+							Method: &[]gatewayapiv1.HTTPMethod{"GET"}[0],
 						},
 					},
 				},
@@ -38,9 +38,9 @@ func TestWasmRules(t *testing.T) {
 		},
 	}
 
-	catchAllHTTPRoute := &gatewayapiv1beta1.HTTPRoute{
-		Spec: gatewayapiv1beta1.HTTPRouteSpec{
-			Hostnames: []gatewayapiv1beta1.Hostname{"*"},
+	catchAllHTTPRoute := &gatewayapiv1.HTTPRoute{
+		Spec: gatewayapiv1.HTTPRouteSpec{
+			Hostnames: []gatewayapiv1.Hostname{"*"},
 		},
 	}
 
@@ -66,7 +66,7 @@ func TestWasmRules(t *testing.T) {
 	testCases := []struct {
 		name          string
 		rlp           *kuadrantv1beta2.RateLimitPolicy
-		route         *gatewayapiv1beta1.HTTPRoute
+		route         *gatewayapiv1.HTTPRoute
 		expectedRules []wasm.Rule
 	}{
 		{
@@ -113,7 +113,7 @@ func TestWasmRules(t *testing.T) {
 					Rates: []kuadrantv1beta2.Rate{counter50rps},
 					RouteSelectors: []kuadrantv1beta2.RouteSelector{
 						{
-							Hostnames: []gatewayapiv1beta1.Hostname{
+							Hostnames: []gatewayapiv1.Hostname{
 								"*.example.com",
 								"myapp.apps.example.com", // ignored
 							},
@@ -163,13 +163,13 @@ func TestWasmRules(t *testing.T) {
 					Rates: []kuadrantv1beta2.Rate{counter50rps},
 					RouteSelectors: []kuadrantv1beta2.RouteSelector{
 						{
-							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+							Matches: []gatewayapiv1.HTTPRouteMatch{
 								{
-									Path: &gatewayapiv1beta1.HTTPPathMatch{
-										Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
+									Path: &gatewayapiv1.HTTPPathMatch{
+										Type:  &[]gatewayapiv1.PathMatchType{gatewayapiv1.PathMatchPathPrefix}[0],
 										Value: &[]string{"/toy"}[0],
 									},
-									Method: &[]gatewayapiv1beta1.HTTPMethod{"GET"}[0],
+									Method: &[]gatewayapiv1.HTTPMethod{"GET"}[0],
 								},
 							},
 						},
@@ -213,10 +213,10 @@ func TestWasmRules(t *testing.T) {
 					Rates: []kuadrantv1beta2.Rate{counter50rps},
 					RouteSelectors: []kuadrantv1beta2.RouteSelector{
 						{
-							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+							Matches: []gatewayapiv1.HTTPRouteMatch{
 								{
-									Path: &gatewayapiv1beta1.HTTPPathMatch{
-										Type:  &[]gatewayapiv1beta1.PathMatchType{gatewayapiv1beta1.PathMatchPathPrefix}[0],
+									Path: &gatewayapiv1.HTTPPathMatch{
+										Type:  &[]gatewayapiv1.PathMatchType{gatewayapiv1.PathMatchPathPrefix}[0],
 										Value: &[]string{"/toy"}[0],
 									},
 								},
@@ -262,9 +262,9 @@ func TestWasmRules(t *testing.T) {
 					Rates: []kuadrantv1beta2.Rate{counter50rps},
 					RouteSelectors: []kuadrantv1beta2.RouteSelector{
 						{
-							Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+							Matches: []gatewayapiv1.HTTPRouteMatch{
 								{
-									Method: &[]gatewayapiv1beta1.HTTPMethod{"POST"}[0],
+									Method: &[]gatewayapiv1.HTTPMethod{"POST"}[0],
 								},
 							},
 						},

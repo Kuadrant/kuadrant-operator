@@ -12,14 +12,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
 func TestIstioWorkloadSelectorFromGateway(t *testing.T) {
-	hostnameAddress := gatewayapiv1beta1.AddressType("Hostname")
-	gateway := &gatewayapiv1beta1.Gateway{
+	hostnameAddress := gatewayapiv1.AddressType("Hostname")
+	gateway := &gatewayapiv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "my-ns",
 			Name:      "my-gw",
@@ -28,8 +28,8 @@ func TestIstioWorkloadSelectorFromGateway(t *testing.T) {
 				"control-plane": "kuadrant",
 			},
 		},
-		Status: gatewayapiv1beta1.GatewayStatus{
-			Addresses: []gatewayapiv1beta1.GatewayAddress{
+		Status: gatewayapiv1.GatewayStatus{
+			Addresses: []gatewayapiv1.GatewayStatusAddress{
 				{
 					Type:  &hostnameAddress,
 					Value: "my-gw-svc.my-ns.svc.cluster.local:80",
@@ -55,7 +55,7 @@ func TestIstioWorkloadSelectorFromGateway(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
-	_ = gatewayapiv1beta1.AddToScheme(scheme)
+	_ = gatewayapiv1.AddToScheme(scheme)
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(gateway, service).Build()
 
 	var selector *istiocommon.WorkloadSelector
@@ -67,7 +67,7 @@ func TestIstioWorkloadSelectorFromGateway(t *testing.T) {
 }
 
 func TestIstioWorkloadSelectorFromGatewayMissingHostnameAddress(t *testing.T) {
-	gateway := &gatewayapiv1beta1.Gateway{
+	gateway := &gatewayapiv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "my-ns",
 			Name:      "my-gw",
@@ -95,7 +95,7 @@ func TestIstioWorkloadSelectorFromGatewayMissingHostnameAddress(t *testing.T) {
 
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
-	_ = gatewayapiv1beta1.AddToScheme(scheme)
+	_ = gatewayapiv1.AddToScheme(scheme)
 	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(gateway, service).Build()
 
 	var selector *istiocommon.WorkloadSelector

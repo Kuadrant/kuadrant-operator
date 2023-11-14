@@ -38,7 +38,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -398,7 +398,7 @@ func buildServiceMeshMember(kObj *kuadrantv1beta1.Kuadrant) *maistrav1.ServiceMe
 
 func (r *KuadrantReconciler) reconcileClusterGateways(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	// TODO: After the RFC defined, we might want to get the gw to label/annotate from Kuadrant.Spec or manual labeling/annotation
-	gwList := &gatewayapiv1beta1.GatewayList{}
+	gwList := &gatewayapiv1.GatewayList{}
 	if err := r.Client().List(ctx, gwList); err != nil {
 		return err
 	}
@@ -427,7 +427,7 @@ func (r *KuadrantReconciler) reconcileClusterGateways(ctx context.Context, kObj 
 }
 
 func (r *KuadrantReconciler) removeAnnotationFromGateways(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	gwList := &gatewayapiv1beta1.GatewayList{}
+	gwList := &gatewayapiv1.GatewayList{}
 	if err := r.Client().List(ctx, gwList); err != nil {
 		return err
 	}

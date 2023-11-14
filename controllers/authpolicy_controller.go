@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -119,7 +119,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 
 	// trigger concurrent reconciliations of possibly affected gateway policies
 	switch route := targetNetworkObject.(type) {
-	case *gatewayapiv1beta1.HTTPRoute:
+	case *gatewayapiv1.HTTPRoute:
 		if err := r.reconcileRouteParentGatewayPolicies(ctx, route); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -198,7 +198,7 @@ func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx cont
 }
 
 // reconcileRouteParentGatewayPolicies triggers the concurrent reconciliation of all policies that target gateways that are parents of a route
-func (r *AuthPolicyReconciler) reconcileRouteParentGatewayPolicies(ctx context.Context, route *gatewayapiv1beta1.HTTPRoute) error {
+func (r *AuthPolicyReconciler) reconcileRouteParentGatewayPolicies(ctx context.Context, route *gatewayapiv1.HTTPRoute) error {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return err
@@ -227,10 +227,10 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.AuthPolicy{}).
 		Watches(
-			&gatewayapiv1beta1.HTTPRoute{},
+			&gatewayapiv1.HTTPRoute{},
 			handler.EnqueueRequestsFromMapFunc(httpRouteEventMapper.MapToAuthPolicy),
 		).
-		Watches(&gatewayapiv1beta1.Gateway{},
+		Watches(&gatewayapiv1.Gateway{},
 			handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.MapToAuthPolicy)).
 		Complete(r)
 }

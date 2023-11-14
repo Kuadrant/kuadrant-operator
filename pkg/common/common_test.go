@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func TestValidSubdomains(t *testing.T) {
@@ -606,32 +606,32 @@ func TestUnMarshallObjectKey(t *testing.T) {
 func TestHostnamesToStrings(t *testing.T) {
 	testCases := []struct {
 		name           string
-		inputHostnames []gatewayapiv1beta1.Hostname
+		inputHostnames []gatewayapiv1.Hostname
 		expectedOutput []string
 	}{
 		{
 			name:           "when input is empty then return empty output",
-			inputHostnames: []gatewayapiv1beta1.Hostname{},
+			inputHostnames: []gatewayapiv1.Hostname{},
 			expectedOutput: []string{},
 		},
 		{
 			name:           "when input has a single precise hostname then return a single string",
-			inputHostnames: []gatewayapiv1beta1.Hostname{"example.com"},
+			inputHostnames: []gatewayapiv1.Hostname{"example.com"},
 			expectedOutput: []string{"example.com"},
 		},
 		{
 			name:           "when input has multiple precise hostnames then return the corresponding strings",
-			inputHostnames: []gatewayapiv1beta1.Hostname{"example.com", "test.com", "localhost"},
+			inputHostnames: []gatewayapiv1.Hostname{"example.com", "test.com", "localhost"},
 			expectedOutput: []string{"example.com", "test.com", "localhost"},
 		},
 		{
 			name:           "when input has a wildcard hostname then return the wildcard string",
-			inputHostnames: []gatewayapiv1beta1.Hostname{"*.example.com"},
+			inputHostnames: []gatewayapiv1.Hostname{"*.example.com"},
 			expectedOutput: []string{"*.example.com"},
 		},
 		{
 			name:           "when input has both precise and wildcard hostnames then return the corresponding strings",
-			inputHostnames: []gatewayapiv1beta1.Hostname{"example.com", "*.test.com"},
+			inputHostnames: []gatewayapiv1.Hostname{"example.com", "*.test.com"},
 			expectedOutput: []string{"example.com", "*.test.com"},
 		},
 	}
@@ -649,39 +649,39 @@ func TestHostnamesToStrings(t *testing.T) {
 func TestFilterValidSubdomains(t *testing.T) {
 	testCases := []struct {
 		name       string
-		domains    []gatewayapiv1beta1.Hostname
-		subdomains []gatewayapiv1beta1.Hostname
-		expected   []gatewayapiv1beta1.Hostname
+		domains    []gatewayapiv1.Hostname
+		subdomains []gatewayapiv1.Hostname
+		expected   []gatewayapiv1.Hostname
 	}{
 		{
 			name:       "when all subdomains are valid",
-			domains:    []gatewayapiv1beta1.Hostname{"my-app.apps.io", "*.acme.com"},
-			subdomains: []gatewayapiv1beta1.Hostname{"toystore.acme.com", "my-app.apps.io", "carstore.acme.com"},
-			expected:   []gatewayapiv1beta1.Hostname{"toystore.acme.com", "my-app.apps.io", "carstore.acme.com"},
+			domains:    []gatewayapiv1.Hostname{"my-app.apps.io", "*.acme.com"},
+			subdomains: []gatewayapiv1.Hostname{"toystore.acme.com", "my-app.apps.io", "carstore.acme.com"},
+			expected:   []gatewayapiv1.Hostname{"toystore.acme.com", "my-app.apps.io", "carstore.acme.com"},
 		},
 		{
 			name:       "when some subdomains are valid and some are not",
-			domains:    []gatewayapiv1beta1.Hostname{"my-app.apps.io", "*.acme.com"},
-			subdomains: []gatewayapiv1beta1.Hostname{"toystore.acme.com", "my-app.apps.io", "other-app.apps.io"},
-			expected:   []gatewayapiv1beta1.Hostname{"toystore.acme.com", "my-app.apps.io"},
+			domains:    []gatewayapiv1.Hostname{"my-app.apps.io", "*.acme.com"},
+			subdomains: []gatewayapiv1.Hostname{"toystore.acme.com", "my-app.apps.io", "other-app.apps.io"},
+			expected:   []gatewayapiv1.Hostname{"toystore.acme.com", "my-app.apps.io"},
 		},
 		{
 			name:       "when none of subdomains are valid",
-			domains:    []gatewayapiv1beta1.Hostname{"my-app.apps.io", "*.acme.com"},
-			subdomains: []gatewayapiv1beta1.Hostname{"other-app.apps.io"},
-			expected:   []gatewayapiv1beta1.Hostname{},
+			domains:    []gatewayapiv1.Hostname{"my-app.apps.io", "*.acme.com"},
+			subdomains: []gatewayapiv1.Hostname{"other-app.apps.io"},
+			expected:   []gatewayapiv1.Hostname{},
 		},
 		{
 			name:       "when the set of super domains is empty",
-			domains:    []gatewayapiv1beta1.Hostname{},
-			subdomains: []gatewayapiv1beta1.Hostname{"toystore.acme.com"},
-			expected:   []gatewayapiv1beta1.Hostname{},
+			domains:    []gatewayapiv1.Hostname{},
+			subdomains: []gatewayapiv1.Hostname{"toystore.acme.com"},
+			expected:   []gatewayapiv1.Hostname{},
 		},
 		{
 			name:       "when the set of subdomains is empty",
-			domains:    []gatewayapiv1beta1.Hostname{"my-app.apps.io", "*.acme.com"},
-			subdomains: []gatewayapiv1beta1.Hostname{},
-			expected:   []gatewayapiv1beta1.Hostname{},
+			domains:    []gatewayapiv1.Hostname{"my-app.apps.io", "*.acme.com"},
+			subdomains: []gatewayapiv1.Hostname{},
+			expected:   []gatewayapiv1.Hostname{},
 		},
 	}
 

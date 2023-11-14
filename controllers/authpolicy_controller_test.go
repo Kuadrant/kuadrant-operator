@@ -20,8 +20,8 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -44,7 +44,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(func() bool {
-			existingGateway := &gatewayapiv1beta1.Gateway{}
+			existingGateway := &gatewayapiv1.Gateway{}
 			err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
 			return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType)
 		}, 15*time.Second, 5*time.Second).Should(BeTrue())
@@ -64,7 +64,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			Eventually(func() bool {
-				existingRoute := &gatewayapiv1beta1.HTTPRoute{}
+				existingRoute := &gatewayapiv1.HTTPRoute{}
 				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(route), existingRoute)
 				return err == nil && common.IsHTTPRouteAccepted(existingRoute)
 			}, 15*time.Second, 5*time.Second).Should(BeTrue())
@@ -81,7 +81,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "Gateway",
 						Name:      testGatewayName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
@@ -143,7 +143,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
 						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
@@ -203,7 +203,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
 						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
@@ -218,11 +218,11 @@ var _ = Describe("AuthPolicy controller", func() {
 
 			// create second (policyless) httproute
 			otherRoute := testBuildBasicHttpRoute("policyless-route", testGatewayName, testNamespace, []string{"*.other"})
-			otherRoute.Spec.Rules = []gatewayapiv1beta1.HTTPRouteRule{
+			otherRoute.Spec.Rules = []gatewayapiv1.HTTPRouteRule{
 				{
-					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+					Matches: []gatewayapiv1.HTTPRouteMatch{
 						{
-							Method: ptr.To(gatewayapiv1beta1.HTTPMethod("POST")),
+							Method: ptr.To(gatewayapiv1.HTTPMethod("POST")),
 						},
 					},
 				},
@@ -241,7 +241,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "Gateway",
 						Name:      testGatewayName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
@@ -302,7 +302,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
 						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
@@ -326,7 +326,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "Gateway",
 						Name:      testGatewayName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
@@ -374,7 +374,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
 						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					RouteSelectors: []api.RouteSelector{
 						{ // does not select any HTTPRouteRule
@@ -431,7 +431,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
 						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
@@ -496,7 +496,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
 						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
@@ -540,7 +540,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
 						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					NamedPatterns: map[string]authorinoapi.PatternExpressions{
 						"internal-source": []authorinoapi.PatternExpression{
@@ -784,7 +784,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			Eventually(func() bool {
-				existingRoute := &gatewayapiv1beta1.HTTPRoute{}
+				existingRoute := &gatewayapiv1.HTTPRoute{}
 				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(route), existingRoute)
 				return err == nil && common.IsHTTPRouteAccepted(existingRoute)
 			}, 15*time.Second, 5*time.Second).Should(BeTrue())
@@ -801,7 +801,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
 						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
@@ -886,7 +886,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
 						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					RouteSelectors: []api.RouteSelector{
 						{ // Selects: POST|DELETE *.admin.toystore.com/admin*
@@ -898,7 +898,7 @@ var _ = Describe("AuthPolicy controller", func() {
 									},
 								},
 							},
-							Hostnames: []gatewayapiv1beta1.Hostname{"*.admin.toystore.com"},
+							Hostnames: []gatewayapiv1.Hostname{"*.admin.toystore.com"},
 						},
 						{ // Selects: GET /private*
 							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
@@ -1003,7 +1003,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
 						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
@@ -1019,7 +1019,7 @@ var _ = Describe("AuthPolicy controller", func() {
 							},
 						},
 					},
-					Hostnames: []gatewayapiv1beta1.Hostname{"*.admin.toystore.com"},
+					Hostnames: []gatewayapiv1.Hostname{"*.admin.toystore.com"},
 				},
 			}
 			policy.Spec.AuthScheme.Authentication["apiKey"] = config
@@ -1130,7 +1130,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "HTTPRoute",
 						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1beta1.Namespace(testNamespace)),
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
@@ -1138,13 +1138,13 @@ var _ = Describe("AuthPolicy controller", func() {
 			config := policy.Spec.AuthScheme.Authentication["apiKey"]
 			config.RouteSelectors = []api.RouteSelector{
 				{ // Selects: GET /private*
-					Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+					Matches: []gatewayapiv1.HTTPRouteMatch{
 						{
-							Path: &gatewayapiv1beta1.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1beta1.PathMatchType("PathPrefix")),
+							Path: &gatewayapiv1.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
 								Value: ptr.To("/private"),
 							},
-							Method: ptr.To(gatewayapiv1beta1.HTTPMethod("GET")),
+							Method: ptr.To(gatewayapiv1.HTTPMethod("GET")),
 						},
 					},
 				},

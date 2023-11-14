@@ -11,8 +11,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	istiosecurity "istio.io/api/security/v1beta1"
 	istio "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -101,26 +101,26 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 		},
 	}
 
-	var route *gatewayapiv1beta1.HTTPRoute
+	var route *gatewayapiv1.HTTPRoute
 
 	gwHostnames := gw.Hostnames()
 	if len(gwHostnames) == 0 {
-		gwHostnames = []gatewayapiv1beta1.Hostname{"*"}
+		gwHostnames = []gatewayapiv1.Hostname{"*"}
 	}
-	var routeHostnames []gatewayapiv1beta1.Hostname
+	var routeHostnames []gatewayapiv1.Hostname
 
 	switch obj := targetNetworkObject.(type) {
-	case *gatewayapiv1beta1.HTTPRoute:
+	case *gatewayapiv1.HTTPRoute:
 		route = obj
 		if len(route.Spec.Hostnames) > 0 {
 			routeHostnames = common.FilterValidSubdomains(gwHostnames, route.Spec.Hostnames)
 		} else {
 			routeHostnames = gwHostnames
 		}
-	case *gatewayapiv1beta1.Gateway:
+	case *gatewayapiv1.Gateway:
 		// fake a single httproute with all rules from all httproutes accepted by the gateway,
 		// that do not have an authpolicy of its own, so we can generate wasm rules for those cases
-		rules := make([]gatewayapiv1beta1.HTTPRouteRule, 0)
+		rules := make([]gatewayapiv1.HTTPRouteRule, 0)
 		routes := r.FetchAcceptedGatewayHTTPRoutes(ctx, ap.TargetKey())
 		for idx := range routes {
 			route := routes[idx]
@@ -135,8 +135,8 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 			common.TagObjectToDelete(iap)
 			return iap, nil
 		}
-		route = &gatewayapiv1beta1.HTTPRoute{
-			Spec: gatewayapiv1beta1.HTTPRouteSpec{
+		route = &gatewayapiv1.HTTPRoute{
+			Spec: gatewayapiv1.HTTPRouteSpec{
 				Hostnames: gwHostnames,
 				Rules:     rules,
 			},
@@ -190,7 +190,7 @@ func istioAuthorizationPolicyLabels(gwKey, apKey client.ObjectKey) map[string]st
 // These rules are the conditions that, when matched, will make the gateway to call external authorization.
 // If no rules are specified, the gateway will call external authorization for all requests.
 // If the route selectors specified in the policy do not match any route rules, an error is returned.
-func istioAuthorizationPolicyRules(ap *api.AuthPolicy, route *gatewayapiv1beta1.HTTPRoute) ([]*istiosecurity.Rule, error) {
+func istioAuthorizationPolicyRules(ap *api.AuthPolicy, route *gatewayapiv1.HTTPRoute) ([]*istiosecurity.Rule, error) {
 	// use only the top level route selectors if defined
 	if topLevelRouteSelectors := ap.Spec.RouteSelectors; len(topLevelRouteSelectors) > 0 {
 		return istioAuthorizationPolicyRulesFromRouteSelectors(route, topLevelRouteSelectors)
@@ -200,7 +200,7 @@ func istioAuthorizationPolicyRules(ap *api.AuthPolicy, route *gatewayapiv1beta1.
 
 // istioAuthorizationPolicyRulesFromRouteSelectors builds a list of Istio AuthorizationPolicy rules from an HTTPRoute,
 // filtered to the HTTPRouteRules and hostnames selected by the route selectors.
-func istioAuthorizationPolicyRulesFromRouteSelectors(route *gatewayapiv1beta1.HTTPRoute, routeSelectors []api.RouteSelector) ([]*istiosecurity.Rule, error) {
+func istioAuthorizationPolicyRulesFromRouteSelectors(route *gatewayapiv1.HTTPRoute, routeSelectors []api.RouteSelector) ([]*istiosecurity.Rule, error) {
 	istioRules := []*istiosecurity.Rule{}
 
 	if len(routeSelectors) > 0 {
@@ -223,7 +223,7 @@ func istioAuthorizationPolicyRulesFromRouteSelectors(route *gatewayapiv1beta1.HT
 
 // istioAuthorizationPolicyRulesFromHTTPRoute builds a list of Istio AuthorizationPolicy rules from an HTTPRoute,
 // without using route selectors.
-func istioAuthorizationPolicyRulesFromHTTPRoute(route *gatewayapiv1beta1.HTTPRoute) []*istiosecurity.Rule {
+func istioAuthorizationPolicyRulesFromHTTPRoute(route *gatewayapiv1.HTTPRoute) []*istiosecurity.Rule {
 	istioRules := []*istiosecurity.Rule{}
 
 	hostnamesForConditions := (&api.RouteSelector{}).HostnamesForConditions(route)
@@ -239,7 +239,7 @@ func istioAuthorizationPolicyRulesFromHTTPRoute(route *gatewayapiv1beta1.HTTPRou
 // * Each combination of HTTPRouteMatch and hostname yields one condition.
 // * Rules that specify no explicit HTTPRouteMatch are assumed to match all requests (i.e. implicit catch-all rule.)
 // * Empty list of hostnames yields a condition without a hostname pattern expression.
-func istioAuthorizationPolicyRulesFromHTTPRouteRule(rule gatewayapiv1beta1.HTTPRouteRule, hostnames []gatewayapiv1beta1.Hostname) (istioRules []*istiosecurity.Rule) {
+func istioAuthorizationPolicyRulesFromHTTPRouteRule(rule gatewayapiv1.HTTPRouteRule, hostnames []gatewayapiv1.Hostname) (istioRules []*istiosecurity.Rule) {
 	hosts := []string{}
 	for _, hostname := range hostnames {
 		if hostname == "*" {
@@ -294,9 +294,9 @@ func istioAuthorizationPolicyRulesFromHTTPRouteRule(rule gatewayapiv1beta1.HTTPR
 			skip := false
 			if path.Type != nil {
 				switch *path.Type {
-				case gatewayapiv1beta1.PathMatchExact:
+				case gatewayapiv1.PathMatchExact:
 					operator = ""
-				case gatewayapiv1beta1.PathMatchRegularExpression:
+				case gatewayapiv1.PathMatchRegularExpression:
 					// ignore this rule as it is not supported by Istio - Authorino will check it anyway
 					skip = true
 				}
@@ -322,7 +322,7 @@ func istioAuthorizationPolicyRulesFromHTTPRouteRule(rule gatewayapiv1beta1.HTTPR
 
 			for idx := range match.Headers {
 				header := match.Headers[idx]
-				if header.Type != nil && *header.Type == gatewayapiv1beta1.HeaderMatchRegularExpression {
+				if header.Type != nil && *header.Type == gatewayapiv1.HeaderMatchRegularExpression {
 					// skip this rule as it is not supported by Istio - Authorino will check it anyway
 					continue
 				}

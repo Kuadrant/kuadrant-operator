@@ -24,8 +24,8 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -70,7 +70,7 @@ type Rate struct {
 }
 
 // RouteSelector defines semantics for matching an HTTP request based on conditions
-// https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRouteSpec
+// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
 type WhenCondition struct {
 	// Selector defines one item from the well known selectors
 	// TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
@@ -88,6 +88,7 @@ type WhenCondition struct {
 type Limit struct {
 	// RouteSelectors defines semantics for matching an HTTP request based on conditions
 	// +optional
+	// +kubebuilder:validation:MaxItems=15
 	RouteSelectors []RouteSelector `json:"routeSelectors,omitempty"`
 
 	// When holds the list of conditions for the policy to be enforced.
@@ -119,6 +120,7 @@ type RateLimitPolicySpec struct {
 
 	// Limits holds the struct of limits indexed by a unique name
 	// +optional
+	// +kubebuilder:validation:MaxProperties=14
 	Limits map[string]Limit `json:"limits,omitempty"`
 }
 
@@ -226,15 +228,15 @@ func (r *RateLimitPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReferenc
 	return r.Spec.TargetRef
 }
 
-func (r *RateLimitPolicy) GetWrappedNamespace() gatewayapiv1beta1.Namespace {
-	return gatewayapiv1beta1.Namespace(r.Namespace)
+func (r *RateLimitPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
+	return gatewayapiv1.Namespace(r.Namespace)
 }
 
 func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 	ruleHosts = make([]string, 0)
 	for _, limit := range r.Spec.Limits {
 		for _, routeSelector := range limit.RouteSelectors {
-			convertHostnamesToString := func(gwHostnames []gatewayapiv1beta1.Hostname) []string {
+			convertHostnamesToString := func(gwHostnames []gatewayapiv1.Hostname) []string {
 				hostnames := make([]string, 0, len(gwHostnames))
 				for _, gwHostName := range gwHostnames {
 					hostnames = append(hostnames, string(gwHostName))

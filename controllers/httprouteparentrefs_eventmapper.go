@@ -7,7 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -35,9 +35,9 @@ func (m *HTTPRouteParentRefsEventMapper) mapToPolicyRequest(obj client.Object, p
 		"policyKind", policyKind,
 	)
 
-	route, ok := obj.(*gatewayapiv1beta1.HTTPRoute)
+	route, ok := obj.(*gatewayapiv1.HTTPRoute)
 	if !ok {
-		logger.Info("mapToPolicyRequest:", "error", fmt.Sprintf("%T is not a *gatewayapiv1beta1.HTTPRoute", obj))
+		logger.Info("mapToPolicyRequest:", "error", fmt.Sprintf("%T is not a *gatewayapiv1.HTTPRoute", obj))
 		return []reconcile.Request{}
 	}
 
@@ -51,7 +51,7 @@ func (m *HTTPRouteParentRefsEventMapper) mapToPolicyRequest(obj client.Object, p
 		// list policies in the same namespace as the parent gateway of the route
 		parentRefNamespace := parentRef.Namespace
 		if parentRefNamespace == nil {
-			ns := gatewayapiv1beta1.Namespace(route.GetNamespace())
+			ns := gatewayapiv1.Namespace(route.GetNamespace())
 			parentRefNamespace = &ns
 		}
 		if err := m.Client.List(context.Background(), policyList, &client.ListOptions{Namespace: string(*parentRefNamespace)}); err != nil {
@@ -70,7 +70,7 @@ func (m *HTTPRouteParentRefsEventMapper) mapToPolicyRequest(obj client.Object, p
 			}
 			targetRefNamespace := targetRef.Namespace
 			if targetRefNamespace == nil {
-				ns := gatewayapiv1beta1.Namespace(policy.GetNamespace())
+				ns := gatewayapiv1.Namespace(policy.GetNamespace())
 				targetRefNamespace = &ns
 			}
 			if *parentRefNamespace == *targetRefNamespace && parentRef.Name == targetRef.Name {

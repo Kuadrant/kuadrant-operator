@@ -8,21 +8,23 @@
 The Operator to install and manage the lifecycle of the [Kuadrant](https://github.com/Kuadrant/) components deployments.
 
 <!--ts-->
-* [Overview](#overview)
-* [Architecture](#architecture)
-    * [Kuadrant components](#kuadrant-components)
-    * [Provided APIs](#provided-apis)
-* [Getting started](#getting-started)
-    * [Pre-requisites](#pre-requisites)
-    * [Installing Kuadrant](#installing-kuadrant)
-    * [Protect Your Service](#protect-your-service)
-      * [If you are an <em>API Provider</em>](#if-you-are-an-api-provider)
-      * [If you are a <em>Cluster Operator</em>](#if-you-are-a-cluster-operator)
-* [User guides](#user-guides)
-* [<a href="doc/rate-limiting.md">Kuadrant Rate Limiting</a>](#kuadrant-rate-limiting)
-* [Documentation](#documentation)
-* [Contributing](#contributing)
-* [Licensing](#licensing)
+- [Overview](#overview)
+- [Architecture](#architecture)
+  - [Kuadrant components](#kuadrant-components)
+  - [Provided APIs](#provided-apis)
+- [Getting started](#getting-started)
+  - [Pre-requisites](#pre-requisites)
+  - [Installing Kuadrant](#installing-kuadrant)
+    - [1. Install the Kuadrant Operator](#1-install-the-kuadrant-operator)
+    - [2. Request a Kuadrant instance](#2-request-a-kuadrant-instance)
+  - [Protect your service](#protect-your-service)
+    - [If you are an *API Provider*](#if-you-are-an-api-provider)
+    - [If you are a *Cluster Operator*](#if-you-are-a-cluster-operator)
+- [User guides](#user-guides)
+- [Kuadrant Rate Limiting](#kuadrant-rate-limiting)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [Licensing](#licensing)
 
 <!--te-->
 
@@ -144,7 +146,7 @@ EOF
 
 * Deploy the service/API to be protected ("Upstream")
 * Expose the service/API using the kubernetes Gateway API, ie
-  [HTTPRoute](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.HTTPRoute) object.
+  [HTTPRoute](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRoute) object.
 * Write and apply the Kuadrant's [RateLimitPolicy](doc/rate-limiting.md) and/or
   [AuthPolicy](doc/auth.md) custom resources targeting the HTTPRoute resource
   to have your API protected.
@@ -152,7 +154,7 @@ EOF
 #### If you are a *Cluster Operator*
 
 * (Optionally) deploy istio ingress gateway using the
-  [Gateway](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1beta1.Gateway) resource.
+  [Gateway](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.Gateway) resource.
 * Write and apply the Kuadrant's [RateLimitPolicy](doc/rate-limiting.md) and/or
   [AuthPolicy](doc/auth.md) custom resources targeting the Gateway resource
   to have your gateway traffic protected.

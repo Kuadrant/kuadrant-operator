@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -49,7 +49,7 @@ func (r *GatewayKuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl
 	logger.Info("Reconciling Kuadrant annotations")
 	ctx := logr.NewContext(eventCtx, logger)
 
-	gw := &gatewayapiv1beta1.Gateway{}
+	gw := &gatewayapiv1.Gateway{}
 	if err := r.Client().Get(ctx, req.NamespacedName, gw); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("no gateway found")
@@ -77,7 +77,7 @@ func (r *GatewayKuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *GatewayKuadrantReconciler) reconcileGatewayKuadrantMetadata(ctx context.Context, gw *gatewayapiv1beta1.Gateway) error {
+func (r *GatewayKuadrantReconciler) reconcileGatewayKuadrantMetadata(ctx context.Context, gw *gatewayapiv1.Gateway) error {
 	updated, err := r.reconcileKuadrantNamespaceAnnotation(ctx, gw)
 	if err != nil {
 		return err
@@ -92,7 +92,7 @@ func (r *GatewayKuadrantReconciler) reconcileGatewayKuadrantMetadata(ctx context
 	return nil
 }
 
-func (r *GatewayKuadrantReconciler) reconcileKuadrantNamespaceAnnotation(ctx context.Context, gw *gatewayapiv1beta1.Gateway) (bool, error) {
+func (r *GatewayKuadrantReconciler) reconcileKuadrantNamespaceAnnotation(ctx context.Context, gw *gatewayapiv1.Gateway) (bool, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return false, err
@@ -131,6 +131,6 @@ func (r *GatewayKuadrantReconciler) reconcileKuadrantNamespaceAnnotation(ctx con
 func (r *GatewayKuadrantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		// Gateway Kuadrant controller only cares about the annotations
-		For(&gatewayapiv1beta1.Gateway{}, builder.WithPredicates(predicate.AnnotationChangedPredicate{})).
+		For(&gatewayapiv1.Gateway{}, builder.WithPredicates(predicate.AnnotationChangedPredicate{})).
 		Complete(r)
 }

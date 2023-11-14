@@ -8,20 +8,20 @@ import (
 
 	istiosecurity "istio.io/api/security/v1beta1"
 	"k8s.io/utils/ptr"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func TestIstioAuthorizationPolicyRulesFromHTTPRouteRule(t *testing.T) {
 	testCases := []struct {
 		name      string
-		hostnames []gatewayapiv1beta1.Hostname
-		rule      gatewayapiv1beta1.HTTPRouteRule
+		hostnames []gatewayapiv1.Hostname
+		rule      gatewayapiv1.HTTPRouteRule
 		expected  []*istiosecurity.Rule
 	}{
 		{
 			name:      "No HTTPRouteMatch",
-			hostnames: []gatewayapiv1beta1.Hostname{"toystore.kuadrant.io"},
-			rule:      gatewayapiv1beta1.HTTPRouteRule{},
+			hostnames: []gatewayapiv1.Hostname{"toystore.kuadrant.io"},
+			rule:      gatewayapiv1.HTTPRouteRule{},
 			expected: []*istiosecurity.Rule{
 				{
 					To: []*istiosecurity.Rule_To{
@@ -36,12 +36,12 @@ func TestIstioAuthorizationPolicyRulesFromHTTPRouteRule(t *testing.T) {
 		},
 		{
 			name:      "Single HTTPRouteMatch",
-			hostnames: []gatewayapiv1beta1.Hostname{"toystore.kuadrant.io"},
-			rule: gatewayapiv1beta1.HTTPRouteRule{
-				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+			hostnames: []gatewayapiv1.Hostname{"toystore.kuadrant.io"},
+			rule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
 					{
-						Path: &gatewayapiv1beta1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1beta1.PathMatchType("PathPrefix")),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
 							Value: ptr.To("/toy"),
 						},
 					},
@@ -62,18 +62,18 @@ func TestIstioAuthorizationPolicyRulesFromHTTPRouteRule(t *testing.T) {
 		},
 		{
 			name:      "Multiple HTTPRouteMatches",
-			hostnames: []gatewayapiv1beta1.Hostname{"toystore.kuadrant.io"},
-			rule: gatewayapiv1beta1.HTTPRouteRule{
-				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+			hostnames: []gatewayapiv1.Hostname{"toystore.kuadrant.io"},
+			rule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
 					{
-						Path: &gatewayapiv1beta1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1beta1.PathMatchType("PathPrefix")),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
 							Value: ptr.To("/toy"),
 						},
 					},
 					{
-						Path: &gatewayapiv1beta1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1beta1.PathMatchType("Exact")),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchType("Exact")),
 							Value: ptr.To("/foo"),
 						},
 					},
@@ -104,12 +104,12 @@ func TestIstioAuthorizationPolicyRulesFromHTTPRouteRule(t *testing.T) {
 		},
 		{
 			name:      "Multiple hosts",
-			hostnames: []gatewayapiv1beta1.Hostname{"toystore.kuadrant.io", "gamestore.kuadrant.io"},
-			rule: gatewayapiv1beta1.HTTPRouteRule{
-				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+			hostnames: []gatewayapiv1.Hostname{"toystore.kuadrant.io", "gamestore.kuadrant.io"},
+			rule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
 					{
-						Path: &gatewayapiv1beta1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1beta1.PathMatchType("PathPrefix")),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
 							Value: ptr.To("/toy"),
 						},
 					},
@@ -130,12 +130,12 @@ func TestIstioAuthorizationPolicyRulesFromHTTPRouteRule(t *testing.T) {
 		},
 		{
 			name:      "Catch-all host is ignored",
-			hostnames: []gatewayapiv1beta1.Hostname{"toystore.kuadrant.io", "*"},
-			rule: gatewayapiv1beta1.HTTPRouteRule{
-				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+			hostnames: []gatewayapiv1.Hostname{"toystore.kuadrant.io", "*"},
+			rule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
 					{
-						Path: &gatewayapiv1beta1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1beta1.PathMatchType("PathPrefix")),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
 							Value: ptr.To("/toy"),
 						},
 					},
@@ -156,10 +156,10 @@ func TestIstioAuthorizationPolicyRulesFromHTTPRouteRule(t *testing.T) {
 		},
 		{
 			name: "Method",
-			rule: gatewayapiv1beta1.HTTPRouteRule{
-				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+			rule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
 					{
-						Method: ptr.To(gatewayapiv1beta1.HTTPMethod("GET")),
+						Method: ptr.To(gatewayapiv1.HTTPMethod("GET")),
 					},
 				},
 			},
@@ -177,11 +177,11 @@ func TestIstioAuthorizationPolicyRulesFromHTTPRouteRule(t *testing.T) {
 		},
 		{
 			name: "PathMatchExact",
-			rule: gatewayapiv1beta1.HTTPRouteRule{
-				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+			rule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
 					{
-						Path: &gatewayapiv1beta1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1beta1.PathMatchType("Exact")),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchType("Exact")),
 							Value: ptr.To("/toy"),
 						},
 					},
@@ -201,11 +201,11 @@ func TestIstioAuthorizationPolicyRulesFromHTTPRouteRule(t *testing.T) {
 		},
 		{
 			name: "PathMatchPrefix",
-			rule: gatewayapiv1beta1.HTTPRouteRule{
-				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+			rule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
 					{
-						Path: &gatewayapiv1beta1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1beta1.PathMatchType("PathPrefix")),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
 							Value: ptr.To("/toy"),
 						},
 					},
@@ -225,11 +225,11 @@ func TestIstioAuthorizationPolicyRulesFromHTTPRouteRule(t *testing.T) {
 		},
 		{
 			name: "PathMatchRegularExpression",
-			rule: gatewayapiv1beta1.HTTPRouteRule{
-				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+			rule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
 					{
-						Path: &gatewayapiv1beta1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1beta1.PathMatchType("RegularExpression")),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchType("RegularExpression")),
 							Value: ptr.To("/toy"),
 						},
 					},
@@ -247,12 +247,12 @@ func TestIstioAuthorizationPolicyRulesFromHTTPRouteRule(t *testing.T) {
 		},
 		{
 			name: "Single header match",
-			rule: gatewayapiv1beta1.HTTPRouteRule{
-				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+			rule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
 					{
-						Headers: []gatewayapiv1beta1.HTTPHeaderMatch{
+						Headers: []gatewayapiv1.HTTPHeaderMatch{
 							{
-								Type:  ptr.To(gatewayapiv1beta1.HeaderMatchType("Exact")),
+								Type:  ptr.To(gatewayapiv1.HeaderMatchType("Exact")),
 								Name:  "x-foo",
 								Value: "a-value",
 							},
@@ -273,17 +273,17 @@ func TestIstioAuthorizationPolicyRulesFromHTTPRouteRule(t *testing.T) {
 		},
 		{
 			name: "Multiple header matches",
-			rule: gatewayapiv1beta1.HTTPRouteRule{
-				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+			rule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
 					{
-						Headers: []gatewayapiv1beta1.HTTPHeaderMatch{
+						Headers: []gatewayapiv1.HTTPHeaderMatch{
 							{
-								Type:  ptr.To(gatewayapiv1beta1.HeaderMatchType("Exact")),
+								Type:  ptr.To(gatewayapiv1.HeaderMatchType("Exact")),
 								Name:  "x-foo",
 								Value: "a-value",
 							},
 							{
-								Type:  ptr.To(gatewayapiv1beta1.HeaderMatchType("Exact")),
+								Type:  ptr.To(gatewayapiv1.HeaderMatchType("Exact")),
 								Name:  "x-bar",
 								Value: "other-value",
 							},
@@ -308,12 +308,12 @@ func TestIstioAuthorizationPolicyRulesFromHTTPRouteRule(t *testing.T) {
 		},
 		{
 			name: "HeaderMatchRegularExpression",
-			rule: gatewayapiv1beta1.HTTPRouteRule{
-				Matches: []gatewayapiv1beta1.HTTPRouteMatch{
+			rule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
 					{
-						Headers: []gatewayapiv1beta1.HTTPHeaderMatch{
+						Headers: []gatewayapiv1.HTTPHeaderMatch{
 							{
-								Type:  ptr.To(gatewayapiv1beta1.HeaderMatchType("RegularExpression")),
+								Type:  ptr.To(gatewayapiv1.HeaderMatchType("RegularExpression")),
 								Name:  "x-foo",
 								Value: "^a+.*$",
 							},

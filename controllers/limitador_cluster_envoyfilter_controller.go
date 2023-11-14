@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
@@ -55,7 +55,7 @@ func (r *LimitadorClusterEnvoyFilterReconciler) Reconcile(eventCtx context.Conte
 	logger.Info("Reconciling EnvoyFilter")
 	ctx := logr.NewContext(eventCtx, logger)
 
-	gw := &gatewayapiv1beta1.Gateway{}
+	gw := &gatewayapiv1.Gateway{}
 	if err := r.Client().Get(ctx, req.NamespacedName, gw); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("no gateway found")
@@ -83,7 +83,7 @@ func (r *LimitadorClusterEnvoyFilterReconciler) Reconcile(eventCtx context.Conte
 	return ctrl.Result{}, nil
 }
 
-func (r *LimitadorClusterEnvoyFilterReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx context.Context, gw *gatewayapiv1beta1.Gateway) error {
+func (r *LimitadorClusterEnvoyFilterReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx context.Context, gw *gatewayapiv1.Gateway) error {
 	desired, err := r.desiredRateLimitingClusterEnvoyFilter(ctx, gw)
 	if err != nil {
 		return err
@@ -97,7 +97,7 @@ func (r *LimitadorClusterEnvoyFilterReconciler) reconcileRateLimitingClusterEnvo
 	return nil
 }
 
-func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyFilter(ctx context.Context, gw *gatewayapiv1beta1.Gateway) (*istioclientnetworkingv1alpha3.EnvoyFilter, error) {
+func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyFilter(ctx context.Context, gw *gatewayapiv1.Gateway) (*istioclientnetworkingv1alpha3.EnvoyFilter, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -166,7 +166,7 @@ func (r *LimitadorClusterEnvoyFilterReconciler) SetupWithManager(mgr ctrl.Manage
 		// Limitador cluster EnvoyFilter controller only cares about
 		// the annotation having references to RLP's
 		// kuadrant.io/ratelimitpolicies
-		For(&gatewayapiv1beta1.Gateway{}, builder.WithPredicates(predicate.AnnotationChangedPredicate{})).
+		For(&gatewayapiv1.Gateway{}, builder.WithPredicates(predicate.AnnotationChangedPredicate{})).
 		Owns(&istioclientnetworkingv1alpha3.EnvoyFilter{}).
 		Complete(r)
 }

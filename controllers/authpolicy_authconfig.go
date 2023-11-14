@@ -11,7 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -79,28 +79,28 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 		Spec: authorinoapi.AuthConfigSpec{},
 	}
 
-	var route *gatewayapiv1beta1.HTTPRoute
+	var route *gatewayapiv1.HTTPRoute
 	var hosts []string
 
 	switch obj := targetNetworkObject.(type) {
-	case *gatewayapiv1beta1.HTTPRoute:
+	case *gatewayapiv1.HTTPRoute:
 		route = obj
 		var err error
 		hosts, err = common.HostnamesFromHTTPRoute(ctx, obj, r.Client())
 		if err != nil {
 			return nil, err
 		}
-	case *gatewayapiv1beta1.Gateway:
+	case *gatewayapiv1.Gateway:
 		// fake a single httproute with all rules from all httproutes accepted by the gateway,
 		// that do not have an authpolicy of its own, so we can generate wasm rules for those cases
 		gw := common.GatewayWrapper{Gateway: obj}
 		gwHostnames := gw.Hostnames()
 		if len(hosts) == 0 {
-			gwHostnames = []gatewayapiv1beta1.Hostname{"*"}
+			gwHostnames = []gatewayapiv1.Hostname{"*"}
 		}
 		hosts = common.HostnamesToStrings(gwHostnames)
 
-		rules := make([]gatewayapiv1beta1.HTTPRouteRule, 0)
+		rules := make([]gatewayapiv1.HTTPRouteRule, 0)
 		routes := r.FetchAcceptedGatewayHTTPRoutes(ctx, ap.TargetKey())
 		for idx := range routes {
 			route := routes[idx]
@@ -115,8 +115,8 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 			common.TagObjectToDelete(authConfig)
 			return authConfig, nil
 		}
-		route = &gatewayapiv1beta1.HTTPRoute{
-			Spec: gatewayapiv1beta1.HTTPRouteSpec{
+		route = &gatewayapiv1.HTTPRoute{
+			Spec: gatewayapiv1.HTTPRouteSpec{
 				Hostnames: gwHostnames,
 				Rules:     rules,
 			},
@@ -196,7 +196,7 @@ func authorinoSpecsFromConfigs[T, U any](configs map[string]U, extractAuthorinoS
 	return specs
 }
 
-func mergeConditionsFromRouteSelectorsIntoConfigs(ap *api.AuthPolicy, route *gatewayapiv1beta1.HTTPRoute, authConfig *authorinoapi.AuthConfig) (*authorinoapi.AuthConfig, error) {
+func mergeConditionsFromRouteSelectorsIntoConfigs(ap *api.AuthPolicy, route *gatewayapiv1.HTTPRoute, authConfig *authorinoapi.AuthConfig) (*authorinoapi.AuthConfig, error) {
 	// authentication
 	for name, config := range ap.Spec.AuthScheme.Authentication {
 		conditions, err := authorinoConditionsFromRouteSelectors(route, config)
@@ -288,7 +288,7 @@ func mergeConditionsFromRouteSelectorsIntoConfigs(ap *api.AuthPolicy, route *gat
 }
 
 // authorinoConditionFromRouteSelectors builds a list of Authorino conditions from a config that may specify route selectors
-func authorinoConditionsFromRouteSelectors(route *gatewayapiv1beta1.HTTPRoute, config api.RouteSelectorsGetter) ([]authorinoapi.PatternExpressionOrRef, error) {
+func authorinoConditionsFromRouteSelectors(route *gatewayapiv1.HTTPRoute, config api.RouteSelectorsGetter) ([]authorinoapi.PatternExpressionOrRef, error) {
 	routeSelectors := config.GetRouteSelectors()
 
 	if len(routeSelectors) == 0 {
@@ -311,7 +311,7 @@ func authorinoConditionsFromRouteSelectors(route *gatewayapiv1beta1.HTTPRoute, c
 }
 
 // authorinoConditionsFromHTTPRoute builds a list of Authorino conditions from an HTTPRoute, without using route selectors.
-func authorinoConditionsFromHTTPRoute(route *gatewayapiv1beta1.HTTPRoute) []authorinoapi.PatternExpressionOrRef {
+func authorinoConditionsFromHTTPRoute(route *gatewayapiv1.HTTPRoute) []authorinoapi.PatternExpressionOrRef {
 	conditions := []authorinoapi.PatternExpressionOrRef{}
 	hostnamesForConditions := (&api.RouteSelector{}).HostnamesForConditions(route)
 	for _, rule := range route.Spec.Rules {
@@ -324,7 +324,7 @@ func authorinoConditionsFromHTTPRoute(route *gatewayapiv1beta1.HTTPRoute) []auth
 // * Each combination of HTTPRouteMatch and hostname yields one condition.
 // * Rules that specify no explicit HTTPRouteMatch are assumed to match all requests (i.e. implicit catch-all rule.)
 // * Empty list of hostnames yields a condition without a hostname pattern expression.
-func authorinoConditionsFromHTTPRouteRule(rule gatewayapiv1beta1.HTTPRouteRule, hostnames []gatewayapiv1beta1.Hostname) []authorinoapi.PatternExpressionOrRef {
+func authorinoConditionsFromHTTPRouteRule(rule gatewayapiv1.HTTPRouteRule, hostnames []gatewayapiv1.Hostname) []authorinoapi.PatternExpressionOrRef {
 	hosts := []string{}
 	for _, hostname := range hostnames {
 		if hostname == "*" {
@@ -397,7 +397,7 @@ func hostnamesToRegex(hostnames []string) string {
 	}), "|")
 }
 
-func httpMethodRuleToAuthorinoCondition(method gatewayapiv1beta1.HTTPMethod) authorinoapi.PatternExpressionOrRef {
+func httpMethodRuleToAuthorinoCondition(method gatewayapiv1.HTTPMethod) authorinoapi.PatternExpressionOrRef {
 	return authorinoapi.PatternExpressionOrRef{
 		PatternExpression: authorinoapi.PatternExpression{
 			Selector: "request.method",
@@ -407,7 +407,7 @@ func httpMethodRuleToAuthorinoCondition(method gatewayapiv1beta1.HTTPMethod) aut
 	}
 }
 
-func httpPathRuleToAuthorinoCondition(path gatewayapiv1beta1.HTTPPathMatch) authorinoapi.PatternExpressionOrRef {
+func httpPathRuleToAuthorinoCondition(path gatewayapiv1.HTTPPathMatch) authorinoapi.PatternExpressionOrRef {
 	value := "/"
 	if path.Value != nil {
 		value = *path.Value
@@ -416,17 +416,17 @@ func httpPathRuleToAuthorinoCondition(path gatewayapiv1beta1.HTTPPathMatch) auth
 
 	matchType := path.Type
 	if matchType == nil {
-		p := gatewayapiv1beta1.PathMatchPathPrefix
+		p := gatewayapiv1.PathMatchPathPrefix
 		matchType = &p // gateway api defaults to PathMatchPathPrefix
 	}
 
 	switch *matchType {
-	case gatewayapiv1beta1.PathMatchExact:
+	case gatewayapiv1.PathMatchExact:
 		operator = "eq"
-	case gatewayapiv1beta1.PathMatchPathPrefix:
+	case gatewayapiv1.PathMatchPathPrefix:
 		operator = "matches"
 		value += ".*"
-	case gatewayapiv1beta1.PathMatchRegularExpression:
+	case gatewayapiv1.PathMatchRegularExpression:
 		operator = "matches"
 	}
 
@@ -439,7 +439,7 @@ func httpPathRuleToAuthorinoCondition(path gatewayapiv1beta1.HTTPPathMatch) auth
 	}
 }
 
-func httpHeadersRuleToAuthorinoConditions(headers []gatewayapiv1beta1.HTTPHeaderMatch) []authorinoapi.PatternExpressionOrRef {
+func httpHeadersRuleToAuthorinoConditions(headers []gatewayapiv1.HTTPHeaderMatch) []authorinoapi.PatternExpressionOrRef {
 	conditions := make([]authorinoapi.PatternExpressionOrRef, 0, len(headers))
 	for _, header := range headers {
 		condition := httpHeaderRuleToAuthorinoCondition(header)
@@ -448,9 +448,9 @@ func httpHeadersRuleToAuthorinoConditions(headers []gatewayapiv1beta1.HTTPHeader
 	return conditions
 }
 
-func httpHeaderRuleToAuthorinoCondition(header gatewayapiv1beta1.HTTPHeaderMatch) authorinoapi.PatternExpressionOrRef {
+func httpHeaderRuleToAuthorinoCondition(header gatewayapiv1.HTTPHeaderMatch) authorinoapi.PatternExpressionOrRef {
 	operator := "eq" // gateway api defaults to HeaderMatchExact
-	if header.Type != nil && *header.Type == gatewayapiv1beta1.HeaderMatchRegularExpression {
+	if header.Type != nil && *header.Type == gatewayapiv1.HeaderMatchRegularExpression {
 		operator = "matches"
 	}
 	return authorinoapi.PatternExpressionOrRef{
@@ -462,7 +462,7 @@ func httpHeaderRuleToAuthorinoCondition(header gatewayapiv1beta1.HTTPHeaderMatch
 	}
 }
 
-func httpQueryParamsRuleToAuthorinoConditions(queryParams []gatewayapiv1beta1.HTTPQueryParamMatch) []authorinoapi.PatternExpressionOrRef {
+func httpQueryParamsRuleToAuthorinoConditions(queryParams []gatewayapiv1.HTTPQueryParamMatch) []authorinoapi.PatternExpressionOrRef {
 	conditions := make([]authorinoapi.PatternExpressionOrRef, 0, len(queryParams))
 	for _, queryParam := range queryParams {
 		condition := httpQueryParamRuleToAuthorinoCondition(queryParam)
@@ -471,9 +471,9 @@ func httpQueryParamsRuleToAuthorinoConditions(queryParams []gatewayapiv1beta1.HT
 	return conditions
 }
 
-func httpQueryParamRuleToAuthorinoCondition(queryParam gatewayapiv1beta1.HTTPQueryParamMatch) authorinoapi.PatternExpressionOrRef {
+func httpQueryParamRuleToAuthorinoCondition(queryParam gatewayapiv1.HTTPQueryParamMatch) authorinoapi.PatternExpressionOrRef {
 	operator := "eq" // gateway api defaults to QueryParamMatchExact
-	if queryParam.Type != nil && *queryParam.Type == gatewayapiv1beta1.QueryParamMatchRegularExpression {
+	if queryParam.Type != nil && *queryParam.Type == gatewayapiv1.QueryParamMatchRegularExpression {
 		operator = "matches"
 	}
 	return authorinoapi.PatternExpressionOrRef{

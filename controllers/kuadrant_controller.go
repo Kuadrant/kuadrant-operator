@@ -464,7 +464,9 @@ func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadr
 			Name:      common.LimitadorName,
 			Namespace: kObj.Namespace,
 		},
-		Spec: limitadorv1alpha1.LimitadorSpec{},
+		Spec: limitadorv1alpha1.LimitadorSpec{
+			RateLimitHeaders: &[]limitadorv1alpha1.RateLimitHeadersType{"DRAFT_VERSION_03"}[0],
+		},
 	}
 
 	err := r.SetOwnerReference(kObj, limitador)

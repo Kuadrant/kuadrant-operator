@@ -188,13 +188,13 @@ kubectl port-forward -n istio-system service/internal-istio 9082:80 2>&1 >/dev/n
 Up to 5 successful (`200 OK`) requests every 10 seconds through the `external` ingress gateway (`*.io`), then `429 Too Many Requests`:
 
 ```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H 'Host: api.toystore.io' http://localhost:9081 | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Host: api.toystore.io' http://localhost:9081 | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
 Unlimited successful (`200 OK`) through the `internal` ingress gateway (`*.local`):
 
 ```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H 'Host: api.toystore.local' http://localhost:9082 | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Host: api.toystore.local' http://localhost:9082 | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
 ## Cleanup

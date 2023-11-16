@@ -141,13 +141,13 @@ Verify the rate limiting works by sending requests in a loop.
 Up to 5 successful (`200 OK`) requests every 10 seconds to `POST /toys`, then `429 Too Many Requests`:
 
 ```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H 'Host: api.toystore.com' http://localhost:9080/toys -X POST | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Host: api.toystore.com' http://localhost:9080/toys -X POST | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
 Unlimited successful (`200 OK`) to `GET /toys`:
 
 ```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H 'Host: api.toystore.com' http://localhost:9080/toys | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Host: api.toystore.com' http://localhost:9080/toys | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
 ## Cleanup

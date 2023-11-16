@@ -42,32 +42,6 @@ func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api
 	return nil
 }
 
-func (r *AuthPolicyReconciler) deleteAuthConfigs(ctx context.Context, ap *api.AuthPolicy) error {
-	logger, err := logr.FromContext(ctx)
-	if err != nil {
-		return err
-	}
-
-	logger.Info("Removing Authorino's AuthConfigs")
-
-	authConfig := &authorinoapi.AuthConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      authConfigName(client.ObjectKeyFromObject(ap)),
-			Namespace: ap.Namespace,
-		},
-	}
-
-	if err := r.DeleteResource(ctx, authConfig); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-		logger.Error(err, "failed to delete Authorino's AuthConfig")
-		return err
-	}
-
-	return nil
-}
-
 func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) (*authorinoapi.AuthConfig, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("desiredAuthConfig")

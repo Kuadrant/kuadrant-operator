@@ -174,10 +174,6 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 		return err
 	}
 
-	if err := r.deleteAuthConfigs(ctx, ap); err != nil {
-		return err
-	}
-
 	// remove direct back ref
 	if targetNetworkObject != nil {
 		if err := r.deleteNetworkResourceDirectBackReference(ctx, targetNetworkObject); err != nil {

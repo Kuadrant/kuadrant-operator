@@ -74,7 +74,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 		// that do not have an authpolicy of its own, so we can generate wasm rules for those cases
 		gw := common.GatewayWrapper{Gateway: obj}
 		gwHostnames := gw.Hostnames()
-		if len(hosts) == 0 {
+		if len(gwHostnames) == 0 {
 			gwHostnames = []gatewayapiv1.Hostname{"*"}
 		}
 		hosts = common.HostnamesToStrings(gwHostnames)

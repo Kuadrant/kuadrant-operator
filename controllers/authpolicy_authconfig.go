@@ -29,6 +29,11 @@ func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api
 		return err
 	}
 
+	err = r.SetOwnerReference(ap, authConfig)
+	if err != nil {
+		return err
+	}
+
 	err = r.ReconcileResource(ctx, &authorinoapi.AuthConfig{}, authConfig, alwaysUpdateAuthConfig)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		logger.Error(err, "ReconcileResource failed to create/update AuthConfig resource")

@@ -19,7 +19,7 @@ spec:
       # Read more about this feature at https://github.com/Kuadrant/authorino/blob/v0.11.0/docs/user-guides/oidc-jwt-authentication.md.
       "keycloak-users":
         jwt:
-          issuerUrl: http://keycloak.keycloak.svc.cluster.local:8080/auth/realms/kuadrant
+          issuerUrl: http://keycloak.keycloak.svc.cluster.local:8080/realms/kuadrant
 
       # Authorino will verify Kubernetes Service Account tokens, using Kubernetes TokenReview API,
       # as valid authentication tokens to consume the protected API.

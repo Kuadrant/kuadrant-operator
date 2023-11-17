@@ -5,6 +5,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -43,11 +44,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		err := k8sClient.Create(context.Background(), gateway)
 		Expect(err).ToNot(HaveOccurred())
 
-		Eventually(func() bool {
-			existingGateway := &gatewayapiv1.Gateway{}
-			err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
-			return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType)
-		}, 15*time.Second, 5*time.Second).Should(BeTrue())
+		Eventually(testGatewayIsReady(gateway), 15*time.Second, 5*time.Second).Should(BeTrue())
 
 		ApplyKuadrantCR(testNamespace)
 	})
@@ -116,7 +113,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), authConfigKey, authConfig)
 				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
-				return err == nil || authConfig.Status.Ready()
+				return err == nil && authConfig.Status.Ready()
 			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
 			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
 			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*"}))
@@ -130,6 +127,52 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`request.url_path`))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/toy.*"))
+		})
+
+		It("Attaches policy to a Gateway with hostname in listeners", func() {
+			gatewayName := fmt.Sprintf("%s-with-hostnames", testGatewayName)
+			gateway := testBuildBasicGateway(gatewayName, testNamespace)
+			Expect(gateway.Spec.Listeners).Must(HaveLen(1))
+			// Set hostname
+			gateway.Spec.Listeners[0].Hostname = &[]gatewayapiv1.Hostname{"*.example.com"}[0]
+			err := k8sClient.Create(context.Background(), gateway)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(testGatewayIsReady(gateway), 15*time.Second, 5*time.Second).Should(BeTrue())
+
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gw-auth",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     "gateway.networking.k8s.io",
+						Kind:      "Gateway",
+						Name:      gatewayName,
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
+					},
+					AuthScheme: testBasicAuthScheme(),
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(testPolicyIsReady(policy), 60*time.Second, 5*time.Second).Should(BeTrue())
+
+			// check authorino authconfig hosts
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfig := &authorinoapi.AuthConfig{}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), authConfigKey, authConfig)
+				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
+				return err == nil && authConfig.Status.Ready()
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+
+			Expect(authConfig.Spec.Hosts).To(ConsistOf("*.example.com"))
 		})
 
 		It("Attaches policy to the HTTPRoute", func() {
@@ -275,7 +318,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), authConfigKey, authConfig)
 				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
-				return err == nil || authConfig.Status.Ready()
+				return err == nil && authConfig.Status.Ready()
 			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
 			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
 			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*"}))
@@ -844,7 +887,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), authConfigKey, authConfig)
 				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
-				return err == nil || authConfig.Status.Ready()
+				return err == nil && authConfig.Status.Ready()
 			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
 			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
 			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
@@ -1244,6 +1287,12 @@ func testBasicAuthScheme() api.AuthSchemeSpec {
 			},
 		},
 	}
+}
+
+func testGatewayIsReady(gateway *gatewayapiv1.Gateway) func() bool {
+	existingGateway := &gatewayapiv1.Gateway{}
+	err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
+	return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType)
 }
 
 func testPolicyIsReady(policy *api.AuthPolicy) func() bool {

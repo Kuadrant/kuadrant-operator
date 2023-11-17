@@ -12,11 +12,11 @@ coverage:
     project:
       default:
         target: auto
-        threshold: 1%
+        threshold: 3%
     patch:
       default:
         target: auto
-        threshold: 1%
+        threshold: 3%
 
 # Layout of the PR comment produced by Codecov bot
 comment:

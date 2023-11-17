@@ -131,7 +131,7 @@ spec:
     authentication:
       "keycloak-users":
         jwt:
-          issuerUrl: http://keycloak.keycloak.svc.cluster.local:8080/auth/realms/kuadrant
+          issuerUrl: http://keycloak.keycloak.svc.cluster.local:8080/realms/kuadrant
       "k8s-service-accounts":
         kubernetesTokenReview:
           audiences:
@@ -170,7 +170,7 @@ curl -H 'Host: api.toystore.com' http://localhost:9080/toy -i
 Obtain an access token with the Keycloak server:
 
 ```sh
-ACCESS_TOKEN=$(kubectl run token --attach --rm --restart=Never -q --image=curlimages/curl -- http://keycloak.keycloak.svc.cluster.local:8080/auth/realms/kuadrant/protocol/openid-connect/token -s -d 'grant_type=password' -d 'client_id=demo' -d 'username=john' -d 'password=p' | jq -r .access_token)
+ACCESS_TOKEN=$(kubectl run token --attach --rm --restart=Never -q --image=curlimages/curl -- http://keycloak.keycloak.svc.cluster.local:8080/realms/kuadrant/protocol/openid-connect/token -s -d 'grant_type=password' -d 'client_id=demo' -d 'username=john' -d 'password=p' -d 'scope=openid' | jq -r .access_token)
 ```
 
 Send a request to the API as the Keycloak-authenticated user while still missing permissions:
@@ -340,13 +340,13 @@ Each user should be entitled to a maximum of 5 requests every 10 seconds.
 Send requests as the Keycloak-authenticated user:
 
 ```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
 Send requests as the Kubernetes service account:
 
 ```sh
-while :; do curl --write-out '%{http_code}' --silent --output /dev/null -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
 ```
 
 ## Cleanup

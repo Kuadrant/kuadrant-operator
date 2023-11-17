@@ -132,7 +132,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		It("Attaches policy to a Gateway with hostname in listeners", func() {
 			gatewayName := fmt.Sprintf("%s-with-hostnames", testGatewayName)
 			gateway := testBuildBasicGateway(gatewayName, testNamespace)
-			Expect(gateway.Spec.Listeners).Must(HaveLen(1))
+			Expect(gateway.Spec.Listeners).To(HaveLen(1))
 			// Set hostname
 			gateway.Spec.Listeners[0].Hostname = &[]gatewayapiv1.Hostname{"*.example.com"}[0]
 			err := k8sClient.Create(context.Background(), gateway)
@@ -149,14 +149,14 @@ var _ = Describe("AuthPolicy controller", func() {
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 						Group:     "gateway.networking.k8s.io",
 						Kind:      "Gateway",
-						Name:      gatewayName,
+						Name:      gatewayapiv1.ObjectName(gatewayName),
 						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					AuthScheme: testBasicAuthScheme(),
 				},
 			}
 
-			err := k8sClient.Create(context.Background(), policy)
+			err = k8sClient.Create(context.Background(), policy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -1290,9 +1290,11 @@ func testBasicAuthScheme() api.AuthSchemeSpec {
 }
 
 func testGatewayIsReady(gateway *gatewayapiv1.Gateway) func() bool {
-	existingGateway := &gatewayapiv1.Gateway{}
-	err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
-	return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType)
+	return func() bool {
+		existingGateway := &gatewayapiv1.Gateway{}
+		err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
+		return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType)
+	}
 }
 
 func testPolicyIsReady(policy *api.AuthPolicy) func() bool {

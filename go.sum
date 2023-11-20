@@ -197,8 +197,8 @@ github.com/kuadrant/authorino v0.15.0 h1:Xw/buh/wTINdL+IpLSxhlpet4hpleMxZzfx39c4
 github.com/kuadrant/authorino v0.15.0/go.mod h1:vXkHKrntn8DR7kt8a8Ohxq+2lgAD0jWivThoP+7ASew=
 github.com/kuadrant/authorino-operator v0.9.0 h1:EV7zrYBNcd53HPQMivvTwe/+DIATTK7O4znJzh4xON8=
 github.com/kuadrant/authorino-operator v0.9.0/go.mod h1:VkUqS4CHNiaHMrjSFQ5V71DN829kPnqT3FQxqlOntEI=
-github.com/kuadrant/limitador-operator v0.4.0 h1:HgJi7LuOsenCUMs2ACCfKMKsKpfHcqmmwVmqpci0hw4=
-github.com/kuadrant/limitador-operator v0.4.0/go.mod h1:5fQo2XwxPr7bDObut9sK5sHCnK4hwAmTsTptaYvGfuc=
+github.com/kuadrant/limitador-operator v0.6.0 h1:WsXjPgzX5/021SNEaI9Y1cjQtU7JUyXGdjLx+06+mn0=
+github.com/kuadrant/limitador-operator v0.6.0/go.mod h1:hqKQ0Qtwl3UX/NqOYdLFUARlfUS7YNWnR28owMuAXfs=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/lestrrat-go/backoff/v2 v2.0.8 h1:oNb5E5isby2kiro9AgdHLv5N5tint1AnDVVf2E2un5A=

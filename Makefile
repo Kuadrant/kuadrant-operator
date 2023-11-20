@@ -168,7 +168,7 @@ help: ## Display this help.
 ##@ Tools
 
 OPERATOR_SDK = $(PROJECT_PATH)/bin/operator-sdk
-OPERATOR_SDK_VERSION = v1.28.1
+OPERATOR_SDK_VERSION = v1.32.0
 $(OPERATOR_SDK):
 	./utils/install-operator-sdk.sh $(OPERATOR_SDK) $(OPERATOR_SDK_VERSION)
 

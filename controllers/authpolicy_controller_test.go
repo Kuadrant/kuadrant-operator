@@ -140,6 +140,16 @@ var _ = Describe("AuthPolicy controller", func() {
 
 			Eventually(testGatewayIsReady(gateway), 15*time.Second, 5*time.Second).Should(BeTrue())
 
+			routeName := fmt.Sprintf("%s-with-hostnames", testHTTPRouteName)
+			route := testBuildBasicHttpRoute(routeName, gatewayName, testNamespace, []string{"*.api.example.com"})
+			err = k8sClient.Create(context.Background(), route)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(func() bool {
+				existingRoute := &gatewayapiv1.HTTPRoute{}
+				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(route), existingRoute)
+				return err == nil && common.IsHTTPRouteAccepted(existingRoute)
+			}, 15*time.Second, 5*time.Second).Should(BeTrue())
+
 			policy := &api.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "gw-auth",

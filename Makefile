@@ -371,6 +371,7 @@ deploy-dependencies: kustomize dependencies-manifests ## Deploy dependencies to 
 .PHONY: install-metallb
 install-metallb: $(KUSTOMIZE) ## Installs the metallb load balancer allowing use of an LoadBalancer type with a gateway
 	$(KUSTOMIZE) build config/metallb | kubectl apply -f -
+	kubectl -n metallb-system wait --for=condition=ready pod --selector=app=metallb --timeout=60s
 
 .PHONY: uninstall-metallb
 uninstall-metallb: $(KUSTOMIZE) 

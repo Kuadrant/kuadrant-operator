@@ -13,6 +13,8 @@ import (
 	istioapiv1alpha1 "istio.io/api/operator/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
+	"maistra.io/istio-operator/pkg/helm"
 )
 
 func getStubbedMeshConfig() *istiomeshv1alpha1.MeshConfig {
@@ -74,6 +76,14 @@ func getStubbedMeshConfigStruct() *structpb.Struct {
 					},
 				},
 			},
+		},
+	}
+}
+
+func getInvalidStubbedMeshConfigStruct() *structpb.Struct {
+	return &structpb.Struct{
+		Fields: map[string]*structpb.Value{
+			"invalid-field": {},
 		},
 	}
 }
@@ -197,5 +207,61 @@ func TestOSSMControlPlaneWrapper_SetMeshConfig(t *testing.T) {
 	meshConfig, _ := wrapper.GetMeshConfig()
 
 	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, "custom-authorizer")
+	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().GetPort(), uint32(50051))
+}
+
+func TestSailWrapper_GetConfigObject(t *testing.T) {
+	ist := &istiov1alpha1.Istio{}
+	wrapper := NewSailWrapper(ist)
+
+	assert.Equal(t, wrapper.GetConfigObject(), ist)
+}
+
+func TestSailWrapper_GetMeshConfig(t *testing.T) {
+	structConfig := getStubbedMeshConfigStruct()
+	values := helm.HelmValues{}
+	if err := values.Set("meshConfig", structConfig.AsMap()); err != nil {
+		assert.NilError(t, err)
+	}
+	config := &istiov1alpha1.Istio{}
+	if err := config.Spec.SetValues(values); err != nil {
+		assert.NilError(t, err)
+	}
+	wrapper := NewSailWrapper(config)
+
+	meshConfig, err := wrapper.GetMeshConfig()
+	assert.NilError(t, err)
+	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, "custom-authorizer")
+	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().GetPort(), uint32(50051))
+}
+
+func TestSailWrapper_GetMeshConfigInvalid(t *testing.T) {
+	structConfig := getInvalidStubbedMeshConfigStruct()
+	values := helm.HelmValues{}
+	if err := values.Set("meshConfig", structConfig.AsMap()); err != nil {
+		assert.NilError(t, err)
+	}
+	config := &istiov1alpha1.Istio{}
+	if err := config.Spec.SetValues(values); err != nil {
+		assert.NilError(t, err)
+	}
+	wrapper := NewSailWrapper(config)
+
+	meshConfig, err := wrapper.GetMeshConfig()
+	assert.Check(t, err != nil)
+	assert.Check(t, meshConfig == nil)
+}
+
+func TestSailWrapper_SetMeshConfig(t *testing.T) {
+	config := &istiov1alpha1.Istio{}
+	wrapper := NewSailWrapper(config)
+
+	stubbedMeshConfig := getStubbedMeshConfig()
+	err := wrapper.SetMeshConfig(stubbedMeshConfig)
+	assert.NilError(t, err)
+
+	meshConfig, _ := wrapper.GetMeshConfig()
+
+	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, stubbedMeshConfig.ExtensionProviders[0].Name)
 	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().GetPort(), uint32(50051))
 }

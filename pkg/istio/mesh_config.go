@@ -11,6 +11,8 @@ import (
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	"istio.io/istio/pkg/util/protomarshal"
 	corev1 "k8s.io/api/core/v1"
+	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
+	"maistra.io/istio-operator/pkg/helm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -101,6 +103,55 @@ func NewOSSMControlPlaneWrapper(config *maistrav2.ServiceMeshControlPlane) *OSSM
 // GetConfigObject returns the OSSM ServiceMeshControlPlane
 func (w *OSSMControlPlaneWrapper) GetConfigObject() client.Object {
 	return w.config
+}
+
+// SailWrapper wraps the IstioCR
+type SailWrapper struct {
+	config *istiov1alpha1.Istio
+}
+
+// NewSailWrapper creates a new SailWrapper
+func NewSailWrapper(config *istiov1alpha1.Istio) *SailWrapper {
+	return &SailWrapper{config: config}
+}
+
+// GetConfigObject returns the IstioCR
+func (w *SailWrapper) GetConfigObject() client.Object {
+	return w.config
+}
+
+// GetMeshConfig returns the Istio MeshConfig
+func (w *SailWrapper) GetMeshConfig() (*istiomeshv1alpha1.MeshConfig, error) {
+	values := w.config.Spec.GetValues()
+	config, ok := values["meshConfig"].(map[string]any)
+	if !ok {
+		return &istiomeshv1alpha1.MeshConfig{}, nil
+	}
+	meshConfigStruct, err := structpb.NewStruct(config)
+	if err != nil {
+		return nil, err
+	}
+	meshConfig, err := meshConfigFromStruct(meshConfigStruct)
+	if err != nil {
+		return nil, err
+	}
+	return meshConfig, nil
+}
+
+// SetMeshConfig sets the Istio MeshConfig
+func (w *SailWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshConfig) error {
+	meshConfigStruct, err := meshConfigToStruct(config)
+	if err != nil {
+		return err
+	}
+	values := w.config.Spec.GetValues()
+	if values == nil {
+		values = helm.HelmValues{}
+	}
+	if err := values.Set("meshConfig", meshConfigStruct.AsMap()); err != nil {
+		return err
+	}
+	return w.config.Spec.SetValues(values)
 }
 
 // GetMeshConfig returns the MeshConfig from the OSSM ServiceMeshControlPlane

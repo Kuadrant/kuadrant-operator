@@ -35,6 +35,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -70,6 +71,7 @@ type KuadrantReconciler struct {
 //+kubebuilder:rbac:groups="gateway.networking.k8s.io",resources=httproutes,verbs=get;list;patch;update;watch
 //+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos,verbs=get;list;watch;create;update;delete;patch
 //+kubebuilder:rbac:groups=install.istio.io,resources=istiooperators,verbs=get;list;watch;create;update;patch
+//+kubebuilder:rbac:groups=operator.istio.io,resources=istios,verbs=get;list;watch;create;update;patch
 //+kubebuilder:rbac:groups=maistra.io,resources=servicemeshcontrolplanes,verbs=get;list;watch;update;use;patch
 //+kubebuilder:rbac:groups=maistra.io,resources=servicemeshmembers,verbs=get;list;watch;create;update;delete;patch
 
@@ -320,23 +322,32 @@ func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context, logger l
 	var configsToUpdate []common.ConfigWrapper
 
 	iop := &iopv1alpha1.IstioOperator{}
-	iopKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
-	if err := r.GetResource(ctx, iopKey, iop); err != nil {
-		logger.V(1).Info("failed to get istiooperator object", "key", iopKey, "err", err)
-		if apimeta.IsNoMatchError(err) {
-			// return nil and nil if there's no istiooperator CRD, means istio is not installed
-			return nil, nil
-		} else if !apierrors.IsNotFound(err) {
-			// return nil and err if there's an error other than not found (no istiooperator CR)
-			return nil, err
-		}
-	} else {
+	istKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
+	err := r.GetResource(ctx, istKey, iop)
+	if err == nil || apierrors.IsNotFound(err) {
 		configsToUpdate = append(configsToUpdate, istio.NewOperatorWrapper(iop))
+	} else if !apimeta.IsNoMatchError(err) {
+		logger.V(1).Info("failed to get istiooperator object", "key", istKey, "err", err)
+		return nil, err
+	} else {
+		// Error is NoMatchError so check for Istio CR instead
+		ist := &istiov1alpha1.Istio{}
+		if err := r.GetResource(ctx, istKey, ist); err != nil {
+			logger.V(1).Info("failed to get istio object", "key", istKey, "err", err)
+			if apimeta.IsNoMatchError(err) {
+				// return nil and nil if there's no istiooperator or istio CR
+				return nil, nil
+			} else if !apierrors.IsNotFound(err) {
+				// return nil and err if there's an error other than not found (no istio CR)
+				return nil, err
+			}
+		}
+		configsToUpdate = append(configsToUpdate, istio.NewSailWrapper(ist))
 	}
 
 	istioConfigMap := &corev1.ConfigMap{}
 	if err := r.GetResource(ctx, client.ObjectKey{Name: controlPlaneConfigMapName(), Namespace: controlPlaneProviderNamespace()}, istioConfigMap); err != nil {
-		logger.V(1).Info("failed to get istio configMap", "key", iopKey, "err", err)
+		logger.V(1).Info("failed to get istio configMap", "key", istKey, "err", err)
 		return configsToUpdate, err
 	}
 	configsToUpdate = append(configsToUpdate, istio.NewConfigMapWrapper(istioConfigMap))

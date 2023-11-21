@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"golang.org/x/exp/slices"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -18,6 +17,7 @@ import (
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 )
 
 const (
@@ -94,7 +94,7 @@ func (r *KuadrantReconciler) readyCondition(ctx context.Context, kObj *kuadrantv
 		return cond, nil
 	}
 
-	reason, err := r.checkLimitadorAvailable(ctx, kObj)
+	reason, err := r.checkLimitadorReady(ctx, kObj)
 	if err != nil {
 		return nil, err
 	}
@@ -119,29 +119,27 @@ func (r *KuadrantReconciler) readyCondition(ctx context.Context, kObj *kuadrantv
 	return cond, nil
 }
 
-func (r *KuadrantReconciler) checkLimitadorAvailable(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (*string, error) {
-	// Should be implemented reading the Limitador CR's status conditions.
-	// Not implemented yet in the limitador's operator
-	deployment := &appsv1.Deployment{}
-	dKey := client.ObjectKey{Name: "limitador", Namespace: kObj.Namespace}
-	err := r.Client().Get(ctx, dKey, deployment)
+func (r *KuadrantReconciler) checkLimitadorReady(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (*string, error) {
+	limitadorObj := &limitadorv1alpha1.Limitador{}
+	limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kObj.Namespace}
+
+	err := r.Client().Get(ctx, limitadorKey, limitadorObj)
 	if err != nil && !errors.IsNotFound(err) {
 		return nil, err
 	}
 
-	if err != nil && errors.IsNotFound(err) {
-		tmp := err.Error()
-		return &tmp, nil
+	if errors.IsNotFound(err) {
+		reason := "Limitador not found"
+		return &reason, nil
 	}
 
-	availableCondition := common.FindDeploymentStatusCondition(deployment.Status.Conditions, "Available")
-	if availableCondition == nil {
-		tmp := "Available condition not found"
-		return &tmp, nil
+	statusConditionReady := meta.FindStatusCondition(limitadorObj.Status.Conditions, "Ready")
+	if statusConditionReady == nil {
+		reason := "Ready condition not found"
+		return &reason, nil
 	}
-
-	if availableCondition.Status != corev1.ConditionTrue {
-		return &availableCondition.Message, nil
+	if statusConditionReady.Status != metav1.ConditionTrue {
+		return &statusConditionReady.Message, nil
 	}
 
 	return nil, nil

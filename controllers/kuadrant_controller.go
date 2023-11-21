@@ -465,7 +465,8 @@ func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadr
 			Namespace: kObj.Namespace,
 		},
 		Spec: limitadorv1alpha1.LimitadorSpec{
-			RateLimitHeaders: &[]limitadorv1alpha1.RateLimitHeadersType{"DRAFT_VERSION_03"}[0],
+			RateLimitHeaders: &[]limitadorv1alpha1.RateLimitHeadersType{limitadorv1alpha1.RateLimitHeadersTypeDraft03}[0],
+			Telemetry:        &[]limitadorv1alpha1.Telemetry{limitadorv1alpha1.TelemetryExhaustive}[0],
 		},
 	}
 

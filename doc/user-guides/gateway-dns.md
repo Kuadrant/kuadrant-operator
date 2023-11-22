@@ -36,33 +36,6 @@ Install metallb:
 make install-metallb
 ```
 
-Fetch the current kind networks subnet:
-```shell
-docker network inspect kind -f '{{ (index .IPAM.Config 0).Subnet }}'
-```
-Response:
-```shell
-"172.18.0.0/16"
-```
-
-Create IPAddressPool within kind network(Fetched by the command above) e.g. 172.18.200
-```shell
-kubectl -n metallb-system apply -f -<<EOF
-apiVersion: metallb.io/v1beta1
-kind: IPAddressPool
-metadata:
-  name: kuadrant-local
-spec:
-  addresses:
-  - 172.18.200.0/24
----
-apiVersion: metallb.io/v1beta1
-kind: L2Advertisement
-metadata:
-  name: empty
-EOF
-```
-
 Create a namespace:
 ```shell
 kubectl create namespace my-gateways

@@ -19,7 +19,7 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: Kuadrant is the Schema for the kuadrants API
+        description: Kuadrant is the Schema for the Kuadrant API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation

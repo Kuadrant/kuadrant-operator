@@ -7,27 +7,6 @@
 
 The Operator to install and manage the lifecycle of the [Kuadrant](https://github.com/Kuadrant/) components deployments.
 
-<!--ts-->
-- [Overview](#overview)
-- [Architecture](#architecture)
-  - [Kuadrant components](#kuadrant-components)
-  - [Provided APIs](#provided-apis)
-- [Getting started](#getting-started)
-  - [Pre-requisites](#pre-requisites)
-  - [Installing Kuadrant](#installing-kuadrant)
-    - [1. Install the Kuadrant Operator](#1-install-the-kuadrant-operator)
-    - [2. Request a Kuadrant instance](#2-request-a-kuadrant-instance)
-  - [Protect your service](#protect-your-service)
-    - [If you are an *API Provider*](#if-you-are-an-api-provider)
-    - [If you are a *Cluster Operator*](#if-you-are-a-cluster-operator)
-- [User guides](#user-guides)
-- [Kuadrant Rate Limiting](#kuadrant-rate-limiting)
-- [Documentation](#documentation)
-- [Contributing](#contributing)
-- [Licensing](#licensing)
-
-<!--te-->
-
 ## Overview
 
 Kuadrant is a re-architecture of API Management using Cloud Native concepts and separating the components to be less coupled,
@@ -75,7 +54,7 @@ Additionally, Kuadrant provides the following CRDs
 |--------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------|-------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
 | [Kuadrant CRD](https://github.com/Kuadrant/kuadrant-operator/blob/main/api/v1beta1/kuadrant_types.go)        | [Kuadrant Operator](https://github.com/Kuadrant/kuadrant-operator)   | Represents an instance of kuadrant  | [Kuadrant CR](https://github.com/Kuadrant/kuadrant-operator/blob/main/config/samples/kuadrant_v1beta1_kuadrant.yaml)              |
 | [Limitador CRD](https://github.com/Kuadrant/limitador-operator/blob/main/api/v1alpha1/limitador_types.go)    | [Limitador Operator](https://github.com/Kuadrant/limitador-operator) | Represents an instance of Limitador | [Limitador CR](https://github.com/Kuadrant/limitador-operator/blob/main/config/samples/limitador_v1alpha1_limitador.yaml)         |
-| [Authorino CRD](https://github.com/Kuadrant/authorino-operator#the-authorino-custom-resource-definition-crd) | [Authorino Operator](https://github.com/Kuadrant/authorino-operator) | Represents an instance of Authorino | [Authorino CR](https://github.com/Kuadrant/authorino-operator/blob/main/config/samples/authorino-operator_v1beta1_authorino.yaml) |
+| [Authorino CRD](https://docs.kuadrant.io/authorino-operator/#the-authorino-custom-resource-definition-crd) | [Authorino Operator](https://github.com/Kuadrant/authorino-operator) | Represents an instance of Authorino | [Authorino CR](https://github.com/Kuadrant/authorino-operator/blob/main/config/samples/authorino-operator_v1beta1_authorino.yaml) |
 
 <img alt="Kuadrant Architecture" src="doc/images/kuadrant-architecture.svg" />
 

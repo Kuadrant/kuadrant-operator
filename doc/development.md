@@ -1,26 +1,5 @@
 # Development Guide
 
-<!--ts-->
-   * [Technology stack required for development](#technology-stack-required-for-development)
-   * [Build](#build)
-   * [Run locally](#run-locally)
-   * [Deploy the operator in a deployment object](#deploy-the-operator-in-a-deployment-object)
-   * [Deploy kuadrant operator using OLM](#deploy-kuadrant-operator-using-olm)
-   * [Build custom OLM catalog](#build-custom-olm-catalog)
-      * [Build kuadrant operator bundle image](#build-kuadrant-operator-bundle-image)
-      * [Build custom catalog](#build-custom-catalog)
-   * [Cleaning up](#cleaning-up)
-   * [Run tests](#run-tests)
-      * [Unit tests](#unittests)
-      * [Integration tests](#integration-tests)
-      * [All tests](#all-tests)
-      * [Lint tests](#lint-tests)
-   * [(Un)Install Kuadrant CRDs](#uninstall-kuadrant-crds)
-
-<!-- Created by https://github.com/ekalinin/github-markdown-toc -->
-
-<!--te-->
-
 ## Technology stack required for development
 
 * [operator-sdk] version v1.28.1

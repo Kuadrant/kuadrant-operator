@@ -1,12 +1,11 @@
 # Authenticated Rate Limiting with JWTs and Kubernetes RBAC
 
 This user guide walks you through an example of how to use Kuadrant to protect an application with policies to enforce:
+
 - authentication based OpenId Connect (OIDC) ID tokens (signed JWTs), issued by a Keycloak server;
 - alternative authentication method by Kubernetes Service Account tokens;
 - authorization delegated to Kubernetes RBAC system;
 - rate limiting by user ID.
-
-<br/>
 
 In this example, we will protect a sample REST API called **Toy Store**. In reality, this API is just an echo service that echoes back to the user whatever attributes it gets in the request.
 
@@ -266,14 +265,14 @@ subjects:
 EOF
 ```
 
-<details>
+<details markdown="1">
   <summary><i>Q:</i> Can I use <code>Roles</code> and <code>RoleBindings</code> instead of <code>ClusterRoles</code> and <code>ClusterRoleBindings</code>?</summary>
 
   Yes, you can.
 
   The example above is for non-resource URL Kubernetes roles. For using `Roles` and `RoleBindings` instead of
   `ClusterRoles` and `ClusterRoleBindings`, thus more flexible resource-based permissions to protect the API,
-  see the spec for [Kubernetes SubjectAccessReview authorization](https://github.com/Kuadrant/authorino/blob/v0.5.0/docs/features.md#kubernetes-subjectaccessreview-authorizationkubernetes)
+  see the spec for [Kubernetes SubjectAccessReview authorization](https://docs.kuadrant.io/authorino/docs/features/#kubernetes-subjectaccessreview-authorizationkubernetessubjectaccessreview)
   in the Authorino docs.
 </details>
 

@@ -23,7 +23,6 @@ import (
 
 	"github.com/go-logr/logr"
 	istioextensionsv1alpha1 "istio.io/api/extensions/v1alpha1"
-	istiov1beta1 "istio.io/api/type/v1beta1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -96,11 +95,7 @@ func (r *RateLimitingWASMPluginReconciler) desiredRateLimitingWASMPlugin(ctx con
 		},
 		ObjectMeta: common.RateLimitingWASMPluginName(gw),
 		Spec: istioextensionsv1alpha1.WasmPlugin{
-			TargetRef: &istiov1beta1.PolicyTargetReference{
-				Group: "gateway.networking.k8s.io",
-				Kind:  "Gateway",
-				Name:  gw.Name,
-			},
+			Selector:     common.IstioWorkloadSelectorFromGateway(ctx, r.Client(), gw),
 			Url:          rlptools.WASMFilterImageURL,
 			PluginConfig: nil,
 			// Insert plugin before Istio stats filters and after Istio authorization filters.

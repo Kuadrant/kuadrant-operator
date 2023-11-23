@@ -139,6 +139,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
 				Conditions: []string{`limit.l1__2804bad6 == "1"`},
 				Variables:  []string{},
+				Name:       rlptools.LimitsNameFromRLP(rlp),
 			}))
 
 			// Check wasm plugin
@@ -477,6 +478,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
 				Conditions: []string{`limit.l1__2804bad6 == "1"`},
 				Variables:  []string{},
+				Name:       rlptools.LimitsNameFromRLP(rlp),
 			}))
 
 			// Check wasm plugin
@@ -594,6 +596,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
 				Conditions: []string{`limit.l1__2804bad6 == "1"`},
 				Variables:  []string{},
+				Name:       rlptools.LimitsNameFromRLP(rlp),
 			}))
 
 			// Check wasm plugin

@@ -51,6 +51,7 @@ func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []limitado
 				Seconds:    seconds,
 				Conditions: []string{fmt.Sprintf("%s == \"1\"", limitIdentifier)},
 				Variables:  common.GetEmptySliceIfNil(limit.CountersAsStringList()),
+				Name:       LimitsNameFromRLP(rlp),
 			})
 		}
 	}
@@ -59,6 +60,10 @@ func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []limitado
 
 func LimitsNamespaceFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) string {
 	return fmt.Sprintf("%s/%s", rlp.GetNamespace(), rlp.GetName())
+}
+
+func LimitsNameFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) string {
+	return LimitsNamespaceFromRLP(rlp)
 }
 
 var timeUnitMap = map[kuadrantv1beta2.TimeUnit]int{

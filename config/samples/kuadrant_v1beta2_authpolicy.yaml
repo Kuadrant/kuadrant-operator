@@ -1,0 +1,18 @@
+---
+apiVersion: kuadrant.io/v1beta2
+kind: AuthPolicy
+metadata:
+  name: toystore
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
+  rules:
+    authentication:
+      "apikey":
+        apiKey:
+          selector: {}
+      credentials:
+        authorizationHeader:
+          prefix: APIKEY

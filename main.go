@@ -135,12 +135,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = common.AddHTTPRouteByGatewayIndexer(mgr, log.Log.WithName("routeByGatewayIndexer"))
-	if err != nil {
-		setupLog.Error(err, "unable to add indexer to the manager")
-		os.Exit(1)
-	}
-
 	kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("kuadrant"),
@@ -241,7 +235,7 @@ func main() {
 	rateLimitingWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("ratelimitpolicy").WithName("wasmplugin"),
-		mgr.GetEventRecorderFor("GatewayKuadrant"),
+		mgr.GetEventRecorderFor("RateLimitingWASMPlugin"),
 	)
 
 	if err = (&controllers.RateLimitingWASMPluginReconciler{

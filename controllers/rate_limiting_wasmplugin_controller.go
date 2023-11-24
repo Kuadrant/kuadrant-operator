@@ -26,6 +26,7 @@ import (
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -36,6 +37,10 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
+)
+
+const (
+	HTTPRouteParents = ".metadata.parent"
 )
 
 // RateLimitingWASMPluginReconciler reconciles a WASMPlugin object for rate limiting
@@ -179,7 +184,7 @@ func (r *RateLimitingWASMPluginReconciler) gatewayAPITopologyFromGateway(ctx con
 
 	routeList := &gatewayapiv1.HTTPRouteList{}
 	// Get all the routes having the gateway as parent
-	err = r.Client().List(ctx, routeList, client.MatchingFields{common.HTTPRouteParents: client.ObjectKeyFromObject(gw).String()})
+	err = r.Client().List(ctx, routeList, client.MatchingFields{HTTPRouteParents: client.ObjectKeyFromObject(gw).String()})
 	logger.V(1).Info("gatewayAPITopologyFromGateway: list httproutes from gateway", "err", err)
 	if err != nil {
 		return nil, err
@@ -261,8 +266,56 @@ func (r *RateLimitingWASMPluginReconciler) RouteFromRLP(t *common.KuadrantTopolo
 	return route
 }
 
+// addHTTPRouteByGatewayIndexer declares an index key that we can later use with the client as a pseudo-field name,
+// allowing to query all the routes parenting a given gateway
+// to prevent creating the same index field multiple times, the function is declared private to be
+// called ontly by this controller
+func addHTTPRouteByGatewayIndexer(mgr ctrl.Manager, logger logr.Logger) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &gatewayapiv1.HTTPRoute{}, HTTPRouteParents, func(rawObj client.Object) []string {
+		// grab the route object, extract the parents
+		route, assertionOk := rawObj.(*gatewayapiv1.HTTPRoute)
+		logger.Info("assertionOK", "ok", assertionOk)
+		if !assertionOk {
+			return nil
+		}
+
+		logger.Info("route", "name", client.ObjectKeyFromObject(route).String())
+
+		keys := make([]string, 0)
+
+		for _, parentRef := range route.Spec.CommonRouteSpec.ParentRefs {
+			if !common.IsParentGateway(parentRef) {
+				logger.Info("parent not gateway", "ParentRefs", parentRef)
+				continue
+			}
+
+			key := client.ObjectKey{
+				Name:      string(parentRef.Name),
+				Namespace: string(ptr.Deref(parentRef.Namespace, gatewayapiv1.Namespace(route.Namespace))),
+			}
+
+			logger.Info("new key", "key", key.String())
+
+			keys = append(keys, key.String())
+		}
+
+		// ...and if so, return it
+		return keys
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *RateLimitingWASMPluginReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Add custom indexer
+	err := addHTTPRouteByGatewayIndexer(mgr, r.Logger().WithName("routeByGatewayIndexer"))
+	if err != nil {
+		return err
+	}
+
 	httpRouteToParentGatewaysEventMapper := &common.HTTPRouteToParentGatewaysEventMapper{
 		Logger: r.Logger().WithName("httpRouteToParentGatewaysEventMapper"),
 	}

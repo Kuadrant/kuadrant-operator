@@ -83,7 +83,7 @@ func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw co
 			APIVersion: "extensions.istio.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("kuadrant-%s", gw.Name),
+			Name:      rlptools.WASMPluginName(gw.Gateway),
 			Namespace: gw.Namespace,
 		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{

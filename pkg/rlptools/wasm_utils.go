@@ -285,3 +285,7 @@ func WASMPluginMutator(existingObj, desiredObj client.Object) (bool, error) {
 
 	return update, nil
 }
+
+func WASMPluginName(gw *gatewayapiv1.Gateway) string {
+	return fmt.Sprintf("kuadrant-%s", gw.Name)
+}

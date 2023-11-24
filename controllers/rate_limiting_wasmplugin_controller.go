@@ -93,7 +93,10 @@ func (r *RateLimitingWASMPluginReconciler) desiredRateLimitingWASMPlugin(ctx con
 			Kind:       "WasmPlugin",
 			APIVersion: "extensions.istio.io/v1alpha1",
 		},
-		ObjectMeta: common.RateLimitingWASMPluginName(gw),
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      rlptools.WASMPluginName(gw),
+			Namespace: gw.Namespace,
+		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{
 			Selector:     common.IstioWorkloadSelectorFromGateway(ctx, r.Client(), gw),
 			Url:          rlptools.WASMFilterImageURL,

@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -1148,17 +1149,171 @@ func TestGetGatewayWorkloadSelectorWithoutHostnameAddress(t *testing.T) {
 	}
 }
 
+func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = gatewayapiv1.AddToScheme(scheme)
+
+	testCases := []struct {
+		name        string
+		k8sClient   client.Client
+		policy      *FakePolicy
+		expected    string
+		expectedErr bool
+	}{
+		{
+			"retrieve gateway namespace from httproute",
+			fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(
+				&gatewayapiv1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace:   "my-ns",
+						Name:        "my-gw",
+						Annotations: map[string]string{"kuadrant.io/namespace": "my-ns"},
+					},
+				},
+				&gatewayapiv1.HTTPRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "my-ns",
+						Name:      "my-httproute",
+					},
+					Spec: gatewayapiv1.HTTPRouteSpec{
+						CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+							ParentRefs: []gatewayapiv1.ParentReference{
+								{
+									Name:      "my-gw",
+									Namespace: ptr.To[gatewayapiv1.Namespace](gatewayapiv1.Namespace("my-ns")),
+								},
+							},
+						},
+					},
+				},
+			).Build(),
+			&FakePolicy{
+				Object: &metav1.PartialObjectMetadata{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-policy",
+						Namespace: "my-ns",
+					},
+				},
+				targetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					Group:     "gateway.networking.k8s.io",
+					Kind:      "HTTPRoute",
+					Name:      "my-httproute",
+					Namespace: ptr.To[gatewayapiv1.Namespace](gatewayapiv1.Namespace("my-ns")),
+				},
+			},
+			"my-ns",
+			false,
+		},
+		{
+			"retrieve gateway namespace from httproute implicitly",
+			fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(
+				&gatewayapiv1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace:   "my-ns",
+						Name:        "my-gw",
+						Annotations: map[string]string{"kuadrant.io/namespace": "my-ns"},
+					},
+				},
+				&gatewayapiv1.HTTPRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "my-ns",
+						Name:      "my-httproute",
+					},
+					Spec: gatewayapiv1.HTTPRouteSpec{
+						CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+							ParentRefs: []gatewayapiv1.ParentReference{
+								{
+									Name: "my-gw",
+								},
+							},
+						},
+					},
+				},
+			).Build(),
+			&FakePolicy{
+				Object: &metav1.PartialObjectMetadata{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-policy",
+						Namespace: "my-ns",
+					},
+				},
+				targetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					Group: "gateway.networking.k8s.io",
+					Kind:  "HTTPRoute",
+					Name:  "my-httproute",
+				},
+			},
+			"my-ns",
+			false,
+		},
+		{
+			"error retrieving gateway namespace not annotated",
+			fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(
+				&gatewayapiv1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "my-ns",
+						Name:      "my-gw",
+					},
+				},
+				&gatewayapiv1.HTTPRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "my-ns",
+						Name:      "my-httproute",
+					},
+					Spec: gatewayapiv1.HTTPRouteSpec{
+						CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+							ParentRefs: []gatewayapiv1.ParentReference{
+								{
+									Name: "my-gw",
+								},
+							},
+						},
+					},
+				},
+			).Build(),
+			&FakePolicy{
+				Object: &metav1.PartialObjectMetadata{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "my-policy",
+						Namespace: "my-ns",
+					},
+				},
+				targetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					Group: "gateway.networking.k8s.io",
+					Kind:  "HTTPRoute",
+					Name:  "my-httproute",
+				},
+			},
+			"",
+			true,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			res, err := GetKuadrantNamespaceFromPolicyTargetRef(context.TODO(), tc.k8sClient, tc.policy)
+			if err != nil && !tc.expectedErr {
+				subT.Errorf("received err (%s) when expected error (%T)", err, tc.expectedErr)
+			}
+			if res != tc.expected {
+				subT.Errorf("result (%s) does not match expected (%s)", res, tc.expected)
+			}
+		})
+	}
+}
+
 type FakePolicy struct {
 	client.Object
-	Hosts []string
+	Hosts     []string
+	targetRef gatewayapiv1alpha2.PolicyTargetReference
 }
 
 func (p *FakePolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
-	return gatewayapiv1alpha2.PolicyTargetReference{}
+	return p.targetRef
 }
 
 func (p *FakePolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
-	return ""
+	return gatewayapiv1.Namespace(p.GetNamespace())
 }
 
 func (p *FakePolicy) GetRulesHostnames() []string {

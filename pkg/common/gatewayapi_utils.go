@@ -218,7 +218,7 @@ func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Cli
 		}
 		// First should be OK considering there's 1 Kuadrant instance per cluster and all are tagged
 		parentRef := route.Spec.ParentRefs[0]
-		gwNamespacedName = types.NamespacedName{Namespace: string(*parentRef.Namespace), Name: string(parentRef.Name)}
+		gwNamespacedName = types.NamespacedName{Namespace: string(ptr.Deref(parentRef.Namespace, gatewayapiv1.Namespace(route.Namespace))), Name: string(parentRef.Name)}
 	}
 	gw := &gatewayapiv1.Gateway{}
 	if err := cli.Get(ctx, gwNamespacedName, gw); err != nil {

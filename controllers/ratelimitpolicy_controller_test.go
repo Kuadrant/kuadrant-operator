@@ -143,7 +143,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
-			Eventually(testWasmPluginIsAvailable(wasmPluginKey), time.Minute, 5*time.Second).To(BeTrue())
+			Eventually(testWasmPluginIsAvailable(wasmPluginKey), time.Minute, 5*time.Second).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
 			// must exist
@@ -312,7 +312,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
-			Eventually(testWasmPluginIsAvailable(wasmPluginKey), time.Minute, 5*time.Second).To(BeTrue())
+			Eventually(testWasmPluginIsAvailable(wasmPluginKey), time.Minute, 5*time.Second).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
 			// must exist
@@ -482,7 +482,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
-			Eventually(testWasmPluginIsAvailable(wasmPluginKey), time.Minute, 5*time.Second).To(BeTrue())
+			Eventually(testWasmPluginIsAvailable(wasmPluginKey), time.Minute, 5*time.Second).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
 			// must exist
@@ -601,7 +601,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
 			// Wait a bit to catch cases where wasmplugin is created and takes a bit to be created
-			Eventually(testWasmPluginIsAvailable(wasmPluginKey), 20*time.Second, 5*time.Second).To(BeFalse())
+			Eventually(testWasmPluginIsAvailable(wasmPluginKey), 20*time.Second, 5*time.Second).Should(BeFalse())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			// must not exist
 			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)

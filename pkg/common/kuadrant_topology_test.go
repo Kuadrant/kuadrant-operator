@@ -9,8 +9,8 @@ import (
 	"gotest.tools/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 const (
@@ -26,7 +26,7 @@ func TestPoliciesFromGateway(t *testing.T) {
 	})
 
 	t.Run("unknown gateway", func(subT *testing.T) {
-		gateways := []*gatewayapiv1beta1.Gateway{
+		gateways := []*gatewayapiv1.Gateway{
 			testBasicGateway("gw1"),
 			testBasicGateway("gw2"),
 		}
@@ -43,10 +43,10 @@ func TestPoliciesFromGateway(t *testing.T) {
 		// policy2 -> route1
 
 		invalidGateway := testInvalidGateway("gw1")
-		gateways := []*gatewayapiv1beta1.Gateway{invalidGateway}
+		gateways := []*gatewayapiv1.Gateway{invalidGateway}
 
 		route1 := testBasicRoute("route1", invalidGateway)
-		routes := []*gatewayapiv1beta1.HTTPRoute{route1}
+		routes := []*gatewayapiv1.HTTPRoute{route1}
 
 		gwPolicy := testBasicGatewayPolicy("policy1", invalidGateway)
 		routePolicy := testBasicRoutePolicy("policy2", route1)
@@ -63,10 +63,10 @@ func TestPoliciesFromGateway(t *testing.T) {
 		// policy1 -> gw1
 
 		gw1 := testBasicGateway("gw1")
-		gateways := []*gatewayapiv1beta1.Gateway{gw1}
+		gateways := []*gatewayapiv1.Gateway{gw1}
 
 		route1 := testBasicRoute("route1", gw1)
-		routes := []*gatewayapiv1beta1.HTTPRoute{route1}
+		routes := []*gatewayapiv1.HTTPRoute{route1}
 
 		gwPolicy := testBasicGatewayPolicy("policy1", gw1)
 		policies := []KuadrantPolicy{gwPolicy}
@@ -86,10 +86,10 @@ func TestPoliciesFromGateway(t *testing.T) {
 		// policy1 -> route1
 
 		gw1 := testBasicGateway("gw1")
-		gateways := []*gatewayapiv1beta1.Gateway{gw1}
+		gateways := []*gatewayapiv1.Gateway{gw1}
 
 		route1 := testBasicRoute("route1", gw1)
-		routes := []*gatewayapiv1beta1.HTTPRoute{route1}
+		routes := []*gatewayapiv1.HTTPRoute{route1}
 
 		routePolicy := testBasicRoutePolicy("policy1", route1)
 		policies := []KuadrantPolicy{routePolicy}
@@ -111,10 +111,10 @@ func TestPoliciesFromGateway(t *testing.T) {
 
 		gw1 := testBasicGateway("gw1")
 		gw2 := testBasicGateway("gw2")
-		gateways := []*gatewayapiv1beta1.Gateway{gw1, gw2}
+		gateways := []*gatewayapiv1.Gateway{gw1, gw2}
 
 		route1 := testBasicRoute("route1", gw1, gw2)
-		routes := []*gatewayapiv1beta1.HTTPRoute{route1}
+		routes := []*gatewayapiv1.HTTPRoute{route1}
 
 		routePolicy := testBasicRoutePolicy("policy1", route1)
 		policies := []KuadrantPolicy{routePolicy}
@@ -154,7 +154,7 @@ func TestGetPolicyHTTPRoute(t *testing.T) {
 		// policy1 -> gw1
 
 		gw1 := testBasicGateway("gw1")
-		gateways := []*gatewayapiv1beta1.Gateway{gw1}
+		gateways := []*gatewayapiv1.Gateway{gw1}
 
 		gwPolicy := testBasicGatewayPolicy("policy1", gw1)
 		policies := []KuadrantPolicy{gwPolicy}
@@ -170,10 +170,10 @@ func TestGetPolicyHTTPRoute(t *testing.T) {
 		// policy1 -> route1
 
 		gw1 := testBasicGateway("gw1")
-		gateways := []*gatewayapiv1beta1.Gateway{gw1}
+		gateways := []*gatewayapiv1.Gateway{gw1}
 
 		route1 := testBasicRoute("route1", gw1)
-		routes := []*gatewayapiv1beta1.HTTPRoute{route1}
+		routes := []*gatewayapiv1.HTTPRoute{route1}
 
 		routePolicy := testBasicRoutePolicy("policy1", route1)
 		policies := []KuadrantPolicy{routePolicy}
@@ -194,7 +194,7 @@ func TestGetFreeRoutes(t *testing.T) {
 		// gw1
 		// policy1 -> gw1
 		gw1 := testBasicGateway("gw1")
-		gateways := []*gatewayapiv1beta1.Gateway{gw1}
+		gateways := []*gatewayapiv1.Gateway{gw1}
 
 		gatewayPolicy := testBasicGatewayPolicy("policy1", gw1)
 		policies := []KuadrantPolicy{gatewayPolicy}
@@ -212,11 +212,11 @@ func TestGetFreeRoutes(t *testing.T) {
 		// policy1 -> route1
 		// policy2 -> route1
 		gw1 := testBasicGateway("gw1")
-		gateways := []*gatewayapiv1beta1.Gateway{gw1}
+		gateways := []*gatewayapiv1.Gateway{gw1}
 
 		route1 := testBasicRoute("route1", gw1)
 		route2 := testBasicRoute("route2", gw1)
-		routes := []*gatewayapiv1beta1.HTTPRoute{route1, route2}
+		routes := []*gatewayapiv1.HTTPRoute{route1, route2}
 
 		routePolicy1 := testBasicRoutePolicy("policy1", route1)
 		routePolicy2 := testBasicRoutePolicy("policy2", route2)
@@ -234,11 +234,11 @@ func TestGetFreeRoutes(t *testing.T) {
 		// route 2 -> gw1
 		// policy1 -> route1
 		gw1 := testBasicGateway("gw1")
-		gateways := []*gatewayapiv1beta1.Gateway{gw1}
+		gateways := []*gatewayapiv1.Gateway{gw1}
 
 		route1 := testBasicRoute("route1", gw1)
 		route2 := testBasicRoute("route2", gw1)
-		routes := []*gatewayapiv1beta1.HTTPRoute{route1, route2}
+		routes := []*gatewayapiv1.HTTPRoute{route1, route2}
 
 		routePolicy1 := testBasicRoutePolicy("policy1", route1)
 		policies := []KuadrantPolicy{routePolicy1}
@@ -258,11 +258,11 @@ func TestGetFreeRoutes(t *testing.T) {
 		// route 1 -> gw1
 		// route 2 -> gw1
 		gw1 := testBasicGateway("gw1")
-		gateways := []*gatewayapiv1beta1.Gateway{gw1}
+		gateways := []*gatewayapiv1.Gateway{gw1}
 
 		route1 := testBasicRoute("route1", gw1)
 		route2 := testBasicRoute("route2", gw1)
-		routes := []*gatewayapiv1beta1.HTTPRoute{route1, route2}
+		routes := []*gatewayapiv1.HTTPRoute{route1, route2}
 
 		topology := NewKuadrantTopology(gateways, routes, nil)
 
@@ -289,10 +289,10 @@ func TestKuadrantTopologyString(t *testing.T) {
 		// policy1 -> route1
 
 		gw1 := testBasicGateway("gw1")
-		gateways := []*gatewayapiv1beta1.Gateway{gw1}
+		gateways := []*gatewayapiv1.Gateway{gw1}
 
 		route1 := testBasicRoute("route1", gw1)
-		routes := []*gatewayapiv1beta1.HTTPRoute{route1}
+		routes := []*gatewayapiv1.HTTPRoute{route1}
 
 		routePolicy := testBasicRoutePolicy("policy1", route1)
 		policies := []KuadrantPolicy{routePolicy}
@@ -339,14 +339,14 @@ func TestKuadrantTopologyString(t *testing.T) {
 	})
 }
 
-func testBasicGateway(name string) *gatewayapiv1beta1.Gateway {
+func testBasicGateway(name string) *gatewayapiv1.Gateway {
 	// Valid gateway
-	return &gatewayapiv1beta1.Gateway{
+	return &gatewayapiv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: NS,
 			Name:      name,
 		},
-		Status: gatewayapiv1beta1.GatewayStatus{
+		Status: gatewayapiv1.GatewayStatus{
 			Conditions: []metav1.Condition{
 				{
 					Type:   GatewayProgrammedConditionType,
@@ -357,76 +357,76 @@ func testBasicGateway(name string) *gatewayapiv1beta1.Gateway {
 	}
 }
 
-func testInvalidGateway(name string) *gatewayapiv1beta1.Gateway {
+func testInvalidGateway(name string) *gatewayapiv1.Gateway {
 	gw := testBasicGateway(name)
 	// remove conditions to make it invalid
-	gw.Status = gatewayapiv1beta1.GatewayStatus{}
+	gw.Status = gatewayapiv1.GatewayStatus{}
 
 	return gw
 }
 
-func testBasicRoute(name string, parents ...*gatewayapiv1beta1.Gateway) *gatewayapiv1beta1.HTTPRoute {
-	parentRefs := make([]gatewayapiv1beta1.ParentReference, 0)
+func testBasicRoute(name string, parents ...*gatewayapiv1.Gateway) *gatewayapiv1.HTTPRoute {
+	parentRefs := make([]gatewayapiv1.ParentReference, 0)
 	for _, val := range parents {
-		parentRefs = append(parentRefs, gatewayapiv1beta1.ParentReference{
-			Group:     &[]gatewayapiv1beta1.Group{"gateway.networking.k8s.io"}[0],
-			Kind:      &[]gatewayapiv1beta1.Kind{"Gateway"}[0],
-			Namespace: &[]gatewayapiv1beta1.Namespace{gatewayapiv1beta1.Namespace(val.Namespace)}[0],
-			Name:      gatewayapiv1beta1.ObjectName(val.Name),
+		parentRefs = append(parentRefs, gatewayapiv1.ParentReference{
+			Group:     &[]gatewayapiv1.Group{"gateway.networking.k8s.io"}[0],
+			Kind:      &[]gatewayapiv1.Kind{"Gateway"}[0],
+			Namespace: &[]gatewayapiv1.Namespace{gatewayapiv1.Namespace(val.Namespace)}[0],
+			Name:      gatewayapiv1.ObjectName(val.Name),
 		})
 	}
 
-	parentStatusRefs := Map(parentRefs, func(p gatewayapiv1beta1.ParentReference) gatewayapiv1beta1.RouteParentStatus {
-		return gatewayapiv1beta1.RouteParentStatus{
+	parentStatusRefs := Map(parentRefs, func(p gatewayapiv1.ParentReference) gatewayapiv1.RouteParentStatus {
+		return gatewayapiv1.RouteParentStatus{
 			ParentRef:  p,
 			Conditions: []metav1.Condition{{Type: "Accepted", Status: metav1.ConditionTrue}},
 		}
 	})
 
-	return &gatewayapiv1beta1.HTTPRoute{
+	return &gatewayapiv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: NS,
 			Name:      name,
 		},
-		Spec: gatewayapiv1beta1.HTTPRouteSpec{
-			CommonRouteSpec: gatewayapiv1beta1.CommonRouteSpec{
+		Spec: gatewayapiv1.HTTPRouteSpec{
+			CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
 				ParentRefs: parentRefs,
 			},
 		},
-		Status: gatewayapiv1beta1.HTTPRouteStatus{
-			RouteStatus: gatewayapiv1beta1.RouteStatus{
+		Status: gatewayapiv1.HTTPRouteStatus{
+			RouteStatus: gatewayapiv1.RouteStatus{
 				Parents: parentStatusRefs,
 			},
 		},
 	}
 }
 
-func testBasicGatewayPolicy(name string, gateway *gatewayapiv1beta1.Gateway) KuadrantPolicy {
+func testBasicGatewayPolicy(name string, gateway *gatewayapiv1.Gateway) KuadrantPolicy {
 	return &TestPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: NS,
 			Name:      name,
 		},
 		TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-			Group:     gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
-			Kind:      gatewayapiv1beta1.Kind("Gateway"),
-			Namespace: &[]gatewayapiv1beta1.Namespace{gatewayapiv1beta1.Namespace(gateway.Namespace)}[0],
-			Name:      gatewayapiv1beta1.ObjectName(gateway.Name),
+			Group:     gatewayapiv1.Group("gateway.networking.k8s.io"),
+			Kind:      gatewayapiv1.Kind("Gateway"),
+			Namespace: &[]gatewayapiv1.Namespace{gatewayapiv1.Namespace(gateway.Namespace)}[0],
+			Name:      gatewayapiv1.ObjectName(gateway.Name),
 		},
 	}
 }
 
-func testBasicRoutePolicy(name string, route *gatewayapiv1beta1.HTTPRoute) KuadrantPolicy {
+func testBasicRoutePolicy(name string, route *gatewayapiv1.HTTPRoute) KuadrantPolicy {
 	return &TestPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: NS,
 			Name:      name,
 		},
 		TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-			Group:     gatewayapiv1beta1.Group("gateway.networking.k8s.io"),
-			Kind:      gatewayapiv1beta1.Kind("HTTPRoute"),
-			Namespace: &[]gatewayapiv1beta1.Namespace{gatewayapiv1beta1.Namespace(route.Namespace)}[0],
-			Name:      gatewayapiv1beta1.ObjectName(route.Name),
+			Group:     gatewayapiv1.Group("gateway.networking.k8s.io"),
+			Kind:      gatewayapiv1.Kind("HTTPRoute"),
+			Namespace: &[]gatewayapiv1.Namespace{gatewayapiv1.Namespace(route.Namespace)}[0],
+			Name:      gatewayapiv1.ObjectName(route.Name),
 		},
 	}
 }

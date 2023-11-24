@@ -5,7 +5,6 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -143,8 +142,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			}))
 
 			// Check wasm plugin
-			wpName := fmt.Sprintf("kuadrant-%s", gwName)
-			wasmPluginKey := client.ObjectKey{Name: wpName, Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			Eventually(testWasmPluginIsAvailable(wasmPluginKey), time.Minute, 5*time.Second).To(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
 			// must exist
@@ -312,8 +311,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(testRLPIsAvailable(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check wasm plugin
-			wpName := fmt.Sprintf("kuadrant-%s", gwName)
-			wasmPluginKey := client.ObjectKey{Name: wpName, Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			Eventually(testWasmPluginIsAvailable(wasmPluginKey), time.Minute, 5*time.Second).To(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
 			// must exist
@@ -482,8 +481,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			}))
 
 			// Check wasm plugin
-			wpName := fmt.Sprintf("kuadrant-%s", gwName)
-			wasmPluginKey := client.ObjectKey{Name: wpName, Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			Eventually(testWasmPluginIsAvailable(wasmPluginKey), time.Minute, 5*time.Second).To(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
 			// must exist
@@ -600,8 +599,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			}))
 
 			// Check wasm plugin
-			wpName := fmt.Sprintf("kuadrant-%s", gwName)
-			wasmPluginKey := client.ObjectKey{Name: wpName, Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			// Wait a bit to catch cases where wasmplugin is created and takes a bit to be created
+			Eventually(testWasmPluginIsAvailable(wasmPluginKey), 20*time.Second, 5*time.Second).To(BeFalse())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			// must not exist
 			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
@@ -629,6 +629,24 @@ func testRLPIsAvailable(rlpKey client.ObjectKey) func() bool {
 		if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, "Available") {
 			return false
 		}
+
+		return true
+	}
+}
+
+func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {
+	return func() bool {
+		wp := &istioclientgoextensionv1alpha1.WasmPlugin{}
+		err := k8sClient.Get(context.Background(), key, wp)
+		if err != nil {
+			return false
+		}
+
+		// Unfortunately, WasmPlugin does not have status yet
+		// Leaving this here for future use
+		//if !meta.IsStatusConditionTrue(wp.Status.Conditions, "Available") {
+		//	return false
+		//}
 
 		return true
 	}

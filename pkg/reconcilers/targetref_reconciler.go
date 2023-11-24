@@ -119,7 +119,11 @@ func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context
 			routes = append(routes, route)
 			continue
 		}
-		logger.V(1).Info("skipping route, not attached to gateway", "httproute", client.ObjectKeyFromObject(&route))
+
+		logger.V(1).Info("skipping route, not attached to gateway",
+			"httproute", client.ObjectKeyFromObject(&route),
+			"isChildRoute", found,
+			"isAccepted", routeParentStatus != nil && meta.IsStatusConditionTrue(routeParentStatus.Conditions, "Accepted"))
 	}
 
 	return

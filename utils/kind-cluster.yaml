@@ -10,8 +10,8 @@ nodes:
     - containerPort: 30951
       hostPort: 9443
     - containerPort: 80
-      hostPort: 8080
+      hostPort: 9081
       protocol: TCP
     - containerPort: 443
-      hostPort: 8443
+      hostPort: 9444
       protocol: TCP

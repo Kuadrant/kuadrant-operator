@@ -26,6 +26,11 @@ Setup the environment:
 make local-setup
 ```
 
+Deploy policy controller and install DNSPolicy CRD:
+```shell
+make deploy-policy-controller
+```
+
 Install metallb:
 ```shell
 make install-metallb

@@ -25,6 +25,11 @@ Setup the environment:
 make local-setup
 ```
 
+Deploy policy controller and install TLSPolicy CRD:
+```shell
+make deploy-policy-controller
+```
+
 Install metallb:
 ```shell
 make install-metallb
@@ -64,7 +69,7 @@ kubectl create namespace my-gateways
 
 ### Create an ingress gateway
 
-Create a gateway using your ROOT_DOMAIN as part of a listener hostname:
+Create a gateway:
 ```sh
 kubectl -n my-gateways apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1

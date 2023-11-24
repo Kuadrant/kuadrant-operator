@@ -49,4 +49,4 @@ resources:
 - ../crd
 - ../rbac
 - ../manager
-- ../policy-controller
+#- ../policy-controller removed for now to avoid double policy controllers in a shared hub/spoke cluster

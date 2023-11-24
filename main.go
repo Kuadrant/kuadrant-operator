@@ -58,7 +58,6 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	//+kubebuilder:scaffold:imports
@@ -137,12 +136,6 @@ func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
-	}
-
-	err = common.AddHTTPRouteByGatewayIndexer(mgr, log.Log.WithName("routeByGatewayIndexer"))
-	if err != nil {
-		setupLog.Error(err, "unable to add indexer to the manager")
 		os.Exit(1)
 	}
 
@@ -250,7 +243,7 @@ func main() {
 	rateLimitingWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("ratelimitpolicy").WithName("wasmplugin"),
-		mgr.GetEventRecorderFor("GatewayKuadrant"),
+		mgr.GetEventRecorderFor("RateLimitingWASMPlugin"),
 	)
 
 	if err = (&controllers.RateLimitingWASMPluginReconciler{

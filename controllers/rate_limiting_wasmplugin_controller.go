@@ -164,7 +164,11 @@ func (r *RateLimitingWASMPluginReconciler) wasmPluginConfig(ctx context.Context,
 
 	for _, policy := range rateLimitPolicies {
 		rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)
-		wasmRLP := r.WASMRateLimitPolicy(gatewayAPITopology, rlp, gw)
+		wasmRLP, err := r.WASMRateLimitPolicy(ctx, gatewayAPITopology, rlp, gw)
+		if err != nil {
+			return nil, err
+		}
+
 		if wasmRLP == nil {
 			// skip this RLP
 			continue
@@ -206,16 +210,25 @@ func (r *RateLimitingWASMPluginReconciler) gatewayAPITopologyFromGateway(ctx con
 	), nil
 }
 
-func (r *RateLimitingWASMPluginReconciler) WASMRateLimitPolicy(t *common.KuadrantTopology, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) *wasm.RateLimitPolicy {
+func (r *RateLimitingWASMPluginReconciler) WASMRateLimitPolicy(ctx context.Context, t *common.KuadrantTopology, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*wasm.RateLimitPolicy, error) {
 	gwHostnamesTmp := common.TargetHostnames(gw)
 	gwHostnames := common.Map(gwHostnamesTmp, func(str string) gatewayapiv1.Hostname { return gatewayapiv1.Hostname(str) })
 
-	route := r.RouteFromRLP(t, rlp, gw)
+	route, err := r.RouteFromRLP(ctx, t, rlp, gw)
+	if err != nil {
+		return nil, err
+	}
+	if route == nil {
+		// no need to add the policy if there are no routes;
+		// a rlp can return no rules if all its limits fail to match any route rule
+		// or targeting a gateway with no "free" routes. "free" meaning no route with policies targeting it
+		return nil, nil
+	}
 
 	rules := rlptools.WasmRules(rlp, route)
 	if len(rules) == 0 {
 		// no need to add the policy if there are no rules; a rlp can return no rules if all its limits fail to match any route rule
-		return nil
+		return nil, nil
 	}
 
 	// narrow the list of hostnames specified in the route so we don't generate wasm rules that only apply to other gateways
@@ -231,10 +244,15 @@ func (r *RateLimitingWASMPluginReconciler) WASMRateLimitPolicy(t *common.Kuadran
 		Hostnames: common.HostnamesToStrings(hostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
 		Service:   common.KuadrantRateLimitClusterName,
 		Rules:     rules,
-	}
+	}, nil
 }
 
-func (r *RateLimitingWASMPluginReconciler) RouteFromRLP(t *common.KuadrantTopology, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) *gatewayapiv1.HTTPRoute {
+func (r *RateLimitingWASMPluginReconciler) RouteFromRLP(ctx context.Context, t *common.KuadrantTopology, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*gatewayapiv1.HTTPRoute, error) {
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	route := t.GetPolicyHTTPRoute(rlp)
 
 	if route == nil {
@@ -244,9 +262,13 @@ func (r *RateLimitingWASMPluginReconciler) RouteFromRLP(t *common.KuadrantTopolo
 		// Build imaginary route with all the routes not having a RLP targeting it
 		freeRoutes := t.GetFreeRoutes(gw)
 
-		// For policies targeting a gateway, when no httproutes is attached to the gateway, skip wasm config
-		// test wasm config when no http routes attached to the gateway
-		//logger.V(1).Info("no httproutes attached to the targeted gateway, skipping wasm config for the gateway rlp", "ratelimitpolicy", gwRLPKey)
+		if len(freeRoutes) == 0 {
+			// For policies targeting a gateway, when no httproutes is attached to the gateway, skip wasm config
+			// test wasm config when no http routes attached to the gateway
+			logger.V(1).Info("no free httproutes attached to the targeted gateway, skipping wasm config for the gateway rlp", "ratelimitpolicy", client.ObjectKeyFromObject(rlp))
+			return nil, nil
+		}
+
 		freeRules := make([]gatewayapiv1.HTTPRouteRule, 0)
 		for idx := range freeRoutes {
 			freeroute := freeRoutes[idx]
@@ -263,7 +285,7 @@ func (r *RateLimitingWASMPluginReconciler) RouteFromRLP(t *common.KuadrantTopolo
 		}
 	}
 
-	return route
+	return route, nil
 }
 
 // addHTTPRouteByGatewayIndexer declares an index key that we can later use with the client as a pseudo-field name,

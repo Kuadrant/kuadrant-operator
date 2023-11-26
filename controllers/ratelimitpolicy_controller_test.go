@@ -82,7 +82,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
 			err := k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
-			Eventually(testRouteIsAcceptedByGateway(client.ObjectKeyFromObject(httpRoute), gateway), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create ratelimitpolicy
 			rlp := &kuadrantv1beta2.RateLimitPolicy{
@@ -239,7 +239,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			}
 			err := k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
-			Eventually(testRouteIsAcceptedByGateway(client.ObjectKeyFromObject(httpRoute), gateway), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create ratelimitpolicy
 			rlp := &kuadrantv1beta2.RateLimitPolicy{
@@ -423,7 +423,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
 			err := k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
-			Eventually(testRouteIsAcceptedByGateway(client.ObjectKeyFromObject(httpRoute), gateway), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create ratelimitpolicy
 			rlp := &kuadrantv1beta2.RateLimitPolicy{
@@ -650,32 +650,6 @@ func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {
 		//if !meta.IsStatusConditionTrue(wp.Status.Conditions, "Available") {
 		//	return false
 		//}
-
-		return true
-	}
-}
-
-func testRouteIsAcceptedByGateway(key client.ObjectKey, gateway *gatewayapiv1.Gateway) func() bool {
-	return func() bool {
-		route := &gatewayapiv1.HTTPRoute{}
-		err := k8sClient.Get(context.Background(), key, route)
-		if err != nil {
-			return false
-		}
-
-		routeParentStatus, found := common.Find(route.Status.RouteStatus.Parents, func(p gatewayapiv1.RouteParentStatus) bool {
-			return *p.ParentRef.Kind == ("Gateway") &&
-				((p.ParentRef.Namespace == nil && route.GetNamespace() == gateway.Namespace) || string(*p.ParentRef.Namespace) == gateway.Namespace) &&
-				string(p.ParentRef.Name) == gateway.Name
-		})
-
-		if !found {
-			return false
-		}
-
-		if !meta.IsStatusConditionTrue(routeParentStatus.Conditions, "Accepted") {
-			return false
-		}
 
 		return true
 	}

@@ -280,3 +280,19 @@ func testBuildMultipleRulesHttpRoute(routeName, gwName, ns string, hostnames []s
 	}
 	return route
 }
+
+func testRouteIsAccepted(routeKey client.ObjectKey) func() bool {
+	return func() bool {
+		route := &gatewayapiv1.HTTPRoute{}
+		err := k8sClient.Get(context.Background(), routeKey, route)
+		return err == nil && common.IsHTTPRouteAccepted(route)
+	}
+}
+
+func testGatewayIsReady(gateway *gatewayapiv1.Gateway) func() bool {
+	return func() bool {
+		existingGateway := &gatewayapiv1.Gateway{}
+		err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
+		return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType)
+	}
+}

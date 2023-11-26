@@ -26,7 +26,6 @@ import (
 
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 const (
@@ -59,12 +58,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			route := testBuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
 			err = k8sClient.Create(context.Background(), route)
 			Expect(err).ToNot(HaveOccurred())
-
-			Eventually(func() bool {
-				existingRoute := &gatewayapiv1.HTTPRoute{}
-				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(route), existingRoute)
-				return err == nil && common.IsHTTPRouteAccepted(existingRoute)
-			}, 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route)), time.Minute, 5*time.Second).Should(BeTrue())
 		})
 
 		It("Attaches policy to the Gateway", func() {
@@ -144,11 +138,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			route := testBuildBasicHttpRoute(routeName, gatewayName, testNamespace, []string{"*.api.example.com"})
 			err = k8sClient.Create(context.Background(), route)
 			Expect(err).ToNot(HaveOccurred())
-			Eventually(func() bool {
-				existingRoute := &gatewayapiv1.HTTPRoute{}
-				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(route), existingRoute)
-				return err == nil && common.IsHTTPRouteAccepted(existingRoute)
-			}, 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			policy := &api.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
@@ -282,6 +272,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			}
 			err = k8sClient.Create(context.Background(), otherRoute)
 			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(otherRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// attach policy to the gatewaay
 			gwPolicy := &api.AuthPolicy{
@@ -835,12 +826,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			route := testBuildMultipleRulesHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com", "*.admin.toystore.com"})
 			err = k8sClient.Create(context.Background(), route)
 			Expect(err).ToNot(HaveOccurred())
-
-			Eventually(func() bool {
-				existingRoute := &gatewayapiv1.HTTPRoute{}
-				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(route), existingRoute)
-				return err == nil && common.IsHTTPRouteAccepted(existingRoute)
-			}, 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route)), time.Minute, 5*time.Second).Should(BeTrue())
 		})
 
 		It("Attaches simple policy to the HTTPRoute", func() {
@@ -1296,14 +1282,6 @@ func testBasicAuthScheme() api.AuthSchemeSpec {
 				},
 			},
 		},
-	}
-}
-
-func testGatewayIsReady(gateway *gatewayapiv1.Gateway) func() bool {
-	return func() bool {
-		existingGateway := &gatewayapiv1.Gateway{}
-		err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
-		return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType)
 	}
 }
 

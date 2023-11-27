@@ -172,6 +172,11 @@ func authorinoSpecsFromConfigs[T, U any](configs map[string]U, extractAuthorinoS
 		authorinoConfig := extractAuthorinoSpec(config)
 		specs[name] = authorinoConfig
 	}
+
+	if len(specs) == 0 {
+		return nil
+	}
+
 	return specs
 }
 

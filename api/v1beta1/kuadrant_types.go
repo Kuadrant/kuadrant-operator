@@ -68,7 +68,7 @@ func (r *KuadrantStatus) Equals(other *KuadrantStatus, logger logr.Logger) bool 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// Kuadrant is the Schema for the kuadrants API
+// Kuadrant configures installations of Kuadrant Service Protection components
 type Kuadrant struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

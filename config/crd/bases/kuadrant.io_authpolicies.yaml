@@ -19,6 +19,8 @@ spec:
   - name: v1beta2
     schema:
       openAPIV3Schema:
+        description: AuthPolicy enables authentication and authorization for service
+          workloads in a Gateway API network
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation

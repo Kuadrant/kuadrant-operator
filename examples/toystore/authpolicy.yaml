@@ -8,13 +8,13 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
+  routeSelectors:
+  - matches:
+    - path:
+        type: Exact
+        value: "/admin/toy"
+      method: DELETE
   rules:
-    routeSelectors:
-    - matches:
-      - path:
-          type: Exact
-          value: "/admin/toy"
-        method: DELETE
     authentication:
       "apikey":
         apiKey:
@@ -22,8 +22,8 @@ spec:
             matchLabels:
               app: toystore
       credentials:
-        in: authorization_header
-        keySelector: APIKEY
+        authorizationHeader:
+          prefix: APIKEY
     response:
       success:
         dynamicMetadata:

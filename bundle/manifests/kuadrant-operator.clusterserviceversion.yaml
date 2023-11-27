@@ -14,6 +14,34 @@ metadata:
         },
         {
           "apiVersion": "kuadrant.io/v1beta2",
+          "kind": "AuthPolicy",
+          "metadata": {
+            "name": "toystore"
+          },
+          "spec": {
+            "rules": {
+              "authentication": {
+                "apikey": {
+                  "apiKey": {
+                    "selector": {}
+                  }
+                },
+                "credentials": {
+                  "authorizationHeader": {
+                    "prefix": "APIKEY"
+                  }
+                }
+              }
+            },
+            "targetRef": {
+              "group": "gateway.networking.k8s.io",
+              "kind": "HTTPRoute",
+              "name": "toystore"
+            }
+          }
+        },
+        {
+          "apiVersion": "kuadrant.io/v1beta2",
           "kind": "RateLimitPolicy",
           "metadata": {
             "name": "toystore"
@@ -41,7 +69,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2023-11-24T11:49:17Z"
+    createdAt: "2023-11-27T14:18:37Z"
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator
@@ -52,15 +80,22 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - kind: AuthPolicy
+    - description: AuthPolicy enables authentication and authorization for service
+        workloads in a Gateway API network
+      displayName: AuthPolicy
+      kind: AuthPolicy
       name: authpolicies.kuadrant.io
       version: v1beta2
-    - description: Kuadrant is the Schema for the kuadrants API
+    - description: Kuadrant configures installations of Kuadrant Service Protection
+        components
       displayName: Kuadrant
       kind: Kuadrant
       name: kuadrants.kuadrant.io
       version: v1beta1
-    - kind: RateLimitPolicy
+    - description: RateLimitPolicy enables rate limiting for service workloads in
+        a Gateway API network
+      displayName: RateLimitPolicy
+      kind: RateLimitPolicy
       name: ratelimitpolicies.kuadrant.io
       version: v1beta2
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system

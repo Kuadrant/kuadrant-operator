@@ -16,21 +16,21 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-      - description: Kuadrant is the Schema for the kuadrants API
+      - description: Kuadrant configures installations of Kuadrant Service Protection components
         displayName: Kuadrant
         kind: Kuadrant
         name: kuadrants.kuadrant.io
         version: v1beta1
-      - description: Enable AuthN and AuthZ based access control on workloads
+      - description: AuthPolicy enables authentication and authorization for service workloads in a Gateway API network
         displayName: AuthPolicy
         kind: AuthPolicy
         name: authpolicies.kuadrant.io
-        version: v1beta1
-      - description: Enable access control on workloads based on HTTP rate limiting
+        version: v1beta2
+      - description: RateLimitPolicy enables rate limiting for service workloads in a Gateway API network
         displayName: RateLimitPolicy
         kind: RateLimitPolicy
         name: ratelimitpolicies.kuadrant.io
-        version: v1beta1
+        version: v1beta2
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
   displayName: Kuadrant Operator
   icon:

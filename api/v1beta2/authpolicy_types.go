@@ -201,7 +201,7 @@ func (s *AuthPolicyStatus) Equals(other *AuthPolicyStatus, logger logr.Logger) b
 // +kubebuilder:subresource:status
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=direct"
 
-// AuthPolicy enables AuthN and AuthZ based access control on workloads
+// AuthPolicy enables authentication and authorization for service workloads in a Gateway API network
 type AuthPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

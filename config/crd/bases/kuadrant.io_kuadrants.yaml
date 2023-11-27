@@ -17,7 +17,8 @@ spec:
   - name: v1beta1
     schema:
       openAPIV3Schema:
-        description: Kuadrant is the Schema for the Kuadrant API
+        description: Kuadrant configures installations of Kuadrant Service Protection
+          components
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation

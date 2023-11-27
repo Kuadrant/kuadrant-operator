@@ -69,7 +69,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2023-11-27T11:17:31Z"
+    createdAt: "2023-11-27T14:18:37Z"
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator
@@ -80,17 +80,20 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: AuthPolicy enables AuthN and AuthZ based access control on workloads
+    - description: AuthPolicy enables authentication and authorization for service
+        workloads in a Gateway API network
       displayName: AuthPolicy
       kind: AuthPolicy
       name: authpolicies.kuadrant.io
       version: v1beta2
-    - description: Kuadrant is the Schema for the Kuadrant API
+    - description: Kuadrant configures installations of Kuadrant Service Protection
+        components
       displayName: Kuadrant
       kind: Kuadrant
       name: kuadrants.kuadrant.io
       version: v1beta1
-    - description: RateLimitPolicy is the Schema for the ratelimitpolicies API
+    - description: RateLimitPolicy enables rate limiting for service workloads in
+        a Gateway API network
       displayName: RateLimitPolicy
       kind: RateLimitPolicy
       name: ratelimitpolicies.kuadrant.io

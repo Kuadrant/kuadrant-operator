@@ -16,17 +16,17 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-      - description: Kuadrant is the Schema for the Kuadrant API
+      - description: Kuadrant configures installations of Kuadrant Service Protection components
         displayName: Kuadrant
         kind: Kuadrant
         name: kuadrants.kuadrant.io
         version: v1beta1
-      - description: AuthPolicy enables AuthN and AuthZ based access control on workloads
+      - description: AuthPolicy enables authentication and authorization for service workloads in a Gateway API network
         displayName: AuthPolicy
         kind: AuthPolicy
         name: authpolicies.kuadrant.io
         version: v1beta2
-      - description: RateLimitPolicy is the Schema for the ratelimitpolicies API
+      - description: RateLimitPolicy enables rate limiting for service workloads in a Gateway API network
         displayName: RateLimitPolicy
         kind: RateLimitPolicy
         name: ratelimitpolicies.kuadrant.io

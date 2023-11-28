@@ -368,9 +368,18 @@ deploy-dependencies: kustomize dependencies-manifests ## Deploy dependencies to 
 	$(KUSTOMIZE) build config/dependencies | kubectl apply -f -
 	kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments --all
 
+deploy-policy-controller: kustomize ## Deploy policy-controller to the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/policy-controller | kubectl apply -f -
+	kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments policy-controller
+
+undeploy-policy-controller: ## Undeploy policy-controller from the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/policy-controller | kubectl delete -f -
+
 .PHONY: install-metallb
 install-metallb: $(KUSTOMIZE) ## Installs the metallb load balancer allowing use of an LoadBalancer type with a gateway
 	$(KUSTOMIZE) build config/metallb | kubectl apply -f -
+	kubectl -n metallb-system wait --for=condition=ready pod --selector=app=metallb --timeout=60s
+	./utils/docker-network-ipaddresspool.sh kind | kubectl apply -n metallb-system -f -
 
 .PHONY: uninstall-metallb
 uninstall-metallb: $(KUSTOMIZE) 

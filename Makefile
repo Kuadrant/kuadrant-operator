@@ -12,13 +12,14 @@ PROJECT_PATH := $(patsubst %/,%,$(dir $(MKFILE_PATH)))
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 0.0.0
+VERSION ?= 0.5.0
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
 # To re-generate a bundle for other specific channels without changing the standard setup, you can:
 # - use the CHANNELS as arg of the bundle target (e.g make bundle CHANNELS=candidate,fast,stable)
 # - use environment variables to overwrite this value (e.g export CHANNELS="candidate,fast,stable")
+CHANNELS ?= stable
 ifneq ($(origin CHANNELS), undefined)
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
 endif
@@ -28,13 +29,14 @@ endif
 # To re-generate a bundle for any other default channel without changing the default setup, you can:
 # - use the DEFAULT_CHANNEL as arg of the bundle target (e.g make bundle DEFAULT_CHANNEL=stable)
 # - use environment variables to overwrite this value (e.g export DEFAULT_CHANNEL="stable")
+DEFAULT_CHANNEL ?= stable
 ifneq ($(origin DEFAULT_CHANNEL), undefined)
 BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 DEFAULT_IMAGE_TAG = latest
-DEFAULT_REPLACES_VERSION = 0.0.0-alpha
+DEFAULT_REPLACES_VERSION = 0.4.1
 
 REPLACES_VERSION ?= $(DEFAULT_REPLACES_VERSION)
 
@@ -100,7 +102,7 @@ KUADRANT_NAMESPACE ?= kuadrant-system
 # Kuadrant component versions
 ## authorino
 #ToDo Pin this version once we have an initial release of authorino
-AUTHORINO_OPERATOR_VERSION ?= latest
+AUTHORINO_OPERATOR_VERSION ?= 0.10.0
 authorino_bundle_is_semantic := $(call is_semantic_version,$(AUTHORINO_OPERATOR_VERSION))
 
 ifeq (latest,$(AUTHORINO_OPERATOR_VERSION))
@@ -120,7 +122,7 @@ endif
 AUTHORINO_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/authorino-operator-bundle:$(AUTHORINO_OPERATOR_BUNDLE_IMG_TAG)
 ## limitador
 #ToDo Pin this version once we have an initial release of limitador
-LIMITADOR_OPERATOR_VERSION ?= latest
+LIMITADOR_OPERATOR_VERSION ?= 0.7.0
 limitador_bundle_is_semantic := $(call is_semantic_version,$(LIMITADOR_OPERATOR_VERSION))
 ifeq (latest,$(LIMITADOR_OPERATOR_VERSION))
 LIMITADOR_OPERATOR_BUNDLE_VERSION = 0.0.0
@@ -138,7 +140,7 @@ endif
 LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LIMITADOR_OPERATOR_BUNDLE_IMG_TAG)
 
 ## wasm-shim
-WASM_SHIM_VERSION ?= latest
+WASM_SHIM_VERSION ?= v0.3.0
 shim_version_is_semantic := $(call is_semantic_version,$(WASM_SHIM_VERSION))
 
 ifeq (true,$(shim_version_is_semantic))
@@ -382,7 +384,7 @@ install-metallb: $(KUSTOMIZE) ## Installs the metallb load balancer allowing use
 	./utils/docker-network-ipaddresspool.sh kind | kubectl apply -n metallb-system -f -
 
 .PHONY: uninstall-metallb
-uninstall-metallb: $(KUSTOMIZE) 
+uninstall-metallb: $(KUSTOMIZE)
 	$(KUSTOMIZE) build config/metallb | kubectl delete -f -
 
 .PHONY: install-olm

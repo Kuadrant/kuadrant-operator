@@ -305,8 +305,7 @@ local-cluster-setup: ## Sets up Kind cluster with GatewayAPI manifests and istio
 	$(MAKE) kind-create-cluster
 	$(MAKE) namespace
 	$(MAKE) gateway-api-install
-	$(MAKE) install-metallb
-	$(MAKE) sail-install
+	$(MAKE) istio-install
 	$(MAKE) install-cert-manager
 	$(MAKE) deploy-gateway
 

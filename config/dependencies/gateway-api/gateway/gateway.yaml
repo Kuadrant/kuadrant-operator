@@ -8,12 +8,9 @@ metadata:
 spec:
   gatewayClassName: istio
   listeners:
-  - name: default
+  - name: http
     port: 80
     protocol: HTTP
     allowedRoutes:
       namespaces:
         from: All
-  addresses:
-  - value: istio-ingressgateway.istio-system.svc.cluster.local
-    type: Hostname

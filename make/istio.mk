@@ -31,3 +31,14 @@ istio-uninstall: istioctl ## Uninstall istio.
 .PHONY: istio-verify-install
 istio-verify-install: istioctl ## Verify istio installation.
 	$(ISTIOCTL) verify-install -i $(ISTIO_NAMESPACE)
+
+.PHONY: sail-install
+sail-install: kustomize
+	$(KUSTOMIZE) build $(ISTIO_INSTALL_DIR)/sail | kubectl apply -f -
+	kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
+	kubectl apply -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
+
+.PHONY: sail-uninstall
+sail-uninstall: kustomize
+	kubectl delete -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
+	$(KUSTOMIZE) build $(ISTIO_INSTALL_DIR)/sail | kubectl delete -f -

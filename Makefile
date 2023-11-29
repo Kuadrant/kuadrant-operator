@@ -305,7 +305,8 @@ local-cluster-setup: ## Sets up Kind cluster with GatewayAPI manifests and istio
 	$(MAKE) kind-create-cluster
 	$(MAKE) namespace
 	$(MAKE) gateway-api-install
-	$(MAKE) istio-install
+	$(MAKE) install-metallb
+	$(MAKE) sail-install
 	$(MAKE) install-cert-manager
 	$(MAKE) deploy-gateway
 
@@ -378,6 +379,7 @@ undeploy-policy-controller: ## Undeploy policy-controller from the K8s cluster s
 .PHONY: install-metallb
 install-metallb: $(KUSTOMIZE) ## Installs the metallb load balancer allowing use of an LoadBalancer type with a gateway
 	$(KUSTOMIZE) build config/metallb | kubectl apply -f -
+	kubectl -n metallb-system wait --for=condition=Available deployments controller --timeout=300s
 	kubectl -n metallb-system wait --for=condition=ready pod --selector=app=metallb --timeout=60s
 	./utils/docker-network-ipaddresspool.sh kind | kubectl apply -n metallb-system -f -
 

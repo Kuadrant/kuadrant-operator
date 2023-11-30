@@ -36,6 +36,7 @@ const (
 	KuadrantNamespaceLabel             = "kuadrant.io/namespace"
 	NamespaceSeparator                 = '/'
 	LimitadorName                      = "limitador"
+	AuthorinoName                      = "authorino"
 )
 
 type KuadrantPolicy interface {

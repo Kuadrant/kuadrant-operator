@@ -40,12 +40,23 @@ type KuadrantSpec struct {
 
 type AuthorinoSpec struct {
 	EvaluatorCacheSize *int                          `json:"evaluatorCacheSize,omitempty"`
-	Listener           *authorinov1beta1.Listener    `json:"listener,omitempty"`
+	Listener           *AuthorinoListener            `json:"listener,omitempty"`
 	Metrics            *authorinov1beta1.Metrics     `json:"metrics,omitempty"`
 	OIDCServer         *authorinov1beta1.OIDCServer  `json:"oidcServer,omitempty"`
 	Replicas           *int32                        `json:"replicas,omitempty"`
 	Tracing            *authorinov1beta1.Tracing     `json:"tracing,omitempty"`
 	Volumes            *authorinov1beta1.VolumesSpec `json:"volumes,omitempty"`
+}
+
+type AuthorinoListener struct {
+	// Port numbers of the GRPC and HTTP auth interfaces.
+	Ports *authorinov1beta1.Ports `json:"ports,omitempty"`
+	// TLS configuration of the auth service (GRPC and HTTP interfaces).
+	Tls *authorinov1beta1.Tls `json:"tls"`
+	// Timeout of the auth service (GRPC and HTTP interfaces), in milliseconds.
+	Timeout *int `json:"timeout,omitempty"`
+	// Maximum payload (request body) size for the auth service (HTTP interface), in bytes.
+	MaxHttpRequestBodySize *int `json:"maxHttpRequestBodySize,omitempty"`
 }
 
 type LimitadorSpec struct {

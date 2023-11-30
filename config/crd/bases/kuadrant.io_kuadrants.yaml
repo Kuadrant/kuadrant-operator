@@ -53,11 +53,6 @@ spec:
                         description: Maximum payload (request body) size for the auth
                           service (HTTP interface), in bytes.
                         type: integer
-                      port:
-                        description: 'Port number of the GRPC interface. DEPRECATED:
-                          use ''ports.grpc'' instead.'
-                        format: int32
-                        type: integer
                       ports:
                         description: Port numbers of the GRPC and HTTP auth interfaces.
                         properties:

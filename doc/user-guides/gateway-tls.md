@@ -30,11 +30,6 @@ Deploy policy controller and install TLSPolicy CRD:
 make deploy-policy-controller
 ```
 
-Install metallb:
-```shell
-make install-metallb
-```
-
 Create a namespace:
 ```shell
 kubectl create namespace my-gateways

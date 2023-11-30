@@ -110,20 +110,28 @@ spec:
 EOF
 ```
 
+Export the gateway hostname and port:
+
+```sh
+export INGRESS_HOST=$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.status.addresses[0].value}')
+export INGRESS_PORT=$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
+export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
+```
+
 Send requests to the application unprotected:
 
 ```sh
-curl -H 'Host: api.toystore.com' http://localhost:9080/cars -i
+curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/cars -i
 # HTTP/1.1 200 OK
 ```
 
 ```sh
-curl -H 'Host: api.toystore.com' http://localhost:9080/dolls -i
+curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/dolls -i
 # HTTP/1.1 200 OK
 ```
 
 ```sh
-curl -H 'Host: api.toystore.com' http://localhost:9080/admin -i
+curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/admin -i
 # HTTP/1.1 200 OK
 ```
 
@@ -199,22 +207,22 @@ EOF
 Send requests to the application protected by Kuadrant:
 
 ```sh
-curl -H 'Host: api.toystore.com' http://localhost:9080/cars -i
+curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/cars -i
 # HTTP/1.1 401 Unauthorized
 ```
 
 ```sh
-curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamaregularuser' http://localhost:9080/cars -i
+curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamaregularuser' http://$GATEWAY_URL/cars -i
 # HTTP/1.1 200 OK
 ```
 
 ```sh
-curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamaregularuser' http://localhost:9080/admin -i
+curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamaregularuser' http://$GATEWAY_URL/admin -i
 # HTTP/1.1 403 Forbidden
 ```
 
 ```sh
-curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamanadmin' http://localhost:9080/admin -i
+curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamanadmin' http://$GATEWAY_URL/admin -i
 # HTTP/1.1 200 OK
 ```
 
@@ -274,7 +282,7 @@ EOF
 Send requests to the route protected by the default policy set at the level of the gateway:
 
 ```sh
-curl -H 'Host: foo.other-apps.com' http://localhost:9080/ -i
+curl -H 'Host: foo.other-apps.com' http://$GATEWAY_URL/ -i
 # HTTP/1.1 403 Forbidden
 ```
 

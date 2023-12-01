@@ -373,7 +373,7 @@ func alwaysUpdateAuthPolicy(existingObj, desiredObj client.Object) (bool, error)
 		existing.Spec.Selector = desired.Spec.Selector
 	}
 
-	if reflect.DeepEqual(existing.Annotations, desired.Annotations) {
+	if !reflect.DeepEqual(existing.Annotations, desired.Annotations) {
 		update = true
 		existing.Annotations = desired.Annotations
 	}

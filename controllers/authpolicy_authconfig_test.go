@@ -567,7 +567,7 @@ func TestAuthorinoConditionsFromHTTPRouteRule(t *testing.T) {
 												{
 													PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
 														PatternExpression: authorinoapi.PatternExpression{
-															Selector: `request.path.@extract:{"sep":"?x-foo=","pos":1}.@extract:{"sep":"&"}`,
+															Selector: `request.path.@extract:{"sep":"?x-foo=","pos":1}|@extract:{"sep":"&"}`,
 															Operator: "eq",
 															Value:    "a-value",
 														},
@@ -576,7 +576,7 @@ func TestAuthorinoConditionsFromHTTPRouteRule(t *testing.T) {
 												{
 													PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
 														PatternExpression: authorinoapi.PatternExpression{
-															Selector: `request.path.@extract:{"sep":"&x-foo=","pos":1}.@extract:{"sep":"&"}`,
+															Selector: `request.path.@extract:{"sep":"&x-foo=","pos":1}|@extract:{"sep":"&"}`,
 															Operator: "eq",
 															Value:    "a-value",
 														},
@@ -624,7 +624,7 @@ func TestAuthorinoConditionsFromHTTPRouteRule(t *testing.T) {
 												{
 													PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
 														PatternExpression: authorinoapi.PatternExpression{
-															Selector: `request.path.@extract:{"sep":"?x-foo=","pos":1}.@extract:{"sep":"&"}`,
+															Selector: `request.path.@extract:{"sep":"?x-foo=","pos":1}|@extract:{"sep":"&"}`,
 															Operator: "eq",
 															Value:    "a-value",
 														},
@@ -633,7 +633,7 @@ func TestAuthorinoConditionsFromHTTPRouteRule(t *testing.T) {
 												{
 													PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
 														PatternExpression: authorinoapi.PatternExpression{
-															Selector: `request.path.@extract:{"sep":"&x-foo=","pos":1}.@extract:{"sep":"&"}`,
+															Selector: `request.path.@extract:{"sep":"&x-foo=","pos":1}|@extract:{"sep":"&"}`,
 															Operator: "eq",
 															Value:    "a-value",
 														},
@@ -648,7 +648,7 @@ func TestAuthorinoConditionsFromHTTPRouteRule(t *testing.T) {
 												{
 													PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
 														PatternExpression: authorinoapi.PatternExpression{
-															Selector: `request.path.@extract:{"sep":"?x-bar=","pos":1}.@extract:{"sep":"&"}`,
+															Selector: `request.path.@extract:{"sep":"?x-bar=","pos":1}|@extract:{"sep":"&"}`,
 															Operator: "eq",
 															Value:    "other-value",
 														},
@@ -657,7 +657,7 @@ func TestAuthorinoConditionsFromHTTPRouteRule(t *testing.T) {
 												{
 													PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
 														PatternExpression: authorinoapi.PatternExpression{
-															Selector: `request.path.@extract:{"sep":"&x-bar=","pos":1}.@extract:{"sep":"&"}`,
+															Selector: `request.path.@extract:{"sep":"&x-bar=","pos":1}|@extract:{"sep":"&"}`,
 															Operator: "eq",
 															Value:    "other-value",
 														},
@@ -700,7 +700,7 @@ func TestAuthorinoConditionsFromHTTPRouteRule(t *testing.T) {
 												{
 													PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
 														PatternExpression: authorinoapi.PatternExpression{
-															Selector: `request.path.@extract:{"sep":"?x-foo=","pos":1}.@extract:{"sep":"&"}`,
+															Selector: `request.path.@extract:{"sep":"?x-foo=","pos":1}|@extract:{"sep":"&"}`,
 															Operator: "matches",
 															Value:    "^a+.*$",
 														},
@@ -709,7 +709,7 @@ func TestAuthorinoConditionsFromHTTPRouteRule(t *testing.T) {
 												{
 													PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
 														PatternExpression: authorinoapi.PatternExpression{
-															Selector: `request.path.@extract:{"sep":"&x-foo=","pos":1}.@extract:{"sep":"&"}`,
+															Selector: `request.path.@extract:{"sep":"&x-foo=","pos":1}|@extract:{"sep":"&"}`,
 															Operator: "matches",
 															Value:    "^a+.*$",
 														},
@@ -735,7 +735,7 @@ func TestAuthorinoConditionsFromHTTPRouteRule(t *testing.T) {
 			}
 			for i := range result {
 				if !reflect.DeepEqual(result[i], tc.expected[i]) {
-					t.Errorf("Expected rule %d to be %v, got %v", i, tc.expected[i], result[i])
+					t.Errorf("Expected rule %d to \nbe\t%v, \ngot\t%v", i, tc.expected[i], result[i])
 				}
 			}
 		})

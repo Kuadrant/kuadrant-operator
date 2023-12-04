@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
@@ -223,7 +222,6 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.AuthPolicy{}).
-		Owns(&authorinoapi.AuthConfig{}).
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
 			handler.EnqueueRequestsFromMapFunc(httpRouteEventMapper.MapToAuthPolicy),

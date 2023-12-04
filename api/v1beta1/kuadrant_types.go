@@ -67,6 +67,8 @@ func (r *KuadrantStatus) Equals(other *KuadrantStatus, logger logr.Logger) bool 
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[0].reason`,priority=2
+//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // Kuadrant configures installations of Kuadrant Service Protection components
 type Kuadrant struct {

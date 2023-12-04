@@ -163,6 +163,10 @@ func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=direct"
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[0].reason`,description="RateLimitPolicy Status",priority=2
+// +kubebuilder:printcolumn:name="TargetRefKind",type="string",JSONPath=".spec.targetRef.kind",description="Type of the referenced Gateway API resource",priority=2
+// +kubebuilder:printcolumn:name="TargetRefName",type="string",JSONPath=".spec.targetRef.name",description="Name of the referenced Gateway API resource",priority=2
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // RateLimitPolicy enables rate limiting for service workloads in a Gateway API network
 type RateLimitPolicy struct {

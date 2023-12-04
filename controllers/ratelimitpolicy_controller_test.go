@@ -116,7 +116,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
-			Eventually(testRLPIsAvailable(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check HTTPRoute direct back reference
 			routeKey := client.ObjectKey{Name: routeName, Namespace: testNamespace}
@@ -310,7 +310,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
-			Eventually(testRLPIsAvailable(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
@@ -457,7 +457,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
-			Eventually(testRLPIsAvailable(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
@@ -575,7 +575,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
-			Eventually(testRLPIsAvailable(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
@@ -755,14 +755,14 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 	})
 })
 
-func testRLPIsAvailable(rlpKey client.ObjectKey) func() bool {
+func testRLPIsAccepted(rlpKey client.ObjectKey) func() bool {
 	return func() bool {
 		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
 		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
 		if err != nil {
 			return false
 		}
-		if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, "Available") {
+		if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
 			return false
 		}
 

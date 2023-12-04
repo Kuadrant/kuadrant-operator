@@ -11,12 +11,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-)
-
-const (
-	RLPAvailableConditionType string = "Available"
 )
 
 func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, specErr error) (ctrl.Result, error) {
@@ -62,26 +59,31 @@ func (r *RateLimitPolicyReconciler) calculateStatus(_ context.Context, rlp *kuad
 		ObservedGeneration: rlp.Status.ObservedGeneration,
 	}
 
-	availableCond := r.availableCondition(specErr)
+	acceptedCond := r.acceptedCondition(specErr)
 
-	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
+	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)
 
 	return newStatus
 }
 
-func (r *RateLimitPolicyReconciler) availableCondition(specErr error) *metav1.Condition {
+// TODO - Accepted Condition
+func (r *RateLimitPolicyReconciler) acceptedCondition(specErr error) *metav1.Condition {
 	cond := &metav1.Condition{
-		Type:    RLPAvailableConditionType,
+		Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
 		Status:  metav1.ConditionTrue,
-		Reason:  "HTTPRouteProtected",
-		Message: "HTTPRoute is ratelimited",
+		Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
+		Message: "KuadrantPolicy has been accepted",
 	}
 
 	if specErr != nil {
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = "ReconcilliationError"
+		cond.Reason = "ReconciliationError"
 		cond.Message = specErr.Error()
 	}
+
+	// TODO - Invalid Condition
+	// TODO - TargetNotFound Condition
+	// TODO - Conflicted Condition
 
 	return cond
 }

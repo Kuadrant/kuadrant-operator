@@ -86,6 +86,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	// fetch the target network object
 	targetNetworkObject, err := r.FetchValidTargetRef(ctx, rlp.GetTargetRef(), rlp.Namespace)
 	if err != nil {
+		// TODO - Target not found status
 		if !markedForDeletion {
 			if apierrors.IsNotFound(err) {
 				logger.V(1).Info("Network object not found. Cleaning up")
@@ -151,6 +152,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 
 func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
 	// validate
+	// TODO - Validation Error
 	err := rlp.Validate()
 	if err != nil {
 		return err

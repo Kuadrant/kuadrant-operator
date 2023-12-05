@@ -262,3 +262,92 @@ func TestBaseReconcilerDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+type FakeClient struct {
+	client.Client
+
+	UpdateCalledWithDryRun bool
+}
+
+func (f *FakeClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	for _, opt := range opts {
+		if opt == client.DryRunAll {
+			f.UpdateCalledWithDryRun = true
+		}
+	}
+
+	return f.Client.Update(ctx, obj, opts...)
+}
+
+func TestBaseReconcilerWithDryRunFirst(t *testing.T) {
+	// Test that update with dry run first is done
+	var (
+		name      = "myConfigmap"
+		namespace = "operator-unittest"
+	)
+	baseCtx := context.Background()
+	ctx := logr.NewContext(baseCtx, log.Log)
+
+	s := runtime.NewScheme()
+	err := v1.AddToScheme(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	existingConfigmap := &v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			"somekey": "somevalue",
+		},
+	}
+
+	// Objects to track in the fake client.
+	objs := []runtime.Object{existingConfigmap}
+
+	// Create a fake client to mock API calls.
+	fakeCL := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
+	cl := &FakeClient{Client: fakeCL}
+	clientAPIReader := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
+	recorder := record.NewFakeRecorder(10000)
+
+	baseReconciler := NewBaseReconciler(cl, s, clientAPIReader, log.Log, recorder)
+
+	desiredConfigmap := &v1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "ConfigMap",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+
+	customMutator := func(existingObj, desiredObj client.Object) (bool, error) {
+		existing, ok := existingObj.(*v1.ConfigMap)
+		if !ok {
+			return false, fmt.Errorf("%T is not a *v1.ConfigMap", existingObj)
+		}
+		if existing.Data == nil {
+			existing.Data = map[string]string{}
+		}
+		existing.Data["customKey"] = "customValue"
+		return true, nil
+	}
+
+	err = baseReconciler.ReconcileResource(ctx, &v1.ConfigMap{}, desiredConfigmap, customMutator, DryRunFirst)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !cl.UpdateCalledWithDryRun {
+		t.Fatal("Dry run not called")
+	}
+}

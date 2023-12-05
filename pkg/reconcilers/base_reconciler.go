@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -92,6 +93,41 @@ func (b *BaseReconciler) EventRecorder() record.EventRecorder {
 	return b.recorder
 }
 
+// ReconcileOptions contains options for reconcile objects.
+type ReconcileOptions struct {
+	// Ensure defaults and webhook mutations are considered before comparing
+	// existing vs desired state of resources when reconciling updates
+	// by dry-running the updates before
+	DryRunFirst *bool
+
+	GetOptions []client.GetOption
+
+	CreateOptions []client.CreateOption
+
+	DeleteOptions []client.DeleteOption
+
+	UpdateOptions []client.UpdateOption
+}
+
+// DryRunFirst sets the "dry run first" option to "true", ensuring all
+// validation, mutations etc first without persisting the change to storage.
+var DryRunFirst = dryRunFirst{}
+
+type dryRunFirst struct{}
+
+// ApplyToList applies this configuration to the given list options.
+func (dryRunFirst) ApplyToReconcile(opts *ReconcileOptions) {
+	opts.DryRunFirst = ptr.To(true)
+}
+
+var _ ReconcileOption = &dryRunFirst{}
+
+// ReconcileOption adds some customization for the reconciliation process.
+type ReconcileOption interface {
+	// ApplyToUpdate applies this configuration to the given update options.
+	ApplyToReconcile(*ReconcileOptions)
+}
+
 // ReconcileResource attempts to mutate the existing state
 // in order to match the desired state. The object's desired state must be reconciled
 // with the existing state inside the passed in callback MutateFn.
@@ -104,17 +140,23 @@ func (b *BaseReconciler) EventRecorder() record.EventRecorder {
 // desired: Object representing the desired state
 //
 // It returns an error.
-func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired client.Object, mutateFn MutateFn) error {
+func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired client.Object, mutateFn MutateFn, opts ...ReconcileOption) error {
+	// Capture options
+	reconcileOpts := &ReconcileOptions{}
+	for _, opt := range opts {
+		opt.ApplyToReconcile(reconcileOpts)
+	}
+
 	key := client.ObjectKeyFromObject(desired)
 
-	if err := b.Client().Get(ctx, key, obj); err != nil {
+	if err := b.GetResource(ctx, key, obj, reconcileOpts.GetOptions...); err != nil {
 		if !errors.IsNotFound(err) {
 			return err
 		}
 
 		// Not found
 		if !common.IsObjectTaggedToDelete(desired) {
-			return b.CreateResource(ctx, desired)
+			return b.CreateResource(ctx, desired, reconcileOpts.CreateOptions...)
 		}
 
 		// Marked for deletion and not found. Nothing to do.
@@ -123,48 +165,53 @@ func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired cli
 
 	// item found successfully
 	if common.IsObjectTaggedToDelete(desired) {
-		return b.DeleteResource(ctx, desired)
+		return b.DeleteResource(ctx, desired, reconcileOpts.DeleteOptions...)
 	}
 
-	desired.SetResourceVersion(obj.GetResourceVersion())
-	if err := b.Client().Update(ctx, desired, client.DryRunAll); err != nil {
-		return err
+	var desiredMutated client.Object = desired
+
+	if ptr.Deref(reconcileOpts.DryRunFirst, false) {
+		desiredMutated = desired.DeepCopyObject().(client.Object)
+		desiredMutated.SetResourceVersion(obj.GetResourceVersion())
+		if err := b.UpdateResource(ctx, desiredMutated, client.DryRunAll); err != nil {
+			return err
+		}
 	}
 
-	update, err := mutateFn(obj, desired)
+	update, err := mutateFn(obj, desiredMutated)
 	if err != nil {
 		return err
 	}
 
 	if update {
-		return b.UpdateResource(ctx, obj)
+		return b.UpdateResource(ctx, obj, reconcileOpts.UpdateOptions...)
 	}
 
 	return nil
 }
 
-func (b *BaseReconciler) GetResource(ctx context.Context, objKey types.NamespacedName, obj client.Object) error {
+func (b *BaseReconciler) GetResource(ctx context.Context, objKey types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("get object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", objKey.Name, "namespace", objKey.Namespace)
-	return b.Client().Get(ctx, objKey, obj)
+	return b.Client().Get(ctx, objKey, obj, opts...)
 }
 
-func (b *BaseReconciler) CreateResource(ctx context.Context, obj client.Object) error {
+func (b *BaseReconciler) CreateResource(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("create object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
-	return b.Client().Create(ctx, obj)
+	return b.Client().Create(ctx, obj, opts...)
 }
 
-func (b *BaseReconciler) UpdateResource(ctx context.Context, obj client.Object) error {
+func (b *BaseReconciler) UpdateResource(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("update object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
-	return b.Client().Update(ctx, obj)
+	return b.Client().Update(ctx, obj, opts...)
 }
 
-func (b *BaseReconciler) DeleteResource(ctx context.Context, obj client.Object, options ...client.DeleteOption) error {
+func (b *BaseReconciler) DeleteResource(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("delete object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
-	return b.Client().Delete(ctx, obj, options...)
+	return b.Client().Delete(ctx, obj, opts...)
 }
 
 func (b *BaseReconciler) UpdateResourceStatus(ctx context.Context, obj client.Object) error {

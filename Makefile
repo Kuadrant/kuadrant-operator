@@ -263,7 +263,7 @@ test: test-unit test-integration ## Run all tests
 
 test-integration: clean-cov generate fmt vet envtest ## Run Integration tests.
 	mkdir -p coverage/integration
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)" USE_EXISTING_CLUSTER=true go test $(INTEGRATION_DIRS) -coverprofile $(PROJECT_PATH)/coverage/integration/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)" go test $(INTEGRATION_DIRS) -coverprofile $(PROJECT_PATH)/coverage/integration/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
 
 ifdef TEST_NAME
 test-unit: TEST_PATTERN := --run $(TEST_NAME)
@@ -383,7 +383,7 @@ install-metallb: $(KUSTOMIZE) ## Installs the metallb load balancer allowing use
 	./utils/docker-network-ipaddresspool.sh kind | kubectl apply -n metallb-system -f -
 
 .PHONY: uninstall-metallb
-uninstall-metallb: $(KUSTOMIZE) 
+uninstall-metallb: $(KUSTOMIZE)
 	$(KUSTOMIZE) build config/metallb | kubectl delete -f -
 
 .PHONY: install-olm

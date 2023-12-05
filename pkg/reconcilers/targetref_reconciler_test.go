@@ -304,7 +304,6 @@ func TestReconcileTargetBackReference(t *testing.T) {
 	}
 
 	policy := &v1beta2.RateLimitPolicy{ObjectMeta: metav1.ObjectMeta{Name: "someName", Namespace: "someNamespace"}}
-	policyKey := client.ObjectKey{Name: "someName", Namespace: "someNamespace"}
 
 	existingRoute := &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
@@ -381,7 +380,7 @@ func TestReconcileTargetBackReference(t *testing.T) {
 	}
 
 	if val != client.ObjectKeyFromObject(policy).String() {
-		t.Fatalf("annotation value (%s) does not match expected (%s)", val, policyKey.String())
+		t.Fatalf("annotation value (%s) does not match expected (%s)", val, client.ObjectKeyFromObject(policy).String())
 	}
 }
 

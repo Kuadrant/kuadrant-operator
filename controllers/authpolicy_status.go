@@ -2,15 +2,18 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -89,16 +92,23 @@ func (r *AuthPolicyReconciler) calculateStatus(ap *api.AuthPolicy, specErr error
 func (r *AuthPolicyReconciler) availableCondition(targetNetworkObjectectKind string, specErr error, authConfigReady bool) *metav1.Condition {
 	// Condition if there is no issue
 	cond := &metav1.Condition{
-		Type:    APAvailableConditionType,
+		Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
 		Status:  metav1.ConditionTrue,
-		Reason:  fmt.Sprintf("%sProtected", targetNetworkObjectectKind),
-		Message: fmt.Sprintf("%s is protected", targetNetworkObjectectKind),
+		Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
+		Message: fmt.Sprintf("AuthPolicy has been accepted. %s is protected", targetNetworkObjectectKind),
 	}
 
 	if specErr != nil {
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = "ReconciliationError"
 		cond.Message = specErr.Error()
+
+		switch {
+		// TargetNotFound
+		case errors.As(specErr, &common.ErrTargetNotFound{}):
+			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)
+		default:
+			cond.Reason = "ReconciliationError"
+		}
 	} else if !authConfigReady {
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = "AuthSchemeNotReady"

@@ -34,7 +34,7 @@ func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api
 		return err
 	}
 
-	err = r.ReconcileResource(ctx, &authorinoapi.AuthConfig{}, authConfig, alwaysUpdateAuthConfig)
+	err = r.ReconcileResource(ctx, &authorinoapi.AuthConfig{}, authConfig, authConfigBasicMutator)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		logger.Error(err, "ReconcileResource failed to create/update AuthConfig resource")
 		return err
@@ -496,7 +496,7 @@ func toAuthorinoOneOfPatternExpressionsOrRefs(oneOf []authorinoapi.PatternExpres
 	}
 }
 
-func alwaysUpdateAuthConfig(existingObj, desiredObj client.Object) (bool, error) {
+func authConfigBasicMutator(existingObj, desiredObj client.Object) (bool, error) {
 	existing, ok := existingObj.(*authorinoapi.AuthConfig)
 	if !ok {
 		return false, fmt.Errorf("%T is not an *authorinoapi.AuthConfig", existingObj)
@@ -506,11 +506,11 @@ func alwaysUpdateAuthConfig(existingObj, desiredObj client.Object) (bool, error)
 		return false, fmt.Errorf("%T is not an *authorinoapi.AuthConfig", desiredObj)
 	}
 
-	if reflect.DeepEqual(existing.Spec, desired.Spec) && reflect.DeepEqual(existing.Annotations, desired.Annotations) {
+	if reflect.DeepEqual(existing.Spec, desired.Spec) {
 		return false, nil
 	}
 
 	existing.Spec = desired.Spec
-	existing.Annotations = desired.Annotations
+
 	return true, nil
 }

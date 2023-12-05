@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2023-11-08
+
+### What's Changed
+* docs: fix user guide authenticated rl for app devs based on authpolicy/v1beta2 by @guicassolato in https://github.com/Kuadrant/kuadrant-operator/pull/282
+* Indentation fix by @Ygnas in https://github.com/Kuadrant/kuadrant-operator/pull/284
+* rename controller files by @guicassolato in https://github.com/Kuadrant/kuadrant-operator/pull/285
+* Fix bug in response validation rules by @adam-cattermole in https://github.com/Kuadrant/kuadrant-operator/pull/287
+* Bump google.golang.org/grpc from 1.54.0 to 1.56.3 by @dependabot in https://github.com/Kuadrant/kuadrant-operator/pull/288
+* Propagate REPLACES_VERSION param when generating catalog files by @guicassolato in https://github.com/Kuadrant/kuadrant-operator/pull/291
+
+### New Contributors
+* @Ygnas made their first contribution in https://github.com/Kuadrant/kuadrant-operator/pull/284
+* @dependabot made their first contribution in https://github.com/Kuadrant/kuadrant-operator/pull/288
+
 ## [0.4.0] - 2023-11-01
 
 ### What's Changed

@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -302,6 +303,7 @@ func TestReconcileTargetBackReference(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	policy := &v1beta2.RateLimitPolicy{ObjectMeta: metav1.ObjectMeta{Name: "someName", Namespace: "someNamespace"}}
 	policyKey := client.ObjectKey{Name: "someName", Namespace: "someNamespace"}
 
 	existingRoute := &gatewayapiv1.HTTPRoute{
@@ -354,7 +356,7 @@ func TestReconcileTargetBackReference(t *testing.T) {
 		BaseReconciler: baseReconciler,
 	}
 
-	err = targetRefReconciler.ReconcileTargetBackReference(ctx, policyKey, existingRoute, annotationName)
+	err = targetRefReconciler.ReconcileTargetBackReference(ctx, policy, existingRoute, annotationName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +380,7 @@ func TestReconcileTargetBackReference(t *testing.T) {
 		t.Fatal("expected annotation not found")
 	}
 
-	if val != policyKey.String() {
+	if val != client.ObjectKeyFromObject(policy).String() {
 		t.Fatalf("annotation value (%s) does not match expected (%s)", val, policyKey.String())
 	}
 }

@@ -68,7 +68,6 @@ func (r *RateLimitPolicyReconciler) calculateStatus(_ context.Context, rlp *kuad
 	return newStatus
 }
 
-// TODO - Accepted Condition
 func (r *RateLimitPolicyReconciler) acceptedCondition(specErr error) *metav1.Condition {
 	// Accepted
 	cond := &metav1.Condition{
@@ -89,12 +88,13 @@ func (r *RateLimitPolicyReconciler) acceptedCondition(specErr error) *metav1.Con
 		// Invalid
 		case errors.As(specErr, &common.ErrInvalid{}):
 			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonInvalid)
+		// Conflicted
+		case errors.As(specErr, &common.ErrConflict{}):
+			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonConflicted)
 		default:
 			cond.Reason = "ReconciliationError"
 		}
 	}
-
-	// TODO - Conflicted Reason
 
 	return cond
 }

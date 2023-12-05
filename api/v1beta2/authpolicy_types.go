@@ -277,6 +277,10 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 	return
 }
 
+func (ap *AuthPolicy) Kind() string {
+	return ap.TypeMeta.Kind
+}
+
 //+kubebuilder:object:root=true
 
 // AuthPolicyList contains a list of AuthPolicy

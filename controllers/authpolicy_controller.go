@@ -186,8 +186,8 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 }
 
 // Ensures only one RLP targets the network resource
-func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
-	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(ap), targetNetworkObject, common.AuthPolicyBackRefAnnotation)
+func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, ap common.KuadrantPolicy, targetNetworkObject client.Object) error {
+	return r.ReconcileTargetBackReference(ctx, ap, targetNetworkObject, common.AuthPolicyBackRefAnnotation)
 }
 
 func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object) error {

@@ -1320,6 +1320,10 @@ func (p *FakePolicy) GetRulesHostnames() []string {
 	return p.Hosts
 }
 
+func (p *FakePolicy) Kind() string {
+	return "FakePolicy"
+}
+
 func TestValidateHierarchicalRules(t *testing.T) {
 	hostname := gatewayapiv1.Hostname("*.example.com")
 	gateway := &gatewayapiv1.Gateway{

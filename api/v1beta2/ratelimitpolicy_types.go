@@ -240,6 +240,10 @@ func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 	return
 }
 
+func (r *RateLimitPolicy) Kind() string {
+	return r.TypeMeta.Kind
+}
+
 func init() {
 	SchemeBuilder.Register(&RateLimitPolicy{}, &RateLimitPolicyList{})
 }

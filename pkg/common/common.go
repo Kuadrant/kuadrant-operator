@@ -43,6 +43,7 @@ type KuadrantPolicy interface {
 	GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference
 	GetWrappedNamespace() gatewayapiv1.Namespace
 	GetRulesHostnames() []string
+	Kind() string
 }
 
 type KuadrantPolicyList interface {

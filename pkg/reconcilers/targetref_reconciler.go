@@ -154,9 +154,10 @@ func (r *TargetRefReconciler) TargetedGatewayKeys(_ context.Context, targetNetwo
 }
 
 // ReconcileTargetBackReference adds policy key in annotations of the target object
-func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, policyKey client.ObjectKey, targetNetworkObject client.Object, annotationName string) error {
+func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, policy common.KuadrantPolicy, targetNetworkObject client.Object, annotationName string) error {
 	logger, _ := logr.FromContext(ctx)
 
+	policyKey := client.ObjectKeyFromObject(policy)
 	targetNetworkObjectKey := client.ObjectKeyFromObject(targetNetworkObject)
 	targetNetworkObjectKind := targetNetworkObject.GetObjectKind().GroupVersionKind()
 
@@ -165,7 +166,7 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, 
 
 	if val, ok := objAnnotations[annotationName]; ok {
 		if val != policyKey.String() {
-			return fmt.Errorf("the %s target %s is already referenced by policy %s", targetNetworkObjectKind, targetNetworkObjectKey, policyKey.String())
+			return common.ErrConflict{Kind: policy.Kind(), NameNamespace: val, Err: fmt.Errorf("the %s target %s is already referenced by policy %s", targetNetworkObjectKind, targetNetworkObjectKey, val)}
 		}
 	} else {
 		objAnnotations[annotationName] = policyKey.String()

@@ -2,11 +2,22 @@ package common
 
 import (
 	"encoding/json"
+	"fmt"
 	"slices"
 	"sort"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
+
+type ErrTargetNotFound struct {
+	Kind      string
+	TargetRef gatewayapiv1alpha2.PolicyTargetReference
+}
+
+func (e ErrTargetNotFound) Error() string {
+	return fmt.Sprintf("%s target %s was not found", e.Kind, e.TargetRef.Name)
+}
 
 // ConditionMarshal marshals the set of conditions as a JSON array, sorted by condition type.
 func ConditionMarshal(conditions []metav1.Condition) ([]byte, error) {

@@ -2,10 +2,12 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -68,22 +70,29 @@ func (r *RateLimitPolicyReconciler) calculateStatus(_ context.Context, rlp *kuad
 
 // TODO - Accepted Condition
 func (r *RateLimitPolicyReconciler) acceptedCondition(specErr error) *metav1.Condition {
+	// Accepted
 	cond := &metav1.Condition{
 		Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
-		Message: "KuadrantPolicy has been accepted",
+		Message: "RateLimitPolicy has been accepted",
 	}
 
 	if specErr != nil {
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = "ReconciliationError"
 		cond.Message = specErr.Error()
+
+		// TargetNotFound
+		switch {
+		case errors.As(specErr, &common.ErrTargetNotFound{}):
+			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)
+		default:
+			cond.Reason = "ReconciliationError"
+		}
 	}
 
-	// TODO - Invalid Condition
-	// TODO - TargetNotFound Condition
-	// TODO - Conflicted Condition
+	// TODO - Invalid Reason
+	// TODO - Conflicted Reason
 
 	return cond
 }

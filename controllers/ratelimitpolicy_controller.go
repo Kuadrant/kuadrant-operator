@@ -93,7 +93,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, rlp, common.ErrTargetNotFound{Kind: rlp.Kind(), TargetRef: rlp.GetTargetRef()})
+				return r.reconcileStatus(ctx, rlp, common.ErrTargetNotFound{Kind: rlp.Kind(), TargetRef: rlp.GetTargetRef(), Err: delResErr})
 			}
 			return ctrl.Result{}, err
 		}

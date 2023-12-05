@@ -133,11 +133,11 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
 	// validate
 	if err := ap.Validate(); err != nil {
-		return err
+		return common.ErrInvalid{Kind: ap.Kind(), Err: err}
 	}
 
 	if err := common.ValidateHierarchicalRules(ap, targetNetworkObject); err != nil {
-		return err
+		return common.ErrInvalid{Kind: ap.Kind(), Err: err}
 	}
 
 	// reconcile based on gateway diffs

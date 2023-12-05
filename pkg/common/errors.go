@@ -3,16 +3,22 @@ package common
 import (
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 type ErrTargetNotFound struct {
 	Kind      string
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference
+	Err       error
 }
 
 func (e ErrTargetNotFound) Error() string {
-	return fmt.Sprintf("%s target %s was not found", e.Kind, e.TargetRef.Name)
+	if apierrors.IsNotFound(e.Err) {
+		return fmt.Sprintf("%s target %s was not found", e.Kind, e.TargetRef.Name)
+	}
+
+	return fmt.Sprintf("%s target %s was not found: %s", e.Kind, e.TargetRef.Name, e.Err.Error())
 }
 
 type ErrInvalid struct {

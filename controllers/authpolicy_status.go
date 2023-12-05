@@ -89,13 +89,13 @@ func (r *AuthPolicyReconciler) calculateStatus(ap *api.AuthPolicy, specErr error
 	return newStatus
 }
 
-func (r *AuthPolicyReconciler) availableCondition(targetNetworkObjectectKind string, specErr error, authConfigReady bool) *metav1.Condition {
+func (r *AuthPolicyReconciler) availableCondition(targetNetworkObjectKind string, specErr error, authConfigReady bool) *metav1.Condition {
 	// Condition if there is no issue
 	cond := &metav1.Condition{
 		Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
-		Message: fmt.Sprintf("AuthPolicy has been accepted. %s is protected", targetNetworkObjectectKind),
+		Message: fmt.Sprintf("AuthPolicy has been accepted. %s is protected", targetNetworkObjectKind),
 	}
 
 	if specErr != nil {
@@ -106,6 +106,9 @@ func (r *AuthPolicyReconciler) availableCondition(targetNetworkObjectectKind str
 		// TargetNotFound
 		case errors.As(specErr, &common.ErrTargetNotFound{}):
 			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)
+		// Invalid
+		case errors.As(specErr, &common.ErrInvalid{}):
+			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonInvalid)
 		default:
 			cond.Reason = "ReconciliationError"
 		}

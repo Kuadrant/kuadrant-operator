@@ -168,7 +168,7 @@ func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired cli
 		return b.DeleteResource(ctx, desired, reconcileOpts.DeleteOptions...)
 	}
 
-	var desiredMutated client.Object = desired
+	var desiredMutated = desired
 
 	if ptr.Deref(reconcileOpts.DryRunFirst, false) {
 		desiredMutated = desired.DeepCopyObject().(client.Object)

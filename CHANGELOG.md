@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2023-12-05
+
+### What's Changed
+* refactor: controller-runtime v0.16.3 by @KevFan in https://github.com/Kuadrant/kuadrant-operator/pull/246
+* Update gatewayapi to v1.0.0 by @adam-cattermole in https://github.com/Kuadrant/kuadrant-operator/pull/286
+* Add mandatory Gateway API label to the policy CRDs by @guicassolato in https://github.com/Kuadrant/kuadrant-operator/pull/295
+* Update Keycloak examples by @guicassolato in https://github.com/Kuadrant/kuadrant-operator/pull/311
+* Gh 639 policy controller by @maleck13 in https://github.com/Kuadrant/kuadrant-operator/pull/293
+* Update bundle (policy-controller) by @mikenairn in https://github.com/Kuadrant/kuadrant-operator/pull/313
+* Update istio to 1.20 by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/303
+* Allow the coverage to drop by 3% by @eguzki in https://github.com/Kuadrant/kuadrant-operator/pull/316
+* fix authconfig hosts when targeting gateway by @eguzki in https://github.com/Kuadrant/kuadrant-operator/pull/310
+* Using Limitador CR condition ready by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/324
+* Upgrading operator-sdk to v1.32.0 by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/319
+* Enhanced observability for the limitador instance by @eguzki in https://github.com/Kuadrant/kuadrant-operator/pull/301
+* Maintenance/docs by @Boomatang in https://github.com/Kuadrant/kuadrant-operator/pull/294
+* Update google.golang.org/grpc by @alexsnaps in https://github.com/Kuadrant/kuadrant-operator/pull/329
+* Again:  name things by @alexsnaps in https://github.com/Kuadrant/kuadrant-operator/pull/336
+* rlp e2e tests: fix sync issues by @eguzki in https://github.com/Kuadrant/kuadrant-operator/pull/337
+* Updating istio dependencies by @didierofrivia in https://github.com/Kuadrant/kuadrant-operator/pull/331
+* Fix nil pointer in parentRef namespace dereference by @adam-cattermole in https://github.com/Kuadrant/kuadrant-operator/pull/335
+* fix integration tests: wait for route to be accepted by @eguzki in https://github.com/Kuadrant/kuadrant-operator/pull/339
+* remove deployment of policy-controller for now by @maleck13 in https://github.com/Kuadrant/kuadrant-operator/pull/338
+* Add better information for OperatorHub by @alexsnaps in https://github.com/Kuadrant/kuadrant-operator/pull/330
+* fix authconfig reconciliation by @eguzki in https://github.com/Kuadrant/kuadrant-operator/pull/341
+* docs: TLS and DNS Policy user guides by @mikenairn in https://github.com/Kuadrant/kuadrant-operator/pull/322
+* Fix Istio AuthorizationPolicy mutate check by @guicassolato in https://github.com/Kuadrant/kuadrant-operator/pull/351
+* Include missing unit test by @Boomatang in https://github.com/Kuadrant/kuadrant-operator/pull/344
+* Dry-run resource update before comparing changes by @guicassolato in https://github.com/Kuadrant/kuadrant-operator/pull/356
+
+### New Contributors
+* @maleck13 made their first contribution in https://github.com/Kuadrant/kuadrant-operator/pull/293
+
 ## [0.4.1] - 2023-11-08
 
 ### What's Changed

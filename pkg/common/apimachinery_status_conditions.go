@@ -19,6 +19,15 @@ func (e ErrTargetNotFound) Error() string {
 	return fmt.Sprintf("%s target %s was not found", e.Kind, e.TargetRef.Name)
 }
 
+type ErrInvalid struct {
+	Kind string
+	Err  error
+}
+
+func (e ErrInvalid) Error() string {
+	return fmt.Sprintf("%s target is invalid: %s", e.Kind, e.Err.Error())
+}
+
 // ConditionMarshal marshals the set of conditions as a JSON array, sorted by condition type.
 func ConditionMarshal(conditions []metav1.Condition) ([]byte, error) {
 	condCopy := slices.Clone(conditions)

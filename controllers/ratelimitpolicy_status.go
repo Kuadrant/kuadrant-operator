@@ -82,16 +82,18 @@ func (r *RateLimitPolicyReconciler) acceptedCondition(specErr error) *metav1.Con
 		cond.Status = metav1.ConditionFalse
 		cond.Message = specErr.Error()
 
-		// TargetNotFound
 		switch {
+		// TargetNotFound
 		case errors.As(specErr, &common.ErrTargetNotFound{}):
 			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)
+		// Invalid
+		case errors.As(specErr, &common.ErrInvalid{}):
+			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonInvalid)
 		default:
 			cond.Reason = "ReconciliationError"
 		}
 	}
 
-	// TODO - Invalid Reason
 	// TODO - Conflicted Reason
 
 	return cond

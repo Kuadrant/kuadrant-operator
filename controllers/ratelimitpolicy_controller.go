@@ -154,12 +154,12 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 	// TODO - Validation Error
 	err := rlp.Validate()
 	if err != nil {
-		return err
+		return common.ErrInvalid{Kind: rlp.Kind, Err: err}
 	}
 
 	err = common.ValidateHierarchicalRules(rlp, targetNetworkObject)
 	if err != nil {
-		return err
+		return common.ErrInvalid{Kind: rlp.Kind, Err: err}
 	}
 
 	// reconcile based on gateway diffs

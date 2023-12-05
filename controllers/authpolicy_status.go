@@ -19,8 +19,6 @@ import (
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
 
-const APAvailableConditionType string = "Available"
-
 // reconcileStatus makes sure status block of AuthPolicy is up-to-date.
 func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *api.AuthPolicy, specErr error) (ctrl.Result, error) {
 	logger, _ := logr.FromContext(ctx)
@@ -82,14 +80,14 @@ func (r *AuthPolicyReconciler) calculateStatus(ap *api.AuthPolicy, specErr error
 	}
 
 	targetNetworkObjectKind := string(ap.Spec.TargetRef.Kind)
-	availableCond := r.availableCondition(targetNetworkObjectKind, specErr, authConfigReady)
+	availableCond := r.acceptedCondition(targetNetworkObjectKind, specErr, authConfigReady)
 
 	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
 
 	return newStatus
 }
 
-func (r *AuthPolicyReconciler) availableCondition(targetNetworkObjectKind string, specErr error, authConfigReady bool) *metav1.Condition {
+func (r *AuthPolicyReconciler) acceptedCondition(targetNetworkObjectKind string, specErr error, authConfigReady bool) *metav1.Condition {
 	// Condition if there is no issue
 	cond := &metav1.Condition{
 		Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
@@ -109,6 +107,9 @@ func (r *AuthPolicyReconciler) availableCondition(targetNetworkObjectKind string
 		// Invalid
 		case errors.As(specErr, &common.ErrInvalid{}):
 			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonInvalid)
+		// Conflicted
+		case errors.As(specErr, &common.ErrConflict{}):
+			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonConflicted)
 		default:
 			cond.Reason = "ReconciliationError"
 		}

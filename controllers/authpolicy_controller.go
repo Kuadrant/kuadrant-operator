@@ -159,7 +159,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 		return err
 	}
 
-	// set annotation of policies afftecting the gateway - should be the last step, only when all the reconciliation steps succeed
+	// set annotation of policies affecting the gateway - should be the last step, only when all the reconciliation steps succeed
 	return r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
 }
 
@@ -181,7 +181,7 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 		}
 	}
 
-	// update annotation of policies afftecting the gateway
+	// update annotation of policies affecting the gateway
 	return r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
 }
 

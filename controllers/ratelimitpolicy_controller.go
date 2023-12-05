@@ -151,7 +151,6 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 
 func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
 	// validate
-	// TODO - Validation Error
 	err := rlp.Validate()
 	if err != nil {
 		return common.ErrInvalid{Kind: rlp.Kind(), Err: err}
@@ -181,7 +180,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 		return err
 	}
 
-	// set annotation of policies afftecting the gateway - should be the last step, only when all the reconciliation steps succeed
+	// set annotation of policies affecting the gateway - should be the last step, only when all the reconciliation steps succeed
 	return r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
 }
 

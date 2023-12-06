@@ -2,7 +2,7 @@ name: Schedule build with latest image SHA versions
 
 on:
   schedule:
-    - cron: '0 0 * * 0'
+    - cron: '0 1 * * *'
 
 jobs:
   workflow-build:

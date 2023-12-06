@@ -63,7 +63,7 @@ on:
         type: string
 
 env:
-  IMG_TAGS: ${{ github.sha }} ${{ inputs.kuadrantOperatorTag }}
+  IMG_TAGS: ${{ inputs.kuadrantOperatorTag }}
   VERSION: ${{ inputs.kuadrantOperatorVersion }}
   IMG_REGISTRY_HOST: quay.io
   IMG_REGISTRY_ORG: kuadrant

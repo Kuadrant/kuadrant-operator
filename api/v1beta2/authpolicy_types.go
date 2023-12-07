@@ -223,18 +223,6 @@ func (ap *AuthPolicy) TargetKey() client.ObjectKey {
 }
 
 func (ap *AuthPolicy) Validate() error {
-	if ap.Spec.TargetRef.Group != ("gateway.networking.k8s.io") {
-		return fmt.Errorf("invalid targetRef.Group %s. The only supported group is gateway.networking.k8s.io", ap.Spec.TargetRef.Group)
-	}
-
-	switch kind := ap.Spec.TargetRef.Kind; kind {
-	case
-		"HTTPRoute",
-		"Gateway":
-	default:
-		return fmt.Errorf("invalid targetRef.Kind %s. The only supported kinds are HTTPRoute and Gateway", kind)
-	}
-
 	if ap.Spec.TargetRef.Namespace != nil && string(*ap.Spec.TargetRef.Namespace) != ap.Namespace {
 		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *ap.Spec.TargetRef.Namespace)
 	}

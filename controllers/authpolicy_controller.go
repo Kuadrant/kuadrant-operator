@@ -67,7 +67,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, ap, delResErr)
+				return r.reconcileStatus(ctx, ap, common.ErrTargetNotFound{Kind: ap.Kind(), TargetRef: ap.GetTargetRef(), Err: delResErr})
 			}
 			return ctrl.Result{}, err
 		}

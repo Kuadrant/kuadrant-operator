@@ -5,6 +5,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -34,6 +35,40 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		rlpName       = "toystore-rlp"
 		gateway       *gatewayapiv1.Gateway
 	)
+
+	rlpFactory := func(mutateFn func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
+		rlp := &kuadrantv1beta2.RateLimitPolicy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "RateLimitPolicy",
+				APIVersion: kuadrantv1beta2.GroupVersion.String(),
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      rlpName,
+				Namespace: testNamespace,
+			},
+			Spec: kuadrantv1beta2.RateLimitPolicySpec{
+				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+					Kind:  "HTTPRoute",
+					Name:  gatewayapiv1.ObjectName(routeName),
+				},
+				Limits: map[string]kuadrantv1beta2.Limit{
+					"l1": {
+						Rates: []kuadrantv1beta2.Rate{
+							{
+								Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+							},
+						},
+					},
+				},
+			},
+		}
+
+		if mutateFn != nil {
+			mutateFn(rlp)
+		}
+		return rlp
+	}
 
 	beforeEachCallback := func() {
 		CreateNamespace(&testNamespace)
@@ -85,32 +120,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create ratelimitpolicy
-			rlp := &kuadrantv1beta2.RateLimitPolicy{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "RateLimitPolicy",
-					APIVersion: kuadrantv1beta2.GroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      rlpName,
-					Namespace: testNamespace,
-				},
-				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1.ObjectName(routeName),
-					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
-								},
-							},
-						},
-					},
-				},
-			}
+			rlp := rlpFactory(nil)
 			err = k8sClient.Create(context.Background(), rlp)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -242,69 +252,54 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create ratelimitpolicy
-			rlp := &kuadrantv1beta2.RateLimitPolicy{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "RateLimitPolicy",
-					APIVersion: kuadrantv1beta2.GroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      rlpName,
-					Namespace: testNamespace,
-				},
-				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1.ObjectName(routeName),
-					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"toys": {
-							Rates: []kuadrantv1beta2.Rate{
-								{Limit: 50, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
-							},
-							Counters: []kuadrantv1beta2.ContextSelector{"auth.identity.username"},
-							RouteSelectors: []kuadrantv1beta2.RouteSelector{
-								{ // selects the 1st HTTPRouteRule (i.e. get|post /toys*) for one of the hostnames
-									Matches: []gatewayapiv1.HTTPRouteMatch{
-										{
-											Path: &gatewayapiv1.HTTPPathMatch{
-												Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-												Value: ptr.To("/toys"),
-											},
+			rlp := rlpFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.Limits = map[string]kuadrantv1beta2.Limit{
+					"toys": {
+						Rates: []kuadrantv1beta2.Rate{
+							{Limit: 50, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
+						},
+						Counters: []kuadrantv1beta2.ContextSelector{"auth.identity.username"},
+						RouteSelectors: []kuadrantv1beta2.RouteSelector{
+							{ // selects the 1st HTTPRouteRule (i.e. get|post /toys*) for one of the hostnames
+								Matches: []gatewayapiv1.HTTPRouteMatch{
+									{
+										Path: &gatewayapiv1.HTTPPathMatch{
+											Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+											Value: ptr.To("/toys"),
 										},
 									},
-									Hostnames: []gatewayapiv1.Hostname{"*.toystore.acme.com"},
 								},
-							},
-							When: []kuadrantv1beta2.WhenCondition{
-								{
-									Selector: "auth.identity.group",
-									Operator: kuadrantv1beta2.WhenConditionOperator("neq"),
-									Value:    "admin",
-								},
+								Hostnames: []gatewayapiv1.Hostname{"*.toystore.acme.com"},
 							},
 						},
-						"assets": {
-							Rates: []kuadrantv1beta2.Rate{
-								{Limit: 5, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
-								{Limit: 100, Duration: 12, Unit: kuadrantv1beta2.TimeUnit("hour")},
+						When: []kuadrantv1beta2.WhenCondition{
+							{
+								Selector: "auth.identity.group",
+								Operator: kuadrantv1beta2.WhenConditionOperator("neq"),
+								Value:    "admin",
 							},
-							RouteSelectors: []kuadrantv1beta2.RouteSelector{
-								{ // selects the 2nd HTTPRouteRule (i.e. /assets*) for all hostnames
-									Matches: []gatewayapiv1.HTTPRouteMatch{
-										{
-											Path: &gatewayapiv1.HTTPPathMatch{
-												Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-												Value: ptr.To("/assets"),
-											},
+						},
+					},
+					"assets": {
+						Rates: []kuadrantv1beta2.Rate{
+							{Limit: 5, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
+							{Limit: 100, Duration: 12, Unit: kuadrantv1beta2.TimeUnit("hour")},
+						},
+						RouteSelectors: []kuadrantv1beta2.RouteSelector{
+							{ // selects the 2nd HTTPRouteRule (i.e. /assets*) for all hostnames
+								Matches: []gatewayapiv1.HTTPRouteMatch{
+									{
+										Path: &gatewayapiv1.HTTPPathMatch{
+											Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+											Value: ptr.To("/assets"),
 										},
 									},
 								},
 							},
 						},
 					},
-				},
-			}
+				}
+			})
 			err = k8sClient.Create(context.Background(), rlp)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -426,32 +421,10 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create ratelimitpolicy
-			rlp := &kuadrantv1beta2.RateLimitPolicy{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "RateLimitPolicy",
-					APIVersion: kuadrantv1beta2.GroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      rlpName,
-					Namespace: testNamespace,
-				},
-				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
-						Kind:  "Gateway",
-						Name:  gatewayapiv1.ObjectName(gwName),
-					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
-								},
-							},
-						},
-					},
-				},
-			}
+			rlp := rlpFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gwName)
+			})
 			err = k8sClient.Create(context.Background(), rlp)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -544,32 +517,10 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 		It("Creates all the resources for a basic Gateway and RateLimitPolicy when missing a HTTPRoute attached to the Gateway", func() {
 			// create ratelimitpolicy
-			rlp := &kuadrantv1beta2.RateLimitPolicy{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "RateLimitPolicy",
-					APIVersion: kuadrantv1beta2.GroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      rlpName,
-					Namespace: testNamespace,
-				},
-				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
-						Kind:  "Gateway",
-						Name:  gatewayapiv1.ObjectName(gwName),
-					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
-								},
-							},
-						},
-					},
-				},
-			}
+			rlp := rlpFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gwName)
+			})
 			err := k8sClient.Create(context.Background(), rlp)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -618,6 +569,94 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			serialized, err := json.Marshal(refs)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
+		})
+	})
+
+	Context("RLP accepted condition reasons", func() {
+		// Accepted reason is already tested generally by the existing tests
+
+		It("Target not found reason", func() {
+			rlp := rlpFactory(nil)
+			err := k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			rlpKey := client.ObjectKeyFromObject(rlp)
+			Eventually(func() bool {
+				existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+				err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+				if err != nil {
+					return false
+				}
+
+				cond := meta.FindStatusCondition(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				if cond == nil {
+					return false
+				}
+
+				return cond.Status == metav1.ConditionFalse && cond.Reason == string(gatewayapiv1alpha2.PolicyReasonTargetNotFound) &&
+					cond.Message == fmt.Sprintf("RateLimitPolicy target %s was not found", routeName)
+			}, time.Minute, 5*time.Second).Should(BeTrue())
+		})
+
+		It("Conflict reason", func() {
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
+			err := k8sClient.Create(context.Background(), httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			rlp := rlpFactory(nil)
+			err = k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			rlp2 := rlpFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Name = "conflicting-rlp"
+			})
+			err = k8sClient.Create(context.Background(), rlp2)
+			Expect(err).ToNot(HaveOccurred())
+
+			rlpKey := client.ObjectKeyFromObject(rlp2)
+			Eventually(func() bool {
+				existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+				err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+				if err != nil {
+					return false
+				}
+
+				cond := meta.FindStatusCondition(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				if cond == nil {
+					return false
+				}
+
+				return cond.Status == metav1.ConditionFalse && cond.Reason == string(gatewayapiv1alpha2.PolicyReasonConflicted) &&
+					cond.Message == fmt.Sprintf("RateLimitPolicy is conflicted by %[1]v/toystore-rlp: the gateway.networking.k8s.io/v1, Kind=HTTPRoute target %[1]v/toystore-route is already referenced by policy %[1]v/toystore-rlp", testNamespace)
+			}, time.Minute, 5*time.Second).Should(BeTrue())
+		})
+
+		It("Validation reason", func() {
+			rlp := rlpFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace("istio-system"))
+				policy.Spec.TargetRef.Name = "istio-ingressgateway"
+			})
+			err := k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			rlpKey := client.ObjectKeyFromObject(rlp)
+			Eventually(func() bool {
+				existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+				err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+				if err != nil {
+					return false
+				}
+
+				cond := meta.FindStatusCondition(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				if cond == nil {
+					return false
+				}
+
+				return cond.Status == metav1.ConditionFalse && cond.Reason == string(gatewayapiv1alpha2.PolicyReasonInvalid) &&
+					cond.Message == "RateLimitPolicy target is invalid: invalid targetRef.Namespace istio-system. Currently only supporting references to the same namespace"
+			}, time.Minute, 5*time.Second).Should(BeTrue())
 		})
 	})
 })

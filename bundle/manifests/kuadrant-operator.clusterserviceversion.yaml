@@ -69,7 +69,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2023-11-27T14:18:37Z"
+    createdAt: "2023-11-30T07:30:44Z"
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator
@@ -86,18 +86,33 @@ spec:
       kind: AuthPolicy
       name: authpolicies.kuadrant.io
       version: v1beta2
+    - kind: DNSHealthCheckProbe
+      name: dnshealthcheckprobes.kuadrant.io
+      version: v1alpha1
+    - kind: DNSPolicy
+      name: dnspolicies.kuadrant.io
+      version: v1alpha1
+    - kind: DNSRecord
+      name: dnsrecords.kuadrant.io
+      version: v1alpha1
     - description: Kuadrant configures installations of Kuadrant Service Protection
         components
       displayName: Kuadrant
       kind: Kuadrant
       name: kuadrants.kuadrant.io
       version: v1beta1
+    - kind: ManagedZone
+      name: managedzones.kuadrant.io
+      version: v1alpha1
     - description: RateLimitPolicy enables rate limiting for service workloads in
         a Gateway API network
       displayName: RateLimitPolicy
       kind: RateLimitPolicy
       name: ratelimitpolicies.kuadrant.io
       version: v1beta2
+    - kind: TLSPolicy
+      name: tlspolicies.kuadrant.io
+      version: v1alpha1
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
   displayName: Kuadrant Operator
   icon:
@@ -378,6 +393,206 @@ spec:
           - update
           - watch
         serviceAccountName: kuadrant-operator-controller-manager
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - secrets
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - certificates
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - clusterissuers
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - cert-manager.io
+          resources:
+          - issuers
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - cluster.open-cluster-management.io
+          resources:
+          - managedclusters
+          verbs:
+          - get
+          - list
+          - watch
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - gateways
+          verbs:
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - gateways/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - gateways/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnshealthcheckprobes
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnshealthcheckprobes/finalizers
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnshealthcheckprobes/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnspolicies
+          verbs:
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnspolicies/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnspolicies/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnsrecords
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnsrecords/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - dnsrecords/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - managedzones
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - managedzones/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - managedzones/status
+          verbs:
+          - get
+          - patch
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - tlspolicies
+          verbs:
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - tlspolicies/finalizers
+          verbs:
+          - update
+        - apiGroups:
+          - kuadrant.io
+          resources:
+          - tlspolicies/status
+          verbs:
+          - get
+          - patch
+          - update
+        serviceAccountName: kuadrant-operator-policy-controller
       deployments:
       - label:
           app: kuadrant
@@ -434,6 +649,62 @@ spec:
                 runAsNonRoot: true
               serviceAccountName: kuadrant-operator-controller-manager
               terminationGracePeriodSeconds: 10
+      - label:
+          app: kuadrant
+          control-plane: policy-controller
+        name: kuadrant-operator-policy-controller
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: kuadrant
+              control-plane: policy-controller
+          strategy: {}
+          template:
+            metadata:
+              annotations:
+                kubectl.kubernetes.io/default-container: manager
+              labels:
+                app: kuadrant
+                control-plane: policy-controller
+            spec:
+              containers:
+              - args:
+                - --leader-elect
+                - --ocm-hub=false
+                command:
+                - /policy_controller
+                image: quay.io/kuadrant/policy-controller:main
+                imagePullPolicy: Always
+                livenessProbe:
+                  httpGet:
+                    path: /healthz
+                    port: 8081
+                  initialDelaySeconds: 15
+                  periodSeconds: 20
+                name: policy-controller
+                readinessProbe:
+                  httpGet:
+                    path: /readyz
+                    port: 8081
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 256Mi
+                  requests:
+                    cpu: 10m
+                    memory: 64Mi
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                    - ALL
+              securityContext:
+                runAsNonRoot: true
+              serviceAccountName: kuadrant-operator-policy-controller
+              terminationGracePeriodSeconds: 10
       permissions:
       - rules:
         - apiGroups:
@@ -468,6 +739,39 @@ spec:
           - create
           - patch
         serviceAccountName: kuadrant-operator-controller-manager
+      - rules:
+        - apiGroups:
+          - ""
+          resources:
+          - configmaps
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - coordination.k8s.io
+          resources:
+          - leases
+          verbs:
+          - get
+          - list
+          - watch
+          - create
+          - update
+          - patch
+          - delete
+        - apiGroups:
+          - ""
+          resources:
+          - events
+          verbs:
+          - create
+          - patch
+        serviceAccountName: kuadrant-operator-policy-controller
     strategy: deployment
   installModes:
   - supported: false

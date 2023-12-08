@@ -69,7 +69,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2023-11-30T07:30:44Z"
+    createdAt: "2023-12-08T14:10:07Z"
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator

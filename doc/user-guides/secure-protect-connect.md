@@ -95,7 +95,7 @@ Lets define a HTTPRoute and test our policy. We will re-use this with some of th
 
 export INGRESS_PORT=$(kubectl get gtw api-gateway -o jsonpath='{.spec.listeners[?(@.name=="api")].port}' -n kuadrant-system)
 
-export INGRESS_PORT=$(kubectl get gtw api-gateway -o jsonpath='{.spec.listeners[?(@.name=="api")].port}' -n kuadrant-system)
+export INGRESS_HOST=$(kubectl get gtw api-gateway -o jsonpath='{.status.addresses[0].value}' -n kuadrant-system)
 
 export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
 

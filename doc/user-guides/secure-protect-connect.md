@@ -222,7 +222,8 @@ curl -k -H "'Host: api.${KUADRANT_ZONE_ROOT_DOMAIN}'" "https://$GATEWAY_URL/cars
 
 ```
 
-### Define DNSPolicy (skip of you did not setup a DNS provider during the setup)
+### Define DNSPolicy 
+(skip of you did not setup a DNS provider during the setup)
 
 Now we have our gateway protected and communications secured, we are ready to configure DNS so it is easy for clients to connect and access the APIs we intend to expose via this gateway. Note during the setup of this walk through, we setup a `DNS Provider` secret and a `ManagedZone`.
 

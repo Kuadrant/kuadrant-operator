@@ -1,0 +1,4 @@
+---
+namespace: istio-system
+resources:
+- github.com/maistra/istio-operator/config/default?ref=maistra-3.0

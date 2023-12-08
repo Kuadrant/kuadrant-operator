@@ -284,7 +284,7 @@ local-deploy: ## Deploy Kuadrant Operator in the cluster pointed by KUBECONFIG
 	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
 	@echo
 	@echo "Now you can export the kuadrant gateway by doing:"
-	@echo "kubectl port-forward -n istio-system service/istio-ingressgateway 9080:80 &"
+	@echo "kubectl port-forward -n istio-system service/istio-ingressgateway-istio 9080:80 &"
 	@echo "after that, you can curl -H \"Host: myhost.com\" localhost:9080"
 	@echo "-- Linux only -- Ingress gateway is exported using nodePort service in port 9080"
 	@echo "curl -H \"Host: myhost.com\" localhost:9080"
@@ -378,6 +378,7 @@ undeploy-policy-controller: ## Undeploy policy-controller from the K8s cluster s
 .PHONY: install-metallb
 install-metallb: $(KUSTOMIZE) ## Installs the metallb load balancer allowing use of an LoadBalancer type with a gateway
 	$(KUSTOMIZE) build config/metallb | kubectl apply -f -
+	kubectl -n metallb-system wait --for=condition=Available deployments controller --timeout=300s
 	kubectl -n metallb-system wait --for=condition=ready pod --selector=app=metallb --timeout=60s
 	./utils/docker-network-ipaddresspool.sh kind | kubectl apply -n metallb-system -f -
 

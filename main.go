@@ -43,6 +43,7 @@ import (
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -75,6 +76,7 @@ func init() {
 	utilruntime.Must(istioextensionv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(apiextv1.AddToScheme(scheme))
 	utilruntime.Must(istioapis.AddToScheme(scheme))
+	utilruntime.Must(istiov1alpha1.AddToScheme(scheme))
 	utilruntime.Must(maistraapis.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta2.AddToScheme(scheme))

@@ -263,6 +263,17 @@ rules:
   - update
   - watch
 - apiGroups:
+  - operator.istio.io
+  resources:
+  - istios
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - security.istio.io
   resources:
   - authorizationpolicies

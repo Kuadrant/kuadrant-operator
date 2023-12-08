@@ -64,11 +64,8 @@ spec:
                 properties:
                   name:
                     type: string
-                  namespace:
-                    type: string
                 required:
                 - name
-                - namespace
                 type: object
               domainName:
                 description: Domain name of this ManagedZone

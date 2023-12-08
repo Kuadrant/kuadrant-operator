@@ -44,49 +44,13 @@ func testBuildBasicHTTPRouteRLP(name string) *RateLimitPolicy {
 // TestRateLimitPolicyValidation calls rlp.Validate()
 // for a valid return value.
 func TestRateLimitPolicyValidation(t *testing.T) {
-	// valid httproute rlp
 	name := "httproute-a"
-	rlp := testBuildBasicHTTPRouteRLP(name)
-	err := rlp.Validate()
-	if err != nil {
-		t.Fatalf(`rlp.Validate() returned error "%v", wanted nil`, err)
-	}
-
-	// valid gateway rlp
-	name = "gateway-a"
-	rlp = testBuildBasicGatewayRLP(name)
-	err = rlp.Validate()
-	if err != nil {
-		t.Fatalf(`rlp.Validate() returned error "%v", wanted nil`, err)
-	}
-
-	// invalid group
-	rlp = testBuildBasicHTTPRouteRLP(name)
-	rlp.Spec.TargetRef.Group = gatewayapiv1.Group("foo.example.com")
-	err = rlp.Validate()
-	if err == nil {
-		t.Fatal(`rlp.Validate() did not return error and should`)
-	}
-	if !strings.Contains(err.Error(), "invalid targetRef.Group") {
-		t.Fatalf(`rlp.Validate() did not return expected error. Instead: %v`, err)
-	}
-
-	// invalid kind
-	rlp = testBuildBasicHTTPRouteRLP(name)
-	rlp.Spec.TargetRef.Kind = gatewayapiv1.Kind("Foo")
-	err = rlp.Validate()
-	if err == nil {
-		t.Fatal(`rlp.Validate() did not return error and should`)
-	}
-	if !strings.Contains(err.Error(), "invalid targetRef.Kind") {
-		t.Fatalf(`rlp.Validate() did not return expected error. Instead: %v`, err)
-	}
 
 	// Different namespace
-	rlp = testBuildBasicHTTPRouteRLP(name)
+	rlp := testBuildBasicHTTPRouteRLP(name)
 	otherNS := gatewayapiv1.Namespace(rlp.GetNamespace() + "other")
 	rlp.Spec.TargetRef.Namespace = &otherNS
-	err = rlp.Validate()
+	err := rlp.Validate()
 	if err == nil {
 		t.Fatal(`rlp.Validate() did not return error and should`)
 	}

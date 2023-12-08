@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	secv1beta1resources "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -23,9 +25,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
 
 const (
@@ -1258,6 +1257,92 @@ var _ = Describe("AuthPolicy controller", func() {
 	})
 
 	Context("TODO: Targeted resource does not exist", func() {})
+})
+
+var _ = Describe("AuthPolicy CEL Validations", func() {
+	var testNamespace string
+
+	BeforeEach(func() {
+		CreateNamespace(&testNamespace)
+	})
+
+	AfterEach(DeleteNamespaceCallback(&testNamespace))
+
+	Context("Spec TargetRef Validations", func() {
+		It("Valid policy targeting HTTPRoute", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "HTTPRoute",
+						Name:  "my-route",
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(BeNil())
+		})
+
+		It("Valid policy targeting Gateway", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(BeNil())
+		})
+
+		It("Invalid Target Ref Group", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "not-gateway.networking.k8s.io",
+						Kind:  "HTTPRoute",
+						Name:  "my-route",
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'")).To(BeTrue())
+		})
+
+		It("Invalid Target Ref Kind", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "TCPRoute",
+						Name:  "my-route",
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'")).To(BeTrue())
+		})
+	})
 })
 
 func testBasicAuthScheme() api.AuthSchemeSpec {

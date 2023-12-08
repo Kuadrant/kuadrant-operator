@@ -5,25 +5,25 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
-
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 var _ = Describe("RateLimitPolicy controller", func() {
@@ -618,6 +618,92 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			serialized, err := json.Marshal(refs)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
+		})
+	})
+})
+
+var _ = Describe("RateLimitPolicy CEL Validations", func() {
+	var testNamespace string
+
+	BeforeEach(func() {
+		CreateNamespace(&testNamespace)
+	})
+
+	AfterEach(DeleteNamespaceCallback(&testNamespace))
+
+	Context("Spec TargetRef Validations", func() {
+		It("Valid policy targeting HTTPRoute", func() {
+			policy := &kuadrantv1beta2.RateLimitPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "HTTPRoute",
+						Name:  "my-route",
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(BeNil())
+		})
+
+		It("Valid policy targeting Gateway", func() {
+			policy := &kuadrantv1beta2.RateLimitPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(BeNil())
+		})
+
+		It("Invalid Target Ref Group", func() {
+			policy := &kuadrantv1beta2.RateLimitPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "not-gateway.networking.k8s.io",
+						Kind:  "HTTPRoute",
+						Name:  "my-route",
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'")).To(BeTrue())
+		})
+
+		It("Invalid Target Ref Kind", func() {
+			policy := &kuadrantv1beta2.RateLimitPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "TCPRoute",
+						Name:  "my-route",
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'")).To(BeTrue())
 		})
 	})
 })

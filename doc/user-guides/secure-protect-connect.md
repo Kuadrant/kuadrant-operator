@@ -68,7 +68,7 @@ This is because currently there is not a TLS secret in place. Let's fix that by 
 
 ### ❸ Define the TLSPolicy
 
-Note: For convenience, in the setup, we have created a self-signed CA as a cluster issuer in the Kubernetes cluster.
+> **Note:** For convenience, in the setup, we have created a self-signed CA as a cluster issuer in the Kubernetes cluster.
 
 ```sh
 kubectl --context kind-kuadrant-local apply -f - <<EOF
@@ -166,6 +166,8 @@ EOF
 
 kubectl wait ratelimitpolicy infra-ratelimit -n kuadrant-system --for=condition=available
 ```
+
+> **Note:** It may take a couple of minutes for the RateLimitPolicy to be applied depending on your cluster.
 
 The limit here is artificially low in order for us to show it working easily. Let's test it with our endpoint:
 
@@ -348,6 +350,8 @@ spec:
         value: bob
 EOF
 ```
+
+> **Note:** It may take a couple of minutes for the RateLimitPolicy to be applied depending on your cluster.
 
 As just another example, we have given **bob** twice as many requests to use compared to everyone else.
 

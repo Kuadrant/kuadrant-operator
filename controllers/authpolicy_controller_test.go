@@ -1343,6 +1343,231 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'")).To(BeTrue())
 		})
 	})
+
+	Context("Route Selector Validation", func() {
+		var (
+			routeSelectors = []api.RouteSelector{
+				{
+					Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
+					Matches: []gatewayapiv1.HTTPRouteMatch{
+						{
+							Path: &gatewayapiv1.HTTPPathMatch{
+								Value: ptr.To("/foo"),
+							},
+						},
+					},
+				},
+			}
+
+			commonAuthRuleSpec = api.CommonAuthRuleSpec{RouteSelectors: routeSelectors}
+		)
+
+		It("invalid usage of top-level route selectors with a gateway targetRef", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					RouteSelectors: routeSelectors,
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - authentication", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					AuthScheme: api.AuthSchemeSpec{
+						Authentication: map[string]api.AuthenticationSpec{
+							"my-rule": {
+								AuthenticationSpec: authorinoapi.AuthenticationSpec{
+									AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+										AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
+									},
+								},
+								CommonAuthRuleSpec: commonAuthRuleSpec,
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - metadata", func() {
+
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					AuthScheme: api.AuthSchemeSpec{
+						Metadata: map[string]api.MetadataSpec{
+							"my-metadata": {
+								CommonAuthRuleSpec: commonAuthRuleSpec,
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - authorization", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					AuthScheme: api.AuthSchemeSpec{
+						Authorization: map[string]api.AuthorizationSpec{
+							"my-authZ": {
+								CommonAuthRuleSpec: commonAuthRuleSpec,
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - response success headers", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					AuthScheme: api.AuthSchemeSpec{
+						Response: &api.ResponseSpec{
+							Success: api.WrappedSuccessResponseSpec{
+								Headers: map[string]api.HeaderSuccessResponseSpec{
+									"header": {
+										SuccessResponseSpec: api.SuccessResponseSpec{
+											CommonAuthRuleSpec: commonAuthRuleSpec,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - response success dynamic metadata", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					AuthScheme: api.AuthSchemeSpec{
+						Response: &api.ResponseSpec{
+							Success: api.WrappedSuccessResponseSpec{
+								DynamicMetadata: map[string]api.SuccessResponseSpec{
+									"header": {
+										CommonAuthRuleSpec: commonAuthRuleSpec,
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - callbacks", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					AuthScheme: api.AuthSchemeSpec{
+						Callbacks: map[string]api.CallbackSpec{
+							"callback": {
+								CallbackSpec: authorinoapi.CallbackSpec{
+									CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
+										Http: &authorinoapi.HttpEndpointSpec{
+											Url: "test.com",
+										},
+									},
+								},
+								CommonAuthRuleSpec: commonAuthRuleSpec,
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+		})
+	})
 })
 
 func testBasicAuthScheme() api.AuthSchemeSpec {

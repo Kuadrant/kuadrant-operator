@@ -227,36 +227,6 @@ func (ap *AuthPolicy) Validate() error {
 		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *ap.Spec.TargetRef.Namespace)
 	}
 
-	// prevents usage of routeSelectors in a gateway AuthPolicy
-	if ap.Spec.TargetRef.Kind == ("Gateway") {
-		containRouteSelectors := func(config map[string]RouteSelectorsGetter) bool {
-			if config == nil {
-				return false
-			}
-			for _, config := range config {
-				if len(config.GetRouteSelectors()) > 0 {
-					return true
-				}
-			}
-			return false
-		}
-		configs := []map[string]RouteSelectorsGetter{
-			{"": ap.Spec},
-			toRouteSelectorGetterMap(ap.Spec.AuthScheme.Authentication),
-			toRouteSelectorGetterMap(ap.Spec.AuthScheme.Metadata),
-			toRouteSelectorGetterMap(ap.Spec.AuthScheme.Authorization),
-			toRouteSelectorGetterMap(ap.Spec.AuthScheme.Callbacks),
-		}
-		if r := ap.Spec.AuthScheme.Response; r != nil {
-			configs = append(configs, toRouteSelectorGetterMap(r.Success.Headers), toRouteSelectorGetterMap(r.Success.DynamicMetadata))
-		}
-		for _, config := range configs {
-			if containRouteSelectors(config) {
-				return fmt.Errorf("route selectors not supported when targeting a Gateway")
-			}
-		}
-	}
-
 	return nil
 }
 

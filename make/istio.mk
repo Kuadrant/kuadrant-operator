@@ -41,7 +41,6 @@ istioctl-verify-install: istioctl ## Verify istio installation.
 
 .PHONY: sail-install
 sail-install: kustomize
-	$(MAKE) install-metallb
 	$(KUSTOMIZE) build $(ISTIO_INSTALL_DIR)/sail | kubectl apply -f -
 	kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
 	kubectl apply -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
@@ -50,7 +49,6 @@ sail-install: kustomize
 sail-uninstall: kustomize
 	kubectl delete -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
 	$(KUSTOMIZE) build $(ISTIO_INSTALL_DIR)/sail | kubectl delete -f -
-	$(MAKE) uninstall-metallb
 
 .PHONY: istio-install
 istio-install:

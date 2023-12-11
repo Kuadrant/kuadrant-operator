@@ -305,6 +305,7 @@ local-cluster-setup: ## Sets up Kind cluster with GatewayAPI manifests and istio
 	$(MAKE) kind-create-cluster
 	$(MAKE) namespace
 	$(MAKE) gateway-api-install
+	$(MAKE) install-metallb
 	$(MAKE) istio-install
 	$(MAKE) install-cert-manager
 	$(MAKE) deploy-gateway
@@ -320,6 +321,7 @@ local-env-setup: ## Deploys all services and manifests required by kuadrant to r
 test-env-setup: ## Deploys all services and manifests required by kuadrant to run on CI.
 	$(MAKE) namespace
 	$(MAKE) gateway-api-install
+	$(MAKE) install-metallb
 	$(MAKE) istio-install
 	$(MAKE) install-cert-manager
 	$(MAKE) deploy-gateway

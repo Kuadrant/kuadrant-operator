@@ -5,6 +5,68 @@ metadata:
     alm-examples: |-
       [
         {
+          "apiVersion": "kuadrant.io/v1alpha1",
+          "kind": "DNSPolicy",
+          "metadata": {
+            "name": "example-dnspolicy"
+          },
+          "spec": {
+            "healthCheck": {
+              "endpoint": "/",
+              "protocol": "HTTP"
+            },
+            "targetRef": {
+              "group": "",
+              "kind": "Gateway",
+              "name": "example-gateway"
+            }
+          }
+        },
+        {
+          "apiVersion": "kuadrant.io/v1alpha1",
+          "kind": "ManagedZone",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/created-by": "multicluster-gateway-controller",
+              "app.kubernetes.io/instance": "managedzone-sample",
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "managedzone",
+              "app.kubernetes.io/part-of": "multicluster-gateway-controller"
+            },
+            "name": "managedzone-sample"
+          },
+          "spec": {
+            "description": "My managed domain",
+            "domainName": "testmz.hcapps.net"
+          }
+        },
+        {
+          "apiVersion": "kuadrant.io/v1alpha1",
+          "kind": "TLSPolicy",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/created-by": "tmp",
+              "app.kubernetes.io/instance": "tlspolicy-sample",
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "tlspolicy",
+              "app.kubernetes.io/part-of": "tmp"
+            },
+            "name": "tlspolicy-sample"
+          },
+          "spec": {
+            "issuerRef": {
+              "group": "cert-manager.io",
+              "kind": "ClusterIssuer",
+              "name": "glbc-ca"
+            },
+            "targetRef": {
+              "group": "gateway.networking.k8s.io",
+              "kind": "Gateway",
+              "name": "prod-web"
+            }
+          }
+        },
+        {
           "apiVersion": "kuadrant.io/v1beta1",
           "kind": "Kuadrant",
           "metadata": {
@@ -69,7 +131,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2023-12-08T14:10:07Z"
+    createdAt: "2023-12-12T12:34:15Z"
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator
@@ -86,13 +148,21 @@ spec:
       kind: AuthPolicy
       name: authpolicies.kuadrant.io
       version: v1beta2
-    - kind: DNSHealthCheckProbe
+    - description: DNSHealthCheckProbe enables performing health checks against a
+        DNS endpoint (A or CNAME record)
+      displayName: DNSHealthCheckProbe
+      kind: DNSHealthCheckProbe
       name: dnshealthcheckprobes.kuadrant.io
       version: v1alpha1
-    - kind: DNSPolicy
+    - description: DNSPolicy configures how North-South based traffic should be balanced
+        and reach the gateways
+      displayName: DNSPolicy
+      kind: DNSPolicy
       name: dnspolicies.kuadrant.io
       version: v1alpha1
-    - kind: DNSRecord
+    - description: DNSRecord represents DNS endpoints for gateway network services
+      displayName: DNSRecord
+      kind: DNSRecord
       name: dnsrecords.kuadrant.io
       version: v1alpha1
     - description: Kuadrant configures installations of Kuadrant Service Protection
@@ -101,7 +171,10 @@ spec:
       kind: Kuadrant
       name: kuadrants.kuadrant.io
       version: v1beta1
-    - kind: ManagedZone
+    - description: ManagedZone configures domain or subdomain management for gateway
+        hosts
+      displayName: ManagedZone
+      kind: ManagedZone
       name: managedzones.kuadrant.io
       version: v1alpha1
     - description: RateLimitPolicy enables rate limiting for service workloads in
@@ -110,7 +183,10 @@ spec:
       kind: RateLimitPolicy
       name: ratelimitpolicies.kuadrant.io
       version: v1beta2
-    - kind: TLSPolicy
+    - description: TLSPolicy provides tls for gateway listeners by managing the lifecycle
+        of tls certificates
+      displayName: TLSPolicy
+      kind: TLSPolicy
       name: tlspolicies.kuadrant.io
       version: v1alpha1
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system

@@ -4,6 +4,7 @@ resources:
 - bases/kuadrant-operator.clusterserviceversion.yaml
 - ../default
 - ../samples
+- github.com/Kuadrant/multicluster-gateway-controller/config/samples
 - ../scorecard
 
 # [WEBHOOK] To enable webhooks, uncomment all the sections with [WEBHOOK] prefix.

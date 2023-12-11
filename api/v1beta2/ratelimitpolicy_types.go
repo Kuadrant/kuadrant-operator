@@ -114,6 +114,7 @@ func (l Limit) CountersAsStringList() []string {
 }
 
 // RateLimitPolicySpec defines the desired state of RateLimitPolicy
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.limits) || !self.limits.exists(x, has(self.limits[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
 type RateLimitPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
@@ -178,15 +179,6 @@ type RateLimitPolicy struct {
 func (r *RateLimitPolicy) Validate() error {
 	if r.Spec.TargetRef.Namespace != nil && string(*r.Spec.TargetRef.Namespace) != r.Namespace {
 		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *r.Spec.TargetRef.Namespace)
-	}
-
-	// prevents usage of routeSelectors in a gateway RLP
-	if r.Spec.TargetRef.Kind == ("Gateway") {
-		for _, limit := range r.Spec.Limits {
-			if len(limit.RouteSelectors) > 0 {
-				return fmt.Errorf("route selectors not supported when targeting a Gateway")
-			}
-		}
 	}
 
 	return nil

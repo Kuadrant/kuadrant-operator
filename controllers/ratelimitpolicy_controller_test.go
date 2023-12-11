@@ -706,6 +706,53 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'")).To(BeTrue())
 		})
 	})
+
+	Context("Route Selector Validation", func() {
+		const (
+			gateWayRouteSelectorErrorMessage = "route selectors not supported when targeting a Gateway"
+		)
+
+		It("invalid usage of limit route selectors with a gateway targetRef", func() {
+			policy := &kuadrantv1beta2.RateLimitPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
+							},
+							RouteSelectors: []kuadrantv1beta2.RouteSelector{
+								{
+									Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
+									Matches: []gatewayapiv1.HTTPRouteMatch{
+										{
+											Path: &gatewayapiv1.HTTPPathMatch{
+												Value: ptr.To("/foo"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+	})
 })
 
 func testRLPIsAvailable(rlpKey client.ObjectKey) func() bool {

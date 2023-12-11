@@ -1345,6 +1345,10 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 	})
 
 	Context("Route Selector Validation", func() {
+		const (
+			gateWayRouteSelectorErrorMessage = "route selectors not supported when targeting a Gateway"
+		)
+
 		var (
 			routeSelectors = []api.RouteSelector{
 				{
@@ -1380,7 +1384,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
 		})
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - authentication", func() {
@@ -1412,11 +1416,10 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
 		})
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - metadata", func() {
-
 			policy := &api.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-policy",
@@ -1440,7 +1443,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
 		})
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - authorization", func() {
@@ -1467,7 +1470,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
 		})
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - response success headers", func() {
@@ -1500,7 +1503,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
 		})
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - response success dynamic metadata", func() {
@@ -1531,7 +1534,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
 		})
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - callbacks", func() {
@@ -1565,7 +1568,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "route selectors not supported when targeting a Gateway")).To(BeTrue())
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
 		})
 	})
 })

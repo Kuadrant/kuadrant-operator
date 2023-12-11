@@ -291,11 +291,3 @@ func (l *AuthPolicyList) GetItems() []common.KuadrantPolicy {
 func init() {
 	SchemeBuilder.Register(&AuthPolicy{}, &AuthPolicyList{})
 }
-
-func toRouteSelectorGetterMap[T RouteSelectorsGetter](m map[string]T) map[string]RouteSelectorsGetter {
-	result := make(map[string]RouteSelectorsGetter)
-	for k, v := range m {
-		result[k] = v
-	}
-	return result
-}

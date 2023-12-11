@@ -102,12 +102,6 @@ curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toys -i
 # HTTP/1.1 200 OK
 ```
 
-> **Note**: If the command above fails to hit the Toy Store API on your environment, try forwarding requests to the service:
->
-> ```sh
-> kubectl port-forward -n istio-system service/istio-ingressgateway 9080:80 2>&1 >/dev/null &
-> ```
-
 ### ③ Enforce rate limiting on requests to the Toy Store API
 
 Create a Kuadrant `RateLimitPolicy` to configure rate limiting:

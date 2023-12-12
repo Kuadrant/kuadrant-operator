@@ -257,7 +257,7 @@ Lets test again. This time we expect a `403` still as the DENY_ALL is still in e
 
 
 ```
-curl -k "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" -i
+curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST}  "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" -i
 
 ```
 

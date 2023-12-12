@@ -2,7 +2,7 @@
 
 ## Pre-requisites
 
-- Completed the [single cluster quick start](https://docs.kuadrant.io/getting-started-single/)
+- Completed the [single cluster quick start](https://docs.kuadrant.io/getting-started-single-cluster/)
 
 ## Overview 
 
@@ -10,14 +10,14 @@ In this guide, we will cover the different policies from Kuadrant and how you ca
 
 Here are the steps we will go through:
 
-- [Deploy a sample application](#deploy-the-example-app-we-will-serve-via-our-gateway)
-- [Define a new Gateway](#define-a-new-istio-managed-gateway)
-- [Ensure TLS based secure connectivity to the gateway with `TLSPolicy`](#define-tlspolicy)
-- [Define a default `RateLimitPolicy` to set some infrastructure limits on your gateway](#define-infrastructure-rate-limiting)
-- [Define a default `AuthPolicy` to `Deny ALL` access to the gateway](#define-a-gateway-authpolicy)
-- [Define `DNSPolicy` to bring traffic to the gateway](#define-dnspolicy)
-- [Override the Gateway's Deny ALL `AuthPolicy`](#override-the-gateways-deny-all-authpolicy)
-- [Override the Gateway `RateLimits`](#override-the-gateways-ratelimits) 
+1) [Deploy a sample application](#deploy-the-example-app-we-will-serve-via-our-gateway)
+2) [Define a new Gateway](#define-a-new-istio-managed-gateway)
+3) [Ensure TLS based secure connectivity to the gateway with `TLSPolicy`](#define-tlspolicy)
+4) [Define a default `RateLimitPolicy` to set some infrastructure limits on your gateway](#define-infrastructure-rate-limiting)
+5) [Define a default `AuthPolicy` to `Deny ALL` access to the gateway](#define-a-gateway-authpolicy)
+6) [Define `DNSPolicy` to bring traffic to the gateway](#define-dnspolicy)
+7) [Override the Gateway's Deny ALL `AuthPolicy` with an endpoint specific policy](#override-the-gateways-deny-all-authpolicy)
+8) [Override the Gateway `RateLimits` with an endpoint specific policy](#override-the-gateways-ratelimits) 
 
 
 To help with this walk through, you should set a `KUADRANT_ZONE_ROOT_DOMAIN` environmental variable to a domain you want to use. If it you want to try `DNSPolicy` this should also be a domain you have access to the DNS for in `route53 or GCP`. Example:
@@ -97,7 +97,6 @@ export INGRESS_PORT=$(kubectl get gtw api-gateway -o jsonpath='{.spec.listeners[
 
 export INGRESS_HOST=$(kubectl get gtw api-gateway -o jsonpath='{.status.addresses[0].value}' -n kuadrant-system)
 
-export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
 
 kubectl --context kind-kuadrant-local apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -257,7 +256,7 @@ Lets test again. This time we expect a `403` still as the DENY_ALL is still in e
 
 
 ```
-curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST}  "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" -i
+curl -k  "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" -i
 
 ```
 

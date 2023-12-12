@@ -218,7 +218,7 @@ EOF
 Lets test again. This time we expect a `403`
 
 ```
-curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:172.18.200.1 "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars"
+curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST}  "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars"
 
 ```
 

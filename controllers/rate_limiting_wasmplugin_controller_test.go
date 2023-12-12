@@ -4,6 +4,7 @@ package controllers
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -478,6 +479,248 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// must not exist
 			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+		})
+	})
+
+	Context("RLP targeting HTTPRoute when route selection match is empty", func() {
+		var (
+			routeName = "toystore-route"
+			rlpName   = "toystore-rlp"
+		)
+
+		It("When the gateway does not have more policies, the wasmplugin resource is not created", func() {
+			// create httproute
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
+			err := k8sClient.Create(context.Background(), httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create ratelimitpolicy with no matching routes
+			rlp := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Kind:  "HTTPRoute",
+						Name:  gatewayapiv1.ObjectName(routeName),
+					},
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							RouteSelectors: []kuadrantv1beta2.RouteSelector{
+								{ // does no select any HTTPRouteRule (i.e. GET /toys*)
+									Matches: []gatewayapiv1.HTTPRouteMatch{
+										{
+											Path: &gatewayapiv1.HTTPPathMatch{
+												Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+												Value: ptr.To("/other"),
+											},
+										},
+									},
+								},
+							},
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check RLP status is available
+			rlpKey := client.ObjectKeyFromObject(rlp)
+			Eventually(testRLPIsAvailable(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check wasm plugin
+			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			// Wait a bit to catch cases where wasmplugin is created and takes a bit to be created
+			Eventually(testWasmPluginIsAvailable(wasmPluginKey), 20*time.Second, 5*time.Second).Should(BeFalse())
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			// must not exist
+			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+			Expect(apierrors.IsNotFound(err)).To(BeTrue())
+		})
+
+		It("When the gateway has more policies, the wasmplugin resource does not have any configuration regarding the current RLP", func() {
+			// Gw A
+			// Route B -> Gw A
+			// RLP A -> Gw A
+			// Route C -> GW A
+			// RLP B -> Route C (however, no matching routes)
+
+			var (
+				routeBName = "toystore-b"
+				routeCName = "toystore-c"
+				rlpAName   = "toystore-a"
+				rlpBName   = "toystore-b"
+			)
+
+			// create httproute B
+			httpRouteB := testBuildBasicHttpRoute(routeBName, gwName, testNamespace, []string{"*.b.example.com"})
+			err := k8sClient.Create(context.Background(), httpRouteB)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRouteB)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create RLP A -> Gw A
+			rlpA := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: rlpAName, Namespace: testNamespace},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Kind:  "Gateway",
+						Name:  gatewayapiv1.ObjectName(gwName),
+					},
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(context.Background(), rlpA)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check RLP status is available
+			rlpAKey := client.ObjectKey{Name: rlpAName, Namespace: testNamespace}
+			Eventually(testRLPIsAvailable(rlpAKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create httproute C
+			httpRouteC := testBuildBasicHttpRoute(routeCName, gwName, testNamespace, []string{"*.c.example.com"})
+			httpRouteC.Spec.Rules = []gatewayapiv1.HTTPRouteRule{
+				{
+					Matches: []gatewayapiv1.HTTPRouteMatch{
+						{
+							Path: &gatewayapiv1.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+								Value: ptr.To("/otherPathRouteC"),
+							},
+							Method: ptr.To(gatewayapiv1.HTTPMethod("GET")),
+						},
+					},
+				},
+			}
+
+			err = k8sClient.Create(context.Background(), httpRouteC)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRouteC)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create RLP B -> Route C (however, no matching routes)
+			rlpB := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: rlpBName, Namespace: testNamespace},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Kind:  "HTTPRoute",
+						Name:  gatewayapiv1.ObjectName(routeCName),
+					},
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							RouteSelectors: []kuadrantv1beta2.RouteSelector{
+								{ // does no select any HTTPRouteRule (i.e. GET /otherPathRouteC*)
+									Matches: []gatewayapiv1.HTTPRouteMatch{
+										{
+											Path: &gatewayapiv1.HTTPPathMatch{
+												Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+												Value: ptr.To("/notmatchingpath"),
+											},
+										},
+									},
+								},
+							},
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(context.Background(), rlpB)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check RLP status is available
+			rlpBKey := client.ObjectKey{Name: rlpBName, Namespace: testNamespace}
+			Eventually(testRLPIsAvailable(rlpBKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check wasm plugin only has configuration ONLY from the RLP targeting the gateway
+			// it may take some reconciliation loops to get to that, so checking it with eventually
+			Eventually(func() bool {
+				wasmPluginKey := client.ObjectKey{
+					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+				}
+				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+				if err != nil {
+					return false
+				}
+				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				if err != nil {
+					return false
+				}
+
+				expectedPlugin := &wasm.Plugin{
+					FailureMode: wasm.FailureModeDeny,
+					RateLimitPolicies: []wasm.RateLimitPolicy{
+						{
+							Name:   rlpAKey.String(),
+							Domain: rlptools.LimitsNamespaceFromRLP(rlpA),
+							Rules: []wasm.Rule{
+								{
+									Conditions: []wasm.Condition{
+										{
+											AllOf: []wasm.PatternExpression{
+												{
+													Selector: "request.url_path",
+													Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+													Value:    "/toy",
+												},
+												{
+													Selector: "request.method",
+													Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+													Value:    "GET",
+												},
+											},
+										},
+									},
+									Data: []wasm.DataItem{
+										{
+											Static: &wasm.StaticSpec{
+												Key:   `limit.l1__2804bad6`,
+												Value: "1",
+											},
+										},
+									},
+								},
+							},
+							Hostnames: []string{"*"},
+							Service:   common.KuadrantRateLimitClusterName,
+						},
+					},
+				}
+
+				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
+					return false
+				}
+
+				return true
+			}, time.Minute, 5*time.Second).Should(BeTrue())
 		})
 	})
 })

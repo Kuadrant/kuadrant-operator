@@ -175,7 +175,7 @@ kubectl wait ratelimitpolicy infra-ratelimit -n kuadrant-system --for=condition=
 The limit here is artificially low in order for us to show it working easily. Lets test it with our endpoint:
 
 ```
-for i in {1..10}; do curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:172.18.200.1 "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" && sleep 1; done
+for i in {1..10}; do curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST} "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" && sleep 1; done
 ```
 
 Here we should see `409s` start returning after the 5th request.

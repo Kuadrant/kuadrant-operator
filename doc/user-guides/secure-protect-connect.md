@@ -139,7 +139,7 @@ EOF
 With this HTTPRoute in place the service we deployed later is exposed via the gateway. We should be able to access our endpoint via HTTPS:
 
 ```
-curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:172.18.200.1 "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars"
+curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST} "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars"
 
 ```
 

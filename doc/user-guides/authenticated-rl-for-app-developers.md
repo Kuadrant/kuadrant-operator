@@ -101,6 +101,17 @@ curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
 # HTTP/1.1 200 OK
 ```
 
+> **Note**: If the command above fails to hit the Toy Store API on your environment, try forwarding requests to the service and accessing over localhost:
+>
+> ```sh
+> kubectl port-forward -n istio-system service/istio-ingressgateway-istio 9080:80 2>&1 >/dev/null &
+> export GATEWAY_URL=localhost:9080
+> ```
+> ```sh
+> curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
+> # HTTP/1.1 200 OK
+> ```
+
 ### ③ Enforce authentication on requests to the Toy Store API
 
 Create a Kuadrant `AuthPolicy` to configure the authentication:

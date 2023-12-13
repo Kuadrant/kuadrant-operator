@@ -18,9 +18,9 @@ package common
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
-	"golang.org/x/exp/slices"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"

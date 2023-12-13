@@ -428,9 +428,19 @@ spec:
                 - kind
                 - name
                 type: object
+                x-kubernetes-validations:
+                - message: Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'
+                  rule: self.group == 'gateway.networking.k8s.io'
+                - message: Invalid targetRef.kind. The only supported values are 'HTTPRoute'
+                    and 'Gateway'
+                  rule: self.kind == 'HTTPRoute' || self.kind == 'Gateway'
             required:
             - targetRef
             type: object
+            x-kubernetes-validations:
+            - message: route selectors not supported when targeting a Gateway
+              rule: self.targetRef.kind != 'Gateway' || !has(self.limits) || !self.limits.exists(x,
+                has(self.limits[x].routeSelectors))
           status:
             description: RateLimitPolicyStatus defines the observed state of RateLimitPolicy
             properties:

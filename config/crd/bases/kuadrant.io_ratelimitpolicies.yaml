@@ -16,7 +16,26 @@ spec:
     singular: ratelimitpolicy
   scope: Namespaced
   versions:
-  - name: v1beta2
+  - additionalPrinterColumns:
+    - description: RateLimitPolicy Status
+      jsonPath: .status.conditions[0].reason
+      name: Status
+      priority: 2
+      type: string
+    - description: Type of the referenced Gateway API resource
+      jsonPath: .spec.targetRef.kind
+      name: TargetRefKind
+      priority: 2
+      type: string
+    - description: Name of the referenced Gateway API resource
+      jsonPath: .spec.targetRef.name
+      name: TargetRefName
+      priority: 2
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta2
     schema:
       openAPIV3Schema:
         description: RateLimitPolicy enables rate limiting for service workloads in

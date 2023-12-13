@@ -14,7 +14,15 @@ spec:
     singular: kuadrant
   scope: Namespaced
   versions:
-  - name: v1beta1
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[0].reason
+      name: Status
+      priority: 2
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1beta1
     schema:
       openAPIV3Schema:
         description: Kuadrant configures installations of Kuadrant Service Protection

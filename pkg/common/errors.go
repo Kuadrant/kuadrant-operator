@@ -21,6 +21,14 @@ func (e ErrTargetNotFound) Error() string {
 	return fmt.Sprintf("%s target %s was not found: %s", e.Kind, e.TargetRef.Name, e.Err.Error())
 }
 
+func NewErrTargetNotFound(kind string, targetRef gatewayapiv1alpha2.PolicyTargetReference, err error) ErrTargetNotFound {
+	return ErrTargetNotFound{
+		Kind:      kind,
+		TargetRef: targetRef,
+		Err:       err,
+	}
+}
+
 type ErrInvalid struct {
 	Kind string
 	Err  error
@@ -28,6 +36,13 @@ type ErrInvalid struct {
 
 func (e ErrInvalid) Error() string {
 	return fmt.Sprintf("%s target is invalid: %s", e.Kind, e.Err.Error())
+}
+
+func NewErrInvalid(kind string, err error) ErrInvalid {
+	return ErrInvalid{
+		Kind: kind,
+		Err:  err,
+	}
 }
 
 type ErrConflict struct {
@@ -38,4 +53,12 @@ type ErrConflict struct {
 
 func (e ErrConflict) Error() string {
 	return fmt.Sprintf("%s is conflicted by %s: %s", e.Kind, e.NameNamespace, e.Err.Error())
+}
+
+func NewErrConflict(kind string, nameNamespace string, err error) ErrConflict {
+	return ErrConflict{
+		Kind:          kind,
+		NameNamespace: nameNamespace,
+		Err:           err,
+	}
 }

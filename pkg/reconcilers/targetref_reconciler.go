@@ -166,7 +166,7 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, 
 
 	if val, ok := objAnnotations[annotationName]; ok {
 		if val != policyKey.String() {
-			return common.ErrConflict{Kind: policy.Kind(), NameNamespace: val, Err: fmt.Errorf("the %s target %s is already referenced by policy %s", targetNetworkObjectKind, targetNetworkObjectKey, val)}
+			return common.NewErrConflict(policy.Kind(), val, fmt.Errorf("the %s target %s is already referenced by policy %s", targetNetworkObjectKind, targetNetworkObjectKey, val))
 		}
 	} else {
 		objAnnotations[annotationName] = policyKey.String()

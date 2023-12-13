@@ -67,7 +67,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, ap, common.ErrTargetNotFound{Kind: ap.Kind(), TargetRef: ap.GetTargetRef(), Err: delResErr})
+				return r.reconcileStatus(ctx, ap, common.NewErrTargetNotFound(ap.Kind(), ap.GetTargetRef(), delResErr))
 			}
 			return ctrl.Result{}, err
 		}
@@ -133,11 +133,11 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
 	// validate
 	if err := ap.Validate(); err != nil {
-		return common.ErrInvalid{Kind: ap.Kind(), Err: err}
+		return common.NewErrInvalid(ap.Kind(), err)
 	}
 
 	if err := common.ValidateHierarchicalRules(ap, targetNetworkObject); err != nil {
-		return common.ErrInvalid{Kind: ap.Kind(), Err: err}
+		return common.NewErrInvalid(ap.Kind(), err)
 	}
 
 	// reconcile based on gateway diffs

@@ -2,21 +2,18 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/go-logr/logr"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
 
 // reconcileStatus makes sure status block of AuthPolicy is up-to-date.
@@ -79,41 +76,17 @@ func (r *AuthPolicyReconciler) calculateStatus(ap *api.AuthPolicy, specErr error
 		ObservedGeneration: ap.Status.ObservedGeneration,
 	}
 
-	targetNetworkObjectKind := string(ap.Spec.TargetRef.Kind)
-	availableCond := r.acceptedCondition(targetNetworkObjectKind, specErr, authConfigReady)
+	availableCond := r.acceptedCondition(ap, specErr, authConfigReady)
 
 	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
 
 	return newStatus
 }
 
-func (r *AuthPolicyReconciler) acceptedCondition(targetNetworkObjectKind string, specErr error, authConfigReady bool) *metav1.Condition {
-	// Condition if there is no issue
-	cond := &metav1.Condition{
-		Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
-		Status:  metav1.ConditionTrue,
-		Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
-		Message: fmt.Sprintf("AuthPolicy has been accepted. %s is protected", targetNetworkObjectKind),
-	}
+func (r *AuthPolicyReconciler) acceptedCondition(policy common.KuadrantPolicy, specErr error, authConfigReady bool) *metav1.Condition {
+	cond := common.AcceptedCondition(policy, specErr)
 
-	if specErr != nil {
-		cond.Status = metav1.ConditionFalse
-		cond.Message = specErr.Error()
-
-		switch {
-		// TargetNotFound
-		case errors.As(specErr, &common.ErrTargetNotFound{}):
-			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)
-		// Invalid
-		case errors.As(specErr, &common.ErrInvalid{}):
-			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonInvalid)
-		// Conflicted
-		case errors.As(specErr, &common.ErrConflict{}):
-			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonConflicted)
-		default:
-			cond.Reason = "ReconciliationError"
-		}
-	} else if !authConfigReady {
+	if !authConfigReady {
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = "AuthSchemeNotReady"
 		cond.Message = "AuthScheme is not ready yet" // TODO(rahul): need to take care if status change is delayed.

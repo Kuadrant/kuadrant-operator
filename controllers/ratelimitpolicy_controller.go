@@ -93,7 +93,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, rlp, common.ErrTargetNotFound{Kind: rlp.Kind(), TargetRef: rlp.GetTargetRef(), Err: delResErr})
+				return r.reconcileStatus(ctx, rlp, common.NewErrTargetNotFound(rlp.Kind(), rlp.GetTargetRef(), delResErr))
 			}
 			return ctrl.Result{}, err
 		}
@@ -153,12 +153,12 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 	// validate
 	err := rlp.Validate()
 	if err != nil {
-		return common.ErrInvalid{Kind: rlp.Kind(), Err: err}
+		return common.NewErrInvalid(rlp.Kind(), err)
 	}
 
 	err = common.ValidateHierarchicalRules(rlp, targetNetworkObject)
 	if err != nil {
-		return common.ErrInvalid{Kind: rlp.Kind(), Err: err}
+		return common.NewErrInvalid(rlp.Kind(), err)
 	}
 
 	// reconcile based on gateway diffs

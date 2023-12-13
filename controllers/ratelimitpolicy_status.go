@@ -2,20 +2,16 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/go-logr/logr"
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
 
 func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, specErr error) (ctrl.Result, error) {
@@ -61,40 +57,9 @@ func (r *RateLimitPolicyReconciler) calculateStatus(_ context.Context, rlp *kuad
 		ObservedGeneration: rlp.Status.ObservedGeneration,
 	}
 
-	acceptedCond := r.acceptedCondition(specErr)
+	acceptedCond := common.AcceptedCondition(rlp, specErr)
 
 	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)
 
 	return newStatus
-}
-
-func (r *RateLimitPolicyReconciler) acceptedCondition(specErr error) *metav1.Condition {
-	// Accepted
-	cond := &metav1.Condition{
-		Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
-		Status:  metav1.ConditionTrue,
-		Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
-		Message: "RateLimitPolicy has been accepted",
-	}
-
-	if specErr != nil {
-		cond.Status = metav1.ConditionFalse
-		cond.Message = specErr.Error()
-
-		switch {
-		// TargetNotFound
-		case errors.As(specErr, &common.ErrTargetNotFound{}):
-			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)
-		// Invalid
-		case errors.As(specErr, &common.ErrInvalid{}):
-			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonInvalid)
-		// Conflicted
-		case errors.As(specErr, &common.ErrConflict{}):
-			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonConflicted)
-		default:
-			cond.Reason = "ReconciliationError"
-		}
-	}
-
-	return cond
 }

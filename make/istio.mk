@@ -5,6 +5,13 @@
 
 ISTIO_INSTALL_DIR = config/dependencies/istio
 ISTIO_NAMESPACE = istio-system
+## installs project sail vs istioctl install
+ISTIO_INSTALL_SAIL ?= true
+ifeq (true,$(ISTIO_INSTALL_SAIL))
+INSTALL_COMMAND=sail-install
+else
+INSTALL_COMMAND=istioctl-install
+endif
 
 # istioctl tool
 ISTIOCTL=$(shell pwd)/bin/istioctl
@@ -19,15 +26,32 @@ $(ISTIOCTL):
 .PHONY: istioctl
 istioctl: $(ISTIOCTL) ## Download istioctl locally if necessary.
 
-.PHONY: istio-install
-istio-install: istioctl ## Install istio.
+.PHONY: istioctl-install
+istioctl-install: istioctl ## Install istio.
 	$(ISTIOCTL) operator init
 	kubectl apply -f $(ISTIO_INSTALL_DIR)/istio-operator.yaml
 
-.PHONY: istio-uninstall
-istio-uninstall: istioctl ## Uninstall istio.
+.PHONY: istioctl-uninstall
+istioctl-uninstall: istioctl ## Uninstall istio.
 	$(ISTIOCTL) x uninstall -y --purge
 
-.PHONY: istio-verify-install
-istio-verify-install: istioctl ## Verify istio installation.
+.PHONY: istioctl-verify-install
+istioctl-verify-install: istioctl ## Verify istio installation.
 	$(ISTIOCTL) verify-install -i $(ISTIO_NAMESPACE)
+
+.PHONY: sail-install
+sail-install: kustomize
+	$(MAKE) install-metallb
+	$(KUSTOMIZE) build $(ISTIO_INSTALL_DIR)/sail | kubectl apply -f -
+	kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
+	kubectl apply -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
+
+.PHONY: sail-uninstall
+sail-uninstall: kustomize
+	kubectl delete -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
+	$(KUSTOMIZE) build $(ISTIO_INSTALL_DIR)/sail | kubectl delete -f -
+	$(MAKE) uninstall-metallb
+
+.PHONY: istio-install
+istio-install:
+	$(MAKE) $(INSTALL_COMMAND)

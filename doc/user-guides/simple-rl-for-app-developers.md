@@ -87,10 +87,18 @@ spec:
 EOF
 ```
 
+Export the gateway hostname and port:
+
+```sh
+export INGRESS_HOST=$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.status.addresses[0].value}')
+export INGRESS_PORT=$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
+export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
+```
+
 Verify the route works:
 
 ```sh
-curl -H 'Host: api.toystore.com' http://localhost:9080/toys -i
+curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toys -i
 # HTTP/1.1 200 OK
 ```
 
@@ -141,13 +149,13 @@ Verify the rate limiting works by sending requests in a loop.
 Up to 5 successful (`200 OK`) requests every 10 seconds to `POST /toys`, then `429 Too Many Requests`:
 
 ```sh
-while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Host: api.toystore.com' http://localhost:9080/toys -X POST | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Host: api.toystore.com' http://$GATEWAY_URL/toys -X POST | grep -E --color "\b(429)\b|$"; sleep 1; done
 ```
 
 Unlimited successful (`200 OK`) to `GET /toys`:
 
 ```sh
-while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Host: api.toystore.com' http://localhost:9080/toys | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H 'Host: api.toystore.com' http://$GATEWAY_URL/toys | grep -E --color "\b(429)\b|$"; sleep 1; done
 ```
 
 ## Cleanup

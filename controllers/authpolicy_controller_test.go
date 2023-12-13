@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	secv1beta1resources "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -23,9 +25,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
 
 const (
@@ -1258,6 +1257,320 @@ var _ = Describe("AuthPolicy controller", func() {
 	})
 
 	Context("TODO: Targeted resource does not exist", func() {})
+})
+
+var _ = Describe("AuthPolicy CEL Validations", func() {
+	var testNamespace string
+
+	BeforeEach(func() {
+		CreateNamespace(&testNamespace)
+	})
+
+	AfterEach(DeleteNamespaceCallback(&testNamespace))
+
+	Context("Spec TargetRef Validations", func() {
+		It("Valid policy targeting HTTPRoute", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "HTTPRoute",
+						Name:  "my-route",
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(BeNil())
+		})
+
+		It("Valid policy targeting Gateway", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(BeNil())
+		})
+
+		It("Invalid Target Ref Group", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "not-gateway.networking.k8s.io",
+						Kind:  "HTTPRoute",
+						Name:  "my-route",
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'")).To(BeTrue())
+		})
+
+		It("Invalid Target Ref Kind", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "TCPRoute",
+						Name:  "my-route",
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'")).To(BeTrue())
+		})
+	})
+
+	Context("Route Selector Validation", func() {
+		const (
+			gateWayRouteSelectorErrorMessage = "route selectors not supported when targeting a Gateway"
+		)
+
+		var (
+			routeSelectors = []api.RouteSelector{
+				{
+					Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
+					Matches: []gatewayapiv1.HTTPRouteMatch{
+						{
+							Path: &gatewayapiv1.HTTPPathMatch{
+								Value: ptr.To("/foo"),
+							},
+						},
+					},
+				},
+			}
+
+			commonAuthRuleSpec = api.CommonAuthRuleSpec{RouteSelectors: routeSelectors}
+		)
+
+		It("invalid usage of top-level route selectors with a gateway targetRef", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					RouteSelectors: routeSelectors,
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - authentication", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					AuthScheme: api.AuthSchemeSpec{
+						Authentication: map[string]api.AuthenticationSpec{
+							"my-rule": {
+								AuthenticationSpec: authorinoapi.AuthenticationSpec{
+									AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+										AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
+									},
+								},
+								CommonAuthRuleSpec: commonAuthRuleSpec,
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - metadata", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					AuthScheme: api.AuthSchemeSpec{
+						Metadata: map[string]api.MetadataSpec{
+							"my-metadata": {
+								CommonAuthRuleSpec: commonAuthRuleSpec,
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - authorization", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					AuthScheme: api.AuthSchemeSpec{
+						Authorization: map[string]api.AuthorizationSpec{
+							"my-authZ": {
+								CommonAuthRuleSpec: commonAuthRuleSpec,
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - response success headers", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					AuthScheme: api.AuthSchemeSpec{
+						Response: &api.ResponseSpec{
+							Success: api.WrappedSuccessResponseSpec{
+								Headers: map[string]api.HeaderSuccessResponseSpec{
+									"header": {
+										SuccessResponseSpec: api.SuccessResponseSpec{
+											CommonAuthRuleSpec: commonAuthRuleSpec,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - response success dynamic metadata", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					AuthScheme: api.AuthSchemeSpec{
+						Response: &api.ResponseSpec{
+							Success: api.WrappedSuccessResponseSpec{
+								DynamicMetadata: map[string]api.SuccessResponseSpec{
+									"header": {
+										CommonAuthRuleSpec: commonAuthRuleSpec,
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - callbacks", func() {
+			policy := &api.AuthPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: "gateway.networking.k8s.io",
+						Kind:  "Gateway",
+						Name:  "my-gw",
+					},
+					AuthScheme: api.AuthSchemeSpec{
+						Callbacks: map[string]api.CallbackSpec{
+							"callback": {
+								CallbackSpec: authorinoapi.CallbackSpec{
+									CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
+										Http: &authorinoapi.HttpEndpointSpec{
+											Url: "test.com",
+										},
+									},
+								},
+								CommonAuthRuleSpec: commonAuthRuleSpec,
+							},
+						},
+					},
+				},
+			}
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+	})
 })
 
 func testBasicAuthScheme() api.AuthSchemeSpec {

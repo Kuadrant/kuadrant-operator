@@ -126,6 +126,11 @@ func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired cli
 		return b.DeleteResource(ctx, desired)
 	}
 
+	desired.SetResourceVersion(obj.GetResourceVersion())
+	if err := b.Client().Update(ctx, desired, client.DryRunAll); err != nil {
+		return err
+	}
+
 	update, err := mutateFn(obj, desired)
 	if err != nil {
 		return err

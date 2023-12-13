@@ -82,17 +82,27 @@ kubectl apply -f examples/toystore/httproute.yaml
 
 #### Try the API unprotected
 
+Export the gateway hostname and port:
+
 ```sh
-curl -H 'Host: api.toystore.com' http://localhost:9080/toy -i
+export INGRESS_HOST=$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.status.addresses[0].value}')
+export INGRESS_PORT=$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
+export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
+```
+
+```sh
+curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
 # HTTP/1.1 200 OK
 ```
 
 It should return `200 OK`.
 
-> **Note**: If the command above fails to hit the Toy Store API on your environment, try forwarding requests to the service:
+> **Note**: If the command above fails to hit the Toy Store API on your environment, try forwarding requests to the service and accessing over localhost:
 >
 > ```sh
 > kubectl port-forward -n istio-system service/istio-ingressgateway 9080:80 2>&1 >/dev/null &
+> curl -H 'Host: api.toystore.com' http://localhost:9080/toy -i
+> # HTTP/1.1 200 OK
 > ```
 
 ### ③ Deploy Keycloak
@@ -157,7 +167,7 @@ EOF
 #### Try the API missing authentication
 
 ```sh
-curl -H 'Host: api.toystore.com' http://localhost:9080/toy -i
+curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
 # HTTP/1.1 401 Unauthorized
 # www-authenticate: Bearer realm="keycloak-users"
 # www-authenticate: Bearer realm="k8s-service-accounts"
@@ -175,7 +185,7 @@ ACCESS_TOKEN=$(kubectl run token --attach --rm --restart=Never -q --image=curlim
 Send a request to the API as the Keycloak-authenticated user while still missing permissions:
 
 ```sh
-curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy -i
+curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
 # HTTP/1.1 403 Forbidden
 ```
 
@@ -199,7 +209,7 @@ SA_TOKEN=$(kubectl create token client-app-1)
 Send a request to the API as the service account while still missing permissions:
 
 ```sh
-curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy -i
+curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
 # HTTP/1.1 403 Forbidden
 ```
 
@@ -281,24 +291,24 @@ EOF
 Send requests to the API as the Keycloak-authenticated user:
 
 ```sh
-curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy -i
+curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
 # HTTP/1.1 200 OK
 ```
 
 ```sh
-curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' -X POST http://localhost:9080/admin/toy -i
+curl -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' -X POST http://$GATEWAY_URL/admin/toy -i
 # HTTP/1.1 200 OK
 ```
 
 Send requests to the API as the Kubernetes service account:
 
 ```sh
-curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy -i
+curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
 # HTTP/1.1 200 OK
 ```
 
 ```sh
-curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' -X POST http://localhost:9080/admin/toy -i
+curl -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' -X POST http://$GATEWAY_URL/admin/toy -i
 # HTTP/1.1 403 Forbidden
 ```
 
@@ -339,13 +349,13 @@ Each user should be entitled to a maximum of 5 requests every 10 seconds.
 Send requests as the Keycloak-authenticated user:
 
 ```sh
-while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy | grep -E --color "\b(429)\b|$"; sleep 1; done
 ```
 
 Send requests as the Kubernetes service account:
 
 ```sh
-while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://localhost:9080/toy | egrep --color "\b(429)\b|$"; sleep 1; done
+while :; do curl --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $SA_TOKEN" -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy | grep -E --color "\b(429)\b|$"; sleep 1; done
 ```
 
 ## Cleanup

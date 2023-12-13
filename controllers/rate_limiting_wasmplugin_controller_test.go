@@ -723,6 +723,188 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			}, time.Minute, 5*time.Second).Should(BeTrue())
 		})
 	})
+
+	Context("HTTPRoute switches parentship from one gateway to another", func() {
+		var (
+			routeName = "route-a"
+			rlpName   = "rlp-a"
+			gwBName   = "gw-b"
+		)
+
+		It("RLP targeting a gateway, GwA should not have wasmplugin and GwB should have wasmplugin", func() {
+			// Initial state
+			// Gw A
+			// Gw B
+			// RLP A -> Gw A
+			// Route A -> Gw A
+			//
+			// Switch parentship
+			// Gw A
+			// Gw B
+			// RLP A -> Gw A
+			// Route A -> Gw B
+
+			// Gw A will be the pre-existing $gateway with name $gwName
+
+			// create RLP A -> Gw A
+			rlpA := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Kind:  "Gateway",
+						Name:  gatewayapiv1.ObjectName(gwName),
+					},
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
+							},
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), rlpA)
+			Expect(err).ToNot(HaveOccurred())
+			// Check RLP status is available
+			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
+			Eventually(testRLPIsAvailable(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create Route A -> Gw A
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
+			err = k8sClient.Create(context.Background(), httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create Gateway B
+			gwB := testBuildBasicGateway(gwBName, testNamespace)
+			err = k8sClient.Create(context.Background(), gwB)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testGatewayIsReady(gwB), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// Initial state set.
+			// Check wasm plugin for gateway A has configuration from the route
+			// it may take some reconciliation loops to get to that, so checking it with eventually
+			Eventually(func() bool {
+				wasmPluginKey := client.ObjectKey{
+					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+				}
+				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+				if err != nil {
+					return false
+				}
+				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				if err != nil {
+					return false
+				}
+
+				expectedPlugin := &wasm.Plugin{
+					FailureMode: wasm.FailureModeDeny,
+					RateLimitPolicies: []wasm.RateLimitPolicy{
+						{
+							Name:   rlpKey.String(),
+							Domain: rlptools.LimitsNamespaceFromRLP(rlpA),
+							Rules: []wasm.Rule{
+								{
+									Conditions: []wasm.Condition{
+										{
+											AllOf: []wasm.PatternExpression{
+												{
+													Selector: "request.url_path",
+													Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+													Value:    "/toy",
+												},
+												{
+													Selector: "request.method",
+													Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+													Value:    "GET",
+												},
+											},
+										},
+									},
+									Data: []wasm.DataItem{
+										{
+											Static: &wasm.StaticSpec{
+												Key:   `limit.l1__2804bad6`,
+												Value: "1",
+											},
+										},
+									},
+								},
+							},
+							Hostnames: []string{"*"},
+							Service:   common.KuadrantRateLimitClusterName,
+						},
+					},
+				}
+
+				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
+					return false
+				}
+
+				return true
+			}, time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check wasm plugin for gateway B does not exist
+			// it may take some reconciliation loops to get to that, so checking it with eventually
+			Eventually(func() bool {
+				// Check wasm plugin
+				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gwB), Namespace: testNamespace}
+				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+				return apierrors.IsNotFound(err)
+			})
+
+			// Proceed with the update:
+			// From Route A -> Gw A
+			// To Route A -> Gw B
+			httpRouteUpdated := &gatewayapiv1.HTTPRoute{}
+			err = k8sClient.Get(context.Background(), client.ObjectKeyFromObject(httpRoute), httpRouteUpdated)
+			Expect(err).ToNot(HaveOccurred())
+			httpRouteUpdated.Spec.CommonRouteSpec.ParentRefs[0].Name = gatewayapiv1.ObjectName(gwBName)
+			err = k8sClient.Update(context.Background(), httpRouteUpdated)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check wasm plugin for gateway A no longer exists
+			// it may take some reconciliation loops to get to that, so checking it with eventually
+			Eventually(func() bool {
+				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+				return apierrors.IsNotFound(err)
+			})
+
+			// Check wasm plugin for gateway B does not exist
+			// There is not RLP targeting Gateway B or any route parenting Gateway B
+			// it may take some reconciliation loops to get to that, so checking it with eventually
+			Eventually(func() bool {
+				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gwB), Namespace: testNamespace}
+				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+				return apierrors.IsNotFound(err)
+			})
+		})
+
+		It("RLP targeting a route, GwA should not have wasmplugin and GwB should have wasmplugin", func() {
+			// Initial state
+			// Gw A
+			// Gw B
+			// Route A -> Gw A
+			// RLP A -> Route A
+			//
+			// Switch parentship
+			// Gw A
+			// Gw B
+			// Route A -> Gw B
+			// RLP A -> Route A
+		})
+	})
 })
 
 func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {

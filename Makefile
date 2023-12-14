@@ -227,6 +227,21 @@ $(ACT):
 act: $(ACT) ## Download act locally if necessary.
 
 ##@ Development
+define patch-dependencies-config
+	envsubst \
+		< $2 \
+		> $3
+endef
+
+define update-csv-config
+	V="$1" \
+	$(YQ) eval '$(3) = strenv(V)' -i $2
+endef
+
+define update-operator-dependencies
+	V=`$(PROJECT_PATH)/utils/parse-bundle-version.sh $(OPM) $(YQ) $2` \
+	$(YQ) eval '(.dependencies[] | select(.value.packageName == "$1").value.version) = strenv(V)' -i bundle/metadata/dependencies.yaml
+endef
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
@@ -237,12 +252,8 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
 dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
 dependencies-manifests: ## Update kuadrant dependencies manifests.
-	envsubst \
-        < config/dependencies/authorino/kustomization.template.yaml \
-        > config/dependencies/authorino/kustomization.yaml
-	envsubst \
-        < config/dependencies/limitador/kustomization.template.yaml \
-        > config/dependencies/limitador/kustomization.yaml
+	$(call patch-dependencies-config,authorino,config/dependencies/authorino/kustomization.template.yaml,config/dependencies/authorino/kustomization.yaml)
+	$(call patch-dependencies-config,limitador,config/dependencies/limitador/kustomization.template.yaml,config/dependencies/limitador/kustomization.yaml)
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -430,22 +441,20 @@ endef
 bundle: $(OPM) $(YQ) manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
 	# Set desired operator image and related wasm shim image
-	V="$(RELATED_IMAGE_WASMSHIM)" $(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
+	V="$(RELATED_IMAGE_WASMSHIM)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Update CSV
-	V="kuadrant-operator.v$(BUNDLE_VERSION)" $(YQ) eval '.metadata.name = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
-	V="$(BUNDLE_VERSION)" $(YQ) eval '.spec.version = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
-	V="$(IMG)" $(YQ) eval '.metadata.annotations.containerImage = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
-	V="kuadrant-operator.v$(REPLACES_VERSION)" $(YQ) eval '.spec.replaces = strenv(V)' -i config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml
+	$(call update-csv-config,kuadrant-operator.v$(BUNDLE_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.name)
+	$(call update-csv-config,$(BUNDLE_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.spec.version)
+	$(call update-csv-config,$(IMG),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.annotations.containerImage)
+	$(call update-csv-config,kuadrant-operator.v$(REPLACES_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.spec.replaces)
 	# Generate bundle
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)
 	# Update operator dependencies
 	# TODO(eguzki): run only if not default one. Avoid bundle parsing if version is known in advance
-	V=`$(PROJECT_PATH)/utils/parse-bundle-version.sh $(OPM) $(YQ) $(LIMITADOR_OPERATOR_BUNDLE_IMG)` \
-	    $(YQ) eval '(.dependencies[] | select(.value.packageName == "limitador-operator").value.version) = strenv(V)' -i bundle/metadata/dependencies.yaml
-	V=`$(PROJECT_PATH)/utils/parse-bundle-version.sh $(OPM) $(YQ) $(AUTHORINO_OPERATOR_BUNDLE_IMG)` \
-	    $(YQ) eval '(.dependencies[] | select(.value.packageName == "authorino-operator").value.version) = strenv(V)' -i bundle/metadata/dependencies.yaml
-	# Validate bundle manifests
+	$(call update-operator-dependencies,limitador-operator,$(LIMITADOR_OPERATOR_BUNDLE_IMG))
+	$(call update-operator-dependencies,authorino-operator,$(AUTHORINO_OPERATOR_BUNDLE_IMG))
 	$(OPERATOR_SDK) bundle validate ./bundle
 	$(MAKE) bundle-ignore-createdAt
 

@@ -49,7 +49,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
-	apFactory := func(mutateFn func(policy *api.AuthPolicy)) *api.AuthPolicy {
+	policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
 		policy := &api.AuthPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "toystore",
@@ -65,7 +65,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				AuthScheme: testBasicAuthScheme(),
 			},
 		}
-		if mutateFn != nil {
+		for _, mutateFn := range mutateFns {
 			mutateFn(policy)
 		}
 		return policy
@@ -83,7 +83,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches policy to the Gateway", func() {
-			policy := apFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -152,7 +152,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route)), time.Minute, 5*time.Second).Should(BeTrue())
 
-			policy := apFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -179,7 +179,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches policy to the HTTPRoute", func() {
-			policy := apFactory(nil)
+			policy := policyFactory()
 
 			err := k8sClient.Create(context.Background(), policy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
@@ -225,7 +225,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches policy to the Gateway while having other policies attached to some HTTPRoutes", func() {
-			routePolicy := apFactory(nil)
+			routePolicy := policyFactory()
 
 			err := k8sClient.Create(context.Background(), routePolicy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
@@ -250,7 +250,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(otherRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// attach policy to the gatewaay
-			gwPolicy := apFactory(func(policy *api.AuthPolicy) {
+			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -302,7 +302,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches policy to the Gateway while having other policies attached to all HTTPRoutes", func() {
-			routePolicy := apFactory(nil)
+			routePolicy := policyFactory()
 
 			err := k8sClient.Create(context.Background(), routePolicy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
@@ -312,7 +312,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(testPolicyIsAccepted(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// attach policy to the gatewaay
-			gwPolicy := apFactory(func(policy *api.AuthPolicy) {
+			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -351,7 +351,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Rejects policy with only unmatching top-level route selectors while trying to configure the gateway", func() {
-			policy := apFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Spec.RouteSelectors = []api.RouteSelector{
 					{ // does not select any HTTPRouteRule
 						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
@@ -395,7 +395,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Rejects policy with only unmatching config-level route selectors post-configuring the gateway", func() {
-			policy := apFactory(nil)
+			policy := policyFactory()
 			config := policy.Spec.AuthScheme.Authentication["apiKey"]
 			config.RouteSelectors = []api.RouteSelector{
 				{ // does not select any HTTPRouteRule
@@ -446,7 +446,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Deletes resources when the policy is deleted", func() {
-			policy := apFactory(nil)
+			policy := policyFactory()
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).ToNot(HaveOccurred())
@@ -476,7 +476,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Maps to all fields of the AuthConfig", func() {
-			policy := apFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Spec.NamedPatterns = map[string]authorinoapi.PatternExpressions{
 					"internal-source": []authorinoapi.PatternExpression{
 						{
@@ -720,7 +720,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches simple policy to the HTTPRoute", func() {
-			policy := apFactory(nil)
+			policy := policyFactory()
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).ToNot(HaveOccurred())
@@ -791,7 +791,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches policy with top-level route selectors to the HTTPRoute", func() {
-			policy := apFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Spec.RouteSelectors = []api.RouteSelector{
 					{ // Selects: POST|DELETE *.admin.toystore.com/admin*
 						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
@@ -895,7 +895,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches policy with config-level route selectors to the HTTPRoute", func() {
-			policy := apFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
 				config := policy.Spec.AuthScheme.Authentication["apiKey"]
 				config.RouteSelectors = []api.RouteSelector{
 					{ // Selects: POST|DELETE *.admin.toystore.com/admin*
@@ -1009,7 +1009,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Mixes route selectors into other conditions", func() {
-			policy := apFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
 				config := policy.Spec.AuthScheme.Authentication["apiKey"]
 				config.RouteSelectors = []api.RouteSelector{
 					{ // Selects: GET /private*
@@ -1114,7 +1114,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		// Accepted reason is already tested generally by the existing tests
 
 		It("Target not found reason", func() {
-			policy := apFactory(nil)
+			policy := policyFactory()
 
 			err := k8sClient.Create(context.Background(), policy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
@@ -1130,12 +1130,12 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route)), time.Minute, 5*time.Second).Should(BeTrue())
 
-			policy := apFactory(nil)
+			policy := policyFactory()
 			err = k8sClient.Create(context.Background(), policy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
-			policy2 := apFactory(func(policy *api.AuthPolicy) {
+			policy2 := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "conflicting-ap"
 			})
 			err = k8sClient.Create(context.Background(), policy2)
@@ -1150,7 +1150,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		It("Invalid reason", func() {
 			const targetRefName, targetRefNamespace = "istio-ingressgateway", "istio-system"
 
-			policy := apFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = targetRefName
 				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(targetRefNamespace))
@@ -1177,7 +1177,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
 	Context("Spec TargetRef Validations", func() {
-		policyFactory := func(mutateFn func(policy *api.AuthPolicy)) *api.AuthPolicy {
+		policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
 			policy := &api.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-policy",
@@ -1192,7 +1192,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 				},
 			}
 
-			if mutateFn != nil {
+			for _, mutateFn := range mutateFns {
 				mutateFn(policy)
 			}
 
@@ -1200,7 +1200,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		}
 
 		It("Valid policy targeting HTTPRoute", func() {
-			policy := policyFactory(nil)
+			policy := policyFactory()
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(BeNil())
 		})

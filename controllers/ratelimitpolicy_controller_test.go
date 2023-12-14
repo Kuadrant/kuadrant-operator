@@ -36,8 +36,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		gateway       *gatewayapiv1.Gateway
 	)
 
-	rlpFactory := func(mutateFn func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
-		rlp := &kuadrantv1beta2.RateLimitPolicy{
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
+		policy := &kuadrantv1beta2.RateLimitPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "RateLimitPolicy",
 				APIVersion: kuadrantv1beta2.GroupVersion.String(),
@@ -63,11 +63,11 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				},
 			},
 		}
-
-		if mutateFn != nil {
-			mutateFn(rlp)
+		for _, mutateFn := range mutateFns {
+			mutateFn(policy)
 		}
-		return rlp
+
+		return policy
 	}
 
 	beforeEachCallback := func() {
@@ -120,7 +120,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create ratelimitpolicy
-			rlp := rlpFactory(nil)
+			rlp := policyFactory()
 			err = k8sClient.Create(context.Background(), rlp)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -252,7 +252,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create ratelimitpolicy
-			rlp := rlpFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Spec.Limits = map[string]kuadrantv1beta2.Limit{
 					"toys": {
 						Rates: []kuadrantv1beta2.Rate{
@@ -421,7 +421,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create ratelimitpolicy
-			rlp := rlpFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gwName)
 			})
@@ -517,7 +517,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 		It("Creates all the resources for a basic Gateway and RateLimitPolicy when missing a HTTPRoute attached to the Gateway", func() {
 			// create ratelimitpolicy
-			rlp := rlpFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gwName)
 			})
@@ -594,7 +594,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		// Accepted reason is already tested generally by the existing tests
 
 		It("Target not found reason", func() {
-			rlp := rlpFactory(nil)
+			rlp := policyFactory()
 			err := k8sClient.Create(context.Background(), rlp)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -609,11 +609,11 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
-			rlp := rlpFactory(nil)
+			rlp := policyFactory()
 			err = k8sClient.Create(context.Background(), rlp)
 			Expect(err).ToNot(HaveOccurred())
 
-			rlp2 := rlpFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+			rlp2 := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Name = "conflicting-rlp"
 			})
 			err = k8sClient.Create(context.Background(), rlp2)
@@ -627,7 +627,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		It("Validation reason", func() {
 			const targetRefName, targetRefNamespace = "istio-ingressgateway", "istio-system"
 
-			rlp := rlpFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = targetRefName
 				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(targetRefNamespace))
@@ -652,7 +652,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
 	Context("Spec TargetRef Validations", func() {
-		policyFactory := func(mutateFn func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
+		policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
 			policy := &kuadrantv1beta2.RateLimitPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-policy",
@@ -666,14 +666,14 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 					},
 				},
 			}
-			if mutateFn != nil {
+			for _, mutateFn := range mutateFns {
 				mutateFn(policy)
 			}
 
 			return policy
 		}
 		It("Valid policy targeting HTTPRoute", func() {
-			policy := policyFactory(nil)
+			policy := policyFactory()
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(BeNil())
 		})

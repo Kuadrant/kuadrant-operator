@@ -85,7 +85,7 @@ spec:
   issuerRef:
     group: cert-manager.io
     kind: ClusterIssuer
-    name: glbc-ca
+    name: kuadrant-operator-glbc-ca
 EOF
 
 kubectl wait tlspolicy api-gateway-tls -n kuadrant-system --for=condition=ready

@@ -19,6 +19,10 @@ on:
         description: Limitador Operator bundle version
         default: latest
         type: string
+      policyControllerVersion:
+        description: Policy Controller version
+        default: latest
+        type: string
       wasmShimVersion:
         description: WASM Shim version
         default: latest
@@ -47,6 +51,10 @@ on:
         type: string
       limitadorOperatorVersion:
         description: Limitador Operator bundle version
+        default: latest
+        type: string
+      policyControllerVersion:
+        description: Policy Controller version
         default: latest
         type: string
       wasmShimVersion:
@@ -127,6 +135,7 @@ jobs:
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
+            POLICY_CONTROLLER_VERSION=${{ inputs.policyControllerVersion }} \
             REPLACES_VERSION=${{ inputs.replacesVersion }} \
             CHANNELS=${{ inputs.channels }}
       - name: Build Image
@@ -170,6 +179,7 @@ jobs:
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
+            POLICY_CONTROLLER_VERSION=${{ inputs.policyControllerVersion }} \
             REPLACES_VERSION=${{ inputs.replacesVersion }} \
             CHANNELS=${{ inputs.channels }}
       - name: Install qemu dependency

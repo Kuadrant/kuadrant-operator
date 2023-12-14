@@ -16,7 +16,6 @@ import (
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/google/uuid"
 	. "github.com/onsi/gomega"
-
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -35,7 +34,6 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
-
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -308,7 +306,18 @@ func testRouteIsAccepted(routeKey client.ObjectKey) func() bool {
 	return func() bool {
 		route := &gatewayapiv1.HTTPRoute{}
 		err := k8sClient.Get(context.Background(), routeKey, route)
-		return err == nil && common.IsHTTPRouteAccepted(route)
+
+		if err != nil {
+			logf.Log.V(1).Info("httpRoute not read", "route", routeKey, "error", err)
+			return false
+		}
+
+		if !common.IsHTTPRouteAccepted(route) {
+			logf.Log.V(1).Info("httpRoute not accepted", "route", routeKey)
+			return false
+		}
+
+		return true
 	}
 }
 
@@ -316,18 +325,13 @@ func testGatewayIsReady(gateway *gatewayapiv1.Gateway) func() bool {
 	return func() bool {
 		existingGateway := &gatewayapiv1.Gateway{}
 		err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
-		return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType)
-	}
-}
-
-func testRLPIsAccepted(rlpKey client.ObjectKey) func() bool {
-	return func() bool {
-		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
-		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
 		if err != nil {
+			logf.Log.V(1).Info("gateway not read", "gateway", client.ObjectKeyFromObject(gateway), "error", err)
 			return false
 		}
-		if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
+
+		if !meta.IsStatusConditionTrue(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType) {
+			logf.Log.V(1).Info("gateway not programmed", "gateway", client.ObjectKeyFromObject(gateway))
 			return false
 		}
 
@@ -348,6 +352,21 @@ func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {
 		//if !meta.IsStatusConditionTrue(wp.Status.Conditions, "Available") {
 		//	return false
 		//}
+
+		return true
+	}
+}
+
+func testRLPIsAccepted(rlpKey client.ObjectKey) func() bool {
+	return func() bool {
+		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+		if err != nil {
+			return false
+		}
+		if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
+			return false
+		}
 
 		return true
 	}

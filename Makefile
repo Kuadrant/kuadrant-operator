@@ -239,10 +239,10 @@ $(ACT):
 act: $(ACT) ## Download act locally if necessary.
 
 ##@ Development
-define patch-dependencies-config
+define patch-config
 	envsubst \
-		< $2 \
-		> $3
+		< $1 \
+		> $2
 endef
 
 define update-csv-config
@@ -265,9 +265,10 @@ dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR
 dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
 dependencies-manifests: export POLICY_CONTROLLER_GITREF := $(POLICY_CONTROLLER_GITREF)
 dependencies-manifests: ## Update kuadrant dependencies manifests.
-	$(call patch-dependencies-config,authorino,config/dependencies/authorino/kustomization.template.yaml,config/dependencies/authorino/kustomization.yaml)
-	$(call patch-dependencies-config,limitador,config/dependencies/limitador/kustomization.template.yaml,config/dependencies/limitador/kustomization.yaml)
-	$(call patch-dependencies-config,policy-controller,config/dependencies/policy-controller/kustomization.template.yaml,config/dependencies/policy-controller/kustomization.yaml)
+	$(call patch-config,config/dependencies/authorino/kustomization.template.yaml,config/dependencies/authorino/kustomization.yaml)
+	$(call patch-config,config/dependencies/limitador/kustomization.template.yaml,config/dependencies/limitador/kustomization.yaml)
+	$(call patch-config,config/dependencies/policy-controller/kustomization.template.yaml,config/dependencies/policy-controller/kustomization.yaml)
+	$(call patch-config,config/dependencies/policy-controller/samples/kustomization.template.yaml,config/dependencies/policy-controller/samples/kustomization.yaml)
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.

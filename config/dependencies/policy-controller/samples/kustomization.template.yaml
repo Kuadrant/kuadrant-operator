@@ -1,3 +1,2 @@
 resources:
 - github.com/Kuadrant/multicluster-gateway-controller/config/samples?ref=${POLICY_CONTROLLER_GITREF}
-

@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
@@ -14,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -668,10 +670,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
 				if err != nil {
+					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
 					return false
 				}
 				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				if err != nil {
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
 					return false
 				}
 
@@ -716,6 +720,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
+					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
 					return false
 				}
 
@@ -731,7 +737,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			gwBName   = "gw-b"
 		)
 
-		It("RLP targeting a gateway, GwA should not have wasmplugin and GwB should have wasmplugin", func() {
+		It("RLP targeting a gateway, GwA should not have wasmplugin and GwB should not have wasmplugin", func() {
 			// Initial state
 			// Gw A
 			// Gw B
@@ -797,10 +803,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
 				if err != nil {
+					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
 					return false
 				}
 				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				if err != nil {
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
 					return false
 				}
 
@@ -845,6 +853,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
+					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
 					return false
 				}
 
@@ -858,7 +868,16 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gwB), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
-				return apierrors.IsNotFound(err)
+				if err == nil {
+					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", wasmPluginKey)
+					return false
+				}
+				if !apierrors.IsNotFound(err) {
+					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					return false
+				}
+				// not found
+				return true
 			})
 
 			// Proceed with the update:
@@ -877,7 +896,16 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
-				return apierrors.IsNotFound(err)
+				if err == nil {
+					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", wasmPluginKey)
+					return false
+				}
+				if !apierrors.IsNotFound(err) {
+					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					return false
+				}
+				// not found
+				return true
 			})
 
 			// Check wasm plugin for gateway B does not exist
@@ -887,7 +915,16 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gwB), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
-				return apierrors.IsNotFound(err)
+				if err == nil {
+					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", wasmPluginKey)
+					return false
+				}
+				if !apierrors.IsNotFound(err) {
+					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					return false
+				}
+				// not found
+				return true
 			})
 		})
 
@@ -903,6 +940,231 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Gw B
 			// Route A -> Gw B
 			// RLP A -> Route A
+
+			// Gw A will be the pre-existing $gateway with name $gwName
+
+			// create Gateway B
+			gwB := testBuildBasicGateway(gwBName, testNamespace)
+			err := k8sClient.Create(context.Background(), gwB)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testGatewayIsReady(gwB), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// create Route A -> Gw A
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
+			err = k8sClient.Create(context.Background(), httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create RLP A -> Route A
+			rlpA := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Kind:  "HTTPRoute",
+						Name:  gatewayapiv1.ObjectName(routeName),
+					},
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(context.Background(), rlpA)
+			Expect(err).ToNot(HaveOccurred())
+			// Check RLP status is available
+			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
+			Eventually(testRLPIsAvailable(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Initial state set.
+			// Check wasm plugin for gateway A has configuration from the route
+			// it may take some reconciliation loops to get to that, so checking it with eventually
+			Eventually(func() bool {
+				wasmPluginKey := client.ObjectKey{
+					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+				}
+				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+				if err != nil {
+					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					return false
+				}
+				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				if err != nil {
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
+					return false
+				}
+
+				expectedPlugin := &wasm.Plugin{
+					FailureMode: wasm.FailureModeDeny,
+					RateLimitPolicies: []wasm.RateLimitPolicy{
+						{
+							Name:   rlpKey.String(),
+							Domain: rlptools.LimitsNamespaceFromRLP(rlpA),
+							Rules: []wasm.Rule{
+								{
+									Conditions: []wasm.Condition{
+										{
+											AllOf: []wasm.PatternExpression{
+												{
+													Selector: "request.url_path",
+													Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+													Value:    "/toy",
+												},
+												{
+													Selector: "request.method",
+													Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+													Value:    "GET",
+												},
+											},
+										},
+									},
+									Data: []wasm.DataItem{
+										{
+											Static: &wasm.StaticSpec{
+												Key:   `limit.l1__2804bad6`,
+												Value: "1",
+											},
+										},
+									},
+								},
+							},
+							Hostnames: []string{"*.example.com"},
+							Service:   common.KuadrantRateLimitClusterName,
+						},
+					},
+				}
+
+				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
+					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
+					return false
+				}
+
+				return true
+			}, time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check wasm plugin for gateway B does not exist
+			// it may take some reconciliation loops to get to that, so checking it with eventually
+			Eventually(func() bool {
+				// Check wasm plugin
+				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gwB), Namespace: testNamespace}
+				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+				if err == nil {
+					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", wasmPluginKey)
+					return false
+				}
+				if !apierrors.IsNotFound(err) {
+					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					return false
+				}
+				// not found
+				return true
+			})
+
+			// Proceed with the update:
+			// From Route A -> Gw A
+			// To Route A -> Gw B
+			httpRouteUpdated := &gatewayapiv1.HTTPRoute{}
+			err = k8sClient.Get(context.Background(), client.ObjectKeyFromObject(httpRoute), httpRouteUpdated)
+			Expect(err).ToNot(HaveOccurred())
+			httpRouteUpdated.Spec.CommonRouteSpec.ParentRefs[0].Name = gatewayapiv1.ObjectName(gwBName)
+			err = k8sClient.Update(context.Background(), httpRouteUpdated)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check wasm plugin for gateway A no longer exists
+			// it may take some reconciliation loops to get to that, so checking it with eventually
+			Eventually(func() bool {
+				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+				if err == nil {
+					logf.Log.V(1).Info("wasmplugin found unexpectedly", "key", wasmPluginKey)
+					return false
+				}
+				if !apierrors.IsNotFound(err) {
+					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					return false
+				}
+				// not found
+				return true
+			})
+
+			// Check wasm plugin for gateway B has configuration from the route
+			// it may take some reconciliation loops to get to that, so checking it with eventually
+			Eventually(func() bool {
+				wasmPluginKey := client.ObjectKey{
+					Name: rlptools.WASMPluginName(gwB), Namespace: testNamespace,
+				}
+				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+				if err != nil {
+					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					return false
+				}
+				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				if err != nil {
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
+					return false
+				}
+
+				expectedPlugin := &wasm.Plugin{
+					FailureMode: wasm.FailureModeDeny,
+					RateLimitPolicies: []wasm.RateLimitPolicy{
+						{
+							Name:   rlpKey.String(),
+							Domain: rlptools.LimitsNamespaceFromRLP(rlpA),
+							Rules: []wasm.Rule{
+								{
+									Conditions: []wasm.Condition{
+										{
+											AllOf: []wasm.PatternExpression{
+												{
+													Selector: "request.url_path",
+													Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+													Value:    "/toy",
+												},
+												{
+													Selector: "request.method",
+													Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+													Value:    "GET",
+												},
+											},
+										},
+									},
+									Data: []wasm.DataItem{
+										{
+											Static: &wasm.StaticSpec{
+												Key:   `limit.l1__2804bad6`,
+												Value: "1",
+											},
+										},
+									},
+								},
+							},
+							Hostnames: []string{"*.example.com"},
+							Service:   common.KuadrantRateLimitClusterName,
+						},
+					},
+				}
+
+				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
+					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
+					return false
+				}
+
+				return true
+			}, time.Minute, 5*time.Second).Should(BeTrue())
 		})
 	})
 })
@@ -912,6 +1174,7 @@ func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {
 		wp := &istioclientgoextensionv1alpha1.WasmPlugin{}
 		err := k8sClient.Get(context.Background(), key, wp)
 		if err != nil {
+			logf.Log.V(1).Info("wasmplugin not read", "key", key, "error", err)
 			return false
 		}
 

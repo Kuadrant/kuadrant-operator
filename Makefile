@@ -137,6 +137,18 @@ LIMITADOR_OPERATOR_GITREF = $(LIMITADOR_OPERATOR_BUNDLE_VERSION)
 endif
 LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LIMITADOR_OPERATOR_BUNDLE_IMG_TAG)
 
+## policy-controller
+POLICY_CONTROLLER_VERSION ?= latest
+policy_controller_is_semantic := $(call is_semantic_version,$(POLICY_CONTROLLER_VERSION))
+ifeq (latest,$(POLICY_CONTROLLER_VERSION))
+POLICY_CONTROLLER_VERSION = 0.0.0
+POLICY_CONTROLLER_GITREF = main
+else ifeq (true,$(policy_controller_is_semantic))
+POLICY_CONTROLLER_GITREF = v$(POLICY_CONTROLLER_VERSION)
+else
+POLICY_CONTROLLER_GITREF = $(POLICY_CONTROLLER_VERSION)
+endif
+
 ## wasm-shim
 WASM_SHIM_VERSION ?= latest
 shim_version_is_semantic := $(call is_semantic_version,$(WASM_SHIM_VERSION))
@@ -251,9 +263,11 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 .PHONY: dependencies-manifests
 dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
 dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
+dependencies-manifests: export POLICY_CONTROLLER_GITREF := $(POLICY_CONTROLLER_GITREF)
 dependencies-manifests: ## Update kuadrant dependencies manifests.
 	$(call patch-dependencies-config,authorino,config/dependencies/authorino/kustomization.template.yaml,config/dependencies/authorino/kustomization.yaml)
 	$(call patch-dependencies-config,limitador,config/dependencies/limitador/kustomization.template.yaml,config/dependencies/limitador/kustomization.yaml)
+	$(call patch-dependencies-config,policy-controller,config/dependencies/policy-controller/kustomization.template.yaml,config/dependencies/policy-controller/kustomization.yaml)
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -438,7 +452,7 @@ rm -rf $$TMP_DIR ;\
 endef
 
 .PHONY: bundle
-bundle: $(OPM) $(YQ) manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
+bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
 	# Set desired operator image and related wasm shim image
 	V="$(RELATED_IMAGE_WASMSHIM)" \

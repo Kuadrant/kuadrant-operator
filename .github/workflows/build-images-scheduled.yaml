@@ -14,4 +14,5 @@ jobs:
       kuadrantOperatorTag: ${{ github.sha }}
       authorinoOperatorVersion: ${{ vars.AUTHORINO_OPERATOR_SHA }}
       limitadorOperatorVersion: ${{ vars.LIMITADOR_OPERATOR_SHA }}
+      policyControllerVersion: ${{ vars.POLICY_CONTROLLER_SHA }}
       wasmShimVersion: ${{ vars.WASM_SHIM_SHA }}

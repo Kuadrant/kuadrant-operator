@@ -149,16 +149,22 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
-	// validate
-	err := rlp.Validate()
-	if err != nil {
+// validate performs validation before proceeding with the reconcile loop, returning a common.ErrInvalid on failing validation
+func (r *RateLimitPolicyReconciler) validate(rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
+	if err := rlp.Validate(); err != nil {
 		return common.NewErrInvalid(rlp.Kind(), err)
 	}
 
-	err = common.ValidateHierarchicalRules(rlp, targetNetworkObject)
-	if err != nil {
+	if err := common.ValidateHierarchicalRules(rlp, targetNetworkObject); err != nil {
 		return common.NewErrInvalid(rlp.Kind(), err)
+	}
+
+	return nil
+}
+
+func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
+	if err := r.validate(rlp, targetNetworkObject); err != nil {
+		return err
 	}
 
 	// reconcile based on gateway diffs

@@ -29,24 +29,17 @@ func AcceptedCondition(policy KuadrantPolicy, err error) *metav1.Condition {
 		Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
 		Message: fmt.Sprintf("%s has been accepted", policy.Kind()),
 	}
+	if err == nil {
+		return cond
+	}
 
-	if err != nil {
-		cond.Status = metav1.ConditionFalse
-		cond.Message = err.Error()
+	cond.Status = metav1.ConditionFalse
+	cond.Message = err.Error()
+	cond.Reason = "ReconciliationError"
 
-		switch {
-		// TargetNotFound
-		case errors.As(err, &ErrTargetNotFound{}):
-			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)
-		// Invalid
-		case errors.As(err, &ErrInvalid{}):
-			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonInvalid)
-		// Conflicted
-		case errors.As(err, &ErrConflict{}):
-			cond.Reason = string(gatewayapiv1alpha2.PolicyReasonConflicted)
-		default:
-			cond.Reason = "ReconciliationError"
-		}
+	var policyErr PolicyError
+	if errors.As(err, &policyErr) {
+		cond.Reason = string(policyErr.Reason())
 	}
 
 	return cond

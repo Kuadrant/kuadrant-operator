@@ -1409,6 +1409,246 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			}, time.Minute, 5*time.Second).Should(BeTrue())
 		})
 	})
+
+	Context("Free Route gets dedicated RLP", func() {
+		It("wasmplugin config should update config", func() {
+			// Initial state
+			// Gw A
+			// Route A -> Gw A (free route, i.e. no rlp targeting it)
+			// RLP 1 -> Gw A
+			//
+			// Add new RLP 2
+			// Gw A
+			// Route A -> Gw A
+			// RLP 1 -> Gw A
+			// RLP 2 -> Route A
+
+			var (
+				routeAName = "route-a"
+				rlp1Name   = "rlp-1"
+				rlp2Name   = "rlp-2"
+			)
+
+			//
+			// create Route A -> Gw A on *.a.example.com
+			//
+			httpRouteA := testBuildBasicHttpRoute(routeAName, gwName, testNamespace, []string{"*.a.example.com"})
+			// GET /routeA
+			httpRouteA.Spec.Rules = []gatewayapiv1.HTTPRouteRule{
+				{
+					Matches: []gatewayapiv1.HTTPRouteMatch{
+						{
+							Path: &gatewayapiv1.HTTPPathMatch{
+								Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+								Value: ptr.To("/routeA"),
+							},
+							Method: ptr.To(gatewayapiv1.HTTPMethod("GET")),
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(context.Background(), httpRouteA)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRouteA)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create RLP 1 -> Gw A
+			rlp1 := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: rlp1Name, Namespace: testNamespace},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Kind:  "Gateway",
+						Name:  gatewayapiv1.ObjectName(gwName),
+					},
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"gatewaylimit": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(context.Background(), rlp1)
+			Expect(err).ToNot(HaveOccurred())
+			// Check RLP status is available
+			rlp1Key := client.ObjectKey{Name: rlp1Name, Namespace: testNamespace}
+			Eventually(testRLPIsAvailable(rlp1Key), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Initial state set.
+			// Check wasm plugin for gateway A has configuration from the route 1
+			// it may take some reconciliation loops to get to that, so checking it with eventually
+			Eventually(func() bool {
+				wasmPluginKey := client.ObjectKey{
+					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+				}
+				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+				if err != nil {
+					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					return false
+				}
+				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				if err != nil {
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
+					return false
+				}
+
+				expectedPlugin := &wasm.Plugin{
+					FailureMode: wasm.FailureModeDeny,
+					RateLimitPolicies: []wasm.RateLimitPolicy{
+						{
+							Name:   rlp1Key.String(),
+							Domain: rlptools.LimitsNamespaceFromRLP(rlp1),
+							Rules: []wasm.Rule{
+								{
+									Conditions: []wasm.Condition{
+										{
+											AllOf: []wasm.PatternExpression{
+												{
+													Selector: "request.url_path",
+													Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+													Value:    "/routeA",
+												},
+												{
+													Selector: "request.method",
+													Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+													Value:    "GET",
+												},
+											},
+										},
+									},
+									Data: []wasm.DataItem{
+										{
+											Static: &wasm.StaticSpec{
+												Key:   `limit.gatewaylimit__b95fa83b`,
+												Value: "1",
+											},
+										},
+									},
+								},
+							},
+							Hostnames: []string{"*"},
+							Service:   common.KuadrantRateLimitClusterName,
+						},
+					},
+				}
+
+				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
+					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
+					return false
+				}
+
+				return true
+			}, time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Proceed with the update:
+			// New RLP 2 -> Route A
+
+			// create RLP 2 -> Route A
+			rlp2 := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: rlp2Name, Namespace: testNamespace},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Kind:  "HTTPRoute",
+						Name:  gatewayapiv1.ObjectName(routeAName),
+					},
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"routelimit": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 4, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(context.Background(), rlp2)
+			Expect(err).ToNot(HaveOccurred())
+			// Check RLP status is available
+			rlp2Key := client.ObjectKey{Name: rlp2Name, Namespace: testNamespace}
+			Eventually(testRLPIsAvailable(rlp2Key), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check wasm plugin has configuration from the route A and RLP 2.
+			// RLP 1 should not add any config to the wasm plugin
+			// it may take some reconciliation loops to get to that, so checking it with eventually
+			Eventually(func() bool {
+				wasmPluginKey := client.ObjectKey{
+					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+				}
+				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+				err := k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+				if err != nil {
+					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
+					return false
+				}
+				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				if err != nil {
+					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
+					return false
+				}
+
+				expectedPlugin := &wasm.Plugin{
+					FailureMode: wasm.FailureModeDeny,
+					RateLimitPolicies: []wasm.RateLimitPolicy{
+						{
+							Name:   rlp2Key.String(),
+							Domain: rlptools.LimitsNamespaceFromRLP(rlp2),
+							Rules: []wasm.Rule{
+								{
+									Conditions: []wasm.Condition{
+										{
+											AllOf: []wasm.PatternExpression{
+												{
+													Selector: "request.url_path",
+													Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+													Value:    "/routeA",
+												},
+												{
+													Selector: "request.method",
+													Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+													Value:    "GET",
+												},
+											},
+										},
+									},
+									Data: []wasm.DataItem{
+										{
+											Static: &wasm.StaticSpec{
+												Key:   `limit.routelimit__efc5113c`,
+												Value: "1",
+											},
+										},
+									},
+								},
+							},
+							Hostnames: []string{"*.a.example.com"},
+							Service:   common.KuadrantRateLimitClusterName,
+						},
+					},
+				}
+
+				if !reflect.DeepEqual(existingWASMConfig, expectedPlugin) {
+					diff := cmp.Diff(existingWASMConfig, expectedPlugin)
+					logf.Log.V(1).Info("wasmplugin does not match", "key", wasmPluginKey, "diff", diff)
+					return false
+				}
+
+				return true
+			}, time.Minute, 5*time.Second).Should(BeTrue())
+		})
+	})
 })
 
 func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {

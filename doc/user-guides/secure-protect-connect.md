@@ -11,12 +11,26 @@ In this guide, we will cover the different policies from Kuadrant and how you ca
 Here are the steps we will go through:
 
 1) [Deploy a sample application](#-deploy-the-example-app-we-will-serve-via-our-gateway)
+
+
 2) [Define a new Gateway](#-define-a-new-istio-managed-gateway)
+
+
 3) [Ensure TLS-based secure connectivity to the gateway with a TLSPolicy](#-define-the-tlspolicy)
+
+
 4) [Define a default RateLimitPolicy to set some infrastructure limits on your gateway](#-define-infrastructure-rate-limiting)
+
+
 5) [Define a default AuthPolicy to deny all access to the gateway](#-define-the-gateway-authpolicy)
+
+
 6) [Define a DNSPolicy to bring traffic to the gateway](#-define-the-dnspolicy)
+
+
 7) [Override the Gateway's deny-all AuthPolicy with an endpoint-specific policy](#-override-the-gateways-deny-all-authpolicy)
+
+
 8) [Override the Gateway rate limits with an endpoint-specific policy](#-override-the-gateways-ratelimitpolicy)
 
 To help with this walk through, you should set a `KUADRANT_ZONE_ROOT_DOMAIN` environment variable to a domain you want to use. If it you want to try DNSPolicy, this should also be a domain you have access to the DNS for in AWS Route53 or GCP. E.g.:

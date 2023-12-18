@@ -1,2 +1,2 @@
 resources:
-- github.com/Kuadrant/multicluster-gateway-controller/config/samples?ref=main
+- github.com/Kuadrant/multicluster-gateway-controller/config/samples?ref=v0.3.0

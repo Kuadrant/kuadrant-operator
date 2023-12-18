@@ -1,5 +1,5 @@
 resources:
-- github.com/Kuadrant/multicluster-gateway-controller/config/policy-controller/default?ref=main
+- github.com/Kuadrant/multicluster-gateway-controller/config/policy-controller/default?ref=v0.3.0
 
 patchesStrategicMerge:
 - delete-ns.yaml

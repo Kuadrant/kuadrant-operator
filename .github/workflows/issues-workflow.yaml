@@ -13,6 +13,11 @@ jobs:
     name: Add issue to project
     runs-on: ubuntu-latest
     steps:
+      - name: see repo
+        run: |
+          echo "github.repository" ${{ github.repository }}
+          echo "github.event.pull_request.head.repo.full_name" ${{ github.event.pull_request.head.repo.full_name }}
+          echo "github.repository_owner" ${{ github.repository_owner }}
       - uses: actions/add-to-project@v0.5.0
         with:
           project-url: https://github.com/orgs/Kuadrant/projects/18

@@ -1,8 +1,7 @@
 apiVersion: operator.istio.io/v1alpha1
 kind: Istio
 metadata:
-  name: istiocontrolplane
-  namespace: istio-system
+  name: default
 spec:
   version: v1.20.0
   namespace: istio-system

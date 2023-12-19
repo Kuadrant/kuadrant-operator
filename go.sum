@@ -272,8 +272,8 @@ github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de h1:9TO3cAIGXtEhn
 github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de/go.mod h1:zAbeS9B/r2mtpb6U+EI2rYA5OAXxsYw6wTamcNW+zcE=
 github.com/mailru/easyjson v0.7.7 h1:UGYAvKxe3sBsEDzO8ZeWOSlIQfWFlxbzLZe7hwFURr0=
 github.com/mailru/easyjson v0.7.7/go.mod h1:xzfreul335JAWq5oZzymOObrkdz5UnU4kGfJJLY9Nlc=
-github.com/maistra/istio-operator v0.0.0-20231214211859-76e404c8df41 h1:ihBNQRjbQxzSzSKVIJivoME371XMbrxYTk/Zq7tYohs=
-github.com/maistra/istio-operator v0.0.0-20231214211859-76e404c8df41/go.mod h1:647w84PGqHJZFBvik6DtvFSf7MjGG8U2U/+GGc30D8A=
+github.com/maistra/istio-operator v0.0.0-20231207034822-2025bead5bf0 h1:jeNCg6AaBI62L3ybfmRteL/dSDP5JA0fwRphvQ1IKkU=
+github.com/maistra/istio-operator v0.0.0-20231207034822-2025bead5bf0/go.mod h1:ckgG8jFswtqXDxNXdbz41Xk0gia/sjy7IamSvQcRLtE=
 github.com/markbates/errx v1.1.0 h1:QDFeR+UP95dO12JgW+tgi2UVfo0V8YBHiUIOaeBPiEI=
 github.com/markbates/errx v1.1.0/go.mod h1:PLa46Oex9KNbVDZhKel8v1OT7hD5JZ2eI7AHhA0wswc=
 github.com/markbates/oncer v1.0.0 h1:E83IaVAHygyndzPimgUYJjbshhDTALZyXxvk9FOlQRY=

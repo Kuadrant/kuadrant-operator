@@ -25,7 +25,7 @@ require (
 	k8s.io/client-go v0.28.4
 	k8s.io/klog/v2 v2.110.1
 	k8s.io/utils v0.0.0-20231127182322-b307cd553661
-	maistra.io/istio-operator v0.0.0-20231214211859-76e404c8df41
+	maistra.io/istio-operator v0.0.0-20231207034822-2025bead5bf0
 	sigs.k8s.io/controller-runtime v0.16.3
 	sigs.k8s.io/gateway-api v1.0.1-0.20231204134048-c7da42e6eafc
 )
@@ -171,6 +171,6 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
-replace maistra.io/istio-operator => github.com/maistra/istio-operator v0.0.0-20231214211859-76e404c8df41
+replace maistra.io/istio-operator => github.com/maistra/istio-operator v0.0.0-20231207034822-2025bead5bf0
 
 replace github.com/imdario/mergo => dario.cat/mergo v0.3.5

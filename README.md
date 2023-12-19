@@ -7,6 +7,7 @@
 
 The Operator to install and manage the lifecycle of the [Kuadrant](https://github.com/Kuadrant/) components deployments.
 
+
 ## Overview
 
 Kuadrant is a re-architecture of API Management using Cloud Native concepts and separating the components to be less coupled,

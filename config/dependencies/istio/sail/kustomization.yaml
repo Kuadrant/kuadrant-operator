@@ -1,4 +1,4 @@
 ---
 namespace: istio-system
 resources:
-- github.com/maistra/istio-operator/config/default?ref=sail-mvp2
+- github.com/maistra/istio-operator/config/default?ref=76e404c8df41defad64df5cc1551b4009a4f8986

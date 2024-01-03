@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/env"
@@ -320,11 +321,12 @@ func (r *KuadrantReconciler) registerExternalAuthorizerOSSM(ctx context.Context,
 
 func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context, logger logr.Logger) ([]common.ConfigWrapper, error) {
 	var configsToUpdate []common.ConfigWrapper
-
+	configMapName := ""
 	iop := &iopv1alpha1.IstioOperator{}
 	istKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
 	err := r.GetResource(ctx, istKey, iop)
 	if err == nil || apierrors.IsNotFound(err) {
+		configMapName = controlPlaneConfigMapName(false)
 		configsToUpdate = append(configsToUpdate, istio.NewOperatorWrapper(iop))
 	} else if !apimeta.IsNoMatchError(err) {
 		logger.V(1).Info("failed to get istiooperator object", "key", istKey, "err", err)
@@ -342,11 +344,12 @@ func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context, logger l
 				return nil, err
 			}
 		}
+		configMapName = controlPlaneConfigMapName(true)
 		configsToUpdate = append(configsToUpdate, istio.NewSailWrapper(ist))
 	}
 
 	istioConfigMap := &corev1.ConfigMap{}
-	if err := r.GetResource(ctx, client.ObjectKey{Name: controlPlaneConfigMapName(), Namespace: controlPlaneProviderNamespace()}, istioConfigMap); err != nil {
+	if err := r.GetResource(ctx, client.ObjectKey{Name: configMapName, Namespace: controlPlaneProviderNamespace()}, istioConfigMap); err != nil {
 		logger.V(1).Info("failed to get istio configMap", "key", istKey, "err", err)
 		return configsToUpdate, err
 	}
@@ -380,7 +383,10 @@ func controlPlaneProviderName() string {
 	return env.GetString("ISTIOOPERATOR_NAME", "istiocontrolplane")
 }
 
-func controlPlaneConfigMapName() string {
+func controlPlaneConfigMapName(isSail bool) string {
+	if isSail {
+		return env.GetString("ISTIOCONFIGMAP_NAME", fmt.Sprintf("istio-%s", controlPlaneProviderName()))
+	}
 	return env.GetString("ISTIOCONFIGMAP_NAME", "istio")
 }
 

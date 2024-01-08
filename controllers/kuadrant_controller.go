@@ -50,6 +50,8 @@ import (
 
 const (
 	kuadrantFinalizer = "kuadrant.io/finalizer"
+	// (Sail) The istio CR must be named default to process GW API resources
+	istioCRName = "default"
 )
 
 // KuadrantReconciler reconciles a Kuadrant object
@@ -332,7 +334,7 @@ func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context, logger l
 	} else {
 		// Error is NoMatchError so check for Istio CR instead
 		ist := &istiov1alpha1.Istio{}
-		istKey := client.ObjectKey{Name: istioCRName()}
+		istKey := client.ObjectKey{Name: istioCRName}
 		if err := r.GetResource(ctx, istKey, ist); err != nil {
 			logger.V(1).Info("failed to get istio object", "key", istKey, "err", err)
 			if apimeta.IsNoMatchError(err) {
@@ -379,10 +381,6 @@ func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1
 
 func controlPlaneProviderName() string {
 	return env.GetString("ISTIOOPERATOR_NAME", "istiocontrolplane")
-}
-
-func istioCRName() string {
-	return env.GetString("ISTIO_NAME", "default")
 }
 
 func controlPlaneConfigMapName() string {

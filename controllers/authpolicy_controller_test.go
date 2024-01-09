@@ -49,6 +49,28 @@ var _ = Describe("AuthPolicy controller", func() {
 
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
+	policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
+		policy := &api.AuthPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "toystore",
+				Namespace: testNamespace,
+			},
+			Spec: api.AuthPolicySpec{
+				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					Group:     "gateway.networking.k8s.io",
+					Kind:      "HTTPRoute",
+					Name:      testHTTPRouteName,
+					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
+				},
+				AuthScheme: testBasicAuthScheme(),
+			},
+		}
+		for _, mutateFn := range mutateFns {
+			mutateFn(policy)
+		}
+		return policy
+	}
+
 	Context("Basic HTTPRoute", func() {
 		BeforeEach(func() {
 			err := ApplyResources(filepath.Join("..", "examples", "toystore", "toystore.yaml"), k8sClient, testNamespace)
@@ -61,29 +83,20 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches policy to the Gateway", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "gw-auth",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "Gateway",
-						Name:      testGatewayName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
-			policy.Spec.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = testGatewayName
+				policy.Spec.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+			})
 
 			err := k8sClient.Create(context.Background(), policy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testPolicyIsAccepted(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
@@ -139,28 +152,19 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route)), time.Minute, 5*time.Second).Should(BeTrue())
 
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "gw-auth",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "Gateway",
-						Name:      gatewayapiv1.ObjectName(gatewayName),
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gatewayName)
+			})
 
 			err = k8sClient.Create(context.Background(), policy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(testPolicyIsReady(policy), 60*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testPolicyIsAccepted(policy), 60*time.Second, 5*time.Second).Should(BeTrue())
 
 			// check authorino authconfig hosts
 			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
@@ -175,28 +179,14 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches policy to the HTTPRoute", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "toystore",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "HTTPRoute",
-						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
+			policy := policyFactory()
 
 			err := k8sClient.Create(context.Background(), policy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testPolicyIsAccepted(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
@@ -235,28 +225,14 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches policy to the Gateway while having other policies attached to some HTTPRoutes", func() {
-			routePolicy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "toystore",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "HTTPRoute",
-						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
+			routePolicy := policyFactory()
 
 			err := k8sClient.Create(context.Background(), routePolicy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(testPolicyIsReady(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testPolicyIsAccepted(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// create second (policyless) httproute
 			otherRoute := testBuildBasicHttpRoute("policyless-route", testGatewayName, testNamespace, []string{"*.other"})
@@ -274,28 +250,19 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(otherRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// attach policy to the gatewaay
-			gwPolicy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "gw-auth",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "Gateway",
-						Name:      testGatewayName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
+			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = testGatewayName
+			})
 
 			err = k8sClient.Create(context.Background(), gwPolicy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gwPolicy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(testPolicyIsReady(gwPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testPolicyIsAccepted(gwPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, gwPolicy.Spec.TargetRef), Namespace: testNamespace}
@@ -335,45 +302,22 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches policy to the Gateway while having other policies attached to all HTTPRoutes", func() {
-			routePolicy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "toystore",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "HTTPRoute",
-						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
+			routePolicy := policyFactory()
 
 			err := k8sClient.Create(context.Background(), routePolicy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(testPolicyIsReady(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testPolicyIsAccepted(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// attach policy to the gatewaay
-			gwPolicy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "gw-auth",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "Gateway",
-						Name:      testGatewayName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
+			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = testGatewayName
+			})
 
 			err = k8sClient.Create(context.Background(), gwPolicy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gwPolicy).String(), "error", err)
@@ -386,7 +330,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				if err != nil {
 					return false
 				}
-				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, APAvailableConditionType)
+				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
 				return condition != nil && condition.Reason == "AuthSchemeNotReady"
 			}, 30*time.Second, 5*time.Second).Should(BeTrue())
 
@@ -407,30 +351,17 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Rejects policy with only unmatching top-level route selectors while trying to configure the gateway", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "toystore",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "HTTPRoute",
-						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					RouteSelectors: []api.RouteSelector{
-						{ // does not select any HTTPRouteRule
-							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
-								{
-									Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
-								},
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.RouteSelectors = []api.RouteSelector{
+					{ // does not select any HTTPRouteRule
+						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+							{
+								Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
 							},
 						},
 					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
+				}
+			})
 
 			err := k8sClient.Create(context.Background(), policy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
@@ -443,7 +374,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				if err != nil {
 					return false
 				}
-				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, APAvailableConditionType)
+				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
 				return condition != nil && condition.Reason == "ReconciliationError" && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
 			}, 30*time.Second, 5*time.Second).Should(BeTrue())
 
@@ -464,21 +395,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Rejects policy with only unmatching config-level route selectors post-configuring the gateway", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "toystore",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "HTTPRoute",
-						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
+			policy := policyFactory()
 			config := policy.Spec.AuthScheme.Authentication["apiKey"]
 			config.RouteSelectors = []api.RouteSelector{
 				{ // does not select any HTTPRouteRule
@@ -502,7 +419,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				if err != nil {
 					return false
 				}
-				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, APAvailableConditionType)
+				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
 				return condition != nil && condition.Reason == "ReconciliationError" && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
 			}, 30*time.Second, 5*time.Second).Should(BeTrue())
 
@@ -529,27 +446,13 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Deletes resources when the policy is deleted", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "toystore",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "HTTPRoute",
-						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
+			policy := policyFactory()
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testPolicyIsAccepted(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// delete policy
 			err = k8sClient.Delete(context.Background(), policy)
@@ -573,186 +476,174 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Maps to all fields of the AuthConfig", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "toystore",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "HTTPRoute",
-						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					NamedPatterns: map[string]authorinoapi.PatternExpressions{
-						"internal-source": []authorinoapi.PatternExpression{
-							{
-								Selector: "source.ip",
-								Operator: authorinoapi.PatternExpressionOperator("matches"),
-								Value:    `192\.168\..*`,
-							},
-						},
-						"authz-and-rl-required": []authorinoapi.PatternExpression{
-							{
-								Selector: "source.ip",
-								Operator: authorinoapi.PatternExpressionOperator("neq"),
-								Value:    "192.168.0.10",
-							},
-						},
-					},
-					Conditions: []authorinoapi.PatternExpressionOrRef{
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.NamedPatterns = map[string]authorinoapi.PatternExpressions{
+					"internal-source": []authorinoapi.PatternExpression{
 						{
-							PatternRef: authorinoapi.PatternRef{
-								Name: "internal-source",
+							Selector: "source.ip",
+							Operator: authorinoapi.PatternExpressionOperator("matches"),
+							Value:    `192\.168\..*`,
+						},
+					},
+					"authz-and-rl-required": []authorinoapi.PatternExpression{
+						{
+							Selector: "source.ip",
+							Operator: authorinoapi.PatternExpressionOperator("neq"),
+							Value:    "192.168.0.10",
+						},
+					},
+				}
+				policy.Spec.Conditions = []authorinoapi.PatternExpressionOrRef{
+					{
+						PatternRef: authorinoapi.PatternRef{
+							Name: "internal-source",
+						},
+					},
+				}
+				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+					Authentication: map[string]api.AuthenticationSpec{
+						"jwt": {
+							AuthenticationSpec: authorinoapi.AuthenticationSpec{
+								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+									Conditions: []authorinoapi.PatternExpressionOrRef{
+										{
+											PatternExpression: authorinoapi.PatternExpression{
+												Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
+												Operator: "neq",
+												Value:    "",
+											},
+										},
+									},
+								},
+								AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+									Plain: &authorinoapi.PlainIdentitySpec{
+										Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
+									},
+								},
 							},
 						},
 					},
-					AuthScheme: api.AuthSchemeSpec{
-						Authentication: map[string]api.AuthenticationSpec{
-							"jwt": {
-								AuthenticationSpec: authorinoapi.AuthenticationSpec{
-									CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-										Conditions: []authorinoapi.PatternExpressionOrRef{
-											{
-												PatternExpression: authorinoapi.PatternExpression{
-													Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
-													Operator: "neq",
-													Value:    "",
-												},
+					Metadata: map[string]api.MetadataSpec{
+						"user-groups": {
+							MetadataSpec: authorinoapi.MetadataSpec{
+								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+									Conditions: []authorinoapi.PatternExpressionOrRef{
+										{
+											PatternExpression: authorinoapi.PatternExpression{
+												Selector: "auth.identity.admin",
+												Operator: authorinoapi.PatternExpressionOperator("neq"),
+												Value:    "true",
 											},
 										},
 									},
-									AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-										Plain: &authorinoapi.PlainIdentitySpec{
-											Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
-										},
+								},
+								MetadataMethodSpec: authorinoapi.MetadataMethodSpec{
+									Http: &authorinoapi.HttpEndpointSpec{
+										Url: "http://user-groups/username={auth.identity.username}",
 									},
 								},
 							},
 						},
-						Metadata: map[string]api.MetadataSpec{
-							"user-groups": {
-								MetadataSpec: authorinoapi.MetadataSpec{
-									CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-										Conditions: []authorinoapi.PatternExpressionOrRef{
+					},
+					Authorization: map[string]api.AuthorizationSpec{
+						"admin-or-privileged": {
+							AuthorizationSpec: authorinoapi.AuthorizationSpec{
+								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+									Conditions: []authorinoapi.PatternExpressionOrRef{
+										{
+											PatternRef: authorinoapi.PatternRef{
+												Name: "authz-and-rl-required",
+											},
+										},
+									},
+								},
+								AuthorizationMethodSpec: authorinoapi.AuthorizationMethodSpec{
+									PatternMatching: &authorinoapi.PatternMatchingAuthorizationSpec{
+										Patterns: []authorinoapi.PatternExpressionOrRef{
 											{
-												PatternExpression: authorinoapi.PatternExpression{
-													Selector: "auth.identity.admin",
-													Operator: authorinoapi.PatternExpressionOperator("neq"),
-													Value:    "true",
-												},
-											},
-										},
-									},
-									MetadataMethodSpec: authorinoapi.MetadataMethodSpec{
-										Http: &authorinoapi.HttpEndpointSpec{
-											Url: "http://user-groups/username={auth.identity.username}",
-										},
-									},
-								},
-							},
-						},
-						Authorization: map[string]api.AuthorizationSpec{
-							"admin-or-privileged": {
-								AuthorizationSpec: authorinoapi.AuthorizationSpec{
-									CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-										Conditions: []authorinoapi.PatternExpressionOrRef{
-											{
-												PatternRef: authorinoapi.PatternRef{
-													Name: "authz-and-rl-required",
-												},
-											},
-										},
-									},
-									AuthorizationMethodSpec: authorinoapi.AuthorizationMethodSpec{
-										PatternMatching: &authorinoapi.PatternMatchingAuthorizationSpec{
-											Patterns: []authorinoapi.PatternExpressionOrRef{
-												{
-													Any: []authorinoapi.UnstructuredPatternExpressionOrRef{
-														{
-															PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
-																PatternExpression: authorinoapi.PatternExpression{
-																	Selector: "auth.identity.admin",
-																	Operator: authorinoapi.PatternExpressionOperator("eq"),
-																	Value:    "true",
-																},
-															},
-														},
-														{
-															PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
-																PatternExpression: authorinoapi.PatternExpression{
-																	Selector: "auth.metadata.user-groups",
-																	Operator: authorinoapi.PatternExpressionOperator("incl"),
-																	Value:    "privileged",
-																},
-															},
-														},
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-						Response: &api.ResponseSpec{
-							Unauthenticated: &authorinoapi.DenyWithSpec{
-								Message: &authorinoapi.ValueOrSelector{
-									Value: k8sruntime.RawExtension{Raw: []byte(`"Missing verified JWT injected by the gateway"`)},
-								},
-							},
-							Unauthorized: &authorinoapi.DenyWithSpec{
-								Message: &authorinoapi.ValueOrSelector{
-									Value: k8sruntime.RawExtension{Raw: []byte(`"User must be admin or member of privileged group"`)},
-								},
-							},
-							Success: api.WrappedSuccessResponseSpec{
-								Headers: map[string]api.HeaderSuccessResponseSpec{
-									"x-username": {
-										SuccessResponseSpec: api.SuccessResponseSpec{
-											SuccessResponseSpec: authorinoapi.SuccessResponseSpec{
-												CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-													Conditions: []authorinoapi.PatternExpressionOrRef{
-														{
+												Any: []authorinoapi.UnstructuredPatternExpressionOrRef{
+													{
+														PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
 															PatternExpression: authorinoapi.PatternExpression{
-																Selector: "request.headers.x-propagate-username.@case:lower",
-																Operator: authorinoapi.PatternExpressionOperator("matches"),
-																Value:    "1|yes|true",
+																Selector: "auth.identity.admin",
+																Operator: authorinoapi.PatternExpressionOperator("eq"),
+																Value:    "true",
 															},
 														},
 													},
-												},
-												AuthResponseMethodSpec: authorinoapi.AuthResponseMethodSpec{
-													Plain: &authorinoapi.PlainAuthResponseSpec{
-														Selector: "auth.identity.username",
+													{
+														PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
+															PatternExpression: authorinoapi.PatternExpression{
+																Selector: "auth.metadata.user-groups",
+																Operator: authorinoapi.PatternExpressionOperator("incl"),
+																Value:    "privileged",
+															},
+														},
 													},
 												},
 											},
 										},
 									},
 								},
-								DynamicMetadata: map[string]api.SuccessResponseSpec{
-									"x-auth-data": {
+							},
+						},
+					},
+					Response: &api.ResponseSpec{
+						Unauthenticated: &authorinoapi.DenyWithSpec{
+							Message: &authorinoapi.ValueOrSelector{
+								Value: k8sruntime.RawExtension{Raw: []byte(`"Missing verified JWT injected by the gateway"`)},
+							},
+						},
+						Unauthorized: &authorinoapi.DenyWithSpec{
+							Message: &authorinoapi.ValueOrSelector{
+								Value: k8sruntime.RawExtension{Raw: []byte(`"User must be admin or member of privileged group"`)},
+							},
+						},
+						Success: api.WrappedSuccessResponseSpec{
+							Headers: map[string]api.HeaderSuccessResponseSpec{
+								"x-username": {
+									SuccessResponseSpec: api.SuccessResponseSpec{
 										SuccessResponseSpec: authorinoapi.SuccessResponseSpec{
 											CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
 												Conditions: []authorinoapi.PatternExpressionOrRef{
 													{
-														PatternRef: authorinoapi.PatternRef{
-															Name: "authz-and-rl-required",
+														PatternExpression: authorinoapi.PatternExpression{
+															Selector: "request.headers.x-propagate-username.@case:lower",
+															Operator: authorinoapi.PatternExpressionOperator("matches"),
+															Value:    "1|yes|true",
 														},
 													},
 												},
 											},
 											AuthResponseMethodSpec: authorinoapi.AuthResponseMethodSpec{
-												Json: &authorinoapi.JsonAuthResponseSpec{
-													Properties: authorinoapi.NamedValuesOrSelectors{
-														"username": {
-															Selector: "auth.identity.username",
-														},
-														"groups": {
-															Selector: "auth.metadata.user-groups",
-														},
+												Plain: &authorinoapi.PlainAuthResponseSpec{
+													Selector: "auth.identity.username",
+												},
+											},
+										},
+									},
+								},
+							},
+							DynamicMetadata: map[string]api.SuccessResponseSpec{
+								"x-auth-data": {
+									SuccessResponseSpec: authorinoapi.SuccessResponseSpec{
+										CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+											Conditions: []authorinoapi.PatternExpressionOrRef{
+												{
+													PatternRef: authorinoapi.PatternRef{
+														Name: "authz-and-rl-required",
+													},
+												},
+											},
+										},
+										AuthResponseMethodSpec: authorinoapi.AuthResponseMethodSpec{
+											Json: &authorinoapi.JsonAuthResponseSpec{
+												Properties: authorinoapi.NamedValuesOrSelectors{
+													"username": {
+														Selector: "auth.identity.username",
+													},
+													"groups": {
+														Selector: "auth.metadata.user-groups",
 													},
 												},
 											},
@@ -761,48 +652,48 @@ var _ = Describe("AuthPolicy controller", func() {
 								},
 							},
 						},
-						Callbacks: map[string]api.CallbackSpec{
-							"unauthorized-attempt": {
-								CallbackSpec: authorinoapi.CallbackSpec{
-									CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-										Conditions: []authorinoapi.PatternExpressionOrRef{
-											{
-												PatternRef: authorinoapi.PatternRef{
-													Name: "authz-and-rl-required",
-												},
+					},
+					Callbacks: map[string]api.CallbackSpec{
+						"unauthorized-attempt": {
+							CallbackSpec: authorinoapi.CallbackSpec{
+								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+									Conditions: []authorinoapi.PatternExpressionOrRef{
+										{
+											PatternRef: authorinoapi.PatternRef{
+												Name: "authz-and-rl-required",
 											},
-											{
-												PatternExpression: authorinoapi.PatternExpression{
-													Selector: "auth.authorization.admin-or-privileged",
-													Operator: authorinoapi.PatternExpressionOperator("neq"),
-													Value:    "true",
-												},
+										},
+										{
+											PatternExpression: authorinoapi.PatternExpression{
+												Selector: "auth.authorization.admin-or-privileged",
+												Operator: authorinoapi.PatternExpressionOperator("neq"),
+												Value:    "true",
 											},
 										},
 									},
-									CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
-										Http: &authorinoapi.HttpEndpointSpec{
-											Url:         "http://events/unauthorized",
-											Method:      ptr.To(authorinoapi.HttpMethod("POST")),
-											ContentType: authorinoapi.HttpContentType("application/json"),
-											Body: &authorinoapi.ValueOrSelector{
-												Selector: `\{"identity":{auth.identity},"request-id":{request.id}\}`,
-											},
+								},
+								CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
+									Http: &authorinoapi.HttpEndpointSpec{
+										Url:         "http://events/unauthorized",
+										Method:      ptr.To(authorinoapi.HttpMethod("POST")),
+										ContentType: authorinoapi.HttpContentType("application/json"),
+										Body: &authorinoapi.ValueOrSelector{
+											Selector: `\{"identity":{auth.identity},"request-id":{request.id}\}`,
 										},
 									},
 								},
 							},
 						},
 					},
-				},
-			}
+				}
+			})
 
 			err := k8sClient.Create(context.Background(), policy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testPolicyIsAccepted(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// check authorino authconfig
 			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
@@ -829,27 +720,13 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches simple policy to the HTTPRoute", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "toystore",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "HTTPRoute",
-						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
+			policy := policyFactory()
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testPolicyIsAccepted(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
@@ -914,50 +791,37 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches policy with top-level route selectors to the HTTPRoute", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "toystore",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "HTTPRoute",
-						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					RouteSelectors: []api.RouteSelector{
-						{ // Selects: POST|DELETE *.admin.toystore.com/admin*
-							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
-								{
-									Path: &gatewayapiv1alpha2.HTTPPathMatch{
-										Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
-										Value: ptr.To("/admin"),
-									},
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.RouteSelectors = []api.RouteSelector{
+					{ // Selects: POST|DELETE *.admin.toystore.com/admin*
+						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+							{
+								Path: &gatewayapiv1alpha2.HTTPPathMatch{
+									Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+									Value: ptr.To("/admin"),
 								},
 							},
-							Hostnames: []gatewayapiv1.Hostname{"*.admin.toystore.com"},
 						},
-						{ // Selects: GET /private*
-							Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
-								{
-									Path: &gatewayapiv1alpha2.HTTPPathMatch{
-										Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
-										Value: ptr.To("/private"),
-									},
+						Hostnames: []gatewayapiv1.Hostname{"*.admin.toystore.com"},
+					},
+					{ // Selects: GET /private*
+						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+							{
+								Path: &gatewayapiv1alpha2.HTTPPathMatch{
+									Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+									Value: ptr.To("/private"),
 								},
 							},
 						},
 					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
+				}
+			})
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testPolicyIsAccepted(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
@@ -1031,42 +895,29 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches policy with config-level route selectors to the HTTPRoute", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "toystore",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "HTTPRoute",
-						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
-			config := policy.Spec.AuthScheme.Authentication["apiKey"]
-			config.RouteSelectors = []api.RouteSelector{
-				{ // Selects: POST|DELETE *.admin.toystore.com/admin*
-					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
-						{
-							Path: &gatewayapiv1alpha2.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
-								Value: ptr.To("/admin"),
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				config := policy.Spec.AuthScheme.Authentication["apiKey"]
+				config.RouteSelectors = []api.RouteSelector{
+					{ // Selects: POST|DELETE *.admin.toystore.com/admin*
+						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+							{
+								Path: &gatewayapiv1alpha2.HTTPPathMatch{
+									Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+									Value: ptr.To("/admin"),
+								},
 							},
 						},
+						Hostnames: []gatewayapiv1.Hostname{"*.admin.toystore.com"},
 					},
-					Hostnames: []gatewayapiv1.Hostname{"*.admin.toystore.com"},
-				},
-			}
-			policy.Spec.AuthScheme.Authentication["apiKey"] = config
+				}
+				policy.Spec.AuthScheme.Authentication["apiKey"] = config
+			})
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testPolicyIsAccepted(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
@@ -1158,51 +1009,38 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Mixes route selectors into other conditions", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "toystore",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
-						Kind:      "HTTPRoute",
-						Name:      testHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
-					},
-					AuthScheme: testBasicAuthScheme(),
-				},
-			}
-			config := policy.Spec.AuthScheme.Authentication["apiKey"]
-			config.RouteSelectors = []api.RouteSelector{
-				{ // Selects: GET /private*
-					Matches: []gatewayapiv1.HTTPRouteMatch{
-						{
-							Path: &gatewayapiv1.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
-								Value: ptr.To("/private"),
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				config := policy.Spec.AuthScheme.Authentication["apiKey"]
+				config.RouteSelectors = []api.RouteSelector{
+					{ // Selects: GET /private*
+						Matches: []gatewayapiv1.HTTPRouteMatch{
+							{
+								Path: &gatewayapiv1.HTTPPathMatch{
+									Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
+									Value: ptr.To("/private"),
+								},
+								Method: ptr.To(gatewayapiv1.HTTPMethod("GET")),
 							},
-							Method: ptr.To(gatewayapiv1.HTTPMethod("GET")),
 						},
 					},
-				},
-			}
-			config.Conditions = []authorinoapi.PatternExpressionOrRef{
-				{
-					PatternExpression: authorinoapi.PatternExpression{
-						Selector: "context.source.address.Address.SocketAddress.address",
-						Operator: authorinoapi.PatternExpressionOperator("matches"),
-						Value:    `192\.168\.0\..*`,
+				}
+				config.Conditions = []authorinoapi.PatternExpressionOrRef{
+					{
+						PatternExpression: authorinoapi.PatternExpression{
+							Selector: "context.source.address.Address.SocketAddress.address",
+							Operator: authorinoapi.PatternExpressionOperator("matches"),
+							Value:    `192\.168\.0\..*`,
+						},
 					},
-				},
-			}
-			policy.Spec.AuthScheme.Authentication["apiKey"] = config
+				}
+				policy.Spec.AuthScheme.Authentication["apiKey"] = config
+			})
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(testPolicyIsReady(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testPolicyIsAccepted(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// check authorino authconfig
 			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
@@ -1256,7 +1094,77 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 	})
 
-	Context("TODO: Targeted resource does not exist", func() {})
+	Context("AuthPolicy accepted condition reasons", func() {
+		assertAcceptedConditionFalse := func(policy *api.AuthPolicy, reason, message string) func() bool {
+			return func() bool {
+				existingPolicy := &api.AuthPolicy{}
+				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(policy), existingPolicy)
+				if err != nil {
+					return false
+				}
+				cond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				if cond == nil {
+					return false
+				}
+
+				return cond.Status == metav1.ConditionFalse && cond.Reason == reason && cond.Message == message
+			}
+		}
+
+		// Accepted reason is already tested generally by the existing tests
+
+		It("Target not found reason", func() {
+			policy := policyFactory()
+
+			err := k8sClient.Create(context.Background(), policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(assertAcceptedConditionFalse(policy, string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
+				fmt.Sprintf("AuthPolicy target %s was not found", testHTTPRouteName)), 30*time.Second, 5*time.Second).Should(BeTrue())
+		})
+		It("Conflict reason", func() {
+			route := testBuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
+			err := k8sClient.Create(context.Background(), route)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			policy := policyFactory()
+			err = k8sClient.Create(context.Background(), policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			policy2 := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "conflicting-ap"
+			})
+			err = k8sClient.Create(context.Background(), policy2)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy2).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(assertAcceptedConditionFalse(policy2, string(gatewayapiv1alpha2.PolicyReasonConflicted),
+				fmt.Sprintf("AuthPolicy is conflicted by %[1]v/toystore: the gateway.networking.k8s.io/v1, Kind=HTTPRoute target %[1]v/toystore-route is already referenced by policy %[1]v/toystore", testNamespace),
+			), 30*time.Second, 5*time.Second).Should(BeTrue())
+		})
+		It("Invalid reason", func() {
+			const targetRefName, targetRefNamespace = "istio-ingressgateway", "istio-system"
+
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = targetRefName
+				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(targetRefNamespace))
+			})
+
+			err := k8sClient.Create(context.Background(), policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(assertAcceptedConditionFalse(policy, string(gatewayapiv1alpha2.PolicyReasonInvalid),
+				fmt.Sprintf("AuthPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", targetRefNamespace),
+			), 30*time.Second, 5*time.Second).Should(BeTrue())
+		})
+	})
 })
 
 var _ = Describe("AuthPolicy CEL Validations", func() {
@@ -1269,7 +1177,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
 	Context("Spec TargetRef Validations", func() {
-		It("Valid policy targeting HTTPRoute", func() {
+		policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
 			policy := &api.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-policy",
@@ -1279,65 +1187,45 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 						Group: "gateway.networking.k8s.io",
 						Kind:  "HTTPRoute",
-						Name:  "my-route",
+						Name:  "my-target",
 					},
 				},
 			}
+
+			for _, mutateFn := range mutateFns {
+				mutateFn(policy)
+			}
+
+			return policy
+		}
+
+		It("Valid policy targeting HTTPRoute", func() {
+			policy := policyFactory()
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(BeNil())
 		})
 
 		It("Valid policy targeting Gateway", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
-						Kind:  "Gateway",
-						Name:  "my-gw",
-					},
-				},
-			}
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+			})
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(BeNil())
 		})
 
 		It("Invalid Target Ref Group", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "not-gateway.networking.k8s.io",
-						Kind:  "HTTPRoute",
-						Name:  "my-route",
-					},
-				},
-			}
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.TargetRef.Group = "not-gateway.networking.k8s.io"
+			})
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
 			Expect(strings.Contains(err.Error(), "Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'")).To(BeTrue())
 		})
 
 		It("Invalid Target Ref Kind", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
-						Kind:  "TCPRoute",
-						Name:  "my-route",
-					},
-				},
-			}
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.TargetRef.Kind = "TCPRoute"
+			})
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
 			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'")).To(BeTrue())
@@ -1366,7 +1254,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 			commonAuthRuleSpec = api.CommonAuthRuleSpec{RouteSelectors: routeSelectors}
 		)
 
-		It("invalid usage of top-level route selectors with a gateway targetRef", func() {
+		policyFactory := func(mutateFn func(policy *api.AuthPolicy)) *api.AuthPolicy {
 			policy := &api.AuthPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-policy",
@@ -1378,9 +1266,19 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 						Kind:  "Gateway",
 						Name:  "my-gw",
 					},
-					RouteSelectors: routeSelectors,
 				},
 			}
+
+			if mutateFn != nil {
+				mutateFn(policy)
+			}
+
+			return policy
+		}
+		It("invalid usage of top-level route selectors with a gateway targetRef", func() {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.RouteSelectors = routeSelectors
+			})
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
@@ -1388,31 +1286,20 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - authentication", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
-						Kind:  "Gateway",
-						Name:  "my-gw",
-					},
-					AuthScheme: api.AuthSchemeSpec{
-						Authentication: map[string]api.AuthenticationSpec{
-							"my-rule": {
-								AuthenticationSpec: authorinoapi.AuthenticationSpec{
-									AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-										AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
-									},
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+					Authentication: map[string]api.AuthenticationSpec{
+						"my-rule": {
+							AuthenticationSpec: authorinoapi.AuthenticationSpec{
+								AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+									AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
 								},
-								CommonAuthRuleSpec: commonAuthRuleSpec,
 							},
+							CommonAuthRuleSpec: commonAuthRuleSpec,
 						},
 					},
-				},
-			}
+				}
+			})
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
@@ -1420,26 +1307,15 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - metadata", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
-						Kind:  "Gateway",
-						Name:  "my-gw",
-					},
-					AuthScheme: api.AuthSchemeSpec{
-						Metadata: map[string]api.MetadataSpec{
-							"my-metadata": {
-								CommonAuthRuleSpec: commonAuthRuleSpec,
-							},
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+					Metadata: map[string]api.MetadataSpec{
+						"my-metadata": {
+							CommonAuthRuleSpec: commonAuthRuleSpec,
 						},
 					},
-				},
-			}
+				}
+			})
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
@@ -1447,26 +1323,15 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - authorization", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
-						Kind:  "Gateway",
-						Name:  "my-gw",
-					},
-					AuthScheme: api.AuthSchemeSpec{
-						Authorization: map[string]api.AuthorizationSpec{
-							"my-authZ": {
-								CommonAuthRuleSpec: commonAuthRuleSpec,
-							},
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+					Authorization: map[string]api.AuthorizationSpec{
+						"my-authZ": {
+							CommonAuthRuleSpec: commonAuthRuleSpec,
 						},
 					},
-				},
-			}
+				}
+			})
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
@@ -1474,32 +1339,21 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - response success headers", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
-						Kind:  "Gateway",
-						Name:  "my-gw",
-					},
-					AuthScheme: api.AuthSchemeSpec{
-						Response: &api.ResponseSpec{
-							Success: api.WrappedSuccessResponseSpec{
-								Headers: map[string]api.HeaderSuccessResponseSpec{
-									"header": {
-										SuccessResponseSpec: api.SuccessResponseSpec{
-											CommonAuthRuleSpec: commonAuthRuleSpec,
-										},
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+					Response: &api.ResponseSpec{
+						Success: api.WrappedSuccessResponseSpec{
+							Headers: map[string]api.HeaderSuccessResponseSpec{
+								"header": {
+									SuccessResponseSpec: api.SuccessResponseSpec{
+										CommonAuthRuleSpec: commonAuthRuleSpec,
 									},
 								},
 							},
 						},
 					},
-				},
-			}
+				}
+			})
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
@@ -1507,30 +1361,19 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - response success dynamic metadata", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
-						Kind:  "Gateway",
-						Name:  "my-gw",
-					},
-					AuthScheme: api.AuthSchemeSpec{
-						Response: &api.ResponseSpec{
-							Success: api.WrappedSuccessResponseSpec{
-								DynamicMetadata: map[string]api.SuccessResponseSpec{
-									"header": {
-										CommonAuthRuleSpec: commonAuthRuleSpec,
-									},
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+					Response: &api.ResponseSpec{
+						Success: api.WrappedSuccessResponseSpec{
+							DynamicMetadata: map[string]api.SuccessResponseSpec{
+								"header": {
+									CommonAuthRuleSpec: commonAuthRuleSpec,
 								},
 							},
 						},
 					},
-				},
-			}
+				}
+			})
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
@@ -1538,33 +1381,22 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - callbacks", func() {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
-						Kind:  "Gateway",
-						Name:  "my-gw",
-					},
-					AuthScheme: api.AuthSchemeSpec{
-						Callbacks: map[string]api.CallbackSpec{
-							"callback": {
-								CallbackSpec: authorinoapi.CallbackSpec{
-									CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
-										Http: &authorinoapi.HttpEndpointSpec{
-											Url: "test.com",
-										},
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+					Callbacks: map[string]api.CallbackSpec{
+						"callback": {
+							CallbackSpec: authorinoapi.CallbackSpec{
+								CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
+									Http: &authorinoapi.HttpEndpointSpec{
+										Url: "test.com",
 									},
 								},
-								CommonAuthRuleSpec: commonAuthRuleSpec,
 							},
+							CommonAuthRuleSpec: commonAuthRuleSpec,
 						},
 					},
-				},
-			}
+				}
+			})
 
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
@@ -1598,10 +1430,10 @@ func testBasicAuthScheme() api.AuthSchemeSpec {
 	}
 }
 
-func testPolicyIsReady(policy *api.AuthPolicy) func() bool {
+func testPolicyIsAccepted(policy *api.AuthPolicy) func() bool {
 	return func() bool {
 		existingPolicy := &api.AuthPolicy{}
 		err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(policy), existingPolicy)
-		return err == nil && meta.IsStatusConditionTrue(existingPolicy.Status.Conditions, "Available")
+		return err == nil && meta.IsStatusConditionTrue(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
 	}
 }

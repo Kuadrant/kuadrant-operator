@@ -1302,24 +1302,6 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 	}
 }
 
-type FakePolicy struct {
-	client.Object
-	Hosts     []string
-	targetRef gatewayapiv1alpha2.PolicyTargetReference
-}
-
-func (p *FakePolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
-	return p.targetRef
-}
-
-func (p *FakePolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
-	return gatewayapiv1.Namespace(p.GetNamespace())
-}
-
-func (p *FakePolicy) GetRulesHostnames() []string {
-	return p.Hosts
-}
-
 func TestValidateHierarchicalRules(t *testing.T) {
 	hostname := gatewayapiv1.Hostname("*.example.com")
 	gateway := &gatewayapiv1.Gateway{

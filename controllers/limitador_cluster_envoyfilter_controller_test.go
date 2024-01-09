@@ -105,7 +105,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
-			Eventually(testRLPIsAvailable(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check envoy filter
 			Eventually(func() bool {

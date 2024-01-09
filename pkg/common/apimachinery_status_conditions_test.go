@@ -3,11 +3,16 @@
 package common
 
 import (
+	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
 	goCmp "github.com/google/go-cmp/cmp"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 func TestConditionMarshal(t *testing.T) {
@@ -109,6 +114,111 @@ func TestConditionMarshal(t *testing.T) {
 			diff = goCmp.Diff(tc.expectedError, actualError)
 			if diff != "" {
 				subT.Errorf("Unexpected error (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestAcceptedCondition(t *testing.T) {
+	type args struct {
+		policy KuadrantPolicy
+		err    error
+	}
+	tests := []struct {
+		name string
+		args args
+		want *metav1.Condition
+	}{
+		{
+			name: "accepted reason",
+			args: args{
+				policy: &FakePolicy{},
+			},
+			want: &metav1.Condition{
+				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+				Status:  metav1.ConditionTrue,
+				Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
+				Message: "FakePolicy has been accepted",
+			},
+		},
+		{
+			name: "target not found reason",
+			args: args{
+				policy: &FakePolicy{},
+				err: NewErrTargetNotFound("FakePolicy", gatewayapiv1alpha2.PolicyTargetReference{
+					Group: "gateway.networking.k8s.io",
+					Kind:  "HTTPRoute",
+					Name:  "my-target-ref",
+				}, errors.NewNotFound(schema.GroupResource{}, "my-target-ref")),
+			},
+			want: &metav1.Condition{
+				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
+				Message: "FakePolicy target my-target-ref was not found",
+			},
+		},
+		{
+			name: "target not found reason with err",
+			args: args{
+				policy: &FakePolicy{},
+				err: NewErrTargetNotFound("FakePolicy", gatewayapiv1alpha2.PolicyTargetReference{
+					Group: "gateway.networking.k8s.io",
+					Kind:  "HTTPRoute",
+					Name:  "my-target-ref",
+				}, fmt.Errorf("deletion err")),
+			},
+			want: &metav1.Condition{
+				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
+				Message: "FakePolicy target my-target-ref was not found: deletion err",
+			},
+		},
+		{
+			name: "invalid reason",
+			args: args{
+				policy: &FakePolicy{},
+				err:    NewErrInvalid("FakePolicy", fmt.Errorf("invalid err")),
+			},
+			want: &metav1.Condition{
+				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(gatewayapiv1alpha2.PolicyReasonInvalid),
+				Message: "FakePolicy target is invalid: invalid err",
+			},
+		},
+		{
+			name: "conflicted reason",
+			args: args{
+				policy: &FakePolicy{},
+				err:    NewErrConflict("FakePolicy", "testNs/policy1", fmt.Errorf("conflict err")),
+			},
+			want: &metav1.Condition{
+				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(gatewayapiv1alpha2.PolicyReasonConflicted),
+				Message: "FakePolicy is conflicted by testNs/policy1: conflict err",
+			},
+		},
+		{
+			name: "reconciliation error reason",
+			args: args{
+				policy: &FakePolicy{},
+				err:    fmt.Errorf("reconcile err"),
+			},
+			want: &metav1.Condition{
+				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+				Status:  metav1.ConditionFalse,
+				Reason:  "ReconciliationError",
+				Message: "reconcile err",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := AcceptedCondition(tt.args.policy, tt.args.err); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("AcceptedCondition() = %v, want %v", got, tt.want)
 			}
 		})
 	}

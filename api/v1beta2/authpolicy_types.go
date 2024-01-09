@@ -197,6 +197,8 @@ func (s *AuthPolicyStatus) Equals(other *AuthPolicyStatus, logger logr.Logger) b
 	return true
 }
 
+var _ common.KuadrantPolicy = &AuthPolicy{}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=direct"
@@ -275,6 +277,10 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 	}
 
 	return
+}
+
+func (ap *AuthPolicy) Kind() string {
+	return ap.TypeMeta.Kind
 }
 
 //+kubebuilder:object:root=true

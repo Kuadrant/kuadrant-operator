@@ -163,6 +163,8 @@ func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr
 	return true
 }
 
+var _ common.KuadrantPolicy = &RateLimitPolicy{}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=direct"
@@ -238,6 +240,10 @@ func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 		}
 	}
 	return
+}
+
+func (r *RateLimitPolicy) Kind() string {
+	return r.TypeMeta.Kind
 }
 
 func init() {

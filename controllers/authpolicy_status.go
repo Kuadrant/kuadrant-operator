@@ -14,9 +14,8 @@ import (
 
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
-
-const APAvailableConditionType string = "Available"
 
 // reconcileStatus makes sure status block of AuthPolicy is up-to-date.
 func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *api.AuthPolicy, specErr error) (ctrl.Result, error) {
@@ -78,28 +77,17 @@ func (r *AuthPolicyReconciler) calculateStatus(ap *api.AuthPolicy, specErr error
 		ObservedGeneration: ap.Status.ObservedGeneration,
 	}
 
-	targetNetworkObjectKind := string(ap.Spec.TargetRef.Kind)
-	availableCond := r.availableCondition(targetNetworkObjectKind, specErr, authConfigReady)
+	availableCond := r.acceptedCondition(ap, specErr, authConfigReady)
 
 	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
 
 	return newStatus
 }
 
-func (r *AuthPolicyReconciler) availableCondition(targetNetworkObjectectKind string, specErr error, authConfigReady bool) *metav1.Condition {
-	// Condition if there is no issue
-	cond := &metav1.Condition{
-		Type:    APAvailableConditionType,
-		Status:  metav1.ConditionTrue,
-		Reason:  fmt.Sprintf("%sProtected", targetNetworkObjectectKind),
-		Message: fmt.Sprintf("%s is protected", targetNetworkObjectectKind),
-	}
+func (r *AuthPolicyReconciler) acceptedCondition(policy common.KuadrantPolicy, specErr error, authConfigReady bool) *metav1.Condition {
+	cond := common.AcceptedCondition(policy, specErr)
 
-	if specErr != nil {
-		cond.Status = metav1.ConditionFalse
-		cond.Reason = "ReconciliationError"
-		cond.Message = specErr.Error()
-	} else if !authConfigReady {
+	if !authConfigReady {
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = "AuthSchemeNotReady"
 		cond.Message = "AuthScheme is not ready yet" // TODO(rahul): need to take care if status change is delayed.

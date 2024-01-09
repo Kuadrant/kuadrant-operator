@@ -67,7 +67,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, ap, delResErr)
+				return r.reconcileStatus(ctx, ap, common.NewErrTargetNotFound(ap.Kind(), ap.GetTargetRef(), delResErr))
 			}
 			return ctrl.Result{}, err
 		}
@@ -130,13 +130,21 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	return ctrl.Result{}, nil
 }
 
-func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
-	// validate
+// validate performs validation before proceeding with the reconcile loop, returning a common.ErrInvalid on any failing validation
+func (r *AuthPolicyReconciler) validate(ap *api.AuthPolicy, targetNetworkObject client.Object) error {
 	if err := ap.Validate(); err != nil {
-		return err
+		return common.NewErrInvalid(ap.Kind(), err)
 	}
 
 	if err := common.ValidateHierarchicalRules(ap, targetNetworkObject); err != nil {
+		return common.NewErrInvalid(ap.Kind(), err)
+	}
+
+	return nil
+}
+
+func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
+	if err := r.validate(ap, targetNetworkObject); err != nil {
 		return err
 	}
 
@@ -159,7 +167,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 		return err
 	}
 
-	// set annotation of policies afftecting the gateway - should be the last step, only when all the reconciliation steps succeed
+	// set annotation of policies affecting the gateway - should be the last step, only when all the reconciliation steps succeed
 	return r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
 }
 
@@ -181,13 +189,13 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 		}
 	}
 
-	// update annotation of policies afftecting the gateway
+	// update annotation of policies affecting the gateway
 	return r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
 }
 
 // Ensures only one RLP targets the network resource
-func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
-	return r.ReconcileTargetBackReference(ctx, client.ObjectKeyFromObject(ap), targetNetworkObject, common.AuthPolicyBackRefAnnotation)
+func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, ap common.KuadrantPolicy, targetNetworkObject client.Object) error {
+	return r.ReconcileTargetBackReference(ctx, ap, targetNetworkObject, common.AuthPolicyBackRefAnnotation)
 }
 
 func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object) error {

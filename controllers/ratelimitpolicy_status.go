@@ -8,15 +8,11 @@ import (
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-)
-
-const (
-	RLPAvailableConditionType string = "Available"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, specErr error) (ctrl.Result, error) {
@@ -62,26 +58,9 @@ func (r *RateLimitPolicyReconciler) calculateStatus(_ context.Context, rlp *kuad
 		ObservedGeneration: rlp.Status.ObservedGeneration,
 	}
 
-	availableCond := r.availableCondition(specErr)
+	acceptedCond := common.AcceptedCondition(rlp, specErr)
 
-	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
+	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)
 
 	return newStatus
-}
-
-func (r *RateLimitPolicyReconciler) availableCondition(specErr error) *metav1.Condition {
-	cond := &metav1.Condition{
-		Type:    RLPAvailableConditionType,
-		Status:  metav1.ConditionTrue,
-		Reason:  "HTTPRouteProtected",
-		Message: "HTTPRoute is ratelimited",
-	}
-
-	if specErr != nil {
-		cond.Status = metav1.ConditionFalse
-		cond.Reason = "ReconcilliationError"
-		cond.Message = specErr.Error()
-	}
-
-	return cond
 }

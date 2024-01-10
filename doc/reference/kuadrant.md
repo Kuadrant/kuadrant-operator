@@ -16,6 +16,80 @@ The Kuadrant operator creates a Limitador CR named `limitador` in the same names
 
 | **Field**   | **Type**                | **Required** | **Description**                  |
 |-------------|-------------------------|:------------:|----------------------------------|
+| `authorino` | [Authorino](#authorino) |      No      | Configure Authorino deployments. | 
+
+### Authorino
+
+| **Field**          | **Type**                    | **Required** | **Description**                                          |
+|--------------------|-----------------------------|:------------:|----------------------------------------------------------|
+| evaluatorCacheSize | Integer                     |      No      | Cache size (in megabytes) of each Authorino evaluator.   |
+| listener           | [Listener](#listener)       |      No      | Specification of authorization service (gRPC interface). |
+| metrics            | [Metrics](#metrics)         |      No      | Configuration of the metrics server.                     |
+| oidcServer         | [OIDCServer](#oidcserver)   |      No      | Specification of the OIDC service.                       |
+| replicas           | Integer                     |      No      | Number of replicas desired for the Authorino instance.   |
+| tracing            | [Tracing](#tracing)         |      No      | Configuration f the OpenTelemetry tracing exporter.      |
+| volumes            | [VolumesSpec](#volumesSpec) |      No      | Additional volumes to be mounted in the Authorino pods.  |
+
+#### Listener
+
+| **Field**              | **Type**        | **Required** | **Description**                                                                                                 |
+|------------------------|-----------------|:------------:|-----------------------------------------------------------------------------------------------------------------|
+| ports                  | [Ports](#ports) |      No      | Port numbers of the authorization server (gRPC and raw HTTP interfaces).                                        |
+| tls                    | [Tls](#tls)     |      No      | TLS configuration of the authorization server (gRPC and HTTP interfaces).                                       |
+| timeout                | Integer         |      No      | Timeout of external authorization request (in milliseconds), controlled internally by the authorization server. |
+| maxHttpRequestBodySize | Integer         |      No      | Maximum payload (request body) size for the auth service (HTTP interface0, in bytes.                            |
+
+##### Ports
+
+| **Field** | **Type** | **Required** | **Description**                                                                                        |
+|-----------|----------|:------------:|--------------------------------------------------------------------------------------------------------|
+| grpc      | Integer  |      No      | Port number of the gRPC interface of the authorization server. Set to 0 to disable this interface.     |
+| http      | Integer  |      No      | Port number of the raw HTTP interface of the authorization server. Set to 0 to disable this interface. |
+
+#### Metrics
+
+| **Field** | **Type** | **Required** | **Description**                                                                              |
+|-----------|----------|:------------:|----------------------------------------------------------------------------------------------|
+| deep      | Boolean  |      No      | Enable/disable metrics at the level of each evaluator config exported by the metrics server. |
+| port      | Integer  |      No      | Port number of the metrics server.                                                           |
+
+#### OIDCServer
+
+| **Field**  | **Type**    | **Required** | **Description**                                                               |
+|------------|-------------|:------------:|-------------------------------------------------------------------------------|
+| port       | Integer     |      No      | Port number of OIDC Discovery server for Festival Wristband tokens.           |
+| tls        | [TLS](#tls) |     Yes      | TLS configuration of the ODIC Discovery server for Festival Wristband tokens. |
+
+#### Tracing
+
+| **Field** | **Type** | **Required** | **Description**                                                                                     |
+|-----------|----------|:------------:|-----------------------------------------------------------------------------------------------------|
+| endpoint  | String   |     Yes      | Full endpoint of the OpenTelemetry tracing collector service (e.g. http://jaegar:14268/api/traces). |
+| tags      | Map      |      No      | Key-value map of fixed tags to add to all OpenTelemetry traces emitted by Authorino.                |
+
+#### VolumesSpec
+
+| **Field**   | **Type**                    | **Required** | **Description**                                                                                                                    |
+|-------------|-----------------------------|:------------:|------------------------------------------------------------------------------------------------------------------------------------|
+| defaultMode | [[]VolumeSpec](#volumespec) |      No      | List of additional volumes items to project.                                                                                       |
+| items       | Integer                     |      No      | Mode bits used to set permissions on the files. Must be an octal value between 0000 and 0777 or a decimal value between 0 and 511. |
+
+##### VolumeSpec
+
+| **Field**  | **Type**                                                                                              |           **Required**            | **Description**                                                                         |
+|------------|-------------------------------------------------------------------------------------------------------|:---------------------------------:|-----------------------------------------------------------------------------------------|
+| configMaps | []String                                                                                              |  Yes, if `secrets` is not used.   | List of Kubernetes ConfigMap names to mount.                                            |
+| items      | [[]keyToPath](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.23/#keytopath-v1-core) |                No                 | Mount details for selecting specific ConfigMap or Secret entries.                       |
+| mountPath  | String                                                                                                |                Yes                | Absolute path where to all the items.                                                   |
+| name       | String                                                                                                |                No                 | Name of the volume and volume mount within the Deployment. It must be unique in the CR. |
+| secrets    | []String                                                                                              | Yes, if `configMaps` is not used. | List of Kubernetes Secret names to mount.                                               |
+
+#### Tls
+
+| **Field**     | **Type**                                                                                                                  |          **Required**          | **Description**                                                                          |
+|---------------|---------------------------------------------------------------------------------------------------------------------------|:------------------------------:|------------------------------------------------------------------------------------------|
+| enabled       | Boolean                                                                                                                   |               No               | Whether TLS is enabled or disabled for the server.                                       |
+| certSecretRef | [LocalObjectReference](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.23/#localobjectreference-v1-core) | Required when `enabled: true`  | The reference to the secret that contains the TLS certificates `tls.cert` and `tls.key`. |
 | `limitador` | [Limitador](#limitador) |      No      | Configure limitador deployments. | 
 
 ### Limitador

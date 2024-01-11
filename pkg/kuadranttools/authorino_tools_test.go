@@ -1,12 +1,13 @@
 package kuadranttools
 
 import (
+	"reflect"
+	"testing"
+
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"k8s.io/utils/ptr"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"testing"
 )
 
 func Test_authorinoSpecSubSet(t *testing.T) {
@@ -177,9 +178,9 @@ func TestMapListenerSpec(t *testing.T) {
 				listener: nil,
 				spec: v1beta1.AuthorinoListener{
 					Ports:                  &authorinov1beta1.Ports{},
-					Tls:                    &authorinov1beta1.Tls{},
+					TLS:                    &authorinov1beta1.Tls{},
 					Timeout:                ptr.To(5000),
-					MaxHttpRequestBodySize: ptr.To(5000),
+					MaxHTTPRequestBodySize: ptr.To(5000),
 				},
 			},
 			want: authorinov1beta1.Listener{

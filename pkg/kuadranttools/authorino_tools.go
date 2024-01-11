@@ -2,9 +2,10 @@ package kuadranttools
 
 import (
 	"fmt"
+	"reflect"
+
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -57,14 +58,14 @@ func MapListenerSpec(listener *authorinov1beta1.Listener, spec v1beta1.Authorino
 	if spec.Ports != nil {
 		out.Ports = *spec.Ports
 	}
-	if spec.Tls != nil {
-		out.Tls = *spec.Tls
+	if spec.TLS != nil {
+		out.Tls = *spec.TLS
 	}
 	if spec.Timeout != nil {
 		out.Timeout = spec.Timeout
 	}
-	if spec.MaxHttpRequestBodySize != nil {
-		out.MaxHttpRequestBodySize = spec.MaxHttpRequestBodySize
+	if spec.MaxHTTPRequestBodySize != nil {
+		out.MaxHttpRequestBodySize = spec.MaxHTTPRequestBodySize
 	}
 	return out
 }

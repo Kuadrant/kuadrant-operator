@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/env"

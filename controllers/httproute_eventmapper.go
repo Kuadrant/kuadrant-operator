@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -24,12 +25,12 @@ func (m *HTTPRouteEventMapper) MapToAuthPolicy(_ context.Context, obj client.Obj
 }
 
 func (m *HTTPRouteEventMapper) mapToPolicyRequest(obj client.Object, policyKind, policyBackRefAnnotationName string) []reconcile.Request {
-	policyRef, found := common.ReadAnnotationsFromObject(obj)[policyBackRefAnnotationName]
+	policyRef, found := utils.ReadAnnotationsFromObject(obj)[policyBackRefAnnotationName]
 	if !found {
 		return []reconcile.Request{}
 	}
 
-	policyKey := common.NamespacedNameToObjectKey(policyRef, obj.GetNamespace())
+	policyKey := utils.NamespacedNameToObjectKey(policyRef, obj.GetNamespace())
 
 	m.Logger.V(1).Info("Processing object", "object", client.ObjectKeyFromObject(obj), policyKind, policyKey)
 

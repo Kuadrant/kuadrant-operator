@@ -207,46 +207,6 @@ func TestObjectInfo(t *testing.T) {
 	}
 }
 
-func TestReadAnnotationsFromObject(t *testing.T) {
-	testCases := []struct {
-		name     string
-		input    client.Object
-		expected map[string]string
-	}{
-		{
-			name: "when object has annotations then return the annotations",
-			input: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						"key1": "value1",
-						"key2": "value2",
-					},
-				},
-			},
-			expected: map[string]string{
-				"key1": "value1",
-				"key2": "value2",
-			},
-		},
-		{
-			name: "when object has no annotations then return an empty map",
-			input: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{},
-			},
-			expected: map[string]string{},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			actual := ReadAnnotationsFromObject(tc.input)
-			if !reflect.DeepEqual(actual, tc.expected) {
-				t.Errorf("Expected annotations %v, but got %v", tc.expected, actual)
-			}
-		})
-	}
-}
-
 func TestTagObjectToDelete(t *testing.T) {
 	testCases := []struct {
 		name         string

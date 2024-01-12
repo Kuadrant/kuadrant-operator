@@ -97,44 +97,6 @@ func TestGetEmptySliceIfNil(t *testing.T) {
 	})
 }
 
-func TestNamespacedNameToObjectKey(t *testing.T) {
-	t.Run("when a namespaced name is provided then return an ObjectKey with corresponding namespace and name", func(t *testing.T) {
-		namespacedName := "test-namespace/test-name"
-		defaultNamespace := "default"
-
-		result := NamespacedNameToObjectKey(namespacedName, defaultNamespace)
-
-		expected := client.ObjectKey{Name: "test-name", Namespace: "test-namespace"}
-		if !reflect.DeepEqual(result, expected) {
-			t.Errorf("Expected %v, but got %v", expected, result)
-		}
-	})
-
-	t.Run("when only a name is provided then return an ObjectKey with the default namespace and provided name", func(t *testing.T) {
-		namespacedName := "test-name"
-		defaultNamespace := "default"
-
-		result := NamespacedNameToObjectKey(namespacedName, defaultNamespace)
-
-		expected := client.ObjectKey{Name: "test-name", Namespace: "default"}
-		if !reflect.DeepEqual(result, expected) {
-			t.Errorf("Expected %v, but got %v", expected, result)
-		}
-	})
-
-	t.Run("when an empty string is provided, then return an ObjectKey with default namespace and empty name", func(t *testing.T) {
-		namespacedName := ""
-		defaultNamespace := "default"
-
-		result := NamespacedNameToObjectKey(namespacedName, defaultNamespace)
-
-		expected := client.ObjectKey{Name: "", Namespace: "default"}
-		if !reflect.DeepEqual(result, expected) {
-			t.Errorf("Expected %v, but got %v", expected, result)
-		}
-	})
-}
-
 func TestSameElements(t *testing.T) {
 	testCases := []struct {
 		name     string

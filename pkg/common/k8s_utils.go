@@ -40,16 +40,6 @@ func ObjectInfo(obj client.Object) string {
 	return fmt.Sprintf("%s/%s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
 }
 
-// ReadAnnotationsFromObject reads the annotations from a Kubernetes object
-// and returns them as a map. If the object has no annotations, it returns an empty map.
-func ReadAnnotationsFromObject(obj client.Object) map[string]string {
-	annotations := obj.GetAnnotations()
-	if annotations == nil {
-		annotations = map[string]string{}
-	}
-	return annotations
-}
-
 // TagObjectToDelete adds a special DeleteTagAnnotation to the object's annotations.
 // If the object's annotations are nil, it first initializes the Annotations field with an empty map.
 func TagObjectToDelete(obj client.Object) {

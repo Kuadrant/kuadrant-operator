@@ -22,6 +22,7 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"k8s.io/apimachinery/pkg/api/meta"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -162,7 +163,7 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, 
 	targetNetworkObjectKind := targetNetworkObject.GetObjectKind().GroupVersionKind()
 
 	// Reconcile the back reference:
-	objAnnotations := common.ReadAnnotationsFromObject(targetNetworkObject)
+	objAnnotations := utils.ReadAnnotationsFromObject(targetNetworkObject)
 
 	if val, ok := objAnnotations[annotationName]; ok {
 		if val != policyKey.String() {
@@ -188,7 +189,7 @@ func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, tar
 	targetNetworkObjectKind := targetNetworkObject.GetObjectKind().GroupVersionKind()
 
 	// Reconcile the back reference:
-	objAnnotations := common.ReadAnnotationsFromObject(targetNetworkObject)
+	objAnnotations := utils.ReadAnnotationsFromObject(targetNetworkObject)
 
 	if _, ok := objAnnotations[annotationName]; ok {
 		delete(objAnnotations, annotationName)

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
@@ -381,7 +382,7 @@ func (g GatewayWrapper) PolicyRefs() []client.ObjectKey {
 		return make([]client.ObjectKey, 0)
 	}
 
-	gwAnnotations := ReadAnnotationsFromObject(g)
+	gwAnnotations := utils.ReadAnnotationsFromObject(g)
 
 	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
 	if !ok {
@@ -403,7 +404,7 @@ func (g GatewayWrapper) ContainsPolicy(policyKey client.ObjectKey) bool {
 		return false
 	}
 
-	gwAnnotations := ReadAnnotationsFromObject(g)
+	gwAnnotations := utils.ReadAnnotationsFromObject(g)
 
 	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
 	if !ok {
@@ -427,7 +428,7 @@ func (g GatewayWrapper) AddPolicy(policyKey client.ObjectKey) bool {
 		return false
 	}
 
-	gwAnnotations := ReadAnnotationsFromObject(g)
+	gwAnnotations := utils.ReadAnnotationsFromObject(g)
 
 	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
 	if !ok {
@@ -469,7 +470,7 @@ func (g GatewayWrapper) DeletePolicy(policyKey client.ObjectKey) bool {
 		return false
 	}
 
-	gwAnnotations := ReadAnnotationsFromObject(g)
+	gwAnnotations := utils.ReadAnnotationsFromObject(g)
 
 	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
 	if !ok {

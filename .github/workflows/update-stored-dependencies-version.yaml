@@ -28,14 +28,14 @@ jobs:
     steps:
       - name: Fetch dependencies images list
         id: fetch
-        uses: fjogeleit/http-request-action@master
+        uses: fjogeleit/http-request-action@v1
         with:
           method: 'GET'
           url: ${{env.IMG_REPO_URL}}${{ matrix.repository }}?includeTags=true
       - name: Parse the list to get the last SHA
         id: extract-sha-var
         run: |
-          echo "sha=$(echo '${{ steps.fetch.outputs.response }}' | jq -c -r '.tags | keys_unsorted | .[] | select(.|test("[0-9a-f]{5,40}"))' | jq -Rn '[inputs]' | jq -c -r '.[0]')" >> $GITHUB_OUTPUT
+          echo "sha=$(echo '${{ steps.fetch.outputs.response }}' | jq -c -r '.tags | to_entries | sort_by(.value.last_modified | strptime("%a, %d %b %Y %H:%M:%S -0000"))[].key | select(.|test("[0-9a-f]{5,40}"))' | jq -Rn '[inputs]' | jq -c -r '.[-1]')" >> $GITHUB_OUTPUT
           echo "var=$(echo ${{ matrix.repository }} | sed -E 's/-/_/g;s/[a-z]/\U&/g')_SHA" >> $GITHUB_OUTPUT
       - name: Update stored variable
         id: update

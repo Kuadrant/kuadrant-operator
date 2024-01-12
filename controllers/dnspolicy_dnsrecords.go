@@ -12,11 +12,12 @@ import (
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
@@ -69,7 +70,7 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 			continue
 		}
 
-		listenerGateways := common.Filter(clusterGateways, func(cgw multicluster.ClusterGateway) bool {
+		listenerGateways := utils.Filter(clusterGateways, func(cgw multicluster.ClusterGateway) bool {
 			hasAttachedRoute := false
 			for _, statusListener := range cgw.Status.Listeners {
 				if string(statusListener.Name) == string(listener.Name) {

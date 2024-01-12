@@ -23,7 +23,6 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
-
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,11 +32,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
@@ -241,14 +242,15 @@ func (r *TLSPolicyReconciler) updateGatewayCondition(ctx context.Context, condit
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	gatewayEventMapper := &GatewayEventMapper{
-		Logger: r.Logger().WithName("gatewayEventMapper"),
-	}
+	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.TLSPolicy{}).
 		Watches(
 			&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.MapToTLSPolicy),
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+				return gatewayEventMapper.MapToPolicy(object, &v1alpha1.TLSPolicy{})
+			}),
 		).
 		Complete(r)
 }

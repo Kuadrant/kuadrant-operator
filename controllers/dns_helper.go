@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-
 	"sort"
 	"strconv"
 	"strings"
@@ -17,8 +16,10 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
@@ -66,7 +67,7 @@ func findMatchingManagedZone(originalHost, host string, zones []kuadrantdnsv1alp
 		return findMatchingManagedZone(originalHost, parentDomain, zones)
 	}
 
-	zone, ok := common.Find(zones, func(zone kuadrantdnsv1alpha1.ManagedZone) bool {
+	zone, ok := utils.Find(zones, func(zone kuadrantdnsv1alpha1.ManagedZone) bool {
 		return strings.ToLower(zone.Spec.DomainName) == host
 	})
 
@@ -370,7 +371,7 @@ func (dh *dnsHelper) getDNSHealthCheckProbes(ctx context.Context, gateway *gatew
 		return nil, err
 	}
 
-	return common.Map(list.Items, func(obj kuadrantdnsv1alpha1.DNSHealthCheckProbe) *kuadrantdnsv1alpha1.DNSHealthCheckProbe {
+	return utils.Map(list.Items, func(obj kuadrantdnsv1alpha1.DNSHealthCheckProbe) *kuadrantdnsv1alpha1.DNSHealthCheckProbe {
 		return &obj
 	}), nil
 }

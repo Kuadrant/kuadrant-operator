@@ -27,6 +27,7 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/policy"
 )
 
 type RoutingStrategy string
@@ -127,6 +128,7 @@ type DNSPolicyStatus struct {
 }
 
 var _ common.KuadrantPolicy = &DNSPolicy{}
+var _ policy.Referrer = &DNSPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -158,6 +160,10 @@ func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 }
 
 func (p *DNSPolicy) Kind() string { return p.TypeMeta.Kind }
+
+func (p *DNSPolicy) BackReferenceAnnotationName() string {
+	return "kuadrant.io/dnspolicies"
+}
 
 // Validate ensures the resource is valid. Compatible with the validating interface
 // used by webhooks

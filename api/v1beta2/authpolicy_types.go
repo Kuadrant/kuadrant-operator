@@ -5,13 +5,16 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/policy"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
@@ -199,6 +202,7 @@ func (s *AuthPolicyStatus) Equals(other *AuthPolicyStatus, logger logr.Logger) b
 }
 
 var _ common.KuadrantPolicy = &AuthPolicy{}
+var _ policy.Referrer = &AuthPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -283,6 +287,10 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 
 func (ap *AuthPolicy) Kind() string {
 	return ap.TypeMeta.Kind
+}
+
+func (ap *AuthPolicy) BackReferenceAnnotationName() string {
+	return "kuadrant.io/authpolicies"
 }
 
 //+kubebuilder:object:root=true

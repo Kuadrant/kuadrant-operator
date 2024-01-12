@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/go-logr/logr"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,9 +17,9 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // reconcileStatus makes sure status block of AuthPolicy is up-to-date.
@@ -135,7 +136,7 @@ func (r *AuthPolicyReconciler) handleGatewayPolicyOverride(logger logr.Logger, p
 	obj := targetNetworkObject.(*gatewayapiv1.Gateway)
 	gatewayWrapper := common.GatewayWrapper{Gateway: obj, PolicyRefsConfig: &common.KuadrantAuthPolicyRefsConfig{}}
 	refs := gatewayWrapper.PolicyRefs()
-	filteredRef := common.Filter(refs, func(key client.ObjectKey) bool {
+	filteredRef := utils.Filter(refs, func(key client.ObjectKey) bool {
 		return key != client.ObjectKeyFromObject(policy)
 	})
 	jsonData, err := json.Marshal(filteredRef)

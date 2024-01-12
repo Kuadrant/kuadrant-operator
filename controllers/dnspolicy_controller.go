@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -37,6 +38,7 @@ import (
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
@@ -245,9 +247,8 @@ func (r *DNSPolicyReconciler) updateGatewayCondition(ctx context.Context, condit
 }
 
 func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	gatewayEventMapper := &GatewayEventMapper{
-		Logger: r.Logger().WithName("gatewayEventMapper"),
-	}
+	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
+
 	dnsHealthCheckProbeEventMapper := &DNSHealthCheckProbeEventMapper{
 		Logger: r.Logger().WithName("dnsHealthCheckProbeEventMapper"),
 	}
@@ -257,7 +258,9 @@ func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&kuadrantdnsv1alpha1.DNSRecord{}).
 		Watches(
 			&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.MapToDNSPolicy),
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+				return gatewayEventMapper.MapToPolicy(object, &v1alpha1.DNSPolicy{})
+			}),
 		).
 		Watches(
 			&kuadrantdnsv1alpha1.DNSHealthCheckProbe{},

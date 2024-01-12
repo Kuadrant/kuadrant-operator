@@ -10,9 +10,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
+
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
@@ -224,21 +228,22 @@ func (r *AuthPolicyReconciler) reconcileRouteParentGatewayPolicies(ctx context.C
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	httpRouteEventMapper := &HTTPRouteEventMapper{
-		Logger: r.Logger().WithName("httpRouteEventMapper"),
-	}
-	gatewayEventMapper := &GatewayEventMapper{
-		Logger: r.Logger().WithName("gatewayEventMapper"),
-	}
+	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httpRouteEventMapper")))
+	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.AuthPolicy{}).
 		Owns(&authorinoapi.AuthConfig{}).
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
-			handler.EnqueueRequestsFromMapFunc(httpRouteEventMapper.MapToAuthPolicy),
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+				return httpRouteEventMapper.MapToPolicy(object, &api.AuthPolicy{})
+			}),
 		).
 		Watches(&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.MapToAuthPolicy)).
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+				return gatewayEventMapper.MapToPolicy(object, &api.AuthPolicy{})
+			}),
+		).
 		Complete(r)
 }

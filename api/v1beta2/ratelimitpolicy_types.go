@@ -22,6 +22,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/policy"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -165,6 +166,7 @@ func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr
 }
 
 var _ common.KuadrantPolicy = &RateLimitPolicy{}
+var _ policy.Referrer = &RateLimitPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -246,6 +248,10 @@ func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 
 func (r *RateLimitPolicy) Kind() string {
 	return r.TypeMeta.Kind
+}
+
+func (r *RateLimitPolicy) BackReferenceAnnotationName() string {
+	return "kuadrant.io/ratelimitpolicies"
 }
 
 func init() {

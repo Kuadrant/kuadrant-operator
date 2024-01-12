@@ -9,6 +9,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -710,7 +711,7 @@ func TestGatewaysMissingPolicyRef(t *testing.T) {
 	policyRefConfig := &KuadrantRateLimitPolicyRefsConfig{}
 	gwName := func(gw GatewayWrapper) string { return gw.Gateway.Name }
 
-	gws = Map(GatewaysMissingPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-1"}, []client.ObjectKey{
+	gws = utils.Map(GatewaysMissingPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-1"}, []client.ObjectKey{
 		{Namespace: "gw-ns", Name: "gw-2"},
 		{Namespace: "gw-ns", Name: "gw-3"},
 	}, policyRefConfig), gwName)
@@ -725,7 +726,7 @@ func TestGatewaysMissingPolicyRef(t *testing.T) {
 		t.Error("gateway expected to be listed as missing policy ref")
 	}
 
-	gws = Map(GatewaysMissingPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-2"}, []client.ObjectKey{
+	gws = utils.Map(GatewaysMissingPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-2"}, []client.ObjectKey{
 		{Namespace: "gw-ns", Name: "gw-1"},
 	}, policyRefConfig), gwName)
 
@@ -739,7 +740,7 @@ func TestGatewaysMissingPolicyRef(t *testing.T) {
 		t.Error("gateway expected not to be listed as missing policy ref")
 	}
 
-	gws = Map(GatewaysMissingPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-3"}, []client.ObjectKey{
+	gws = utils.Map(GatewaysMissingPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-3"}, []client.ObjectKey{
 		{Namespace: "gw-ns", Name: "gw-1"},
 		{Namespace: "gw-ns", Name: "gw-3"},
 	}, policyRefConfig), gwName)
@@ -785,7 +786,7 @@ func TestGatewaysWithValidPolicyRef(t *testing.T) {
 	policyRefConfig := &KuadrantRateLimitPolicyRefsConfig{}
 	gwName := func(gw GatewayWrapper) string { return gw.Gateway.Name }
 
-	gws = Map(GatewaysWithValidPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-1"}, []client.ObjectKey{
+	gws = utils.Map(GatewaysWithValidPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-1"}, []client.ObjectKey{
 		{Namespace: "gw-ns", Name: "gw-2"},
 		{Namespace: "gw-ns", Name: "gw-3"},
 	}, policyRefConfig), gwName)
@@ -800,7 +801,7 @@ func TestGatewaysWithValidPolicyRef(t *testing.T) {
 		t.Error("gateway expected not to be listed as with valid policy ref")
 	}
 
-	gws = Map(GatewaysWithValidPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-2"}, []client.ObjectKey{
+	gws = utils.Map(GatewaysWithValidPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-2"}, []client.ObjectKey{
 		{Namespace: "gw-ns", Name: "gw-1"},
 	}, policyRefConfig), gwName)
 
@@ -814,7 +815,7 @@ func TestGatewaysWithValidPolicyRef(t *testing.T) {
 		t.Error("gateway expected not to be listed as with valid policy ref")
 	}
 
-	gws = Map(GatewaysWithValidPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-3"}, []client.ObjectKey{
+	gws = utils.Map(GatewaysWithValidPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-3"}, []client.ObjectKey{
 		{Namespace: "gw-ns", Name: "gw-1"},
 		{Namespace: "gw-ns", Name: "gw-3"},
 	}, policyRefConfig), gwName)
@@ -860,7 +861,7 @@ func TestGatewaysWithInvalidPolicyRef(t *testing.T) {
 	policyRefConfig := &KuadrantRateLimitPolicyRefsConfig{}
 	gwName := func(gw GatewayWrapper) string { return gw.Gateway.Name }
 
-	gws = Map(GatewaysWithInvalidPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-1"}, []client.ObjectKey{
+	gws = utils.Map(GatewaysWithInvalidPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-1"}, []client.ObjectKey{
 		{Namespace: "gw-ns", Name: "gw-2"},
 		{Namespace: "gw-ns", Name: "gw-3"},
 	}, policyRefConfig), gwName)
@@ -875,7 +876,7 @@ func TestGatewaysWithInvalidPolicyRef(t *testing.T) {
 		t.Error("gateway expected not to be listed as with invalid policy ref")
 	}
 
-	gws = Map(GatewaysWithInvalidPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-2"}, []client.ObjectKey{
+	gws = utils.Map(GatewaysWithInvalidPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-2"}, []client.ObjectKey{
 		{Namespace: "gw-ns", Name: "gw-1"},
 	}, policyRefConfig), gwName)
 
@@ -889,7 +890,7 @@ func TestGatewaysWithInvalidPolicyRef(t *testing.T) {
 		t.Error("gateway expected not to be listed as with invalid policy ref")
 	}
 
-	gws = Map(GatewaysWithInvalidPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-3"}, []client.ObjectKey{
+	gws = utils.Map(GatewaysWithInvalidPolicyRef(gwList, k8stypes.NamespacedName{Namespace: "app-ns", Name: "policy-3"}, []client.ObjectKey{
 		{Namespace: "gw-ns", Name: "gw-1"},
 		{Namespace: "gw-ns", Name: "gw-3"},
 	}, policyRefConfig), gwName)
@@ -932,7 +933,7 @@ func TestGatewayWrapperPolicyRefs(t *testing.T) {
 		},
 		PolicyRefsConfig: &KuadrantRateLimitPolicyRefsConfig{},
 	}
-	refs := Map(gw.PolicyRefs(), func(ref k8stypes.NamespacedName) string { return ref.String() })
+	refs := utils.Map(gw.PolicyRefs(), func(ref k8stypes.NamespacedName) string { return ref.String() })
 	if !slices.Contains(refs, "app-ns/policy-1") {
 		t.Error("GatewayWrapper.PolicyRefs() should contain app-ns/policy-1")
 	}

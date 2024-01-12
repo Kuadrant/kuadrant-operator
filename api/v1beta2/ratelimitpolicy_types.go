@@ -22,6 +22,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -110,7 +111,7 @@ func (l Limit) CountersAsStringList() []string {
 	if len(l.Counters) == 0 {
 		return nil
 	}
-	return common.Map(l.Counters, func(counter ContextSelector) string { return string(counter) })
+	return utils.Map(l.Counters, func(counter ContextSelector) string { return string(counter) })
 }
 
 // RateLimitPolicySpec defines the desired state of RateLimitPolicy
@@ -213,7 +214,7 @@ type RateLimitPolicyList struct {
 }
 
 func (l *RateLimitPolicyList) GetItems() []common.KuadrantPolicy {
-	return common.Map(l.Items, func(item RateLimitPolicy) common.KuadrantPolicy {
+	return utils.Map(l.Items, func(item RateLimitPolicy) common.KuadrantPolicy {
 		return &item
 	})
 }

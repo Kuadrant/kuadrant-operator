@@ -103,7 +103,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1.HTTPRouteRule) bool {
 		return true
 	}
 
-	_, found := Find(rule.Matches, func(ruleMatch gatewayapiv1.HTTPRouteMatch) bool {
+	_, found := utils.Find(rule.Matches, func(ruleMatch gatewayapiv1.HTTPRouteMatch) bool {
 		// path
 		if s.Path != nil && !reflect.DeepEqual(s.Path, ruleMatch.Path) {
 			return false
@@ -116,7 +116,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1.HTTPRouteRule) bool {
 
 		// headers
 		for _, header := range s.Headers {
-			if _, found := Find(ruleMatch.Headers, func(otherHeader gatewayapiv1.HTTPHeaderMatch) bool {
+			if _, found := utils.Find(ruleMatch.Headers, func(otherHeader gatewayapiv1.HTTPHeaderMatch) bool {
 				return reflect.DeepEqual(header, otherHeader)
 			}); !found {
 				return false
@@ -125,7 +125,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1.HTTPRouteRule) bool {
 
 		// query params
 		for _, param := range s.QueryParams {
-			if _, found := Find(ruleMatch.QueryParams, func(otherParam gatewayapiv1.HTTPQueryParamMatch) bool {
+			if _, found := utils.Find(ruleMatch.QueryParams, func(otherParam gatewayapiv1.HTTPQueryParamMatch) bool {
 				return reflect.DeepEqual(param, otherParam)
 			}); !found {
 				return false
@@ -140,7 +140,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1.HTTPRouteRule) bool {
 
 // HTTPRouteRuleToString prints the matches of a  HTTPRouteRule as string
 func HTTPRouteRuleToString(rule gatewayapiv1.HTTPRouteRule) string {
-	matches := Map(rule.Matches, HTTPRouteMatchToString)
+	matches := utils.Map(rule.Matches, HTTPRouteMatchToString)
 	return fmt.Sprintf("{matches:[%s]}", strings.Join(matches, ","))
 }
 
@@ -153,11 +153,11 @@ func HTTPRouteMatchToString(match gatewayapiv1.HTTPRouteMatch) string {
 		patterns = append(patterns, fmt.Sprintf("path:%s", HTTPPathMatchToString(path)))
 	}
 	if len(match.QueryParams) > 0 {
-		queryParams := Map(match.QueryParams, HTTPQueryParamMatchToString)
+		queryParams := utils.Map(match.QueryParams, HTTPQueryParamMatchToString)
 		patterns = append(patterns, fmt.Sprintf("queryParams:[%s]", strings.Join(queryParams, ",")))
 	}
 	if len(match.Headers) > 0 {
-		headers := Map(match.Headers, HTTPHeaderMatchToString)
+		headers := utils.Map(match.Headers, HTTPHeaderMatchToString)
 		patterns = append(patterns, fmt.Sprintf("headers:[%s]", strings.Join(headers, ",")))
 	}
 	return fmt.Sprintf("{%s}", strings.Join(patterns, ","))
@@ -601,7 +601,7 @@ func ValidateHierarchicalRules(policy KuadrantPolicy, targetNetworkObject client
 }
 
 func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway *gatewayapiv1.Gateway) (map[string]string, error) {
-	address, found := Find(
+	address, found := utils.Find(
 		gateway.Status.Addresses,
 		func(address gatewayapiv1.GatewayStatusAddress) bool {
 			return address.Type != nil && *address.Type == gatewayapiv1.HostnameAddressType

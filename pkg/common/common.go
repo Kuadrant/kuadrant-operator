@@ -18,9 +18,9 @@ package common
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -52,81 +52,6 @@ type KuadrantPolicy interface {
 
 type KuadrantPolicyList interface {
 	GetItems() []KuadrantPolicy
-}
-
-// GetEmptySliceIfNil returns a provided slice, or an empty slice of the same type if the input slice is nil.
-func GetEmptySliceIfNil[T any](val []T) []T {
-	if val == nil {
-		return make([]T, 0)
-	}
-	return val
-}
-
-// SameElements checks if the two slices contain the exact same elements. Order does not matter.
-func SameElements[T comparable](s1, s2 []T) bool {
-	if len(s1) != len(s2) {
-		return false
-	}
-	for _, v := range s1 {
-		if !slices.Contains(s2, v) {
-			return false
-		}
-	}
-	return true
-}
-
-func Intersect[T comparable](slice1, slice2 []T) bool {
-	for _, item := range slice1 {
-		if slices.Contains(slice2, item) {
-			return true
-		}
-	}
-	return false
-}
-
-func Intersection[T comparable](slice1, slice2 []T) []T {
-	smallerSlice := slice1
-	largerSlice := slice2
-	if len(slice1) > len(slice2) {
-		smallerSlice = slice2
-		largerSlice = slice1
-	}
-	var result []T
-	for _, item := range smallerSlice {
-		if slices.Contains(largerSlice, item) {
-			result = append(result, item)
-		}
-	}
-	return result
-}
-
-func Find[T any](slice []T, match func(T) bool) (*T, bool) {
-	for _, item := range slice {
-		if match(item) {
-			return &item, true
-		}
-	}
-	return nil, false
-}
-
-// Map applies the given mapper function to each element in the input slice and returns a new slice with the results.
-func Map[T, U any](slice []T, f func(T) U) []U {
-	arr := make([]U, len(slice))
-	for i, e := range slice {
-		arr[i] = f(e)
-	}
-	return arr
-}
-
-// Filter filters the input slice using the given predicate function and returns a new slice with the results.
-func Filter[T any](slice []T, f func(T) bool) []T {
-	arr := make([]T, 0)
-	for _, e := range slice {
-		if f(e) {
-			arr = append(arr, e)
-		}
-	}
-	return arr
 }
 
 // MergeMapStringString Merge desired into existing.
@@ -181,7 +106,7 @@ func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 
 // HostnamesToStrings converts []gatewayapiv1.Hostname to []string
 func HostnamesToStrings(hostnames []gatewayapiv1.Hostname) []string {
-	return Map(hostnames, func(hostname gatewayapiv1.Hostname) string {
+	return utils.Map(hostnames, func(hostname gatewayapiv1.Hostname) string {
 		return string(hostname)
 	})
 }
@@ -213,7 +138,7 @@ func ValidSubdomains(domains, subdomains []string) (bool, string) {
 func FilterValidSubdomains(domains, subdomains []gatewayapiv1.Hostname) []gatewayapiv1.Hostname {
 	arr := make([]gatewayapiv1.Hostname, 0)
 	for _, subsubdomain := range subdomains {
-		if _, found := Find(domains, func(domain gatewayapiv1.Hostname) bool {
+		if _, found := utils.Find(domains, func(domain gatewayapiv1.Hostname) bool {
 			return Name(subsubdomain).SubsetOf(Name(domain))
 		}); found {
 			arr = append(arr, subsubdomain)

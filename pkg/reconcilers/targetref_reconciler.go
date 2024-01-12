@@ -110,7 +110,7 @@ func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context
 
 	for idx := range routeList.Items {
 		route := routeList.Items[idx]
-		routeParentStatus, found := common.Find(route.Status.RouteStatus.Parents, func(p gatewayapiv1.RouteParentStatus) bool {
+		routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, func(p gatewayapiv1.RouteParentStatus) bool {
 			return *p.ParentRef.Kind == ("Gateway") &&
 				((p.ParentRef.Namespace == nil && route.GetNamespace() == gwKey.Namespace) || string(*p.ParentRef.Namespace) == gwKey.Namespace) &&
 				string(p.ParentRef.Name) == gwKey.Name

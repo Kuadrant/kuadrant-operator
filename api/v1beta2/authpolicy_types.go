@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -294,7 +295,7 @@ type AuthPolicyList struct {
 }
 
 func (l *AuthPolicyList) GetItems() []common.KuadrantPolicy {
-	return common.Map(l.Items, func(item AuthPolicy) common.KuadrantPolicy {
+	return utils.Map(l.Items, func(item AuthPolicy) common.KuadrantPolicy {
 		return &item
 	})
 }

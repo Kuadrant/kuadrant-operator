@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -362,7 +363,7 @@ func authorinoConditionsFromHTTPRouteRule(rule gatewayapiv1.HTTPRouteRule, hostn
 
 		if len(allOf) > 0 {
 			oneOf = append(oneOf, authorinoapi.PatternExpressionOrRef{
-				All: common.Map(allOf, toAuthorinoUnstructuredPatternExpressionOrRef),
+				All: utils.Map(allOf, toAuthorinoUnstructuredPatternExpressionOrRef),
 			})
 		}
 	}
@@ -380,7 +381,7 @@ func hostnameRuleToAuthorinoCondition(hostnames []string) authorinoapi.PatternEx
 }
 
 func hostnamesToRegex(hostnames []string) string {
-	return strings.Join(common.Map(hostnames, func(hostname string) string {
+	return strings.Join(utils.Map(hostnames, func(hostname string) string {
 		return strings.ReplaceAll(strings.ReplaceAll(hostname, ".", `\.`), "*", ".*")
 	}), "|")
 }
@@ -495,7 +496,7 @@ func toAuthorinoUnstructuredPatternExpressionOrRef(patternExpressionOrRef author
 func toAuthorinoOneOfPatternExpressionsOrRefs(oneOf []authorinoapi.PatternExpressionOrRef) []authorinoapi.PatternExpressionOrRef {
 	return []authorinoapi.PatternExpressionOrRef{
 		{
-			Any: common.Map(oneOf, toAuthorinoUnstructuredPatternExpressionOrRef),
+			Any: utils.Map(oneOf, toAuthorinoUnstructuredPatternExpressionOrRef),
 		},
 	}
 }

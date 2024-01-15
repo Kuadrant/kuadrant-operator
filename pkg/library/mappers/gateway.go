@@ -3,10 +3,11 @@ package mappers
 import (
 	"fmt"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/policy"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // TODO(@guicassolato): unit test
@@ -19,7 +20,7 @@ type gatewayEventMapper struct {
 }
 
 // TODO(@guicassolato): unit test
-func (m *gatewayEventMapper) MapToPolicy(obj client.Object, policyKind policy.Referrer) []reconcile.Request {
+func (m *gatewayEventMapper) MapToPolicy(obj client.Object, policyKind utils.Referrer) []reconcile.Request {
 	logger := m.opts.logger.WithValues("gateway", client.ObjectKeyFromObject(obj))
 
 	gateway, ok := obj.(*gatewayapiv1beta1.Gateway)
@@ -30,7 +31,7 @@ func (m *gatewayEventMapper) MapToPolicy(obj client.Object, policyKind policy.Re
 
 	requests := make([]reconcile.Request, 0)
 
-	for _, policyKey := range policy.BackReferencesFromObject(gateway, policyKind) {
+	for _, policyKey := range utils.BackReferencesFromObject(gateway, policyKind) {
 		logger.V(1).Info("kuadrant policy possibly affected by the gateway related event found", policyKind.Kind(), policyKey)
 		requests = append(requests, reconcile.Request{NamespacedName: policyKey})
 	}

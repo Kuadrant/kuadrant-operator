@@ -17,10 +17,10 @@ import (
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
+	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
-func (r *TLSPolicyReconciler) reconcileCertificates(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
+func (r *TLSPolicyReconciler) reconcileCertificates(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy, gwDiffObj *reconcilerutils.GatewayDiffs) error {
 	log := crlog.FromContext(ctx)
 
 	log.V(3).Info("reconciling certificates")

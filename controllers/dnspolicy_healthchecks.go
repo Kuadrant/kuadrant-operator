@@ -17,12 +17,12 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
-func (r *DNSPolicyReconciler) reconcileHealthCheckProbes(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
+func (r *DNSPolicyReconciler) reconcileHealthCheckProbes(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, gwDiffObj *reconcilerutils.GatewayDiffs) error {
 	log := crlog.FromContext(ctx)
 
 	log.V(3).Info("reconciling health checks")
@@ -110,7 +110,7 @@ func (r *DNSPolicyReconciler) deleteUnexpectedGatewayHealthCheckProbes(ctx conte
 	return nil
 }
 
-func (r *DNSPolicyReconciler) expectedHealthCheckProbesForGateway(ctx context.Context, gw common.GatewayWrapper, dnsPolicy *v1alpha1.DNSPolicy) []*kuadrantdnsv1alpha1.DNSHealthCheckProbe {
+func (r *DNSPolicyReconciler) expectedHealthCheckProbesForGateway(ctx context.Context, gw utils.GatewayWrapper, dnsPolicy *v1alpha1.DNSPolicy) []*kuadrantdnsv1alpha1.DNSHealthCheckProbe {
 	log := crlog.FromContext(ctx)
 	var healthChecks []*kuadrantdnsv1alpha1.DNSHealthCheckProbe
 	if dnsPolicy.Spec.HealthCheck == nil {

@@ -12,16 +12,16 @@ import (
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
-
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+
+	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
-func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
+func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, gwDiffObj *reconcilerutils.GatewayDiffs) error {
 	log := crlog.FromContext(ctx)
 
 	log.V(3).Info("reconciling dns records")

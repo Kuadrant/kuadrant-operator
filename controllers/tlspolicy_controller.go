@@ -39,6 +39,8 @@ import (
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
+	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
@@ -49,8 +51,9 @@ const (
 
 // TLSPolicyReconciler reconciles a TLSPolicy object
 type TLSPolicyReconciler struct {
-	reconcilers.TargetRefReconciler
-	Scheme *runtime.Scheme
+	*reconcilers.BaseReconciler
+	TargetRefReconciler reconcilerutils.TargetRefReconciler
+	Scheme              *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=tlspolicies,verbs=get;list;watch;update;patch;delete
@@ -79,7 +82,7 @@ func (r *TLSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	markedForDeletion := tlsPolicy.GetDeletionTimestamp() != nil
 
-	targetReferenceObject, err := r.FetchValidTargetRef(ctx, tlsPolicy.GetTargetRef(), tlsPolicy.Namespace)
+	targetReferenceObject, err := reconcilerutils.FetchTargetRefObject(ctx, r.Client(), tlsPolicy.GetTargetRef(), tlsPolicy.Namespace)
 	log.V(3).Info("TLSPolicyReconciler targetReferenceObject", "targetReferenceObject", targetReferenceObject)
 	if err != nil {
 		if !markedForDeletion {
@@ -89,7 +92,7 @@ func (r *TLSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, tlsPolicy, common.NewErrTargetNotFound(tlsPolicy.Kind(), tlsPolicy.GetTargetRef(), delResErr))
+				return r.reconcileStatus(ctx, tlsPolicy, utils.NewErrTargetNotFound(tlsPolicy.Kind(), tlsPolicy.GetTargetRef(), delResErr))
 			}
 			return ctrl.Result{}, err
 		}
@@ -151,7 +154,7 @@ func (r *TLSPolicyReconciler) reconcileResources(ctx context.Context, tlsPolicy 
 	}
 
 	// reconcile based on gateway diffs
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, tlsPolicy, targetNetworkObject, &common.KuadrantTLSPolicyRefsConfig{})
+	gatewayDiffObj, err := reconcilerutils.ComputeGatewayDiffs(ctx, r.Client(), tlsPolicy, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -163,14 +166,14 @@ func (r *TLSPolicyReconciler) reconcileResources(ctx context.Context, tlsPolicy 
 	}
 
 	// set direct back ref - i.e. claim the target network object as taken asap
-	if err = r.ReconcileTargetBackReference(ctx, tlsPolicy, targetNetworkObject, common.TLSPolicyBackRefAnnotation); err != nil {
+	if err = r.TargetRefReconciler.ReconcileTargetBackReference(ctx, tlsPolicy, targetNetworkObject, common.TLSPolicyBackRefAnnotation); err != nil {
 		gatewayCondition = BuildPolicyAffectedCondition(TLSPolicyAffected, tlsPolicy, targetNetworkObject, gatewayapiv1alpha2.PolicyReasonConflicted, err)
 		updateErr := r.updateGatewayCondition(ctx, gatewayCondition, gatewayDiffObj)
 		return errors.Join(fmt.Errorf("reconcile TargetBackReference error %w", err), updateErr)
 	}
 
 	// set annotation of policies affecting the gateway
-	if err = r.ReconcileGatewayPolicyReferences(ctx, tlsPolicy, gatewayDiffObj); err != nil {
+	if err = r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, tlsPolicy, gatewayDiffObj); err != nil {
 		gatewayCondition = BuildPolicyAffectedCondition(TLSPolicyAffected, tlsPolicy, targetNetworkObject, gatewayapiv1alpha2.PolicyConditionReason(PolicyReasonUnknown), err)
 		updateErr := r.updateGatewayCondition(ctx, gatewayCondition, gatewayDiffObj)
 		return errors.Join(fmt.Errorf("ReconcileGatewayPolicyReferences error %w", err), updateErr)
@@ -187,7 +190,7 @@ func (r *TLSPolicyReconciler) reconcileResources(ctx context.Context, tlsPolicy 
 
 func (r *TLSPolicyReconciler) deleteResources(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, tlsPolicy, targetNetworkObject, &common.KuadrantTLSPolicyRefsConfig{})
+	gatewayDiffObj, err := reconcilerutils.ComputeGatewayDiffs(ctx, r.Client(), tlsPolicy, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -198,13 +201,13 @@ func (r *TLSPolicyReconciler) deleteResources(ctx context.Context, tlsPolicy *v1
 
 	// remove direct back ref
 	if targetNetworkObject != nil {
-		if err := r.DeleteTargetBackReference(ctx, targetNetworkObject, common.TLSPolicyBackRefAnnotation); err != nil {
+		if err := r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, common.TLSPolicyBackRefAnnotation); err != nil {
 			return err
 		}
 	}
 
 	// update annotation of policies affecting the gateway
-	if err := r.ReconcileGatewayPolicyReferences(ctx, tlsPolicy, gatewayDiffObj); err != nil {
+	if err := r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, tlsPolicy, gatewayDiffObj); err != nil {
 		return err
 	}
 
@@ -212,7 +215,7 @@ func (r *TLSPolicyReconciler) deleteResources(ctx context.Context, tlsPolicy *v1
 	return r.updateGatewayCondition(ctx, metav1.Condition{Type: string(TLSPolicyAffected)}, gatewayDiffObj)
 }
 
-func (r *TLSPolicyReconciler) updateGatewayCondition(ctx context.Context, condition metav1.Condition, gatewayDiff *reconcilers.GatewayDiff) error {
+func (r *TLSPolicyReconciler) updateGatewayCondition(ctx context.Context, condition metav1.Condition, gatewayDiff *reconcilerutils.GatewayDiffs) error {
 	// update condition if needed
 	gatewayDiffs := append(gatewayDiff.GatewaysWithValidPolicyRef, gatewayDiff.GatewaysMissingPolicyRef...)
 	for i, gw := range gatewayDiffs {
@@ -253,28 +256,6 @@ func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}),
 		).
 		Complete(r)
-}
-
-// The following methods are here temporarily and copied from the kuadrant-operator https://github.com/Kuadrant/kuadrant-operator/blob/main/pkg/reconcilers/targetref_reconciler.go#L45
-// FetchValidTargetRef and FetchValidGateway currently expect that the gateway should have a ready condition, but in the
-// case of the TLSPolicy it might not be ready because there is an invalid tls section that this policy would resolve.
-// ToDo mnairn: Create issue in kuadrant-operator and link it here
-
-// FetchValidTargetRef fetches the target reference object and checks the status is valid
-func (r *TLSPolicyReconciler) FetchValidTargetRef(ctx context.Context, targetRef gatewayapiv1alpha2.PolicyTargetReference, defaultNs string) (client.Object, error) {
-	tmpNS := defaultNs
-	if targetRef.Namespace != nil {
-		tmpNS = string(*targetRef.Namespace)
-	}
-
-	objKey := client.ObjectKey{Name: string(targetRef.Name), Namespace: tmpNS}
-	if common.IsTargetRefHTTPRoute(targetRef) {
-		return r.FetchValidHTTPRoute(ctx, objKey)
-	} else if common.IsTargetRefGateway(targetRef) {
-		return r.FetchValidGateway(ctx, objKey)
-	}
-
-	return nil, fmt.Errorf("FetchValidTargetRef: targetRef (%v) to unknown network resource", targetRef)
 }
 
 func (r *TLSPolicyReconciler) FetchValidGateway(ctx context.Context, key client.ObjectKey) (*gatewayapiv1.Gateway, error) {

@@ -66,22 +66,22 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	case *gatewayapiv1.HTTPRoute:
 		route = obj
 		var err error
-		hosts, err = common.HostnamesFromHTTPRoute(ctx, obj, r.Client())
+		hosts, err = utils.HostnamesFromHTTPRoute(ctx, obj, r.Client())
 		if err != nil {
 			return nil, err
 		}
 	case *gatewayapiv1.Gateway:
 		// fake a single httproute with all rules from all httproutes accepted by the gateway,
 		// that do not have an authpolicy of its own, so we can generate wasm rules for those cases
-		gw := common.GatewayWrapper{Gateway: obj}
+		gw := utils.GatewayWrapper{Gateway: obj}
 		gwHostnames := gw.Hostnames()
 		if len(gwHostnames) == 0 {
 			gwHostnames = []gatewayapiv1.Hostname{"*"}
 		}
-		hosts = common.HostnamesToStrings(gwHostnames)
+		hosts = utils.HostnamesToStrings(gwHostnames)
 
 		rules := make([]gatewayapiv1.HTTPRouteRule, 0)
-		routes := r.FetchAcceptedGatewayHTTPRoutes(ctx, ap.TargetKey())
+		routes := r.TargetRefReconciler.FetchAcceptedGatewayHTTPRoutes(ctx, ap.TargetKey())
 		for idx := range routes {
 			route := routes[idx]
 			// skip routes that have an authpolicy of its own

@@ -5,17 +5,13 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/policy"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
-
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 type AuthSchemeSpec struct {
@@ -190,8 +186,8 @@ func (s *AuthPolicyStatus) Equals(other *AuthPolicyStatus, logger logr.Logger) b
 	}
 
 	// Marshalling sorts by condition type
-	currentMarshaledJSON, _ := common.ConditionMarshal(s.Conditions)
-	otherMarshaledJSON, _ := common.ConditionMarshal(other.Conditions)
+	currentMarshaledJSON, _ := utils.ConditionMarshal(s.Conditions)
+	otherMarshaledJSON, _ := utils.ConditionMarshal(other.Conditions)
 	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
 		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
 		logger.V(1).Info("Conditions not equal", "difference", diff)
@@ -201,8 +197,8 @@ func (s *AuthPolicyStatus) Equals(other *AuthPolicyStatus, logger logr.Logger) b
 	return true
 }
 
-var _ common.KuadrantPolicy = &AuthPolicy{}
-var _ policy.Referrer = &AuthPolicy{}
+var _ utils.KuadrantPolicy = &AuthPolicy{}
+var _ utils.Referrer = &AuthPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -256,7 +252,7 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 
 	appendRuleHosts := func(obj RouteSelectorsGetter) {
 		for _, routeSelector := range obj.GetRouteSelectors() {
-			ruleHosts = append(ruleHosts, common.HostnamesToStrings(routeSelector.Hostnames)...)
+			ruleHosts = append(ruleHosts, utils.HostnamesToStrings(routeSelector.Hostnames)...)
 		}
 	}
 
@@ -302,8 +298,8 @@ type AuthPolicyList struct {
 	Items           []AuthPolicy `json:"items"`
 }
 
-func (l *AuthPolicyList) GetItems() []common.KuadrantPolicy {
-	return utils.Map(l.Items, func(item AuthPolicy) common.KuadrantPolicy {
+func (l *AuthPolicyList) GetItems() []utils.KuadrantPolicy {
+	return utils.Map(l.Items, func(item AuthPolicy) utils.KuadrantPolicy {
 		return &item
 	})
 }

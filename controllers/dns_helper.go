@@ -103,7 +103,7 @@ func gatewayDNSRecordLabels(gwKey client.ObjectKey) map[string]string {
 	}
 }
 
-func withGatewayListener[T metav1.Object](gateway common.GatewayWrapper, listener gatewayapiv1.Listener, obj T) T {
+func withGatewayListener[T metav1.Object](gateway utils.GatewayWrapper, listener gatewayapiv1.Listener, obj T) T {
 	if obj.GetAnnotations() == nil {
 		obj.SetAnnotations(map[string]string{})
 	}

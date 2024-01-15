@@ -26,9 +26,10 @@ import (
 
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 const (
@@ -335,7 +336,7 @@ var _ = Describe("AuthPolicy controller", func() {
 					return false
 				}
 				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
-				return condition != nil && condition.Reason == string(common.PolicyReasonUnknown) && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
+				return condition != nil && condition.Reason == string(utils.PolicyReasonUnknown) && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
 			}, 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// check istio authorizationpolicy
@@ -380,7 +381,7 @@ var _ = Describe("AuthPolicy controller", func() {
 					return false
 				}
 				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
-				return condition != nil && condition.Reason == string(common.PolicyReasonUnknown) && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
+				return condition != nil && condition.Reason == string(utils.PolicyReasonUnknown) && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
 			}, 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
@@ -1075,7 +1076,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 				acceptedCondMatch := acceptedCond.Status == metav1.ConditionFalse && acceptedCond.Reason == reason && acceptedCond.Message == message
 
-				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(common.PolicyReasonEnforced))
+				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(utils.PolicyReasonEnforced))
 				enforcedCondMatch := enforcedCond == nil
 
 				return acceptedCondMatch && enforcedCondMatch
@@ -1152,7 +1153,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 				acceptedCondMatch := acceptedCond.Status == metav1.ConditionTrue && acceptedCond.Reason == string(gatewayapiv1alpha2.PolicyReasonAccepted)
 
-				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(common.PolicyReasonEnforced))
+				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(utils.PolicyReasonEnforced))
 				if enforcedCond == nil {
 					return false
 				}
@@ -1179,7 +1180,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
-			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionTrue, string(common.PolicyReasonEnforced),
+			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionTrue, string(utils.PolicyReasonEnforced),
 				"AuthPolicy has been successfully enforced"), 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
 
@@ -1198,7 +1199,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
-			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionFalse, string(common.PolicyReasonUnknown),
+			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionFalse, string(utils.PolicyReasonUnknown),
 				"AuthPolicy has encountered some issues: AuthScheme is not ready yet"), 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
 
@@ -1228,7 +1229,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			// check policy status
 			Eventually(isAuthPolicyAccepted(gwPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
 			Eventually(
-				assertAcceptedCondTrueAndEnforcedCond(gwPolicy, metav1.ConditionFalse, string(common.PolicyReasonOverridden),
+				assertAcceptedCondTrueAndEnforcedCond(gwPolicy, metav1.ConditionFalse, string(utils.PolicyReasonOverridden),
 					fmt.Sprintf("AuthPolicy is overridden by [{\"Namespace\":\"%s\",\"Name\":\"%s\"}]", testNamespace, routePolicy.Name)),
 				30*time.Second, 5*time.Second).Should(BeTrue())
 
@@ -1527,7 +1528,7 @@ func isAuthPolicyAccepted(policy *api.AuthPolicy) func() bool {
 }
 
 func isAuthPolicyEnforced(policy *api.AuthPolicy) func() bool {
-	return isAuthPolicyConditionTrue(policy, string(common.PolicyConditionEnforced))
+	return isAuthPolicyConditionTrue(policy, string(utils.PolicyConditionEnforced))
 }
 
 func isAuthPolicyConditionTrue(policy *api.AuthPolicy, condition string) func() bool {

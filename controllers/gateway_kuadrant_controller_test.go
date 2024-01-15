@@ -15,7 +15,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 var _ = Describe("Kuadrant Gateway controller", func() {
@@ -47,7 +47,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 					return false
 				}
 
-				if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType) {
+				if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, utils.GatewayProgrammedConditionType) {
 					logf.Log.V(1).Info("[WARN] Gateway not ready")
 					return false
 				}
@@ -63,7 +63,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 					logf.Log.V(1).Info("[WARN] Getting gateway failed", "error", err)
 					return false
 				}
-				return common.IsKuadrantManaged(existingGateway)
+				return utils.IsKuadrantManaged(existingGateway)
 			}, 15*time.Second, 5*time.Second).Should(BeTrue())
 		})
 	})
@@ -109,7 +109,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 					return false
 				}
 
-				if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType) {
+				if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, utils.GatewayProgrammedConditionType) {
 					logf.Log.V(1).Info("[WARN] Gateway not ready")
 					return false
 				}
@@ -125,7 +125,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 					logf.Log.V(1).Info("[WARN] Getting gateway failed", "error", err)
 					return false
 				}
-				return !common.IsKuadrantManaged(existingGateway)
+				return !utils.IsKuadrantManaged(existingGateway)
 			}, 15*time.Second, 5*time.Second).Should(BeTrue())
 		})
 	})

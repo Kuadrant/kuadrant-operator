@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 
 	"github.com/go-logr/logr"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,6 +31,9 @@ import (
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
+	reconcilers2 "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
@@ -39,7 +41,8 @@ const rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
 
 // RateLimitPolicyReconciler reconciles a RateLimitPolicy object
 type RateLimitPolicyReconciler struct {
-	reconcilers.TargetRefReconciler
+	*reconcilers.BaseReconciler
+	TargetRefReconciler reconcilers2.TargetRefReconciler
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -86,7 +89,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	markedForDeletion := rlp.GetDeletionTimestamp() != nil
 
 	// fetch the target network object
-	targetNetworkObject, err := r.FetchValidTargetRef(ctx, rlp.GetTargetRef(), rlp.Namespace)
+	targetNetworkObject, err := reconcilers2.FetchTargetRefObject(ctx, r.Client(), rlp.GetTargetRef(), rlp.Namespace)
 	if err != nil {
 		if !markedForDeletion {
 			if apierrors.IsNotFound(err) {
@@ -95,7 +98,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, rlp, common.NewErrTargetNotFound(rlp.Kind(), rlp.GetTargetRef(), delResErr))
+				return r.reconcileStatus(ctx, rlp, utils.NewErrTargetNotFound(rlp.Kind(), rlp.GetTargetRef(), delResErr))
 			}
 			return ctrl.Result{}, err
 		}
@@ -154,11 +157,11 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 // validate performs validation before proceeding with the reconcile loop, returning a common.ErrInvalid on failing validation
 func (r *RateLimitPolicyReconciler) validate(rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
 	if err := rlp.Validate(); err != nil {
-		return common.NewErrInvalid(rlp.Kind(), err)
+		return utils.NewErrInvalid(rlp.Kind(), err)
 	}
 
-	if err := common.ValidateHierarchicalRules(rlp, targetNetworkObject); err != nil {
-		return common.NewErrInvalid(rlp.Kind(), err)
+	if err := utils.ValidateHierarchicalRules(rlp, targetNetworkObject); err != nil {
+		return utils.NewErrInvalid(rlp.Kind(), err)
 	}
 
 	return nil
@@ -170,7 +173,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 	}
 
 	// reconcile based on gateway diffs
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, targetNetworkObject, &common.KuadrantRateLimitPolicyRefsConfig{})
+	gatewayDiffObj, err := reconcilers2.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -189,12 +192,12 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 	}
 
 	// set annotation of policies affecting the gateway - should be the last step, only when all the reconciliation steps succeed
-	return r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
+	return r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
 }
 
 func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, rlp, targetNetworkObject, &common.KuadrantRateLimitPolicyRefsConfig{})
+	gatewayDiffObj, err := reconcilers2.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -215,16 +218,16 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 	}
 
 	// update annotation of policies afftecting the gateway
-	return r.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
+	return r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
 }
 
 // Ensures only one RLP targets the network resource
-func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, policy common.KuadrantPolicy, targetNetworkObject client.Object) error {
-	return r.ReconcileTargetBackReference(ctx, policy, targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
+func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, policy utils.KuadrantPolicy, targetNetworkObject client.Object) error {
+	return r.TargetRefReconciler.ReconcileTargetBackReference(ctx, policy, targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
 }
 
 func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object) error {
-	return r.DeleteTargetBackReference(ctx, targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
+	return r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
 }
 
 // SetupWithManager sets up the controller with the Manager.

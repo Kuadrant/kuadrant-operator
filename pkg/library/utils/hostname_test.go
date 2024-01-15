@@ -1,9 +1,12 @@
 //go:build unit
 
-package common
+package utils
 
 import (
+	"reflect"
 	"testing"
+
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func TestNameSubsetOf(t *testing.T) {
@@ -78,6 +81,49 @@ func TestString(t *testing.T) {
 			res := tc.actual.String()
 			if res != tc.expected {
 				subT.Errorf("expected (%s), got (%s)", tc.expected, res)
+			}
+		})
+	}
+}
+
+func TestHostnamesToStrings(t *testing.T) {
+	testCases := []struct {
+		name           string
+		inputHostnames []gatewayapiv1.Hostname
+		expectedOutput []string
+	}{
+		{
+			name:           "when input is empty then return empty output",
+			inputHostnames: []gatewayapiv1.Hostname{},
+			expectedOutput: []string{},
+		},
+		{
+			name:           "when input has a single precise hostname then return a single string",
+			inputHostnames: []gatewayapiv1.Hostname{"example.com"},
+			expectedOutput: []string{"example.com"},
+		},
+		{
+			name:           "when input has multiple precise hostnames then return the corresponding strings",
+			inputHostnames: []gatewayapiv1.Hostname{"example.com", "test.com", "localhost"},
+			expectedOutput: []string{"example.com", "test.com", "localhost"},
+		},
+		{
+			name:           "when input has a wildcard hostname then return the wildcard string",
+			inputHostnames: []gatewayapiv1.Hostname{"*.example.com"},
+			expectedOutput: []string{"*.example.com"},
+		},
+		{
+			name:           "when input has both precise and wildcard hostnames then return the corresponding strings",
+			inputHostnames: []gatewayapiv1.Hostname{"example.com", "*.test.com"},
+			expectedOutput: []string{"example.com", "*.test.com"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			output := HostnamesToStrings(tc.inputHostnames)
+			if !reflect.DeepEqual(tc.expectedOutput, output) {
+				t.Errorf("Unexpected output. Expected %v but got %v", tc.expectedOutput, output)
 			}
 		})
 	}

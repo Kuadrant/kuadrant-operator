@@ -1,8 +1,13 @@
-package common
+package utils
 
 // From https://github.com/istio/istio/blob/8af3aff0648fcf7ed3829e82ee0bd741bfc99a2e/pkg/config/host/name.go
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kuadrant/authorino/pkg/utils"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+)
 
 // Name describes a (possibly wildcarded) hostname
 type Name string
@@ -40,4 +45,11 @@ func (n Name) IsWildCarded() bool {
 
 func (n Name) String() string {
 	return string(n)
+}
+
+// HostnamesToStrings converts []gatewayapiv1.Hostname to []string
+func HostnamesToStrings(hostnames []gatewayapiv1.Hostname) []string {
+	return utils.Map(hostnames, func(hostname gatewayapiv1.Hostname) string {
+		return string(hostname)
+	})
 }

@@ -1,14 +1,11 @@
-package common
+package utils
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"reflect"
-	"slices"
 	"strings"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
@@ -103,7 +100,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1.HTTPRouteRule) bool {
 		return true
 	}
 
-	_, found := utils.Find(rule.Matches, func(ruleMatch gatewayapiv1.HTTPRouteMatch) bool {
+	_, found := Find(rule.Matches, func(ruleMatch gatewayapiv1.HTTPRouteMatch) bool {
 		// path
 		if s.Path != nil && !reflect.DeepEqual(s.Path, ruleMatch.Path) {
 			return false
@@ -116,7 +113,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1.HTTPRouteRule) bool {
 
 		// headers
 		for _, header := range s.Headers {
-			if _, found := utils.Find(ruleMatch.Headers, func(otherHeader gatewayapiv1.HTTPHeaderMatch) bool {
+			if _, found := Find(ruleMatch.Headers, func(otherHeader gatewayapiv1.HTTPHeaderMatch) bool {
 				return reflect.DeepEqual(header, otherHeader)
 			}); !found {
 				return false
@@ -125,7 +122,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1.HTTPRouteRule) bool {
 
 		// query params
 		for _, param := range s.QueryParams {
-			if _, found := utils.Find(ruleMatch.QueryParams, func(otherParam gatewayapiv1.HTTPQueryParamMatch) bool {
+			if _, found := Find(ruleMatch.QueryParams, func(otherParam gatewayapiv1.HTTPQueryParamMatch) bool {
 				return reflect.DeepEqual(param, otherParam)
 			}); !found {
 				return false
@@ -140,7 +137,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1.HTTPRouteRule) bool {
 
 // HTTPRouteRuleToString prints the matches of a  HTTPRouteRule as string
 func HTTPRouteRuleToString(rule gatewayapiv1.HTTPRouteRule) string {
-	matches := utils.Map(rule.Matches, HTTPRouteMatchToString)
+	matches := Map(rule.Matches, HTTPRouteMatchToString)
 	return fmt.Sprintf("{matches:[%s]}", strings.Join(matches, ","))
 }
 
@@ -153,11 +150,11 @@ func HTTPRouteMatchToString(match gatewayapiv1.HTTPRouteMatch) string {
 		patterns = append(patterns, fmt.Sprintf("path:%s", HTTPPathMatchToString(path)))
 	}
 	if len(match.QueryParams) > 0 {
-		queryParams := utils.Map(match.QueryParams, HTTPQueryParamMatchToString)
+		queryParams := Map(match.QueryParams, HTTPQueryParamMatchToString)
 		patterns = append(patterns, fmt.Sprintf("queryParams:[%s]", strings.Join(queryParams, ",")))
 	}
 	if len(match.Headers) > 0 {
-		headers := utils.Map(match.Headers, HTTPHeaderMatchToString)
+		headers := Map(match.Headers, HTTPHeaderMatchToString)
 		patterns = append(patterns, fmt.Sprintf("headers:[%s]", strings.Join(headers, ",")))
 	}
 	return fmt.Sprintf("{%s}", strings.Join(patterns, ","))
@@ -228,8 +225,8 @@ func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Cli
 	return GetKuadrantNamespace(gw)
 }
 
-func GetKuadrantNamespaceFromPolicy(policy KuadrantPolicy) (string, bool) {
-	if kuadrantNamespace, isSet := policy.GetAnnotations()[KuadrantNamespaceLabel]; isSet {
+func GetKuadrantNamespaceFromPolicy(p KuadrantPolicy) (string, bool) {
+	if kuadrantNamespace, isSet := p.GetAnnotations()[KuadrantNamespaceLabel]; isSet {
 		return kuadrantNamespace, true
 	}
 	return "", false
@@ -240,11 +237,6 @@ func GetKuadrantNamespace(obj client.Object) (string, error) {
 		return "", errors.NewInternalError(fmt.Errorf("object %T is not Kuadrant managed", obj))
 	}
 	return obj.GetAnnotations()[KuadrantNamespaceLabel], nil
-}
-
-func IsKuadrantManaged(obj client.Object) bool {
-	_, isSet := obj.GetAnnotations()[KuadrantNamespaceLabel]
-	return isSet
 }
 
 func AnnotateObject(obj client.Object, namespace string) {
@@ -295,239 +287,6 @@ func routePathMatchToRulePath(pathMatch *gatewayapiv1.HTTPPathMatch) []string {
 	}
 
 	return []string{val + suffix}
-}
-
-type PolicyRefsConfig interface {
-	PolicyRefsAnnotation() string
-}
-
-type KuadrantRateLimitPolicyRefsConfig struct{}
-
-func (c *KuadrantRateLimitPolicyRefsConfig) PolicyRefsAnnotation() string {
-	return RateLimitPoliciesBackRefAnnotation
-}
-
-type KuadrantAuthPolicyRefsConfig struct{}
-
-func (c *KuadrantAuthPolicyRefsConfig) PolicyRefsAnnotation() string {
-	return AuthPoliciesBackRefAnnotation
-}
-
-type KuadrantTLSPolicyRefsConfig struct{}
-
-func (c *KuadrantTLSPolicyRefsConfig) PolicyRefsAnnotation() string {
-	return TLSPoliciesBackRefAnnotation
-}
-
-type KuadrantDNSPolicyRefsConfig struct{}
-
-func (c *KuadrantDNSPolicyRefsConfig) PolicyRefsAnnotation() string {
-	return DNSPoliciesBackRefAnnotation
-}
-
-func GatewaysMissingPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
-	// gateways referenced by the policy but do not have reference to it in the annotations
-	gateways := make([]GatewayWrapper, 0)
-	for i := range gwList.Items {
-		gateway := gwList.Items[i]
-		gw := GatewayWrapper{&gateway, config}
-		if slices.Contains(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && !gw.ContainsPolicy(policyKey) {
-			gateways = append(gateways, gw)
-		}
-	}
-	return gateways
-}
-
-func GatewaysWithValidPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
-	// gateways referenced by the policy but also have reference to it in the annotations
-	gateways := make([]GatewayWrapper, 0)
-	for i := range gwList.Items {
-		gateway := gwList.Items[i]
-		gw := GatewayWrapper{&gateway, config}
-		if slices.Contains(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && gw.ContainsPolicy(policyKey) {
-			gateways = append(gateways, gw)
-		}
-	}
-	return gateways
-}
-
-func GatewaysWithInvalidPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
-	// gateways not referenced by the policy but still have reference in the annotations
-	gateways := make([]GatewayWrapper, 0)
-	for i := range gwList.Items {
-		gateway := gwList.Items[i]
-		gw := GatewayWrapper{&gateway, config}
-		if !slices.Contains(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && gw.ContainsPolicy(policyKey) {
-			gateways = append(gateways, gw)
-		}
-	}
-	return gateways
-}
-
-// GatewayWrapper wraps a Gateway API Gateway adding methods and configs to manage policy references in annotations
-type GatewayWrapper struct {
-	*gatewayapiv1.Gateway
-	PolicyRefsConfig
-}
-
-func (g GatewayWrapper) Key() client.ObjectKey {
-	if g.Gateway == nil {
-		return client.ObjectKey{}
-	}
-	return client.ObjectKeyFromObject(g.Gateway)
-}
-
-func (g GatewayWrapper) PolicyRefs() []client.ObjectKey {
-	if g.Gateway == nil {
-		return make([]client.ObjectKey, 0)
-	}
-
-	gwAnnotations := utils.ReadAnnotationsFromObject(g)
-
-	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
-	if !ok {
-		return make([]client.ObjectKey, 0)
-	}
-
-	var refs []client.ObjectKey
-
-	err := json.Unmarshal([]byte(val), &refs)
-	if err != nil {
-		return make([]client.ObjectKey, 0)
-	}
-
-	return refs
-}
-
-func (g GatewayWrapper) ContainsPolicy(policyKey client.ObjectKey) bool {
-	if g.Gateway == nil {
-		return false
-	}
-
-	gwAnnotations := utils.ReadAnnotationsFromObject(g)
-
-	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
-	if !ok {
-		return false
-	}
-
-	var refs []client.ObjectKey
-
-	err := json.Unmarshal([]byte(val), &refs)
-	if err != nil {
-		return false
-	}
-
-	return slices.Contains(refs, policyKey)
-}
-
-// AddPolicy tries to add a policy to the existing ref list.
-// Returns true if policy was added, false otherwise
-func (g GatewayWrapper) AddPolicy(policyKey client.ObjectKey) bool {
-	if g.Gateway == nil {
-		return false
-	}
-
-	gwAnnotations := utils.ReadAnnotationsFromObject(g)
-
-	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
-	if !ok {
-		refs := []client.ObjectKey{policyKey}
-		serialized, err := json.Marshal(refs)
-		if err != nil {
-			return false
-		}
-		gwAnnotations[g.PolicyRefsAnnotation()] = string(serialized)
-		g.SetAnnotations(gwAnnotations)
-		return true
-	}
-
-	var refs []client.ObjectKey
-
-	err := json.Unmarshal([]byte(val), &refs)
-	if err != nil {
-		return false
-	}
-
-	if slices.Contains(refs, policyKey) {
-		return false
-	}
-
-	refs = append(refs, policyKey)
-	serialized, err := json.Marshal(refs)
-	if err != nil {
-		return false
-	}
-	gwAnnotations[g.PolicyRefsAnnotation()] = string(serialized)
-	g.SetAnnotations(gwAnnotations)
-	return true
-}
-
-// DeletePolicy tries to delete a policy from the existing ref list.
-// Returns true if the policy was deleted, false otherwise
-func (g GatewayWrapper) DeletePolicy(policyKey client.ObjectKey) bool {
-	if g.Gateway == nil {
-		return false
-	}
-
-	gwAnnotations := utils.ReadAnnotationsFromObject(g)
-
-	val, ok := gwAnnotations[g.PolicyRefsAnnotation()]
-	if !ok {
-		return false
-	}
-
-	var refs []client.ObjectKey
-
-	err := json.Unmarshal([]byte(val), &refs)
-	if err != nil {
-		return false
-	}
-
-	if refID := FindObjectKey(refs, policyKey); refID != len(refs) {
-		// remove index
-		refs = append(refs[:refID], refs[refID+1:]...)
-		serialized, err := json.Marshal(refs)
-		if err != nil {
-			return false
-		}
-		gwAnnotations[g.PolicyRefsAnnotation()] = string(serialized)
-		g.SetAnnotations(gwAnnotations)
-		return true
-	}
-
-	return false
-}
-
-// Hostnames builds a list of hostnames from the listeners.
-func (g GatewayWrapper) Hostnames() []gatewayapiv1.Hostname {
-	hostnames := make([]gatewayapiv1.Hostname, 0)
-	if g.Gateway == nil {
-		return hostnames
-	}
-
-	for idx := range g.Spec.Listeners {
-		if g.Spec.Listeners[idx].Hostname != nil {
-			hostnames = append(hostnames, *g.Spec.Listeners[idx].Hostname)
-		}
-	}
-
-	return hostnames
-}
-
-// GatewayWrapperList is a list of GatewayWrappers that implements sort.Interface
-type GatewayWrapperList []GatewayWrapper
-
-func (g GatewayWrapperList) Len() int {
-	return len(g)
-}
-
-func (g GatewayWrapperList) Less(i, j int) bool {
-	return g[i].CreationTimestamp.Before(&g[j].CreationTimestamp)
-}
-
-func (g GatewayWrapperList) Swap(i, j int) {
-	g[i], g[j] = g[j], g[i]
 }
 
 // TargetHostnames returns an array of hostnames coming from the network object (HTTPRoute, Gateway)
@@ -601,7 +360,7 @@ func ValidateHierarchicalRules(policy KuadrantPolicy, targetNetworkObject client
 }
 
 func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway *gatewayapiv1.Gateway) (map[string]string, error) {
-	address, found := utils.Find(
+	address, found := Find(
 		gateway.Status.Addresses,
 		func(address gatewayapiv1.GatewayStatusAddress) bool {
 			return address.Type != nil && *address.Type == gatewayapiv1.HostnameAddressType

@@ -21,13 +21,12 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/policy"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -152,8 +151,8 @@ func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr
 	}
 
 	// Marshalling sorts by condition type
-	currentMarshaledJSON, _ := common.ConditionMarshal(s.Conditions)
-	otherMarshaledJSON, _ := common.ConditionMarshal(other.Conditions)
+	currentMarshaledJSON, _ := utils.ConditionMarshal(s.Conditions)
+	otherMarshaledJSON, _ := utils.ConditionMarshal(other.Conditions)
 	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
 		if logger.V(1).Enabled() {
 			diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
@@ -165,8 +164,8 @@ func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr
 	return true
 }
 
-var _ common.KuadrantPolicy = &RateLimitPolicy{}
-var _ policy.Referrer = &RateLimitPolicy{}
+var _ utils.KuadrantPolicy = &RateLimitPolicy{}
+var _ utils.Referrer = &RateLimitPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -215,8 +214,8 @@ type RateLimitPolicyList struct {
 	Items           []RateLimitPolicy `json:"items"`
 }
 
-func (l *RateLimitPolicyList) GetItems() []common.KuadrantPolicy {
-	return utils.Map(l.Items, func(item RateLimitPolicy) common.KuadrantPolicy {
+func (l *RateLimitPolicyList) GetItems() []utils.KuadrantPolicy {
+	return utils.Map(l.Items, func(item RateLimitPolicy) utils.KuadrantPolicy {
 		return &item
 	})
 }

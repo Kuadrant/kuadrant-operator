@@ -7,26 +7,26 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
+	istiosecurity "istio.io/api/security/v1beta1"
+	istio "istio.io/client-go/pkg/apis/security/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/utils/env"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	istiosecurity "istio.io/api/security/v1beta1"
-	istio "istio.io/client-go/pkg/apis/security/v1beta1"
-
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
-	"k8s.io/utils/env"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 var KuadrantExtAuthProviderName = env.GetString("AUTH_PROVIDER", "kuadrant-authorization")
 
 // reconcileIstioAuthorizationPolicies translates and reconciles `AuthRules` into an Istio AuthorizationPoilcy containing them.
-func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, gwDiffObj *reconcilers.GatewayDiff) error {
+func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, gwDiffObj *reconcilers.GatewayDiffs) error {
 	if err := r.deleteIstioAuthorizationPolicies(ctx, ap, gwDiffObj); err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.C
 }
 
 // deleteIstioAuthorizationPolicies deletes IstioAuthorizationPolicies previously created for gateways no longer targeted by the policy (directly or indirectly)
-func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Context, ap *api.AuthPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
+func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Context, ap *api.AuthPolicy, gwDiffObj *reconcilers.GatewayDiffs) error {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return err
@@ -78,7 +78,7 @@ func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Cont
 	return nil
 }
 
-func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, gw common.GatewayWrapper) (*istio.AuthorizationPolicy, error) {
+func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, gw utils.GatewayWrapper) (*istio.AuthorizationPolicy, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("istioAuthorizationPolicy")
 
@@ -121,7 +121,7 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 		// fake a single httproute with all rules from all httproutes accepted by the gateway,
 		// that do not have an authpolicy of its own, so we can generate wasm rules for those cases
 		rules := make([]gatewayapiv1.HTTPRouteRule, 0)
-		routes := r.FetchAcceptedGatewayHTTPRoutes(ctx, ap.TargetKey())
+		routes := r.TargetRefReconciler.FetchAcceptedGatewayHTTPRoutes(ctx, ap.TargetKey())
 		for idx := range routes {
 			route := routes[idx]
 			// skip routes that have an authpolicy of its own
@@ -151,7 +151,7 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 
 	if len(rules) > 0 {
 		// make sure all istio authorizationpolicy rules include the hosts so we don't send a request to authorino for hosts that are not in the scope of the policy
-		hosts := common.HostnamesToStrings(routeHostnames)
+		hosts := utils.HostnamesToStrings(routeHostnames)
 		for i := range rules {
 			for j := range rules[i].To {
 				if len(rules[i].To[j].Operation.Hosts) > 0 {

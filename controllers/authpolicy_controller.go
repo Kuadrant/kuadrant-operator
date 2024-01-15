@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/go-logr/logr"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -13,12 +14,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
-
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
-
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
+	reconcilers2 "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
@@ -26,9 +26,10 @@ const authPolicyFinalizer = "authpolicy.kuadrant.io/finalizer"
 
 // AuthPolicyReconciler reconciles a AuthPolicy object
 type AuthPolicyReconciler struct {
-	reconcilers.TargetRefReconciler
+	*reconcilers.BaseReconciler
+	TargetRefReconciler reconcilers2.TargetRefReconciler
 	// OverriddenPolicyMap tracks the overridden policies to report their status.
-	OverriddenPolicyMap *common.OverriddenPolicyMap
+	OverriddenPolicyMap *utils.OverriddenPolicyMap
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -64,7 +65,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	markedForDeletion := ap.GetDeletionTimestamp() != nil
 
 	// fetch the target network object
-	targetNetworkObject, err := r.FetchValidTargetRef(ctx, ap.GetTargetRef(), ap.Namespace)
+	targetNetworkObject, err := reconcilers2.FetchTargetRefObject(ctx, r.Client(), ap.GetTargetRef(), ap.Namespace)
 	if err != nil {
 		if !markedForDeletion {
 			if apierrors.IsNotFound(err) {
@@ -73,7 +74,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, ap, targetNetworkObject, common.NewErrTargetNotFound(ap.Kind(), ap.GetTargetRef(), delResErr))
+				return r.reconcileStatus(ctx, ap, targetNetworkObject, utils.NewErrTargetNotFound(ap.Kind(), ap.GetTargetRef(), delResErr))
 			}
 			return ctrl.Result{}, err
 		}
@@ -139,11 +140,11 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 // validate performs validation before proceeding with the reconcile loop, returning a common.ErrInvalid on any failing validation
 func (r *AuthPolicyReconciler) validate(ap *api.AuthPolicy, targetNetworkObject client.Object) error {
 	if err := ap.Validate(); err != nil {
-		return common.NewErrInvalid(ap.Kind(), err)
+		return utils.NewErrInvalid(ap.Kind(), err)
 	}
 
-	if err := common.ValidateHierarchicalRules(ap, targetNetworkObject); err != nil {
-		return common.NewErrInvalid(ap.Kind(), err)
+	if err := utils.ValidateHierarchicalRules(ap, targetNetworkObject); err != nil {
+		return utils.NewErrInvalid(ap.Kind(), err)
 	}
 
 	return nil
@@ -155,7 +156,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 	}
 
 	// reconcile based on gateway diffs
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, ap, targetNetworkObject, &common.KuadrantAuthPolicyRefsConfig{})
+	gatewayDiffObj, err := reconcilers2.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -174,12 +175,12 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 	}
 
 	// set annotation of policies affecting the gateway - should be the last step, only when all the reconciliation steps succeed
-	return r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
+	return r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
 }
 
 func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, ap, targetNetworkObject, &common.KuadrantAuthPolicyRefsConfig{})
+	gatewayDiffObj, err := reconcilers2.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -196,16 +197,16 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 	}
 
 	// update annotation of policies affecting the gateway
-	return r.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
+	return r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
 }
 
 // Ensures only one RLP targets the network resource
-func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, ap common.KuadrantPolicy, targetNetworkObject client.Object) error {
-	return r.ReconcileTargetBackReference(ctx, ap, targetNetworkObject, common.AuthPolicyBackRefAnnotation)
+func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, ap utils.KuadrantPolicy, targetNetworkObject client.Object) error {
+	return r.TargetRefReconciler.ReconcileTargetBackReference(ctx, ap, targetNetworkObject, common.AuthPolicyBackRefAnnotation)
 }
 
 func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object) error {
-	return r.DeleteTargetBackReference(ctx, targetNetworkObject, common.AuthPolicyBackRefAnnotation)
+	return r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, common.AuthPolicyBackRefAnnotation)
 }
 
 // reconcileRouteParentGatewayPolicies triggers the concurrent reconciliation of all policies that target gateways that are parents of a route

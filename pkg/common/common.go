@@ -20,10 +20,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // TODO: move the const to a proper place, or get it from config
@@ -41,18 +41,6 @@ const (
 	NamespaceSeparator                 = '/'
 	LimitadorName                      = "limitador"
 )
-
-type KuadrantPolicy interface {
-	client.Object
-	GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference
-	GetWrappedNamespace() gatewayapiv1.Namespace
-	GetRulesHostnames() []string
-	Kind() string
-}
-
-type KuadrantPolicyList interface {
-	GetItems() []KuadrantPolicy
-}
 
 // MergeMapStringString Merge desired into existing.
 // Not Thread-Safe. Does it matter?
@@ -104,42 +92,12 @@ func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 	return client.ObjectKey{Namespace: keyStr[:namespaceEndIndex], Name: keyStr[namespaceEndIndex+1:]}, nil
 }
 
-// HostnamesToStrings converts []gatewayapiv1.Hostname to []string
-func HostnamesToStrings(hostnames []gatewayapiv1.Hostname) []string {
-	return utils.Map(hostnames, func(hostname gatewayapiv1.Hostname) string {
-		return string(hostname)
-	})
-}
-
-// ValidSubdomains returns (true, "") when every single subdomains item
-// is a subset of at least one of the domains.
-// Domains and subdomains may be prefixed with a wildcard label (*.).
-// The wildcard label must appear by itself as the first label.
-// When one of the subdomains is not a subset of the domains, it returns false and
-// the subdomain not being subset of the domains
-func ValidSubdomains(domains, subdomains []string) (bool, string) {
-	for _, subdomain := range subdomains {
-		validSubdomain := false
-		for _, domain := range domains {
-			if Name(subdomain).SubsetOf(Name(domain)) {
-				validSubdomain = true
-				break
-			}
-		}
-
-		if !validSubdomain {
-			return false, subdomain
-		}
-	}
-	return true, ""
-}
-
 // FilterValidSubdomains returns every subdomain that is a subset of at least one of the (super) domains specified in the first argument.
 func FilterValidSubdomains(domains, subdomains []gatewayapiv1.Hostname) []gatewayapiv1.Hostname {
 	arr := make([]gatewayapiv1.Hostname, 0)
 	for _, subsubdomain := range subdomains {
 		if _, found := utils.Find(domains, func(domain gatewayapiv1.Hostname) bool {
-			return Name(subsubdomain).SubsetOf(Name(domain))
+			return utils.Name(subsubdomain).SubsetOf(utils.Name(domain))
 		}); found {
 			arr = append(arr, subsubdomain)
 		}

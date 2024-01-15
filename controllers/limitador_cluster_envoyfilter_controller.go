@@ -26,7 +26,7 @@ import (
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	meta "k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -34,8 +34,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
@@ -120,7 +122,7 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 		},
 	}
 
-	gateway := common.GatewayWrapper{Gateway: gw, PolicyRefsConfig: &common.KuadrantRateLimitPolicyRefsConfig{}}
+	gateway := utils.GatewayWrapper{Gateway: gw, Referrer: &v1beta2.RateLimitPolicy{}}
 	rlpRefs := gateway.PolicyRefs()
 	logger.V(1).Info("desiredRateLimitingClusterEnvoyFilter", "rlpRefs", rlpRefs)
 
@@ -129,7 +131,7 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 		return ef, nil
 	}
 
-	kuadrantNamespace, err := common.GetKuadrantNamespace(gw)
+	kuadrantNamespace, err := utils.GetKuadrantNamespace(gw)
 	if err != nil {
 		return nil, err
 	}

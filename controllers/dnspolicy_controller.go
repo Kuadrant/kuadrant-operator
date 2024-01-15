@@ -39,6 +39,8 @@ import (
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
+	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
@@ -51,8 +53,9 @@ type DNSPolicyRefsConfig struct{}
 
 // DNSPolicyReconciler reconciles a DNSPolicy object
 type DNSPolicyReconciler struct {
-	reconcilers.TargetRefReconciler
-	dnsHelper dnsHelper
+	*reconcilers.BaseReconciler
+	TargetRefReconciler reconcilerutils.TargetRefReconciler
+	dnsHelper           dnsHelper
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=dnspolicies,verbs=get;list;watch;update;patch;delete
@@ -85,7 +88,7 @@ func (r *DNSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	markedForDeletion := dnsPolicy.GetDeletionTimestamp() != nil
 
-	targetNetworkObject, err := r.FetchValidTargetRef(ctx, dnsPolicy.GetTargetRef(), dnsPolicy.Namespace)
+	targetNetworkObject, err := reconcilerutils.FetchTargetRefObject(ctx, r.Client(), dnsPolicy.GetTargetRef(), dnsPolicy.Namespace)
 	if err != nil {
 		if !markedForDeletion {
 			if apierrors.IsNotFound(err) {
@@ -94,7 +97,7 @@ func (r *DNSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, dnsPolicy, common.NewErrTargetNotFound(dnsPolicy.Kind(), dnsPolicy.GetTargetRef(), delResErr))
+				return r.reconcileStatus(ctx, dnsPolicy, utils.NewErrTargetNotFound(dnsPolicy.Kind(), dnsPolicy.GetTargetRef(), delResErr))
 			}
 			return ctrl.Result{}, err
 		}
@@ -147,7 +150,7 @@ func (r *DNSPolicyReconciler) reconcileResources(ctx context.Context, dnsPolicy 
 	dnsPolicy.Default()
 
 	// reconcile based on gateway diffs
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, dnsPolicy, targetNetworkObject, &common.KuadrantDNSPolicyRefsConfig{})
+	gatewayDiffObj, err := reconcilerutils.ComputeGatewayDiffs(ctx, r.Client(), dnsPolicy, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -165,14 +168,14 @@ func (r *DNSPolicyReconciler) reconcileResources(ctx context.Context, dnsPolicy 
 	}
 
 	// set direct back ref - i.e. claim the target network object as taken asap
-	if err = r.ReconcileTargetBackReference(ctx, dnsPolicy, targetNetworkObject, common.DNSPolicyBackRefAnnotation); err != nil {
+	if err = r.TargetRefReconciler.ReconcileTargetBackReference(ctx, dnsPolicy, targetNetworkObject, common.DNSPolicyBackRefAnnotation); err != nil {
 		gatewayCondition = BuildPolicyAffectedCondition(DNSPolicyAffected, dnsPolicy, targetNetworkObject, gatewayapiv1alpha2.PolicyReasonConflicted, err)
 		updateErr := r.updateGatewayCondition(ctx, gatewayCondition, gatewayDiffObj)
 		return errors.Join(fmt.Errorf("reconcile TargetBackReference error %w", err), updateErr)
 	}
 
 	// set annotation of policies affecting the gateway
-	if err := r.ReconcileGatewayPolicyReferences(ctx, dnsPolicy, gatewayDiffObj); err != nil {
+	if err := r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, dnsPolicy, gatewayDiffObj); err != nil {
 		gatewayCondition = BuildPolicyAffectedCondition(DNSPolicyAffected, dnsPolicy, targetNetworkObject, gatewayapiv1alpha2.PolicyConditionReason(PolicyReasonUnknown), err)
 		updateErr := r.updateGatewayCondition(ctx, gatewayCondition, gatewayDiffObj)
 		return errors.Join(fmt.Errorf("ReconcileGatewayPolicyReferences error %w", err), updateErr)
@@ -199,18 +202,18 @@ func (r *DNSPolicyReconciler) deleteResources(ctx context.Context, dnsPolicy *v1
 
 	// remove direct back ref
 	if targetNetworkObject != nil {
-		if err := r.DeleteTargetBackReference(ctx, targetNetworkObject, common.DNSPolicyBackRefAnnotation); err != nil {
+		if err := r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, common.DNSPolicyBackRefAnnotation); err != nil {
 			return err
 		}
 	}
 
-	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, dnsPolicy, targetNetworkObject, &common.KuadrantDNSPolicyRefsConfig{})
+	gatewayDiffObj, err := reconcilerutils.ComputeGatewayDiffs(ctx, r.Client(), dnsPolicy, targetNetworkObject)
 	if err != nil {
 		return err
 	}
 
 	// update annotation of policies affecting the gateway
-	if err := r.ReconcileGatewayPolicyReferences(ctx, dnsPolicy, gatewayDiffObj); err != nil {
+	if err := r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, dnsPolicy, gatewayDiffObj); err != nil {
 		return err
 	}
 
@@ -218,7 +221,7 @@ func (r *DNSPolicyReconciler) deleteResources(ctx context.Context, dnsPolicy *v1
 	return r.updateGatewayCondition(ctx, metav1.Condition{Type: DNSPolicyAffected}, gatewayDiffObj)
 }
 
-func (r *DNSPolicyReconciler) updateGatewayCondition(ctx context.Context, condition metav1.Condition, gatewayDiff *reconcilers.GatewayDiff) error {
+func (r *DNSPolicyReconciler) updateGatewayCondition(ctx context.Context, condition metav1.Condition, gatewayDiff *reconcilerutils.GatewayDiffs) error {
 	// update condition if needed
 	gatewayDiffs := append(gatewayDiff.GatewaysWithValidPolicyRef, gatewayDiff.GatewaysMissingPolicyRef...)
 	for i, gw := range gatewayDiffs {

@@ -1,4 +1,4 @@
-package common
+package utils
 
 import (
 	"encoding/json"
@@ -66,13 +66,13 @@ func ConditionMarshal(conditions []metav1.Condition) ([]byte, error) {
 }
 
 // AcceptedCondition returns an accepted conditions with common reasons for a kuadrant policy
-func AcceptedCondition(policy KuadrantPolicy, err error) *metav1.Condition {
+func AcceptedCondition(p KuadrantPolicy, err error) *metav1.Condition {
 	// Accepted
 	cond := &metav1.Condition{
 		Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
-		Message: fmt.Sprintf("%s has been accepted", policy.Kind()),
+		Message: fmt.Sprintf("%s has been accepted", p.Kind()),
 	}
 	if err == nil {
 		return cond
@@ -81,7 +81,7 @@ func AcceptedCondition(policy KuadrantPolicy, err error) *metav1.Condition {
 	// Wrap error into a PolicyError if it is not this type
 	var policyErr PolicyError
 	if !errors.As(err, &policyErr) {
-		policyErr = NewErrUnknown(policy.Kind(), err)
+		policyErr = NewErrUnknown(p.Kind(), err)
 	}
 
 	cond.Status = metav1.ConditionFalse

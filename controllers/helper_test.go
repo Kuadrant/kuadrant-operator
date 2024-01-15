@@ -38,7 +38,7 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 const (
@@ -250,7 +250,7 @@ func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string) *
 					},
 				},
 			},
-			Hostnames: common.Map(hostnames, func(hostname string) gatewayapiv1.Hostname { return gatewayapiv1.Hostname(hostname) }),
+			Hostnames: utils.Map(hostnames, func(hostname string) gatewayapiv1.Hostname { return gatewayapiv1.Hostname(hostname) }),
 			Rules: []gatewayapiv1.HTTPRouteRule{
 				{
 					Matches: []gatewayapiv1.HTTPRouteMatch{
@@ -308,7 +308,7 @@ func testRouteIsAccepted(routeKey client.ObjectKey) func() bool {
 	return func() bool {
 		route := &gatewayapiv1.HTTPRoute{}
 		err := k8sClient.Get(context.Background(), routeKey, route)
-		return err == nil && common.IsHTTPRouteAccepted(route)
+		return err == nil && utils.IsHTTPRouteAccepted(route)
 	}
 }
 
@@ -316,7 +316,7 @@ func testGatewayIsReady(gateway *gatewayapiv1.Gateway) func() bool {
 	return func() bool {
 		existingGateway := &gatewayapiv1.Gateway{}
 		err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
-		return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType)
+		return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, utils.GatewayProgrammedConditionType)
 	}
 }
 

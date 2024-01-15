@@ -1,12 +1,10 @@
 package v1beta2
 
 import (
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/elliotchance/orderedmap/v2"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	orderedmap "github.com/elliotchance/orderedmap/v2"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // RouteSelector defines semantics for matching an HTTP request based on conditions
@@ -42,7 +40,7 @@ func (s *RouteSelector) SelectRules(route *gatewayapiv1.HTTPRoute) (rules []gate
 	for idx := range s.Matches {
 		routeSelectorMatch := s.Matches[idx]
 		for idx, rule := range route.Spec.Rules {
-			rs := common.HTTPRouteRuleSelector{HTTPRouteMatch: &routeSelectorMatch}
+			rs := utils.HTTPRouteRuleSelector{HTTPRouteMatch: &routeSelectorMatch}
 			if rs.Selects(rule) {
 				rulesIndices.Set(idx, rule)
 			}

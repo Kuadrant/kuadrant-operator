@@ -26,8 +26,7 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/policy"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 type RoutingStrategy string
@@ -127,8 +126,8 @@ type DNSPolicyStatus struct {
 	HealthCheck *HealthCheckStatus `json:"healthCheck,omitempty"`
 }
 
-var _ common.KuadrantPolicy = &DNSPolicy{}
-var _ policy.Referrer = &DNSPolicy{}
+var _ utils.KuadrantPolicy = &DNSPolicy{}
+var _ utils.Referrer = &DNSPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

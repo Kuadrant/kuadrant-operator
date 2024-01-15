@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 func (r *DNSPolicyReconciler) reconcileStatus(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, specErr error) (ctrl.Result, error) {
@@ -50,7 +50,7 @@ func (r *DNSPolicyReconciler) reconcileStatus(ctx context.Context, dnsPolicy *v1
 		return ctrl.Result{}, updateErr
 	}
 
-	if common.IsTargetNotFound(specErr) {
+	if utils.IsTargetNotFound(specErr) {
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -64,7 +64,7 @@ func (r *DNSPolicyReconciler) calculateStatus(dnsPolicy *v1alpha1.DNSPolicy, spe
 		ObservedGeneration: dnsPolicy.Status.ObservedGeneration,
 	}
 
-	acceptedCond := common.AcceptedCondition(dnsPolicy, specErr)
+	acceptedCond := utils.AcceptedCondition(dnsPolicy, specErr)
 	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)
 
 	return newStatus

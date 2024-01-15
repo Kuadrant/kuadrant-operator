@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"testing"
 
+	"gotest.tools/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -925,16 +926,18 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 func TestValidateHierarchicalRules(t *testing.T) {
 	hostname := gatewayapiv1.Hostname("*.example.com")
 	gateway := &gatewayapiv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "cool-namespace",
-			Name:      "cool-gateway",
-		},
 		Spec: gatewayapiv1.GatewaySpec{Listeners: []gatewayapiv1.Listener{
 			{
 				Hostname: &hostname,
 			},
 		}},
 	}
+	httpRoute := &gatewayapiv1.HTTPRoute{
+		Spec: gatewayapiv1.HTTPRouteSpec{
+			Hostnames: []gatewayapiv1.Hostname{hostname},
+		},
+	}
+
 	policy1 := FakePolicy{Hosts: []string{"this.example.com", "*.example.com"}}
 	policy2 := FakePolicy{Hosts: []string{"*.z.com"}}
 
@@ -942,18 +945,27 @@ func TestValidateHierarchicalRules(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedError := fmt.Errorf(
-		"rule host (%s) does not follow any hierarchical constraints, "+
+	t.Run("gateway - contains host", func(subT *testing.T) {
+		assert.NilError(subT, ValidateHierarchicalRules(&policy1, gateway))
+	})
+
+	t.Run("gateway error - host has no match", func(subT *testing.T) {
+		expectedError := fmt.Sprintf("rule host (%s) does not follow any hierarchical constraints, "+
 			"for the %T to be validated, it must match with at least one of the target network hostnames %+q",
-		"*.z.com",
-		&policy2,
-		[]string{"*.example.com"},
-	)
+			"*.z.com",
+			&policy2,
+			[]string{"*.example.com"},
+		)
+		assert.Error(subT, ValidateHierarchicalRules(&policy2, gateway), expectedError)
+	})
 
-	if err := ValidateHierarchicalRules(&policy2, gateway); err.Error() != expectedError.Error() {
-		t.Fatal("the error message does not match the expected error one", expectedError.Error(), err.Error())
-	}
+	t.Run("gateway - no hosts", func(subT *testing.T) {
+		assert.NilError(subT, ValidateHierarchicalRules(&policy1, &gatewayapiv1.Gateway{}))
+	})
 
+	t.Run("httpRoute - contains host ", func(subT *testing.T) {
+		assert.NilError(subT, ValidateHierarchicalRules(&policy1, httpRoute))
+	})
 }
 
 func TestIsHTTPRouteAccepted(t *testing.T) {

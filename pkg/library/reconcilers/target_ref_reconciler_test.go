@@ -103,10 +103,6 @@ func TestReconcileTargetBackReference(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if res == nil {
-		t.Fatal("res is nil")
-	}
-
 	if len(res.GetAnnotations()) == 0 {
 		t.Fatal("annotations are empty")
 	}
@@ -198,10 +194,6 @@ func TestDeleteTargetBackReference(t *testing.T) {
 	err = cl.Get(ctx, client.ObjectKey{Name: routeName, Namespace: namespace}, res)
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	if res == nil {
-		t.Fatal("res is nil")
 	}
 
 	if len(res.GetAnnotations()) > 0 {

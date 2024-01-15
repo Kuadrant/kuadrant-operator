@@ -86,7 +86,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},

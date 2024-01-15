@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	secv1beta1resources "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -23,9 +25,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-
-	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -62,7 +61,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			},
 			Spec: api.AuthPolicySpec{
 				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-					Group:     "gateway.networking.k8s.io",
+					Group:     gatewayapiv1.GroupName,
 					Kind:      "HTTPRoute",
 					Name:      testHTTPRouteName,
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
@@ -90,7 +89,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		It("Attaches policy to the Gateway", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = testGatewayName
 				policy.Spec.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -160,7 +159,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gatewayName)
 			})
@@ -261,7 +260,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			// attach policy to the gatewaay
 			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = testGatewayName
 			})
@@ -1217,7 +1216,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			// attach policy to the gatewaay
 			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = testGatewayName
 			})
@@ -1278,7 +1277,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 				},
 				Spec: api.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
+						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  "my-target",
 					},
@@ -1355,7 +1354,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 				},
 				Spec: api.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
+						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  "my-gw",
 					},

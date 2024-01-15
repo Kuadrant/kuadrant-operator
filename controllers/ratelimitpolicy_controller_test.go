@@ -49,7 +49,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
 				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-					Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  gatewayapiv1.ObjectName(routeName),
 				},
@@ -661,7 +661,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
+						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  "my-target",
 					},
@@ -719,7 +719,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
+						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  "my-gw",
 					},

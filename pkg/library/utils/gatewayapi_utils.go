@@ -22,11 +22,11 @@ type HTTPRouteRule struct {
 }
 
 func IsTargetRefHTTPRoute(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool {
-	return targetRef.Group == ("gateway.networking.k8s.io") && targetRef.Kind == ("HTTPRoute")
+	return targetRef.Group == (gatewayapiv1.GroupName) && targetRef.Kind == ("HTTPRoute")
 }
 
 func IsTargetRefGateway(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool {
-	return targetRef.Group == ("gateway.networking.k8s.io") && targetRef.Kind == ("Gateway")
+	return targetRef.Group == (gatewayapiv1.GroupName) && targetRef.Kind == ("Gateway")
 }
 
 func RouteHTTPMethodToRuleMethod(httpMethod *gatewayapiv1.HTTPMethod) []string {
@@ -319,7 +319,7 @@ func HostnamesFromHTTPRoute(ctx context.Context, route *gatewayapiv1.HTTPRoute, 
 	hosts := []string{}
 
 	for _, ref := range route.Spec.ParentRefs {
-		if (ref.Kind != nil && *ref.Kind != "Gateway") || (ref.Group != nil && *ref.Group != "gateway.networking.k8s.io") {
+		if (ref.Kind != nil && *ref.Kind != "Gateway") || (ref.Group != nil && *ref.Group != gatewayapiv1.GroupName) {
 			continue
 		}
 		gw := &gatewayapiv1.Gateway{}

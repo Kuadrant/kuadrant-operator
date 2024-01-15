@@ -55,7 +55,7 @@ func TestAuthPolicyTargetKey(t *testing.T) {
 		},
 		Spec: AuthPolicySpec{
 			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-				Group: "gateway.networking.k8s.io",
+				Group: gatewayapiv1.GroupName,
 				Kind:  "HTTPRoute",
 				Name:  "my-route",
 			},
@@ -100,7 +100,7 @@ func TestAuthPolicyGetRulesHostnames(t *testing.T) {
 		},
 		Spec: AuthPolicySpec{
 			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-				Group: "gateway.networking.k8s.io",
+				Group: gatewayapiv1.GroupName,
 				Kind:  "HTTPRoute",
 				Name:  "my-route",
 			},
@@ -256,7 +256,7 @@ func TestAuthPolicyValidate(t *testing.T) {
 				},
 				Spec: AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
+						Group:     gatewayapiv1.GroupName,
 						Kind:      "HTTPRoute",
 						Name:      "my-route",
 						Namespace: ptr.To(gatewayapiv1.Namespace("other-namespace")),

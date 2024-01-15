@@ -45,7 +45,7 @@ func (m *HTTPRouteParentRefsEventMapper) mapToPolicyRequest(obj client.Object, p
 
 	for _, parentRef := range route.Spec.ParentRefs {
 		// skips if parentRef is not a Gateway
-		if (parentRef.Group != nil && *parentRef.Group != "gateway.networking.k8s.io") || (parentRef.Kind != nil && *parentRef.Kind != "Gateway") {
+		if (parentRef.Group != nil && *parentRef.Group != gatewayapiv1.GroupName) || (parentRef.Kind != nil && *parentRef.Kind != "Gateway") {
 			continue
 		}
 		// list policies in the same namespace as the parent gateway of the route

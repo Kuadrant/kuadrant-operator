@@ -25,7 +25,7 @@ func testBuildBasicRLP(name string, kind gatewayapiv1.Kind) *RateLimitPolicy {
 		},
 		Spec: RateLimitPolicySpec{
 			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-				Group: "gateway.networking.k8s.io",
+				Group: gatewayapiv1.GroupName,
 				Kind:  kind,
 				Name:  "some-name",
 			},

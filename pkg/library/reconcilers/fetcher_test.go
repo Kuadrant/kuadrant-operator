@@ -40,13 +40,13 @@ func TestFetchTargetRefObject(t *testing.T) {
 	}
 
 	routeTargetRef := gatewayapiv1alpha2.PolicyTargetReference{
-		Group: "gateway.networking.k8s.io",
+		Group: gatewayapiv1.GroupName,
 		Kind:  "HTTPRoute",
 		Name:  gatewayapiv1.ObjectName(routeName),
 	}
 
 	gatewayTargetRef := gatewayapiv1alpha2.PolicyTargetReference{
-		Group: "gateway.networking.k8s.io",
+		Group: gatewayapiv1.GroupName,
 		Kind:  "Gateway",
 		Name:  gatewayapiv1.ObjectName(gatewayName),
 	}

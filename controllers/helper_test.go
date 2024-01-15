@@ -316,7 +316,7 @@ func testGatewayIsReady(gateway *gatewayapiv1.Gateway) func() bool {
 	return func() bool {
 		existingGateway := &gatewayapiv1.Gateway{}
 		err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
-		return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, utils.GatewayProgrammedConditionType)
+		return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed))
 	}
 }
 

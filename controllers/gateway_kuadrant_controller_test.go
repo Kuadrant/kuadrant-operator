@@ -47,7 +47,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 					return false
 				}
 
-				if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, utils.GatewayProgrammedConditionType) {
+				if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed)) {
 					logf.Log.V(1).Info("[WARN] Gateway not ready")
 					return false
 				}
@@ -109,7 +109,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 					return false
 				}
 
-				if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, utils.GatewayProgrammedConditionType) {
+				if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed)) {
 					logf.Log.V(1).Info("[WARN] Gateway not ready")
 					return false
 				}

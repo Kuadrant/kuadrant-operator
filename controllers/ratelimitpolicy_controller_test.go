@@ -24,7 +24,6 @@ import (
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
@@ -86,7 +85,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				return false
 			}
 
-			if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, utils.GatewayProgrammedConditionType) {
+			if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed)) {
 				logf.Log.V(1).Info("[WARN] Gateway not ready")
 				return false
 			}

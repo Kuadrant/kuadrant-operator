@@ -18,7 +18,6 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
@@ -78,9 +77,9 @@ func findMatchingManagedZone(originalHost, host string, zones []kuadrantdnsv1alp
 	return findMatchingManagedZone(originalHost, parentDomain, zones)
 }
 
-func commonDNSRecordLabels(gwKey, apKey client.ObjectKey) map[string]string {
+func commonDNSRecordLabels(gwKey client.ObjectKey, p *v1alpha1.DNSPolicy) map[string]string {
 	commonLabels := map[string]string{}
-	for k, v := range policyDNSRecordLabels(apKey) {
+	for k, v := range policyDNSRecordLabels(p) {
 		commonLabels[k] = v
 	}
 	for k, v := range gatewayDNSRecordLabels(gwKey) {
@@ -89,10 +88,10 @@ func commonDNSRecordLabels(gwKey, apKey client.ObjectKey) map[string]string {
 	return commonLabels
 }
 
-func policyDNSRecordLabels(apKey client.ObjectKey) map[string]string {
+func policyDNSRecordLabels(p *v1alpha1.DNSPolicy) map[string]string {
 	return map[string]string{
-		common.DNSPolicyBackRefAnnotation:                              apKey.Name,
-		fmt.Sprintf("%s-namespace", common.DNSPolicyBackRefAnnotation): apKey.Namespace,
+		p.DirectReferenceAnnotationName():                              p.Name,
+		fmt.Sprintf("%s-namespace", p.DirectReferenceAnnotationName()): p.Namespace,
 	}
 }
 
@@ -365,7 +364,7 @@ func isWildCardHost(host string) bool {
 func (dh *dnsHelper) getDNSHealthCheckProbes(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) ([]*kuadrantdnsv1alpha1.DNSHealthCheckProbe, error) {
 	list := &kuadrantdnsv1alpha1.DNSHealthCheckProbeList{}
 	if err := dh.List(ctx, list, &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(dnsPolicy))),
+		LabelSelector: labels.SelectorFromSet(commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy)),
 		Namespace:     dnsPolicy.Namespace,
 	}); err != nil {
 		return nil, err

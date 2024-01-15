@@ -11,17 +11,17 @@ import (
 )
 
 // TODO(@guicassolato): unit test
-func NewHTTPRouteEventMapper(o ...mapperOption) EventMapper {
-	return &httpRouteEventMapper{opts: apply(o...)}
+func NewHTTPRouteEventMapper(o ...MapperOption) EventMapper {
+	return &httpRouteEventMapper{opts: Apply(o...)}
 }
 
 type httpRouteEventMapper struct {
-	opts mapperOptions
+	opts MapperOptions
 }
 
 // TODO(@guicassolato): unit test
 func (m *httpRouteEventMapper) MapToPolicy(obj client.Object, policyKind utils.Referrer) []reconcile.Request {
-	logger := m.opts.logger.WithValues("httproute", client.ObjectKeyFromObject(obj))
+	logger := m.opts.Logger.WithValues("httproute", client.ObjectKeyFromObject(obj))
 
 	httpRoute, ok := obj.(*gatewayapiv1beta1.HTTPRoute)
 	if !ok {

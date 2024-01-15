@@ -1,30 +1,30 @@
 package controllers
 
 import (
-	"context"
 	"fmt"
-
-	"github.com/go-logr/logr"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
+
+func NewDNSHealthCheckProbeEventMapper(o ...mappers.MapperOption) mappers.EventMapper {
+	return &DNSHealthCheckProbeEventMapper{opts: mappers.Apply(o...)}
+}
 
 // DNSHealthCheckProbeEventMapper is an EventHandler that maps DNSHealthCheckProbe object events to policy events.
 type DNSHealthCheckProbeEventMapper struct {
-	Logger logr.Logger
+	opts mappers.MapperOptions
 }
 
-func (m *DNSHealthCheckProbeEventMapper) MapToDNSPolicy(_ context.Context, obj client.Object) []reconcile.Request {
-	return m.mapToPolicyRequest(obj, "dnspolicy", common.DNSPolicyBackRefAnnotation)
-}
-
-func (m *DNSHealthCheckProbeEventMapper) mapToPolicyRequest(obj client.Object, policyKind string, policyBackRefAnnotationName string) []reconcile.Request {
-	logger := m.Logger.V(1).WithValues("object", client.ObjectKeyFromObject(obj))
+func (m *DNSHealthCheckProbeEventMapper) MapToPolicy(obj client.Object, policyKind utils.Referrer) []reconcile.Request {
+	logger := m.opts.Logger.V(1).WithValues("object", client.ObjectKeyFromObject(obj))
 	probe, ok := obj.(*kuadrantdnsv1alpha1.DNSHealthCheckProbe)
 	if !ok {
 		logger.Info("mapToPolicyRequest:", "error", fmt.Sprintf("%T is not a *v1alpha1.DNSHealthCheckProbe", obj))
@@ -33,11 +33,11 @@ func (m *DNSHealthCheckProbeEventMapper) mapToPolicyRequest(obj client.Object, p
 
 	requests := make([]reconcile.Request, 0)
 
-	policyName := common.GetLabel(probe, policyBackRefAnnotationName)
+	policyName := common.GetLabel(probe, policyKind.DirectReferenceAnnotationName())
 	if policyName == "" {
 		return requests
 	}
-	policyNamespace := common.GetLabel(probe, fmt.Sprintf("%s-namespace", policyBackRefAnnotationName))
+	policyNamespace := common.GetLabel(probe, fmt.Sprintf("%s-namespace", policyKind.DirectReferenceAnnotationName()))
 	if policyNamespace == "" {
 		return requests
 	}

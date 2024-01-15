@@ -253,6 +253,10 @@ func (r *RateLimitPolicy) BackReferenceAnnotationName() string {
 	return "kuadrant.io/ratelimitpolicies"
 }
 
+func (r *RateLimitPolicy) DirectReferenceAnnotationName() string {
+	return "kuadrant.io/ratelimitpolicy"
+}
+
 func init() {
 	SchemeBuilder.Register(&RateLimitPolicy{}, &RateLimitPolicyList{})
 }

@@ -114,7 +114,7 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(ctx context.Context, gateway *gat
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      dnsRecordName(gateway.Name, string(targetListener.Name)),
 			Namespace: managedZone.Namespace,
-			Labels:    commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(dnsPolicy)),
+			Labels:    commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy),
 		},
 		Spec: kuadrantdnsv1alpha1.DNSRecordSpec{
 			ManagedZoneRef: &kuadrantdnsv1alpha1.ManagedZoneReference{
@@ -143,11 +143,11 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(ctx context.Context, gateway *gat
 }
 
 func (r *DNSPolicyReconciler) deleteGatewayDNSRecords(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) error {
-	return r.deleteDNSRecordsWithLabels(ctx, commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(dnsPolicy)), dnsPolicy.Namespace)
+	return r.deleteDNSRecordsWithLabels(ctx, commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy), dnsPolicy.Namespace)
 }
 
 func (r *DNSPolicyReconciler) deleteDNSRecords(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy) error {
-	return r.deleteDNSRecordsWithLabels(ctx, policyDNSRecordLabels(client.ObjectKeyFromObject(dnsPolicy)), dnsPolicy.Namespace)
+	return r.deleteDNSRecordsWithLabels(ctx, policyDNSRecordLabels(dnsPolicy), dnsPolicy.Namespace)
 }
 
 func (r *DNSPolicyReconciler) deleteDNSRecordsWithLabels(ctx context.Context, lbls map[string]string, namespace string) error {

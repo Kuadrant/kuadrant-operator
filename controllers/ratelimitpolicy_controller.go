@@ -30,7 +30,6 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	reconcilers2 "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -212,22 +211,22 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 
 	// remove direct back ref
 	if targetNetworkObject != nil {
-		if err := r.deleteNetworkResourceDirectBackReference(ctx, targetNetworkObject); err != nil {
+		if err := r.deleteNetworkResourceDirectBackReference(ctx, targetNetworkObject, rlp); err != nil {
 			return err
 		}
 	}
 
-	// update annotation of policies afftecting the gateway
+	// update annotation of policies affecting the gateway
 	return r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
 }
 
 // Ensures only one RLP targets the network resource
-func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, policy utils.KuadrantPolicy, targetNetworkObject client.Object) error {
-	return r.TargetRefReconciler.ReconcileTargetBackReference(ctx, policy, targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
+func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, policy *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
+	return r.TargetRefReconciler.ReconcileTargetBackReference(ctx, policy, targetNetworkObject, policy.DirectReferenceAnnotationName())
 }
 
-func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object) error {
-	return r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, common.RateLimitPolicyBackRefAnnotation)
+func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object, policy *kuadrantv1beta2.RateLimitPolicy) error {
+	return r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, policy.DirectReferenceAnnotationName())
 }
 
 // SetupWithManager sets up the controller with the Manager.

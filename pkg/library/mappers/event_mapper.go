@@ -15,39 +15,39 @@ type EventMapper interface {
 // options
 
 // TODO(@guicassolato): unit test
-func WithLogger(logger logr.Logger) mapperOption {
-	return newFuncMapperOption(func(o *mapperOptions) {
-		o.logger = logger
+func WithLogger(logger logr.Logger) MapperOption {
+	return newFuncMapperOption(func(o *MapperOptions) {
+		o.Logger = logger
 	})
 }
 
-type mapperOption interface {
-	apply(*mapperOptions)
+type MapperOption interface {
+	apply(*MapperOptions)
 }
 
-type mapperOptions struct {
-	logger logr.Logger
+type MapperOptions struct {
+	Logger logr.Logger
 }
 
-var defaultMapperOptions = mapperOptions{
-	logger: logr.Discard(),
+var defaultMapperOptions = MapperOptions{
+	Logger: logr.Discard(),
 }
 
-func newFuncMapperOption(f func(*mapperOptions)) *funcMapperOption {
+func newFuncMapperOption(f func(*MapperOptions)) *funcMapperOption {
 	return &funcMapperOption{
 		f: f,
 	}
 }
 
 type funcMapperOption struct {
-	f func(*mapperOptions)
+	f func(*MapperOptions)
 }
 
-func (fmo *funcMapperOption) apply(opts *mapperOptions) {
+func (fmo *funcMapperOption) apply(opts *MapperOptions) {
 	fmo.f(opts)
 }
 
-func apply(opt ...mapperOption) mapperOptions {
+func Apply(opt ...MapperOption) MapperOptions {
 	opts := defaultMapperOptions
 	for _, o := range opt {
 		o.apply(&opts)

@@ -11,6 +11,8 @@ type Referrer interface {
 	Kind() string
 	// BackReferenceAnnotationName returns the name of the annotation in a target reference object that contains the back references to the referrer objects.
 	BackReferenceAnnotationName() string
+	// DirectReferenceAnnotationName return the name of the annotation for direct reference
+	DirectReferenceAnnotationName() string
 }
 
 // BackReferencesFromObject returns the names of the policies listed in the annotations of a target ref object.

@@ -6,6 +6,8 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
+var _ Referrer = &PolicyKindStub{}
+
 type PolicyKindStub struct{}
 
 func (tpk *PolicyKindStub) Kind() string {
@@ -14,6 +16,10 @@ func (tpk *PolicyKindStub) Kind() string {
 
 func (tpk *PolicyKindStub) BackReferenceAnnotationName() string {
 	return "kuadrant.io/testpolicies"
+}
+
+func (tpk *PolicyKindStub) DirectReferenceAnnotationName() string {
+	return "kuadrant.io/testpolicy"
 }
 
 type FakePolicy struct {

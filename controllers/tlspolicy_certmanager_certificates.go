@@ -16,7 +16,6 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
@@ -66,11 +65,11 @@ func (r *TLSPolicyReconciler) createOrUpdateGatewayCertificates(ctx context.Cont
 }
 
 func (r *TLSPolicyReconciler) deleteGatewayCertificates(ctx context.Context, gateway *gatewayapiv1.Gateway, tlsPolicy *v1alpha1.TLSPolicy) error {
-	return r.deleteCertificatesWithLabels(ctx, commonTLSCertificateLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(tlsPolicy)), tlsPolicy.Namespace)
+	return r.deleteCertificatesWithLabels(ctx, commonTLSCertificateLabels(client.ObjectKeyFromObject(gateway), tlsPolicy), tlsPolicy.Namespace)
 }
 
 func (r *TLSPolicyReconciler) deleteCertificates(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy) error {
-	return r.deleteCertificatesWithLabels(ctx, policyTLSCertificateLabels(client.ObjectKeyFromObject(tlsPolicy)), tlsPolicy.Namespace)
+	return r.deleteCertificatesWithLabels(ctx, policyTLSCertificateLabels(tlsPolicy), tlsPolicy.Namespace)
 }
 
 func (r *TLSPolicyReconciler) deleteCertificatesWithLabels(ctx context.Context, lbls map[string]string, namespace string) error {
@@ -91,7 +90,7 @@ func (r *TLSPolicyReconciler) deleteCertificatesWithLabels(ctx context.Context, 
 func (r *TLSPolicyReconciler) deleteUnexpectedCertificates(ctx context.Context, expectedCertificates []*certmanv1.Certificate, gateway *gatewayapiv1.Gateway, tlsPolicy *v1alpha1.TLSPolicy) error {
 	// remove any certificates for this gateway and TLSPolicy that are no longer expected
 	existingCertificates := &certmanv1.CertificateList{}
-	dnsLabels := commonTLSCertificateLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(tlsPolicy))
+	dnsLabels := commonTLSCertificateLabels(client.ObjectKeyFromObject(gateway), tlsPolicy)
 	listOptions := &client.ListOptions{LabelSelector: labels.SelectorFromSet(dnsLabels)}
 	if err := r.Client().List(ctx, existingCertificates, listOptions); client.IgnoreNotFound(err) != nil {
 		return err
@@ -142,7 +141,7 @@ func (r *TLSPolicyReconciler) expectedCertificatesForGateway(ctx context.Context
 }
 
 func (r *TLSPolicyReconciler) buildCertManagerCertificate(gateway *gatewayapiv1.Gateway, tlsPolicy *v1alpha1.TLSPolicy, secretRef corev1.ObjectReference, hosts []string) *certmanv1.Certificate {
-	tlsCertLabels := commonTLSCertificateLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(tlsPolicy))
+	tlsCertLabels := commonTLSCertificateLabels(client.ObjectKeyFromObject(gateway), tlsPolicy)
 
 	crt := &certmanv1.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
@@ -164,9 +163,9 @@ func (r *TLSPolicyReconciler) buildCertManagerCertificate(gateway *gatewayapiv1.
 	return crt
 }
 
-func commonTLSCertificateLabels(gwKey, apKey client.ObjectKey) map[string]string {
+func commonTLSCertificateLabels(gwKey client.ObjectKey, p *v1alpha1.TLSPolicy) map[string]string {
 	common := map[string]string{}
-	for k, v := range policyTLSCertificateLabels(apKey) {
+	for k, v := range policyTLSCertificateLabels(p) {
 		common[k] = v
 	}
 	for k, v := range gatewayTLSCertificateLabels(gwKey) {
@@ -175,10 +174,10 @@ func commonTLSCertificateLabels(gwKey, apKey client.ObjectKey) map[string]string
 	return common
 }
 
-func policyTLSCertificateLabels(apKey client.ObjectKey) map[string]string {
+func policyTLSCertificateLabels(p *v1alpha1.TLSPolicy) map[string]string {
 	return map[string]string{
-		common.TLSPolicyBackRefAnnotation:                              apKey.Name,
-		fmt.Sprintf("%s-namespace", common.TLSPolicyBackRefAnnotation): apKey.Namespace,
+		p.DirectReferenceAnnotationName():                              p.Name,
+		fmt.Sprintf("%s-namespace", p.DirectReferenceAnnotationName()): p.Namespace,
 	}
 }
 

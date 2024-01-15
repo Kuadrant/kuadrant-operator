@@ -69,11 +69,11 @@ func (r *DNSPolicyReconciler) createOrUpdateHealthCheckProbes(ctx context.Contex
 }
 
 func (r *DNSPolicyReconciler) deleteGatewayHealthCheckProbes(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) error {
-	return r.deleteHealthCheckProbesWithLabels(ctx, commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(dnsPolicy)), dnsPolicy.Namespace)
+	return r.deleteHealthCheckProbesWithLabels(ctx, commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy), dnsPolicy.Namespace)
 }
 
 func (r *DNSPolicyReconciler) deleteHealthCheckProbes(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy) error {
-	return r.deleteHealthCheckProbesWithLabels(ctx, policyDNSRecordLabels(client.ObjectKeyFromObject(dnsPolicy)), dnsPolicy.Namespace)
+	return r.deleteHealthCheckProbesWithLabels(ctx, policyDNSRecordLabels(dnsPolicy), dnsPolicy.Namespace)
 }
 
 func (r *DNSPolicyReconciler) deleteHealthCheckProbesWithLabels(ctx context.Context, lbls map[string]string, namespace string) error {
@@ -93,7 +93,7 @@ func (r *DNSPolicyReconciler) deleteHealthCheckProbesWithLabels(ctx context.Cont
 func (r *DNSPolicyReconciler) deleteUnexpectedGatewayHealthCheckProbes(ctx context.Context, expectedProbes []*kuadrantdnsv1alpha1.DNSHealthCheckProbe, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) error {
 	// remove any probes for this gateway and DNS Policy that are no longer expected
 	existingProbes := &kuadrantdnsv1alpha1.DNSHealthCheckProbeList{}
-	dnsLabels := commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(dnsPolicy))
+	dnsLabels := commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy)
 	listOptions := &client.ListOptions{LabelSelector: labels.SelectorFromSet(dnsLabels)}
 	if err := r.Client().List(ctx, existingProbes, listOptions); client.IgnoreNotFound(err) != nil {
 		return err
@@ -157,7 +157,7 @@ func (r *DNSPolicyReconciler) expectedHealthCheckProbesForGateway(ctx context.Co
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      dnsHealthCheckProbeName(address.Value, gw.Name, string(listener.Name)),
 						Namespace: gw.Namespace,
-						Labels:    commonDNSRecordLabels(client.ObjectKeyFromObject(gw), client.ObjectKeyFromObject(dnsPolicy)),
+						Labels:    commonDNSRecordLabels(client.ObjectKeyFromObject(gw), dnsPolicy),
 					},
 					Spec: kuadrantdnsv1alpha1.DNSHealthCheckProbeSpec{
 						Port:                     *port,

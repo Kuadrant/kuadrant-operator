@@ -37,7 +37,6 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -168,7 +167,7 @@ func (r *DNSPolicyReconciler) reconcileResources(ctx context.Context, dnsPolicy 
 	}
 
 	// set direct back ref - i.e. claim the target network object as taken asap
-	if err = r.TargetRefReconciler.ReconcileTargetBackReference(ctx, dnsPolicy, targetNetworkObject, common.DNSPolicyBackRefAnnotation); err != nil {
+	if err = r.TargetRefReconciler.ReconcileTargetBackReference(ctx, dnsPolicy, targetNetworkObject, dnsPolicy.DirectReferenceAnnotationName()); err != nil {
 		gatewayCondition = BuildPolicyAffectedCondition(DNSPolicyAffected, dnsPolicy, targetNetworkObject, gatewayapiv1alpha2.PolicyReasonConflicted, err)
 		updateErr := r.updateGatewayCondition(ctx, gatewayCondition, gatewayDiffObj)
 		return errors.Join(fmt.Errorf("reconcile TargetBackReference error %w", err), updateErr)
@@ -202,7 +201,7 @@ func (r *DNSPolicyReconciler) deleteResources(ctx context.Context, dnsPolicy *v1
 
 	// remove direct back ref
 	if targetNetworkObject != nil {
-		if err := r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, common.DNSPolicyBackRefAnnotation); err != nil {
+		if err := r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, dnsPolicy.DirectReferenceAnnotationName()); err != nil {
 			return err
 		}
 	}
@@ -251,10 +250,8 @@ func (r *DNSPolicyReconciler) updateGatewayCondition(ctx context.Context, condit
 
 func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
+	dnsHealthCheckProbeEventMapper := NewDNSHealthCheckProbeEventMapper(mappers.WithLogger(r.Logger().WithName("dnsHealthCheckProbeEventMapper")))
 
-	dnsHealthCheckProbeEventMapper := &DNSHealthCheckProbeEventMapper{
-		Logger: r.Logger().WithName("dnsHealthCheckProbeEventMapper"),
-	}
 	r.dnsHelper = dnsHelper{Client: r.Client()}
 	ctrlr := ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.DNSPolicy{}).
@@ -267,7 +264,9 @@ func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		Watches(
 			&kuadrantdnsv1alpha1.DNSHealthCheckProbe{},
-			handler.EnqueueRequestsFromMapFunc(dnsHealthCheckProbeEventMapper.MapToDNSPolicy),
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+				return dnsHealthCheckProbeEventMapper.MapToPolicy(object, &v1alpha1.DNSPolicy{})
+			}),
 		)
 	return ctrlr.Complete(r)
 }

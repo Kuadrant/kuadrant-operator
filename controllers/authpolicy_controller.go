@@ -15,7 +15,6 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	reconcilers2 "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -191,7 +190,7 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 
 	// remove direct back ref
 	if targetNetworkObject != nil {
-		if err := r.deleteNetworkResourceDirectBackReference(ctx, targetNetworkObject); err != nil {
+		if err := r.deleteNetworkResourceDirectBackReference(ctx, targetNetworkObject, ap); err != nil {
 			return err
 		}
 	}
@@ -201,12 +200,12 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 }
 
 // Ensures only one RLP targets the network resource
-func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, ap utils.KuadrantPolicy, targetNetworkObject client.Object) error {
-	return r.TargetRefReconciler.ReconcileTargetBackReference(ctx, ap, targetNetworkObject, common.AuthPolicyBackRefAnnotation)
+func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
+	return r.TargetRefReconciler.ReconcileTargetBackReference(ctx, ap, targetNetworkObject, ap.DirectReferenceAnnotationName())
 }
 
-func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object) error {
-	return r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, common.AuthPolicyBackRefAnnotation)
+func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object, ap *api.AuthPolicy) error {
+	return r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, ap.DirectReferenceAnnotationName())
 }
 
 // reconcileRouteParentGatewayPolicies triggers the concurrent reconciliation of all policies that target gateways that are parents of a route

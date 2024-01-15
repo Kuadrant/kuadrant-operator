@@ -164,6 +164,10 @@ func (p *DNSPolicy) BackReferenceAnnotationName() string {
 	return "kuadrant.io/dnspolicies"
 }
 
+func (p *DNSPolicy) DirectReferenceAnnotationName() string {
+	return "kuadrant.io/dnspolicy"
+}
+
 // Validate ensures the resource is valid. Compatible with the validating interface
 // used by webhooks
 func (p *DNSPolicy) Validate() error {

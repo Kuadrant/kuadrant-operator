@@ -11,17 +11,17 @@ import (
 )
 
 // TODO(@guicassolato): unit test
-func NewGatewayEventMapper(o ...mapperOption) EventMapper {
-	return &gatewayEventMapper{opts: apply(o...)}
+func NewGatewayEventMapper(o ...MapperOption) EventMapper {
+	return &gatewayEventMapper{opts: Apply(o...)}
 }
 
 type gatewayEventMapper struct {
-	opts mapperOptions
+	opts MapperOptions
 }
 
 // TODO(@guicassolato): unit test
 func (m *gatewayEventMapper) MapToPolicy(obj client.Object, policyKind utils.Referrer) []reconcile.Request {
-	logger := m.opts.logger.WithValues("gateway", client.ObjectKeyFromObject(obj))
+	logger := m.opts.Logger.WithValues("gateway", client.ObjectKeyFromObject(obj))
 
 	gateway, ok := obj.(*gatewayapiv1beta1.Gateway)
 	if !ok {

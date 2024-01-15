@@ -37,7 +37,6 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -166,7 +165,7 @@ func (r *TLSPolicyReconciler) reconcileResources(ctx context.Context, tlsPolicy 
 	}
 
 	// set direct back ref - i.e. claim the target network object as taken asap
-	if err = r.TargetRefReconciler.ReconcileTargetBackReference(ctx, tlsPolicy, targetNetworkObject, common.TLSPolicyBackRefAnnotation); err != nil {
+	if err = r.TargetRefReconciler.ReconcileTargetBackReference(ctx, tlsPolicy, targetNetworkObject, tlsPolicy.DirectReferenceAnnotationName()); err != nil {
 		gatewayCondition = BuildPolicyAffectedCondition(TLSPolicyAffected, tlsPolicy, targetNetworkObject, gatewayapiv1alpha2.PolicyReasonConflicted, err)
 		updateErr := r.updateGatewayCondition(ctx, gatewayCondition, gatewayDiffObj)
 		return errors.Join(fmt.Errorf("reconcile TargetBackReference error %w", err), updateErr)
@@ -201,7 +200,7 @@ func (r *TLSPolicyReconciler) deleteResources(ctx context.Context, tlsPolicy *v1
 
 	// remove direct back ref
 	if targetNetworkObject != nil {
-		if err := r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, common.TLSPolicyBackRefAnnotation); err != nil {
+		if err := r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, tlsPolicy.DirectReferenceAnnotationName()); err != nil {
 			return err
 		}
 	}

@@ -112,7 +112,7 @@ type TLSPolicyStatus struct {
 }
 
 var _ utils.KuadrantPolicy = &TLSPolicy{}
-var _ utils.Referrer = &DNSPolicy{}
+var _ utils.Referrer = &TLSPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -147,6 +147,10 @@ func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 
 func (p *TLSPolicy) BackReferenceAnnotationName() string {
 	return "kuadrant.io/tlspolicies"
+}
+
+func (p *TLSPolicy) DirectReferenceAnnotationName() string {
+	return "kuadrant.io/tlspolicy"
 }
 
 func (p *TLSPolicy) Validate() error {

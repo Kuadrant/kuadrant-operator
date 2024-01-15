@@ -289,6 +289,10 @@ func (ap *AuthPolicy) BackReferenceAnnotationName() string {
 	return "kuadrant.io/authpolicies"
 }
 
+func (ap *AuthPolicy) DirectReferenceAnnotationName() string {
+	return "kuadrant.io/authpolicy"
+}
+
 //+kubebuilder:object:root=true
 
 // AuthPolicyList contains a list of AuthPolicy

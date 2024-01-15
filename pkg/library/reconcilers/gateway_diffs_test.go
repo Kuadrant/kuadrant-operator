@@ -256,7 +256,7 @@ func TestTargetedGatewayKeys(t *testing.T) {
 
 	httpRoute := &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gateway.networking.k8s.io/v1beta1",
+			APIVersion: "gateway.networking.k8s.io/v1",
 			Kind:       "HTTPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{

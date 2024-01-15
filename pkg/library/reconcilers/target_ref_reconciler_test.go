@@ -47,7 +47,7 @@ func TestReconcileTargetBackReference(t *testing.T) {
 
 	existingRoute := &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gateway.networking.k8s.io/v1beta1",
+			APIVersion: "gateway.networking.k8s.io/v1",
 			Kind:       "HTTPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -138,7 +138,7 @@ func TestDeleteTargetBackReference(t *testing.T) {
 
 	existingRoute := &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "gateway.networking.k8s.io/v1beta1",
+			APIVersion: "gateway.networking.k8s.io/v1",
 			Kind:       "HTTPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{

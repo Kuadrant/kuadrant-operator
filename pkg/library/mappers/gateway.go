@@ -5,25 +5,25 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-// TODO(@guicassolato): unit test
 func NewGatewayEventMapper(o ...MapperOption) EventMapper {
 	return &gatewayEventMapper{opts: Apply(o...)}
 }
+
+var _ EventMapper = &gatewayEventMapper{}
 
 type gatewayEventMapper struct {
 	opts MapperOptions
 }
 
-// TODO(@guicassolato): unit test
 func (m *gatewayEventMapper) MapToPolicy(obj client.Object, policyKind utils.Referrer) []reconcile.Request {
 	logger := m.opts.Logger.WithValues("gateway", client.ObjectKeyFromObject(obj))
 
-	gateway, ok := obj.(*gatewayapiv1beta1.Gateway)
+	gateway, ok := obj.(*gatewayapiv1.Gateway)
 	if !ok {
 		logger.Info("cannot map gateway related event to kuadrant policy", "error", fmt.Sprintf("%T is not a *gatewayapiv1beta1.Gateway", obj))
 		return []reconcile.Request{}

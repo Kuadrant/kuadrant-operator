@@ -6,7 +6,7 @@
 ISTIO_INSTALL_DIR = config/dependencies/istio
 ISTIO_NAMESPACE = istio-system
 ## installs project sail vs istioctl install
-ISTIO_INSTALL_SAIL ?= true
+ISTIO_INSTALL_SAIL ?= false
 ifeq (true,$(ISTIO_INSTALL_SAIL))
 INSTALL_COMMAND=sail-install
 else

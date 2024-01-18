@@ -69,19 +69,21 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 	})
 
 	Context("Two kuadrant instances", func() {
+		var secondNamespace string
 
 		BeforeEach(func() {
+			CreateNamespace(&secondNamespace)
 			newKuadrantName := "second"
 			newKuadrant := &kuadrantv1beta1.Kuadrant{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "v1beta1", Kind: "Kuadrant"},
-				ObjectMeta: metav1.ObjectMeta{Name: newKuadrantName, Namespace: testNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: newKuadrantName, Namespace: secondNamespace},
 			}
 			err := testClient().Create(context.Background(), newKuadrant)
 			Expect(err).ToNot(HaveOccurred())
 
 			Eventually(func() bool {
 				kuadrant := &kuadrantv1beta1.Kuadrant{}
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: newKuadrantName, Namespace: testNamespace}, kuadrant)
+				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: newKuadrantName, Namespace: secondNamespace}, kuadrant)
 				if err != nil {
 					return false
 				}
@@ -91,6 +93,8 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 				return true
 			}, time.Minute, 5*time.Second).Should(BeTrue())
 		})
+
+		AfterEach(DeleteNamespaceCallback(&secondNamespace))
 
 		It("new gateway should not be annotated", func() {
 			gateway := testBuildBasicGateway(gwName, testNamespace)

@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"k8s.io/utils/ptr"
+
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/env"
@@ -467,34 +469,32 @@ func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadr
 	authorino := &authorinov1beta1.Authorino{}
 	err := r.Client().Get(ctx, authorinoKey, authorino)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			tmpFalse := false
-			authorino = &authorinov1beta1.Authorino{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Authorino",
-					APIVersion: "operator.authorino.kuadrant.io/v1beta1",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      common.AuthorinoName,
-					Namespace: kObj.Namespace,
-				},
-				Spec: authorinov1beta1.AuthorinoSpec{
-					ClusterWide:            true,
-					SupersedingHostSubsets: true,
-					Listener: authorinov1beta1.Listener{
-						Tls: authorinov1beta1.Tls{
-							Enabled: &tmpFalse,
-						},
-					},
-					OIDCServer: authorinov1beta1.OIDCServer{
-						Tls: authorinov1beta1.Tls{
-							Enabled: &tmpFalse,
-						},
-					},
-				},
-			}
-		} else {
+		if !apierrors.IsNotFound(err) {
 			return err
+		}
+		authorino = &authorinov1beta1.Authorino{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Authorino",
+				APIVersion: "operator.authorino.kuadrant.io/v1beta1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      common.AuthorinoName,
+				Namespace: kObj.Namespace,
+			},
+			Spec: authorinov1beta1.AuthorinoSpec{
+				ClusterWide:            true,
+				SupersedingHostSubsets: true,
+				Listener: authorinov1beta1.Listener{
+					Tls: authorinov1beta1.Tls{
+						Enabled: ptr.To(false),
+					},
+				},
+				OIDCServer: authorinov1beta1.OIDCServer{
+					Tls: authorinov1beta1.Tls{
+						Enabled: ptr.To(false),
+					},
+				},
+			},
 		}
 	}
 

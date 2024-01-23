@@ -13,11 +13,11 @@ func AuthorinoMutator(existingObj, desiredObj client.Object) (bool, error) {
 	update := false
 	existing, ok := existingObj.(*authorinov1beta1.Authorino)
 	if !ok {
-		return false, fmt.Errorf("existingObj %T is not a *authorinoauthorinov1beta1.Authorino", existingObj)
+		return false, fmt.Errorf("existingObj %T is not a *authorinov1beta1.Authorino", existingObj)
 	}
 	desired, ok := desiredObj.(*authorinov1beta1.Authorino)
 	if !ok {
-		return false, fmt.Errorf("desiredObj %T is not a *authorinoauthorinov1beta1.Authorino", desiredObj)
+		return false, fmt.Errorf("desiredObj %T is not a *authorinov1beta1.Authorino", desiredObj)
 	}
 
 	existingSpec := authorinoSpecSubSet(existing.Spec)

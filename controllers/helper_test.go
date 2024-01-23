@@ -62,10 +62,7 @@ func CreateNamespace(namespace *string) {
 	existingNamespace := &v1.Namespace{}
 	Eventually(func() bool {
 		err := testClient().Get(context.Background(), types.NamespacedName{Name: generatedTestNamespace}, existingNamespace)
-		if err != nil {
-			return false
-		}
-		return true
+		return err == nil
 	}, time.Minute, 5*time.Second).Should(BeTrue())
 
 	*namespace = existingNamespace.Name

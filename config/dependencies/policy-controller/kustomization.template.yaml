@@ -3,11 +3,3 @@ resources:
 
 patchesStrategicMerge:
 - delete-ns.yaml
-
-patches:
-- patch: |-
-    - op: add
-      path: /spec/template/spec/containers/0/args/-
-      value: --ocm-hub=false
-  target:
-    kind: Deployment

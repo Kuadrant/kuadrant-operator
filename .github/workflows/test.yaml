@@ -48,6 +48,11 @@ jobs:
     strategy:
       matrix:
         istio-type: [ sail, istioctl ]
+        pr-event:
+          - ${{ github.event_name == 'pull_request' }}
+        exclude:
+          - istio-type: sail
+            pr-event: true
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test

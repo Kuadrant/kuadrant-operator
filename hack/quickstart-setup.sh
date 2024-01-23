@@ -26,16 +26,24 @@ if [ -z $MGC_REF ]; then
   MGC_REF=${MGC_REF:="main"}
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -z $ISTIO_INSTALL_SAIL]; then
+  ISTIO_INSTALL_SAIL=${ISTIO_INSTALL_SAIL:=false}
+fi
+
+echo "Loading quickstart scripts from GitHub"
 source /dev/stdin <<< "$(curl -s https://raw.githubusercontent.com/${KUADRANT_ORG}/multicluster-gateway-controller/${MGC_REF}/hack/.quickstartEnv)"
 source /dev/stdin <<< "$(curl -s https://raw.githubusercontent.com/${KUADRANT_ORG}/multicluster-gateway-controller/${MGC_REF}/hack/.deployUtils)"
 
+YQ_BIN=$(dockerBinCmd "yq")
+
 KUADRANT_IMAGE="quay.io/${KUADRANT_ORG}/kuadrant-operator:latest"
 KUADRANT_REPO="github.com/${KUADRANT_ORG}/kuadrant-operator.git"
+MGC_REPO="github.com/${KUADRANT_ORG}/multicluster-gateway-controller.git"
 KUADRANT_REPO_RAW="https://raw.githubusercontent.com/${KUADRANT_ORG}/kuadrant-operator/${KUADRANT_REF}"
 KUADRANT_DEPLOY_KUSTOMIZATION="${KUADRANT_REPO}/config/deploy"
 KUADRANT_GATEWAY_API_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/gateway-api"
 KUADRANT_ISTIO_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/istio/sail"
+MGC_ISTIO_KUSTOMIZATION="${MGC_REPO}/config/istio"
 KUADRANT_CERT_MANAGER_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/cert-manager"
 KUADRANT_METALLB_KUSTOMIZATION="${KUADRANT_REPO}/config/metallb"
 
@@ -48,6 +56,7 @@ if [[ "${KUADRANT_REF}" != "main" ]]; then
   KUADRANT_ISTIO_KUSTOMIZATION=${KUADRANT_ISTIO_KUSTOMIZATION}?ref=${KUADRANT_REF}
   KUADRANT_CERT_MANAGER_KUSTOMIZATION=${KUADRANT_CERT_MANAGER_KUSTOMIZATION}?ref=${KUADRANT_REF}
   KUADRANT_METALLB_KUSTOMIZATION=${KUADRANT_METALLB_KUSTOMIZATION}?ref=${KUADRANT_REF}
+  MGC_ISTIO_KUSTOMIZATION=${MGC_ISTIO_KUSTOMIZATION}?ref=${MGC_REF}
 fi
 
 # Make temporary directory
@@ -78,9 +87,18 @@ ${KUSTOMIZE_BIN} build ${KUADRANT_GATEWAY_API_KUSTOMIZATION} | kubectl apply -f 
 
 # Install istio
 echo "Installing Istio in ${KUADRANT_CLUSTER_NAME}"
-${KUSTOMIZE_BIN} build ${KUADRANT_ISTIO_KUSTOMIZATION} | kubectl apply -f -
-kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
-kubectl apply -f ${KUADRANT_REPO_RAW}/config/dependencies/istio/sail/istio.yaml
+if [ "$ISTIO_INSTALL_SAIL" = true ]; then
+  ${KUSTOMIZE_BIN} build ${KUADRANT_ISTIO_KUSTOMIZATION} | kubectl apply -f -
+  kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
+  kubectl apply -f ${KUADRANT_REPO_RAW}/config/dependencies/istio/sail/istio.yaml
+else
+  # Create CRD first to prevent race condition with creating CR
+  ${KUSTOMIZE_BIN} build ${MGC_ISTIO_KUSTOMIZATION} > ${TMP_DIR}/doctmp
+  ${YQ_BIN} 'select(.kind == "CustomResourceDefinition")' ${TMP_DIR}/doctmp | kubectl apply -f -
+  kubectl -n istio-system wait --for=condition=established crd/istiooperators.install.istio.io --timeout=60s
+  cat ${TMP_DIR}/doctmp | kubectl apply -f -
+  kubectl -n istio-operator wait --for=condition=Available deployment istio-operator --timeout=300s
+fi
 
 # Install cert-manager
 echo "Installing cert-manager in ${KUADRANT_CLUSTER_NAME}"

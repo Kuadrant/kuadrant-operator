@@ -1,4 +1,10 @@
 ---
 namespace: istio-system
 resources:
-- github.com/maistra/istio-operator/config/default?ref=maistra-3.0
+- github.com/maistra/istio-operator/config/default?ref=b7f5286be0bc25cb257bc439e7c18acb99dce26f
+# commit sha from prior to removal of kustomize manifests
+patches:
+- path: deployment_patch.yaml
+  target:
+    kind: Deployment
+    name: istio-operator

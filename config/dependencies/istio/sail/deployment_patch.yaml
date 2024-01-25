@@ -1,0 +1,11 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: istio-operator
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        # nightly build from commit b7f5286be0bc25cb257bc439e7c18acb99dce26f
+        image: quay.io/maistra-dev/istio-operator:3.0-nightly-2024-01-18

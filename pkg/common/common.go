@@ -31,7 +31,7 @@ const (
 	AuthPolicyBackRefAnnotation  = "kuadrant.io/authpolicy"
 	NamespaceSeparator           = '/'
 	LimitadorName                = "limitador"
-	AuthorinoName                      = "authorino"
+	AuthorinoName                = "authorino"
 )
 
 // MergeMapStringString Merge desired into existing.

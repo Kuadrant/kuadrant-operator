@@ -1,4 +1,4 @@
-name: Schedule build with latest image SHA versions
+name: Schedule nightly build with latest image SHA versions
 
 on:
   schedule:
@@ -11,7 +11,7 @@ jobs:
     secrets: inherit
     with:
       kuadrantOperatorVersion: ${{ github.sha }}
-      kuadrantOperatorTag: ${{ github.sha }}
+      kuadrantOperatorTag: nightly-$(date +'%d-%m-%Y')
       authorinoOperatorVersion: ${{ vars.AUTHORINO_OPERATOR_SHA }}
       limitadorOperatorVersion: ${{ vars.LIMITADOR_OPERATOR_SHA }}
       policyControllerVersion: ${{ vars.POLICY_CONTROLLER_SHA }}

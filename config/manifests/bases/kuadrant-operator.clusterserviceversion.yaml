@@ -5,12 +5,12 @@ metadata:
     alm-examples: '[]'
     capabilities: Basic Install
     categories: Integration & Delivery
-    containerImage: quay.io/kuadrant/kuadrant-operator:v0.6.0
+    containerImage: quay.io/kuadrant/kuadrant-operator:v0.6.1-rc1
     operators.operatorframework.io/builder: operator-sdk-v1.9.0
     operators.operatorframework.io/project_layout: unknown
     repository: https://github.com/Kuadrant/kuadrant-operator
     support: kuadrant
-  name: kuadrant-operator.v0.6.0
+  name: kuadrant-operator.v0.6.1-rc1
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -101,5 +101,5 @@ spec:
   provider:
     name: Red Hat
     url: https://github.com/Kuadrant/kuadrant-operator
-  replaces: kuadrant-operator.v0.5.0
-  version: 0.6.0
+  replaces: kuadrant-operator.v0.6.0
+  version: 0.6.1-rc1

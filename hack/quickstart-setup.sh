@@ -36,7 +36,6 @@ source /dev/stdin <<< "$(curl -s https://raw.githubusercontent.com/${KUADRANT_OR
 
 YQ_BIN=$(dockerBinCmd "yq")
 
-KUADRANT_IMAGE="quay.io/${KUADRANT_ORG}/kuadrant-operator:latest"
 KUADRANT_REPO="github.com/${KUADRANT_ORG}/kuadrant-operator.git"
 MGC_REPO="github.com/${KUADRANT_ORG}/multicluster-gateway-controller.git"
 KUADRANT_REPO_RAW="https://raw.githubusercontent.com/${KUADRANT_ORG}/kuadrant-operator/${KUADRANT_REF}"
@@ -51,7 +50,7 @@ set -e pipefail
 
 if [[ "${KUADRANT_REF}" != "main" ]]; then
   echo "setting KUADRANT_REPO to use branch ${KUADRANT_REF}"
-  KUADRANT_IMAGE="quay.io/${KUADRANT_ORG}/kuadrant-operator:${KUADRANT_REF}"
+  KUADRANT_DEPLOY_KUSTOMIZATION=${KUADRANT_DEPLOY_KUSTOMIZATION}?ref=${KUADRANT_REF}
   KUADRANT_GATEWAY_API_KUSTOMIZATION=${KUADRANT_GATEWAY_API_KUSTOMIZATION}?ref=${KUADRANT_REF}
   KUADRANT_ISTIO_KUSTOMIZATION=${KUADRANT_ISTIO_KUSTOMIZATION}?ref=${KUADRANT_REF}
   KUADRANT_CERT_MANAGER_KUSTOMIZATION=${KUADRANT_CERT_MANAGER_KUSTOMIZATION}?ref=${KUADRANT_REF}
@@ -117,7 +116,6 @@ kubectl apply -n metallb-system -f - <<< "$(curl -s ${KUADRANT_REPO_RAW}/utils/d
 # Install kuadrant
 echo "Installing Kuadrant in ${KUADRANT_CLUSTER_NAME}"
 ${KUSTOMIZE_BIN} build ${KUADRANT_DEPLOY_KUSTOMIZATION} | kubectl apply -f -
-kubectl -n ${KUADRANT_NAMESPACE} patch deployment kuadrant-operator-controller-manager --type='merge' -p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","image":"'"${KUADRANT_IMAGE}"'"}]}}}}'
 
 # Configure managedzone
 if [ ! -z "$DNS_PROVIDER" ]; then

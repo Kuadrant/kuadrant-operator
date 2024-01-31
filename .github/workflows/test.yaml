@@ -53,6 +53,7 @@ jobs:
         exclude:
           - istio-type: sail
             pr-event: true
+      fail-fast: false
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test

@@ -26,7 +26,7 @@ if [ -z $MGC_REF ]; then
   MGC_REF=${MGC_REF:="main"}
 fi
 
-if [ -z $ISTIO_INSTALL_SAIL]; then
+if [ -z $ISTIO_INSTALL_SAIL ]; then
   ISTIO_INSTALL_SAIL=${ISTIO_INSTALL_SAIL:=false}
 fi
 

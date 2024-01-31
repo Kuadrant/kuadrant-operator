@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -77,21 +78,35 @@ func (r *AuthPolicyReconciler) calculateStatus(ap *api.AuthPolicy, specErr error
 		ObservedGeneration: ap.Status.ObservedGeneration,
 	}
 
-	availableCond := r.acceptedCondition(ap, specErr, authConfigReady)
-
+	availableCond := r.acceptedCondition(ap, specErr)
 	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
+
+	// Do not set enforced condition if Accepted condition is false
+	if meta.IsStatusConditionFalse(newStatus.Conditions, string(gatewayapiv1alpha2.PolicyReasonAccepted)) {
+		return newStatus
+	}
+
+	enforcedCond := r.enforcedCondition(ap, authConfigReady)
+	meta.SetStatusCondition(&newStatus.Conditions, *enforcedCond)
 
 	return newStatus
 }
 
-func (r *AuthPolicyReconciler) acceptedCondition(policy common.KuadrantPolicy, specErr error, authConfigReady bool) *metav1.Condition {
+func (r *AuthPolicyReconciler) acceptedCondition(policy common.KuadrantPolicy, specErr error) *metav1.Condition {
 	cond := common.AcceptedCondition(policy, specErr)
 
+	return cond
+}
+
+func (r *AuthPolicyReconciler) enforcedCondition(policy common.KuadrantPolicy, authConfigReady bool) *metav1.Condition {
+	var err common.PolicyError
 	if !authConfigReady {
-		cond.Status = metav1.ConditionFalse
-		cond.Reason = "AuthSchemeNotReady"
-		cond.Message = "AuthScheme is not ready yet" // TODO(rahul): need to take care if status change is delayed.
+		err = common.NewErrUnknown(policy.Kind(), fmt.Errorf("AuthScheme is not ready yet"))
 	}
+
+	// TODO: Implement 'Overridden' Reason if AuthPolicy supports Inherited Policy Attachment
+
+	cond := common.EnforcedCondition(policy, err)
 
 	return cond
 }

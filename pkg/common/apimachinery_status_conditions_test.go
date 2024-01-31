@@ -202,7 +202,7 @@ func TestAcceptedCondition(t *testing.T) {
 			},
 		},
 		{
-			name: "reconciliation error reason",
+			name: "unknown error reason",
 			args: args{
 				policy: &FakePolicy{},
 				err:    fmt.Errorf("reconcile err"),
@@ -210,8 +210,8 @@ func TestAcceptedCondition(t *testing.T) {
 			want: &metav1.Condition{
 				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
 				Status:  metav1.ConditionFalse,
-				Reason:  "ReconciliationError",
-				Message: "reconcile err",
+				Reason:  string(PolicyReasonUnknown),
+				Message: "FakePolicy has encountered some issues: reconcile err",
 			},
 		},
 	}
@@ -219,6 +219,52 @@ func TestAcceptedCondition(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := AcceptedCondition(tt.args.policy, tt.args.err); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("AcceptedCondition() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEnforcedCondition(t *testing.T) {
+	type args struct {
+		policy KuadrantPolicy
+		err    PolicyError
+	}
+	policy := &FakePolicy{}
+	tests := []struct {
+		name string
+		args args
+		want *metav1.Condition
+	}{
+		{
+			name: "enforced true",
+			args: args{
+				policy: &FakePolicy{},
+			},
+			want: &metav1.Condition{
+				Type:    string(PolicyConditionEnforced),
+				Status:  metav1.ConditionTrue,
+				Reason:  string(PolicyReasonEnforced),
+				Message: "FakePolicy has been successfully enforced",
+			},
+		},
+		{
+			name: "enforced false",
+			args: args{
+				policy: &FakePolicy{},
+				err:    NewErrUnknown(policy.Kind(), fmt.Errorf("unknown err")),
+			},
+			want: &metav1.Condition{
+				Type:    string(PolicyConditionEnforced),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(PolicyReasonUnknown),
+				Message: "FakePolicy has encountered some issues: unknown err",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := EnforcedCondition(tt.args.policy, tt.args.err); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("EnforcedCondition() = %v, want %v", got, tt.want)
 			}
 		})
 	}

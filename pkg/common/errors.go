@@ -85,3 +85,25 @@ func NewErrConflict(kind string, nameNamespace string, err error) ErrConflict {
 		Err:           err,
 	}
 }
+
+var _ PolicyError = ErrUnknown{}
+
+type ErrUnknown struct {
+	Kind string
+	Err  error
+}
+
+func (e ErrUnknown) Error() string {
+	return fmt.Sprintf("%s has encountered some issues: %s", e.Kind, e.Err.Error())
+}
+
+func (e ErrUnknown) Reason() gatewayapiv1alpha2.PolicyConditionReason {
+	return PolicyReasonUnknown
+}
+
+func NewErrUnknown(kind string, err error) ErrUnknown {
+	return ErrUnknown{
+		Kind: kind,
+		Err:  err,
+	}
+}

@@ -1,6 +1,6 @@
 # Enforcing authentication & authorization with Kuadrant AuthPolicy
 
-This guide walks you through the process of setting up a local Kubernetes cluster with Kuadrant where you will protect [Gateway API](gateway-api.sigs.k8s.io/) endpoints by declaring Kuadrant AuthPolicy custom resources.
+This guide walks you through the process of setting up a local Kubernetes cluster with Kuadrant where you will protect [Gateway API](https://gateway-api.sigs.k8s.io/) endpoints by declaring Kuadrant AuthPolicy custom resources.
 
 Two AuthPolicies will be declared:
 

@@ -33,7 +33,7 @@ Here are the steps we will go through:
 
 8) [Override the Gateway rate limits with an endpoint-specific policy](#-override-the-gateways-ratelimitpolicy)
 
-To help with this walk through, you should set a `KUADRANT_ZONE_ROOT_DOMAIN` environment variable to a domain you want to use. If it you want to try DNSPolicy, this should also be a domain you have access to the DNS for in AWS Route53 or GCP. E.g.:
+To help with this walk through, you should set a `KUADRANT_ZONE_ROOT_DOMAIN` environment variable to a domain you want to use. If you want to try DNSPolicy, this should also be a domain you have access to the DNS for in AWS Route53 or GCP. E.g.:
 
 ```sh
 export KUADRANT_ZONE_ROOT_DOMAIN=my.domain.iown
@@ -189,7 +189,7 @@ The limit here is artificially low in order for us to show it working easily. Le
 for i in {1..10}; do curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST} "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" && sleep 1; done
 ```
 
-We should see `409`s start returning after the 5th request.
+We should see `409 Too Many Requests`s start returning after the 5th request.
 
 ### ❺ Define the Gateway AuthPolicy
 
@@ -226,7 +226,7 @@ spec:
 EOF
 ```
 
-Let's test it again. This time we expect a `403`.
+Let's test it again. This time we expect a `403 Forbidden`.
 
 ```sh
 curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST}  "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars"

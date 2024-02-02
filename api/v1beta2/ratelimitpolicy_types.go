@@ -52,6 +52,9 @@ const (
 	IncludeOperator    WhenConditionOperator = "incl"
 	ExcludeOperator    WhenConditionOperator = "excl"
 	MatchesOperator    WhenConditionOperator = "matches"
+
+	RateLimitPolicyBackReferenceAnnotationName   = "kuadrant.io/ratelimitpolicies"
+	RateLimitPolicyDirectReferenceAnnotationName = "kuadrant.io/ratelimitpolicy"
 )
 
 // +kubebuilder:validation:Enum:=second;minute;hour;day
@@ -250,11 +253,11 @@ func (r *RateLimitPolicy) Kind() string {
 }
 
 func (r *RateLimitPolicy) BackReferenceAnnotationName() string {
-	return "kuadrant.io/ratelimitpolicies"
+	return RateLimitPolicyBackReferenceAnnotationName
 }
 
 func (r *RateLimitPolicy) DirectReferenceAnnotationName() string {
-	return "kuadrant.io/ratelimitpolicy"
+	return RateLimitPolicyDirectReferenceAnnotationName
 }
 
 func init() {

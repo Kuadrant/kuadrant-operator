@@ -38,6 +38,9 @@ const (
 	DefaultWeight Weight  = 120
 	DefaultGeo    GeoCode = "default"
 	WildcardGeo   GeoCode = "*"
+
+	DNSPolicyBackReferenceAnnotationName   = "kuadrant.io/dnspolicies"
+	DNSPolicyDirectReferenceAnnotationName = "kuadrant.io/dnspolicy"
 )
 
 // DNSPolicySpec defines the desired state of DNSPolicy
@@ -161,11 +164,11 @@ func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 func (p *DNSPolicy) Kind() string { return p.TypeMeta.Kind }
 
 func (p *DNSPolicy) BackReferenceAnnotationName() string {
-	return "kuadrant.io/dnspolicies"
+	return DNSPolicyBackReferenceAnnotationName
 }
 
 func (p *DNSPolicy) DirectReferenceAnnotationName() string {
-	return "kuadrant.io/dnspolicy"
+	return DNSPolicyDirectReferenceAnnotationName
 }
 
 // Validate ensures the resource is valid. Compatible with the validating interface

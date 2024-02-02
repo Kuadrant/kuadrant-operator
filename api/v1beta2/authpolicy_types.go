@@ -14,6 +14,11 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
+const (
+	AuthPolicyBackReferenceAnnotationName   = "kuadrant.io/authpolicies"
+	AuthPolicyDirectReferenceAnnotationName = "kuadrant.io/authpolicy"
+)
+
 type AuthSchemeSpec struct {
 	// Authentication configs.
 	// At least one config MUST evaluate to a valid identity object for the auth request to be successful.
@@ -286,11 +291,11 @@ func (ap *AuthPolicy) Kind() string {
 }
 
 func (ap *AuthPolicy) BackReferenceAnnotationName() string {
-	return "kuadrant.io/authpolicies"
+	return AuthPolicyBackReferenceAnnotationName
 }
 
 func (ap *AuthPolicy) DirectReferenceAnnotationName() string {
-	return "kuadrant.io/authpolicy"
+	return AuthPolicyDirectReferenceAnnotationName
 }
 
 //+kubebuilder:object:root=true

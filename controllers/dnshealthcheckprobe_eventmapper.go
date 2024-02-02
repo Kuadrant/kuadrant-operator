@@ -41,7 +41,7 @@ func (m *DNSHealthCheckProbeEventMapper) MapToPolicy(obj client.Object, policyKi
 	if policyNamespace == "" {
 		return requests
 	}
-	logger.Info("mapToPolicyRequest", policyKind, policyName)
+	logger.Info("mapToPolicyRequest", policyKind.Kind(), policyName)
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name:      policyName,

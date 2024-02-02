@@ -16,7 +16,7 @@ import (
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
-	reconcilers2 "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
@@ -26,7 +26,7 @@ const authPolicyFinalizer = "authpolicy.kuadrant.io/finalizer"
 // AuthPolicyReconciler reconciles a AuthPolicy object
 type AuthPolicyReconciler struct {
 	*reconcilers.BaseReconciler
-	TargetRefReconciler reconcilers2.TargetRefReconciler
+	TargetRefReconciler reconcilerutils.TargetRefReconciler
 	// OverriddenPolicyMap tracks the overridden policies to report their status.
 	OverriddenPolicyMap *utils.OverriddenPolicyMap
 }
@@ -64,7 +64,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	markedForDeletion := ap.GetDeletionTimestamp() != nil
 
 	// fetch the target network object
-	targetNetworkObject, err := reconcilers2.FetchTargetRefObject(ctx, r.Client(), ap.GetTargetRef(), ap.Namespace)
+	targetNetworkObject, err := reconcilerutils.FetchTargetRefObject(ctx, r.Client(), ap.GetTargetRef(), ap.Namespace)
 	if err != nil {
 		if !markedForDeletion {
 			if apierrors.IsNotFound(err) {
@@ -155,7 +155,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 	}
 
 	// reconcile based on gateway diffs
-	gatewayDiffObj, err := reconcilers2.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
+	gatewayDiffObj, err := reconcilerutils.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 
 func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
-	gatewayDiffObj, err := reconcilers2.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
+	gatewayDiffObj, err := reconcilerutils.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
 	if err != nil {
 		return err
 	}

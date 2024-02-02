@@ -52,7 +52,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
-	reconcilers2 "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
@@ -156,7 +156,7 @@ func main() {
 	)
 
 	if err = (&controllers.RateLimitPolicyReconciler{
-		TargetRefReconciler: reconcilers2.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      rateLimitPolicyBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicy")
@@ -170,7 +170,7 @@ func main() {
 	)
 
 	if err = (&controllers.AuthPolicyReconciler{
-		TargetRefReconciler: reconcilers2.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      authPolicyBaseReconciler,
 		OverriddenPolicyMap: utils.NewOverriddenPolicyMap(),
 	}).SetupWithManager(mgr); err != nil {
@@ -186,7 +186,7 @@ func main() {
 
 	if err = (&controllers.DNSPolicyReconciler{
 		BaseReconciler:      dnsPolicyBaseReconciler,
-		TargetRefReconciler: reconcilers2.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DNSPolicy")
 		os.Exit(1)
@@ -200,7 +200,7 @@ func main() {
 
 	if err = (&controllers.TLSPolicyReconciler{
 		BaseReconciler:      tlsPolicyBaseReconciler,
-		TargetRefReconciler: reconcilers2.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TLSPolicy")
 		os.Exit(1)

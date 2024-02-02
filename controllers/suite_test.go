@@ -48,7 +48,7 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	reconcilers2 "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
@@ -147,7 +147,7 @@ var _ = BeforeSuite(func() {
 
 	err = (&AuthPolicyReconciler{
 		BaseReconciler:      authPolicyBaseReconciler,
-		TargetRefReconciler: reconcilers2.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 		OverriddenPolicyMap: utils.NewOverriddenPolicyMap(),
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
@@ -160,7 +160,7 @@ var _ = BeforeSuite(func() {
 
 	err = (&RateLimitPolicyReconciler{
 		BaseReconciler:      rateLimitPolicyBaseReconciler,
-		TargetRefReconciler: reconcilers2.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())
@@ -173,7 +173,7 @@ var _ = BeforeSuite(func() {
 
 	err = (&TLSPolicyReconciler{
 		BaseReconciler:      tlsPolicyBaseReconciler,
-		TargetRefReconciler: reconcilers2.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())
@@ -186,7 +186,7 @@ var _ = BeforeSuite(func() {
 
 	err = (&DNSPolicyReconciler{
 		BaseReconciler:      dnsPolicyBaseReconciler,
-		TargetRefReconciler: reconcilers2.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())

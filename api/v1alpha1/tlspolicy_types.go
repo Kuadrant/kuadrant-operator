@@ -28,6 +28,11 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
+const (
+	TLSPolicyBackReferenceAnnotationName   = "kuadrant.io/tlspolicies"
+	TLSPolicyDirectReferenceAnnotationName = "kuadrant.io/tlspolicy"
+)
+
 // TLSPolicySpec defines the desired state of TLSPolicy
 type TLSPolicySpec struct {
 	// +kubebuilder:validation:Required
@@ -146,11 +151,11 @@ func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 }
 
 func (p *TLSPolicy) BackReferenceAnnotationName() string {
-	return "kuadrant.io/tlspolicies"
+	return TLSPolicyBackReferenceAnnotationName
 }
 
 func (p *TLSPolicy) DirectReferenceAnnotationName() string {
-	return "kuadrant.io/tlspolicy"
+	return TLSPolicyDirectReferenceAnnotationName
 }
 
 func (p *TLSPolicy) Validate() error {

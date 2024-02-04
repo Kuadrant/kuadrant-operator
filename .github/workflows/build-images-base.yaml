@@ -19,8 +19,8 @@ on:
         description: Limitador Operator bundle version
         default: latest
         type: string
-      policyControllerVersion:
-        description: Policy Controller version
+      kuadrantdnsOperatorVersion:
+        description: Kuadrant DNS Operator bundle version
         default: latest
         type: string
       wasmShimVersion:
@@ -53,8 +53,8 @@ on:
         description: Limitador Operator bundle version
         default: latest
         type: string
-      policyControllerVersion:
-        description: Policy Controller version
+      kuadrantdnsOperatorVersion:
+        description: Kuadrant DNS Operator bundle version
         default: latest
         type: string
       wasmShimVersion:
@@ -134,8 +134,8 @@ jobs:
             VERSION=${{ env.VERSION }} IMAGE_TAG=${{ inputs.kuadrantOperatorTag }} \
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
+            KUADRANT_DNS_OPERATOR_VERSION=${{ inputs.kuadrantdnsOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
-            POLICY_CONTROLLER_VERSION=${{ inputs.policyControllerVersion }} \
             REPLACES_VERSION=${{ inputs.replacesVersion }} \
             CHANNELS=${{ inputs.channels }}
       - name: Build Image
@@ -178,8 +178,8 @@ jobs:
             VERSION=${{ env.VERSION }} IMAGE_TAG=${{ inputs.kuadrantOperatorTag }} \
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
+            KUADRANT_DNS_OPERATOR_VERSION=${{ inputs.kuadrantdnsOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
-            POLICY_CONTROLLER_VERSION=${{ inputs.policyControllerVersion }} \
             REPLACES_VERSION=${{ inputs.replacesVersion }} \
             CHANNELS=${{ inputs.channels }}
       - name: Install qemu dependency

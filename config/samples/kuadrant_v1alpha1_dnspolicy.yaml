@@ -1,0 +1,13 @@
+---
+apiVersion: kuadrant.io/v1alpha1
+kind: DNSPolicy
+metadata:
+  name: dnspolicy-sample
+spec:
+  targetRef:
+    name: example-gateway
+    group: ""
+    kind: Gateway
+  healthCheck:
+    endpoint: /
+    protocol: HTTP

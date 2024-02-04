@@ -51,6 +51,9 @@ import (
 
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrantdnsv1alpha1 "github.com/kuadrant/kuadrant-dns-operator/api/v1alpha1"
+
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
@@ -79,8 +82,10 @@ func init() {
 	utilruntime.Must(istioapis.AddToScheme(scheme))
 	utilruntime.Must(istiov1alpha1.AddToScheme(scheme))
 	utilruntime.Must(maistraapis.AddToScheme(scheme))
+	utilruntime.Must(kuadrantv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta2.AddToScheme(scheme))
+	utilruntime.Must(kuadrantdnsv1alpha1.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
 
@@ -175,6 +180,21 @@ func main() {
 		OverriddenPolicyMap: common.NewOverriddenPolicyMap(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicy")
+		os.Exit(1)
+	}
+
+	dnsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("dnspolicy"),
+		mgr.GetEventRecorderFor("DNSPolicy"),
+	)
+
+	if err = (&controllers.DNSPolicyReconciler{
+		TargetRefReconciler: reconcilers.TargetRefReconciler{
+			BaseReconciler: dnsPolicyBaseReconciler,
+		},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DNSPolicy")
 		os.Exit(1)
 	}
 

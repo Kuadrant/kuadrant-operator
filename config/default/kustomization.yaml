@@ -49,4 +49,3 @@ resources:
 - ../crd
 - ../rbac
 - ../manager
-- ../dependencies/policy-controller

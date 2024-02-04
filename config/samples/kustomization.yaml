@@ -3,5 +3,5 @@ resources:
 - kuadrant_v1beta1_kuadrant.yaml
 - kuadrant_v1beta2_authpolicy.yaml
 - kuadrant_v1beta2_ratelimitpolicy.yaml
-- ../dependencies/policy-controller/samples
+- kuadrant_v1alpha1_dnspolicy.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

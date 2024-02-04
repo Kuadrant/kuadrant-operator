@@ -1,0 +1,11 @@
+- op: replace
+  path: /metadata/labels/control-plane
+  value: kuadrant-dns-operator-controller-manager
+
+- op: replace
+  path: /spec/selector/matchLabels/control-plane
+  value: kuadrant-dns-operator-controller-manager
+
+- op: replace
+  path: /spec/template/metadata/labels/control-plane
+  value: kuadrant-dns-operator-controller-manager

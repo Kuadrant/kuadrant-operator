@@ -23,5 +23,5 @@ jobs:
       kuadrantOperatorTag: ${{ needs.date.outputs.date }}
       authorinoOperatorVersion: ${{ vars.AUTHORINO_OPERATOR_SHA }}
       limitadorOperatorVersion: ${{ vars.LIMITADOR_OPERATOR_SHA }}
-      policyControllerVersion: ${{ vars.POLICY_CONTROLLER_SHA }}
+      kuadrantdnsOperatorVersion: ${{ vars.KUADRANT_DNS_OPERATOR_SHA }}
       wasmShimVersion: ${{ vars.WASM_SHIM_SHA }}

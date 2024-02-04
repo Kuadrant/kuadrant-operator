@@ -9,10 +9,13 @@ require (
 	github.com/google/uuid v1.4.0
 	github.com/kuadrant/authorino v0.15.0
 	github.com/kuadrant/authorino-operator v0.9.0
+	github.com/kuadrant/kuadrant-dns-operator v0.0.0-20240202223525-b889335b228f
 	github.com/kuadrant/limitador-operator v0.7.0
+	github.com/martinlindhe/base36 v1.1.1
 	github.com/onsi/ginkgo/v2 v2.13.2
 	github.com/onsi/gomega v1.30.0
 	go.uber.org/zap v1.26.0
+	golang.org/x/net v0.19.0
 	golang.org/x/sync v0.5.0
 	google.golang.org/protobuf v1.31.0
 	gotest.tools v2.2.0+incompatible
@@ -143,7 +146,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.17.0 // indirect
 	golang.org/x/exp v0.0.0-20231127185646-65229373498e // indirect
-	golang.org/x/net v0.19.0 // indirect
 	golang.org/x/oauth2 v0.15.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/term v0.15.0 // indirect

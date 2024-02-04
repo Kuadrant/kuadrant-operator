@@ -107,6 +107,14 @@ rules:
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
+  - gateways/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
   - httproutes
   verbs:
   - get
@@ -154,6 +162,67 @@ rules:
 - apiGroups:
   - kuadrant.io
   resources:
+  - dnshealthcheckprobes
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - dnshealthcheckprobes/status
+  verbs:
+  - get
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - dnspolicies
+  verbs:
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - dnspolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - dnspolicies/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - dnsrecords
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - dnsrecords/status
+  verbs:
+  - get
+- apiGroups:
+  - kuadrant.io
+  resources:
   - kuadrants
   verbs:
   - create
@@ -177,6 +246,14 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - kuadrant.io
+  resources:
+  - managedzones
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - kuadrant.io
   resources:

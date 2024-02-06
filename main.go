@@ -32,6 +32,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	certmanv1 "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"
@@ -86,7 +87,7 @@ func init() {
 	utilruntime.Must(kuadrantv1beta1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta2.AddToScheme(scheme))
 	utilruntime.Must(kuadrantdnsv1alpha1.AddToScheme(scheme))
-
+	utilruntime.Must(certmanv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 
 	logger := log.NewLogger(
@@ -198,7 +199,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tlsPolicyBaseReconiler := reconcilers.NewBaseReconciler(
+	tlsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("tlspolicy"),
 		mgr.GetEventRecorderFor("TLSPolicy"),
@@ -206,7 +207,7 @@ func main() {
 
 	if err = (&controllers.TLSPolicyReconciler{
 		TargetRefReconciler: reconcilers.TargetRefReconciler{
-			BaseReconciler: tlsPolicyBaseReconiler,
+			BaseReconciler: tlsPolicyBaseReconciler,
 		},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TLSPolicy")

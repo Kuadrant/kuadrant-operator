@@ -5,12 +5,13 @@ import (
 	"fmt"
 
 	certmanv1 "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 )
 
 // https://cert-manager.io/docs/usage/gateway/#supported-annotations

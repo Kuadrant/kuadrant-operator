@@ -6,6 +6,7 @@ resources:
   - bases/kuadrant.io_authpolicies.yaml
   - bases/kuadrant.io_kuadrants.yaml
   - bases/kuadrant.io_dnspolicies.yaml
+  - bases/kuadrant.io_tlspolicies.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:

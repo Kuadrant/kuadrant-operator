@@ -1,5 +1,5 @@
 /*
-Copyright 2023.
+Copyright 2024.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,6 +25,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 // TLSPolicySpec defines the desired state of TLSPolicy
@@ -110,11 +112,15 @@ type TLSPolicyStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
-//var _ common.KuadrantPolicy = &TLSPolicy{}
+var _ common.KuadrantPolicy = &TLSPolicy{}
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description="TLSPolicy ready."
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=direct"
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[0].reason`,description="TLSPolicy Status",priority=2
+// +kubebuilder:printcolumn:name="TargetRefKind",type="string",JSONPath=".spec.targetRef.kind",description="Type of the referenced Gateway API resource",priority=2
+// +kubebuilder:printcolumn:name="TargetRefName",type="string",JSONPath=".spec.targetRef.name",description="Name of the referenced Gateway API resource",priority=2
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // TLSPolicy is the Schema for the tlspolicies API
 type TLSPolicy struct {
@@ -124,6 +130,8 @@ type TLSPolicy struct {
 	Spec   TLSPolicySpec   `json:"spec,omitempty"`
 	Status TLSPolicyStatus `json:"status,omitempty"`
 }
+
+func (p *TLSPolicy) Kind() string { return p.TypeMeta.Kind }
 
 func (p *TLSPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
 	return gatewayapiv1.Namespace(p.Namespace)
@@ -152,10 +160,6 @@ func (p *TLSPolicy) Validate() error {
 	}
 
 	return nil
-}
-
-func (r *TLSPolicy) Kind() string {
-	return r.TypeMeta.Kind
 }
 
 //+kubebuilder:object:root=true

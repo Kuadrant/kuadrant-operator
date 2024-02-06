@@ -15,13 +15,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
-
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 const (

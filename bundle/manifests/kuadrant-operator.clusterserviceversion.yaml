@@ -23,6 +23,25 @@ metadata:
           }
         },
         {
+          "apiVersion": "kuadrant.io/v1alpha1",
+          "kind": "TLSPolicy",
+          "metadata": {
+            "name": "tlspolicy-sample"
+          },
+          "spec": {
+            "issuerRef": {
+              "group": "cert-manager.io",
+              "kind": "ClusterIssuer",
+              "name": "self-signed-ca"
+            },
+            "targetRef": {
+              "group": "gateway.networking.k8s.io",
+              "kind": "Gateway",
+              "name": "example-gateway"
+            }
+          }
+        },
+        {
           "apiVersion": "kuadrant.io/v1beta1",
           "kind": "Kuadrant",
           "metadata": {
@@ -122,6 +141,12 @@ spec:
       kind: RateLimitPolicy
       name: ratelimitpolicies.kuadrant.io
       version: v1beta2
+    - description: TLSPolicy provides tls for gateway listeners by managing the lifecycle
+        of tls certificates
+      displayName: TLSPolicy
+      kind: TLSPolicy
+      name: tlspolicies.kuadrant.io
+      version: v1alpha1
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
   displayName: Kuadrant Operator
   icon:

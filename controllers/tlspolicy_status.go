@@ -4,13 +4,14 @@ import (
 	"context"
 	"slices"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 func (r *TLSPolicyReconciler) reconcileStatus(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy, specErr error) (ctrl.Result, error) {

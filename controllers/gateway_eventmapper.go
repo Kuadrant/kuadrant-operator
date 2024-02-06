@@ -25,6 +25,10 @@ func (m *GatewayEventMapper) MapToAuthPolicy(_ context.Context, obj client.Objec
 	return m.mapToPolicyRequest(obj, "authpolicy", &common.KuadrantAuthPolicyRefsConfig{})
 }
 
+func (m *GatewayEventMapper) MapToTLSPolicy(_ context.Context, obj client.Object) []reconcile.Request {
+	return m.mapToPolicyRequest(obj, "authpolicy", &common.KuadrantTLSPolicyRefsConfig{})
+}
+
 func (m *GatewayEventMapper) mapToPolicyRequest(obj client.Object, policyKind string, policyRefsConfig common.PolicyRefsConfig) []reconcile.Request {
 	logger := m.Logger.V(1).WithValues("object", client.ObjectKeyFromObject(obj))
 

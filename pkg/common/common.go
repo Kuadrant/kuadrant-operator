@@ -33,6 +33,8 @@ const (
 	RateLimitPolicyBackRefAnnotation   = "kuadrant.io/ratelimitpolicy"
 	AuthPoliciesBackRefAnnotation      = "kuadrant.io/authpolicies"
 	AuthPolicyBackRefAnnotation        = "kuadrant.io/authpolicy"
+	TLSPoliciesBackRefAnnotation       = "kuadrant.io/tlspolicies"
+	TLSPolicyBackRefAnnotation         = "kuadrant.io/tlspolicy"
 	KuadrantNamespaceLabel             = "kuadrant.io/namespace"
 	NamespaceSeparator                 = '/'
 	LimitadorName                      = "limitador"
@@ -112,6 +114,11 @@ func Find[T any](slice []T, match func(T) bool) (*T, bool) {
 		}
 	}
 	return nil, false
+}
+
+func Contains[T any](slice []T, match func(T) bool) bool {
+	_, ok := Find(slice, match)
+	return ok
 }
 
 // Map applies the given mapper function to each element in the input slice and returns a new slice with the results.

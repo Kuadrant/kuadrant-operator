@@ -312,6 +312,12 @@ func (c *KuadrantAuthPolicyRefsConfig) PolicyRefsAnnotation() string {
 	return AuthPoliciesBackRefAnnotation
 }
 
+type KuadrantTLSPolicyRefsConfig struct{}
+
+func (c *KuadrantTLSPolicyRefsConfig) PolicyRefsAnnotation() string {
+	return TLSPoliciesBackRefAnnotation
+}
+
 func GatewaysMissingPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, config PolicyRefsConfig) []GatewayWrapper {
 	// gateways referenced by the policy but do not have reference to it in the annotations
 	gateways := make([]GatewayWrapper, 0)

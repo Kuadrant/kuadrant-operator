@@ -7,6 +7,7 @@ require (
 	github.com/go-logr/logr v1.3.0
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.4.0
+	github.com/jetstack/cert-manager v1.7.1
 	github.com/kuadrant/authorino v0.15.0
 	github.com/kuadrant/authorino-operator v0.9.0
 	github.com/kuadrant/kuadrant-dns-operator v0.0.0-20240202223525-b889335b228f

@@ -144,6 +144,21 @@ jobs:
         run: |
           make verify-fmt
 
+  verify-imports:
+    name: Verify imports
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.21.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.21.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v3
+      - name: Run make verify-imports
+        run: |
+          make verify-imports
+
   test-scripts:
     name: Test Scripts
     strategy:

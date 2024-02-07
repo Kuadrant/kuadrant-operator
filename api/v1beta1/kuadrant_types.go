@@ -19,9 +19,11 @@ package v1beta1
 import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )

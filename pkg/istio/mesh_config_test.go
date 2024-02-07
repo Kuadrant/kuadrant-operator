@@ -5,16 +5,18 @@ package istio
 import (
 	"testing"
 
-	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
-	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gotest.tools/assert"
 	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
 	istioapiv1alpha1 "istio.io/api/operator/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	"maistra.io/istio-operator/pkg/helm"
+
+	corev1 "k8s.io/api/core/v1"
+
+	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
+	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 )
 
 func getStubbedMeshConfig() *istiomeshv1alpha1.MeshConfig {

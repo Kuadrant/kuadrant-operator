@@ -12,6 +12,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 

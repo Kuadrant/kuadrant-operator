@@ -10,11 +10,10 @@ import (
 	"strings"
 	"time"
 
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	secv1beta1resources "istio.io/client-go/pkg/apis/security/v1beta1"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,6 +24,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+
+	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
 
 const (

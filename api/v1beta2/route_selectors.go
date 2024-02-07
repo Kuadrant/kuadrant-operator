@@ -1,9 +1,9 @@
 package v1beta2
 
 import (
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-
 	orderedmap "github.com/elliotchance/orderedmap/v2"
+
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )

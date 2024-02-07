@@ -7,20 +7,20 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
+	istiosecurity "istio.io/api/security/v1beta1"
+	istio "istio.io/client-go/pkg/apis/security/v1beta1"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/utils/env"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	istiosecurity "istio.io/api/security/v1beta1"
-	istio "istio.io/client-go/pkg/apis/security/v1beta1"
-
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
-	"k8s.io/utils/env"
 )
 
 var KuadrantExtAuthProviderName = env.GetString("AUTH_PROVIDER", "kuadrant-authorization")

@@ -23,29 +23,30 @@ import (
 	"path/filepath"
 	"testing"
 
-	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	istioapis "istio.io/istio/operator/pkg/apis"
+	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
+
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	//+kubebuilder:scaffold:imports
 )

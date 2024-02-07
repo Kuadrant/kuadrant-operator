@@ -6,6 +6,7 @@ import (
 
 	istioapiv1alpha3 "istio.io/api/networking/v1alpha3"
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/common"

@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/go-logr/logr"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -15,9 +16,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 )
 
 const (

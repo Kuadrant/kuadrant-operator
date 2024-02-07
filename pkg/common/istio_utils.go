@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-logr/logr"
 	istiocommon "istio.io/api/type/v1beta1"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )

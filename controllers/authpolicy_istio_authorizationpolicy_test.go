@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	istiosecurity "istio.io/api/security/v1beta1"
+
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )

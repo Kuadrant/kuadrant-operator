@@ -6,9 +6,10 @@ import (
 	"reflect"
 	"testing"
 
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 )
 
 func TestAuthorinoConditionsFromHTTPRouteRule(t *testing.T) {

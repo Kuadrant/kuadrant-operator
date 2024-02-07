@@ -187,3 +187,19 @@ func FindDeploymentStatusCondition(conditions []appsv1.DeploymentCondition, cond
 
 	return nil
 }
+
+func HasLabel(obj metav1.Object, key string) bool {
+	labels := obj.GetLabels()
+	if labels == nil {
+		return false
+	}
+	_, ok := labels[key]
+	return ok
+}
+
+func GetLabel(obj metav1.Object, key string) string {
+	if !HasLabel(obj, key) {
+		return ""
+	}
+	return obj.GetLabels()[key]
+}

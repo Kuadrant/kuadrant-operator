@@ -21,7 +21,6 @@ import (
 
 	certmanv1 "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/jetstack/cert-manager/pkg/apis/meta/v1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -111,7 +110,7 @@ type TLSPolicyStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
-var _ common.KuadrantPolicy = &TLSPolicy{}
+//var _ common.KuadrantPolicy = &TLSPolicy{}
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
@@ -170,4 +169,41 @@ type TLSPolicyList struct {
 
 func init() {
 	SchemeBuilder.Register(&TLSPolicy{}, &TLSPolicyList{})
+}
+
+//API Helpers
+
+func NewTLSPolicy(policyName, ns string) *TLSPolicy {
+	return &TLSPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      policyName,
+			Namespace: ns,
+		},
+		Spec: TLSPolicySpec{},
+	}
+}
+
+func (p *TLSPolicy) WithTargetGateway(gwName string) *TLSPolicy {
+	typedNamespace := gatewayapiv1.Namespace(p.GetNamespace())
+	p.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
+		Group:     "gateway.networking.k8s.io",
+		Kind:      "Gateway",
+		Name:      gatewayapiv1.ObjectName(gwName),
+		Namespace: &typedNamespace,
+	}
+	return p
+}
+
+func (p *TLSPolicy) WithIssuerRef(issuerRef certmanmetav1.ObjectReference) *TLSPolicy {
+	p.Spec.IssuerRef = issuerRef
+	return p
+}
+
+func (p *TLSPolicy) WithIssuer(name, kind, group string) *TLSPolicy {
+	p.WithIssuerRef(certmanmetav1.ObjectReference{
+		Name:  name,
+		Kind:  kind,
+		Group: group,
+	})
+	return p
 }

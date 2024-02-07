@@ -16,9 +16,8 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/kuadrant-dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/controllers/common"
-	"github.com/kuadrant/kuadrant-operator/controllers/slice"
-	kuadrantcommon "github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
@@ -100,7 +99,7 @@ func (r *DNSPolicyReconciler) deleteUnexpectedGatewayHealthCheckProbes(ctx conte
 		return err
 	}
 	for _, p := range existingProbes.Items {
-		if !slice.Contains(expectedProbes, func(expectedProbe *kuadrantdnsv1alpha1.DNSHealthCheckProbe) bool {
+		if !common.Contains(expectedProbes, func(expectedProbe *kuadrantdnsv1alpha1.DNSHealthCheckProbe) bool {
 			return expectedProbe.Name == p.Name && expectedProbe.Namespace == p.Namespace
 		}) {
 			if err := r.Client().Delete(ctx, &p); err != nil {
@@ -111,7 +110,7 @@ func (r *DNSPolicyReconciler) deleteUnexpectedGatewayHealthCheckProbes(ctx conte
 	return nil
 }
 
-func (r *DNSPolicyReconciler) expectedHealthCheckProbesForGateway(ctx context.Context, gw kuadrantcommon.GatewayWrapper, dnsPolicy *v1alpha1.DNSPolicy) []*kuadrantdnsv1alpha1.DNSHealthCheckProbe {
+func (r *DNSPolicyReconciler) expectedHealthCheckProbesForGateway(ctx context.Context, gw common.GatewayWrapper, dnsPolicy *v1alpha1.DNSPolicy) []*kuadrantdnsv1alpha1.DNSHealthCheckProbe {
 	log := crlog.FromContext(ctx)
 	var healthChecks []*kuadrantdnsv1alpha1.DNSHealthCheckProbe
 	if dnsPolicy.Spec.HealthCheck == nil {
@@ -124,7 +123,7 @@ func (r *DNSPolicyReconciler) expectedHealthCheckProbesForGateway(ctx context.Co
 		interval = *dnsPolicy.Spec.HealthCheck.Interval
 	}
 
-	gatewayWrapper := common.NewGatewayWrapper(gw.Gateway)
+	gatewayWrapper := multicluster.NewGatewayWrapper(gw.Gateway)
 	if err := gatewayWrapper.Validate(); err != nil {
 		return nil
 	}

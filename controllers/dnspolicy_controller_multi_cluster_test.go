@@ -9,38 +9,37 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
-	v1 "open-cluster-management.io/api/cluster/v1"
 
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/apis/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	testutil "github.com/kuadrant/kuadrant-operator/test/util"
+	kuadrantdnsv1alpha1 "github.com/kuadrant/kuadrant-dns-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
 var _ = Describe("DNSPolicy Multi Cluster", func() {
 
 	var gatewayClass *gatewayapiv1.GatewayClass
-	var managedZone *v1alpha1.ManagedZone
+	var managedZone *kuadrantdnsv1alpha1.ManagedZone
 	var testNamespace string
-	var dnsPolicyBuilder *testutil.DNSPolicyBuilder
 	var gateway *gatewayapiv1.Gateway
 	var dnsPolicy *v1alpha1.DNSPolicy
 	var lbHash, recordName, wildcardRecordName string
+	var ctx context.Context
 
 	BeforeEach(func() {
+		ctx = context.Background()
 		CreateNamespace(&testNamespace)
 
-		gatewayClass = testutil.NewTestGatewayClass("foo", "default", "kuadrant.io/bar")
+		gatewayClass = testBuildGatewayClass("foo", "default", "kuadrant.io/bar")
 		Expect(k8sClient.Create(ctx, gatewayClass)).To(Succeed())
 
-		managedZone = testutil.NewManagedZoneBuilder("mz-example-com", testNamespace, "example.com").ManagedZone
+		managedZone = testBuildManagedZone("mz-example-com", testNamespace, "example.com")
 		Expect(k8sClient.Create(ctx, managedZone)).To(Succeed())
 
-		gateway = testutil.NewGatewayBuilder(TestGatewayName, gatewayClass.Name, testNamespace).
+		gateway = NewGatewayBuilder(TestGatewayName, gatewayClass.Name, testNamespace).
 			WithHTTPListener(TestListenerNameOne, TestHostOne).
 			WithHTTPListener(TestListenerNameWildcard, TestHostWildcard).
 			Gateway
@@ -48,27 +47,13 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 
 		//Set multi cluster gateway status
 		Eventually(func() error {
-			if err := k8sClient.Create(ctx, &v1.ManagedCluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: TestClusterNameOne,
-				},
-			}); err != nil && !k8serrors.IsAlreadyExists(err) {
-				return err
-			}
-			if err := k8sClient.Create(ctx, &v1.ManagedCluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: TestClusterNameTwo,
-				},
-			}); err != nil && !k8serrors.IsAlreadyExists(err) {
-				return err
-			}
 			gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 				{
-					Type:  testutil.Pointer(common.MultiClusterIPAddressType),
+					Type:  Pointer(multicluster.MultiClusterIPAddressType),
 					Value: TestClusterNameOne + "/" + TestIPAddressOne,
 				},
 				{
-					Type:  testutil.Pointer(common.MultiClusterIPAddressType),
+					Type:  Pointer(multicluster.MultiClusterIPAddressType),
 					Value: TestClusterNameTwo + "/" + TestIPAddressTwo,
 				},
 			}
@@ -101,10 +86,7 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 			return k8sClient.Status().Update(ctx, gateway)
 		}, TestTimeoutMedium, TestRetryIntervalMedium).ShouldNot(HaveOccurred())
 
-		dnsPolicyBuilder = testutil.NewDNSPolicyBuilder("test-dns-policy", testNamespace)
-		dnsPolicyBuilder.WithTargetGateway(TestGatewayName)
-
-		lbHash = common.ToBase36hash(fmt.Sprintf("%s-%s", gateway.Name, gateway.Namespace))
+		lbHash = multicluster.ToBase36hash(fmt.Sprintf("%s-%s", gateway.Name, gateway.Namespace))
 		recordName = fmt.Sprintf("%s-%s", TestGatewayName, TestListenerNameOne)
 		wildcardRecordName = fmt.Sprintf("%s-%s", TestGatewayName, TestListenerNameWildcard)
 	})
@@ -127,19 +109,21 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 			err := k8sClient.Delete(ctx, gatewayClass)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		}
+		DeleteNamespaceCallback(&testNamespace)()
 	})
 
 	Context("simple routing strategy", func() {
 
 		BeforeEach(func() {
-			dnsPolicyBuilder.WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
-			dnsPolicy = dnsPolicyBuilder.DNSPolicy
+			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+				WithTargetGateway(TestGatewayName).
+				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 		})
 
 		It("should create dns records", func() {
 			Eventually(func(g Gomega, ctx context.Context) {
-				recordList := &v1alpha1.DNSRecordList{}
+				recordList := &kuadrantdnsv1alpha1.DNSRecordList{}
 				err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(recordList.Items).To(HaveLen(2))
@@ -155,7 +139,7 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 										"Targets":       ContainElements(TestIPAddressOne, TestIPAddressTwo),
 										"RecordType":    Equal("A"),
 										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(v1alpha1.TTL(60)),
+										"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 									})),
 								),
 							}),
@@ -170,7 +154,7 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 										"Targets":       ContainElements(TestIPAddressOne, TestIPAddressTwo),
 										"RecordType":    Equal("A"),
 										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(v1alpha1.TTL(60)),
+										"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 									})),
 								),
 							}),
@@ -183,21 +167,19 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 
 	Context("loadbalanced routing strategy", func() {
 
-		BeforeEach(func() {
-			dnsPolicyBuilder.WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy)
-		})
-
 		Context("weighted", func() {
 
 			BeforeEach(func() {
-				dnsPolicyBuilder.WithLoadBalancingWeightedFor(120, nil)
-				dnsPolicy = dnsPolicyBuilder.DNSPolicy
+				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+					WithTargetGateway(TestGatewayName).
+					WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
+					WithLoadBalancingWeightedFor(120, nil)
 				Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 			})
 
 			It("should create dns records", func() {
 				Eventually(func(g Gomega, ctx context.Context) {
-					recordList := &v1alpha1.DNSRecordList{}
+					recordList := &kuadrantdnsv1alpha1.DNSRecordList{}
 					err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(recordList.Items).To(HaveLen(2))
@@ -213,45 +195,45 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 											"Targets":       ConsistOf(TestIPAddressTwo),
 											"RecordType":    Equal("A"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(60)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("default.lb-" + lbHash + ".test.example.com"),
 											"Targets":          ConsistOf("2w705o.lb-" + lbHash + ".test.example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("2w705o.lb-" + lbHash + ".test.example.com"),
-											"RecordTTL":        Equal(v1alpha1.TTL(60)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("default.lb-" + lbHash + ".test.example.com"),
 											"Targets":          ConsistOf("s07c46.lb-" + lbHash + ".test.example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("s07c46.lb-" + lbHash + ".test.example.com"),
-											"RecordTTL":        Equal(v1alpha1.TTL(60)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":       Equal("s07c46.lb-" + lbHash + ".test.example.com"),
 											"Targets":       ConsistOf(TestIPAddressOne),
 											"RecordType":    Equal("A"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(60)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("lb-" + lbHash + ".test.example.com"),
 											"Targets":          ConsistOf("default.lb-" + lbHash + ".test.example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("default"),
-											"RecordTTL":        Equal(v1alpha1.TTL(300)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":       Equal(TestHostOne),
 											"Targets":       ConsistOf("lb-" + lbHash + ".test.example.com"),
 											"RecordType":    Equal("CNAME"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(300)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(300)),
 										})),
 									),
 								}),
@@ -266,45 +248,45 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 											"Targets":       ConsistOf(TestIPAddressTwo),
 											"RecordType":    Equal("A"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(60)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("default.lb-" + lbHash + ".example.com"),
 											"Targets":          ConsistOf("2w705o.lb-" + lbHash + ".example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("2w705o.lb-" + lbHash + ".example.com"),
-											"RecordTTL":        Equal(v1alpha1.TTL(60)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("default.lb-" + lbHash + ".example.com"),
 											"Targets":          ConsistOf("s07c46.lb-" + lbHash + ".example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("s07c46.lb-" + lbHash + ".example.com"),
-											"RecordTTL":        Equal(v1alpha1.TTL(60)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":       Equal("s07c46.lb-" + lbHash + ".example.com"),
 											"Targets":       ConsistOf(TestIPAddressOne),
 											"RecordType":    Equal("A"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(60)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("lb-" + lbHash + ".example.com"),
 											"Targets":          ConsistOf("default.lb-" + lbHash + ".example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("default"),
-											"RecordTTL":        Equal(v1alpha1.TTL(300)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":       Equal(TestHostWildcard),
 											"Targets":       ConsistOf("lb-" + lbHash + ".example.com"),
 											"RecordType":    Equal("CNAME"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(300)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(300)),
 										})),
 									),
 								}),
@@ -318,16 +300,17 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 		Context("geo+weighted", func() {
 
 			BeforeEach(func() {
-				dnsPolicyBuilder.
+				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+					WithTargetGateway(TestGatewayName).
+					WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
 					WithLoadBalancingWeightedFor(120, nil).
 					WithLoadBalancingGeoFor("IE")
-				dnsPolicy = dnsPolicyBuilder.DNSPolicy
 				Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 			})
 
 			It("should create dns records", func() {
 				Eventually(func(g Gomega, ctx context.Context) {
-					recordList := &v1alpha1.DNSRecordList{}
+					recordList := &kuadrantdnsv1alpha1.DNSRecordList{}
 					err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(recordList.Items).To(HaveLen(2))
@@ -343,53 +326,53 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 											"Targets":       ConsistOf(TestIPAddressTwo),
 											"RecordType":    Equal("A"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(60)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("ie.lb-" + lbHash + ".test.example.com"),
 											"Targets":          ConsistOf("2w705o.lb-" + lbHash + ".test.example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("2w705o.lb-" + lbHash + ".test.example.com"),
-											"RecordTTL":        Equal(v1alpha1.TTL(60)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("ie.lb-" + lbHash + ".test.example.com"),
 											"Targets":          ConsistOf("s07c46.lb-" + lbHash + ".test.example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("s07c46.lb-" + lbHash + ".test.example.com"),
-											"RecordTTL":        Equal(v1alpha1.TTL(60)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":       Equal("s07c46.lb-" + lbHash + ".test.example.com"),
 											"Targets":       ConsistOf(TestIPAddressOne),
 											"RecordType":    Equal("A"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(60)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("lb-" + lbHash + ".test.example.com"),
 											"Targets":          ConsistOf("ie.lb-" + lbHash + ".test.example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("IE"),
-											"RecordTTL":        Equal(v1alpha1.TTL(300)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("lb-" + lbHash + ".test.example.com"),
 											"Targets":          ConsistOf("ie.lb-" + lbHash + ".test.example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("default"),
-											"RecordTTL":        Equal(v1alpha1.TTL(300)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":       Equal(TestHostOne),
 											"Targets":       ConsistOf("lb-" + lbHash + ".test.example.com"),
 											"RecordType":    Equal("CNAME"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(300)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(300)),
 										})),
 									),
 								}),
@@ -404,53 +387,53 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 											"Targets":       ConsistOf(TestIPAddressTwo),
 											"RecordType":    Equal("A"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(60)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("ie.lb-" + lbHash + ".example.com"),
 											"Targets":          ConsistOf("2w705o.lb-" + lbHash + ".example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("2w705o.lb-" + lbHash + ".example.com"),
-											"RecordTTL":        Equal(v1alpha1.TTL(60)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("ie.lb-" + lbHash + ".example.com"),
 											"Targets":          ConsistOf("s07c46.lb-" + lbHash + ".example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("s07c46.lb-" + lbHash + ".example.com"),
-											"RecordTTL":        Equal(v1alpha1.TTL(60)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":       Equal("s07c46.lb-" + lbHash + ".example.com"),
 											"Targets":       ConsistOf(TestIPAddressOne),
 											"RecordType":    Equal("A"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(60)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("lb-" + lbHash + ".example.com"),
 											"Targets":          ConsistOf("ie.lb-" + lbHash + ".example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("IE"),
-											"RecordTTL":        Equal(v1alpha1.TTL(300)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("lb-" + lbHash + ".example.com"),
 											"Targets":          ConsistOf("ie.lb-" + lbHash + ".example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("default"),
-											"RecordTTL":        Equal(v1alpha1.TTL(300)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":       Equal(TestHostWildcard),
 											"Targets":       ConsistOf("lb-" + lbHash + ".example.com"),
 											"RecordType":    Equal("CNAME"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(300)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(300)),
 										})),
 									),
 								}),
@@ -464,7 +447,10 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 		Context("geo+weighted with custom weights", func() {
 
 			BeforeEach(func() {
-				dnsPolicyBuilder.
+
+				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+					WithTargetGateway(TestGatewayName).
+					WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
 					WithLoadBalancingWeightedFor(120, []*v1alpha1.CustomWeight{
 						{
 							Selector: &metav1.LabelSelector{
@@ -484,7 +470,6 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 						},
 					}).
 					WithLoadBalancingGeoFor("IE")
-				dnsPolicy = dnsPolicyBuilder.DNSPolicy
 				Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 
 				Eventually(func() error {
@@ -504,7 +489,7 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 
 			It("should create dns records", func() {
 				Eventually(func(g Gomega, ctx context.Context) {
-					recordList := &v1alpha1.DNSRecordList{}
+					recordList := &kuadrantdnsv1alpha1.DNSRecordList{}
 					err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(recordList.Items).To(HaveLen(2))
@@ -520,61 +505,61 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 											"Targets":       ConsistOf(TestIPAddressTwo),
 											"RecordType":    Equal("A"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(60)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("es.lb-" + lbHash + ".test.example.com"),
 											"Targets":          ConsistOf("2w705o.lb-" + lbHash + ".test.example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("2w705o.lb-" + lbHash + ".test.example.com"),
-											"RecordTTL":        Equal(v1alpha1.TTL(60)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "weight", Value: "160"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "160"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("ie.lb-" + lbHash + ".test.example.com"),
 											"Targets":          ConsistOf("s07c46.lb-" + lbHash + ".test.example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("s07c46.lb-" + lbHash + ".test.example.com"),
-											"RecordTTL":        Equal(v1alpha1.TTL(60)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "weight", Value: "100"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "100"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":       Equal("s07c46.lb-" + lbHash + ".test.example.com"),
 											"Targets":       ConsistOf(TestIPAddressOne),
 											"RecordType":    Equal("A"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(60)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("lb-" + lbHash + ".test.example.com"),
 											"Targets":          ConsistOf("es.lb-" + lbHash + ".test.example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("ES"),
-											"RecordTTL":        Equal(v1alpha1.TTL(300)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "geo-code", Value: "ES"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "ES"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("lb-" + lbHash + ".test.example.com"),
 											"Targets":          ConsistOf("ie.lb-" + lbHash + ".test.example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("IE"),
-											"RecordTTL":        Equal(v1alpha1.TTL(300)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("lb-" + lbHash + ".test.example.com"),
 											"Targets":          ConsistOf("ie.lb-" + lbHash + ".test.example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("default"),
-											"RecordTTL":        Equal(v1alpha1.TTL(300)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":       Equal(TestHostOne),
 											"Targets":       ConsistOf("lb-" + lbHash + ".test.example.com"),
 											"RecordType":    Equal("CNAME"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(300)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(300)),
 										})),
 									),
 								}),
@@ -589,61 +574,61 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 											"Targets":       ConsistOf(TestIPAddressTwo),
 											"RecordType":    Equal("A"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(60)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("es.lb-" + lbHash + ".example.com"),
 											"Targets":          ConsistOf("2w705o.lb-" + lbHash + ".example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("2w705o.lb-" + lbHash + ".example.com"),
-											"RecordTTL":        Equal(v1alpha1.TTL(60)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "weight", Value: "160"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "160"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("ie.lb-" + lbHash + ".example.com"),
 											"Targets":          ConsistOf("s07c46.lb-" + lbHash + ".example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("s07c46.lb-" + lbHash + ".example.com"),
-											"RecordTTL":        Equal(v1alpha1.TTL(60)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "weight", Value: "100"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "100"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":       Equal("s07c46.lb-" + lbHash + ".example.com"),
 											"Targets":       ConsistOf(TestIPAddressOne),
 											"RecordType":    Equal("A"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(60)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("lb-" + lbHash + ".example.com"),
 											"Targets":          ConsistOf("ie.lb-" + lbHash + ".example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("IE"),
-											"RecordTTL":        Equal(v1alpha1.TTL(300)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("lb-" + lbHash + ".example.com"),
 											"Targets":          ConsistOf("es.lb-" + lbHash + ".example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("ES"),
-											"RecordTTL":        Equal(v1alpha1.TTL(300)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "geo-code", Value: "ES"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "ES"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":          Equal("lb-" + lbHash + ".example.com"),
 											"Targets":          ConsistOf("ie.lb-" + lbHash + ".example.com"),
 											"RecordType":       Equal("CNAME"),
 											"SetIdentifier":    Equal("default"),
-											"RecordTTL":        Equal(v1alpha1.TTL(300)),
-											"ProviderSpecific": Equal(v1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
+											"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
+											"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
 										})),
 										PointTo(MatchFields(IgnoreExtras, Fields{
 											"DNSName":       Equal(TestHostWildcard),
 											"Targets":       ConsistOf("lb-" + lbHash + ".example.com"),
 											"RecordType":    Equal("CNAME"),
 											"SetIdentifier": Equal(""),
-											"RecordTTL":     Equal(v1alpha1.TTL(300)),
+											"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(300)),
 										})),
 									),
 								}),

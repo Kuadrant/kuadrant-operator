@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The MultiCluster Traffic Controller Authors.
+Copyright 2024.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,6 +25,8 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/kuadrant-dns-operator/api/v1alpha1"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 type RoutingStrategy string
@@ -126,9 +128,15 @@ type DNSPolicyStatus struct {
 	HealthCheck *HealthCheckStatus `json:"healthCheck,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description="DNSPolicy ready."
+var _ common.KuadrantPolicy = &DNSPolicy{}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=direct"
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[0].reason`,description="DNSPolicy Status",priority=2
+// +kubebuilder:printcolumn:name="TargetRefKind",type="string",JSONPath=".spec.targetRef.kind",description="Type of the referenced Gateway API resource",priority=2
+// +kubebuilder:printcolumn:name="TargetRefName",type="string",JSONPath=".spec.targetRef.name",description="Name of the referenced Gateway API resource",priority=2
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 
 // DNSPolicy is the Schema for the dnspolicies API
 type DNSPolicy struct {
@@ -245,4 +253,94 @@ type DNSRecordRef struct {
 
 func init() {
 	SchemeBuilder.Register(&DNSPolicy{}, &DNSPolicyList{})
+}
+
+//API Helpers
+
+func NewDNSPolicy(name, ns string) *DNSPolicy {
+	return &DNSPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: DNSPolicySpec{},
+	}
+}
+
+func (p *DNSPolicy) WithTargetRef(targetRef gatewayapiv1alpha2.PolicyTargetReference) *DNSPolicy {
+	p.Spec.TargetRef = targetRef
+	return p
+}
+
+func (p *DNSPolicy) WithHealthCheck(healthCheck HealthCheckSpec) *DNSPolicy {
+	p.Spec.HealthCheck = &healthCheck
+	return p
+}
+
+func (p *DNSPolicy) WithLoadBalancing(loadBalancing LoadBalancingSpec) *DNSPolicy {
+	p.Spec.LoadBalancing = &loadBalancing
+	return p
+}
+
+func (p *DNSPolicy) WithRoutingStrategy(strategy RoutingStrategy) *DNSPolicy {
+	p.Spec.RoutingStrategy = strategy
+	return p
+}
+
+//TargetRef
+
+func (p *DNSPolicy) WithTargetGateway(gwName string) *DNSPolicy {
+	typedNamespace := gatewayapiv1.Namespace(p.GetNamespace())
+	return p.WithTargetRef(gatewayapiv1alpha2.PolicyTargetReference{
+		Group:     "gateway.networking.k8s.io",
+		Kind:      "Gateway",
+		Name:      gatewayapiv1.ObjectName(gwName),
+		Namespace: &typedNamespace,
+	})
+}
+
+//HealthCheck
+
+func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port *int, protocol kuadrantdnsv1alpha1.HealthProtocol, failureThreshold *int) *DNSPolicy {
+	return p.WithHealthCheck(HealthCheckSpec{
+		Endpoint:                  endpoint,
+		Port:                      port,
+		Protocol:                  &protocol,
+		FailureThreshold:          failureThreshold,
+		AdditionalHeadersRef:      nil,
+		ExpectedResponses:         nil,
+		AllowInsecureCertificates: false,
+		Interval:                  nil,
+	})
+}
+
+//LoadBalancing
+
+func (p *DNSPolicy) WithLoadBalancingWeighted(lbWeighted LoadBalancingWeighted) *DNSPolicy {
+	if p.Spec.LoadBalancing == nil {
+		p.Spec.LoadBalancing = &LoadBalancingSpec{}
+	}
+	p.Spec.LoadBalancing.Weighted = &lbWeighted
+	return p
+}
+
+func (p *DNSPolicy) WithLoadBalancingGeo(lbGeo LoadBalancingGeo) *DNSPolicy {
+	if p.Spec.LoadBalancing == nil {
+		p.Spec.LoadBalancing = &LoadBalancingSpec{}
+	}
+	p.Spec.LoadBalancing.Geo = &lbGeo
+	return p
+}
+
+func (p *DNSPolicy) WithLoadBalancingWeightedFor(defaultWeight Weight, custom []*CustomWeight) *DNSPolicy {
+	return p.WithLoadBalancingWeighted(LoadBalancingWeighted{
+		DefaultWeight: defaultWeight,
+		Custom:        custom,
+	})
+}
+
+func (p *DNSPolicy) WithLoadBalancingGeoFor(defaultGeo string) *DNSPolicy {
+	return p.WithLoadBalancingGeo(LoadBalancingGeo{
+		DefaultGeo: defaultGeo,
+	})
 }

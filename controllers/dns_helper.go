@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+
 	"sort"
 	"strconv"
 	"strings"
@@ -20,9 +21,8 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/kuadrant-dns-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/controllers/common"
-	"github.com/kuadrant/kuadrant-operator/controllers/slice"
-	kuadrantcommon "github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
 const (
@@ -69,13 +69,13 @@ func findMatchingManagedZone(originalHost, host string, zones []kuadrantdnsv1alp
 		return findMatchingManagedZone(originalHost, parentDomain, zones)
 	}
 
-	zone, ok := slice.Find(zones, func(zone kuadrantdnsv1alpha1.ManagedZone) bool {
+	zone, ok := common.Find(zones, func(zone kuadrantdnsv1alpha1.ManagedZone) bool {
 		return strings.ToLower(zone.Spec.DomainName) == host
 	})
 
 	if ok {
 		subdomain := strings.Replace(strings.ToLower(originalHost), "."+strings.ToLower(zone.Spec.DomainName), "", 1)
-		return &zone, subdomain, nil
+		return zone, subdomain, nil
 	}
 	return findMatchingManagedZone(originalHost, parentDomain, zones)
 
@@ -94,8 +94,8 @@ func commonDNSRecordLabels(gwKey, apKey client.ObjectKey) map[string]string {
 
 func policyDNSRecordLabels(apKey client.ObjectKey) map[string]string {
 	return map[string]string{
-		DNSPolicyBackRefAnnotation:                              apKey.Name,
-		fmt.Sprintf("%s-namespace", DNSPolicyBackRefAnnotation): apKey.Namespace,
+		common.DNSPolicyBackRefAnnotation:                              apKey.Name,
+		fmt.Sprintf("%s-namespace", common.DNSPolicyBackRefAnnotation): apKey.Namespace,
 	}
 }
 
@@ -137,7 +137,7 @@ func (dh *dnsHelper) getDNSRecordForListener(ctx context.Context, listener gatew
 	return dnsRecord, nil
 }
 
-func withGatewayListener[T metav1.Object](gateway kuadrantcommon.GatewayWrapper, listener gatewayapiv1.Listener, obj T) T {
+func withGatewayListener[T metav1.Object](gateway common.GatewayWrapper, listener gatewayapiv1.Listener, obj T) T {
 	if obj.GetAnnotations() == nil {
 		obj.SetAnnotations(map[string]string{})
 	}
@@ -148,7 +148,7 @@ func withGatewayListener[T metav1.Object](gateway kuadrantcommon.GatewayWrapper,
 	return obj
 }
 
-func (dh *dnsHelper) setEndpoints(ctx context.Context, mcgTarget *common.MultiClusterGatewayTarget, dnsRecord *kuadrantdnsv1alpha1.DNSRecord, listener gatewayapiv1.Listener, strategy v1alpha1.RoutingStrategy) error {
+func (dh *dnsHelper) setEndpoints(ctx context.Context, mcgTarget *multicluster.MultiClusterGatewayTarget, dnsRecord *kuadrantdnsv1alpha1.DNSRecord, listener gatewayapiv1.Listener, strategy v1alpha1.RoutingStrategy) error {
 	old := dnsRecord.DeepCopy()
 	gwListenerHost := string(*listener.Hostname)
 	var endpoints []*kuadrantdnsv1alpha1.Endpoint
@@ -183,7 +183,7 @@ func (dh *dnsHelper) setEndpoints(ctx context.Context, mcgTarget *common.MultiCl
 
 // getSimpleEndpoints returns the endpoints for the given MultiClusterGatewayTarget using the simple routing strategy
 
-func (dh *dnsHelper) getSimpleEndpoints(mcgTarget *common.MultiClusterGatewayTarget, hostname string, currentEndpoints map[string]*kuadrantdnsv1alpha1.Endpoint) []*kuadrantdnsv1alpha1.Endpoint {
+func (dh *dnsHelper) getSimpleEndpoints(mcgTarget *multicluster.MultiClusterGatewayTarget, hostname string, currentEndpoints map[string]*kuadrantdnsv1alpha1.Endpoint) []*kuadrantdnsv1alpha1.Endpoint {
 
 	var (
 		endpoints  []*kuadrantdnsv1alpha1.Endpoint
@@ -254,7 +254,7 @@ func (dh *dnsHelper) getSimpleEndpoints(mcgTarget *common.MultiClusterGatewayTar
 // ab2.lb-a1b2.shop.example.com A 192.22.2.3
 // ab3.lb-a1b2.shop.example.com A 192.22.2.4
 
-func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *common.MultiClusterGatewayTarget, hostname string, currentEndpoints map[string]*kuadrantdnsv1alpha1.Endpoint) []*kuadrantdnsv1alpha1.Endpoint {
+func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.MultiClusterGatewayTarget, hostname string, currentEndpoints map[string]*kuadrantdnsv1alpha1.Endpoint) []*kuadrantdnsv1alpha1.Endpoint {
 
 	cnameHost := hostname
 	if isWildCardHost(hostname) {
@@ -437,7 +437,7 @@ func (dh *dnsHelper) getDNSHealthCheckProbes(ctx context.Context, gateway *gatew
 		return nil, err
 	}
 
-	return slice.MapErr(list.Items, func(obj kuadrantdnsv1alpha1.DNSHealthCheckProbe) (*kuadrantdnsv1alpha1.DNSHealthCheckProbe, error) {
+	return common.MapErr(list.Items, func(obj kuadrantdnsv1alpha1.DNSHealthCheckProbe) (*kuadrantdnsv1alpha1.DNSHealthCheckProbe, error) {
 		return &obj, nil
 	})
 }

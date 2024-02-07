@@ -26,7 +26,11 @@ func (m *GatewayEventMapper) MapToAuthPolicy(_ context.Context, obj client.Objec
 }
 
 func (m *GatewayEventMapper) MapToTLSPolicy(_ context.Context, obj client.Object) []reconcile.Request {
-	return m.mapToPolicyRequest(obj, "authpolicy", &common.KuadrantTLSPolicyRefsConfig{})
+	return m.mapToPolicyRequest(obj, "tlspolicy", &common.KuadrantTLSPolicyRefsConfig{})
+}
+
+func (m *GatewayEventMapper) MapToDNSPolicy(_ context.Context, obj client.Object) []reconcile.Request {
+	return m.mapToPolicyRequest(obj, "dnspolicy", &common.KuadrantDNSPolicyRefsConfig{})
 }
 
 func (m *GatewayEventMapper) mapToPolicyRequest(obj client.Object, policyKind string, policyRefsConfig common.PolicyRefsConfig) []reconcile.Request {

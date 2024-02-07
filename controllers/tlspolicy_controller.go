@@ -173,7 +173,7 @@ func (r *TLSPolicyReconciler) reconcileResources(ctx context.Context, tlsPolicy 
 
 	// set annotation of policies affecting the gateway
 	if err = r.ReconcileGatewayPolicyReferences(ctx, tlsPolicy, gatewayDiffObj); err != nil {
-		gatewayCondition = BuildPolicyAffectedCondition(TLSPolicyAffected, tlsPolicy, targetNetworkObject, gatewayapiv1alpha2.PolicyConditionReason("Unknown"), err)
+		gatewayCondition = BuildPolicyAffectedCondition(TLSPolicyAffected, tlsPolicy, targetNetworkObject, gatewayapiv1alpha2.PolicyConditionReason(PolicyReasonUnknown), err)
 		updateErr := r.updateGatewayCondition(ctx, gatewayCondition, gatewayDiffObj)
 		return errors.Join(fmt.Errorf("ReconcileGatewayPolicyReferences error %w", err), updateErr)
 	}

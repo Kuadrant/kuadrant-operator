@@ -10,38 +10,38 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
-	v1 "open-cluster-management.io/api/cluster/v1"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrantdnsv1alpha1 "github.com/kuadrant/kuadrant-dns-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	testutil "github.com/kuadrant/kuadrant-operator/test/util"
+	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
 var _ = Describe("DNSPolicy Health Checks", func() {
 
 	var gatewayClass *gatewayapiv1.GatewayClass
-	var managedZone *v1alpha1.ManagedZone
+	var managedZone *kuadrantdnsv1alpha1.ManagedZone
 	var testNamespace string
-	var dnsPolicyBuilder *testutil.DNSPolicyBuilder
 	var gateway *gatewayapiv1.Gateway
 	var dnsPolicy *v1alpha1.DNSPolicy
 	var lbHash, recordName, wildcardRecordName string
+	var ctx context.Context
 
 	BeforeEach(func() {
+		ctx = context.Background()
 		CreateNamespace(&testNamespace)
 
-		gatewayClass = testutil.NewTestGatewayClass("foo", "default", "kuadrant.io/bar")
+		gatewayClass = testBuildGatewayClass("foo", "default", "kuadrant.io/bar")
 		Expect(k8sClient.Create(ctx, gatewayClass)).To(Succeed())
 
-		managedZone = testutil.NewManagedZoneBuilder("mz-example-com", testNamespace, "example.com").ManagedZone
+		managedZone = testBuildManagedZone("mz-example-com", testNamespace, "example.com")
 		Expect(k8sClient.Create(ctx, managedZone)).To(Succeed())
 
-		gateway = testutil.NewGatewayBuilder(TestGatewayName, gatewayClass.Name, testNamespace).
+		gateway = NewGatewayBuilder(TestGatewayName, gatewayClass.Name, testNamespace).
 			WithHTTPListener(TestListenerNameOne, TestHostOne).
 			WithHTTPListener(TestListenerNameWildcard, TestHostWildcard).
 			Gateway
@@ -49,27 +49,13 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 
 		//Set multi cluster gateway status
 		Eventually(func() error {
-			if err := k8sClient.Create(ctx, &v1.ManagedCluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: TestClusterNameOne,
-				},
-			}); err != nil && !k8serrors.IsAlreadyExists(err) {
-				return err
-			}
-			if err := k8sClient.Create(ctx, &v1.ManagedCluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: TestClusterNameTwo,
-				},
-			}); err != nil && !k8serrors.IsAlreadyExists(err) {
-				return err
-			}
 			gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 				{
-					Type:  testutil.Pointer(common.MultiClusterIPAddressType),
+					Type:  Pointer(multicluster.MultiClusterIPAddressType),
 					Value: TestClusterNameOne + "/" + TestIPAddressOne,
 				},
 				{
-					Type:  testutil.Pointer(common.MultiClusterIPAddressType),
+					Type:  Pointer(multicluster.MultiClusterIPAddressType),
 					Value: TestClusterNameTwo + "/" + TestIPAddressTwo,
 				},
 			}
@@ -102,10 +88,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 			return k8sClient.Status().Update(ctx, gateway)
 		}, TestTimeoutMedium, TestRetryIntervalMedium).ShouldNot(HaveOccurred())
 
-		dnsPolicyBuilder = testutil.NewDNSPolicyBuilder("test-dns-policy", testNamespace)
-		dnsPolicyBuilder.WithTargetGateway(TestGatewayName)
-
-		lbHash = common.ToBase36hash(fmt.Sprintf("%s-%s", gateway.Name, gateway.Namespace))
+		lbHash = multicluster.ToBase36hash(fmt.Sprintf("%s-%s", gateway.Name, gateway.Namespace))
 		recordName = fmt.Sprintf("%s-%s", TestGatewayName, TestListenerNameOne)
 		wildcardRecordName = fmt.Sprintf("%s-%s", TestGatewayName, TestListenerNameWildcard)
 	})
@@ -128,24 +111,22 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 			err := k8sClient.Delete(ctx, gatewayClass)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		}
+		DeleteNamespaceCallback(&testNamespace)()
 	})
 
 	Context("multi cluster gateway status", func() {
 
 		Context("loadbalanced routing strategy", func() {
 
-			BeforeEach(func() {
-				dnsPolicyBuilder.WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy)
-			})
-
 			Context("with health checks", func() {
 				var unhealthy bool
 
 				BeforeEach(func() {
-					dnsPolicyBuilder.
+					dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+						WithTargetGateway(TestGatewayName).
+						WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
 						WithLoadBalancingWeightedFor(120, nil).
-						WithHealthCheckFor("/", nil, v1alpha1.HttpProtocol, testutil.Pointer(4))
-					dnsPolicy = dnsPolicyBuilder.DNSPolicy
+						WithHealthCheckFor("/", nil, kuadrantdnsv1alpha1.HttpProtocol, Pointer(4))
 					Expect(k8sClient.Create(ctx, dnsPolicy)).To(BeNil())
 					Eventually(func() error { //dns policy exists
 						return k8sClient.Get(ctx, client.ObjectKey{Name: dnsPolicy.Name, Namespace: dnsPolicy.Namespace}, dnsPolicy)
@@ -154,7 +135,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 
 				It("should create dns records", func() {
 					Eventually(func(g Gomega, ctx context.Context) {
-						recordList := &v1alpha1.DNSRecordList{}
+						recordList := &kuadrantdnsv1alpha1.DNSRecordList{}
 						err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
 						g.Expect(err).NotTo(HaveOccurred())
 						g.Expect(recordList.Items).To(HaveLen(2))
@@ -179,7 +160,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 				})
 
 				It("should have probes that are healthy", func() {
-					probeList := &v1alpha1.DNSHealthCheckProbeList{}
+					probeList := &kuadrantdnsv1alpha1.DNSHealthCheckProbeList{}
 					Eventually(func() error {
 						Expect(k8sClient.List(ctx, probeList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
 						if len(probeList.Items) != 2 {
@@ -193,7 +174,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 				Context("all unhealthy probes", func() {
 					It("should publish all dns records endpoints", func() {
 
-						expectedEndpoints := []*v1alpha1.Endpoint{
+						expectedEndpoints := []*kuadrantdnsv1alpha1.Endpoint{
 							{
 								DNSName: "2w705o.lb-" + lbHash + ".test.example.com",
 								Targets: []string{
@@ -220,7 +201,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 								RecordType:    "CNAME",
 								SetIdentifier: "2w705o.lb-" + lbHash + ".test.example.com",
 								RecordTTL:     60,
-								ProviderSpecific: v1alpha1.ProviderSpecific{
+								ProviderSpecific: kuadrantdnsv1alpha1.ProviderSpecific{
 									{
 										Name:  "weight",
 										Value: "120",
@@ -236,7 +217,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 								SetIdentifier: "s07c46.lb-" + lbHash + ".test.example.com",
 								RecordTTL:     60,
 								Labels:        nil,
-								ProviderSpecific: v1alpha1.ProviderSpecific{
+								ProviderSpecific: kuadrantdnsv1alpha1.ProviderSpecific{
 									{
 										Name:  "weight",
 										Value: "120",
@@ -251,7 +232,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 								RecordType:    "CNAME",
 								SetIdentifier: "default",
 								RecordTTL:     300,
-								ProviderSpecific: v1alpha1.ProviderSpecific{
+								ProviderSpecific: kuadrantdnsv1alpha1.ProviderSpecific{
 									{
 										Name:  "geo-code",
 										Value: "*",
@@ -269,7 +250,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 							},
 						}
 
-						probeList := &v1alpha1.DNSHealthCheckProbeList{}
+						probeList := &kuadrantdnsv1alpha1.DNSHealthCheckProbeList{}
 						Eventually(func() error {
 							Expect(k8sClient.List(ctx, probeList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
 							if len(probeList.Items) != 2 {
@@ -282,13 +263,13 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 							Eventually(func() error {
 								if probe.Name == fmt.Sprintf("%s-%s-%s", TestIPAddressTwo, TestGatewayName, TestHostOne) ||
 									probe.Name == fmt.Sprintf("%s-%s-%s", TestIPAddressOne, TestGatewayName, TestHostOne) {
-									getProbe := &v1alpha1.DNSHealthCheckProbe{}
+									getProbe := &kuadrantdnsv1alpha1.DNSHealthCheckProbe{}
 									if err := k8sClient.Get(ctx, client.ObjectKey{Name: probe.Name, Namespace: probe.Namespace}, getProbe); err != nil {
 										return err
 									}
 									patch := client.MergeFrom(getProbe.DeepCopy())
 									unhealthy = false
-									getProbe.Status = v1alpha1.DNSHealthCheckProbeStatus{
+									getProbe.Status = kuadrantdnsv1alpha1.DNSHealthCheckProbeStatus{
 										LastCheckedAt:       metav1.NewTime(time.Now()),
 										ConsecutiveFailures: *getProbe.Spec.FailureThreshold + 1,
 										Healthy:             &unhealthy,
@@ -300,7 +281,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 								return nil
 							}, TestTimeoutMedium, TestRetryIntervalMedium).Should(BeNil())
 						}
-						createdDNSRecord := &v1alpha1.DNSRecord{}
+						createdDNSRecord := &kuadrantdnsv1alpha1.DNSRecord{}
 						Eventually(func() error {
 
 							err := k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, createdDNSRecord)
@@ -319,7 +300,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 				Context("some unhealthy probes", func() {
 					It("should publish expected endpoints", func() {
 
-						expectedEndpoints := []*v1alpha1.Endpoint{
+						expectedEndpoints := []*kuadrantdnsv1alpha1.Endpoint{
 							{
 								DNSName: "2w705o.lb-" + lbHash + ".test.example.com",
 								Targets: []string{
@@ -346,7 +327,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 								RecordType:    "CNAME",
 								SetIdentifier: "2w705o.lb-" + lbHash + ".test.example.com",
 								RecordTTL:     60,
-								ProviderSpecific: v1alpha1.ProviderSpecific{
+								ProviderSpecific: kuadrantdnsv1alpha1.ProviderSpecific{
 									{
 										Name:  "weight",
 										Value: "120",
@@ -362,7 +343,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 								SetIdentifier: "s07c46.lb-" + lbHash + ".test.example.com",
 								RecordTTL:     60,
 								Labels:        nil,
-								ProviderSpecific: v1alpha1.ProviderSpecific{
+								ProviderSpecific: kuadrantdnsv1alpha1.ProviderSpecific{
 									{
 										Name:  "weight",
 										Value: "120",
@@ -377,7 +358,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 								RecordType:    "CNAME",
 								SetIdentifier: "default",
 								RecordTTL:     300,
-								ProviderSpecific: v1alpha1.ProviderSpecific{
+								ProviderSpecific: kuadrantdnsv1alpha1.ProviderSpecific{
 									{
 										Name:  "geo-code",
 										Value: "*",
@@ -395,7 +376,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 							},
 						}
 
-						probeList := &v1alpha1.DNSHealthCheckProbeList{}
+						probeList := &kuadrantdnsv1alpha1.DNSHealthCheckProbeList{}
 						Eventually(func() error {
 							Expect(k8sClient.List(ctx, probeList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
 							if len(probeList.Items) != 2 {
@@ -406,13 +387,13 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 						Expect(probeList.Items).To(HaveLen(2))
 
 						Eventually(func() error {
-							getProbe := &v1alpha1.DNSHealthCheckProbe{}
+							getProbe := &kuadrantdnsv1alpha1.DNSHealthCheckProbe{}
 							if err := k8sClient.Get(ctx, client.ObjectKey{Name: fmt.Sprintf("%s-%s-%s", TestIPAddressOne, TestGatewayName, TestListenerNameOne), Namespace: testNamespace}, getProbe); err != nil {
 								return err
 							}
 							patch := client.MergeFrom(getProbe.DeepCopy())
 							unhealthy = false
-							getProbe.Status = v1alpha1.DNSHealthCheckProbeStatus{
+							getProbe.Status = kuadrantdnsv1alpha1.DNSHealthCheckProbeStatus{
 								LastCheckedAt:       metav1.NewTime(time.Now()),
 								ConsecutiveFailures: *getProbe.Spec.FailureThreshold + 1,
 								Healthy:             &unhealthy,
@@ -424,7 +405,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 						}, TestTimeoutLong, TestRetryIntervalMedium).Should(BeNil())
 
 						// after that verify that in time the endpoints are 5 in the dnsrecord
-						createdDNSRecord := &v1alpha1.DNSRecord{}
+						createdDNSRecord := &kuadrantdnsv1alpha1.DNSRecord{}
 						Eventually(func() error {
 							err := k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, createdDNSRecord)
 							if err != nil && k8serrors.IsNotFound(err) {
@@ -439,7 +420,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 				Context("some unhealthy endpoints for other listener", func() {
 					It("should publish expected endpoints", func() {
 
-						expectedEndpoints := []*v1alpha1.Endpoint{
+						expectedEndpoints := []*kuadrantdnsv1alpha1.Endpoint{
 							{
 								DNSName: "2w705o.lb-" + lbHash + ".test.example.com",
 								Targets: []string{
@@ -466,7 +447,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 								RecordType:    "CNAME",
 								SetIdentifier: "2w705o.lb-" + lbHash + ".test.example.com",
 								RecordTTL:     60,
-								ProviderSpecific: v1alpha1.ProviderSpecific{
+								ProviderSpecific: kuadrantdnsv1alpha1.ProviderSpecific{
 									{
 										Name:  "weight",
 										Value: "120",
@@ -482,7 +463,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 								SetIdentifier: "s07c46.lb-" + lbHash + ".test.example.com",
 								RecordTTL:     60,
 								Labels:        nil,
-								ProviderSpecific: v1alpha1.ProviderSpecific{
+								ProviderSpecific: kuadrantdnsv1alpha1.ProviderSpecific{
 									{
 										Name:  "weight",
 										Value: "120",
@@ -497,7 +478,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 								RecordType:    "CNAME",
 								SetIdentifier: "default",
 								RecordTTL:     300,
-								ProviderSpecific: v1alpha1.ProviderSpecific{
+								ProviderSpecific: kuadrantdnsv1alpha1.ProviderSpecific{
 									{
 										Name:  "geo-code",
 										Value: "*",
@@ -531,7 +512,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 						gateway.Spec.Listeners = append(gateway.Spec.Listeners, otherListener)
 						Expect(k8sClient.Patch(ctx, gateway, patch)).To(BeNil())
 
-						probeList := &v1alpha1.DNSHealthCheckProbeList{}
+						probeList := &kuadrantdnsv1alpha1.DNSHealthCheckProbeList{}
 						Eventually(func() error {
 							Expect(k8sClient.List(ctx, probeList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
 							if len(probeList.Items) != 4 {
@@ -543,13 +524,13 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 
 						//
 						Eventually(func() error {
-							getProbe := &v1alpha1.DNSHealthCheckProbe{}
+							getProbe := &kuadrantdnsv1alpha1.DNSHealthCheckProbe{}
 							if err = k8sClient.Get(ctx, client.ObjectKey{Name: fmt.Sprintf("%s-%s-%s", TestIPAddressOne, TestGatewayName, TestListenerNameTwo), Namespace: testNamespace}, getProbe); err != nil {
 								return err
 							}
 							patch := client.MergeFrom(getProbe.DeepCopy())
 							unhealthy = false
-							getProbe.Status = v1alpha1.DNSHealthCheckProbeStatus{
+							getProbe.Status = kuadrantdnsv1alpha1.DNSHealthCheckProbeStatus{
 								LastCheckedAt:       metav1.NewTime(time.Now()),
 								ConsecutiveFailures: *getProbe.Spec.FailureThreshold + 1,
 								Healthy:             &unhealthy,
@@ -561,7 +542,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 						}, TestTimeoutLong, TestRetryIntervalMedium).Should(BeNil())
 
 						// after that verify that in time the endpoints are 5 in the dnsrecord
-						createdDNSRecord := &v1alpha1.DNSRecord{}
+						createdDNSRecord := &kuadrantdnsv1alpha1.DNSRecord{}
 						Eventually(func() error {
 							err := k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, createdDNSRecord)
 							if err != nil && k8serrors.IsNotFound(err) {

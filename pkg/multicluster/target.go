@@ -1,4 +1,4 @@
-package common
+package multicluster
 
 import (
 	"crypto/sha256"

@@ -3,6 +3,7 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -10,39 +11,38 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
-	v1 "open-cluster-management.io/api/cluster/v1"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/_internal/conditions"
-	"github.com/kuadrant/kuadrant-operator/pkg/apis/v1alpha1"
+	kuadrantdnsv1alpha1 "github.com/kuadrant/kuadrant-dns-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	testutil "github.com/kuadrant/kuadrant-operator/test/util"
+	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
-var _ = Describe("DNSPolicy", func() {
+var _ = Describe("DNSPolicy controller", func() {
 
 	var gatewayClass *gatewayapiv1.GatewayClass
-	var managedZone *v1alpha1.ManagedZone
+	var managedZone *kuadrantdnsv1alpha1.ManagedZone
 	var testNamespace string
-	var dnsPolicyBuilder *testutil.DNSPolicyBuilder
 	var gateway *gatewayapiv1.Gateway
 	var dnsPolicy *v1alpha1.DNSPolicy
 	var recordName, wildcardRecordName string
+	var ctx context.Context
 
 	BeforeEach(func() {
+		ctx = context.Background()
 		CreateNamespace(&testNamespace)
 
-		gatewayClass = testutil.NewTestGatewayClass("foo", "default", "kuadrant.io/bar")
+		gatewayClass = testBuildGatewayClass("foo", "default", "kuadrant.io/bar")
 		Expect(k8sClient.Create(ctx, gatewayClass)).To(Succeed())
 
-		managedZone = testutil.NewManagedZoneBuilder("mz-example-com", testNamespace, "example.com").ManagedZone
+		managedZone = testBuildManagedZone("mz-example-com", testNamespace, "example.com")
 		Expect(k8sClient.Create(ctx, managedZone)).To(Succeed())
-
-		dnsPolicyBuilder = testutil.NewDNSPolicyBuilder("test-dns-policy", testNamespace)
 	})
 
 	AfterEach(func() {
@@ -53,7 +53,6 @@ var _ = Describe("DNSPolicy", func() {
 		if dnsPolicy != nil {
 			err := k8sClient.Delete(ctx, dnsPolicy)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
-
 		}
 		if managedZone != nil {
 			err := k8sClient.Delete(ctx, managedZone)
@@ -63,36 +62,37 @@ var _ = Describe("DNSPolicy", func() {
 			err := k8sClient.Delete(ctx, gatewayClass)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		}
+		DeleteNamespaceCallback(&testNamespace)()
 	})
 
 	Context("invalid target", func() {
 
 		BeforeEach(func() {
-			dnsPolicy = dnsPolicyBuilder.
+			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithTargetGateway("test-gateway").
-				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy).
-				DNSPolicy
+				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 		})
 
-		It("should have ready condition with status false and correct reason", func() {
+		It("should have accepted condition with status false and correct reason", func() {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":   Equal(string(conditions.ConditionTypeReady)),
-						"Status": Equal(metav1.ConditionFalse),
-						"Reason": Equal(string(conditions.PolicyReasonTargetNotFound)),
+						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Status":  Equal(metav1.ConditionFalse),
+						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)),
+						"Message": Equal("DNSPolicy target test-gateway was not found"),
 					})),
 				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
 
-		It("should have ready condition with status true", func() {
+		It("should have accepted condition with status true", func() {
 			By("creating a valid Gateway")
 
-			gateway = testutil.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+			gateway = NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 				WithHTTPListener("test-listener", "test.example.com").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 
@@ -101,9 +101,10 @@ var _ = Describe("DNSPolicy", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":   Equal(string(conditions.ConditionTypeReady)),
-						"Status": Equal(metav1.ConditionTrue),
-						"Reason": Equal("GatewayDNSEnabled"),
+						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Status":  Equal(metav1.ConditionTrue),
+						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Message": Equal("DNSPolicy has been accepted"),
 					})),
 				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
@@ -112,22 +113,22 @@ var _ = Describe("DNSPolicy", func() {
 		It("should not have any health check records created", func() {
 			// create a health check with the labels for the dnspolicy and the gateway name and namespace that would be expected in a valid target scenario
 			// this one should get deleted if the gateway is invalid policy ref
-			probe := &v1alpha1.DNSHealthCheckProbe{
+			probe := &kuadrantdnsv1alpha1.DNSHealthCheckProbe{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("%s-%s-%s", TestIPAddressTwo, TestGatewayName, TestHostOne),
 					Namespace: testNamespace,
 					Labels: map[string]string{
-						DNSPolicyBackRefAnnotation:                              "test-dns-policy",
-						fmt.Sprintf("%s-namespace", DNSPolicyBackRefAnnotation): testNamespace,
-						LabelGatewayNSRef:                                       testNamespace,
-						LabelGatewayReference:                                   "test-gateway",
+						common.DNSPolicyBackRefAnnotation:                              "test-dns-policy",
+						fmt.Sprintf("%s-namespace", common.DNSPolicyBackRefAnnotation): testNamespace,
+						LabelGatewayNSRef:     testNamespace,
+						LabelGatewayReference: "test-gateway",
 					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, probe)).To(Succeed())
 
 			Eventually(func(g Gomega) { // probe should be removed
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: probe.Name, Namespace: probe.Namespace}, &v1alpha1.DNSHealthCheckProbe{})
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: probe.Name, Namespace: probe.Namespace}, &kuadrantdnsv1alpha1.DNSHealthCheckProbe{})
 				g.Expect(err).To(HaveOccurred())
 				g.Expect(err).To(MatchError(ContainSubstring("not found")))
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
@@ -135,7 +136,7 @@ var _ = Describe("DNSPolicy", func() {
 
 		It("should not process gateway with inconsistent addresses", func() {
 			// build invalid gateway
-			gateway = testutil.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+			gateway = NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 				WithHTTPListener(TestListenerNameOne, TestHostOne).Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 
@@ -145,11 +146,11 @@ var _ = Describe("DNSPolicy", func() {
 				g.Expect(err).ToNot(HaveOccurred())
 				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
-						Type:  testutil.Pointer(gatewayapiv1.HostnameAddressType),
-						Value: TestClusterNameOne + "/" + TestIPAddressOne,
+						Type:  Pointer(gatewayapiv1.HostnameAddressType),
+						Value: TestIPAddressOne,
 					},
 					{
-						Type:  testutil.Pointer(common.MultiClusterIPAddressType),
+						Type:  Pointer(multicluster.MultiClusterIPAddressType),
 						Value: TestIPAddressTwo,
 					},
 				}
@@ -172,8 +173,8 @@ var _ = Describe("DNSPolicy", func() {
 			}, TestTimeoutMedium, TestRetryIntervalMedium).Should(Succeed())
 
 			// expect no dns records
-			Consistently(func() []v1alpha1.DNSRecord {
-				dnsRecords := v1alpha1.DNSRecordList{}
+			Consistently(func() []kuadrantdnsv1alpha1.DNSRecord {
+				dnsRecords := kuadrantdnsv1alpha1.DNSRecordList{}
 				err := k8sClient.List(ctx, &dnsRecords, client.InNamespace(dnsPolicy.GetNamespace()))
 				Expect(err).ToNot(HaveOccurred())
 				return dnsRecords.Items
@@ -183,7 +184,7 @@ var _ = Describe("DNSPolicy", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(conditions.ConditionTypeReady)),
+						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionFalse),
 						"Reason":  Equal("ReconciliationError"),
 						"Message": ContainSubstring("gateway is invalid: inconsistent status addresses"),
@@ -198,36 +199,36 @@ var _ = Describe("DNSPolicy", func() {
 		testGatewayName := "test-no-gateway-status"
 
 		BeforeEach(func() {
-			gateway = testutil.NewGatewayBuilder(testGatewayName, gatewayClass.Name, testNamespace).
+			gateway = NewGatewayBuilder(testGatewayName, gatewayClass.Name, testNamespace).
 				WithHTTPListener(TestListenerNameOne, TestHostOne).
 				Gateway
-			dnsPolicy = dnsPolicyBuilder.
+			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithTargetGateway(testGatewayName).
-				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy).
-				DNSPolicy
+				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
 
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 		})
 
 		It("should not create a dns record", func() {
-			Consistently(func() []v1alpha1.DNSRecord { // DNS record exists
-				dnsRecords := v1alpha1.DNSRecordList{}
+			Consistently(func() []kuadrantdnsv1alpha1.DNSRecord { // DNS record exists
+				dnsRecords := kuadrantdnsv1alpha1.DNSRecordList{}
 				err := k8sClient.List(ctx, &dnsRecords, client.InNamespace(dnsPolicy.GetNamespace()))
 				Expect(err).ToNot(HaveOccurred())
 				return dnsRecords.Items
 			}, time.Second*15, time.Second).Should(BeEmpty())
 		})
 
-		It("should have ready status", func() {
+		It("should have accepted status", func() {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":   Equal(string(conditions.ConditionTypeReady)),
-						"Status": Equal(metav1.ConditionTrue),
-						"Reason": Equal("GatewayDNSEnabled"),
+						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Status":  Equal(metav1.ConditionTrue),
+						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Message": Equal("DNSPolicy has been accepted"),
 					})),
 				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
@@ -242,8 +243,8 @@ var _ = Describe("DNSPolicy", func() {
 				gw := &gatewayapiv1.Gateway{}
 				err := k8sClient.Get(ctx, client.ObjectKey{Name: gateway.Name, Namespace: testNamespace}, gw)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gw.Annotations).To(HaveKeyWithValue(DNSPolicyBackRefAnnotation, policyBackRefValue))
-				g.Expect(gw.Annotations).To(HaveKeyWithValue(DNSPoliciesBackRefAnnotation, policiesBackRefValue))
+				g.Expect(gw.Annotations).To(HaveKeyWithValue(common.DNSPolicyBackRefAnnotation, policyBackRefValue))
+				g.Expect(gw.Annotations).To(HaveKeyWithValue(common.DNSPoliciesBackRefAnnotation, policiesBackRefValue))
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
 	})
@@ -251,43 +252,28 @@ var _ = Describe("DNSPolicy", func() {
 	Context("valid target and valid gateway status", func() {
 
 		BeforeEach(func() {
-			gateway = testutil.NewGatewayBuilder(TestGatewayName, gatewayClass.Name, testNamespace).
+			gateway = NewGatewayBuilder(TestGatewayName, gatewayClass.Name, testNamespace).
 				WithHTTPListener(TestListenerNameOne, TestHostOne).
 				WithHTTPListener(TestListenerNameWildcard, TestHostWildcard).
 				Gateway
-			dnsPolicy = dnsPolicyBuilder.WithTargetGateway(TestGatewayName).
-				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy).
-				DNSPolicy
+			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+				WithTargetGateway(TestGatewayName).
+				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
 
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 
 			Eventually(func() error {
-				if err := k8sClient.Create(ctx, &v1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: TestClusterNameOne,
-					},
-				}); err != nil && !k8serrors.IsAlreadyExists(err) {
-					return err
-				}
-				if err := k8sClient.Create(ctx, &v1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: TestClusterNameTwo,
-					},
-				}); err != nil && !k8serrors.IsAlreadyExists(err) {
-					return err
-				}
-
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
-						Type:  testutil.Pointer(common.MultiClusterIPAddressType),
+						Type:  Pointer(multicluster.MultiClusterIPAddressType),
 						Value: TestClusterNameOne + "/" + TestIPAddressOne,
 					},
 					{
-						Type:  testutil.Pointer(common.MultiClusterIPAddressType),
+						Type:  Pointer(multicluster.MultiClusterIPAddressType),
 						Value: TestClusterNameTwo + "/" + TestIPAddressTwo,
 					},
 				}
@@ -331,18 +317,19 @@ var _ = Describe("DNSPolicy", func() {
 				g.Expect(dnsPolicy.Finalizers).To(ContainElement(DNSPolicyFinalizer))
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":   Equal(string(conditions.ConditionTypeReady)),
-						"Status": Equal(metav1.ConditionTrue),
-						"Reason": Equal("GatewayDNSEnabled"),
+						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Status":  Equal(metav1.ConditionTrue),
+						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Message": Equal("DNSPolicy has been accepted"),
 					})),
 				)
 				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(gateway.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":               Equal(string(DNSPolicyAffected)),
+						"Type":               Equal(DNSPolicyAffected),
 						"Status":             Equal(metav1.ConditionTrue),
-						"Reason":             Equal(string(conditions.PolicyReasonAccepted)),
+						"Reason":             Equal(string(gatewayapiv1alpha2.PolicyReasonAccepted)),
 						"ObservedGeneration": Equal(gateway.Generation),
 					})),
 				)
@@ -357,8 +344,8 @@ var _ = Describe("DNSPolicy", func() {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(DNSPolicyBackRefAnnotation, policyBackRefValue))
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(DNSPoliciesBackRefAnnotation, policiesBackRefValue))
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(common.DNSPolicyBackRefAnnotation, policyBackRefValue))
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(common.DNSPoliciesBackRefAnnotation, policiesBackRefValue))
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
 
@@ -379,7 +366,7 @@ var _ = Describe("DNSPolicy", func() {
 
 				patch := client.MergeFrom(existingGateway.DeepCopy())
 				existingGateway.Spec.Listeners = newListeners
-				rec := &v1alpha1.DNSRecord{}
+				rec := &kuadrantdnsv1alpha1.DNSRecord{}
 				if err := k8sClient.Patch(ctx, existingGateway, patch); err != nil {
 					return err
 				}
@@ -399,13 +386,13 @@ var _ = Describe("DNSPolicy", func() {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(DNSPolicyBackRefAnnotation, policyBackRefValue))
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(DNSPoliciesBackRefAnnotation, policiesBackRefValue))
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(common.DNSPolicyBackRefAnnotation, policyBackRefValue))
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(common.DNSPoliciesBackRefAnnotation, policiesBackRefValue))
 				g.Expect(gateway.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":               Equal(string(DNSPolicyAffected)),
+						"Type":               Equal(DNSPolicyAffected),
 						"Status":             Equal(metav1.ConditionTrue),
-						"Reason":             Equal(string(conditions.PolicyReasonAccepted)),
+						"Reason":             Equal(string(gatewayapiv1alpha2.PolicyReasonAccepted)),
 						"ObservedGeneration": Equal(gateway.Generation),
 					})),
 				)
@@ -421,8 +408,8 @@ var _ = Describe("DNSPolicy", func() {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).ToNot(HaveKey(DNSPolicyBackRefAnnotation))
-				g.Expect(gateway.Annotations).ToNot(HaveKeyWithValue(DNSPoliciesBackRefAnnotation, policiesBackRefValue))
+				g.Expect(gateway.Annotations).ToNot(HaveKey(common.DNSPolicyBackRefAnnotation))
+				g.Expect(gateway.Annotations).ToNot(HaveKeyWithValue(common.DNSPoliciesBackRefAnnotation, policiesBackRefValue))
 				g.Expect(gateway.Status.Conditions).ToNot(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
 						"Type": Equal(string(DNSPolicyAffected)),
@@ -434,7 +421,7 @@ var _ = Describe("DNSPolicy", func() {
 		It("should remove dns record reference on policy deletion even if gateway is removed", func() {
 
 			Eventually(func() error { // DNS record exists
-				return k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &v1alpha1.DNSRecord{})
+				return k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})
 			}, TestTimeoutMedium, TestRetryIntervalMedium).Should(Succeed())
 
 			err := k8sClient.Delete(ctx, gateway)
@@ -443,9 +430,12 @@ var _ = Describe("DNSPolicy", func() {
 			err = k8sClient.Delete(ctx, dnsPolicy)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 
-			Eventually(func() error { // DNS record removed
-				return k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &v1alpha1.DNSRecord{})
-			}, TestTimeoutMedium, TestRetryIntervalMedium).Should(MatchError(ContainSubstring("not found")))
+			//ToDo We cant assume that a dnsrecord reconciler is running that will remove the record or that it will be removed
+			// It's not the responsibility of this operator to do this, so we should just check if it's gone
+			// (in case we are running on a cluster that actually has a dnsrecord reconciler running), or that it is marked for deletion
+			//Eventually(func() error { // DNS record removed
+			//	return k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})
+			//}, TestTimeoutMedium, TestRetryIntervalMedium).Should(MatchError(ContainSubstring("not found")))
 
 		})
 

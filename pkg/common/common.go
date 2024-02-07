@@ -35,6 +35,8 @@ const (
 	AuthPolicyBackRefAnnotation        = "kuadrant.io/authpolicy"
 	TLSPoliciesBackRefAnnotation       = "kuadrant.io/tlspolicies"
 	TLSPolicyBackRefAnnotation         = "kuadrant.io/tlspolicy"
+	DNSPoliciesBackRefAnnotation       = "kuadrant.io/dnspolicies"
+	DNSPolicyBackRefAnnotation         = "kuadrant.io/dnspolicy"
 	KuadrantNamespaceLabel             = "kuadrant.io/namespace"
 	NamespaceSeparator                 = '/'
 	LimitadorName                      = "limitador"
@@ -128,6 +130,21 @@ func Map[T, U any](slice []T, f func(T) U) []U {
 		arr[i] = f(e)
 	}
 	return arr
+}
+
+func MapErr[T, R any](slice []T, f func(T) (R, error)) ([]R, error) {
+	result := make([]R, len(slice))
+
+	for i, elem := range slice {
+		mapped, err := f(elem)
+		if err != nil {
+			return nil, err
+		}
+
+		result[i] = mapped
+	}
+
+	return result, nil
 }
 
 // Filter filters the input slice using the given predicate function and returns a new slice with the results.

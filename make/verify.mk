@@ -16,3 +16,7 @@ verify-bundle: bundle ## Verify bundle update.
 .PHONY: verify-fmt
 verify-fmt: fmt ## Verify fmt update.
 	git diff --exit-code ./api ./controllers
+
+.PHONY: verify-imports
+verify-imports: ## Verify go imports are sorted and grouped correctly.
+	hack/verify-imports.sh

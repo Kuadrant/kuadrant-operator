@@ -479,7 +479,7 @@ func NewTestClusterIssuer(name string) *certmanv1.ClusterIssuer {
 
 var _ client.Object = &TestResource{}
 
-// TestResource dummy client.Object that can be used in place of a real k8s resource for testing
+// TestResource substitute client.Object that can be used in place of a real k8s resource for testing
 type TestResource struct {
 	metav1.TypeMeta
 	metav1.ObjectMeta

@@ -39,7 +39,6 @@ func (g *GatewayWrapper) IsMultiCluster() bool {
 // Validate ensures correctly configured underlying Gateway object
 // Returns nil if validation passed
 func (g *GatewayWrapper) Validate() error {
-
 	// Status.Addresses validation
 	// Compares all addresses against the first address to ensure the same type
 	for _, address := range g.Status.Addresses {
@@ -55,7 +54,6 @@ func (g *GatewayWrapper) Validate() error {
 // with key being a cluster and value being an address in the cluster.
 // In case of a single-cluster Gateway the key is the Gateway Name.
 func (g *GatewayWrapper) GetClusterGatewayAddresses() map[string][]gatewayapiv1.GatewayStatusAddress {
-
 	if !g.IsMultiCluster() {
 		// Single Cluster (Normal Gateway Status)
 		return map[string][]gatewayapiv1.GatewayStatusAddress{g.GetName(): g.Status.Addresses}
@@ -112,7 +110,6 @@ func (g *GatewayWrapper) GetClusterGatewayLabels(clusterName string) map[string]
 // GetClusterGatewayListeners processes the wrapped Gateway and returns a ListenerStatus for the given clusterName.
 // In case of a single-cluster Gateway the wrapped Gateways status listeners are returned unmodified.
 func (g *GatewayWrapper) GetClusterGatewayListeners(clusterName string) []gatewayapiv1.ListenerStatus {
-
 	if !g.IsMultiCluster() {
 		// Single Cluster (Normal Gateway Status)
 		return g.Status.Listeners
@@ -148,7 +145,6 @@ type ClusterGateway struct {
 // In case of a single-cluster Gateway a single ClusterGateway is returned with the unmodified wrapped Gateway and the
 // Gateway name used as values.
 func (g *GatewayWrapper) GetClusterGateways() []ClusterGateway {
-
 	if !g.IsMultiCluster() {
 		// Single Cluster (Normal Gateway Status)
 		return []ClusterGateway{

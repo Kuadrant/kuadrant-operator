@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	certmanv1 "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
-
 	corev1 "k8s.io/api/core/v1"
 	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -80,8 +79,8 @@ func (r *TLSPolicyReconciler) deleteCertificatesWithLabels(ctx context.Context, 
 		return err
 	}
 
-	for _, c := range certList.Items {
-		if err := r.Client().Delete(ctx, &c); err != nil {
+	for i := range certList.Items {
+		if err := r.Client().Delete(ctx, &certList.Items[i]); err != nil {
 			return err
 		}
 	}
@@ -96,11 +95,11 @@ func (r *TLSPolicyReconciler) deleteUnexpectedCertificates(ctx context.Context, 
 	if err := r.Client().List(ctx, existingCertificates, listOptions); client.IgnoreNotFound(err) != nil {
 		return err
 	}
-	for _, p := range existingCertificates.Items {
+	for i, p := range existingCertificates.Items {
 		if !common.Contains(expectedCertificates, func(expectedCertificate *certmanv1.Certificate) bool {
 			return expectedCertificate.Name == p.Name && expectedCertificate.Namespace == p.Namespace
 		}) {
-			if err := r.Client().Delete(ctx, &p); err != nil {
+			if err := r.Client().Delete(ctx, &existingCertificates.Items[i]); err != nil {
 				return err
 			}
 		}
@@ -134,7 +133,7 @@ func (r *TLSPolicyReconciler) expectedCertificatesForGateway(ctx context.Context
 		}
 	}
 
-	var certs []*certmanv1.Certificate
+	certs := make([]*certmanv1.Certificate, 0, len(tlsHosts))
 	for secretRef, hosts := range tlsHosts {
 		certs = append(certs, r.buildCertManagerCertificate(gateway, tlsPolicy, secretRef, hosts))
 	}

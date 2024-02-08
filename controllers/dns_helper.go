@@ -78,7 +78,6 @@ func findMatchingManagedZone(originalHost, host string, zones []kuadrantdnsv1alp
 		return zone, subdomain, nil
 	}
 	return findMatchingManagedZone(originalHost, parentDomain, zones)
-
 }
 
 func commonDNSRecordLabels(gwKey, apKey client.ObjectKey) map[string]string {
@@ -107,7 +106,6 @@ func gatewayDNSRecordLabels(gwKey client.ObjectKey) map[string]string {
 }
 
 func (dh *dnsHelper) buildDNSRecordForListener(gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener, managedZone *kuadrantdnsv1alpha1.ManagedZone) *kuadrantdnsv1alpha1.DNSRecord {
-
 	dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      dnsRecordName(gateway.Name, string(targetListener.Name)),
@@ -148,7 +146,7 @@ func withGatewayListener[T metav1.Object](gateway common.GatewayWrapper, listene
 	return obj
 }
 
-func (dh *dnsHelper) setEndpoints(ctx context.Context, mcgTarget *multicluster.MultiClusterGatewayTarget, dnsRecord *kuadrantdnsv1alpha1.DNSRecord, listener gatewayapiv1.Listener, strategy v1alpha1.RoutingStrategy) error {
+func (dh *dnsHelper) setEndpoints(ctx context.Context, mcgTarget *multicluster.GatewayTarget, dnsRecord *kuadrantdnsv1alpha1.DNSRecord, listener gatewayapiv1.Listener, strategy v1alpha1.RoutingStrategy) error {
 	old := dnsRecord.DeepCopy()
 	gwListenerHost := string(*listener.Hostname)
 	var endpoints []*kuadrantdnsv1alpha1.Endpoint
@@ -181,10 +179,9 @@ func (dh *dnsHelper) setEndpoints(ctx context.Context, mcgTarget *multicluster.M
 	return nil
 }
 
-// getSimpleEndpoints returns the endpoints for the given MultiClusterGatewayTarget using the simple routing strategy
+// getSimpleEndpoints returns the endpoints for the given GatewayTarget using the simple routing strategy
 
-func (dh *dnsHelper) getSimpleEndpoints(mcgTarget *multicluster.MultiClusterGatewayTarget, hostname string, currentEndpoints map[string]*kuadrantdnsv1alpha1.Endpoint) []*kuadrantdnsv1alpha1.Endpoint {
-
+func (dh *dnsHelper) getSimpleEndpoints(mcgTarget *multicluster.GatewayTarget, hostname string, currentEndpoints map[string]*kuadrantdnsv1alpha1.Endpoint) []*kuadrantdnsv1alpha1.Endpoint {
 	var (
 		endpoints  []*kuadrantdnsv1alpha1.Endpoint
 		ipValues   []string
@@ -215,14 +212,14 @@ func (dh *dnsHelper) getSimpleEndpoints(mcgTarget *multicluster.MultiClusterGate
 	return endpoints
 }
 
-// getLoadBalancedEndpoints returns the endpoints for the given MultiClusterGatewayTarget using the loadbalanced routing strategy
+// getLoadBalancedEndpoints returns the endpoints for the given GatewayTarget using the loadbalanced routing strategy
 //
 // Builds an array of kuadrantdnsv1alpha1.Endpoint resources and sets them on the given DNSRecord. The endpoints expected are calculated
-// from the MultiClusterGatewayTarget using the target Gateway (MultiClusterGatewayTarget.Gateway), the LoadBalancing Spec
-// from the DNSPolicy attached to the target gateway (MultiClusterGatewayTarget.LoadBalancing) and the list of clusters the
-// target gateway is currently placed on (MultiClusterGatewayTarget.ClusterGatewayTargets).
+// from the GatewayTarget using the target Gateway (GatewayTarget.Gateway), the LoadBalancing Spec
+// from the DNSPolicy attached to the target gateway (GatewayTarget.LoadBalancing) and the list of clusters the
+// target gateway is currently placed on (GatewayTarget.ClusterGatewayTargets).
 //
-// MultiClusterGatewayTarget.ClusterGatewayTarget are grouped by Geo, in the case of Geo not being defined in the
+// GatewayTarget.ClusterGatewayTarget are grouped by Geo, in the case of Geo not being defined in the
 // LoadBalancing Spec (Weighted only) an internal only Geo Code of "default" is used and all clusters added to it.
 //
 // A CNAME record is created for the target host (DNSRecord.name), pointing to a generated gateway lb host.
@@ -254,25 +251,21 @@ func (dh *dnsHelper) getSimpleEndpoints(mcgTarget *multicluster.MultiClusterGate
 // ab2.lb-a1b2.shop.example.com A 192.22.2.3
 // ab3.lb-a1b2.shop.example.com A 192.22.2.4
 
-func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.MultiClusterGatewayTarget, hostname string, currentEndpoints map[string]*kuadrantdnsv1alpha1.Endpoint) []*kuadrantdnsv1alpha1.Endpoint {
-
+func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.GatewayTarget, hostname string, currentEndpoints map[string]*kuadrantdnsv1alpha1.Endpoint) []*kuadrantdnsv1alpha1.Endpoint {
 	cnameHost := hostname
 	if isWildCardHost(hostname) {
 		cnameHost = strings.Replace(hostname, "*.", "", -1)
 	}
 
-	var (
-		endpoints       []*kuadrantdnsv1alpha1.Endpoint
-		endpoint        *kuadrantdnsv1alpha1.Endpoint
-		defaultEndpoint *kuadrantdnsv1alpha1.Endpoint
-	)
+	var endpoint *kuadrantdnsv1alpha1.Endpoint
+	var defaultEndpoint *kuadrantdnsv1alpha1.Endpoint
+	endpoints := make([]*kuadrantdnsv1alpha1.Endpoint, 0)
 	lbName := strings.ToLower(fmt.Sprintf("lb-%s.%s", mcgTarget.GetShortCode(), cnameHost))
 
 	for geoCode, cgwTargets := range mcgTarget.GroupTargetsByGeo() {
 		geoLbName := strings.ToLower(fmt.Sprintf("%s.%s", geoCode, lbName))
 		var clusterEndpoints []*kuadrantdnsv1alpha1.Endpoint
 		for _, cgwTarget := range cgwTargets {
-
 			var ipValues []string
 			var hostValues []string
 			for _, gwa := range cgwTarget.Status.Addresses {
@@ -359,7 +352,7 @@ func (dh *dnsHelper) removeDNSForDeletedListeners(ctx context.Context, upstreamG
 		return err
 	}
 
-	for _, dnsRecord := range dnsList.Items {
+	for i, dnsRecord := range dnsList.Items {
 		listenerExists := false
 		for _, listener := range upstreamGateway.Spec.Listeners {
 			if listener.Name == gatewayapiv1.SectionName(dnsRecord.Labels[LabelListenerReference]) {
@@ -368,13 +361,12 @@ func (dh *dnsHelper) removeDNSForDeletedListeners(ctx context.Context, upstreamG
 			}
 		}
 		if !listenerExists {
-			if err := dh.Delete(ctx, &dnsRecord, &client.DeleteOptions{}); client.IgnoreNotFound(err) != nil {
+			if err := dh.Delete(ctx, &dnsList.Items[i], &client.DeleteOptions{}); client.IgnoreNotFound(err) != nil {
 				return err
 			}
 		}
 	}
 	return nil
-
 }
 
 func (dh *dnsHelper) getManagedZoneForListener(ctx context.Context, ns string, listener gatewayapiv1.Listener) (*kuadrantdnsv1alpha1.ManagedZone, error) {

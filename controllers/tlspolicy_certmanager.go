@@ -68,7 +68,6 @@ func validateGatewayListenerBlock(path *field.Path, l gatewayapiv1.Listener, ing
 // translatePolicy updates the Certificate spec using the TLSPolicy spec
 // converted from https://github.com/cert-manager/cert-manager/blob/master/pkg/controller/certificate-shim/helper.go#L63
 func translatePolicy(crt *certmanv1.Certificate, tlsPolicy v1alpha1.TLSPolicySpec) {
-
 	if tlsPolicy.CommonName != "" {
 		crt.Spec.CommonName = tlsPolicy.CommonName
 	}
@@ -94,7 +93,6 @@ func translatePolicy(crt *certmanv1.Certificate, tlsPolicy v1alpha1.TLSPolicySpe
 	}
 
 	if tlsPolicy.PrivateKey != nil {
-
 		if crt.Spec.PrivateKey == nil {
 			crt.Spec.PrivateKey = &certmanv1.CertificatePrivateKey{}
 		}
@@ -115,7 +113,6 @@ func translatePolicy(crt *certmanv1.Certificate, tlsPolicy v1alpha1.TLSPolicySpe
 			crt.Spec.PrivateKey.RotationPolicy = tlsPolicy.PrivateKey.RotationPolicy
 		}
 	}
-
 }
 
 // validateIssuer validates that the issuer specified exists

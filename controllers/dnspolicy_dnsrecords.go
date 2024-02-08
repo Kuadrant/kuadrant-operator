@@ -82,24 +82,24 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 			// delete record
 			log.V(1).Info("no cluster gateways, deleting DNS record", " for listener ", listener.Name)
 			if err := r.dnsHelper.deleteDNSRecordForListener(ctx, gatewayWrapper, listener); client.IgnoreNotFound(err) != nil {
-				return fmt.Errorf("failed to delete dns record for listener %s : %s", listener.Name, err)
+				return fmt.Errorf("failed to delete dns record for listener %s : %w", listener.Name, err)
 			}
 			return nil
 		}
 		dnsRecord, err := r.dnsHelper.createDNSRecordForListener(ctx, gatewayWrapper.Gateway, dnsPolicy, mz, listener)
 		if err := client.IgnoreAlreadyExists(err); err != nil {
-			return fmt.Errorf("failed to create dns record for listener host %s : %s ", *listener.Hostname, err)
+			return fmt.Errorf("failed to create dns record for listener host %s : %w", *listener.Hostname, err)
 		}
 		if k8serrors.IsAlreadyExists(err) {
 			dnsRecord, err = r.dnsHelper.getDNSRecordForListener(ctx, listener, gatewayWrapper)
 			if err != nil {
-				return fmt.Errorf("failed to get dns record for host %s : %s ", listener.Name, err)
+				return fmt.Errorf("failed to get dns record for host %s : %w", listener.Name, err)
 			}
 		}
 
-		mcgTarget, err := multicluster.NewMultiClusterGatewayTarget(gatewayWrapper.Gateway, listenerGateways, dnsPolicy.Spec.LoadBalancing)
+		mcgTarget, err := multicluster.NewGatewayTarget(gatewayWrapper.Gateway, listenerGateways, dnsPolicy.Spec.LoadBalancing)
 		if err != nil {
-			return fmt.Errorf("failed to create multi cluster gateway target for listener %s : %s ", listener.Name, err)
+			return fmt.Errorf("failed to create multi cluster gateway target for listener %s : %w", listener.Name, err)
 		}
 
 		log.Info("setting dns dnsTargets for gateway listener", "listener", dnsRecord.Name, "values", mcgTarget)
@@ -109,7 +109,7 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 		}
 		mcgTarget.RemoveUnhealthyGatewayAddresses(probes, listener)
 		if err := r.dnsHelper.setEndpoints(ctx, mcgTarget, dnsRecord, listener, dnsPolicy.Spec.RoutingStrategy); err != nil {
-			return fmt.Errorf("failed to add dns record dnsTargets %s %v", err, mcgTarget)
+			return fmt.Errorf("failed to add dns record dnsTargets %w %v", err, mcgTarget)
 		}
 	}
 	return nil
@@ -132,8 +132,8 @@ func (r *DNSPolicyReconciler) deleteDNSRecordsWithLabels(ctx context.Context, lb
 		return err
 	}
 
-	for _, record := range recordsList.Items {
-		if err := r.DeleteResource(ctx, &record); client.IgnoreNotFound(err) != nil {
+	for i := range recordsList.Items {
+		if err := r.DeleteResource(ctx, &recordsList.Items[i]); client.IgnoreNotFound(err) != nil {
 			log.Error(err, "failed to delete DNSRecord")
 			return err
 		}

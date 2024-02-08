@@ -20,29 +20,29 @@ const (
 	LabelLBAttributeGeoCode = "kuadrant.io/lb-attribute-geo-code"
 )
 
-// MultiClusterGatewayTarget represents a Gateway that is placed on multiple clusters (ClusterGateway).
-type MultiClusterGatewayTarget struct {
+// GatewayTarget represents a Gateway that is placed on multiple clusters (ClusterGateway).
+type GatewayTarget struct {
 	Gateway               *gatewayapiv1.Gateway
 	ClusterGatewayTargets []ClusterGatewayTarget
 	LoadBalancing         *v1alpha1.LoadBalancingSpec
 }
 
-func NewMultiClusterGatewayTarget(gateway *gatewayapiv1.Gateway, clusterGateways []ClusterGateway, loadBalancing *v1alpha1.LoadBalancingSpec) (*MultiClusterGatewayTarget, error) {
-	mcg := &MultiClusterGatewayTarget{Gateway: gateway, LoadBalancing: loadBalancing}
+func NewGatewayTarget(gateway *gatewayapiv1.Gateway, clusterGateways []ClusterGateway, loadBalancing *v1alpha1.LoadBalancingSpec) (*GatewayTarget, error) {
+	mcg := &GatewayTarget{Gateway: gateway, LoadBalancing: loadBalancing}
 	err := mcg.setClusterGatewayTargets(clusterGateways)
 	return mcg, err
 }
 
-func (t *MultiClusterGatewayTarget) GetName() string {
+func (t *GatewayTarget) GetName() string {
 	return fmt.Sprintf("%s-%s", t.Gateway.Name, t.Gateway.Namespace)
 }
 
-func (t *MultiClusterGatewayTarget) GetShortCode() string {
+func (t *GatewayTarget) GetShortCode() string {
 	return ToBase36hash(t.GetName())
 }
 
 // GroupTargetsByGeo groups targets based on Geo Code.
-func (t *MultiClusterGatewayTarget) GroupTargetsByGeo() map[v1alpha1.GeoCode][]ClusterGatewayTarget {
+func (t *GatewayTarget) GroupTargetsByGeo() map[v1alpha1.GeoCode][]ClusterGatewayTarget {
 	geoTargets := make(map[v1alpha1.GeoCode][]ClusterGatewayTarget)
 	for _, target := range t.ClusterGatewayTargets {
 		geoTargets[target.GetGeo()] = append(geoTargets[target.GetGeo()], target)
@@ -50,22 +50,22 @@ func (t *MultiClusterGatewayTarget) GroupTargetsByGeo() map[v1alpha1.GeoCode][]C
 	return geoTargets
 }
 
-func (t *MultiClusterGatewayTarget) GetDefaultGeo() v1alpha1.GeoCode {
+func (t *GatewayTarget) GetDefaultGeo() v1alpha1.GeoCode {
 	if t.LoadBalancing != nil && t.LoadBalancing.Geo != nil {
 		return v1alpha1.GeoCode(t.LoadBalancing.Geo.DefaultGeo)
 	}
 	return v1alpha1.DefaultGeo
 }
 
-func (t *MultiClusterGatewayTarget) GetDefaultWeight() int {
+func (t *GatewayTarget) GetDefaultWeight() int {
 	if t.LoadBalancing != nil && t.LoadBalancing.Weighted != nil {
 		return int(t.LoadBalancing.Weighted.DefaultWeight)
 	}
 	return int(v1alpha1.DefaultWeight)
 }
 
-func (t *MultiClusterGatewayTarget) setClusterGatewayTargets(clusterGateways []ClusterGateway) error {
-	var cgTargets []ClusterGatewayTarget
+func (t *GatewayTarget) setClusterGatewayTargets(clusterGateways []ClusterGateway) error {
+	cgTargets := []ClusterGatewayTarget{}
 	for _, cg := range clusterGateways {
 		var customWeights []*v1alpha1.CustomWeight
 		if t.LoadBalancing != nil && t.LoadBalancing.Weighted != nil {
@@ -128,8 +128,7 @@ func (t *ClusterGatewayTarget) setGeo(defaultGeo v1alpha1.GeoCode) {
 	t.Geo = &geoCode
 }
 
-func (t *MultiClusterGatewayTarget) RemoveUnhealthyGatewayAddresses(probes []*kuadrantdnsv1alpha1.DNSHealthCheckProbe, listener gatewayapiv1.Listener) {
-
+func (t *GatewayTarget) RemoveUnhealthyGatewayAddresses(probes []*kuadrantdnsv1alpha1.DNSHealthCheckProbe, listener gatewayapiv1.Listener) {
 	//If we have no probes we can't determine health so return unmodified
 	if len(probes) == 0 {
 		return
@@ -152,7 +151,6 @@ func (t *MultiClusterGatewayTarget) RemoveUnhealthyGatewayAddresses(probes []*ku
 				allunhealthy = false
 			}
 			gwAddressHealth[gwa.Value] = probeHealthy
-
 		}
 	}
 	//If we have no matching probes for our current addresses, or we have no healthy probes, return unmodified

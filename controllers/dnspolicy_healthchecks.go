@@ -42,7 +42,6 @@ func (r *DNSPolicyReconciler) reconcileHealthCheckProbes(ctx context.Context, dn
 		if err := r.deleteUnexpectedGatewayHealthCheckProbes(ctx, expectedProbes, gw.Gateway, dnsPolicy); err != nil {
 			return fmt.Errorf("error removing unexpected probes for gateway %v: %w", gw.Gateway.Name, err)
 		}
-
 	}
 	return nil
 }
@@ -82,8 +81,8 @@ func (r *DNSPolicyReconciler) deleteHealthCheckProbesWithLabels(ctx context.Cont
 	if err := r.Client().List(ctx, probes, listOptions); client.IgnoreNotFound(err) != nil {
 		return err
 	}
-	for _, p := range probes.Items {
-		if err := r.Client().Delete(ctx, &p); err != nil {
+	for i := range probes.Items {
+		if err := r.Client().Delete(ctx, &probes.Items[i]); err != nil {
 			return err
 		}
 	}
@@ -98,11 +97,11 @@ func (r *DNSPolicyReconciler) deleteUnexpectedGatewayHealthCheckProbes(ctx conte
 	if err := r.Client().List(ctx, existingProbes, listOptions); client.IgnoreNotFound(err) != nil {
 		return err
 	}
-	for _, p := range existingProbes.Items {
+	for i, p := range existingProbes.Items {
 		if !common.Contains(expectedProbes, func(expectedProbe *kuadrantdnsv1alpha1.DNSHealthCheckProbe) bool {
 			return expectedProbe.Name == p.Name && expectedProbe.Namespace == p.Namespace
 		}) {
-			if err := r.Client().Delete(ctx, &p); err != nil {
+			if err := r.Client().Delete(ctx, &existingProbes.Items[i]); err != nil {
 				return err
 			}
 		}
@@ -131,7 +130,6 @@ func (r *DNSPolicyReconciler) expectedHealthCheckProbesForGateway(ctx context.Co
 	clusterGatewayAddresses := gatewayWrapper.GetClusterGatewayAddresses()
 
 	for _, listener := range gw.Spec.Listeners {
-
 		//skip wildcard listeners
 		if strings.Contains(string(*listener.Hostname), "*") {
 			continue

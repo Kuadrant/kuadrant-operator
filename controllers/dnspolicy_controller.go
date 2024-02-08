@@ -187,7 +187,6 @@ func (r *DNSPolicyReconciler) reconcileResources(ctx context.Context, dnsPolicy 
 
 func (r *DNSPolicyReconciler) deleteResources(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
-
 	if err := r.deleteDNSRecords(ctx, dnsPolicy); err != nil {
 		return err
 	}
@@ -218,11 +217,11 @@ func (r *DNSPolicyReconciler) deleteResources(ctx context.Context, dnsPolicy *v1
 }
 
 func (r *DNSPolicyReconciler) updateGatewayCondition(ctx context.Context, condition metav1.Condition, gatewayDiff *reconcilers.GatewayDiff) error {
-
 	// update condition if needed
-	for _, gw := range append(gatewayDiff.GatewaysWithValidPolicyRef, gatewayDiff.GatewaysMissingPolicyRef...) {
+	gatewayDiffs := append(gatewayDiff.GatewaysWithValidPolicyRef, gatewayDiff.GatewaysMissingPolicyRef...)
+	for i, gw := range gatewayDiffs {
 		previous := gw.DeepCopy()
-		meta.SetStatusCondition(&gw.Status.Conditions, condition)
+		meta.SetStatusCondition(&gatewayDiffs[i].Status.Conditions, condition)
 		if !reflect.DeepEqual(previous.Status.Conditions, gw.Status.Conditions) {
 			if err := r.Client().Status().Update(ctx, gw.Gateway); err != nil {
 				return err
@@ -231,9 +230,10 @@ func (r *DNSPolicyReconciler) updateGatewayCondition(ctx context.Context, condit
 	}
 
 	// remove condition from gateway that is no longer referenced
-	for _, gw := range gatewayDiff.GatewaysWithInvalidPolicyRef {
+	gatewayDiffs = gatewayDiff.GatewaysWithInvalidPolicyRef
+	for i, gw := range gatewayDiff.GatewaysWithInvalidPolicyRef {
 		previous := gw.DeepCopy()
-		meta.RemoveStatusCondition(&gw.Status.Conditions, condition.Type)
+		meta.RemoveStatusCondition(&gatewayDiffs[i].Status.Conditions, condition.Type)
 		if !reflect.DeepEqual(previous.Status.Conditions, gw.Status.Conditions) {
 			if err := r.Client().Status().Update(ctx, gw.Gateway); err != nil {
 				return err

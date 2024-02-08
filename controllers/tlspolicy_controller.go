@@ -69,9 +69,8 @@ func (r *TLSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.Client().Get(ctx, req.NamespacedName, previous); err != nil {
 		if err := client.IgnoreNotFound(err); err == nil {
 			return ctrl.Result{}, nil
-		} else {
-			return ctrl.Result{}, err
 		}
+		return ctrl.Result{}, err
 	}
 
 	tlsPolicy := previous.DeepCopy()
@@ -90,7 +89,6 @@ func (r *TLSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 					delResErr = err
 				}
 				return r.reconcileStatus(ctx, tlsPolicy, common.NewErrTargetNotFound(tlsPolicy.Kind(), tlsPolicy.GetTargetRef(), delResErr))
-
 			}
 			return ctrl.Result{}, err
 		}
@@ -188,7 +186,6 @@ func (r *TLSPolicyReconciler) reconcileResources(ctx context.Context, tlsPolicy 
 
 func (r *TLSPolicyReconciler) deleteResources(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
-
 	gatewayDiffObj, err := r.ComputeGatewayDiffs(ctx, tlsPolicy, targetNetworkObject, &common.KuadrantTLSPolicyRefsConfig{})
 	if err != nil {
 		return err
@@ -215,11 +212,11 @@ func (r *TLSPolicyReconciler) deleteResources(ctx context.Context, tlsPolicy *v1
 }
 
 func (r *TLSPolicyReconciler) updateGatewayCondition(ctx context.Context, condition metav1.Condition, gatewayDiff *reconcilers.GatewayDiff) error {
-
 	// update condition if needed
-	for _, gw := range append(gatewayDiff.GatewaysWithValidPolicyRef, gatewayDiff.GatewaysMissingPolicyRef...) {
+	gatewayDiffs := append(gatewayDiff.GatewaysWithValidPolicyRef, gatewayDiff.GatewaysMissingPolicyRef...)
+	for i, gw := range gatewayDiffs {
 		previous := gw.DeepCopy()
-		meta.SetStatusCondition(&gw.Status.Conditions, condition)
+		meta.SetStatusCondition(&gatewayDiffs[i].Status.Conditions, condition)
 		if !reflect.DeepEqual(previous.Status.Conditions, gw.Status.Conditions) {
 			if err := r.Client().Status().Update(ctx, gw.Gateway); err != nil {
 				return err
@@ -228,9 +225,10 @@ func (r *TLSPolicyReconciler) updateGatewayCondition(ctx context.Context, condit
 	}
 
 	// remove condition from gateway that is no longer referenced
-	for _, gw := range gatewayDiff.GatewaysWithInvalidPolicyRef {
+	gatewayDiffs = gatewayDiff.GatewaysWithInvalidPolicyRef
+	for i, gw := range gatewayDiffs {
 		previous := gw.DeepCopy()
-		meta.RemoveStatusCondition(&gw.Status.Conditions, condition.Type)
+		meta.RemoveStatusCondition(&gatewayDiffs[i].Status.Conditions, condition.Type)
 		if !reflect.DeepEqual(previous.Status.Conditions, gw.Status.Conditions) {
 			if err := r.Client().Status().Update(ctx, gw.Gateway); err != nil {
 				return err

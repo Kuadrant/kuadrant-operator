@@ -138,12 +138,12 @@ LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LI
 ## kuadrant dns
 #ToDo Pin this version once we have an initial release of kuadrant dns
 KUADRANT_DNS_OPERATOR_VERSION ?= latest
-limitador_bundle_is_semantic := $(call is_semantic_version,$(KUADRANT_DNS_OPERATOR_VERSION))
+kuadrantdns_bundle_is_semantic := $(call is_semantic_version,$(KUADRANT_DNS_OPERATOR_VERSION))
 ifeq (latest,$(KUADRANT_DNS_OPERATOR_VERSION))
 KUADRANT_DNS_OPERATOR_BUNDLE_VERSION = 0.0.0
 KUADRANT_DNS_OPERATOR_BUNDLE_IMG_TAG = latest
 KUADRANT_DNS_OPERATOR_GITREF = main
-else ifeq (true,$(limitador_bundle_is_semantic))
+else ifeq (true,$(kuadrantdns_bundle_is_semantic))
 KUADRANT_DNS_OPERATOR_BUNDLE_VERSION = $(KUADRANT_DNS_OPERATOR_VERSION)
 KUADRANT_DNS_OPERATOR_BUNDLE_IMG_TAG = v$(KUADRANT_DNS_OPERATOR_BUNDLE_VERSION)
 KUADRANT_DNS_OPERATOR_GITREF = v$(KUADRANT_DNS_OPERATOR_BUNDLE_VERSION)

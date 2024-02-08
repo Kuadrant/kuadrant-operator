@@ -9,7 +9,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	k8smeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -177,7 +176,6 @@ func (r *KuadrantReconciler) checkAuthorinoAvailable(ctx context.Context, kObj *
 }
 
 func BuildPolicyAffectedCondition(conditionType string, policyObject runtime.Object, targetRef metav1.Object, reason gatewayapiv1alpha2.PolicyConditionReason, err error) metav1.Condition {
-
 	condition := metav1.Condition{
 		Type:               conditionType,
 		Status:             metav1.ConditionTrue,
@@ -185,7 +183,7 @@ func BuildPolicyAffectedCondition(conditionType string, policyObject runtime.Obj
 		ObservedGeneration: targetRef.GetGeneration(),
 	}
 
-	objectMeta, metaErr := k8smeta.Accessor(policyObject)
+	objectMeta, metaErr := meta.Accessor(policyObject)
 	if metaErr != nil {
 		condition.Status = metav1.ConditionFalse
 		condition.Message = fmt.Sprintf("failed to get metadata about policy object %s", policyObject.GetObjectKind().GroupVersionKind().String())

@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -98,7 +99,7 @@ func (r *DNSPolicyReconciler) deleteUnexpectedGatewayHealthCheckProbes(ctx conte
 		return err
 	}
 	for i, p := range existingProbes.Items {
-		if !common.Contains(expectedProbes, func(expectedProbe *kuadrantdnsv1alpha1.DNSHealthCheckProbe) bool {
+		if !slices.ContainsFunc(expectedProbes, func(expectedProbe *kuadrantdnsv1alpha1.DNSHealthCheckProbe) bool {
 			return expectedProbe.Name == p.Name && expectedProbe.Namespace == p.Namespace
 		}) {
 			if err := r.Client().Delete(ctx, &existingProbes.Items[i]); err != nil {

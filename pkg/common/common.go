@@ -118,11 +118,6 @@ func Find[T any](slice []T, match func(T) bool) (*T, bool) {
 	return nil, false
 }
 
-func Contains[T any](slice []T, match func(T) bool) bool {
-	_, ok := Find(slice, match)
-	return ok
-}
-
 // Map applies the given mapper function to each element in the input slice and returns a new slice with the results.
 func Map[T, U any](slice []T, f func(T) U) []U {
 	arr := make([]U, len(slice))
@@ -130,21 +125,6 @@ func Map[T, U any](slice []T, f func(T) U) []U {
 		arr[i] = f(e)
 	}
 	return arr
-}
-
-func MapErr[T, R any](slice []T, f func(T) (R, error)) ([]R, error) {
-	result := make([]R, len(slice))
-
-	for i, elem := range slice {
-		mapped, err := f(elem)
-		if err != nil {
-			return nil, err
-		}
-
-		result[i] = mapped
-	}
-
-	return result, nil
 }
 
 // Filter filters the input slice using the given predicate function and returns a new slice with the results.

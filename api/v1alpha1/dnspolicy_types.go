@@ -152,8 +152,7 @@ func (p *DNSPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
 }
 
 func (p *DNSPolicy) GetRulesHostnames() []string {
-	//TODO implement me
-	panic("implement me")
+	return make([]string, 0)
 }
 
 func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {

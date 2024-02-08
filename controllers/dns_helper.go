@@ -429,7 +429,7 @@ func (dh *dnsHelper) getDNSHealthCheckProbes(ctx context.Context, gateway *gatew
 		return nil, err
 	}
 
-	return common.MapErr(list.Items, func(obj kuadrantdnsv1alpha1.DNSHealthCheckProbe) (*kuadrantdnsv1alpha1.DNSHealthCheckProbe, error) {
-		return &obj, nil
-	})
+	return common.Map(list.Items, func(obj kuadrantdnsv1alpha1.DNSHealthCheckProbe) *kuadrantdnsv1alpha1.DNSHealthCheckProbe {
+		return &obj
+	}), nil
 }

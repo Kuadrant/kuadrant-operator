@@ -16,7 +16,8 @@ yq=$2
 SUBNET=$(docker network inspect $networkName --format '{{json .IPAM.Config }}' | \
     ${yq} '.[] | select( .Subnet | test("^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\d+$")) | .Subnet')
 
-echo "---
+cat <<EOF | ADDRESS=$SUBNET ${yq} '(select(.kind == "IPAddressPool") | .spec.addresses[0]) = env(ADDRESS)'
+---
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
@@ -29,5 +30,4 @@ kind: L2Advertisement
 metadata:
   name: empty
   namespace: metallb-system
-" | \
-ADDRESS=$SUBNET ${yq} '(select(.kind == "IPAddressPool") | .spec.addresses[0]) = env(ADDRESS)'
+EOF

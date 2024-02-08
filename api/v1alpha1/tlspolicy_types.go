@@ -19,9 +19,8 @@ package v1alpha1
 import (
 	"fmt"
 
-	certmanv1 "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
-	certmanmetav1 "github.com/jetstack/cert-manager/pkg/apis/meta/v1"
-
+	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -138,8 +137,7 @@ func (p *TLSPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
 }
 
 func (p *TLSPolicy) GetRulesHostnames() []string {
-	//TODO implement me
-	panic("implement me")
+	return make([]string, 0)
 }
 
 func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
@@ -200,14 +198,5 @@ func (p *TLSPolicy) WithTargetGateway(gwName string) *TLSPolicy {
 
 func (p *TLSPolicy) WithIssuerRef(issuerRef certmanmetav1.ObjectReference) *TLSPolicy {
 	p.Spec.IssuerRef = issuerRef
-	return p
-}
-
-func (p *TLSPolicy) WithIssuer(name, kind, group string) *TLSPolicy {
-	p.WithIssuerRef(certmanmetav1.ObjectReference{
-		Name:  name,
-		Kind:  kind,
-		Group: group,
-	})
 	return p
 }

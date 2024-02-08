@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	certmanv1 "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
+	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"

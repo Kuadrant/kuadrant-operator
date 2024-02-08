@@ -3,8 +3,9 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"slices"
 
-	certmanv1 "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
+	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -96,7 +97,7 @@ func (r *TLSPolicyReconciler) deleteUnexpectedCertificates(ctx context.Context, 
 		return err
 	}
 	for i, p := range existingCertificates.Items {
-		if !common.Contains(expectedCertificates, func(expectedCertificate *certmanv1.Certificate) bool {
+		if !slices.ContainsFunc(expectedCertificates, func(expectedCertificate *certmanv1.Certificate) bool {
 			return expectedCertificate.Name == p.Name && expectedCertificate.Namespace == p.Namespace
 		}) {
 			if err := r.Client().Delete(ctx, &existingCertificates.Items[i]); err != nil {

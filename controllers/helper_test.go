@@ -12,8 +12,9 @@ import (
 	"strings"
 	"time"
 
+	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/google/uuid"
-	certmanv1 "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
 	. "github.com/onsi/gomega"
 
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
@@ -23,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -460,30 +460,42 @@ func (t *GatewayBuilder) WithHTTPSListener(hostname, tlsSecretName string) *Gate
 
 //CertMan
 
-func NewTestIssuer(name, ns string) *certmanv1.Issuer {
-	return &certmanv1.Issuer{
+func testBuildSelfSignedIssuer(name, ns string) (*certmanv1.Issuer, *certmanmetav1.ObjectReference) {
+	issuer := &certmanv1.Issuer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 		},
+		Spec: createSelfSignedIssuerSpec(),
 	}
+	objRef := &certmanmetav1.ObjectReference{
+		Group: certmanv1.SchemeGroupVersion.Group,
+		Kind:  certmanv1.IssuerKind,
+		Name:  issuer.Name,
+	}
+	return issuer, objRef
 }
 
-func NewTestClusterIssuer(name string) *certmanv1.ClusterIssuer {
-	return &certmanv1.ClusterIssuer{
+func testBuildSelfSignedClusterIssuer(name, ns string) (*certmanv1.ClusterIssuer, *certmanmetav1.ObjectReference) {
+	issuer := &certmanv1.ClusterIssuer{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: createSelfSignedIssuerSpec(),
+	}
+	objRef := &certmanmetav1.ObjectReference{
+		Group: certmanv1.SchemeGroupVersion.Group,
+		Kind:  certmanv1.ClusterIssuerKind,
+		Name:  issuer.Name,
+	}
+	return issuer, objRef
+}
+
+func createSelfSignedIssuerSpec() certmanv1.IssuerSpec {
+	return certmanv1.IssuerSpec{
+		IssuerConfig: certmanv1.IssuerConfig{
+			SelfSigned: &certmanv1.SelfSignedIssuer{},
 		},
 	}
 }
-
-var _ client.Object = &TestResource{}
-
-// TestResource substitute client.Object that can be used in place of a real k8s resource for testing
-type TestResource struct {
-	metav1.TypeMeta
-	metav1.ObjectMeta
-}
-
-func (*TestResource) GetObjectKind() schema.ObjectKind { return nil }
-func (*TestResource) DeepCopyObject() runtime.Object   { return nil }

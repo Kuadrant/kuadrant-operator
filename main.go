@@ -32,7 +32,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	certmanv1 "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
+	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"

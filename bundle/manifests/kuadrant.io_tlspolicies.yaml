@@ -125,6 +125,9 @@ spec:
                       a private key matching the specified requirements will be generated
                       whenever a re-issuance occurs. Default is 'Never' for backward
                       compatibility.
+                    enum:
+                    - Never
+                    - Always
                     type: string
                   size:
                     description: Size is the key bit size of the corresponding private
@@ -196,15 +199,15 @@ spec:
                   the certificate. Defaults to `digital signature` and `key encipherment`
                   if not specified.
                 items:
-                  description: 'KeyUsage specifies valid usage contexts for keys.
+                  description: "KeyUsage specifies valid usage contexts for keys.
                     See: https://tools.ietf.org/html/rfc5280#section-4.2.1.3 https://tools.ietf.org/html/rfc5280#section-4.2.1.12
-                    Valid KeyUsage values are as follows: "signing", "digital signature",
-                    "content commitment", "key encipherment", "key agreement", "data
-                    encipherment", "cert sign", "crl sign", "encipher only", "decipher
-                    only", "any", "server auth", "client auth", "code signing", "email
-                    protection", "s/mime", "ipsec end system", "ipsec tunnel", "ipsec
-                    user", "timestamping", "ocsp signing", "microsoft sgc", "netscape
-                    sgc"'
+                    \n Valid KeyUsage values are as follows: \"signing\", \"digital
+                    signature\", \"content commitment\", \"key encipherment\", \"key
+                    agreement\", \"data encipherment\", \"cert sign\", \"crl sign\",
+                    \"encipher only\", \"decipher only\", \"any\", \"server auth\",
+                    \"client auth\", \"code signing\", \"email protection\", \"s/mime\",
+                    \"ipsec end system\", \"ipsec tunnel\", \"ipsec user\", \"timestamping\",
+                    \"ocsp signing\", \"microsoft sgc\", \"netscape sgc\""
                   enum:
                   - signing
                   - digital signature

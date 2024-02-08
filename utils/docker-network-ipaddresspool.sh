@@ -9,23 +9,25 @@
 set -euo pipefail
 
 networkName=$1
+yq=$2
 
-subnet=`docker network inspect $networkName -f '{{ (index .IPAM.Config 0).Subnet }}'`
-# shellcheck disable=SC2206
-subnetParts=(${subnet//./ })
-cidr="${subnetParts[0]}.${subnetParts[1]}.200.0/24"
+## Parse kind network subnet
+## Take only IPv4 subnets, exclude IPv6
+SUBNET=$(docker network inspect $networkName --format '{{json .IPAM.Config }}' | \
+    ${yq} '.[] | select( .Subnet | test("^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\d+$")) | .Subnet')
 
-cat <<EOF
+echo "---
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
   name: kuadrant-local
 spec:
-  addresses:
-  - $cidr
+  addresses: [] # set by make target
 ---
 apiVersion: metallb.io/v1beta1
 kind: L2Advertisement
 metadata:
   name: empty
-EOF
+  namespace: metallb-system
+" | \
+ADDRESS=$SUBNET ${yq} '(select(.kind == "IPAddressPool") | .spec.addresses[0]) = env(ADDRESS)'

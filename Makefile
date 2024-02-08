@@ -408,11 +408,11 @@ undeploy-policy-controller: ## Undeploy policy-controller from the K8s cluster s
 	$(KUSTOMIZE) build config/policy-controller | kubectl delete -f -
 
 .PHONY: install-metallb
-install-metallb: $(KUSTOMIZE) ## Installs the metallb load balancer allowing use of an LoadBalancer type with a gateway
+install-metallb: $(KUSTOMIZE) $(YQ) ## Installs the metallb load balancer allowing use of an LoadBalancer type with a gateway
 	$(KUSTOMIZE) build config/metallb | kubectl apply -f -
 	kubectl -n metallb-system wait --for=condition=Available deployments controller --timeout=300s
 	kubectl -n metallb-system wait --for=condition=ready pod --selector=app=metallb --timeout=60s
-	./utils/docker-network-ipaddresspool.sh kind | kubectl apply -n metallb-system -f -
+	./utils/docker-network-ipaddresspool.sh kind $(YQ) | kubectl apply -n metallb-system -f -
 
 .PHONY: uninstall-metallb
 uninstall-metallb: $(KUSTOMIZE) 

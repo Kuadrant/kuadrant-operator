@@ -22,7 +22,7 @@ package v1alpha1
 
 import (
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	apiv1alpha1 "github.com/kuadrant/kuadrant-dns-operator/api/v1alpha1"
+	apiv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )

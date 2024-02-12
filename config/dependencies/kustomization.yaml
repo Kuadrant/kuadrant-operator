@@ -3,12 +3,12 @@ namespace: kuadrant-system
 resources:
   - authorino
   - limitador
-  - kuadrant-dns
+  - dns
 
 patchesStrategicMerge:
   - authorino/delete-ns.yaml
   - limitador/delete-ns.yaml
-  - kuadrant-dns/delete-ns.yaml
+  - dns/delete-ns.yaml
 
 replacements:
 - source:

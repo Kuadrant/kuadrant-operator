@@ -1,0 +1,8 @@
+resources:
+- github.com/kuadrant/dns-operator/config/default?ref=${DNS_OPERATOR_GITREF}
+
+patches:
+  - path: deployment_patch.yaml
+    target:
+      kind: Deployment
+      name: dns-operator-controller-manager

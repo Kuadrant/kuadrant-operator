@@ -19,8 +19,8 @@ on:
         description: Limitador Operator bundle version
         default: latest
         type: string
-      kuadrantdnsOperatorVersion:
-        description: Kuadrant DNS Operator bundle version
+      dnsOperatorVersion:
+        description: DNS Operator bundle version
         default: latest
         type: string
       wasmShimVersion:
@@ -53,8 +53,8 @@ on:
         description: Limitador Operator bundle version
         default: latest
         type: string
-      kuadrantdnsOperatorVersion:
-        description: Kuadrant DNS Operator bundle version
+      dnsOperatorVersion:
+        description: DNS Operator bundle version
         default: latest
         type: string
       wasmShimVersion:
@@ -134,7 +134,7 @@ jobs:
             VERSION=${{ env.VERSION }} IMAGE_TAG=${{ inputs.kuadrantOperatorTag }} \
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
-            KUADRANT_DNS_OPERATOR_VERSION=${{ inputs.kuadrantdnsOperatorVersion }} \
+            DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
             REPLACES_VERSION=${{ inputs.replacesVersion }} \
             CHANNELS=${{ inputs.channels }}
@@ -178,7 +178,7 @@ jobs:
             VERSION=${{ env.VERSION }} IMAGE_TAG=${{ inputs.kuadrantOperatorTag }} \
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
-            KUADRANT_DNS_OPERATOR_VERSION=${{ inputs.kuadrantdnsOperatorVersion }} \
+            DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
             REPLACES_VERSION=${{ inputs.replacesVersion }} \
             CHANNELS=${{ inputs.channels }}

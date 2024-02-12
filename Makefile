@@ -12,6 +12,7 @@ PROJECT_PATH := $(patsubst %/,%,$(dir $(MKFILE_PATH)))
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
 VERSION ?= 0.0.0
+VERSION = unified_kuadrant #ToDo(mnairn) Remove this before merge
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -53,6 +54,7 @@ else
 BUNDLE_VERSION = 0.0.0
 IMAGE_TAG ?= $(DEFAULT_IMAGE_TAG)
 endif
+IMAGE_TAG = unified_kuadrant  #ToDo(mnairn) Remove this before merge
 
 # BUNDLE_IMG defines the image:tag used for the bundle.
 # You can use it as an arg. (E.g make bundle-build BUNDLE_IMG=<some-registry>/<project-name-bundle>:<tag>)
@@ -135,24 +137,26 @@ LIMITADOR_OPERATOR_GITREF = $(LIMITADOR_OPERATOR_BUNDLE_VERSION)
 endif
 LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LIMITADOR_OPERATOR_BUNDLE_IMG_TAG)
 
-## kuadrant dns
-#ToDo Pin this version once we have an initial release of kuadrant dns
-KUADRANT_DNS_OPERATOR_VERSION ?= latest
-kuadrantdns_bundle_is_semantic := $(call is_semantic_version,$(KUADRANT_DNS_OPERATOR_VERSION))
-ifeq (latest,$(KUADRANT_DNS_OPERATOR_VERSION))
-KUADRANT_DNS_OPERATOR_BUNDLE_VERSION = 0.0.0
-KUADRANT_DNS_OPERATOR_BUNDLE_IMG_TAG = latest
-KUADRANT_DNS_OPERATOR_GITREF = main
+## dns
+#ToDo Pin this version once we have an initial release of the dns operator
+DNS_OPERATOR_VERSION ?= latest
+DNS_OPERATOR_VERSION = unified_kuadrant #ToDo(mnairn) Remove this before merge
+
+kuadrantdns_bundle_is_semantic := $(call is_semantic_version,$(DNS_OPERATOR_VERSION))
+ifeq (latest,$(DNS_OPERATOR_VERSION))
+DNS_OPERATOR_BUNDLE_VERSION = 0.0.0
+DNS_OPERATOR_BUNDLE_IMG_TAG = latest
+DNS_OPERATOR_GITREF = main
 else ifeq (true,$(kuadrantdns_bundle_is_semantic))
-KUADRANT_DNS_OPERATOR_BUNDLE_VERSION = $(KUADRANT_DNS_OPERATOR_VERSION)
-KUADRANT_DNS_OPERATOR_BUNDLE_IMG_TAG = v$(KUADRANT_DNS_OPERATOR_BUNDLE_VERSION)
-KUADRANT_DNS_OPERATOR_GITREF = v$(KUADRANT_DNS_OPERATOR_BUNDLE_VERSION)
+DNS_OPERATOR_BUNDLE_VERSION = $(DNS_OPERATOR_VERSION)
+DNS_OPERATOR_BUNDLE_IMG_TAG = v$(DNS_OPERATOR_BUNDLE_VERSION)
+DNS_OPERATOR_GITREF = v$(DNS_OPERATOR_BUNDLE_VERSION)
 else
-KUADRANT_DNS_OPERATOR_BUNDLE_VERSION = $(KUADRANT_DNS_OPERATOR_VERSION)
-KUADRANT_DNS_OPERATOR_BUNDLE_IMG_TAG = $(KUADRANT_DNS_OPERATOR_BUNDLE_VERSION)
-KUADRANT_DNS_OPERATOR_GITREF = $(KUADRANT_DNS_OPERATOR_BUNDLE_VERSION)
+DNS_OPERATOR_BUNDLE_VERSION = $(DNS_OPERATOR_VERSION)
+DNS_OPERATOR_BUNDLE_IMG_TAG = $(DNS_OPERATOR_BUNDLE_VERSION)
+DNS_OPERATOR_GITREF = $(DNS_OPERATOR_BUNDLE_VERSION)
 endif
-KUADRANT_DNS_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/kuadrant-dns-operator-bundle:$(KUADRANT_DNS_OPERATOR_BUNDLE_IMG_TAG)
+DNS_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/dns-operator-bundle:$(DNS_OPERATOR_BUNDLE_IMG_TAG)
 
 ## wasm-shim
 WASM_SHIM_VERSION ?= latest
@@ -279,11 +283,11 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 .PHONY: dependencies-manifests
 dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
 dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
-dependencies-manifests: export KUADRANT_DNS_OPERATOR_GITREF := $(KUADRANT_DNS_OPERATOR_GITREF)
+dependencies-manifests: export DNS_OPERATOR_GITREF := $(DNS_OPERATOR_GITREF)
 dependencies-manifests: ## Update kuadrant dependencies manifests.
 	$(call patch-config,config/dependencies/authorino/kustomization.template.yaml,config/dependencies/authorino/kustomization.yaml)
 	$(call patch-config,config/dependencies/limitador/kustomization.template.yaml,config/dependencies/limitador/kustomization.yaml)
-	$(call patch-config,config/dependencies/kuadrant-dns/kustomization.template.yaml,config/dependencies/kuadrant-dns/kustomization.yaml)
+	$(call patch-config,config/dependencies/dns/kustomization.template.yaml,config/dependencies/dns/kustomization.yaml)
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -414,7 +418,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 deploy: manifests dependencies-manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	$(KUSTOMIZE) build config/deploy | kubectl apply -f -
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMAGE_TAG_BASE):latest
+	#cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMAGE_TAG_BASE):latest #ToDo(mnairn) Uncomment this before merge
 
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/deploy | kubectl delete -f -
@@ -482,7 +486,7 @@ bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## 
 	# TODO(eguzki): run only if not default one. Avoid bundle parsing if version is known in advance
 	$(call update-operator-dependencies,limitador-operator,$(LIMITADOR_OPERATOR_BUNDLE_IMG))
 	$(call update-operator-dependencies,authorino-operator,$(AUTHORINO_OPERATOR_BUNDLE_IMG))
-	$(call update-operator-dependencies,kuadrant-dns-operator,$(KUADRANT_DNS_OPERATOR_BUNDLE_IMG))
+	$(call update-operator-dependencies,dns-operator,$(DNS_OPERATOR_BUNDLE_IMG))
 	$(OPERATOR_SDK) bundle validate ./bundle
 	$(MAKE) bundle-ignore-createdAt
 

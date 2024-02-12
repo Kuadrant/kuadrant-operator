@@ -9,5 +9,5 @@ dependencies:
       version: "0.0.0"
   - type: olm.package
     value:
-      packageName: kuadrant-dns-operator
+      packageName: dns-operator
       version: "0.0.0"

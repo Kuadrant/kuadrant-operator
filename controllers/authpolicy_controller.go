@@ -67,7 +67,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, ap, common.NewErrTargetNotFound(ap.Kind(), ap.GetTargetRef(), delResErr))
+				return r.reconcileStatus(ctx, ap, targetNetworkObject, common.NewErrTargetNotFound(ap.Kind(), ap.GetTargetRef(), delResErr))
 			}
 			return ctrl.Result{}, err
 		}
@@ -103,7 +103,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	specErr := r.reconcileResources(ctx, ap, targetNetworkObject)
 
 	// reconcile authpolicy status
-	statusResult, statusErr := r.reconcileStatus(ctx, ap, specErr)
+	statusResult, statusErr := r.reconcileStatus(ctx, ap, targetNetworkObject, specErr)
 
 	if specErr != nil {
 		return ctrl.Result{}, specErr

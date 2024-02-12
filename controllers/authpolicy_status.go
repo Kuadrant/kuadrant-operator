@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -11,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
@@ -19,32 +22,15 @@ import (
 )
 
 // reconcileStatus makes sure status block of AuthPolicy is up-to-date.
-func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *api.AuthPolicy, specErr error) (ctrl.Result, error) {
+func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, specErr error) (ctrl.Result, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger.V(1).Info("Reconciling AuthPolicy status", "spec error", specErr)
 
-	// fetch the AuthConfig and check if it's ready.
-	isAuthConfigReady := true
-	if specErr == nil { // skip fetching authconfig if we already have a reconciliation error.
-		apKey := client.ObjectKeyFromObject(ap)
-		authConfigKey := client.ObjectKey{
-			Namespace: ap.Namespace,
-			Name:      authConfigName(apKey),
-		}
-		authConfig := &authorinoapi.AuthConfig{}
-		if err := r.GetResource(ctx, authConfigKey, authConfig); err != nil && !apierrors.IsNotFound(err) {
-			return ctrl.Result{}, err
-		}
-
-		isAuthConfigReady = authConfig.Status.Ready()
-	}
-
-	newStatus := r.calculateStatus(ap, specErr, isAuthConfigReady)
+	newStatus := r.calculateStatus(ctx, ap, targetNetworkObject, specErr)
 
 	equalStatus := ap.Status.Equals(newStatus, logger)
 	logger.V(1).Info("Status", "status is different", !equalStatus)
 	logger.V(1).Info("Status", "generation is different", ap.Generation != ap.Status.ObservedGeneration)
-	logger.V(1).Info("Status", "AuthConfig is ready", isAuthConfigReady)
 	if equalStatus && ap.Generation == ap.Status.ObservedGeneration {
 		logger.V(1).Info("Status up-to-date. No changes required.")
 		return ctrl.Result{}, nil
@@ -72,7 +58,7 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *api.Auth
 	return ctrl.Result{}, nil
 }
 
-func (r *AuthPolicyReconciler) calculateStatus(ap *api.AuthPolicy, specErr error, authConfigReady bool) *api.AuthPolicyStatus {
+func (r *AuthPolicyReconciler) calculateStatus(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, specErr error) *api.AuthPolicyStatus {
 	newStatus := &api.AuthPolicyStatus{
 		Conditions:         slices.Clone(ap.Status.Conditions),
 		ObservedGeneration: ap.Status.ObservedGeneration,
@@ -86,27 +72,69 @@ func (r *AuthPolicyReconciler) calculateStatus(ap *api.AuthPolicy, specErr error
 		return newStatus
 	}
 
-	enforcedCond := r.enforcedCondition(ap, authConfigReady)
+	enforcedCond := r.enforcedCondition(ctx, ap, targetNetworkObject)
 	meta.SetStatusCondition(&newStatus.Conditions, *enforcedCond)
 
 	return newStatus
 }
 
 func (r *AuthPolicyReconciler) acceptedCondition(policy common.KuadrantPolicy, specErr error) *metav1.Condition {
-	cond := common.AcceptedCondition(policy, specErr)
-
-	return cond
+	return common.AcceptedCondition(policy, specErr)
 }
 
-func (r *AuthPolicyReconciler) enforcedCondition(policy common.KuadrantPolicy, authConfigReady bool) *metav1.Condition {
-	var err common.PolicyError
-	if !authConfigReady {
-		err = common.NewErrUnknown(policy.Kind(), fmt.Errorf("AuthScheme is not ready yet"))
+// enforcedCondition checks if the provided AuthPolicy is enforced based on the status of the associated AuthConfig and Gateway.
+func (r *AuthPolicyReconciler) enforcedCondition(ctx context.Context, policy *api.AuthPolicy, targetNetworkObject client.Object) *metav1.Condition {
+	logger, _ := logr.FromContext(ctx)
+	authConfigReady, gwPolicyOverridden, err := r.checkAuthConfigAndGateway(ctx, policy)
+	if err != nil {
+		logger.Error(err, "Failed to check AuthConfig and Gateway")
+		return common.EnforcedCondition(policy, common.NewErrUnknown(policy.Kind(), err))
 	}
 
-	// TODO: Implement 'Overridden' Reason if AuthPolicy supports Inherited Policy Attachment
+	if !authConfigReady {
+		logger.V(1).Info("AuthConfig is not ready")
+		return common.EnforcedCondition(policy, common.NewErrUnknown(policy.Kind(), errors.New("AuthScheme is not ready yet")))
+	}
 
-	cond := common.EnforcedCondition(policy, err)
+	if gwPolicyOverridden {
+		logger.V(1).Info("Gateway Policy is overridden")
+		return r.handleGatewayPolicyOverride(logger, policy, targetNetworkObject)
+	}
 
-	return cond
+	logger.V(1).Info("AuthPolicy is enforced")
+	return common.EnforcedCondition(policy, nil)
+}
+
+// checkAuthConfigAndGateway checks if the AuthConfig is ready and if the Gateway Policy is overridden.
+func (r *AuthPolicyReconciler) checkAuthConfigAndGateway(ctx context.Context, policy *api.AuthPolicy) (bool, bool, error) {
+	apKey := client.ObjectKeyFromObject(policy)
+	authConfigKey := client.ObjectKey{
+		Namespace: policy.Namespace,
+		Name:      authConfigName(apKey),
+	}
+	authConfig := &authorinoapi.AuthConfig{}
+	err := r.GetResource(ctx, authConfigKey, authConfig)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return false, false, fmt.Errorf("failed to get AuthConfig: %w", err)
+		}
+		return true, common.IsTargetRefGateway(policy.GetTargetRef()), nil
+	}
+	return authConfig.Status.Ready(), false, nil
+}
+
+// handleGatewayPolicyOverride handles the case where the Gateway Policy is overridden.
+func (r *AuthPolicyReconciler) handleGatewayPolicyOverride(logger logr.Logger, policy *api.AuthPolicy, targetNetworkObject client.Object) *metav1.Condition {
+	obj := targetNetworkObject.(*v1.Gateway)
+	gatewayWrapper := common.GatewayWrapper{Gateway: obj, PolicyRefsConfig: &common.KuadrantAuthPolicyRefsConfig{}}
+	refs := gatewayWrapper.PolicyRefs()
+	filteredRef := common.Filter(refs, func(key client.ObjectKey) bool {
+		return key != client.ObjectKeyFromObject(policy)
+	})
+	jsonData, err := json.Marshal(filteredRef)
+	if err != nil {
+		logger.Error(err, "Failed to marshal filtered references")
+		return common.EnforcedCondition(policy, common.NewErrUnknown(policy.Kind(), err))
+	}
+	return common.EnforcedCondition(policy, common.NewErrOverridden(policy.Kind(), string(jsonData)))
 }

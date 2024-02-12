@@ -310,58 +310,6 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/.*"))
 		})
 
-		It("Attaches policy to the Gateway while having other policies attached to all HTTPRoutes", func() {
-			routePolicy := policyFactory()
-
-			err := k8sClient.Create(context.Background(), routePolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(isAuthPolicyAccepted(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
-
-			// attach policy to the gatewaay
-			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
-				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = testGatewayName
-			})
-
-			err = k8sClient.Create(context.Background(), gwPolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gwPolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(func() bool {
-				existingPolicy := &api.AuthPolicy{}
-				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gwPolicy), existingPolicy)
-				if err != nil {
-					return false
-				}
-				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(common.PolicyConditionEnforced))
-				return condition != nil &&
-					condition.Reason == string(common.PolicyReasonUnknown) &&
-					condition.Message == "AuthPolicy has encountered some issues: AuthScheme is not ready yet"
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-
-			// check istio authorizationpolicy
-			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, gwPolicy.Spec.TargetRef), Namespace: testNamespace}
-			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), iapKey, &secv1beta1resources.AuthorizationPolicy{})
-				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
-				return apierrors.IsNotFound(err)
-			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
-
-			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(gwPolicy)), Namespace: testNamespace}
-			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), authConfigKey, &authorinoapi.AuthConfig{})
-				return apierrors.IsNotFound(err)
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
-
 		It("Rejects policy with only unmatching top-level route selectors while trying to configure the gateway", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Spec.RouteSelectors = []api.RouteSelector{
@@ -1252,6 +1200,52 @@ var _ = Describe("AuthPolicy controller", func() {
 
 			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionFalse, string(common.PolicyReasonUnknown),
 				"AuthPolicy has encountered some issues: AuthScheme is not ready yet"), 30*time.Second, 5*time.Second).Should(BeTrue())
+		})
+
+		It("Overridden reason - Attaches policy to the Gateway while having other policies attached to all HTTPRoutes", func() {
+			routePolicy := policyFactory()
+
+			err := k8sClient.Create(context.Background(), routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check route policy status
+			Eventually(isAuthPolicyAccepted(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(isAuthPolicyEnforced(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// attach policy to the gatewaay
+			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = testGatewayName
+			})
+
+			err = k8sClient.Create(context.Background(), gwPolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gwPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(isAuthPolicyAccepted(gwPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(
+				assertAcceptedCondTrueAndEnforcedCond(gwPolicy, metav1.ConditionFalse, string(common.PolicyReasonOverridden),
+					fmt.Sprintf("AuthPolicy is overridden by [{\"Namespace\":\"%s\",\"Name\":\"%s\"}]", testNamespace, routePolicy.Name)),
+				30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// check istio authorizationpolicy
+			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, gwPolicy.Spec.TargetRef), Namespace: testNamespace}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), iapKey, &secv1beta1resources.AuthorizationPolicy{})
+				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
+				return apierrors.IsNotFound(err)
+			}, 2*time.Minute, 5*time.Second).Should(BeTrue())
+
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(gwPolicy)), Namespace: testNamespace}
+			Eventually(func() bool {
+				err := k8sClient.Get(context.Background(), authConfigKey, &authorinoapi.AuthConfig{})
+				return apierrors.IsNotFound(err)
+			}, 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
 	})
 })

@@ -107,3 +107,25 @@ func NewErrUnknown(kind string, err error) ErrUnknown {
 		Err:  err,
 	}
 }
+
+var _ PolicyError = ErrOverridden{}
+
+type ErrOverridden struct {
+	Kind               string
+	OverridingPolicies string
+}
+
+func (e ErrOverridden) Error() string {
+	return fmt.Sprintf("%s is overridden by %s", e.Kind, e.OverridingPolicies)
+}
+
+func (e ErrOverridden) Reason() gatewayapiv1alpha2.PolicyConditionReason {
+	return PolicyReasonOverridden
+}
+
+func NewErrOverridden(kind, overridingPolicies string) ErrOverridden {
+	return ErrOverridden{
+		Kind:               kind,
+		OverridingPolicies: overridingPolicies,
+	}
+}

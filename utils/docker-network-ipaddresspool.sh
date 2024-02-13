@@ -9,14 +9,18 @@
 set -euo pipefail
 
 networkName=$1
-yq=$2
+YQ="${2:-yq}"
 
 ## Parse kind network subnet
 ## Take only IPv4 subnets, exclude IPv6
 SUBNET=$(docker network inspect $networkName --format '{{json .IPAM.Config }}' | \
-    ${yq} '.[] | select( .Subnet | test("^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\d+$")) | .Subnet')
+    ${YQ} '.[] | select( .Subnet | test("^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\d+$")) | .Subnet')
+if [[ -z "$SUBNET" ]]; then
+   echo "Error: parsing IPv4 network address for '$networkName' docker network"
+   exit 1
+fi
 
-cat <<EOF | ADDRESS=$SUBNET ${yq} '(select(.kind == "IPAddressPool") | .spec.addresses[0]) = env(ADDRESS)'
+cat <<EOF | ADDRESS=$SUBNET ${YQ} '(select(.kind == "IPAddressPool") | .spec.addresses[0]) = env(ADDRESS)'
 ---
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool

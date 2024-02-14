@@ -20,7 +20,11 @@ if [[ -z "$SUBNET" ]]; then
    exit 1
 fi
 
-cat <<EOF | ADDRESS=$SUBNET ${YQ} '(select(.kind == "IPAddressPool") | .spec.addresses[0]) = env(ADDRESS)'
+# shellcheck disable=SC2206
+subnetParts=(${SUBNET//./ })
+cidr="${subnetParts[0]}.${subnetParts[1]}.200.0/24"
+
+cat <<EOF | ADDRESS=$cidr ${YQ} '(select(.kind == "IPAddressPool") | .spec.addresses[0]) = env(ADDRESS)'
 ---
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool

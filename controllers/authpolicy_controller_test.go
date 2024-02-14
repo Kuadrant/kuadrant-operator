@@ -1246,6 +1246,15 @@ var _ = Describe("AuthPolicy controller", func() {
 				err := k8sClient.Get(context.Background(), authConfigKey, &authorinoapi.AuthConfig{})
 				return apierrors.IsNotFound(err)
 			}, 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// GW Policy should go back to being enforced when a HTTPRoute with no AP attached becomes available
+			route2 := testBuildBasicHttpRoute("route2", testGatewayName, testNamespace, []string{"*.carstore.com"})
+
+			err = k8sClient.Create(context.Background(), route2)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(isAuthPolicyAccepted(gwPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(isAuthPolicyEnforced(gwPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
 	})
 })

@@ -11,6 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -64,8 +65,8 @@ func (r *AuthPolicyReconciler) calculateStatus(ctx context.Context, ap *api.Auth
 		ObservedGeneration: ap.Status.ObservedGeneration,
 	}
 
-	availableCond := r.acceptedCondition(ap, specErr)
-	meta.SetStatusCondition(&newStatus.Conditions, *availableCond)
+	acceptedCond := r.acceptedCondition(ap, specErr)
+	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)
 
 	// Do not set enforced condition if Accepted condition is false
 	if meta.IsStatusConditionFalse(newStatus.Conditions, string(gatewayapiv1alpha2.PolicyReasonAccepted)) {
@@ -82,10 +83,19 @@ func (r *AuthPolicyReconciler) acceptedCondition(policy common.KuadrantPolicy, s
 	return common.AcceptedCondition(policy, specErr)
 }
 
-// enforcedCondition checks if the provided AuthPolicy is enforced based on the status of the associated AuthConfig and Gateway.
+// enforcedCondition checks if the provided AuthPolicy is enforced, ensuring it is properly configured and applied based
+// on the status of the associated AuthConfig and Gateway.
 func (r *AuthPolicyReconciler) enforcedCondition(ctx context.Context, policy *api.AuthPolicy, targetNetworkObject client.Object) *metav1.Condition {
 	logger, _ := logr.FromContext(ctx)
-	authConfigReady, gwPolicyOverridden, err := r.checkAuthConfigAndGateway(ctx, policy)
+
+	// Check if the policy is overridden
+	if r.isPolicyOverridden(policy) {
+		logger.V(1).Info("Gateway Policy is overridden")
+		return r.handleGatewayPolicyOverride(logger, policy, targetNetworkObject)
+	}
+
+	// Check if the AuthConfig is ready
+	authConfigReady, err := r.isAuthConfigReady(ctx, policy)
 	if err != nil {
 		logger.Error(err, "Failed to check AuthConfig and Gateway")
 		return common.EnforcedCondition(policy, common.NewErrUnknown(policy.Kind(), err))
@@ -96,17 +106,30 @@ func (r *AuthPolicyReconciler) enforcedCondition(ctx context.Context, policy *ap
 		return common.EnforcedCondition(policy, common.NewErrUnknown(policy.Kind(), errors.New("AuthScheme is not ready yet")))
 	}
 
-	if gwPolicyOverridden {
-		logger.V(1).Info("Gateway Policy is overridden")
-		return r.handleGatewayPolicyOverride(logger, policy, targetNetworkObject)
-	}
-
 	logger.V(1).Info("AuthPolicy is enforced")
 	return common.EnforcedCondition(policy, nil)
 }
 
-// checkAuthConfigAndGateway checks if the AuthConfig is ready and if the Gateway Policy is overridden.
-func (r *AuthPolicyReconciler) checkAuthConfigAndGateway(ctx context.Context, policy *api.AuthPolicy) (bool, bool, error) {
+// setOverriddenPolicy sets the overridden policy in the reconciler's tracking map.
+func (r *AuthPolicyReconciler) setOverriddenPolicy(ap *api.AuthPolicy) {
+	if r.OverriddenPolicies == nil {
+		r.OverriddenPolicies = make(map[types.UID]bool)
+	}
+	r.OverriddenPolicies[ap.GetUID()] = true
+}
+
+// removeOverriddenPolicy removes the overridden policy from the reconciler's tracking map.
+func (r *AuthPolicyReconciler) removeOverriddenPolicy(ap *api.AuthPolicy) {
+	delete(r.OverriddenPolicies, ap.GetUID())
+}
+
+// isPolicyOverridden checks if the provided AuthPolicy is overridden based on the tracking map maintained by the reconciler.
+func (r *AuthPolicyReconciler) isPolicyOverridden(ap *api.AuthPolicy) bool {
+	return r.OverriddenPolicies[ap.GetUID()] && common.IsTargetRefGateway(ap.GetTargetRef())
+}
+
+// isAuthConfigReady checks if the AuthConfig is ready.
+func (r *AuthPolicyReconciler) isAuthConfigReady(ctx context.Context, policy *api.AuthPolicy) (bool, error) {
 	apKey := client.ObjectKeyFromObject(policy)
 	authConfigKey := client.ObjectKey{
 		Namespace: policy.Namespace,
@@ -116,14 +139,14 @@ func (r *AuthPolicyReconciler) checkAuthConfigAndGateway(ctx context.Context, po
 	err := r.GetResource(ctx, authConfigKey, authConfig)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			return false, false, fmt.Errorf("failed to get AuthConfig: %w", err)
+			return false, fmt.Errorf("failed to get AuthConfig: %w", err)
 		}
-		return true, common.IsTargetRefGateway(policy.GetTargetRef()), nil
 	}
-	return authConfig.Status.Ready(), false, nil
+	return authConfig.Status.Ready(), nil
 }
 
-// handleGatewayPolicyOverride handles the case where the Gateway Policy is overridden.
+// handleGatewayPolicyOverride handles the case where the Gateway Policy is overridden by filtering policy references
+// and creating a corresponding error condition.
 func (r *AuthPolicyReconciler) handleGatewayPolicyOverride(logger logr.Logger, policy *api.AuthPolicy, targetNetworkObject client.Object) *metav1.Condition {
 	obj := targetNetworkObject.(*v1.Gateway)
 	gatewayWrapper := common.GatewayWrapper{Gateway: obj, PolicyRefsConfig: &common.KuadrantAuthPolicyRefsConfig{}}

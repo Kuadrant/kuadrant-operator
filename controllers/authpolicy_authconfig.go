@@ -16,6 +16,7 @@ import (
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
 func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
@@ -34,7 +35,9 @@ func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api
 		return err
 	}
 
-	err = r.ReconcileResource(ctx, &authorinoapi.AuthConfig{}, authConfig, authConfigBasicMutator)
+	// Authconfig objects have server side defaults and webhook mutations, reconciliation should
+	// run dry run first for a consistent reconciliation (does not trigger update all the times)
+	err = r.ReconcileResource(ctx, &authorinoapi.AuthConfig{}, authConfig, authConfigBasicMutator, reconcilers.DryRunFirst)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		logger.Error(err, "ReconcileResource failed to create/update AuthConfig resource")
 		return err
@@ -511,6 +514,5 @@ func authConfigBasicMutator(existingObj, desiredObj client.Object) (bool, error)
 	}
 
 	existing.Spec = desired.Spec
-
 	return true, nil
 }

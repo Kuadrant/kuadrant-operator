@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/gomega/gstruct"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -49,11 +50,11 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		Eventually(func() error {
 			gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 				{
-					Type:  Pointer(gatewayapiv1.IPAddressType),
+					Type:  ptr.To(gatewayapiv1.IPAddressType),
 					Value: TestIPAddressOne,
 				},
 				{
-					Type:  Pointer(gatewayapiv1.IPAddressType),
+					Type:  ptr.To(gatewayapiv1.IPAddressType),
 					Value: TestIPAddressTwo,
 				},
 			}

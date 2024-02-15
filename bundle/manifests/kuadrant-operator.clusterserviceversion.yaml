@@ -16,7 +16,7 @@ metadata:
               "protocol": "HTTP"
             },
             "targetRef": {
-              "group": "",
+              "group": "gateway.networking.k8s.io",
               "kind": "Gateway",
               "name": "example-gateway"
             }
@@ -106,7 +106,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2024-02-06T11:59:47Z"
+    createdAt: "2024-02-15T15:27:32Z"
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator

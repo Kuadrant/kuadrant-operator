@@ -6,7 +6,7 @@ metadata:
 spec:
   targetRef:
     name: example-gateway
-    group: ""
+    group: gateway.networking.k8s.io
     kind: Gateway
   healthCheck:
     endpoint: /

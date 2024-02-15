@@ -42,7 +42,6 @@ const (
 
 // DNSPolicySpec defines the desired state of DNSPolicy
 type DNSPolicySpec struct {
-
 	// +kubebuilder:validation:Required
 	// +required
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
@@ -111,7 +110,6 @@ type LoadBalancingGeo struct {
 
 // DNSPolicyStatus defines the observed state of DNSPolicy
 type DNSPolicyStatus struct {
-
 	// conditions are any conditions associated with the policy
 	//
 	// If configuring the policy fails, the "Failed" condition will be set with a
@@ -164,8 +162,8 @@ func (p *DNSPolicy) Kind() string { return p.TypeMeta.Kind }
 // Validate ensures the resource is valid. Compatible with the validating interface
 // used by webhooks
 func (p *DNSPolicy) Validate() error {
-	if p.Spec.TargetRef.Group != "gateway.networking.k8s.io" {
-		return fmt.Errorf("invalid targetRef.Group %s. The only supported group is gateway.networking.k8s.io", p.Spec.TargetRef.Group)
+	if p.Spec.TargetRef.Group != gatewayapiv1.GroupName {
+		return fmt.Errorf("invalid targetRef.Group %s. The only supported group is %s", p.Spec.TargetRef.Group, gatewayapiv1.GroupName)
 	}
 
 	if p.Spec.TargetRef.Kind != ("Gateway") {
@@ -291,7 +289,7 @@ func (p *DNSPolicy) WithRoutingStrategy(strategy RoutingStrategy) *DNSPolicy {
 func (p *DNSPolicy) WithTargetGateway(gwName string) *DNSPolicy {
 	typedNamespace := gatewayapiv1.Namespace(p.GetNamespace())
 	return p.WithTargetRef(gatewayapiv1alpha2.PolicyTargetReference{
-		Group:     "gateway.networking.k8s.io",
+		Group:     gatewayapiv1.GroupName,
 		Kind:      "Gateway",
 		Name:      gatewayapiv1.ObjectName(gwName),
 		Namespace: &typedNamespace,

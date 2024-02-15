@@ -353,10 +353,6 @@ func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {
 	}
 }
 
-func Pointer[T any](t T) *T {
-	return &t
-}
-
 // DNS
 
 func testBuildManagedZone(name, ns, domainName string) *kuadrantdnsv1alpha1.ManagedZone {
@@ -446,11 +442,11 @@ func (t *GatewayBuilder) WithHTTPSListener(hostname, tlsSecretName string) *Gate
 		Port:     gatewayapiv1.PortNumber(443),
 		Protocol: gatewayapiv1.HTTPSProtocolType,
 		TLS: &gatewayapiv1.GatewayTLSConfig{
-			Mode: Pointer(gatewayapiv1.TLSModeTerminate),
+			Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
 			CertificateRefs: []gatewayapiv1.SecretObjectReference{
 				{
 					Name:      gatewayapiv1.ObjectName(tlsSecretName),
-					Namespace: Pointer(typedNamespace),
+					Namespace: ptr.To(typedNamespace),
 				},
 			},
 		},

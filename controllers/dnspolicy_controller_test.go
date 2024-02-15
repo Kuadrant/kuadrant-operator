@@ -14,6 +14,7 @@ import (
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -146,11 +147,11 @@ var _ = Describe("DNSPolicy controller", func() {
 				g.Expect(err).ToNot(HaveOccurred())
 				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
-						Type:  Pointer(gatewayapiv1.HostnameAddressType),
+						Type:  ptr.To(gatewayapiv1.HostnameAddressType),
 						Value: TestIPAddressOne,
 					},
 					{
-						Type:  Pointer(multicluster.MultiClusterIPAddressType),
+						Type:  ptr.To(multicluster.MultiClusterIPAddressType),
 						Value: TestIPAddressTwo,
 					},
 				}
@@ -186,7 +187,7 @@ var _ = Describe("DNSPolicy controller", func() {
 					ContainElement(MatchFields(IgnoreExtras, Fields{
 						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionFalse),
-						"Reason":  Equal("ReconciliationError"),
+						"Reason":  Equal(string(common.PolicyReasonUnknown)),
 						"Message": ContainSubstring("gateway is invalid: inconsistent status addresses"),
 					})),
 				)
@@ -269,11 +270,11 @@ var _ = Describe("DNSPolicy controller", func() {
 
 				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
-						Type:  Pointer(multicluster.MultiClusterIPAddressType),
+						Type:  ptr.To(multicluster.MultiClusterIPAddressType),
 						Value: TestClusterNameOne + "/" + TestIPAddressOne,
 					},
 					{
-						Type:  Pointer(multicluster.MultiClusterIPAddressType),
+						Type:  ptr.To(multicluster.MultiClusterIPAddressType),
 						Value: TestClusterNameTwo + "/" + TestIPAddressTwo,
 					},
 				}

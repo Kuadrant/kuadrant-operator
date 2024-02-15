@@ -388,7 +388,7 @@ func (dh *dnsHelper) createDNSRecordForListener(ctx context.Context, gateway *ga
 	logger := log.FromContext(ctx)
 	logger.Info("creating dns for gateway listener", "listener", listener.Name)
 	dnsRecord := dh.buildDNSRecordForListener(gateway, dnsPolicy, listener, mz)
-	if err := controllerutil.SetControllerReference(mz, dnsRecord, dh.Scheme()); err != nil {
+	if err := controllerutil.SetControllerReference(dnsPolicy, dnsRecord, dh.Scheme()); err != nil {
 		return dnsRecord, err
 	}
 

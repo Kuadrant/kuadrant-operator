@@ -145,8 +145,8 @@ func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 }
 
 func (p *TLSPolicy) Validate() error {
-	if p.Spec.TargetRef.Group != ("gateway.networking.k8s.io") {
-		return fmt.Errorf("invalid targetRef.Group %s. The only supported group is gateway.networking.k8s.io", p.Spec.TargetRef.Group)
+	if p.Spec.TargetRef.Group != (gatewayapiv1.GroupName) {
+		return fmt.Errorf("invalid targetRef.Group %s. The only supported group is %s", p.Spec.TargetRef.Group, gatewayapiv1.GroupName)
 	}
 
 	if p.Spec.TargetRef.Kind != ("Gateway") {
@@ -188,7 +188,7 @@ func NewTLSPolicy(policyName, ns string) *TLSPolicy {
 func (p *TLSPolicy) WithTargetGateway(gwName string) *TLSPolicy {
 	typedNamespace := gatewayapiv1.Namespace(p.GetNamespace())
 	p.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
-		Group:     "gateway.networking.k8s.io",
+		Group:     gatewayapiv1.GroupName,
 		Kind:      "Gateway",
 		Name:      gatewayapiv1.ObjectName(gwName),
 		Namespace: &typedNamespace,

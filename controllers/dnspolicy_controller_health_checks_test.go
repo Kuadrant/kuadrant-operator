@@ -13,6 +13,7 @@ import (
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -51,11 +52,11 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 		Eventually(func() error {
 			gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 				{
-					Type:  Pointer(multicluster.MultiClusterIPAddressType),
+					Type:  ptr.To(multicluster.MultiClusterIPAddressType),
 					Value: TestClusterNameOne + "/" + TestIPAddressOne,
 				},
 				{
-					Type:  Pointer(multicluster.MultiClusterIPAddressType),
+					Type:  ptr.To(multicluster.MultiClusterIPAddressType),
 					Value: TestClusterNameTwo + "/" + TestIPAddressTwo,
 				},
 			}
@@ -126,7 +127,7 @@ var _ = Describe("DNSPolicy Health Checks", func() {
 						WithTargetGateway(TestGatewayName).
 						WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
 						WithLoadBalancingWeightedFor(120, nil).
-						WithHealthCheckFor("/", nil, kuadrantdnsv1alpha1.HttpProtocol, Pointer(4))
+						WithHealthCheckFor("/", nil, kuadrantdnsv1alpha1.HttpProtocol, ptr.To(4))
 					Expect(k8sClient.Create(ctx, dnsPolicy)).To(BeNil())
 					Eventually(func() error { //dns policy exists
 						return k8sClient.Get(ctx, client.ObjectKey{Name: dnsPolicy.Name, Namespace: dnsPolicy.Namespace}, dnsPolicy)

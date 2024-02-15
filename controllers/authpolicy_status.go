@@ -11,10 +11,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
@@ -89,7 +88,10 @@ func (r *AuthPolicyReconciler) enforcedCondition(ctx context.Context, policy *ap
 	logger, _ := logr.FromContext(ctx)
 
 	// Check if the policy is overridden
-	if r.isPolicyOverridden(policy) {
+	// Note: This logic assumes synchronous processing, where computing the desired AuthConfig, marking the AuthPolicy
+	// as overridden, and calculating the Enforced condition happen sequentially.
+	// Introducing a goroutine in this flow could break this assumption and lead to unexpected behavior.
+	if r.OverriddenPolicyMap.IsPolicyOverridden(policy) {
 		logger.V(1).Info("Gateway Policy is overridden")
 		return r.handleGatewayPolicyOverride(logger, policy, targetNetworkObject)
 	}
@@ -108,24 +110,6 @@ func (r *AuthPolicyReconciler) enforcedCondition(ctx context.Context, policy *ap
 
 	logger.V(1).Info("AuthPolicy is enforced")
 	return common.EnforcedCondition(policy, nil)
-}
-
-// setOverriddenPolicy sets the overridden policy in the reconciler's tracking map.
-func (r *AuthPolicyReconciler) setOverriddenPolicy(ap *api.AuthPolicy) {
-	if r.OverriddenPolicies == nil {
-		r.OverriddenPolicies = make(map[types.UID]bool)
-	}
-	r.OverriddenPolicies[ap.GetUID()] = true
-}
-
-// removeOverriddenPolicy removes the overridden policy from the reconciler's tracking map.
-func (r *AuthPolicyReconciler) removeOverriddenPolicy(ap *api.AuthPolicy) {
-	delete(r.OverriddenPolicies, ap.GetUID())
-}
-
-// isPolicyOverridden checks if the provided AuthPolicy is overridden based on the tracking map maintained by the reconciler.
-func (r *AuthPolicyReconciler) isPolicyOverridden(ap *api.AuthPolicy) bool {
-	return r.OverriddenPolicies[ap.GetUID()] && common.IsTargetRefGateway(ap.GetTargetRef())
 }
 
 // isAuthConfigReady checks if the AuthConfig is ready.
@@ -148,7 +132,7 @@ func (r *AuthPolicyReconciler) isAuthConfigReady(ctx context.Context, policy *ap
 // handleGatewayPolicyOverride handles the case where the Gateway Policy is overridden by filtering policy references
 // and creating a corresponding error condition.
 func (r *AuthPolicyReconciler) handleGatewayPolicyOverride(logger logr.Logger, policy *api.AuthPolicy, targetNetworkObject client.Object) *metav1.Condition {
-	obj := targetNetworkObject.(*v1.Gateway)
+	obj := targetNetworkObject.(*gatewayapiv1.Gateway)
 	gatewayWrapper := common.GatewayWrapper{Gateway: obj, PolicyRefsConfig: &common.KuadrantAuthPolicyRefsConfig{}}
 	refs := gatewayWrapper.PolicyRefs()
 	filteredRef := common.Filter(refs, func(key client.ObjectKey) bool {

@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"sync"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -18,6 +20,41 @@ const (
 	PolicyReasonOverridden gatewayapiv1alpha2.PolicyConditionReason = "Overridden"
 	PolicyReasonUnknown    gatewayapiv1alpha2.PolicyConditionReason = "Unknown"
 )
+
+func NewOverriddenPolicyMap() *OverriddenPolicyMap {
+	return &OverriddenPolicyMap{
+		policies: make(map[types.UID]bool),
+	}
+}
+
+type OverriddenPolicyMap struct {
+	policies map[types.UID]bool
+	mu       sync.RWMutex
+}
+
+// SetOverriddenPolicy sets the provided KuadrantPolicy as overridden in the tracking map.
+func (o *OverriddenPolicyMap) SetOverriddenPolicy(p KuadrantPolicy) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	if o.policies == nil {
+		o.policies = make(map[types.UID]bool)
+	}
+	o.policies[p.GetUID()] = true
+}
+
+// RemoveOverriddenPolicy removes the provided KuadrantPolicy from the tracking map of overridden policies.
+func (o *OverriddenPolicyMap) RemoveOverriddenPolicy(p KuadrantPolicy) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	delete(o.policies, p.GetUID())
+}
+
+// IsPolicyOverridden checks if the provided KuadrantPolicy is overridden based on the tracking map maintained.
+func (o *OverriddenPolicyMap) IsPolicyOverridden(p KuadrantPolicy) bool {
+	return o.policies[p.GetUID()] && IsTargetRefGateway(p.GetTargetRef())
+}
 
 // ConditionMarshal marshals the set of conditions as a JSON array, sorted by condition type.
 func ConditionMarshal(conditions []metav1.Condition) ([]byte, error) {

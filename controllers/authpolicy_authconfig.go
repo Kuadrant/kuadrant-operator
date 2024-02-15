@@ -92,7 +92,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 		if len(rules) == 0 {
 			logger.V(1).Info("no httproutes attached to the targeted gateway, skipping authorino authconfig for the gateway authpolicy")
 			common.TagObjectToDelete(authConfig)
-			r.setOverriddenPolicy(ap)
+			r.OverriddenPolicyMap.SetOverriddenPolicy(ap)
 			return authConfig, nil
 		}
 		route = &gatewayapiv1.HTTPRoute{
@@ -103,8 +103,8 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 		}
 	}
 
-	// AuthPolicy is not overridden if code execution flow reaches here
-	r.removeOverriddenPolicy(ap)
+	// AuthPolicy is not overridden if we still need to create an AuthConfig for it
+	r.OverriddenPolicyMap.RemoveOverriddenPolicy(ap)
 
 	// hosts
 	authConfig.Spec.Hosts = hosts

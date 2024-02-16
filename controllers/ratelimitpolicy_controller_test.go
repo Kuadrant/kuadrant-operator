@@ -752,36 +752,3 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 		})
 	})
 })
-
-func testRLPIsAccepted(rlpKey client.ObjectKey) func() bool {
-	return func() bool {
-		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
-		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
-		if err != nil {
-			return false
-		}
-		if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
-			return false
-		}
-
-		return true
-	}
-}
-
-func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {
-	return func() bool {
-		wp := &istioclientgoextensionv1alpha1.WasmPlugin{}
-		err := k8sClient.Get(context.Background(), key, wp)
-		if err != nil {
-			return false
-		}
-
-		// Unfortunately, WasmPlugin does not have status yet
-		// Leaving this here for future use
-		//if !meta.IsStatusConditionTrue(wp.Status.Conditions, "Available") {
-		//	return false
-		//}
-
-		return true
-	}
-}

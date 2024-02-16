@@ -1,5 +1,4 @@
 # Setting SHELL to bash allows bash commands to be executed by recipes.
-# This is a requirement for 'setup-envtest.sh' in the test target.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
@@ -80,12 +79,10 @@ endif
 
 # Image URL to use all building/pushing image targets
 IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
-# ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.22
 
 # Directories containing unit & integration test packages
 UNIT_DIRS := ./pkg/... ./api/... ./controllers/...
-INTEGRATION_DIRS := ./controllers...
+INTEGRATION_TEST_SUITE_PATHS := ./controllers/...
 INTEGRATION_COVER_PKGS := ./pkg/...,./controllers/...,./api/...
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
@@ -239,6 +236,17 @@ $(ACT):
 .PHONY: act
 act: $(ACT) ## Download act locally if necessary.
 
+GINKGO = $(PROJECT_PATH)/bin/ginkgo
+$(GINKGO):
+	# In order to make sure the version of the ginkgo cli installed
+	# is the same as the version of go.mod,
+	# instead of calling go-install-tool,
+	# running go install from the current module will pick version from current go.mod file.
+	GOBIN=$(PROJECT_DIR)/bin go install github.com/onsi/ginkgo/v2/ginkgo
+
+.PHONY: ginkgo
+ginkgo: $(GINKGO) ## Download ginkgo locally if necessary.
+
 ##@ Development
 define patch-config
 	envsubst \
@@ -283,20 +291,28 @@ vet: ## Run go vet against code.
 
 .PHONY: clean-cov
 clean-cov: ## Remove coverage reports
-	rm -rf coverage
+	rm -rf $(PROJECT_PATH)/coverage
 
 .PHONY: test
 test: test-unit test-integration ## Run all tests
 
-test-integration: clean-cov generate fmt vet envtest ## Run Integration tests.
-	mkdir -p coverage/integration
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)" go test $(INTEGRATION_DIRS) -coverpkg=$(INTEGRATION_COVER_PKGS) -coverprofile $(PROJECT_PATH)/coverage/integration/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
+test-integration: clean-cov generate fmt vet ginkgo ## Run Integration tests.
+	mkdir -p $(PROJECT_PATH)/coverage/integration
+#	Check `ginkgo help run` for command line options. For example to filtering tests.
+	$(GINKGO) \
+		--coverpkg $(INTEGRATION_COVER_PKGS) \
+		--output-dir $(PROJECT_PATH)/coverage/integration \
+		--coverprofile cover.out \
+		-tags integration \
+		--fail-fast \
+		-v \
+		$(INTEGRATION_TEST_SUITE_PATHS)
 
 ifdef TEST_NAME
 test-unit: TEST_PATTERN := --run $(TEST_NAME)
 endif
 test-unit: clean-cov generate fmt vet ## Run Unit tests.
-	mkdir -p coverage/unit
+	mkdir -p $(PROJECT_PATH)/coverage/unit
 	go test $(UNIT_DIRS) -coverprofile $(PROJECT_PATH)/coverage/unit/cover.out -tags unit -v -timeout 0 $(TEST_PATTERN)
 
 .PHONY: namespace
@@ -434,10 +450,6 @@ deploy-catalog: $(KUSTOMIZE) $(YQ) ## Deploy operator to the K8s cluster specifi
 undeploy-catalog: $(KUSTOMIZE) ## Undeploy controller from the K8s cluster specified in ~/.kube/config using OLM catalog image.
 	$(KUSTOMIZE) build config/deploy/olm | kubectl delete -f -
 
-
-ENVTEST = $(shell pwd)/bin/setup-envtest
-envtest: ## Download envtest-setup locally if necessary.
-	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest@latest)
 
 # go-install-tool will 'go install' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))

@@ -11,11 +11,9 @@ import (
 	"path/filepath"
 	"time"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-
 	"github.com/google/uuid"
 	. "github.com/onsi/gomega"
+	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,6 +28,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 func ApplyKuadrantCR(namespace string) {
@@ -291,5 +294,38 @@ func testGatewayIsReady(gateway *gatewayapiv1.Gateway) func() bool {
 		existingGateway := &gatewayapiv1.Gateway{}
 		err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
 		return err == nil && meta.IsStatusConditionTrue(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType)
+	}
+}
+
+func testRLPIsAccepted(rlpKey client.ObjectKey) func() bool {
+	return func() bool {
+		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+		if err != nil {
+			return false
+		}
+		if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
+			return false
+		}
+
+		return true
+	}
+}
+
+func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {
+	return func() bool {
+		wp := &istioclientgoextensionv1alpha1.WasmPlugin{}
+		err := k8sClient.Get(context.Background(), key, wp)
+		if err != nil {
+			return false
+		}
+
+		// Unfortunately, WasmPlugin does not have status yet
+		// Leaving this here for future use
+		//if !meta.IsStatusConditionTrue(wp.Status.Conditions, "Available") {
+		//	return false
+		//}
+
+		return true
 	}
 }

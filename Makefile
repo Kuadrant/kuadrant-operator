@@ -86,6 +86,7 @@ ENVTEST_K8S_VERSION = 1.22
 # Directories containing unit & integration test packages
 UNIT_DIRS := ./pkg/... ./api/... ./controllers/...
 INTEGRATION_DIRS := ./controllers...
+INTEGRATION_COVER_PKGS := ./pkg/...,./controllers/...,./api/...
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -289,7 +290,7 @@ test: test-unit test-integration ## Run all tests
 
 test-integration: clean-cov generate fmt vet envtest ## Run Integration tests.
 	mkdir -p coverage/integration
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)" USE_EXISTING_CLUSTER=true go test $(INTEGRATION_DIRS) -coverprofile $(PROJECT_PATH)/coverage/integration/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) $(ARCH_PARAM) use $(ENVTEST_K8S_VERSION) -p path)" go test $(INTEGRATION_DIRS) -coverpkg=$(INTEGRATION_COVER_PKGS) -coverprofile $(PROJECT_PATH)/coverage/integration/cover.out -tags integration -ginkgo.v -ginkgo.progress -v -timeout 0
 
 ifdef TEST_NAME
 test-unit: TEST_PATTERN := --run $(TEST_NAME)
@@ -415,7 +416,7 @@ install-metallb: kustomize yq ## Installs the metallb load balancer allowing use
 	./utils/docker-network-ipaddresspool.sh kind $(YQ) | kubectl apply -n metallb-system -f -
 
 .PHONY: uninstall-metallb
-uninstall-metallb: $(KUSTOMIZE) 
+uninstall-metallb: $(KUSTOMIZE)
 	$(KUSTOMIZE) build config/metallb | kubectl delete -f -
 
 .PHONY: install-olm

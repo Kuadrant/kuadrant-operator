@@ -36,7 +36,7 @@ jobs:
         run: |
           make test-unit
       - name: Upload unit-test coverage reports to CodeCov # more at https://github.com/codecov/codecov-action
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: unit
@@ -92,7 +92,7 @@ jobs:
         run: |
           make test-integration
       - name: Upload integration-test coverage reports to CodeCov # more at https://github.com/codecov/codecov-action
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: integration

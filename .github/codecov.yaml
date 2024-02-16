@@ -45,6 +45,10 @@ component_management:
       name: api/v1beta1 (u)
       paths:
         - api/v1beta1
+    - component_id: api-v1beta2
+      name: api/v1beta2 (u)
+      paths:
+        - api/v1beta2
     - component_id: common
       name: pkg/common (u)
       paths:
@@ -69,4 +73,3 @@ component_management:
       name: controllers (i)
       paths:
         - controllers
-

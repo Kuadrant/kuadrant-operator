@@ -27,18 +27,6 @@ ignore:
   - api/external/**  #  ignoring external vendor code
   - "**/*.deepcopy.go"  # ignore controller-gen generated code
 
-flag_management:
-  individual_flags:
-    - name: unit
-      paths:
-        - pkg/**
-        - api/**
-      carryforward: true
-    - name: integration
-      paths:
-        - controllers/**
-      carryforward: true
-
 component_management:
   individual_components:
     - component_id: api-v1beta1

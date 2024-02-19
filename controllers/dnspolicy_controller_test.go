@@ -116,7 +116,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			// this one should get deleted if the gateway is invalid policy ref
 			probe := &kuadrantdnsv1alpha1.DNSHealthCheckProbe{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      fmt.Sprintf("%s-%s-%s", TestIPAddressTwo, TestGatewayName, TestHostOne),
+					Name:      fmt.Sprintf("%s-%s-%s", TestIPAddressTwo, TestGatewayName, TestHostTwo),
 					Namespace: testNamespace,
 					Labels: map[string]string{
 						common.DNSPolicyBackRefAnnotation:                              "test-dns-policy",
@@ -138,7 +138,7 @@ var _ = Describe("DNSPolicy controller", func() {
 		It("should not process gateway with inconsistent addresses", func() {
 			// build invalid gateway
 			gateway = NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
-				WithHTTPListener(TestListenerNameOne, TestHostOne).Gateway
+				WithHTTPListener(TestListenerNameOne, TestHostTwo).Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 
 			// ensure Gateway exists and invalidate it by setting inconsistent addresses
@@ -201,7 +201,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 		BeforeEach(func() {
 			gateway = NewGatewayBuilder(testGatewayName, gatewayClass.Name, testNamespace).
-				WithHTTPListener(TestListenerNameOne, TestHostOne).
+				WithHTTPListener(TestListenerNameOne, TestHostTwo).
 				Gateway
 			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithTargetGateway(testGatewayName).
@@ -254,7 +254,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 		BeforeEach(func() {
 			gateway = NewGatewayBuilder(TestGatewayName, gatewayClass.Name, testNamespace).
-				WithHTTPListener(TestListenerNameOne, TestHostOne).
+				WithHTTPListener(TestListenerNameOne, TestHostTwo).
 				WithHTTPListener(TestListenerNameWildcard, TestHostWildcard).
 				Gateway
 			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).

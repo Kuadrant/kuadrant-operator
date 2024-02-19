@@ -3,8 +3,10 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
@@ -86,33 +88,57 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 			}
 			return nil
 		}
-		dnsRecord, err := r.dnsHelper.createDNSRecordForListener(ctx, gatewayWrapper.Gateway, dnsPolicy, mz, listener)
-		if err := client.IgnoreAlreadyExists(err); err != nil {
-			return fmt.Errorf("failed to create dns record for listener host %s : %w", *listener.Hostname, err)
-		}
-		if k8serrors.IsAlreadyExists(err) {
-			dnsRecord, err = r.dnsHelper.getDNSRecordForListener(ctx, listener, gatewayWrapper)
-			if err != nil {
-				return fmt.Errorf("failed to get dns record for host %s : %w", listener.Name, err)
-			}
-		}
 
-		mcgTarget, err := multicluster.NewGatewayTarget(gatewayWrapper.Gateway, listenerGateways, dnsPolicy.Spec.LoadBalancing)
-		if err != nil {
-			return fmt.Errorf("failed to create multi cluster gateway target for listener %s : %w", listener.Name, err)
-		}
-
-		log.Info("setting dns dnsTargets for gateway listener", "listener", dnsRecord.Name, "values", mcgTarget)
-		probes, err := r.dnsHelper.getDNSHealthCheckProbes(ctx, mcgTarget.Gateway, dnsPolicy)
+		dnsRecord, err := r.desiredDNSRecord(ctx, gatewayWrapper.Gateway, dnsPolicy, listener, listenerGateways, mz)
 		if err != nil {
 			return err
 		}
-		mcgTarget.RemoveUnhealthyGatewayAddresses(probes, listener)
-		if err := r.dnsHelper.setEndpoints(ctx, mcgTarget, dnsRecord, listener, dnsPolicy.Spec.RoutingStrategy); err != nil {
-			return fmt.Errorf("failed to add dns record dnsTargets %w %v", err, mcgTarget)
+
+		err = r.SetOwnerReference(dnsPolicy, dnsRecord)
+		if err != nil {
+			return err
+		}
+
+		err = r.ReconcileResource(ctx, &kuadrantdnsv1alpha1.DNSRecord{}, dnsRecord, dnsRecordBasicMutator)
+		if err != nil && !apierrors.IsAlreadyExists(err) {
+			log.Error(err, "ReconcileResource failed to create/update DNSRecord resource")
+			return err
 		}
 	}
 	return nil
+}
+
+func (r *DNSPolicyReconciler) desiredDNSRecord(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener, clusterGateways []multicluster.ClusterGateway, managedZone *kuadrantdnsv1alpha1.ManagedZone) (*kuadrantdnsv1alpha1.DNSRecord, error) {
+	dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      dnsRecordName(gateway.Name, string(targetListener.Name)),
+			Namespace: managedZone.Namespace,
+			Labels:    commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(dnsPolicy)),
+		},
+		Spec: kuadrantdnsv1alpha1.DNSRecordSpec{
+			ManagedZoneRef: &kuadrantdnsv1alpha1.ManagedZoneReference{
+				Name: managedZone.Name,
+			},
+		},
+	}
+	dnsRecord.Labels[LabelListenerReference] = string(targetListener.Name)
+
+	mcgTarget, err := multicluster.NewGatewayTarget(gateway, clusterGateways, dnsPolicy.Spec.LoadBalancing)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create multi cluster gateway target for listener %s : %w", targetListener.Name, err)
+	}
+
+	probes, err := r.dnsHelper.getDNSHealthCheckProbes(ctx, mcgTarget.Gateway, dnsPolicy)
+	if err != nil {
+		return nil, err
+	}
+	mcgTarget.RemoveUnhealthyGatewayAddresses(probes, targetListener)
+
+	if err = r.dnsHelper.setEndpoints(mcgTarget, dnsRecord, targetListener, dnsPolicy.Spec.RoutingStrategy); err != nil {
+		return nil, fmt.Errorf("failed to add dns record dnsTargets %w %v", err, mcgTarget)
+	}
+
+	return dnsRecord, nil
 }
 
 func (r *DNSPolicyReconciler) deleteGatewayDNSRecords(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) error {
@@ -139,4 +165,23 @@ func (r *DNSPolicyReconciler) deleteDNSRecordsWithLabels(ctx context.Context, lb
 		}
 	}
 	return nil
+}
+
+func dnsRecordBasicMutator(existingObj, desiredObj client.Object) (bool, error) {
+	existing, ok := existingObj.(*kuadrantdnsv1alpha1.DNSRecord)
+	if !ok {
+		return false, fmt.Errorf("%T is not an *kuadrantdnsv1alpha1.DNSRecord", existingObj)
+	}
+	desired, ok := desiredObj.(*kuadrantdnsv1alpha1.DNSRecord)
+	if !ok {
+		return false, fmt.Errorf("%T is not an *kuadrantdnsv1alpha1.DNSRecord", desiredObj)
+	}
+
+	if reflect.DeepEqual(existing.Spec, desired.Spec) {
+		return false, nil
+	}
+
+	existing.Spec = desired.Spec
+
+	return true, nil
 }

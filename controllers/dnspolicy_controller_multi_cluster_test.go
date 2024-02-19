@@ -304,8 +304,8 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 					WithTargetGateway(TestGatewayName).
 					WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
-					WithLoadBalancingWeightedFor(120, nil).
-					WithLoadBalancingGeoFor("IE")
+					WithLoadBalancingGeoFor("IE").
+					WithLoadBalancingWeightedFor(120, nil)
 				Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 			})
 

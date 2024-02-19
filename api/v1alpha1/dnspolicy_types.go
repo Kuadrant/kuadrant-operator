@@ -315,7 +315,7 @@ func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port *int, protocol kuad
 
 func (p *DNSPolicy) WithLoadBalancingWeighted(lbWeighted LoadBalancingWeighted) *DNSPolicy {
 	if p.Spec.LoadBalancing == nil {
-		p.Spec.LoadBalancing = &LoadBalancingSpec{}
+		p.WithLoadBalancing(LoadBalancingSpec{})
 	}
 	p.Spec.LoadBalancing.Weighted = &lbWeighted
 	return p

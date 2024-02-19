@@ -49,7 +49,7 @@ const (
 	TestClusterNameOne       = "test-placed-control"
 	TestClusterNameTwo       = "test-placed-workload-1"
 	TestHostOne              = "test.example.com"
-	TestHostTwo              = "other.example.com"
+	TestHostTwo              = "other.test.example.com"
 	TestHostWildcard         = "*.example.com"
 	TestListenerNameWildcard = "wildcard"
 	TestListenerNameOne      = "test-listener-1"

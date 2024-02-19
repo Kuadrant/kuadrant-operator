@@ -10,12 +10,9 @@ import (
 
 	"golang.org/x/net/publicsuffix"
 
-	"k8s.io/apimachinery/pkg/api/equality"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -105,36 +102,6 @@ func gatewayDNSRecordLabels(gwKey client.ObjectKey) map[string]string {
 	}
 }
 
-func (dh *dnsHelper) buildDNSRecordForListener(gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener, managedZone *kuadrantdnsv1alpha1.ManagedZone) *kuadrantdnsv1alpha1.DNSRecord {
-	dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      dnsRecordName(gateway.Name, string(targetListener.Name)),
-			Namespace: managedZone.Namespace,
-			Labels:    commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(dnsPolicy)),
-		},
-		Spec: kuadrantdnsv1alpha1.DNSRecordSpec{
-			ManagedZoneRef: &kuadrantdnsv1alpha1.ManagedZoneReference{
-				Name: managedZone.Name,
-			},
-		},
-	}
-	dnsRecord.Labels[LabelListenerReference] = string(targetListener.Name)
-	return dnsRecord
-}
-
-// getDNSRecordForListener returns a v1alpha1.DNSRecord, if one exists, for the given listener in the given kuadrantdnsv1alpha1.ManagedZone.
-func (dh *dnsHelper) getDNSRecordForListener(ctx context.Context, listener gatewayapiv1.Listener, owner metav1.Object) (*kuadrantdnsv1alpha1.DNSRecord, error) {
-	recordName := dnsRecordName(owner.GetName(), string(listener.Name))
-	dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
-	if err := dh.Get(ctx, client.ObjectKey{Name: recordName, Namespace: owner.GetNamespace()}, dnsRecord); err != nil {
-		if k8serrors.IsNotFound(err) {
-			log.Log.V(1).Info("no dnsrecord found for listener ", "listener", listener)
-		}
-		return nil, err
-	}
-	return dnsRecord, nil
-}
-
 func withGatewayListener[T metav1.Object](gateway common.GatewayWrapper, listener gatewayapiv1.Listener, obj T) T {
 	if obj.GetAnnotations() == nil {
 		obj.SetAnnotations(map[string]string{})
@@ -146,8 +113,7 @@ func withGatewayListener[T metav1.Object](gateway common.GatewayWrapper, listene
 	return obj
 }
 
-func (dh *dnsHelper) setEndpoints(ctx context.Context, mcgTarget *multicluster.GatewayTarget, dnsRecord *kuadrantdnsv1alpha1.DNSRecord, listener gatewayapiv1.Listener, strategy v1alpha1.RoutingStrategy) error {
-	old := dnsRecord.DeepCopy()
+func (dh *dnsHelper) setEndpoints(mcgTarget *multicluster.GatewayTarget, dnsRecord *kuadrantdnsv1alpha1.DNSRecord, listener gatewayapiv1.Listener, strategy v1alpha1.RoutingStrategy) error {
 	gwListenerHost := string(*listener.Hostname)
 	var endpoints []*kuadrantdnsv1alpha1.Endpoint
 
@@ -171,10 +137,6 @@ func (dh *dnsHelper) setEndpoints(ctx context.Context, mcgTarget *multicluster.G
 	})
 
 	dnsRecord.Spec.Endpoints = endpoints
-
-	if !equality.Semantic.DeepEqual(old, dnsRecord) {
-		return dh.Update(ctx, dnsRecord)
-	}
 
 	return nil
 }
@@ -382,27 +344,6 @@ func (dh *dnsHelper) getManagedZoneForListener(ctx context.Context, ns string, l
 
 func dnsRecordName(gatewayName, listenerName string) string {
 	return fmt.Sprintf("%s-%s", gatewayName, listenerName)
-}
-
-func (dh *dnsHelper) createDNSRecordForListener(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy, mz *kuadrantdnsv1alpha1.ManagedZone, listener gatewayapiv1.Listener) (*kuadrantdnsv1alpha1.DNSRecord, error) {
-	logger := log.FromContext(ctx)
-	logger.Info("creating dns for gateway listener", "listener", listener.Name)
-	dnsRecord := dh.buildDNSRecordForListener(gateway, dnsPolicy, listener, mz)
-	if err := controllerutil.SetControllerReference(dnsPolicy, dnsRecord, dh.Scheme()); err != nil {
-		return dnsRecord, err
-	}
-
-	err := dh.Create(ctx, dnsRecord, &client.CreateOptions{})
-	if err != nil && !k8serrors.IsAlreadyExists(err) {
-		return dnsRecord, err
-	}
-	if err != nil && k8serrors.IsAlreadyExists(err) {
-		err = dh.Get(ctx, client.ObjectKeyFromObject(dnsRecord), dnsRecord)
-		if err != nil {
-			return dnsRecord, err
-		}
-	}
-	return dnsRecord, nil
 }
 
 func (dh *dnsHelper) deleteDNSRecordForListener(ctx context.Context, owner metav1.Object, listener gatewayapiv1.Listener) error {

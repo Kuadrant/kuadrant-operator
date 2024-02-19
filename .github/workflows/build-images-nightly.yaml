@@ -5,13 +5,22 @@ on:
     - cron: '0 1 * * *'
 
 jobs:
+  date:
+    name: GetDate
+    runs-on: ubuntu-latest
+    outputs:
+      date: ${{ steps.date.outputs.date }}
+    steps:
+      - id: date
+        run: echo "date=nightly-$(date +'%d-%m-%Y')" >> $GITHUB_OUTPUT
   workflow-build:
+    needs: date
     name: Calls build-images-base workflow
     uses: ./.github/workflows/build-images-base.yaml
     secrets: inherit
     with:
       kuadrantOperatorVersion: ${{ github.sha }}
-      kuadrantOperatorTag: nightly-$(date +'%d-%m-%Y')
+      kuadrantOperatorTag: ${{ needs.date.outputs.date }}
       authorinoOperatorVersion: ${{ vars.AUTHORINO_OPERATOR_SHA }}
       limitadorOperatorVersion: ${{ vars.LIMITADOR_OPERATOR_SHA }}
       policyControllerVersion: ${{ vars.POLICY_CONTROLLER_SHA }}

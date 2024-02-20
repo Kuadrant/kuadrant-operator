@@ -9,10 +9,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/google/uuid"
 	. "github.com/onsi/gomega"
+
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -30,9 +34,28 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+)
+
+const (
+	TestTimeoutMedium        = time.Second * 10
+	TestTimeoutLong          = time.Second * 30
+	TestRetryIntervalMedium  = time.Millisecond * 250
+	TestGatewayName          = "test-placed-gateway"
+	TestClusterNameOne       = "test-placed-control"
+	TestClusterNameTwo       = "test-placed-workload-1"
+	TestHostOne              = "test.example.com"
+	TestHostTwo              = "other.test.example.com"
+	TestHostWildcard         = "*.example.com"
+	TestListenerNameWildcard = "wildcard"
+	TestListenerNameOne      = "test-listener-1"
+	TestListenerNameTwo      = "test-listener-2"
+	TestIPAddressOne         = "172.0.0.1"
+	TestIPAddressTwo         = "172.0.0.2"
 )
 
 func ApplyKuadrantCR(namespace string) {
@@ -327,5 +350,148 @@ func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {
 		//}
 
 		return true
+	}
+}
+
+// DNS
+
+func testBuildManagedZone(name, ns, domainName string) *kuadrantdnsv1alpha1.ManagedZone {
+	return &kuadrantdnsv1alpha1.ManagedZone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: kuadrantdnsv1alpha1.ManagedZoneSpec{
+			ID:          "1234",
+			DomainName:  domainName,
+			Description: domainName,
+			SecretRef: kuadrantdnsv1alpha1.ProviderRef{
+				Name: "secretname",
+			},
+		},
+	}
+}
+
+//Gateway
+
+func testBuildGatewayClass(name, ns, controllerName string) *gatewayapiv1.GatewayClass {
+	return &gatewayapiv1.GatewayClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: gatewayapiv1.GatewayClassSpec{
+			ControllerName: gatewayapiv1.GatewayController(controllerName),
+		},
+	}
+}
+
+// GatewayBuilder wrapper for Gateway builder helper
+type GatewayBuilder struct {
+	*gatewayapiv1.Gateway
+}
+
+func NewGatewayBuilder(gwName, gwClassName, ns string) *GatewayBuilder {
+	return &GatewayBuilder{
+		&gatewayapiv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      gwName,
+				Namespace: ns,
+			},
+			Spec: gatewayapiv1.GatewaySpec{
+				GatewayClassName: gatewayapiv1.ObjectName(gwClassName),
+				Listeners:        []gatewayapiv1.Listener{},
+			},
+		},
+	}
+}
+
+func (t *GatewayBuilder) WithListener(listener gatewayapiv1.Listener) *GatewayBuilder {
+	t.Spec.Listeners = append(t.Spec.Listeners, listener)
+	return t
+}
+
+func (t *GatewayBuilder) WithLabels(labels map[string]string) *GatewayBuilder {
+	if t.Labels == nil {
+		t.Labels = map[string]string{}
+	}
+	for key, value := range labels {
+		t.Labels[key] = value
+	}
+	return t
+}
+
+func (t *GatewayBuilder) WithHTTPListener(name, hostname string) *GatewayBuilder {
+	typedHostname := gatewayapiv1.Hostname(hostname)
+	t.WithListener(gatewayapiv1.Listener{
+		Name:     gatewayapiv1.SectionName(name),
+		Hostname: &typedHostname,
+		Port:     gatewayapiv1.PortNumber(80),
+		Protocol: gatewayapiv1.HTTPProtocolType,
+	})
+	return t
+}
+
+func (t *GatewayBuilder) WithHTTPSListener(hostname, tlsSecretName string) *GatewayBuilder {
+	typedHostname := gatewayapiv1.Hostname(hostname)
+	typedNamespace := gatewayapiv1.Namespace(t.GetNamespace())
+	typedNamed := gatewayapiv1.SectionName(strings.Replace(hostname, "*", "wildcard", 1))
+	t.WithListener(gatewayapiv1.Listener{
+		Name:     typedNamed,
+		Hostname: &typedHostname,
+		Port:     gatewayapiv1.PortNumber(443),
+		Protocol: gatewayapiv1.HTTPSProtocolType,
+		TLS: &gatewayapiv1.GatewayTLSConfig{
+			Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
+			CertificateRefs: []gatewayapiv1.SecretObjectReference{
+				{
+					Name:      gatewayapiv1.ObjectName(tlsSecretName),
+					Namespace: ptr.To(typedNamespace),
+				},
+			},
+		},
+	})
+	return t
+}
+
+//CertMan
+
+func testBuildSelfSignedIssuer(name, ns string) (*certmanv1.Issuer, *certmanmetav1.ObjectReference) {
+	issuer := &certmanv1.Issuer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: createSelfSignedIssuerSpec(),
+	}
+	objRef := &certmanmetav1.ObjectReference{
+		Group: certmanv1.SchemeGroupVersion.Group,
+		Kind:  certmanv1.IssuerKind,
+		Name:  issuer.Name,
+	}
+	return issuer, objRef
+}
+
+func testBuildSelfSignedClusterIssuer(name, ns string) (*certmanv1.ClusterIssuer, *certmanmetav1.ObjectReference) {
+	issuer := &certmanv1.ClusterIssuer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: createSelfSignedIssuerSpec(),
+	}
+	objRef := &certmanmetav1.ObjectReference{
+		Group: certmanv1.SchemeGroupVersion.Group,
+		Kind:  certmanv1.ClusterIssuerKind,
+		Name:  issuer.Name,
+	}
+	return issuer, objRef
+}
+
+func createSelfSignedIssuerSpec() certmanv1.IssuerSpec {
+	return certmanv1.IssuerSpec{
+		IssuerConfig: certmanv1.IssuerConfig{
+			SelfSigned: &certmanv1.SelfSignedIssuer{},
+		},
 	}
 }

@@ -135,17 +135,25 @@ LIMITADOR_OPERATOR_GITREF = $(LIMITADOR_OPERATOR_BUNDLE_VERSION)
 endif
 LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LIMITADOR_OPERATOR_BUNDLE_IMG_TAG)
 
-## policy-controller
-POLICY_CONTROLLER_VERSION ?= latest
-policy_controller_is_semantic := $(call is_semantic_version,$(POLICY_CONTROLLER_VERSION))
-ifeq (latest,$(POLICY_CONTROLLER_VERSION))
-POLICY_CONTROLLER_VERSION = 0.0.0
-POLICY_CONTROLLER_GITREF = main
-else ifeq (true,$(policy_controller_is_semantic))
-POLICY_CONTROLLER_GITREF = v$(POLICY_CONTROLLER_VERSION)
+## dns
+#ToDo Pin this version once we have an initial release of the dns operator
+DNS_OPERATOR_VERSION ?= latest
+
+kuadrantdns_bundle_is_semantic := $(call is_semantic_version,$(DNS_OPERATOR_VERSION))
+ifeq (latest,$(DNS_OPERATOR_VERSION))
+DNS_OPERATOR_BUNDLE_VERSION = 0.0.0
+DNS_OPERATOR_BUNDLE_IMG_TAG = latest
+DNS_OPERATOR_GITREF = main
+else ifeq (true,$(kuadrantdns_bundle_is_semantic))
+DNS_OPERATOR_BUNDLE_VERSION = $(DNS_OPERATOR_VERSION)
+DNS_OPERATOR_BUNDLE_IMG_TAG = v$(DNS_OPERATOR_BUNDLE_VERSION)
+DNS_OPERATOR_GITREF = v$(DNS_OPERATOR_BUNDLE_VERSION)
 else
-POLICY_CONTROLLER_GITREF = $(POLICY_CONTROLLER_VERSION)
+DNS_OPERATOR_BUNDLE_VERSION = $(DNS_OPERATOR_VERSION)
+DNS_OPERATOR_BUNDLE_IMG_TAG = $(DNS_OPERATOR_BUNDLE_VERSION)
+DNS_OPERATOR_GITREF = $(DNS_OPERATOR_BUNDLE_VERSION)
 endif
+DNS_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/dns-operator-bundle:$(DNS_OPERATOR_BUNDLE_IMG_TAG)
 
 ## wasm-shim
 WASM_SHIM_VERSION ?= latest
@@ -266,18 +274,17 @@ endef
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) crd paths="./api/v1beta1;./api/v1beta2" output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) crd paths="./api/v1alpha1;./api/v1beta1;./api/v1beta2" output:crd:artifacts:config=config/crd/bases
 	$(CONTROLLER_GEN) rbac:roleName=manager-role webhook paths="./..."
 
 .PHONY: dependencies-manifests
 dependencies-manifests: export AUTHORINO_OPERATOR_GITREF := $(AUTHORINO_OPERATOR_GITREF)
 dependencies-manifests: export LIMITADOR_OPERATOR_GITREF := $(LIMITADOR_OPERATOR_GITREF)
-dependencies-manifests: export POLICY_CONTROLLER_GITREF := $(POLICY_CONTROLLER_GITREF)
+dependencies-manifests: export DNS_OPERATOR_GITREF := $(DNS_OPERATOR_GITREF)
 dependencies-manifests: ## Update kuadrant dependencies manifests.
 	$(call patch-config,config/dependencies/authorino/kustomization.template.yaml,config/dependencies/authorino/kustomization.yaml)
 	$(call patch-config,config/dependencies/limitador/kustomization.template.yaml,config/dependencies/limitador/kustomization.yaml)
-	$(call patch-config,config/dependencies/policy-controller/kustomization.template.yaml,config/dependencies/policy-controller/kustomization.yaml)
-	$(call patch-config,config/dependencies/policy-controller/samples/kustomization.template.yaml,config/dependencies/policy-controller/samples/kustomization.yaml)
+	$(call patch-config,config/dependencies/dns/kustomization.template.yaml,config/dependencies/dns/kustomization.yaml)
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -417,13 +424,6 @@ deploy-dependencies: kustomize dependencies-manifests ## Deploy dependencies to 
 	$(KUSTOMIZE) build config/dependencies | kubectl apply -f -
 	kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments --all
 
-deploy-policy-controller: kustomize ## Deploy policy-controller to the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/policy-controller | kubectl apply -f -
-	kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments policy-controller
-
-undeploy-policy-controller: ## Undeploy policy-controller from the K8s cluster specified in ~/.kube/config.
-	$(KUSTOMIZE) build config/policy-controller | kubectl delete -f -
-
 .PHONY: install-metallb
 install-metallb: kustomize yq ## Installs the metallb load balancer allowing use of an LoadBalancer type with a gateway
 	$(KUSTOMIZE) build config/metallb | kubectl apply -f -
@@ -483,6 +483,7 @@ bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## 
 	# TODO(eguzki): run only if not default one. Avoid bundle parsing if version is known in advance
 	$(call update-operator-dependencies,limitador-operator,$(LIMITADOR_OPERATOR_BUNDLE_IMG))
 	$(call update-operator-dependencies,authorino-operator,$(AUTHORINO_OPERATOR_BUNDLE_IMG))
+	$(call update-operator-dependencies,dns-operator,$(DNS_OPERATOR_BUNDLE_IMG))
 	$(OPERATOR_SDK) bundle validate ./bundle
 	$(MAKE) bundle-ignore-createdAt
 

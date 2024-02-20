@@ -93,6 +93,7 @@ The `make bundle` target accepts the following variables:
 | `VERSION`                       | Bundle version                | `0.0.0`                                             |                                                                                                    |
 | `LIMITADOR_OPERATOR_BUNDLE_IMG` | Limitador operator bundle URL | `quay.io/kuadrant/limitador-operator-bundle:latest` | `LIMITADOR_OPERATOR_VERSION` var could be used to build this, defaults to _latest_ if not provided |
 | `AUTHORINO_OPERATOR_BUNDLE_IMG` | Authorino operator bundle URL | `quay.io/kuadrant/authorino-operator-bundle:latest` | `AUTHORINO_OPERATOR_VERSION` var could be used to build this, defaults to _latest_ if not provided |
+| `DNS_OPERATOR_BUNDLE_IMG`       | DNS operator bundle URL       | `quay.io/kuadrant/dns-operator-bundle:latest`       | `DNS_OPERATOR_BUNDLE_IMG` var could be used to build this, defaults to _latest_ if not provided    |
 | `RELATED_IMAGE_WASMSHIM`        | WASM shim image URL           | `oci://quay.io/kuadrant/wasm-shim:latest`           | `WASM_SHIM_VERSION` var could be used to build this, defaults to _latest_ if not provided          |
 
 * Build the bundle manifests
@@ -103,6 +104,7 @@ make bundle [IMG=quay.io/kuadrant/kuadrant-operator:latest] \
             [VERSION=0.0.0] \
             [LIMITADOR_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/limitador-operator-bundle:latest] \
             [AUTHORINO_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/authorino-operator-bundle:latest] \
+            [DNS_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/dns-operator-bundle:latest] \
             [RELATED_IMAGE_WASMSHIM=oci://quay.io/kuadrant/wasm-shim:latest]
 ```
 
@@ -158,11 +160,13 @@ The `make catalog` target accepts the following variables:
 | `BUNDLE_IMG`                    | Kuadrant operator bundle image URL | `quay.io/kuadrant/kuadrant-operator-bundle:latest`  |
 | `LIMITADOR_OPERATOR_BUNDLE_IMG` | Limitador operator bundle URL      | `quay.io/kuadrant/limitador-operator-bundle:latest` |
 | `AUTHORINO_OPERATOR_BUNDLE_IMG` | Authorino operator bundle URL      | `quay.io/kuadrant/authorino-operator-bundle:latest` |
+| `DNS_OPERATOR_BUNDLE_IMG`       | DNS operator bundle URL            | `quay.io/kuadrant/dns-operator-bundle:latest`       |
 
 ```sh
 make catalog [BUNDLE_IMG=quay.io/kuadrant/kuadrant-operator-bundle:latest] \
             [LIMITADOR_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/limitador-operator-bundle:latest] \
-            [AUTHORINO_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/authorino-operator-bundle:latest]
+            [AUTHORINO_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/authorino-operator-bundle:latest] \
+            [DNS_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/dns-operator-bundle:latest]
 ```
 
 * Build the catalog image from the manifests

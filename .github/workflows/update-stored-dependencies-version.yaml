@@ -24,7 +24,7 @@ jobs:
           - limitador
           - limitador-operator
           - wasm-shim
-          - policy-controller
+          - dns-operator
     steps:
       - name: Fetch dependencies images list
         id: fetch

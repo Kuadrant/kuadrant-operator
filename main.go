@@ -32,6 +32,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"
@@ -51,6 +52,9 @@ import (
 
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
@@ -79,9 +83,11 @@ func init() {
 	utilruntime.Must(istioapis.AddToScheme(scheme))
 	utilruntime.Must(istiov1alpha1.AddToScheme(scheme))
 	utilruntime.Must(maistraapis.AddToScheme(scheme))
+	utilruntime.Must(kuadrantv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta2.AddToScheme(scheme))
-
+	utilruntime.Must(kuadrantdnsv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(certmanv1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 
 	logger := log.NewLogger(
@@ -175,6 +181,36 @@ func main() {
 		OverriddenPolicyMap: common.NewOverriddenPolicyMap(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicy")
+		os.Exit(1)
+	}
+
+	dnsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("dnspolicy"),
+		mgr.GetEventRecorderFor("DNSPolicy"),
+	)
+
+	if err = (&controllers.DNSPolicyReconciler{
+		TargetRefReconciler: reconcilers.TargetRefReconciler{
+			BaseReconciler: dnsPolicyBaseReconciler,
+		},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DNSPolicy")
+		os.Exit(1)
+	}
+
+	tlsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("tlspolicy"),
+		mgr.GetEventRecorderFor("TLSPolicy"),
+	)
+
+	if err = (&controllers.TLSPolicyReconciler{
+		TargetRefReconciler: reconcilers.TargetRefReconciler{
+			BaseReconciler: tlsPolicyBaseReconciler,
+		},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "TLSPolicy")
 		os.Exit(1)
 	}
 

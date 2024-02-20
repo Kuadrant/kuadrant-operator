@@ -26,11 +26,6 @@ Setup the environment:
 make local-setup
 ```
 
-Deploy policy controller and install DNSPolicy CRD:
-```shell
-make deploy-policy-controller
-```
-
 Create a namespace:
 ```shell
 kubectl create namespace my-gateways
@@ -69,7 +64,6 @@ spec:
   description: "my managed zone"
   dnsProviderSecretRef:
     name: aws-credentials
-    namespace: my-gateways
 EOF
 ```
 
@@ -107,7 +101,7 @@ kubectl get gateway prod-web -n my-gateways
 Response:
 ```shell
 NAME       CLASS   ADDRESS        PROGRAMMED   AGE
-prod-web   istio   172.18.200.0   True         25s
+prod-web   istio   172.18.200.1   True         25s
 ```
 
 ### Enable DNS on the gateway
@@ -130,12 +124,12 @@ EOF
 
 Check policy status:
 ```shell
-kubectl get dnspolicy -n my-gateways
+kubectl get dnspolicy -o wide -n my-gateways
 ```
 Response:
 ```shell
-NAME       READY
-prod-web   True
+NAME       STATUS     TARGETREFKIND   TARGETREFNAME   AGE
+prod-web   Accepted   Gateway         prod-web        26s
 ```
 
 ### Deploy a sample API to test DNS
@@ -181,13 +175,40 @@ dig foo.$ROOT_DOMAIN +short
 ```
 Response:
 ```shell
-172.18.200.0
+172.18.200.1
 ```
 
 Verify DNS using curl:
 
 ```shell
 curl http://api.$ROOT_DOMAIN
+```
+Response:
+```shell
+{
+  "method": "GET",
+  "path": "/",
+  "query_string": null,
+  "body": "",
+  "headers": {
+    "HTTP_HOST": "api.$ROOT_DOMAIN",
+    "HTTP_USER_AGENT": "curl/7.85.0",
+    "HTTP_ACCEPT": "*/*",
+    "HTTP_X_FORWARDED_FOR": "10.244.0.1",
+    "HTTP_X_FORWARDED_PROTO": "http",
+    "HTTP_X_ENVOY_INTERNAL": "true",
+    "HTTP_X_REQUEST_ID": "9353dd3d-0fe5-4404-86f4-a9732a9c119c",
+    "HTTP_X_ENVOY_DECORATOR_OPERATION": "toystore.my-gateways.svc.cluster.local:80/*",
+    "HTTP_X_ENVOY_PEER_METADATA": "ChQKDkFQUF9DT05UQUlORVJTEgIaAAoaCgpDTFVTVEVSX0lEEgwaCkt1YmVybmV0ZXMKHQoMSU5TVEFOQ0VfSVBTEg0aCzEwLjI0NC4wLjIyChkKDUlTVElPX1ZFUlNJT04SCBoGMS4xNy4yCtcBCgZMQUJFTFMSzAEqyQEKIwoVaXN0aW8uaW8vZ2F0ZXdheS1uYW1lEgoaCHByb2Qtd2ViChkKDGlzdGlvLmlvL3JldhIJGgdkZWZhdWx0CjMKH3NlcnZpY2UuaXN0aW8uaW8vY2Fub25pY2FsLW5hbWUSEBoOcHJvZC13ZWItaXN0aW8KLwojc2VydmljZS5pc3Rpby5pby9jYW5vbmljYWwtcmV2aXNpb24SCBoGbGF0ZXN0CiEKF3NpZGVjYXIuaXN0aW8uaW8vaW5qZWN0EgYaBHRydWUKGgoHTUVTSF9JRBIPGg1jbHVzdGVyLmxvY2FsCigKBE5BTUUSIBoecHJvZC13ZWItaXN0aW8tYzU0NWQ4ZjY4LTdjcjg2ChoKCU5BTUVTUEFDRRINGgtteS1nYXRld2F5cwpWCgVPV05FUhJNGktrdWJlcm5ldGVzOi8vYXBpcy9hcHBzL3YxL25hbWVzcGFjZXMvbXktZ2F0ZXdheXMvZGVwbG95bWVudHMvcHJvZC13ZWItaXN0aW8KFwoRUExBVEZPUk1fTUVUQURBVEESAioACiEKDVdPUktMT0FEX05BTUUSEBoOcHJvZC13ZWItaXN0aW8=",
+    "HTTP_X_ENVOY_PEER_METADATA_ID": "router~10.244.0.22~prod-web-istio-c545d8f68-7cr86.my-gateways~my-gateways.svc.cluster.local",
+    "HTTP_X_ENVOY_ATTEMPT_COUNT": "1",
+    "HTTP_X_B3_TRACEID": "d65f580db9c6a50c471cdb534771c61a",
+    "HTTP_X_B3_SPANID": "471cdb534771c61a",
+    "HTTP_X_B3_SAMPLED": "0",
+    "HTTP_VERSION": "HTTP/1.1"
+  },
+  "uuid": "0ecb9f84-db30-4289-a3b8-e22d4021122f"
+}
 ```
 
 ## Cleanup

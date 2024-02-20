@@ -38,15 +38,18 @@ to operate the cluster (Istio's) ingress gateway to provide API management with 
 | [Limitador](https://github.com/Kuadrant/limitador)                   | The external rate limiting service. It exposes a gRPC service implementing the [Envoy Rate Limit protocol (v3)](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ratelimit/v3/rls.proto)                                                                                        |
 | [Authorino Operator](https://github.com/Kuadrant/authorino-operator) | A Kubernetes Operator to manage Authorino instances                                                                                                                                                                                                                                       |
 | [Limitador Operator](https://github.com/Kuadrant/limitador-operator) | A Kubernetes Operator to manage Limitador instances                                                                                                                                                                                                                                       |
+| [DNS Operator](https://github.com/Kuadrant/dns-operator)             | A Kubernetes Operator to manage DNS records in external providers                                                                                                                                                                                                                         |
 
 ### Provided APIs
 
 The kuadrant control plane owns the following [Custom Resource Definitions, CRDs](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/):
 
-| CRD                                                                                                 | Description                                                    | Example                                                                                                                                  |
-|-----------------------------------------------------------------------------------------------------|----------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| AuthPolicy CRD [\[doc\]](doc/auth.md) [[reference]](doc/reference/authpolicy.md)                    | Enable AuthN and AuthZ based access control on workloads       | [AuthPolicy CR](https://github.com/Kuadrant/kuadrant-operator/blob/main/examples/toystore/authpolicy.yaml)                               |
+| CRD                                                                                                 | Description                                                    | Example                                                                                                                                |
+|-----------------------------------------------------------------------------------------------------|----------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|
+| AuthPolicy CRD [\[doc\]](doc/auth.md) [[reference]](doc/reference/authpolicy.md)                    | Enable AuthN and AuthZ based access control on workloads       | [AuthPolicy CR](https://github.com/Kuadrant/kuadrant-operator/blob/main/examples/toystore/authpolicy.yaml)                             |
 | RateLimitPolicy CRD [\[doc\]](doc/rate-limiting.md) [[reference]](doc/reference/ratelimitpolicy.md) | Enable access control on workloads based on HTTP rate limiting | [RateLimitPolicy CR](https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/examples/toystore/ratelimitpolicy_httproute.yaml) |
+| DNSPolicy CRD [\[doc\]](doc/dns.md) [[reference]](doc/reference/dnspolicy.md)                       | Enable DNS management                                          | [DNSPolicy CR](config/samples/kuadrant_v1alpha1_dnspolicy.yaml)                |
+| TLSPolicy CRD [\[doc\]](doc/tls.md) [[reference]](doc/reference/tlspolicy.md)                       | Enable TLS management                                          | [TLSPolicy CR](config/samples/kuadrant_v1alpha1_tlspolicy.yaml)                |
 
 Additionally, Kuadrant provides the following CRDs
 
@@ -66,6 +69,8 @@ Additionally, Kuadrant provides the following CRDs
   [Istio getting started guide](https://istio.io/latest/docs/setup/getting-started/).
 * Kubernetes Gateway API is installed in the cluster. Otherwise,
   [configure Istio to expose a service using the Kubernetes Gateway API](https://istio.io/latest/docs/tasks/traffic-management/ingress/gateway-api/).
+* cert-manager is installed in the cluster. Otherwise, refer to the 
+  [cert-manager installation guide](https://cert-manager.io/docs/installation/).
 
 ### Installing Kuadrant
 

@@ -25,11 +25,6 @@ Setup the environment:
 make local-setup
 ```
 
-Deploy policy controller and install TLSPolicy CRD:
-```shell
-make deploy-policy-controller
-```
-
 Create a namespace:
 ```shell
 kubectl create namespace my-gateways
@@ -110,13 +105,12 @@ EOF
 
 Check policy status:
 ```shell
-kubectl get tlspolicy -n my-gateways
+kubectl get tlspolicy -o wide -n my-gateways
 ```
 Response:
 ```shell
-
-NAME       READY
-prod-web   True
+NAME       STATUS     TARGETREFKIND   TARGETREFNAME   AGE
+prod-web   Accepted   Gateway         prod-web        13s
 ```
 
 Check a Certificate resource was created:
@@ -170,9 +164,89 @@ EOF
 
 ### Verify TLS works by sending requests
 
+Get the gateway address@
+```shell
+GWADDRESS=`kubectl get gateway/prod-web -n my-gateways -o=jsonpath='{.status.addresses[?(@.type=="IPAddress")].value}'`
+echo $GWADDRESS
+```
+Response:
+```shell
+172.18.200.1
+```
+
 Verify we can access the service via TLS:
 ```shell
-curl -vkI https://api.toystore.local --resolve 'api.toystore.local:443:172.18.200.0'
+curl -vkI https://api.toystore.local --resolve "api.toystore.local:443:$GWADDRESS"
+```
+Response:
+```shell
+* Added api.toystore.local:443:172.18.200.1 to DNS cache
+* Hostname api.toystore.local was found in DNS cache
+*   Trying 172.18.200.1:443...
+* Connected to api.toystore.local (172.18.200.1) port 443 (#0)
+* ALPN: offers h2
+* ALPN: offers http/1.1
+* TLSv1.0 (OUT), TLS header, Certificate Status (22):
+* TLSv1.3 (OUT), TLS handshake, Client hello (1):
+* TLSv1.2 (IN), TLS header, Certificate Status (22):
+* TLSv1.3 (IN), TLS handshake, Server hello (2):
+* TLSv1.2 (IN), TLS header, Finished (20):
+* TLSv1.2 (IN), TLS header, Supplemental data (23):
+* TLSv1.3 (IN), TLS handshake, Encrypted Extensions (8):
+* TLSv1.3 (IN), TLS handshake, Certificate (11):
+* TLSv1.3 (IN), TLS handshake, CERT verify (15):
+* TLSv1.3 (IN), TLS handshake, Finished (20):
+* TLSv1.2 (OUT), TLS header, Finished (20):
+* TLSv1.3 (OUT), TLS change cipher, Change cipher spec (1):
+* TLSv1.2 (OUT), TLS header, Supplemental data (23):
+* TLSv1.3 (OUT), TLS handshake, Finished (20):
+* SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: [NONE]
+*  start date: Feb 15 11:46:50 2024 GMT
+*  expire date: May 15 11:46:50 2024 GMT
+* Using HTTP2, server supports multiplexing
+* Copying HTTP/2 data in stream buffer to connection buffer after upgrade: len=0
+* TLSv1.2 (OUT), TLS header, Supplemental data (23):
+* TLSv1.2 (OUT), TLS header, Supplemental data (23):
+* TLSv1.2 (OUT), TLS header, Supplemental data (23):
+* h2h3 [:method: HEAD]
+* h2h3 [:path: /]
+* h2h3 [:scheme: https]
+* h2h3 [:authority: api.toystore.local]
+* h2h3 [user-agent: curl/7.85.0]
+* h2h3 [accept: */*]
+* Using Stream ID: 1 (easy handle 0x5623e4fe5bf0)
+* TLSv1.2 (OUT), TLS header, Supplemental data (23):
+> HEAD / HTTP/2
+> Host: api.toystore.local
+> user-agent: curl/7.85.0
+> accept: */*
+> 
+* TLSv1.2 (IN), TLS header, Supplemental data (23):
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+* TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
+* old SSL session ID is stale, removing
+* TLSv1.2 (IN), TLS header, Supplemental data (23):
+* Connection state changed (MAX_CONCURRENT_STREAMS == 2147483647)!
+* TLSv1.2 (OUT), TLS header, Supplemental data (23):
+* TLSv1.2 (IN), TLS header, Supplemental data (23):
+< HTTP/2 200 
+HTTP/2 200 
+< content-type: application/json
+content-type: application/json
+< server: istio-envoy
+server: istio-envoy
+< date: Thu, 15 Feb 2024 12:13:27 GMT
+date: Thu, 15 Feb 2024 12:13:27 GMT
+< content-length: 1658
+content-length: 1658
+< x-envoy-upstream-service-time: 1
+x-envoy-upstream-service-time: 1
+
+< 
+* Connection #0 to host api.toystore.local left intact
 ```
 
 ## Cleanup

@@ -1,6 +1,7 @@
 package common
 
 import (
+	"errors"
 	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -128,4 +129,17 @@ func NewErrOverridden(kind, overridingPolicies string) ErrOverridden {
 		Kind:               kind,
 		OverridingPolicies: overridingPolicies,
 	}
+}
+
+// IsTargetNotFound returns true if the specified error was created by NewErrTargetNotFound.
+func IsTargetNotFound(err error) bool {
+	return reasonForError(err) == gatewayapiv1alpha2.PolicyReasonTargetNotFound
+}
+
+func reasonForError(err error) gatewayapiv1alpha2.PolicyConditionReason {
+	var policyErr PolicyError
+	if errors.As(err, &policyErr) {
+		return policyErr.Reason()
+	}
+	return ""
 }

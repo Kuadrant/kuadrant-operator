@@ -33,6 +33,10 @@ const (
 	RateLimitPolicyBackRefAnnotation   = "kuadrant.io/ratelimitpolicy"
 	AuthPoliciesBackRefAnnotation      = "kuadrant.io/authpolicies"
 	AuthPolicyBackRefAnnotation        = "kuadrant.io/authpolicy"
+	TLSPoliciesBackRefAnnotation       = "kuadrant.io/tlspolicies"
+	TLSPolicyBackRefAnnotation         = "kuadrant.io/tlspolicy"
+	DNSPoliciesBackRefAnnotation       = "kuadrant.io/dnspolicies"
+	DNSPolicyBackRefAnnotation         = "kuadrant.io/dnspolicy"
 	KuadrantNamespaceLabel             = "kuadrant.io/namespace"
 	NamespaceSeparator                 = '/'
 	LimitadorName                      = "limitador"

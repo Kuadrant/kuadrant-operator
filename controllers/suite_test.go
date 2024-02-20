@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -39,12 +40,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
@@ -80,6 +84,12 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
+	err = kuadrantdnsv1alpha1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = kuadrantv1alpha1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	err = kuadrantv1beta1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -113,6 +123,9 @@ var _ = BeforeSuite(func() {
 	err = istioclientgoextensionv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = certmanv1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	//+kubebuilder:scaffold:scheme
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
@@ -120,9 +133,12 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient).NotTo(BeNil())
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme: scheme.Scheme,
+		Scheme:                 scheme.Scheme,
+		HealthProbeBindAddress: "0",
+		Metrics:                metricsserver.Options{BindAddress: "0"},
 	})
-	Expect(err).NotTo(HaveOccurred())
+	Expect(err).ToNot(HaveOccurred())
+
 	authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy"),
@@ -146,6 +162,34 @@ var _ = BeforeSuite(func() {
 	err = (&RateLimitPolicyReconciler{
 		TargetRefReconciler: reconcilers.TargetRefReconciler{
 			BaseReconciler: rateLimitPolicyBaseReconciler,
+		},
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
+	tlsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("tlspolicy"),
+		mgr.GetEventRecorderFor("TLSPolicy"),
+	)
+
+	err = (&TLSPolicyReconciler{
+		TargetRefReconciler: reconcilers.TargetRefReconciler{
+			BaseReconciler: tlsPolicyBaseReconciler,
+		},
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
+	dnsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("dnspolicy"),
+		mgr.GetEventRecorderFor("DNSPolicy"),
+	)
+
+	err = (&DNSPolicyReconciler{
+		TargetRefReconciler: reconcilers.TargetRefReconciler{
+			BaseReconciler: dnsPolicyBaseReconciler,
 		},
 	}).SetupWithManager(mgr)
 

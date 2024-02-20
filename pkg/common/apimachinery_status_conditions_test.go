@@ -3,13 +3,13 @@
 package common
 
 import (
-	"fmt"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
 
 	goCmp "github.com/google/go-cmp/cmp"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -149,7 +149,7 @@ func TestAcceptedCondition(t *testing.T) {
 					Group: "gateway.networking.k8s.io",
 					Kind:  "HTTPRoute",
 					Name:  "my-target-ref",
-				}, errors.NewNotFound(schema.GroupResource{}, "my-target-ref")),
+				}, apiErrors.NewNotFound(schema.GroupResource{}, "my-target-ref")),
 			},
 			want: &metav1.Condition{
 				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
@@ -166,7 +166,7 @@ func TestAcceptedCondition(t *testing.T) {
 					Group: "gateway.networking.k8s.io",
 					Kind:  "HTTPRoute",
 					Name:  "my-target-ref",
-				}, fmt.Errorf("deletion err")),
+				}, errors.New("deletion err")),
 			},
 			want: &metav1.Condition{
 				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
@@ -179,7 +179,7 @@ func TestAcceptedCondition(t *testing.T) {
 			name: "invalid reason",
 			args: args{
 				policy: &FakePolicy{},
-				err:    NewErrInvalid("FakePolicy", fmt.Errorf("invalid err")),
+				err:    NewErrInvalid("FakePolicy", errors.New("invalid err")),
 			},
 			want: &metav1.Condition{
 				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
@@ -192,7 +192,7 @@ func TestAcceptedCondition(t *testing.T) {
 			name: "conflicted reason",
 			args: args{
 				policy: &FakePolicy{},
-				err:    NewErrConflict("FakePolicy", "testNs/policy1", fmt.Errorf("conflict err")),
+				err:    NewErrConflict("FakePolicy", "testNs/policy1", errors.New("conflict err")),
 			},
 			want: &metav1.Condition{
 				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
@@ -202,16 +202,16 @@ func TestAcceptedCondition(t *testing.T) {
 			},
 		},
 		{
-			name: "reconciliation error reason",
+			name: "unknown error reason",
 			args: args{
 				policy: &FakePolicy{},
-				err:    fmt.Errorf("reconcile err"),
+				err:    errors.New("reconcile err"),
 			},
 			want: &metav1.Condition{
 				Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
 				Status:  metav1.ConditionFalse,
-				Reason:  "ReconciliationError",
-				Message: "reconcile err",
+				Reason:  string(PolicyReasonUnknown),
+				Message: "FakePolicy has encountered some issues: reconcile err",
 			},
 		},
 	}
@@ -219,6 +219,65 @@ func TestAcceptedCondition(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := AcceptedCondition(tt.args.policy, tt.args.err); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("AcceptedCondition() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEnforcedCondition(t *testing.T) {
+	type args struct {
+		policy KuadrantPolicy
+		err    PolicyError
+	}
+	policy := &FakePolicy{}
+	tests := []struct {
+		name string
+		args args
+		want *metav1.Condition
+	}{
+		{
+			name: "enforced true",
+			args: args{
+				policy: &FakePolicy{},
+			},
+			want: &metav1.Condition{
+				Type:    string(PolicyConditionEnforced),
+				Status:  metav1.ConditionTrue,
+				Reason:  string(PolicyReasonEnforced),
+				Message: "FakePolicy has been successfully enforced",
+			},
+		},
+		{
+			name: "enforced false - unknown",
+			args: args{
+				policy: &FakePolicy{},
+				err:    NewErrUnknown(policy.Kind(), errors.New("unknown err")),
+			},
+			want: &metav1.Condition{
+				Type:    string(PolicyConditionEnforced),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(PolicyReasonUnknown),
+				Message: "FakePolicy has encountered some issues: unknown err",
+			},
+		},
+		{
+			name: "enforced false - overridden",
+			args: args{
+				policy: &FakePolicy{},
+				err:    NewErrOverridden(policy.Kind(), "ns1/policy1"),
+			},
+			want: &metav1.Condition{
+				Type:    string(PolicyConditionEnforced),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(PolicyReasonOverridden),
+				Message: "FakePolicy is overridden by ns1/policy1",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := EnforcedCondition(tt.args.policy, tt.args.err); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("EnforcedCondition() = %v, want %v", got, tt.want)
 			}
 		})
 	}

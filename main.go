@@ -22,6 +22,7 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"k8s.io/utils/env"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -171,6 +172,7 @@ func main() {
 		TargetRefReconciler: reconcilers.TargetRefReconciler{
 			BaseReconciler: authPolicyBaseReconciler,
 		},
+		OverriddenPolicyMap: common.NewOverriddenPolicyMap(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicy")
 		os.Exit(1)

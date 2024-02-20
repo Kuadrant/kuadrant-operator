@@ -17,9 +17,14 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: AuthPolicy Status
-      jsonPath: .status.conditions[0].reason
-      name: Status
+    - description: AuthPolicy Accepted
+      jsonPath: .status.conditions[?(@.type=="Accepted")].status
+      name: Accepted
+      priority: 2
+      type: string
+    - description: AuthPolicy Enforced
+      jsonPath: .status.conditions[?(@.type=="Enforced")].status
+      name: Enforced
       priority: 2
       type: string
     - description: Type of the referenced Gateway API resource

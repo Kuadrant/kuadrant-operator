@@ -32,6 +32,10 @@ func (p *TestPolicy) GetRulesHostnames() []string {
 	return nil
 }
 
+func (p *TestPolicy) Kind() string {
+	return p.TypeMeta.Kind
+}
+
 func (p *TestPolicy) DeepCopyObject() runtime.Object {
 	if c := p.DeepCopy(); c != nil {
 		return c

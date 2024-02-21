@@ -344,6 +344,7 @@ func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {
 		wp := &istioclientgoextensionv1alpha1.WasmPlugin{}
 		err := k8sClient.Get(context.Background(), key, wp)
 		if err != nil {
+			logf.Log.V(1).Info("wasmplugin not read", "key", key, "error", err)
 			return false
 		}
 
@@ -362,9 +363,11 @@ func testRLPIsAccepted(rlpKey client.ObjectKey) func() bool {
 		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
 		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
 		if err != nil {
+			logf.Log.V(1).Info("ratelimitpolicy not read", "rlp", rlpKey, "error", err)
 			return false
 		}
 		if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
+			logf.Log.V(1).Info("ratelimitpolicy not available", "rlp", rlpKey)
 			return false
 		}
 

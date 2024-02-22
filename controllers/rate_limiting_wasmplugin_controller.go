@@ -219,9 +219,6 @@ func (r *RateLimitingWASMPluginReconciler) gatewayAPITopologyFromGateway(ctx con
 }
 
 func (r *RateLimitingWASMPluginReconciler) WASMRateLimitPolicy(ctx context.Context, t *common.KuadrantTopology, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*wasm.RateLimitPolicy, error) {
-	gwHostnamesTmp := common.TargetHostnames(gw)
-	gwHostnames := common.Map(gwHostnamesTmp, func(str string) gatewayapiv1.Hostname { return gatewayapiv1.Hostname(str) })
-
 	route, err := r.RouteFromRLP(ctx, t, rlp, gw)
 	if err != nil {
 		return nil, err
@@ -233,17 +230,31 @@ func (r *RateLimitingWASMPluginReconciler) WASMRateLimitPolicy(ctx context.Conte
 		return nil, nil
 	}
 
-	rules := rlptools.WasmRules(rlp, route)
-	if len(rules) == 0 {
-		// no need to add the policy if there are no rules; a rlp can return no rules if all its limits fail to match any route rule
-		return nil, nil
-	}
-
 	// narrow the list of hostnames specified in the route so we don't generate wasm rules that only apply to other gateways
 	// this is a no-op for the gateway rlp
+	gwHostnames := common.GatewayWrapper{Gateway: gw}.Hostnames()
+	if len(gwHostnames) == 0 {
+		gwHostnames = []gatewayapiv1.Hostname{"*"}
+	}
 	hostnames := common.FilterValidSubdomains(gwHostnames, route.Spec.Hostnames)
 	if len(hostnames) == 0 { // it should only happen when the route specifies no hostnames
 		hostnames = gwHostnames
+	}
+
+	//
+	// The route selectors logic rely on the "hostnames" field of the route object.
+	// However, routes effective hostname can be inherited from parent gateway,
+	// hence it depends on the context as multiple gateways can be targeted by a route
+	// The route selectors logic needs to be refactored
+	// or just deleted as soon as the HTTPRoute has name in the route object
+	//
+	routeWithEffectiveHostnames := route.DeepCopy()
+	routeWithEffectiveHostnames.Spec.Hostnames = hostnames
+
+	rules := rlptools.WasmRules(rlp, routeWithEffectiveHostnames)
+	if len(rules) == 0 {
+		// no need to add the policy if there are no rules; a rlp can return no rules if all its limits fail to match any route rule
+		return nil, nil
 	}
 
 	return &wasm.RateLimitPolicy{

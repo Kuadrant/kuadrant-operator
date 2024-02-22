@@ -28,16 +28,10 @@ import (
 var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 	var (
 		testNamespace string
-		gwName        = "toystore-gw"
-		gateway       *gatewayapiv1.Gateway
 	)
 
 	beforeEachCallback := func() {
 		CreateNamespace(&testNamespace)
-		gateway = testBuildBasicGateway(gwName, testNamespace)
-		err := k8sClient.Create(context.Background(), gateway)
-		Expect(err).ToNot(HaveOccurred())
-		Eventually(testGatewayIsReady(gateway), 30*time.Second, 5*time.Second).Should(BeTrue())
 		ApplyKuadrantCR(testNamespace)
 	}
 
@@ -48,7 +42,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 		var (
 			routeName = "toystore-route"
 			rlpName   = "toystore-rlp"
+			gwName    = "toystore-gw"
+			gateway   *gatewayapiv1.Gateway
 		)
+
+		beforeEachCallback := func() {
+			gateway = testBuildBasicGateway(gwName, testNamespace)
+			err := k8sClient.Create(context.Background(), gateway)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testGatewayIsReady(gateway), 30*time.Second, 5*time.Second).Should(BeTrue())
+		}
+
+		BeforeEach(beforeEachCallback)
 
 		It("Simple RLP targeting HTTPRoute creates wasmplugin", func() {
 			// create httproute
@@ -65,7 +70,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
 					},
@@ -186,7 +191,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
 					},
@@ -364,7 +369,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
@@ -440,7 +445,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 	Context("RLP targeting HTTPRoute-less Gateway", func() {
 		var (
 			rlpName = "toystore-rlp"
+			gwName  = "toystore-gw"
+			gateway *gatewayapiv1.Gateway
 		)
+
+		beforeEachCallback := func() {
+			gateway = testBuildBasicGateway(gwName, testNamespace)
+			err := k8sClient.Create(context.Background(), gateway)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testGatewayIsReady(gateway), 30*time.Second, 5*time.Second).Should(BeTrue())
+		}
+
+		BeforeEach(beforeEachCallback)
 
 		It("Wasmplugin must not be created", func() {
 			// create ratelimitpolicy
@@ -451,7 +467,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
@@ -488,7 +504,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 		var (
 			routeName = "toystore-route"
 			rlpName   = "toystore-rlp"
+			gwName    = "toystore-gw"
+			gateway   *gatewayapiv1.Gateway
 		)
+
+		beforeEachCallback := func() {
+			gateway = testBuildBasicGateway(gwName, testNamespace)
+			err := k8sClient.Create(context.Background(), gateway)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testGatewayIsReady(gateway), 30*time.Second, 5*time.Second).Should(BeTrue())
+		}
+
+		BeforeEach(beforeEachCallback)
 
 		It("When the gateway does not have more policies, the wasmplugin resource is not created", func() {
 			// create httproute
@@ -505,7 +532,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
 					},
@@ -577,7 +604,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: rlpAName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
@@ -627,7 +654,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: rlpBName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeCName),
 					},
@@ -734,8 +761,19 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 		var (
 			routeName = "route-a"
 			rlpName   = "rlp-a"
+			gwName    = "toystore-gw"
+			gateway   *gatewayapiv1.Gateway
 			gwBName   = "gw-b"
 		)
+
+		beforeEachCallback := func() {
+			gateway = testBuildBasicGateway(gwName, testNamespace)
+			err := k8sClient.Create(context.Background(), gateway)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testGatewayIsReady(gateway), 30*time.Second, 5*time.Second).Should(BeTrue())
+		}
+
+		BeforeEach(beforeEachCallback)
 
 		It("RLP targeting a gateway, GwA should not have wasmplugin and GwB should not have wasmplugin", func() {
 			// Initial state
@@ -760,7 +798,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
@@ -963,7 +1001,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
 					},
@@ -1169,6 +1207,20 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 	})
 
 	Context("RLP switches targetRef from one route A to another route B", func() {
+		var (
+			gwName  = "toystore-gw"
+			gateway *gatewayapiv1.Gateway
+		)
+
+		beforeEachCallback := func() {
+			gateway = testBuildBasicGateway(gwName, testNamespace)
+			err := k8sClient.Create(context.Background(), gateway)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testGatewayIsReady(gateway), 30*time.Second, 5*time.Second).Should(BeTrue())
+		}
+
+		BeforeEach(beforeEachCallback)
+
 		It("wasmplugin config should update config", func() {
 			// Initial state
 			// Gw A
@@ -1242,7 +1294,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeAName),
 					},
@@ -1411,6 +1463,20 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 	})
 
 	Context("Free Route gets dedicated RLP", func() {
+		var (
+			gwName  = "toystore-gw"
+			gateway *gatewayapiv1.Gateway
+		)
+
+		beforeEachCallback := func() {
+			gateway = testBuildBasicGateway(gwName, testNamespace)
+			err := k8sClient.Create(context.Background(), gateway)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testGatewayIsReady(gateway), 30*time.Second, 5*time.Second).Should(BeTrue())
+		}
+
+		BeforeEach(beforeEachCallback)
+
 		It("wasmplugin should update config", func() {
 			// Initial state
 			// Gw A
@@ -1459,7 +1525,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: rlp1Name, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
@@ -1561,7 +1627,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: rlp2Name, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeAName),
 					},
@@ -1653,6 +1719,20 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 	})
 
 	Context("New free route on a Gateway with RLP", func() {
+		var (
+			gwName  = "toystore-gw"
+			gateway *gatewayapiv1.Gateway
+		)
+
+		beforeEachCallback := func() {
+			gateway = testBuildBasicGateway(gwName, testNamespace)
+			err := k8sClient.Create(context.Background(), gateway)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testGatewayIsReady(gateway), 30*time.Second, 5*time.Second).Should(BeTrue())
+		}
+
+		BeforeEach(beforeEachCallback)
+
 		It("wasmplugin should update config", func() {
 			// Initial state
 			// Gw A
@@ -1704,7 +1784,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: rlp1Name, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
@@ -1733,7 +1813,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: rlp2Name, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeAName),
 					},
@@ -1950,6 +2030,122 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				return true
 			}, time.Minute, 5*time.Second).Should(BeTrue())
 
+		})
+	})
+
+	Context("Gateway with hostname in listener", func() {
+		var (
+			gwName     = "toystore-gw"
+			routeName  = "toystore-route"
+			rlpName    = "rlp-a"
+			gateway    *gatewayapiv1.Gateway
+			gwHostname = "*.gw.example.com"
+		)
+
+		beforeEachCallback := func() {
+			gateway = testBuildBasicGateway(gwName, testNamespace)
+			gateway.Spec.Listeners[0].Hostname = ptr.To(gatewayapiv1.Hostname(gwHostname))
+			err := k8sClient.Create(context.Background(), gateway)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testGatewayIsReady(gateway), 30*time.Second, 5*time.Second).Should(BeTrue())
+		}
+
+		BeforeEach(beforeEachCallback)
+
+		It("RLP with hostnames in route selector targeting hostname less HTTPRoute creates wasmplugin", func() {
+			// create httproute
+			var emptyRouteHostnames []string
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, emptyRouteHostnames)
+			err := k8sClient.Create(context.Background(), httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create ratelimitpolicy
+			rlp := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1.GroupName,
+						Kind:  "HTTPRoute",
+						Name:  gatewayapiv1.ObjectName(routeName),
+					},
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							RouteSelectors: []kuadrantv1beta2.RouteSelector{
+								{
+									// Route does not specify any hostname
+									// gateway's listener specifies *.gw.example.com
+									Hostnames: []gatewayapiv1.Hostname{"*.gw.example.com"},
+								},
+							},
+
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check RLP status is available
+			rlpKey := client.ObjectKeyFromObject(rlp)
+			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check wasm plugin
+			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			Eventually(testWasmPluginIsAvailable(wasmPluginKey), time.Minute, 5*time.Second).Should(BeTrue())
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			err = k8sClient.Get(context.Background(), wasmPluginKey, existingWasmPlugin)
+			// must exist
+			Expect(err).ToNot(HaveOccurred())
+			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingWASMConfig).To(Equal(&wasm.Plugin{
+				FailureMode: wasm.FailureModeDeny,
+				RateLimitPolicies: []wasm.RateLimitPolicy{
+					{
+						Name:   rlpKey.String(),
+						Domain: rlptools.LimitsNamespaceFromRLP(rlp),
+						Rules: []wasm.Rule{
+							{
+								Conditions: []wasm.Condition{
+									{
+										AllOf: []wasm.PatternExpression{
+											{
+												Selector: "request.url_path",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+												Value:    "/toy",
+											},
+											{
+												Selector: "request.method",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+												Value:    "GET",
+											},
+										},
+									},
+								},
+								Data: []wasm.DataItem{
+									{
+										Static: &wasm.StaticSpec{
+											Key:   `limit.l1__2804bad6`,
+											Value: "1",
+										},
+									},
+								},
+							},
+						},
+						Hostnames: []string{gwHostname},
+						Service:   common.KuadrantRateLimitClusterName,
+					},
+				},
+			}))
 		})
 	})
 })

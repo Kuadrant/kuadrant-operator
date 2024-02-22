@@ -19,6 +19,7 @@ import (
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -78,7 +79,7 @@ func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Cont
 	return nil
 }
 
-func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, gw utils.GatewayWrapper) (*istio.AuthorizationPolicy, error) {
+func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, gw kuadrant.GatewayWrapper) (*istio.AuthorizationPolicy, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("istioAuthorizationPolicy")
 

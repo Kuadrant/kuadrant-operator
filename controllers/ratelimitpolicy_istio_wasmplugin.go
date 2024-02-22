@@ -14,6 +14,7 @@ import (
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
@@ -74,7 +75,7 @@ func (r *RateLimitPolicyReconciler) reconcileWASMPluginConf(ctx context.Context,
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw utils.GatewayWrapper, rlpRefs []client.ObjectKey) (*istioclientgoextensionv1alpha1.WasmPlugin, error) {
+func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw kuadrant.GatewayWrapper, rlpRefs []client.ObjectKey) (*istioclientgoextensionv1alpha1.WasmPlugin, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger.V(1).Info("gatewayWASMPlugin", "gwKey", gw.Key(), "rlpRefs", rlpRefs)
 
@@ -122,7 +123,7 @@ func (r *RateLimitPolicyReconciler) gatewayWASMPlugin(ctx context.Context, gw ut
 }
 
 // returns nil when there is no rate limit policy to apply
-func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw utils.GatewayWrapper, rlpRefs []client.ObjectKey) (*wasm.Plugin, error) {
+func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw kuadrant.GatewayWrapper, rlpRefs []client.ObjectKey) (*wasm.Plugin, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("wasmPluginConfig").WithValues("gateway", gw.Key())
 
@@ -145,7 +146,7 @@ func (r *RateLimitPolicyReconciler) wasmPluginConfig(ctx context.Context, gw uti
 		}
 
 		// target ref is a HTTPRoute
-		if utils.IsTargetRefHTTPRoute(rlp.Spec.TargetRef) {
+		if kuadrant.IsTargetRefHTTPRoute(rlp.Spec.TargetRef) {
 			route, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), rlp.GetTargetRef(), rlp.Namespace)
 			if err != nil {
 				return nil, err

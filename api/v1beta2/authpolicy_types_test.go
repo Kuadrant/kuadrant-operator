@@ -12,7 +12,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 func TestCommonAuthRuleSpecGetRouteSelectors(t *testing.T) {
@@ -86,9 +86,9 @@ func TestAuthPolicyListGetItems(t *testing.T) {
 	if len(result) != 1 {
 		t.Errorf("Expected 1 item, got %d", len(result))
 	}
-	_, ok := result[0].(utils.KuadrantPolicy)
+	_, ok := result[0].(kuadrant.Policy)
 	if !ok {
-		t.Errorf("Expected item to be a KuadrantPolicy")
+		t.Errorf("Expected item to be a Policy")
 	}
 }
 

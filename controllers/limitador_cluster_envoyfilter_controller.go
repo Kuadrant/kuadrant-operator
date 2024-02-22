@@ -37,7 +37,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
@@ -122,7 +122,7 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 		},
 	}
 
-	gateway := utils.GatewayWrapper{Gateway: gw, Referrer: &v1beta2.RateLimitPolicy{}}
+	gateway := kuadrant.GatewayWrapper{Gateway: gw, Referrer: &v1beta2.RateLimitPolicy{}}
 	rlpRefs := gateway.PolicyRefs()
 	logger.V(1).Info("desiredRateLimitingClusterEnvoyFilter", "rlpRefs", rlpRefs)
 
@@ -131,7 +131,7 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 		return ef, nil
 	}
 
-	kuadrantNamespace, err := utils.GetKuadrantNamespace(gw)
+	kuadrantNamespace, err := kuadrant.GetKuadrantNamespace(gw)
 	if err != nil {
 		return nil, err
 	}

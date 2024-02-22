@@ -37,9 +37,9 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
@@ -96,7 +96,7 @@ func (r *DNSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, dnsPolicy, utils.NewErrTargetNotFound(dnsPolicy.Kind(), dnsPolicy.GetTargetRef(), delResErr))
+				return r.reconcileStatus(ctx, dnsPolicy, kuadrant.NewErrTargetNotFound(dnsPolicy.Kind(), dnsPolicy.GetTargetRef(), delResErr))
 			}
 			return ctrl.Result{}, err
 		}

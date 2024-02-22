@@ -30,9 +30,9 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
@@ -97,7 +97,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, rlp, utils.NewErrTargetNotFound(rlp.Kind(), rlp.GetTargetRef(), delResErr))
+				return r.reconcileStatus(ctx, rlp, kuadrant.NewErrTargetNotFound(rlp.Kind(), rlp.GetTargetRef(), delResErr))
 			}
 			return ctrl.Result{}, err
 		}
@@ -156,11 +156,11 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 // validate performs validation before proceeding with the reconcile loop, returning a common.ErrInvalid on failing validation
 func (r *RateLimitPolicyReconciler) validate(rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
 	if err := rlp.Validate(); err != nil {
-		return utils.NewErrInvalid(rlp.Kind(), err)
+		return kuadrant.NewErrInvalid(rlp.Kind(), err)
 	}
 
-	if err := utils.ValidateHierarchicalRules(rlp, targetNetworkObject); err != nil {
-		return utils.NewErrInvalid(rlp.Kind(), err)
+	if err := kuadrant.ValidateHierarchicalRules(rlp, targetNetworkObject); err != nil {
+		return kuadrant.NewErrInvalid(rlp.Kind(), err)
 	}
 
 	return nil

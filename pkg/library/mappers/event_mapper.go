@@ -5,11 +5,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 type EventMapper interface {
-	MapToPolicy(client.Object, utils.Referrer) []reconcile.Request
+	MapToPolicy(client.Object, kuadrant.Referrer) []reconcile.Request
 }
 
 // options

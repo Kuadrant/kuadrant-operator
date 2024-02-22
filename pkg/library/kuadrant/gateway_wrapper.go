@@ -1,4 +1,4 @@
-package utils
+package kuadrant
 
 import (
 	"encoding/json"
@@ -6,6 +6,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // GatewayWrapper wraps a Gateway API Gateway adding methods and configs to manage policy references in annotations
@@ -26,7 +28,7 @@ func (g GatewayWrapper) PolicyRefs() []client.ObjectKey {
 		return make([]client.ObjectKey, 0)
 	}
 
-	gwAnnotations := ReadAnnotationsFromObject(g)
+	gwAnnotations := utils.ReadAnnotationsFromObject(g)
 
 	val, ok := gwAnnotations[g.BackReferenceAnnotationName()]
 	if !ok {
@@ -63,7 +65,7 @@ func (g GatewayWrapper) AddPolicy(policyKey client.ObjectKey) bool {
 		return false
 	}
 
-	gwAnnotations := ReadAnnotationsFromObject(g)
+	gwAnnotations := utils.ReadAnnotationsFromObject(g)
 	_, annotationFound := gwAnnotations[g.BackReferenceAnnotationName()]
 
 	// annotation does not exist → create it
@@ -96,7 +98,7 @@ func (g GatewayWrapper) DeletePolicy(policyKey client.ObjectKey) bool {
 		return false
 	}
 
-	gwAnnotations := ReadAnnotationsFromObject(g)
+	gwAnnotations := utils.ReadAnnotationsFromObject(g)
 
 	// annotation does not exist → nothing to do
 	refsAsStr, annotationFound := gwAnnotations[g.BackReferenceAnnotationName()]

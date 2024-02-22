@@ -48,8 +48,8 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	//+kubebuilder:scaffold:imports
@@ -148,7 +148,7 @@ var _ = BeforeSuite(func() {
 	err = (&AuthPolicyReconciler{
 		BaseReconciler:      authPolicyBaseReconciler,
 		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
-		OverriddenPolicyMap: utils.NewOverriddenPolicyMap(),
+		OverriddenPolicyMap: kuadrant.NewOverriddenPolicyMap(),
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 

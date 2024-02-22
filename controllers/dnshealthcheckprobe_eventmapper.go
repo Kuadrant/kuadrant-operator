@@ -10,9 +10,11 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
+
+var _ mappers.EventMapper = &DNSHealthCheckProbeEventMapper{}
 
 func NewDNSHealthCheckProbeEventMapper(o ...mappers.MapperOption) mappers.EventMapper {
 	return &DNSHealthCheckProbeEventMapper{opts: mappers.Apply(o...)}
@@ -23,7 +25,7 @@ type DNSHealthCheckProbeEventMapper struct {
 	opts mappers.MapperOptions
 }
 
-func (m *DNSHealthCheckProbeEventMapper) MapToPolicy(obj client.Object, policyKind utils.Referrer) []reconcile.Request {
+func (m *DNSHealthCheckProbeEventMapper) MapToPolicy(obj client.Object, policyKind kuadrant.Referrer) []reconcile.Request {
 	logger := m.opts.Logger.V(1).WithValues("object", client.ObjectKeyFromObject(obj))
 	probe, ok := obj.(*kuadrantdnsv1alpha1.DNSHealthCheckProbe)
 	if !ok {

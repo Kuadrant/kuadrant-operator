@@ -26,6 +26,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -154,8 +155,8 @@ func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr
 	}
 
 	// Marshalling sorts by condition type
-	currentMarshaledJSON, _ := utils.ConditionMarshal(s.Conditions)
-	otherMarshaledJSON, _ := utils.ConditionMarshal(other.Conditions)
+	currentMarshaledJSON, _ := kuadrant.ConditionMarshal(s.Conditions)
+	otherMarshaledJSON, _ := kuadrant.ConditionMarshal(other.Conditions)
 	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
 		if logger.V(1).Enabled() {
 			diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
@@ -167,8 +168,8 @@ func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr
 	return true
 }
 
-var _ utils.KuadrantPolicy = &RateLimitPolicy{}
-var _ utils.Referrer = &RateLimitPolicy{}
+var _ kuadrant.Policy = &RateLimitPolicy{}
+var _ kuadrant.Referrer = &RateLimitPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -217,8 +218,8 @@ type RateLimitPolicyList struct {
 	Items           []RateLimitPolicy `json:"items"`
 }
 
-func (l *RateLimitPolicyList) GetItems() []utils.KuadrantPolicy {
-	return utils.Map(l.Items, func(item RateLimitPolicy) utils.KuadrantPolicy {
+func (l *RateLimitPolicyList) GetItems() []kuadrant.Policy {
+	return utils.Map(l.Items, func(item RateLimitPolicy) kuadrant.Policy {
 		return &item
 	})
 }

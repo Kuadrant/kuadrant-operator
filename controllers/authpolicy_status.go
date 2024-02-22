@@ -18,6 +18,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -78,8 +79,8 @@ func (r *AuthPolicyReconciler) calculateStatus(ctx context.Context, ap *api.Auth
 	return newStatus
 }
 
-func (r *AuthPolicyReconciler) acceptedCondition(policy utils.KuadrantPolicy, specErr error) *metav1.Condition {
-	return utils.AcceptedCondition(policy, specErr)
+func (r *AuthPolicyReconciler) acceptedCondition(policy kuadrant.Policy, specErr error) *metav1.Condition {
+	return kuadrant.AcceptedCondition(policy, specErr)
 }
 
 // enforcedCondition checks if the provided AuthPolicy is enforced, ensuring it is properly configured and applied based
@@ -100,16 +101,16 @@ func (r *AuthPolicyReconciler) enforcedCondition(ctx context.Context, policy *ap
 	authConfigReady, err := r.isAuthConfigReady(ctx, policy)
 	if err != nil {
 		logger.Error(err, "Failed to check AuthConfig and Gateway")
-		return utils.EnforcedCondition(policy, utils.NewErrUnknown(policy.Kind(), err))
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err))
 	}
 
 	if !authConfigReady {
 		logger.V(1).Info("AuthConfig is not ready")
-		return utils.EnforcedCondition(policy, utils.NewErrUnknown(policy.Kind(), errors.New("AuthScheme is not ready yet")))
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), errors.New("AuthScheme is not ready yet")))
 	}
 
 	logger.V(1).Info("AuthPolicy is enforced")
-	return utils.EnforcedCondition(policy, nil)
+	return kuadrant.EnforcedCondition(policy, nil)
 }
 
 // isAuthConfigReady checks if the AuthConfig is ready.
@@ -133,7 +134,7 @@ func (r *AuthPolicyReconciler) isAuthConfigReady(ctx context.Context, policy *ap
 // and creating a corresponding error condition.
 func (r *AuthPolicyReconciler) handleGatewayPolicyOverride(logger logr.Logger, policy *api.AuthPolicy, targetNetworkObject client.Object) *metav1.Condition {
 	obj := targetNetworkObject.(*gatewayapiv1.Gateway)
-	gatewayWrapper := utils.GatewayWrapper{Gateway: obj, Referrer: policy}
+	gatewayWrapper := kuadrant.GatewayWrapper{Gateway: obj, Referrer: policy}
 	refs := gatewayWrapper.PolicyRefs()
 	filteredRef := utils.Filter(refs, func(key client.ObjectKey) bool {
 		return key != client.ObjectKeyFromObject(policy)
@@ -141,7 +142,7 @@ func (r *AuthPolicyReconciler) handleGatewayPolicyOverride(logger logr.Logger, p
 	jsonData, err := json.Marshal(filteredRef)
 	if err != nil {
 		logger.Error(err, "Failed to marshal filtered references")
-		return utils.EnforcedCondition(policy, utils.NewErrUnknown(policy.Kind(), err))
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err))
 	}
-	return utils.EnforcedCondition(policy, utils.NewErrOverridden(policy.Kind(), string(jsonData)))
+	return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), string(jsonData)))
 }

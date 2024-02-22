@@ -1,4 +1,4 @@
-package utils
+package kuadrant
 
 import (
 	"slices"
@@ -8,6 +8,8 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 func TestGatewayWrapperKey(t *testing.T) {
@@ -37,7 +39,7 @@ func TestGatewayWrapperPolicyRefs(t *testing.T) {
 		},
 		Referrer: &PolicyKindStub{},
 	}
-	refs := Map(gw.PolicyRefs(), func(ref k8stypes.NamespacedName) string { return ref.String() })
+	refs := utils.Map(gw.PolicyRefs(), func(ref k8stypes.NamespacedName) string { return ref.String() })
 	if !slices.Contains(refs, "app-ns/policy-1") {
 		t.Error("GatewayWrapper.PolicyRefs() should contain app-ns/policy-1")
 	}
@@ -158,7 +160,7 @@ func TestBackReferencesFromGatewayWrapper(t *testing.T) {
 		},
 		Referrer: &PolicyKindStub{},
 	}
-	refs := Map(BackReferencesFromObject(gw.Gateway, gw.Referrer), func(ref client.ObjectKey) string { return ref.String() })
+	refs := utils.Map(BackReferencesFromObject(gw.Gateway, gw.Referrer), func(ref client.ObjectKey) string { return ref.String() })
 	if !slices.Contains(refs, "app-ns/policy-1") {
 		t.Error("GatewayWrapper.PolicyRefs() should contain app-ns/policy-1")
 	}

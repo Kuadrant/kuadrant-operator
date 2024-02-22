@@ -18,6 +18,7 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
@@ -102,7 +103,7 @@ func gatewayDNSRecordLabels(gwKey client.ObjectKey) map[string]string {
 	}
 }
 
-func withGatewayListener[T metav1.Object](gateway utils.GatewayWrapper, listener gatewayapiv1.Listener, obj T) T {
+func withGatewayListener[T metav1.Object](gateway kuadrant.GatewayWrapper, listener gatewayapiv1.Listener, obj T) T {
 	if obj.GetAnnotations() == nil {
 		obj.SetAnnotations(map[string]string{})
 	}

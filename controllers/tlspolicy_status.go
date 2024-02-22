@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 func (r *TLSPolicyReconciler) reconcileStatus(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy, specErr error) (ctrl.Result, error) {
@@ -50,7 +50,7 @@ func (r *TLSPolicyReconciler) reconcileStatus(ctx context.Context, tlsPolicy *v1
 		return ctrl.Result{}, updateErr
 	}
 
-	if utils.IsTargetNotFound(specErr) {
+	if kuadrant.IsTargetNotFound(specErr) {
 		return ctrl.Result{Requeue: true}, nil
 	}
 
@@ -64,7 +64,7 @@ func (r *TLSPolicyReconciler) calculateStatus(tlsPolicy *v1alpha1.TLSPolicy, spe
 		ObservedGeneration: tlsPolicy.Status.ObservedGeneration,
 	}
 
-	acceptedCond := utils.AcceptedCondition(tlsPolicy, specErr)
+	acceptedCond := kuadrant.AcceptedCondition(tlsPolicy, specErr)
 	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)
 
 	return newStatus

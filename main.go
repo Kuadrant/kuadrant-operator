@@ -52,8 +52,8 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	//+kubebuilder:scaffold:imports
@@ -172,7 +172,7 @@ func main() {
 	if err = (&controllers.AuthPolicyReconciler{
 		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      authPolicyBaseReconciler,
-		OverriddenPolicyMap: utils.NewOverriddenPolicyMap(),
+		OverriddenPolicyMap: kuadrant.NewOverriddenPolicyMap(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicy")
 		os.Exit(1)

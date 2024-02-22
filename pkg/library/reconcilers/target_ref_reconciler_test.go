@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 func TestReconcileTargetBackReference(t *testing.T) {
@@ -36,7 +36,7 @@ func TestReconcileTargetBackReference(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	policy := &utils.FakePolicy{
+	policy := &kuadrant.FakePolicy{
 		Object: &metav1.PartialObjectMetadata{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "my-policy",

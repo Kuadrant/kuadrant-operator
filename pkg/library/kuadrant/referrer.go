@@ -1,9 +1,11 @@
-package utils
+package kuadrant
 
 import (
 	"encoding/json"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 type Referrer interface {
@@ -17,7 +19,7 @@ type Referrer interface {
 
 // BackReferencesFromObject returns the names of the policies listed in the annotations of a target ref object.
 func BackReferencesFromObject(obj client.Object, referrer Referrer) []client.ObjectKey {
-	backRefs, found := ReadAnnotationsFromObject(obj)[referrer.BackReferenceAnnotationName()]
+	backRefs, found := utils.ReadAnnotationsFromObject(obj)[referrer.BackReferenceAnnotationName()]
 	if !found {
 		return make([]client.ObjectKey, 0)
 	}

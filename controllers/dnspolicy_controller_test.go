@@ -21,7 +21,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
@@ -187,7 +187,7 @@ var _ = Describe("DNSPolicy controller", func() {
 					ContainElement(MatchFields(IgnoreExtras, Fields{
 						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionFalse),
-						"Reason":  Equal(string(utils.PolicyReasonUnknown)),
+						"Reason":  Equal(string(kuadrant.PolicyReasonUnknown)),
 						"Message": ContainSubstring("gateway is invalid: inconsistent status addresses"),
 					})),
 				)

@@ -7,7 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 func NewHTTPRouteEventMapper(o ...MapperOption) EventMapper {
@@ -20,7 +20,7 @@ type httpRouteEventMapper struct {
 	opts MapperOptions
 }
 
-func (m *httpRouteEventMapper) MapToPolicy(obj client.Object, policyKind utils.Referrer) []reconcile.Request {
+func (m *httpRouteEventMapper) MapToPolicy(obj client.Object, policyKind kuadrant.Referrer) []reconcile.Request {
 	logger := m.opts.Logger.WithValues("httproute", client.ObjectKeyFromObject(obj))
 
 	httpRoute, ok := obj.(*gatewayapiv1.HTTPRoute)
@@ -31,7 +31,7 @@ func (m *httpRouteEventMapper) MapToPolicy(obj client.Object, policyKind utils.R
 
 	requests := make([]reconcile.Request, 0)
 
-	for _, policyKey := range utils.BackReferencesFromObject(httpRoute, policyKind) {
+	for _, policyKey := range kuadrant.BackReferencesFromObject(httpRoute, policyKind) {
 		logger.V(1).Info("kuadrant policy possibly affected by the httproute related event found", policyKind.Kind(), policyKey)
 		requests = append(requests, reconcile.Request{NamespacedName: policyKey})
 	}

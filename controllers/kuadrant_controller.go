@@ -44,7 +44,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
@@ -421,8 +421,8 @@ func (r *KuadrantReconciler) reconcileClusterGateways(ctx context.Context, kObj 
 
 	for i := range gwList.Items {
 		gw := &gwList.Items[i]
-		if !utils.IsKuadrantManaged(gw) {
-			utils.AnnotateObject(gw, kObj.Namespace)
+		if !kuadrant.IsKuadrantManaged(gw) {
+			kuadrant.AnnotateObject(gw, kObj.Namespace)
 			errGroup.Go(func() error {
 				select {
 				case <-gctx.Done():
@@ -457,7 +457,7 @@ func (r *KuadrantReconciler) removeAnnotationFromGateways(ctx context.Context, k
 				return nil
 			default:
 				// When RFC defined, we could indicate which gateways based on a specific annotation/label
-				utils.DeleteKuadrantAnnotationFromGateway(gw, kObj.Namespace)
+				kuadrant.DeleteKuadrantAnnotationFromGateway(gw, kObj.Namespace)
 				if err := r.Client().Update(ctx, gw); err != nil {
 					return err
 				}

@@ -9,6 +9,7 @@ import (
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
@@ -46,15 +47,15 @@ func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp 
 	// get the current limitador cr for the kuadrant instance so we can compare if it needs to be updated
 	logger.V(1).Info("get kuadrant namespace")
 	var kuadrantNamespace string
-	kuadrantNamespace, isSet := utils.GetKuadrantNamespaceFromPolicy(rlp)
+	kuadrantNamespace, isSet := kuadrant.GetKuadrantNamespaceFromPolicy(rlp)
 	if !isSet {
 		var err error
-		kuadrantNamespace, err = utils.GetKuadrantNamespaceFromPolicyTargetRef(ctx, r.Client(), rlp)
+		kuadrantNamespace, err = kuadrant.GetKuadrantNamespaceFromPolicyTargetRef(ctx, r.Client(), rlp)
 		if err != nil {
 			logger.Error(err, "failed to get kuadrant namespace")
 			return err
 		}
-		utils.AnnotateObject(rlp, kuadrantNamespace)
+		kuadrant.AnnotateObject(rlp, kuadrantNamespace)
 		err = r.UpdateResource(ctx, rlp) // @guicassolato: not sure if this belongs to here
 		if err != nil {
 			logger.Error(err, "failed to update policy, re-queuing")

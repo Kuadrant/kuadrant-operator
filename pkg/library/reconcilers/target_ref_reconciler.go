@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -92,7 +93,7 @@ func (r *TargetRefReconciler) TargetedGatewayKeys(_ context.Context, targetNetwo
 }
 
 // ReconcileTargetBackReference adds policy key in annotations of the target object
-func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, p utils.KuadrantPolicy, targetNetworkObject client.Object, annotationName string) error {
+func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, p kuadrant.Policy, targetNetworkObject client.Object, annotationName string) error {
 	logger, _ := logr.FromContext(ctx)
 
 	policyKey := client.ObjectKeyFromObject(p)
@@ -104,7 +105,7 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, 
 
 	if val, ok := objAnnotations[annotationName]; ok {
 		if val != policyKey.String() {
-			return utils.NewErrConflict(p.Kind(), val, fmt.Errorf("the %s target %s is already referenced by policy %s", targetNetworkObjectKind, targetNetworkObjectKey, val))
+			return kuadrant.NewErrConflict(p.Kind(), val, fmt.Errorf("the %s target %s is already referenced by policy %s", targetNetworkObjectKind, targetNetworkObjectKey, val))
 		}
 	} else {
 		objAnnotations[annotationName] = policyKey.String()
@@ -146,7 +147,7 @@ func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, tar
 // this list of policy refs; nevertheless, the actual order of returned policy refs depends on the order the policy refs
 // appear in the annotations of the gateways.
 // Only gateways with status programmed are considered.
-func (r *TargetRefReconciler) GetAllGatewayPolicyRefs(ctx context.Context, policyRefsConfig utils.Referrer) ([]client.ObjectKey, error) {
+func (r *TargetRefReconciler) GetAllGatewayPolicyRefs(ctx context.Context, policyRefsConfig kuadrant.Referrer) ([]client.ObjectKey, error) {
 	var uniquePolicyRefs map[string]struct{}
 	var policyRefs []client.ObjectKey
 
@@ -156,14 +157,14 @@ func (r *TargetRefReconciler) GetAllGatewayPolicyRefs(ctx context.Context, polic
 	}
 
 	// sort the gateways by creation timestamp to mitigate the risk of non-idenpotent reconciliations
-	var gateways utils.GatewayWrapperList
+	var gateways kuadrant.GatewayWrapperList
 	for i := range gwList.Items {
 		gateway := gwList.Items[i]
 		// skip gateways that are not managed by kuadrant or that are not ready
-		if !utils.IsKuadrantManaged(&gateway) || meta.IsStatusConditionFalse(gateway.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed)) {
+		if !kuadrant.IsKuadrantManaged(&gateway) || meta.IsStatusConditionFalse(gateway.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed)) {
 			continue
 		}
-		gateways = append(gateways, utils.GatewayWrapper{Gateway: &gateway, Referrer: policyRefsConfig})
+		gateways = append(gateways, kuadrant.GatewayWrapper{Gateway: &gateway, Referrer: policyRefsConfig})
 	}
 	sort.Sort(gateways)
 

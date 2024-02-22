@@ -15,7 +15,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 var _ = Describe("Kuadrant Gateway controller", func() {
@@ -63,7 +63,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 					logf.Log.V(1).Info("[WARN] Getting gateway failed", "error", err)
 					return false
 				}
-				return utils.IsKuadrantManaged(existingGateway)
+				return kuadrant.IsKuadrantManaged(existingGateway)
 			}, 15*time.Second, 5*time.Second).Should(BeTrue())
 		})
 	})
@@ -125,7 +125,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 					logf.Log.V(1).Info("[WARN] Getting gateway failed", "error", err)
 					return false
 				}
-				return !utils.IsKuadrantManaged(existingGateway)
+				return !kuadrant.IsKuadrantManaged(existingGateway)
 			}, 15*time.Second, 5*time.Second).Should(BeTrue())
 		})
 	})

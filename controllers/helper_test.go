@@ -38,6 +38,7 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -308,7 +309,7 @@ func testRouteIsAccepted(routeKey client.ObjectKey) func() bool {
 	return func() bool {
 		route := &gatewayapiv1.HTTPRoute{}
 		err := k8sClient.Get(context.Background(), routeKey, route)
-		return err == nil && utils.IsHTTPRouteAccepted(route)
+		return err == nil && kuadrant.IsHTTPRouteAccepted(route)
 	}
 }
 

@@ -1,6 +1,6 @@
 //go:build unit
 
-package utils
+package kuadrant
 
 import (
 	"errors"
@@ -122,7 +122,7 @@ func TestConditionMarshal(t *testing.T) {
 
 func TestAcceptedCondition(t *testing.T) {
 	type args struct {
-		policy KuadrantPolicy
+		policy Policy
 		err    error
 	}
 	tests := []struct {
@@ -227,7 +227,7 @@ func TestAcceptedCondition(t *testing.T) {
 
 func TestEnforcedCondition(t *testing.T) {
 	type args struct {
-		policy KuadrantPolicy
+		policy Policy
 		err    PolicyError
 	}
 	policy := &FakePolicy{}

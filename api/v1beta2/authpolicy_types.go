@@ -11,6 +11,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -191,8 +192,8 @@ func (s *AuthPolicyStatus) Equals(other *AuthPolicyStatus, logger logr.Logger) b
 	}
 
 	// Marshalling sorts by condition type
-	currentMarshaledJSON, _ := utils.ConditionMarshal(s.Conditions)
-	otherMarshaledJSON, _ := utils.ConditionMarshal(other.Conditions)
+	currentMarshaledJSON, _ := kuadrant.ConditionMarshal(s.Conditions)
+	otherMarshaledJSON, _ := kuadrant.ConditionMarshal(other.Conditions)
 	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
 		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
 		logger.V(1).Info("Conditions not equal", "difference", diff)
@@ -202,8 +203,8 @@ func (s *AuthPolicyStatus) Equals(other *AuthPolicyStatus, logger logr.Logger) b
 	return true
 }
 
-var _ utils.KuadrantPolicy = &AuthPolicy{}
-var _ utils.Referrer = &AuthPolicy{}
+var _ kuadrant.Policy = &AuthPolicy{}
+var _ kuadrant.Referrer = &AuthPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -307,8 +308,8 @@ type AuthPolicyList struct {
 	Items           []AuthPolicy `json:"items"`
 }
 
-func (l *AuthPolicyList) GetItems() []utils.KuadrantPolicy {
-	return utils.Map(l.Items, func(item AuthPolicy) utils.KuadrantPolicy {
+func (l *AuthPolicyList) GetItems() []kuadrant.Policy {
+	return utils.Map(l.Items, func(item AuthPolicy) kuadrant.Policy {
 		return &item
 	})
 }

@@ -25,7 +25,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 const (
@@ -116,8 +116,8 @@ type TLSPolicyStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
-var _ utils.KuadrantPolicy = &TLSPolicy{}
-var _ utils.Referrer = &TLSPolicy{}
+var _ kuadrant.Policy = &TLSPolicy{}
+var _ kuadrant.Referrer = &TLSPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

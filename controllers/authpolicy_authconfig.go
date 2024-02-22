@@ -8,15 +8,16 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
@@ -66,14 +67,14 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	case *gatewayapiv1.HTTPRoute:
 		route = obj
 		var err error
-		hosts, err = utils.HostnamesFromHTTPRoute(ctx, obj, r.Client())
+		hosts, err = kuadrant.HostnamesFromHTTPRoute(ctx, obj, r.Client())
 		if err != nil {
 			return nil, err
 		}
 	case *gatewayapiv1.Gateway:
 		// fake a single httproute with all rules from all httproutes accepted by the gateway,
 		// that do not have an authpolicy of its own, so we can generate wasm rules for those cases
-		gw := utils.GatewayWrapper{Gateway: obj}
+		gw := kuadrant.GatewayWrapper{Gateway: obj}
 		gwHostnames := gw.Hostnames()
 		if len(gwHostnames) == 0 {
 			gwHostnames = []gatewayapiv1.Hostname{"*"}

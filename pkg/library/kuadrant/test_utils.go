@@ -1,4 +1,4 @@
-package utils
+package kuadrant
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"

@@ -1,4 +1,4 @@
-package utils
+package kuadrant
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -10,7 +10,7 @@ const (
 	KuadrantNamespaceLabel = "kuadrant.io/namespace"
 )
 
-type KuadrantPolicy interface {
+type Policy interface {
 	client.Object
 	GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference
 	GetWrappedNamespace() gatewayapiv1.Namespace
@@ -18,8 +18,8 @@ type KuadrantPolicy interface {
 	Kind() string
 }
 
-type KuadrantPolicyList interface {
-	GetItems() []KuadrantPolicy
+type PolicyList interface {
+	GetItems() []Policy
 }
 
 func IsKuadrantManaged(obj client.Object) bool {

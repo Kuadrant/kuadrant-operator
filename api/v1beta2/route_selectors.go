@@ -4,6 +4,7 @@ import (
 	"github.com/elliotchance/orderedmap/v2"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -40,7 +41,7 @@ func (s *RouteSelector) SelectRules(route *gatewayapiv1.HTTPRoute) (rules []gate
 	for idx := range s.Matches {
 		routeSelectorMatch := s.Matches[idx]
 		for idx, rule := range route.Spec.Rules {
-			rs := utils.HTTPRouteRuleSelector{HTTPRouteMatch: &routeSelectorMatch}
+			rs := kuadrant.HTTPRouteRuleSelector{HTTPRouteMatch: &routeSelectorMatch}
 			if rs.Selects(rule) {
 				rulesIndices.Set(idx, rule)
 			}

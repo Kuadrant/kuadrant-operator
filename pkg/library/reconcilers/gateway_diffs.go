@@ -9,13 +9,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 type GatewayDiffs struct {
-	GatewaysMissingPolicyRef     []utils.GatewayWrapper
-	GatewaysWithValidPolicyRef   []utils.GatewayWrapper
-	GatewaysWithInvalidPolicyRef []utils.GatewayWrapper
+	GatewaysMissingPolicyRef     []kuadrant.GatewayWrapper
+	GatewaysWithValidPolicyRef   []kuadrant.GatewayWrapper
+	GatewaysWithInvalidPolicyRef []kuadrant.GatewayWrapper
 }
 
 // ComputeGatewayDiffs computes all the differences to reconcile regarding the gateways whose behaviors should/should not be extended by the policy.
@@ -39,7 +39,7 @@ func ComputeGatewayDiffs(ctx context.Context, k8sClient client.Reader, policy, t
 		return nil, err
 	}
 
-	policyKind, ok := policy.(utils.Referrer)
+	policyKind, ok := policy.(kuadrant.Referrer)
 	if !ok {
 		return nil, fmt.Errorf("policy %s is not a referrer", policy.GetObjectKind().GroupVersionKind())
 	}
@@ -60,11 +60,11 @@ func ComputeGatewayDiffs(ctx context.Context, k8sClient client.Reader, policy, t
 }
 
 // gatewaysMissingPolicyRef returns gateways referenced by the policy but that miss the reference to it the annotations
-func gatewaysMissingPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, policyKind utils.Referrer) []utils.GatewayWrapper {
-	gateways := make([]utils.GatewayWrapper, 0)
+func gatewaysMissingPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, policyKind kuadrant.Referrer) []kuadrant.GatewayWrapper {
+	gateways := make([]kuadrant.GatewayWrapper, 0)
 	for i := range gwList.Items {
 		gateway := gwList.Items[i]
-		gw := utils.GatewayWrapper{Gateway: &gateway, Referrer: policyKind}
+		gw := kuadrant.GatewayWrapper{Gateway: &gateway, Referrer: policyKind}
 		if slices.Contains(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && !gw.ContainsPolicy(policyKey) {
 			gateways = append(gateways, gw)
 		}
@@ -73,11 +73,11 @@ func gatewaysMissingPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client
 }
 
 // gatewaysWithValidPolicyRef returns gateways referenced by the policy that also have the reference in the annotations
-func gatewaysWithValidPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, policyKind utils.Referrer) []utils.GatewayWrapper {
-	gateways := make([]utils.GatewayWrapper, 0)
+func gatewaysWithValidPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, policyKind kuadrant.Referrer) []kuadrant.GatewayWrapper {
+	gateways := make([]kuadrant.GatewayWrapper, 0)
 	for i := range gwList.Items {
 		gateway := gwList.Items[i]
-		gw := utils.GatewayWrapper{Gateway: &gateway, Referrer: policyKind}
+		gw := kuadrant.GatewayWrapper{Gateway: &gateway, Referrer: policyKind}
 		if slices.Contains(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && gw.ContainsPolicy(policyKey) {
 			gateways = append(gateways, gw)
 		}
@@ -86,11 +86,11 @@ func gatewaysWithValidPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey clie
 }
 
 // gatewaysWithInvalidPolicyRef returns gateways not referenced by the policy that still have the reference in the annotations
-func gatewaysWithInvalidPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, policyKind utils.Referrer) []utils.GatewayWrapper {
-	gateways := make([]utils.GatewayWrapper, 0)
+func gatewaysWithInvalidPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, policyKind kuadrant.Referrer) []kuadrant.GatewayWrapper {
+	gateways := make([]kuadrant.GatewayWrapper, 0)
 	for i := range gwList.Items {
 		gateway := gwList.Items[i]
-		gw := utils.GatewayWrapper{Gateway: &gateway, Referrer: policyKind}
+		gw := kuadrant.GatewayWrapper{Gateway: &gateway, Referrer: policyKind}
 		if !slices.Contains(policyGwKeys, client.ObjectKeyFromObject(&gateway)) && gw.ContainsPolicy(policyKey) {
 			gateways = append(gateways, gw)
 		}

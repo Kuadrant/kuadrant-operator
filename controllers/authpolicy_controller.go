@@ -15,9 +15,9 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
@@ -28,7 +28,7 @@ type AuthPolicyReconciler struct {
 	*reconcilers.BaseReconciler
 	TargetRefReconciler reconcilerutils.TargetRefReconciler
 	// OverriddenPolicyMap tracks the overridden policies to report their status.
-	OverriddenPolicyMap *utils.OverriddenPolicyMap
+	OverriddenPolicyMap *kuadrant.OverriddenPolicyMap
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -73,7 +73,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, ap, targetNetworkObject, utils.NewErrTargetNotFound(ap.Kind(), ap.GetTargetRef(), delResErr))
+				return r.reconcileStatus(ctx, ap, targetNetworkObject, kuadrant.NewErrTargetNotFound(ap.Kind(), ap.GetTargetRef(), delResErr))
 			}
 			return ctrl.Result{}, err
 		}
@@ -139,11 +139,11 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 // validate performs validation before proceeding with the reconcile loop, returning a common.ErrInvalid on any failing validation
 func (r *AuthPolicyReconciler) validate(ap *api.AuthPolicy, targetNetworkObject client.Object) error {
 	if err := ap.Validate(); err != nil {
-		return utils.NewErrInvalid(ap.Kind(), err)
+		return kuadrant.NewErrInvalid(ap.Kind(), err)
 	}
 
-	if err := utils.ValidateHierarchicalRules(ap, targetNetworkObject); err != nil {
-		return utils.NewErrInvalid(ap.Kind(), err)
+	if err := kuadrant.ValidateHierarchicalRules(ap, targetNetworkObject); err != nil {
+		return kuadrant.NewErrInvalid(ap.Kind(), err)
 	}
 
 	return nil

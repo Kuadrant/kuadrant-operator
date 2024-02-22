@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -40,8 +41,8 @@ func TestGatewaysMissingPolicyRef(t *testing.T) {
 	}
 
 	var gws []string
-	policyKind := &utils.PolicyKindStub{}
-	gwName := func(gw utils.GatewayWrapper) string { return gw.Gateway.Name }
+	policyKind := &kuadrant.PolicyKindStub{}
+	gwName := func(gw kuadrant.GatewayWrapper) string { return gw.Gateway.Name }
 
 	gws = utils.Map(gatewaysMissingPolicyRef(gwList, client.ObjectKey{Namespace: "app-ns", Name: "policy-1"}, []client.ObjectKey{
 		{Namespace: "gw-ns", Name: "gw-2"},
@@ -115,8 +116,8 @@ func TestGatewaysWithValidPolicyRef(t *testing.T) {
 	}
 
 	var gws []string
-	policyKind := &utils.PolicyKindStub{}
-	gwName := func(gw utils.GatewayWrapper) string { return gw.Gateway.Name }
+	policyKind := &kuadrant.PolicyKindStub{}
+	gwName := func(gw kuadrant.GatewayWrapper) string { return gw.Gateway.Name }
 
 	gws = utils.Map(gatewaysWithValidPolicyRef(gwList, client.ObjectKey{Namespace: "app-ns", Name: "policy-1"}, []client.ObjectKey{
 		{Namespace: "gw-ns", Name: "gw-2"},
@@ -190,8 +191,8 @@ func TestGatewaysWithInvalidPolicyRef(t *testing.T) {
 	}
 
 	var gws []string
-	policyKind := &utils.PolicyKindStub{}
-	gwName := func(gw utils.GatewayWrapper) string { return gw.Gateway.Name }
+	policyKind := &kuadrant.PolicyKindStub{}
+	gwName := func(gw kuadrant.GatewayWrapper) string { return gw.Gateway.Name }
 
 	gws = utils.Map(gatewaysWithInvalidPolicyRef(gwList, client.ObjectKey{Namespace: "app-ns", Name: "policy-1"}, []client.ObjectKey{
 		{Namespace: "gw-ns", Name: "gw-2"},

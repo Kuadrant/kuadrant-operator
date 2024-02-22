@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, specErr error) (ctrl.Result, error) {
@@ -58,7 +58,7 @@ func (r *RateLimitPolicyReconciler) calculateStatus(_ context.Context, rlp *kuad
 		ObservedGeneration: rlp.Status.ObservedGeneration,
 	}
 
-	acceptedCond := utils.AcceptedCondition(rlp, specErr)
+	acceptedCond := kuadrant.AcceptedCondition(rlp, specErr)
 
 	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)
 

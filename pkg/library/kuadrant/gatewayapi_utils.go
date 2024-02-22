@@ -1,4 +1,4 @@
-package utils
+package kuadrant
 
 import (
 	"context"
@@ -13,6 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 type HTTPRouteRule struct {
@@ -98,7 +100,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1.HTTPRouteRule) bool {
 		return true
 	}
 
-	_, found := Find(rule.Matches, func(ruleMatch gatewayapiv1.HTTPRouteMatch) bool {
+	_, found := utils.Find(rule.Matches, func(ruleMatch gatewayapiv1.HTTPRouteMatch) bool {
 		// path
 		if s.Path != nil && !reflect.DeepEqual(s.Path, ruleMatch.Path) {
 			return false
@@ -111,7 +113,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1.HTTPRouteRule) bool {
 
 		// headers
 		for _, header := range s.Headers {
-			if _, found := Find(ruleMatch.Headers, func(otherHeader gatewayapiv1.HTTPHeaderMatch) bool {
+			if _, found := utils.Find(ruleMatch.Headers, func(otherHeader gatewayapiv1.HTTPHeaderMatch) bool {
 				return reflect.DeepEqual(header, otherHeader)
 			}); !found {
 				return false
@@ -120,7 +122,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1.HTTPRouteRule) bool {
 
 		// query params
 		for _, param := range s.QueryParams {
-			if _, found := Find(ruleMatch.QueryParams, func(otherParam gatewayapiv1.HTTPQueryParamMatch) bool {
+			if _, found := utils.Find(ruleMatch.QueryParams, func(otherParam gatewayapiv1.HTTPQueryParamMatch) bool {
 				return reflect.DeepEqual(param, otherParam)
 			}); !found {
 				return false
@@ -135,7 +137,7 @@ func (s *HTTPRouteRuleSelector) Selects(rule gatewayapiv1.HTTPRouteRule) bool {
 
 // HTTPRouteRuleToString prints the matches of a  HTTPRouteRule as string
 func HTTPRouteRuleToString(rule gatewayapiv1.HTTPRouteRule) string {
-	matches := Map(rule.Matches, HTTPRouteMatchToString)
+	matches := utils.Map(rule.Matches, HTTPRouteMatchToString)
 	return fmt.Sprintf("{matches:[%s]}", strings.Join(matches, ","))
 }
 
@@ -148,11 +150,11 @@ func HTTPRouteMatchToString(match gatewayapiv1.HTTPRouteMatch) string {
 		patterns = append(patterns, fmt.Sprintf("path:%s", HTTPPathMatchToString(path)))
 	}
 	if len(match.QueryParams) > 0 {
-		queryParams := Map(match.QueryParams, HTTPQueryParamMatchToString)
+		queryParams := utils.Map(match.QueryParams, HTTPQueryParamMatchToString)
 		patterns = append(patterns, fmt.Sprintf("queryParams:[%s]", strings.Join(queryParams, ",")))
 	}
 	if len(match.Headers) > 0 {
-		headers := Map(match.Headers, HTTPHeaderMatchToString)
+		headers := utils.Map(match.Headers, HTTPHeaderMatchToString)
 		patterns = append(patterns, fmt.Sprintf("headers:[%s]", strings.Join(headers, ",")))
 	}
 	return fmt.Sprintf("{%s}", strings.Join(patterns, ","))
@@ -200,7 +202,7 @@ func HTTPMethodToString(method *gatewayapiv1.HTTPMethod) string {
 	return string(*method)
 }
 
-func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, policy KuadrantPolicy) (string, error) {
+func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, policy Policy) (string, error) {
 	targetRef := policy.GetTargetRef()
 	gwNamespacedName := types.NamespacedName{Namespace: string(ptr.Deref(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)}
 	if IsTargetRefHTTPRoute(targetRef) {
@@ -223,7 +225,7 @@ func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Cli
 	return GetKuadrantNamespace(gw)
 }
 
-func GetKuadrantNamespaceFromPolicy(p KuadrantPolicy) (string, bool) {
+func GetKuadrantNamespaceFromPolicy(p Policy) (string, bool) {
 	if kuadrantNamespace, isSet := p.GetAnnotations()[KuadrantNamespaceLabel]; isSet {
 		return kuadrantNamespace, true
 	}
@@ -330,7 +332,7 @@ func HostnamesFromHTTPRoute(ctx context.Context, route *gatewayapiv1.HTTPRoute, 
 		if err := cli.Get(ctx, types.NamespacedName{Namespace: ns, Name: string(ref.Name)}, gw); err != nil {
 			return nil, err
 		}
-		gwHostanmes := HostnamesToStrings(GatewayWrapper{Gateway: gw}.Hostnames())
+		gwHostanmes := utils.HostnamesToStrings(GatewayWrapper{Gateway: gw}.Hostnames())
 		hosts = append(hosts, gwHostanmes...)
 	}
 
@@ -338,13 +340,13 @@ func HostnamesFromHTTPRoute(ctx context.Context, route *gatewayapiv1.HTTPRoute, 
 }
 
 // ValidateHierarchicalRules returns error if the policy rules hostnames fail to match the target network hosts
-func ValidateHierarchicalRules(policy KuadrantPolicy, targetNetworkObject client.Object) error {
+func ValidateHierarchicalRules(policy Policy, targetNetworkObject client.Object) error {
 	targetHostnames, err := TargetHostnames(targetNetworkObject)
 	if err != nil {
 		return err
 	}
 
-	if valid, invalidHost := ValidSubdomains(targetHostnames, policy.GetRulesHostnames()); !valid {
+	if valid, invalidHost := utils.ValidSubdomains(targetHostnames, policy.GetRulesHostnames()); !valid {
 		return fmt.Errorf(
 			"rule host (%s) does not follow any hierarchical constraints, "+
 				"for the %T to be validated, it must match with at least one of the target network hostnames %+q",
@@ -358,7 +360,7 @@ func ValidateHierarchicalRules(policy KuadrantPolicy, targetNetworkObject client
 }
 
 func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway *gatewayapiv1.Gateway) (map[string]string, error) {
-	address, found := Find(
+	address, found := utils.Find(
 		gateway.Status.Addresses,
 		func(address gatewayapiv1.GatewayStatusAddress) bool {
 			return address.Type != nil && *address.Type == gatewayapiv1.HostnameAddressType
@@ -372,7 +374,7 @@ func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway 
 		Name:      serviceNameParts[0],
 		Namespace: serviceNameParts[1],
 	}
-	return GetServiceWorkloadSelector(ctx, cli, serviceKey)
+	return utils.GetServiceWorkloadSelector(ctx, cli, serviceKey)
 }
 
 func IsHTTPRouteAccepted(httpRoute *gatewayapiv1.HTTPRoute) bool {

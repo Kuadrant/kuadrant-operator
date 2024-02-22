@@ -40,7 +40,7 @@ import (
 )
 
 const (
-	HTTPRouteParents = ".metadata.parent"
+	HTTPRouteParents = ".metadata.route.parent"
 )
 
 // RateLimitingWASMPluginReconciler reconciles a WASMPlugin object for rate limiting
@@ -93,6 +93,11 @@ func (r *RateLimitingWASMPluginReconciler) Reconcile(eventCtx context.Context, r
 }
 
 func (r *RateLimitingWASMPluginReconciler) desiredRateLimitingWASMPlugin(ctx context.Context, gw *gatewayapiv1.Gateway) (*istioclientgoextensionv1alpha1.WasmPlugin, error) {
+	baseLogger, err := logr.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	wasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "WasmPlugin",
@@ -111,12 +116,15 @@ func (r *RateLimitingWASMPluginReconciler) desiredRateLimitingWASMPlugin(ctx con
 		},
 	}
 
+	logger := baseLogger.WithValues("wasmplugin", client.ObjectKeyFromObject(wasmPlugin))
+
 	pluginConfig, err := r.wasmPluginConfig(ctx, gw)
 	if err != nil {
 		return nil, err
 	}
 
 	if pluginConfig == nil || len(pluginConfig.RateLimitPolicies) == 0 {
+		logger.V(1).Info("pluginConfig is empty. Wasmplugin will be deleted if it exists")
 		common.TagObjectToDelete(wasmPlugin)
 		return wasmPlugin, nil
 	}
@@ -291,23 +299,22 @@ func (r *RateLimitingWASMPluginReconciler) RouteFromRLP(ctx context.Context, t *
 // addHTTPRouteByGatewayIndexer declares an index key that we can later use with the client as a pseudo-field name,
 // allowing to query all the routes parenting a given gateway
 // to prevent creating the same index field multiple times, the function is declared private to be
-// called ontly by this controller
-func addHTTPRouteByGatewayIndexer(mgr ctrl.Manager, logger logr.Logger) error {
+// called only by this controller
+func addHTTPRouteByGatewayIndexer(mgr ctrl.Manager, baseLogger logr.Logger) error {
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &gatewayapiv1.HTTPRoute{}, HTTPRouteParents, func(rawObj client.Object) []string {
 		// grab the route object, extract the parents
 		route, assertionOk := rawObj.(*gatewayapiv1.HTTPRoute)
-		logger.Info("assertionOK", "ok", assertionOk)
 		if !assertionOk {
 			return nil
 		}
 
-		logger.Info("route", "name", client.ObjectKeyFromObject(route).String())
+		logger := baseLogger.WithValues("route", client.ObjectKeyFromObject(route).String())
 
 		keys := make([]string, 0)
 
 		for _, parentRef := range route.Spec.CommonRouteSpec.ParentRefs {
 			if !common.IsParentGateway(parentRef) {
-				logger.Info("parent not gateway", "ParentRefs", parentRef)
+				logger.V(1).Info("parent is not gateway", "ParentRefs", parentRef)
 				continue
 			}
 
@@ -316,12 +323,11 @@ func addHTTPRouteByGatewayIndexer(mgr ctrl.Manager, logger logr.Logger) error {
 				Namespace: string(ptr.Deref(parentRef.Namespace, gatewayapiv1.Namespace(route.Namespace))),
 			}
 
-			logger.Info("new key", "key", key.String())
+			logger.V(1).Info("new gateway added", "key", key.String())
 
 			keys = append(keys, key.String())
 		}
 
-		// ...and if so, return it
 		return keys
 	}); err != nil {
 		return err

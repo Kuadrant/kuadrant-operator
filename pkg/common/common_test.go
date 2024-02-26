@@ -5,8 +5,11 @@ package common
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"testing"
+	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -689,6 +692,70 @@ func TestFilterValidSubdomains(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if r := FilterValidSubdomains(tc.domains, tc.subdomains); !reflect.DeepEqual(r, tc.expected) {
 				t.Errorf("expected=%v; got=%v", tc.expected, r)
+			}
+		})
+	}
+}
+
+func createTestPolicy(name string, creationTime time.Time) *TestPolicy {
+	return &TestPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:         "testnamespace",
+			Name:              name,
+			CreationTimestamp: metav1.Time{creationTime},
+		},
+	}
+}
+
+func TestPolicyByCreationTimestamp(t *testing.T) {
+	testCases := []struct {
+		name           string
+		policies       []KuadrantPolicy
+		sortedPolicies []KuadrantPolicy
+	}{
+		{
+			name:           "nil input",
+			policies:       nil,
+			sortedPolicies: nil,
+		},
+		{
+			name:           "empty slices",
+			policies:       make([]KuadrantPolicy, 0),
+			sortedPolicies: make([]KuadrantPolicy, 0),
+		},
+		{
+			name: "by creation date",
+			policies: []KuadrantPolicy{
+				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC)),
+				createTestPolicy("bbb", time.Date(2010, time.November, 10, 23, 0, 0, 0, time.UTC)),
+				createTestPolicy("aaa", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
+			},
+			sortedPolicies: []KuadrantPolicy{
+				createTestPolicy("aaa", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
+				createTestPolicy("bbb", time.Date(2010, time.November, 10, 23, 0, 0, 0, time.UTC)),
+				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC)),
+			},
+		},
+		{
+			name: "by name when creation date are equal",
+			policies: []KuadrantPolicy{
+				createTestPolicy("ccc", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
+				createTestPolicy("bbb", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
+				createTestPolicy("aaa", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
+			},
+			sortedPolicies: []KuadrantPolicy{
+				createTestPolicy("aaa", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
+				createTestPolicy("bbb", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
+				createTestPolicy("ccc", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			sort.Sort(PolicyByCreationTimestamp(tc.policies))
+			if !reflect.DeepEqual(tc.policies, tc.sortedPolicies) {
+				subT.Errorf("expected=%v; got=%v", tc.sortedPolicies, tc.policies)
 			}
 		})
 	}

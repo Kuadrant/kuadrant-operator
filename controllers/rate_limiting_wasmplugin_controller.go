@@ -168,7 +168,7 @@ func (r *RateLimitingWASMPluginReconciler) wasmPluginConfig(ctx context.Context,
 	rateLimitPoliciesSorted := rateLimitPolicies
 
 	// Sort RLPs for consistent comparison with existing objects
-	sort.Sort(common.PolicyByKey(rateLimitPoliciesSorted))
+	sort.Sort(common.PolicyByCreationTimestamp(rateLimitPoliciesSorted))
 
 	for _, policy := range rateLimitPolicies {
 		rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)

@@ -189,7 +189,7 @@ func TestGetPolicyHTTPRoute(t *testing.T) {
 	})
 }
 
-func TestGetFreeRoutes(t *testing.T) {
+func TestGetUntargetedRoutes(t *testing.T) {
 	t.Run("gateway without routes", func(subT *testing.T) {
 		// gw1
 		// policy1 -> gw1
@@ -201,8 +201,8 @@ func TestGetFreeRoutes(t *testing.T) {
 
 		topology := NewKuadrantTopology(gateways, nil, policies)
 
-		freeRoutes := topology.GetFreeRoutes(gw1)
-		assert.Equal(subT, len(freeRoutes), 0)
+		untargetedRoutes := topology.GetUntargetedRoutes(gw1)
+		assert.Equal(subT, len(untargetedRoutes), 0)
 	})
 
 	t.Run("all routes have policies", func(subT *testing.T) {
@@ -224,11 +224,11 @@ func TestGetFreeRoutes(t *testing.T) {
 
 		topology := NewKuadrantTopology(gateways, routes, policies)
 
-		freeRoutes := topology.GetFreeRoutes(gw1)
-		assert.Equal(subT, len(freeRoutes), 0)
+		untargetedRoutes := topology.GetUntargetedRoutes(gw1)
+		assert.Equal(subT, len(untargetedRoutes), 0)
 	})
 
-	t.Run("only one route is free", func(subT *testing.T) {
+	t.Run("only one route is untargeted", func(subT *testing.T) {
 		// gw1
 		// route 1 -> gw1
 		// route 2 -> gw1
@@ -245,15 +245,15 @@ func TestGetFreeRoutes(t *testing.T) {
 
 		topology := NewKuadrantTopology(gateways, routes, policies)
 
-		freeRoutes := topology.GetFreeRoutes(gw1)
-		assert.Equal(subT, len(freeRoutes), 1)
+		untargetedRoutes := topology.GetUntargetedRoutes(gw1)
+		assert.Equal(subT, len(untargetedRoutes), 1)
 		assert.Equal(subT,
-			client.ObjectKeyFromObject(freeRoutes[0]),
+			client.ObjectKeyFromObject(untargetedRoutes[0]),
 			client.ObjectKeyFromObject(route2),
 		)
 	})
 
-	t.Run("all routes are free", func(subT *testing.T) {
+	t.Run("all routes are untargeted", func(subT *testing.T) {
 		// gw1
 		// route 1 -> gw1
 		// route 2 -> gw1
@@ -266,8 +266,8 @@ func TestGetFreeRoutes(t *testing.T) {
 
 		topology := NewKuadrantTopology(gateways, routes, nil)
 
-		freeRoutes := topology.GetFreeRoutes(gw1)
-		assert.Equal(subT, len(freeRoutes), 2)
+		untargetedRoutes := topology.GetUntargetedRoutes(gw1)
+		assert.Equal(subT, len(untargetedRoutes), 2)
 	})
 }
 
@@ -281,7 +281,7 @@ func TestKuadrantTopologyString(t *testing.T) {
 		assert.Assert(subT, strings.Contains(topologyStr, `"policies": null`))
 		assert.Assert(subT, strings.Contains(topologyStr, `"policiesPerGateway": null`))
 		assert.Assert(subT, strings.Contains(topologyStr, `"policiesTargetingRoutes": null`))
-		assert.Assert(subT, strings.Contains(topologyStr, `"freeRoutesPerGateway": null`))
+		assert.Assert(subT, strings.Contains(topologyStr, `"untargetedRoutesPerGateway": null`))
 	})
 
 	t.Run("1 gateway 1 route 1 policy for route", func(subT *testing.T) {
@@ -333,7 +333,7 @@ func TestKuadrantTopologyString(t *testing.T) {
 		assert.Assert(subT, strings.Contains(topologyStr, `"policiesTargetingRoutes": {
     "nsA/policy1": "nsA/route1"
   }`))
-		assert.Assert(subT, strings.Contains(topologyStr, `"freeRoutesPerGateway": {
+		assert.Assert(subT, strings.Contains(topologyStr, `"untargetedRoutesPerGateway": {
     "nsA/gw1": []
   }`))
 	})

@@ -279,19 +279,18 @@ func (r *RateLimitingWASMPluginReconciler) RouteFromRLP(ctx context.Context, t *
 		// This gateway policy will be enforced into all HTTPRoutes that do not have a policy attached to it
 
 		// Build imaginary route with all the routes not having a RLP targeting it
-		freeRoutes := t.GetFreeRoutes(gw)
+		untargetedRoutes := t.GetUntargetedRoutes(gw)
 
-		if len(freeRoutes) == 0 {
+		if len(untargetedRoutes) == 0 {
 			// For policies targeting a gateway, when no httproutes is attached to the gateway, skip wasm config
 			// test wasm config when no http routes attached to the gateway
-			logger.V(1).Info("no free httproutes attached to the targeted gateway, skipping wasm config for the gateway rlp", "ratelimitpolicy", client.ObjectKeyFromObject(rlp))
+			logger.V(1).Info("no untargeted httproutes attached to the targeted gateway, skipping wasm config for the gateway rlp", "ratelimitpolicy", client.ObjectKeyFromObject(rlp))
 			return nil, nil
 		}
 
-		freeRules := make([]gatewayapiv1.HTTPRouteRule, 0)
-		for idx := range freeRoutes {
-			freeroute := freeRoutes[idx]
-			freeRules = append(freeRules, freeroute.Spec.Rules...)
+		untargetedRules := make([]gatewayapiv1.HTTPRouteRule, 0)
+		for idx := range untargetedRoutes {
+			untargetedRules = append(untargetedRules, untargetedRoutes[idx].Spec.Rules...)
 		}
 
 		gwHostnamesTmp := common.TargetHostnames(gw)
@@ -299,7 +298,7 @@ func (r *RateLimitingWASMPluginReconciler) RouteFromRLP(ctx context.Context, t *
 		route = &gatewayapiv1.HTTPRoute{
 			Spec: gatewayapiv1.HTTPRouteSpec{
 				Hostnames: gwHostnames,
-				Rules:     freeRules,
+				Rules:     untargetedRules,
 			},
 		}
 	}

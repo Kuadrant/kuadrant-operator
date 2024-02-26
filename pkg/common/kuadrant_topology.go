@@ -22,9 +22,9 @@ type KuadrantTopology struct {
 	// Type: Policy -> HTTPRoute
 	policyRoute map[client.ObjectKey]*gatewayapiv1.HTTPRoute
 
-	// freeRoutes is an index of gateways mapping to HTTPRoutes not targeted by a kuadrant policy
+	// untargetedRoutes is an index of gateways mapping to HTTPRoutes not targeted by a kuadrant policy
 	// Gateway -> []HTTPRoute
-	freeRoutes map[client.ObjectKey][]*gatewayapiv1.HTTPRoute
+	untargetedRoutes map[client.ObjectKey][]*gatewayapiv1.HTTPRoute
 
 	// Raw topology with gateways, routes and policies
 	// Currently only used for logging
@@ -37,21 +37,30 @@ func NewKuadrantTopology(gateways []*gatewayapiv1.Gateway, routes []*gatewayapiv
 	return &KuadrantTopology{
 		gatewayPolicies:  buildGatewayPoliciesIndex(t),
 		policyRoute:      buildPolicyRouteIndex(t),
-		freeRoutes:       buildFreeRoutesIndex(t),
+		untargetedRoutes: buildUntargetedRoutesIndex(t),
 		internalTopology: t,
 	}
 }
 
+// PoliciesFromGateway returns Kuadrant Policies which
+// directly or indirectly are targeting the gateway given as input.
+// Type: Gateway -> []Policy
 func (k *KuadrantTopology) PoliciesFromGateway(gateway *gatewayapiv1.Gateway) []KuadrantPolicy {
 	return k.gatewayPolicies[client.ObjectKeyFromObject(gateway)]
 }
 
+// GetPolicyHTTPRoute returns the HTTPRoute being targetd by the policy.
+// The method only returns existing and accepted (by parent gateways) HTTPRoutes
+// Type: Policy -> HTTPRoute
 func (k *KuadrantTopology) GetPolicyHTTPRoute(policy KuadrantPolicy) *gatewayapiv1.HTTPRoute {
 	return k.policyRoute[client.ObjectKeyFromObject(policy)]
 }
 
-func (k *KuadrantTopology) GetFreeRoutes(gateway *gatewayapiv1.Gateway) []*gatewayapiv1.HTTPRoute {
-	return k.freeRoutes[client.ObjectKeyFromObject(gateway)]
+// GetUntargetedRoutes returns the HTTPRoutes not targeted by any kuadrant policy
+// having the gateway given as input as parent.
+// Gateway -> []HTTPRoute
+func (k *KuadrantTopology) GetUntargetedRoutes(gateway *gatewayapiv1.Gateway) []*gatewayapiv1.HTTPRoute {
+	return k.untargetedRoutes[client.ObjectKeyFromObject(gateway)]
 }
 
 // String representation of the topology
@@ -154,9 +163,9 @@ func (k *KuadrantTopology) String() string {
 		return index
 	}()
 
-	freeRoutesPerGateway := func() map[string][]string {
+	untargetedRoutesPerGateway := func() map[string][]string {
 		index := make(map[string][]string, 0)
-		for gatewayKey, routeList := range k.freeRoutes {
+		for gatewayKey, routeList := range k.untargetedRoutes {
 			index[gatewayKey.String()] = Map(routeList, func(route *gatewayapiv1.HTTPRoute) string {
 				return client.ObjectKeyFromObject(route).String()
 			})
@@ -168,19 +177,19 @@ func (k *KuadrantTopology) String() string {
 	}()
 
 	topologyRepr := struct {
-		Gateways        []Gateway           `json:"gateways"`
-		Routes          []Route             `json:"routes"`
-		Policies        []Policy            `json:"policies"`
-		GatewayPolicies map[string][]string `json:"policiesPerGateway"`
-		PolicyRoute     map[string]string   `json:"policiesTargetingRoutes"`
-		FreeRoutes      map[string][]string `json:"freeRoutesPerGateway"`
+		Gateways         []Gateway           `json:"gateways"`
+		Routes           []Route             `json:"routes"`
+		Policies         []Policy            `json:"policies"`
+		GatewayPolicies  map[string][]string `json:"policiesPerGateway"`
+		PolicyRoute      map[string]string   `json:"policiesTargetingRoutes"`
+		UntargetedRoutes map[string][]string `json:"untargetedRoutesPerGateway"`
 	}{
 		gateways,
 		routes,
 		policies,
 		policiesPerGateway,
 		policiesTargetingRoutes,
-		freeRoutesPerGateway,
+		untargetedRoutesPerGateway,
 	}
 
 	jsonData, err := json.MarshalIndent(topologyRepr, "", "  ")
@@ -227,7 +236,7 @@ func buildPolicyRouteIndex(t *gatewayAPITopology) map[client.ObjectKey]*gatewaya
 	return index
 }
 
-func buildFreeRoutesIndex(t *gatewayAPITopology) map[client.ObjectKey][]*gatewayapiv1.HTTPRoute {
+func buildUntargetedRoutesIndex(t *gatewayAPITopology) map[client.ObjectKey][]*gatewayapiv1.HTTPRoute {
 	// Build Gateway -> []HTTPRoute index with all the routes not targeted by a policy
 	index := make(map[client.ObjectKey][]*gatewayapiv1.HTTPRoute, 0)
 

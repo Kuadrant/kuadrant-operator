@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 
 	"github.com/go-logr/logr"
@@ -26,7 +27,6 @@ import (
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -316,30 +316,16 @@ func addHTTPRouteByGatewayIndexer(mgr ctrl.Manager, baseLogger logr.Logger) erro
 		// grab the route object, extract the parents
 		route, assertionOk := rawObj.(*gatewayapiv1.HTTPRoute)
 		if !assertionOk {
+			baseLogger.V(1).Error(fmt.Errorf("%T is not a *gatewayapiv1.HTTPRoute", rawObj), "cannot map")
 			return nil
 		}
 
 		logger := baseLogger.WithValues("route", client.ObjectKeyFromObject(route).String())
 
-		keys := make([]string, 0)
-
-		for _, parentRef := range route.Spec.CommonRouteSpec.ParentRefs {
-			if !common.IsParentGateway(parentRef) {
-				logger.V(1).Info("parent is not gateway", "ParentRefs", parentRef)
-				continue
-			}
-
-			key := client.ObjectKey{
-				Name:      string(parentRef.Name),
-				Namespace: string(ptr.Deref(parentRef.Namespace, gatewayapiv1.Namespace(route.Namespace))),
-			}
-
+		return common.Map(common.GetRouteAcceptedGatewayParentKeys(route), func(key client.ObjectKey) string {
 			logger.V(1).Info("new gateway added", "key", key.String())
-
-			keys = append(keys, key.String())
-		}
-
-		return keys
+			return key.String()
+		})
 	}); err != nil {
 		return err
 	}

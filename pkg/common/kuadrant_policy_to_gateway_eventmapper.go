@@ -51,27 +51,12 @@ func (k *KuadrantPolicyToParentGatewaysEventMapper) Map(ctx context.Context, obj
 			return []reconcile.Request{}
 		}
 
-		requests := make([]reconcile.Request, 0)
-
-		for _, parentRef := range route.Spec.ParentRefs {
-			// skips if parentRef is not a Gateway
-			if !IsParentGateway(parentRef) {
-				continue
-			}
-
-			ns := route.Namespace
-			if parentRef.Namespace != nil {
-				ns = string(*parentRef.Namespace)
-			}
-
-			nn := types.NamespacedName{Name: string(parentRef.Name), Namespace: ns}
-			logger.V(1).Info("map", " gateway", nn)
-
-			requests = append(requests, reconcile.Request{NamespacedName: nn})
-		}
-
-		return requests
+		return Map(GetRouteAcceptedGatewayParentKeys(route), func(key client.ObjectKey) reconcile.Request {
+			logger.V(1).Info("new gateway event", "key", key.String())
+			return reconcile.Request{NamespacedName: key}
+		})
 	}
 
+	logger.V(1).Info("policy targeting unexpected resource, skipping it", "key", client.ObjectKeyFromObject(kuadrantPolicy))
 	return []reconcile.Request{}
 }

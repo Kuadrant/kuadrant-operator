@@ -7,6 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -130,18 +131,7 @@ func (g GatewayWrapper) DeletePolicy(policyKey client.ObjectKey) bool {
 
 // Hostnames builds a list of hostnames from the listeners.
 func (g GatewayWrapper) Hostnames() []gatewayapiv1.Hostname {
-	hostnames := make([]gatewayapiv1.Hostname, 0)
-	if g.Gateway == nil {
-		return hostnames
-	}
-
-	for idx := range g.Spec.Listeners {
-		if g.Spec.Listeners[idx].Hostname != nil {
-			hostnames = append(hostnames, *g.Spec.Listeners[idx].Hostname)
-		}
-	}
-
-	return hostnames
+	return kuadrantgatewayapi.GatewayHostnames(g.Gateway)
 }
 
 // GatewayWrapperList is a list of GatewayWrappers that implements sort.Interface

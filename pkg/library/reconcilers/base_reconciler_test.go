@@ -36,7 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
@@ -247,7 +247,7 @@ func TestBaseReconcilerDelete(t *testing.T) {
 			"somekey": "somevalue",
 		},
 	}
-	common.TagObjectToDelete(desired)
+	utils.TagObjectToDelete(desired)
 
 	err = baseReconciler.ReconcileResource(ctx, &v1.ConfigMap{}, desired, CreateOnlyMutator)
 	if err != nil {

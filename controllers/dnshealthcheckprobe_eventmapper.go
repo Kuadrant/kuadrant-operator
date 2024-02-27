@@ -9,9 +9,9 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 var _ mappers.EventMapper = &DNSHealthCheckProbeEventMapper{}
@@ -35,11 +35,11 @@ func (m *DNSHealthCheckProbeEventMapper) MapToPolicy(obj client.Object, policyKi
 
 	requests := make([]reconcile.Request, 0)
 
-	policyName := common.GetLabel(probe, policyKind.DirectReferenceAnnotationName())
+	policyName := utils.GetLabel(probe, policyKind.DirectReferenceAnnotationName())
 	if policyName == "" {
 		return requests
 	}
-	policyNamespace := common.GetLabel(probe, fmt.Sprintf("%s-namespace", policyKind.DirectReferenceAnnotationName()))
+	policyNamespace := utils.GetLabel(probe, fmt.Sprintf("%s-namespace", policyKind.DirectReferenceAnnotationName()))
 	if policyNamespace == "" {
 		return requests
 	}

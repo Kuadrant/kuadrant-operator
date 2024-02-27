@@ -26,7 +26,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -39,8 +38,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
-	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
 const (
@@ -51,8 +49,7 @@ const (
 // TLSPolicyReconciler reconciles a TLSPolicy object
 type TLSPolicyReconciler struct {
 	*reconcilers.BaseReconciler
-	TargetRefReconciler reconcilerutils.TargetRefReconciler
-	Scheme              *runtime.Scheme
+	TargetRefReconciler reconcilers.TargetRefReconciler
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=tlspolicies,verbs=get;list;watch;update;patch;delete
@@ -81,7 +78,7 @@ func (r *TLSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	markedForDeletion := tlsPolicy.GetDeletionTimestamp() != nil
 
-	targetReferenceObject, err := reconcilerutils.FetchTargetRefObject(ctx, r.Client(), tlsPolicy.GetTargetRef(), tlsPolicy.Namespace)
+	targetReferenceObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), tlsPolicy.GetTargetRef(), tlsPolicy.Namespace)
 	log.V(3).Info("TLSPolicyReconciler targetReferenceObject", "targetReferenceObject", targetReferenceObject)
 	if err != nil {
 		if !markedForDeletion {
@@ -153,7 +150,7 @@ func (r *TLSPolicyReconciler) reconcileResources(ctx context.Context, tlsPolicy 
 	}
 
 	// reconcile based on gateway diffs
-	gatewayDiffObj, err := reconcilerutils.ComputeGatewayDiffs(ctx, r.Client(), tlsPolicy, targetNetworkObject)
+	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), tlsPolicy, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -189,7 +186,7 @@ func (r *TLSPolicyReconciler) reconcileResources(ctx context.Context, tlsPolicy 
 
 func (r *TLSPolicyReconciler) deleteResources(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
-	gatewayDiffObj, err := reconcilerutils.ComputeGatewayDiffs(ctx, r.Client(), tlsPolicy, targetNetworkObject)
+	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), tlsPolicy, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -214,7 +211,7 @@ func (r *TLSPolicyReconciler) deleteResources(ctx context.Context, tlsPolicy *v1
 	return r.updateGatewayCondition(ctx, metav1.Condition{Type: string(TLSPolicyAffected)}, gatewayDiffObj)
 }
 
-func (r *TLSPolicyReconciler) updateGatewayCondition(ctx context.Context, condition metav1.Condition, gatewayDiff *reconcilerutils.GatewayDiffs) error {
+func (r *TLSPolicyReconciler) updateGatewayCondition(ctx context.Context, condition metav1.Condition, gatewayDiff *reconcilers.GatewayDiffs) error {
 	// update condition if needed
 	gatewayDiffs := append(gatewayDiff.GatewaysWithValidPolicyRef, gatewayDiff.GatewaysMissingPolicyRef...)
 	for i, gw := range gatewayDiffs {

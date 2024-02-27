@@ -22,8 +22,6 @@ import (
 	"os"
 	"runtime"
 
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
@@ -53,9 +51,8 @@ import (
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -143,7 +140,6 @@ func main() {
 
 	if err = (&controllers.KuadrantReconciler{
 		BaseReconciler: kuadrantBaseReconciler,
-		Scheme:         mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Kuadrant")
 		os.Exit(1)
@@ -156,7 +152,7 @@ func main() {
 	)
 
 	if err = (&controllers.RateLimitPolicyReconciler{
-		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      rateLimitPolicyBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicy")
@@ -170,7 +166,7 @@ func main() {
 	)
 
 	if err = (&controllers.AuthPolicyReconciler{
-		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      authPolicyBaseReconciler,
 		OverriddenPolicyMap: kuadrant.NewOverriddenPolicyMap(),
 	}).SetupWithManager(mgr); err != nil {
@@ -186,7 +182,7 @@ func main() {
 
 	if err = (&controllers.DNSPolicyReconciler{
 		BaseReconciler:      dnsPolicyBaseReconciler,
-		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DNSPolicy")
 		os.Exit(1)
@@ -200,7 +196,7 @@ func main() {
 
 	if err = (&controllers.TLSPolicyReconciler{
 		BaseReconciler:      tlsPolicyBaseReconciler,
-		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TLSPolicy")
 		os.Exit(1)
@@ -239,10 +235,7 @@ func main() {
 	)
 
 	if err = (&controllers.RateLimitingWASMPluginReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{
-			// TODO: TargetRefReconciler needed?
-			BaseReconciler: rateLimitingWASMPluginBaseReconciler,
-		},
+		BaseReconciler: rateLimitingWASMPluginBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitingWASMPlugin")
 		os.Exit(1)

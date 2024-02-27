@@ -11,6 +11,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 )
 
 const (
@@ -53,7 +55,7 @@ func (o *OverriddenPolicyMap) RemoveOverriddenPolicy(p Policy) {
 
 // IsPolicyOverridden checks if the provided Policy is overridden based on the tracking map maintained.
 func (o *OverriddenPolicyMap) IsPolicyOverridden(p Policy) bool {
-	return o.policies[p.GetUID()] && IsTargetRefGateway(p.GetTargetRef())
+	return o.policies[p.GetUID()] && gatewayapi.IsTargetRefGateway(p.GetTargetRef())
 }
 
 // ConditionMarshal marshals the set of conditions as a JSON array, sorted by condition type.

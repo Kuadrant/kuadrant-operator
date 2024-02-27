@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // MutateFn is a function which mutates the existing object into it's desired state.
@@ -113,7 +113,7 @@ func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired cli
 		}
 
 		// Not found
-		if !common.IsObjectTaggedToDelete(desired) {
+		if !utils.IsObjectTaggedToDelete(desired) {
 			return b.CreateResource(ctx, desired)
 		}
 
@@ -122,7 +122,7 @@ func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired cli
 	}
 
 	// item found successfully
-	if common.IsObjectTaggedToDelete(desired) {
+	if utils.IsObjectTaggedToDelete(desired) {
 		return b.DeleteResource(ctx, desired)
 	}
 

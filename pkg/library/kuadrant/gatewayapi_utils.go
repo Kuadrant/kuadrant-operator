@@ -20,6 +20,11 @@ const (
 	GatewayProgrammedConditionType = "Programmed"
 )
 
+type GatewayAPIPolicy interface {
+	client.Object
+	GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference
+}
+
 type HTTPRouteRule struct {
 	Paths   []string
 	Methods []string
@@ -420,24 +425,24 @@ func GetRouteAcceptedGatewayParentKeys(route *gatewayapiv1.HTTPRoute) []client.O
 		return nil
 	}
 
-	acceptedRouteParentStatus := Filter(route.Status.RouteStatus.Parents, func(p gatewayapiv1.RouteParentStatus) bool {
-		// Only gateway parents
-		if !IsParentGateway(p.ParentRef) {
+	gatewayParentRefs := Filter(route.Spec.ParentRefs, IsParentGateway)
+
+	acceptedParentRefs := Filter(gatewayParentRefs, func(p gatewayapiv1.ParentReference) bool {
+		parentStatus, found := Find(route.Status.RouteStatus.Parents, func(pStatus gatewayapiv1.RouteParentStatus) bool {
+			return pStatus.ParentRef == p
+		})
+
+		if !found {
 			return false
 		}
 
-		// Only gateways that accepted this route
-		if meta.IsStatusConditionFalse(p.Conditions, "Accepted") {
-			return false
-		}
-
-		return true
+		return meta.IsStatusConditionTrue(parentStatus.Conditions, "Accepted")
 	})
 
-	return Map(acceptedRouteParentStatus, func(p gatewayapiv1.RouteParentStatus) client.ObjectKey {
+	return Map(acceptedParentRefs, func(p gatewayapiv1.ParentReference) client.ObjectKey {
 		return client.ObjectKey{
-			Name:      string(p.ParentRef.Name),
-			Namespace: string(ptr.Deref(p.ParentRef.Namespace, gatewayapiv1.Namespace(route.Namespace))),
+			Name:      string(p.Name),
+			Namespace: string(ptr.Deref(p.Namespace, gatewayapiv1.Namespace(route.Namespace))),
 		}
 	})
 }

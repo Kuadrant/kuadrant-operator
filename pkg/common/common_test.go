@@ -285,8 +285,8 @@ func createTestPolicy(name string, creationTime time.Time) *TestPolicy {
 func TestPolicyByCreationTimestamp(t *testing.T) {
 	testCases := []struct {
 		name           string
-		policies       []KuadrantPolicy
-		sortedPolicies []KuadrantPolicy
+		policies       []GatewayAPIPolicy
+		sortedPolicies []GatewayAPIPolicy
 	}{
 		{
 			name:           "nil input",
@@ -295,17 +295,17 @@ func TestPolicyByCreationTimestamp(t *testing.T) {
 		},
 		{
 			name:           "empty slices",
-			policies:       make([]KuadrantPolicy, 0),
-			sortedPolicies: make([]KuadrantPolicy, 0),
+			policies:       make([]GatewayAPIPolicy, 0),
+			sortedPolicies: make([]GatewayAPIPolicy, 0),
 		},
 		{
 			name: "by creation date",
-			policies: []KuadrantPolicy{
+			policies: []GatewayAPIPolicy{
 				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("bbb", time.Date(2010, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("aaa", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 			},
-			sortedPolicies: []KuadrantPolicy{
+			sortedPolicies: []GatewayAPIPolicy{
 				createTestPolicy("aaa", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("bbb", time.Date(2010, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC)),
@@ -313,12 +313,12 @@ func TestPolicyByCreationTimestamp(t *testing.T) {
 		},
 		{
 			name: "by name when creation date are equal",
-			policies: []KuadrantPolicy{
+			policies: []GatewayAPIPolicy{
 				createTestPolicy("ccc", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("bbb", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("aaa", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 			},
-			sortedPolicies: []KuadrantPolicy{
+			sortedPolicies: []GatewayAPIPolicy{
 				createTestPolicy("aaa", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("bbb", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("ccc", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),

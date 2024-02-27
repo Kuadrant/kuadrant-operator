@@ -155,12 +155,12 @@ func (r *RateLimitingWASMPluginReconciler) wasmPluginConfig(ctx context.Context,
 		RateLimitPolicies: make([]wasm.RateLimitPolicy, 0),
 	}
 
-	gatewayAPITopology, err := r.gatewayAPITopologyFromGateway(ctx, gw)
+	t, err := r.topologyIndexesFromGateway(ctx, gw)
 	if err != nil {
 		return nil, err
 	}
 
-	rateLimitPolicies := gatewayAPITopology.PoliciesFromGateway(gw)
+	rateLimitPolicies := t.PoliciesFromGateway(gw)
 
 	logger.V(1).Info("wasmPluginConfig", "#RLPS", len(rateLimitPolicies))
 
@@ -172,7 +172,7 @@ func (r *RateLimitingWASMPluginReconciler) wasmPluginConfig(ctx context.Context,
 
 	for _, policy := range rateLimitPolicies {
 		rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)
-		wasmRLP, err := r.WASMRateLimitPolicy(ctx, gatewayAPITopology, rlp, gw)
+		wasmRLP, err := r.WASMRateLimitPolicy(ctx, t, rlp, gw)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +188,7 @@ func (r *RateLimitingWASMPluginReconciler) wasmPluginConfig(ctx context.Context,
 	return wasmPlugin, nil
 }
 
-func (r *RateLimitingWASMPluginReconciler) gatewayAPITopologyFromGateway(ctx context.Context, gw *gatewayapiv1.Gateway) (*common.KuadrantTopology, error) {
+func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx context.Context, gw *gatewayapiv1.Gateway) (*common.TopologyIndexes, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -197,7 +197,7 @@ func (r *RateLimitingWASMPluginReconciler) gatewayAPITopologyFromGateway(ctx con
 	routeList := &gatewayapiv1.HTTPRouteList{}
 	// Get all the routes having the gateway as parent
 	err = r.Client().List(ctx, routeList, client.MatchingFields{HTTPRouteParents: client.ObjectKeyFromObject(gw).String()})
-	logger.V(1).Info("gatewayAPITopologyFromGateway: list httproutes from gateway", "err", err)
+	logger.V(1).Info("topologyIndexesFromGateway: list httproutes from gateway", "err", err)
 	if err != nil {
 		return nil, err
 	}
@@ -206,19 +206,19 @@ func (r *RateLimitingWASMPluginReconciler) gatewayAPITopologyFromGateway(ctx con
 	// Get all the rate limit policies
 	// TODO(eastizle): Add index field??
 	err = r.Client().List(ctx, rlpList)
-	logger.V(1).Info("gatewayAPITopologyFromGateway: list rate limit policies", "err", err)
+	logger.V(1).Info("topologyIndexesFromGateway: list rate limit policies", "err", err)
 	if err != nil {
 		return nil, err
 	}
 
-	return common.NewKuadrantTopology(
+	return common.NewTopologyIndexes(
 		[]*gatewayapiv1.Gateway{gw},
 		common.Map(routeList.Items, func(r gatewayapiv1.HTTPRoute) *gatewayapiv1.HTTPRoute { return &r }),
-		common.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) common.KuadrantPolicy { return &p }),
-	), nil
+		common.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) common.GatewayAPIPolicy { return &p }),
+	)
 }
 
-func (r *RateLimitingWASMPluginReconciler) WASMRateLimitPolicy(ctx context.Context, t *common.KuadrantTopology, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*wasm.RateLimitPolicy, error) {
+func (r *RateLimitingWASMPluginReconciler) WASMRateLimitPolicy(ctx context.Context, t *common.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*wasm.RateLimitPolicy, error) {
 	route, err := r.RouteFromRLP(ctx, t, rlp, gw)
 	if err != nil {
 		return nil, err
@@ -266,7 +266,7 @@ func (r *RateLimitingWASMPluginReconciler) WASMRateLimitPolicy(ctx context.Conte
 	}, nil
 }
 
-func (r *RateLimitingWASMPluginReconciler) RouteFromRLP(ctx context.Context, t *common.KuadrantTopology, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*gatewayapiv1.HTTPRoute, error) {
+func (r *RateLimitingWASMPluginReconciler) RouteFromRLP(ctx context.Context, t *common.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*gatewayapiv1.HTTPRoute, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return nil, err

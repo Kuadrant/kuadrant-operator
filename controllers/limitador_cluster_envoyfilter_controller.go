@@ -38,7 +38,8 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // LimitadorClusterEnvoyFilterReconciler reconciles a EnvoyFilter object with limitador's cluster
@@ -116,7 +117,7 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 		},
 		Spec: istioapinetworkingv1alpha3.EnvoyFilter{
 			WorkloadSelector: &istioapinetworkingv1alpha3.WorkloadSelector{
-				Labels: common.IstioWorkloadSelectorFromGateway(ctx, r.Client(), gw).MatchLabels,
+				Labels: kuadrantistioutils.IstioWorkloadSelectorFromGateway(ctx, r.Client(), gw).MatchLabels,
 			},
 			ConfigPatches: nil,
 		},
@@ -127,7 +128,7 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 	logger.V(1).Info("desiredRateLimitingClusterEnvoyFilter", "rlpRefs", rlpRefs)
 
 	if len(rlpRefs) < 1 {
-		common.TagObjectToDelete(ef)
+		utils.TagObjectToDelete(ef)
 		return ef, nil
 	}
 

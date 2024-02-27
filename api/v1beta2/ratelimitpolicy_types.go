@@ -26,6 +26,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -188,6 +189,8 @@ type RateLimitPolicy struct {
 	Spec   RateLimitPolicySpec   `json:"spec,omitempty"`
 	Status RateLimitPolicyStatus `json:"status,omitempty"`
 }
+
+var _ kuadrantgatewayapi.GatewayAPIPolicy = &RateLimitPolicy{}
 
 func (r *RateLimitPolicy) Validate() error {
 	if r.Spec.TargetRef.Namespace != nil && string(*r.Spec.TargetRef.Namespace) != r.Namespace {

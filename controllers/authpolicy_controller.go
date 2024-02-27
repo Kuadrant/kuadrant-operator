@@ -17,8 +17,7 @@ import (
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
-	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
 const authPolicyFinalizer = "authpolicy.kuadrant.io/finalizer"
@@ -26,7 +25,7 @@ const authPolicyFinalizer = "authpolicy.kuadrant.io/finalizer"
 // AuthPolicyReconciler reconciles a AuthPolicy object
 type AuthPolicyReconciler struct {
 	*reconcilers.BaseReconciler
-	TargetRefReconciler reconcilerutils.TargetRefReconciler
+	TargetRefReconciler reconcilers.TargetRefReconciler
 	// OverriddenPolicyMap tracks the overridden policies to report their status.
 	OverriddenPolicyMap *kuadrant.OverriddenPolicyMap
 }
@@ -64,7 +63,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	markedForDeletion := ap.GetDeletionTimestamp() != nil
 
 	// fetch the target network object
-	targetNetworkObject, err := reconcilerutils.FetchTargetRefObject(ctx, r.Client(), ap.GetTargetRef(), ap.Namespace)
+	targetNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), ap.GetTargetRef(), ap.Namespace)
 	if err != nil {
 		if !markedForDeletion {
 			if apierrors.IsNotFound(err) {
@@ -155,7 +154,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 	}
 
 	// reconcile based on gateway diffs
-	gatewayDiffObj, err := reconcilerutils.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
+	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -179,7 +178,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 
 func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
-	gatewayDiffObj, err := reconcilerutils.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
+	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
 	if err != nil {
 		return err
 	}

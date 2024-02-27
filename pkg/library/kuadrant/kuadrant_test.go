@@ -19,46 +19,6 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-func TestRouteHostnames(t *testing.T) {
-	testCases := []struct {
-		name     string
-		route    *gatewayapiv1.HTTPRoute
-		expected []string
-	}{
-		{
-			"nil",
-			nil,
-			nil,
-		},
-		{
-			"nil hostname",
-			&gatewayapiv1.HTTPRoute{
-				Spec: gatewayapiv1.HTTPRouteSpec{
-					Hostnames: nil,
-				},
-			},
-			[]string{"*"},
-		},
-		{
-			"basic",
-			&gatewayapiv1.HTTPRoute{
-				Spec: gatewayapiv1.HTTPRouteSpec{
-					Hostnames: []gatewayapiv1.Hostname{"*.com", "example.net", "test.example.net"},
-				},
-			},
-			[]string{"*.com", "example.net", "test.example.net"},
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(subT *testing.T) {
-			res := RouteHostnames(tc.route)
-			if !reflect.DeepEqual(res, tc.expected) {
-				subT.Errorf("result (%v) does not match expected (%v)", res, tc.expected)
-			}
-		})
-	}
-}
-
 func TestRulesFromHTTPRoute(t *testing.T) {
 	var (
 		getMethod                                    = "GET"
@@ -237,6 +197,46 @@ func TestRulesFromHTTPRoute(t *testing.T) {
 			res := RulesFromHTTPRoute(tc.route)
 			if !reflect.DeepEqual(res, tc.expected) {
 				subT.Errorf("result (%+v) does not match expected (%+v)", res, tc.expected)
+			}
+		})
+	}
+}
+
+func TestRouteHostnames(t *testing.T) {
+	testCases := []struct {
+		name     string
+		route    *gatewayapiv1.HTTPRoute
+		expected []string
+	}{
+		{
+			"nil",
+			nil,
+			nil,
+		},
+		{
+			"nil hostname",
+			&gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{
+					Hostnames: nil,
+				},
+			},
+			[]string{"*"},
+		},
+		{
+			"basic",
+			&gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{
+					Hostnames: []gatewayapiv1.Hostname{"*.com", "example.net", "test.example.net"},
+				},
+			},
+			[]string{"*.com", "example.net", "test.example.net"},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			res := RouteHostnames(tc.route)
+			if !reflect.DeepEqual(res, tc.expected) {
+				subT.Errorf("result (%v) does not match expected (%v)", res, tc.expected)
 			}
 		})
 	}
@@ -515,101 +515,6 @@ func TestHTTPHeaderMatchToString(t *testing.T) {
 	}
 }
 
-func TestHTTPQueryParamMatchToString(t *testing.T) {
-	testCases := []struct {
-		name     string
-		input    gatewayapiv1.HTTPQueryParamMatch
-		expected string
-	}{
-		{
-			name: "exact query param match",
-			input: gatewayapiv1.HTTPQueryParamMatch{
-				Type:  &[]gatewayapiv1.QueryParamMatchType{gatewayapiv1.QueryParamMatchExact}[0],
-				Name:  "some-param",
-				Value: "foo",
-			},
-			expected: "{some-param:foo}",
-		},
-		{
-			name: "regex query param match",
-			input: gatewayapiv1.HTTPQueryParamMatch{
-				Type:  &[]gatewayapiv1.QueryParamMatchType{gatewayapiv1.QueryParamMatchRegularExpression}[0],
-				Name:  "some-param",
-				Value: "^foo.*",
-			},
-			expected: "{some-param:~/^foo.*/}",
-		},
-		{
-			name: "query param match with default type",
-			input: gatewayapiv1.HTTPQueryParamMatch{
-				Name:  "some-param",
-				Value: "foo",
-			},
-			expected: "{some-param:foo}",
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			if r := HTTPQueryParamMatchToString(tc.input); r != tc.expected {
-				t.Errorf("expected: %s, got: %s", tc.expected, r)
-			}
-		})
-	}
-}
-
-func TestHTTPMethodToString(t *testing.T) {
-	testCases := []struct {
-		input    *gatewayapiv1.HTTPMethod
-		expected string
-	}{
-		{
-			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodGet}[0],
-			expected: "GET",
-		},
-		{
-			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodHead}[0],
-			expected: "HEAD",
-		},
-		{
-			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodPost}[0],
-			expected: "POST",
-		},
-		{
-			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodPut}[0],
-			expected: "PUT",
-		},
-		{
-			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodPatch}[0],
-			expected: "PATCH",
-		},
-		{
-			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodDelete}[0],
-			expected: "DELETE",
-		},
-		{
-			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodConnect}[0],
-			expected: "CONNECT",
-		},
-		{
-			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodOptions}[0],
-			expected: "OPTIONS",
-		},
-		{
-			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodTrace}[0],
-			expected: "TRACE",
-		},
-		{
-			input:    nil,
-			expected: "*",
-		},
-	}
-	for _, tc := range testCases {
-		if r := HTTPMethodToString(tc.input); r != tc.expected {
-			t.Errorf("expected: %s, got: %s", tc.expected, r)
-		}
-	}
-}
-
 func TestHTTPRouteMatchToString(t *testing.T) {
 	match := gatewayapiv1.HTTPRouteMatch{
 		Path: &gatewayapiv1.HTTPPathMatch{
@@ -679,94 +584,98 @@ func TestHTTPRouteRuleToString(t *testing.T) {
 	}
 }
 
-func TestGetGatewayWorkloadSelector(t *testing.T) {
-	hostnameAddress := gatewayapiv1.AddressType("Hostname")
-	gateway := &gatewayapiv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "my-ns",
-			Name:      "my-gw",
-			Labels: map[string]string{
-				"app":           "foo",
-				"control-plane": "kuadrant",
-			},
+func TestHTTPMethodToString(t *testing.T) {
+	testCases := []struct {
+		input    *gatewayapiv1.HTTPMethod
+		expected string
+	}{
+		{
+			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodGet}[0],
+			expected: "GET",
 		},
-		Status: gatewayapiv1.GatewayStatus{
-			Addresses: []gatewayapiv1.GatewayStatusAddress{
-				{
-					Type:  &hostnameAddress,
-					Value: "my-gw-svc.my-ns.svc.cluster.local:80",
-				},
-			},
+		{
+			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodHead}[0],
+			expected: "HEAD",
+		},
+		{
+			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodPost}[0],
+			expected: "POST",
+		},
+		{
+			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodPut}[0],
+			expected: "PUT",
+		},
+		{
+			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodPatch}[0],
+			expected: "PATCH",
+		},
+		{
+			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodDelete}[0],
+			expected: "DELETE",
+		},
+		{
+			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodConnect}[0],
+			expected: "CONNECT",
+		},
+		{
+			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodOptions}[0],
+			expected: "OPTIONS",
+		},
+		{
+			input:    &[]gatewayapiv1.HTTPMethod{gatewayapiv1.HTTPMethodTrace}[0],
+			expected: "TRACE",
+		},
+		{
+			input:    nil,
+			expected: "*",
 		},
 	}
-
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "my-ns",
-			Name:      "my-gw-svc",
-			Labels: map[string]string{
-				"a-label": "irrelevant",
-			},
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				"a-selector": "what-we-are-looking-for",
-			},
-		},
-	}
-
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-	_ = gatewayapiv1.AddToScheme(scheme)
-	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(gateway, service).Build()
-
-	var selector map[string]string
-	var err error
-
-	selector, err = GetGatewayWorkloadSelector(context.TODO(), k8sClient, gateway)
-	if err != nil || len(selector) != 1 || selector["a-selector"] != "what-we-are-looking-for" {
-		t.Error("should not have failed to get the gateway workload selector")
+	for _, tc := range testCases {
+		if r := HTTPMethodToString(tc.input); r != tc.expected {
+			t.Errorf("expected: %s, got: %s", tc.expected, r)
+		}
 	}
 }
 
-func TestGetGatewayWorkloadSelectorWithoutHostnameAddress(t *testing.T) {
-	gateway := &gatewayapiv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "my-ns",
-			Name:      "my-gw",
-			Labels: map[string]string{
-				"app":           "foo",
-				"control-plane": "kuadrant",
+func TestHTTPQueryParamMatchToString(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    gatewayapiv1.HTTPQueryParamMatch
+		expected string
+	}{
+		{
+			name: "exact query param match",
+			input: gatewayapiv1.HTTPQueryParamMatch{
+				Type:  &[]gatewayapiv1.QueryParamMatchType{gatewayapiv1.QueryParamMatchExact}[0],
+				Name:  "some-param",
+				Value: "foo",
 			},
+			expected: "{some-param:foo}",
+		},
+		{
+			name: "regex query param match",
+			input: gatewayapiv1.HTTPQueryParamMatch{
+				Type:  &[]gatewayapiv1.QueryParamMatchType{gatewayapiv1.QueryParamMatchRegularExpression}[0],
+				Name:  "some-param",
+				Value: "^foo.*",
+			},
+			expected: "{some-param:~/^foo.*/}",
+		},
+		{
+			name: "query param match with default type",
+			input: gatewayapiv1.HTTPQueryParamMatch{
+				Name:  "some-param",
+				Value: "foo",
+			},
+			expected: "{some-param:foo}",
 		},
 	}
-
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "my-ns",
-			Name:      "my-gw-svc",
-			Labels: map[string]string{
-				"a-label": "irrelevant",
-			},
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				"a-selector": "what-we-are-looking-for",
-			},
-		},
-	}
-
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-	_ = gatewayapiv1.AddToScheme(scheme)
-	k8sClient := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(gateway, service).Build()
-
-	var selector map[string]string
-	var err error
-
-	selector, err = GetGatewayWorkloadSelector(context.TODO(), k8sClient, gateway)
-	if err == nil || err.Error() != "cannot find service Hostname in the Gateway status" || selector != nil {
-		t.Error("should have failed to get the gateway workload selector")
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if r := HTTPQueryParamMatchToString(tc.input); r != tc.expected {
+				t.Errorf("expected: %s, got: %s", tc.expected, r)
+			}
+		})
 	}
 }
 
@@ -966,175 +875,4 @@ func TestValidateHierarchicalRules(t *testing.T) {
 	t.Run("httpRoute - contains host ", func(subT *testing.T) {
 		assert.NilError(subT, ValidateHierarchicalRules(&policy1, httpRoute))
 	})
-}
-
-func TestIsHTTPRouteAccepted(t *testing.T) {
-	testCases := []struct {
-		name     string
-		route    *gatewayapiv1.HTTPRoute
-		expected bool
-	}{
-		{
-			"nil",
-			nil,
-			false,
-		},
-		{
-			"empty parent refs",
-			&gatewayapiv1.HTTPRoute{
-				Spec: gatewayapiv1.HTTPRouteSpec{},
-			},
-			false,
-		},
-		{
-			"single parent accepted",
-			&gatewayapiv1.HTTPRoute{
-				Spec: gatewayapiv1.HTTPRouteSpec{
-					CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
-						ParentRefs: []gatewayapiv1.ParentReference{
-							{
-								Name: "a",
-							},
-						},
-					},
-				},
-				Status: gatewayapiv1.HTTPRouteStatus{
-					RouteStatus: gatewayapiv1.RouteStatus{
-						Parents: []gatewayapiv1.RouteParentStatus{
-							{
-								ParentRef: gatewayapiv1.ParentReference{
-									Name: "a",
-								},
-								Conditions: []metav1.Condition{
-									{
-										Type:   "Accepted",
-										Status: metav1.ConditionTrue,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			true,
-		},
-		{
-			"single parent not accepted",
-			&gatewayapiv1.HTTPRoute{
-				Spec: gatewayapiv1.HTTPRouteSpec{
-					CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
-						ParentRefs: []gatewayapiv1.ParentReference{
-							{
-								Name: "a",
-							},
-						},
-					},
-				},
-				Status: gatewayapiv1.HTTPRouteStatus{
-					RouteStatus: gatewayapiv1.RouteStatus{
-						Parents: []gatewayapiv1.RouteParentStatus{
-							{
-								ParentRef: gatewayapiv1.ParentReference{
-									Name: "a",
-								},
-								Conditions: []metav1.Condition{
-									{
-										Type:   "Accepted",
-										Status: metav1.ConditionFalse,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			false,
-		},
-		{
-			"wrong parent is accepted",
-			&gatewayapiv1.HTTPRoute{
-				Spec: gatewayapiv1.HTTPRouteSpec{
-					CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
-						ParentRefs: []gatewayapiv1.ParentReference{
-							{
-								Name: "a",
-							},
-						},
-					},
-				},
-				Status: gatewayapiv1.HTTPRouteStatus{
-					RouteStatus: gatewayapiv1.RouteStatus{
-						Parents: []gatewayapiv1.RouteParentStatus{
-							{
-								ParentRef: gatewayapiv1.ParentReference{
-									Name: "b",
-								},
-								Conditions: []metav1.Condition{
-									{
-										Type:   "Accepted",
-										Status: metav1.ConditionTrue,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			false,
-		},
-		{
-			"multiple parents only one is accepted",
-			&gatewayapiv1.HTTPRoute{
-				Spec: gatewayapiv1.HTTPRouteSpec{
-					CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
-						ParentRefs: []gatewayapiv1.ParentReference{
-							{
-								Name: "a",
-							},
-							{
-								Name: "b",
-							},
-						},
-					},
-				},
-				Status: gatewayapiv1.HTTPRouteStatus{
-					RouteStatus: gatewayapiv1.RouteStatus{
-						Parents: []gatewayapiv1.RouteParentStatus{
-							{
-								ParentRef: gatewayapiv1.ParentReference{
-									Name: "a",
-								},
-								Conditions: []metav1.Condition{
-									{
-										Type:   "Accepted",
-										Status: metav1.ConditionTrue,
-									},
-								},
-							},
-							{
-								ParentRef: gatewayapiv1.ParentReference{
-									Name: "b",
-								},
-								Conditions: []metav1.Condition{
-									{
-										Type:   "Accepted",
-										Status: metav1.ConditionFalse,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			false,
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(subT *testing.T) {
-			res := IsHTTPRouteAccepted(tc.route)
-			if res != tc.expected {
-				subT.Errorf("result (%t) does not match expected (%t)", res, tc.expected)
-			}
-		})
-	}
 }

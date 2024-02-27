@@ -32,8 +32,7 @@ import (
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
-	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
 const rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
@@ -41,7 +40,7 @@ const rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
 // RateLimitPolicyReconciler reconciles a RateLimitPolicy object
 type RateLimitPolicyReconciler struct {
 	*reconcilers.BaseReconciler
-	TargetRefReconciler reconcilerutils.TargetRefReconciler
+	TargetRefReconciler reconcilers.TargetRefReconciler
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -87,7 +86,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 	markedForDeletion := rlp.GetDeletionTimestamp() != nil
 
 	// fetch the target network object
-	targetNetworkObject, err := reconcilerutils.FetchTargetRefObject(ctx, r.Client(), rlp.GetTargetRef(), rlp.Namespace)
+	targetNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), rlp.GetTargetRef(), rlp.Namespace)
 	if err != nil {
 		if !markedForDeletion {
 			if apierrors.IsNotFound(err) {
@@ -171,7 +170,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 	}
 
 	// reconcile based on gateway diffs
-	gatewayDiffObj, err := reconcilerutils.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
+	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -191,7 +190,7 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 
 func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
-	gatewayDiffObj, err := reconcilerutils.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
+	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
 	if err != nil {
 		return err
 	}

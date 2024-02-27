@@ -1,6 +1,6 @@
 //go:build unit
 
-package common
+package istio
 
 import (
 	"context"

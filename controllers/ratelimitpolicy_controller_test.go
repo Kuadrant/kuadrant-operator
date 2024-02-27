@@ -11,9 +11,6 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,7 +20,6 @@ import (
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
 var _ = Describe("RateLimitPolicy controller", func() {
@@ -256,7 +252,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			refs := []client.ObjectKey{rlpKey}
 			serialized, err := json.Marshal(refs)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
+			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
+				rlp.BackReferenceAnnotationName(), string(serialized)))
 		})
 	})
 })

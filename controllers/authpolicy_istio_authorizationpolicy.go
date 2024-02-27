@@ -19,6 +19,8 @@ import (
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -93,7 +95,7 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 		},
 		Spec: istiosecurity.AuthorizationPolicy{
 			Action:   istiosecurity.AuthorizationPolicy_CUSTOM,
-			Selector: common.IstioWorkloadSelectorFromGateway(ctx, r.Client(), gateway),
+			Selector: kuadrantistioutils.IstioWorkloadSelectorFromGateway(ctx, r.Client(), gateway),
 			ActionDetail: &istiosecurity.AuthorizationPolicy_Provider{
 				Provider: &istiosecurity.AuthorizationPolicy_ExtensionProvider{
 					Name: KuadrantExtAuthProviderName,
@@ -114,7 +116,7 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 	case *gatewayapiv1.HTTPRoute:
 		route = obj
 		if len(route.Spec.Hostnames) > 0 {
-			routeHostnames = common.FilterValidSubdomains(gwHostnames, route.Spec.Hostnames)
+			routeHostnames = kuadrantgatewayapi.FilterValidSubdomains(gwHostnames, route.Spec.Hostnames)
 		} else {
 			routeHostnames = gwHostnames
 		}
@@ -133,7 +135,7 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 		}
 		if len(rules) == 0 {
 			logger.V(1).Info("no httproutes attached to the targeted gateway, skipping istio authorizationpolicy for the gateway authpolicy")
-			common.TagObjectToDelete(iap)
+			utils.TagObjectToDelete(iap)
 			return iap, nil
 		}
 		route = &gatewayapiv1.HTTPRoute{

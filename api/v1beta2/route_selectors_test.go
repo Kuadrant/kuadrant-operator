@@ -11,7 +11,8 @@ import (
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 func TestRouteSelectors(t *testing.T) {
@@ -144,7 +145,7 @@ func TestRouteSelectors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			rules := tc.routeSelector.SelectRules(tc.route)
 			rulesToStringSlice := func(rules []gatewayapiv1.HTTPRouteRule) []string {
-				return common.Map(common.Map(rules, common.HTTPRouteRuleToString), func(r string) string { return fmt.Sprintf("{%s}", r) })
+				return utils.Map(utils.Map(rules, kuadrant.HTTPRouteRuleToString), func(r string) string { return fmt.Sprintf("{%s}", r) })
 			}
 			if !reflect.DeepEqual(rules, tc.expected) {
 				t.Errorf("expected %v, got %v", rulesToStringSlice(tc.expected), rulesToStringSlice(rules))

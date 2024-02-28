@@ -17,12 +17,12 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
-func (r *DNSPolicyReconciler) reconcileHealthCheckProbes(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
+func (r *DNSPolicyReconciler) reconcileHealthCheckProbes(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, gwDiffObj *reconcilerutils.GatewayDiffs) error {
 	log := crlog.FromContext(ctx)
 
 	log.V(3).Info("reconciling health checks")
@@ -69,11 +69,11 @@ func (r *DNSPolicyReconciler) createOrUpdateHealthCheckProbes(ctx context.Contex
 }
 
 func (r *DNSPolicyReconciler) deleteGatewayHealthCheckProbes(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) error {
-	return r.deleteHealthCheckProbesWithLabels(ctx, commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(dnsPolicy)), dnsPolicy.Namespace)
+	return r.deleteHealthCheckProbesWithLabels(ctx, commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy), dnsPolicy.Namespace)
 }
 
 func (r *DNSPolicyReconciler) deleteHealthCheckProbes(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy) error {
-	return r.deleteHealthCheckProbesWithLabels(ctx, policyDNSRecordLabels(client.ObjectKeyFromObject(dnsPolicy)), dnsPolicy.Namespace)
+	return r.deleteHealthCheckProbesWithLabels(ctx, policyDNSRecordLabels(dnsPolicy), dnsPolicy.Namespace)
 }
 
 func (r *DNSPolicyReconciler) deleteHealthCheckProbesWithLabels(ctx context.Context, lbls map[string]string, namespace string) error {
@@ -93,7 +93,7 @@ func (r *DNSPolicyReconciler) deleteHealthCheckProbesWithLabels(ctx context.Cont
 func (r *DNSPolicyReconciler) deleteUnexpectedGatewayHealthCheckProbes(ctx context.Context, expectedProbes []*kuadrantdnsv1alpha1.DNSHealthCheckProbe, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) error {
 	// remove any probes for this gateway and DNS Policy that are no longer expected
 	existingProbes := &kuadrantdnsv1alpha1.DNSHealthCheckProbeList{}
-	dnsLabels := commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(dnsPolicy))
+	dnsLabels := commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy)
 	listOptions := &client.ListOptions{LabelSelector: labels.SelectorFromSet(dnsLabels)}
 	if err := r.Client().List(ctx, existingProbes, listOptions); client.IgnoreNotFound(err) != nil {
 		return err
@@ -110,7 +110,7 @@ func (r *DNSPolicyReconciler) deleteUnexpectedGatewayHealthCheckProbes(ctx conte
 	return nil
 }
 
-func (r *DNSPolicyReconciler) expectedHealthCheckProbesForGateway(ctx context.Context, gw common.GatewayWrapper, dnsPolicy *v1alpha1.DNSPolicy) []*kuadrantdnsv1alpha1.DNSHealthCheckProbe {
+func (r *DNSPolicyReconciler) expectedHealthCheckProbesForGateway(ctx context.Context, gw kuadrant.GatewayWrapper, dnsPolicy *v1alpha1.DNSPolicy) []*kuadrantdnsv1alpha1.DNSHealthCheckProbe {
 	log := crlog.FromContext(ctx)
 	var healthChecks []*kuadrantdnsv1alpha1.DNSHealthCheckProbe
 	if dnsPolicy.Spec.HealthCheck == nil {
@@ -157,7 +157,7 @@ func (r *DNSPolicyReconciler) expectedHealthCheckProbesForGateway(ctx context.Co
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      dnsHealthCheckProbeName(address.Value, gw.Name, string(listener.Name)),
 						Namespace: gw.Namespace,
-						Labels:    commonDNSRecordLabels(client.ObjectKeyFromObject(gw), client.ObjectKeyFromObject(dnsPolicy)),
+						Labels:    commonDNSRecordLabels(client.ObjectKeyFromObject(gw), dnsPolicy),
 					},
 					Spec: kuadrantdnsv1alpha1.DNSHealthCheckProbeSpec{
 						Port:                     *port,

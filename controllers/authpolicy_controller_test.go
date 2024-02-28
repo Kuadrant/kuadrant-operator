@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	secv1beta1resources "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -24,11 +26,9 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 const (
@@ -61,7 +61,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			},
 			Spec: api.AuthPolicySpec{
 				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-					Group:     "gateway.networking.k8s.io",
+					Group:     gatewayapiv1.GroupName,
 					Kind:      "HTTPRoute",
 					Name:      testHTTPRouteName,
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
@@ -89,7 +89,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		It("Attaches policy to the Gateway", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = testGatewayName
 				policy.Spec.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -159,7 +159,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gatewayName)
 			})
@@ -260,7 +260,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			// attach policy to the gatewaay
 			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = testGatewayName
 			})
@@ -335,7 +335,7 @@ var _ = Describe("AuthPolicy controller", func() {
 					return false
 				}
 				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
-				return condition != nil && condition.Reason == string(common.PolicyReasonUnknown) && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
+				return condition != nil && condition.Reason == string(kuadrant.PolicyReasonUnknown) && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
 			}, 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// check istio authorizationpolicy
@@ -380,7 +380,7 @@ var _ = Describe("AuthPolicy controller", func() {
 					return false
 				}
 				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
-				return condition != nil && condition.Reason == string(common.PolicyReasonUnknown) && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
+				return condition != nil && condition.Reason == string(kuadrant.PolicyReasonUnknown) && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
 			}, 30*time.Second, 5*time.Second).Should(BeTrue())
 
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
@@ -1075,7 +1075,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 				acceptedCondMatch := acceptedCond.Status == metav1.ConditionFalse && acceptedCond.Reason == reason && acceptedCond.Message == message
 
-				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(common.PolicyReasonEnforced))
+				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(kuadrant.PolicyReasonEnforced))
 				enforcedCondMatch := enforcedCond == nil
 
 				return acceptedCondMatch && enforcedCondMatch
@@ -1152,7 +1152,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 				acceptedCondMatch := acceptedCond.Status == metav1.ConditionTrue && acceptedCond.Reason == string(gatewayapiv1alpha2.PolicyReasonAccepted)
 
-				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(common.PolicyReasonEnforced))
+				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(kuadrant.PolicyReasonEnforced))
 				if enforcedCond == nil {
 					return false
 				}
@@ -1179,7 +1179,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
-			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionTrue, string(common.PolicyReasonEnforced),
+			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionTrue, string(kuadrant.PolicyReasonEnforced),
 				"AuthPolicy has been successfully enforced"), 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
 
@@ -1198,7 +1198,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
-			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionFalse, string(common.PolicyReasonUnknown),
+			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionFalse, string(kuadrant.PolicyReasonUnknown),
 				"AuthPolicy has encountered some issues: AuthScheme is not ready yet"), 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
 
@@ -1216,7 +1216,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			// attach policy to the gatewaay
 			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = "gateway.networking.k8s.io"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = testGatewayName
 			})
@@ -1228,7 +1228,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			// check policy status
 			Eventually(isAuthPolicyAccepted(gwPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
 			Eventually(
-				assertAcceptedCondTrueAndEnforcedCond(gwPolicy, metav1.ConditionFalse, string(common.PolicyReasonOverridden),
+				assertAcceptedCondTrueAndEnforcedCond(gwPolicy, metav1.ConditionFalse, string(kuadrant.PolicyReasonOverridden),
 					fmt.Sprintf("AuthPolicy is overridden by [{\"Namespace\":\"%s\",\"Name\":\"%s\"}]", testNamespace, routePolicy.Name)),
 				30*time.Second, 5*time.Second).Should(BeTrue())
 
@@ -1277,7 +1277,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 				},
 				Spec: api.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
+						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  "my-target",
 					},
@@ -1354,7 +1354,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 				},
 				Spec: api.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
+						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  "my-gw",
 					},
@@ -1527,7 +1527,7 @@ func isAuthPolicyAccepted(policy *api.AuthPolicy) func() bool {
 }
 
 func isAuthPolicyEnforced(policy *api.AuthPolicy) func() bool {
-	return isAuthPolicyConditionTrue(policy, string(common.PolicyConditionEnforced))
+	return isAuthPolicyConditionTrue(policy, string(kuadrant.PolicyConditionEnforced))
 }
 
 func isAuthPolicyConditionTrue(policy *api.AuthPolicy, condition string) func() bool {

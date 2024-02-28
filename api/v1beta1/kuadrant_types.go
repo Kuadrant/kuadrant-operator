@@ -23,7 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -76,8 +76,8 @@ func (r *KuadrantStatus) Equals(other *KuadrantStatus, logger logr.Logger) bool 
 	}
 
 	// Marshalling sorts by condition type
-	currentMarshaledJSON, _ := common.ConditionMarshal(r.Conditions)
-	otherMarshaledJSON, _ := common.ConditionMarshal(other.Conditions)
+	currentMarshaledJSON, _ := kuadrant.ConditionMarshal(r.Conditions)
+	otherMarshaledJSON, _ := kuadrant.ConditionMarshal(other.Conditions)
 	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
 		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
 		logger.V(1).Info("Conditions not equal", "difference", diff)

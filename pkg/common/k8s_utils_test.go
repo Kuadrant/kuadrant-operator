@@ -10,15 +10,15 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/kuadrant/limitador-operator/api/v1alpha1"
 
-	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 func TestObjectKeyListDifference(t *testing.T) {
@@ -88,70 +88,6 @@ func TestObjectKeyListDifference(t *testing.T) {
 	}
 }
 
-func TestGetService(t *testing.T) {
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "svc-ns",
-			Name:      "my-svc",
-			Labels: map[string]string{
-				"a-label": "irrelevant",
-			},
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				"a-selector": "what-we-are-looking-for",
-			},
-		},
-	}
-
-	k8sClient := fake.NewClientBuilder().WithRuntimeObjects(service).Build()
-
-	var svc *corev1.Service
-	var err error
-
-	svc, err = GetService(context.TODO(), k8sClient, client.ObjectKey{Namespace: "svc-ns", Name: "my-svc"})
-	if err != nil || svc == nil || svc.GetNamespace() != service.GetNamespace() || svc.GetName() != service.GetName() {
-		t.Error("should have gotten Service svc-ns/my-svc")
-	}
-
-	svc, err = GetService(context.TODO(), k8sClient, client.ObjectKey{Namespace: "svc-ns", Name: "unknown"})
-	if err == nil || !apierrors.IsNotFound(err) || svc != nil {
-		t.Error("should have gotten no Service")
-	}
-}
-
-func TestGetServiceWorkloadSelector(t *testing.T) {
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: "svc-ns",
-			Name:      "my-svc",
-			Labels: map[string]string{
-				"a-label": "irrelevant",
-			},
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				"a-selector": "what-we-are-looking-for",
-			},
-		},
-	}
-
-	k8sClient := fake.NewClientBuilder().WithRuntimeObjects(service).Build()
-
-	var selector map[string]string
-	var err error
-
-	selector, err = GetServiceWorkloadSelector(context.TODO(), k8sClient, client.ObjectKey{Namespace: "svc-ns", Name: "my-svc"})
-	if err != nil || len(selector) != 1 || selector["a-selector"] != "what-we-are-looking-for" {
-		t.Error("should not have failed to get the service workload selector")
-	}
-
-	selector, err = GetServiceWorkloadSelector(context.TODO(), k8sClient, client.ObjectKey{Namespace: "svc-ns", Name: "unknown-svc"})
-	if err == nil || !apierrors.IsNotFound(err) || selector != nil {
-		t.Error("should have failed to get the service workload selector")
-	}
-}
-
 func TestObjectInfo(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -202,46 +138,6 @@ func TestObjectInfo(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			if actual := ObjectInfo(c.input); actual != c.expected {
 				t.Errorf("Expected %q, got %q", c.expected, actual)
-			}
-		})
-	}
-}
-
-func TestReadAnnotationsFromObject(t *testing.T) {
-	testCases := []struct {
-		name     string
-		input    client.Object
-		expected map[string]string
-	}{
-		{
-			name: "when object has annotations then return the annotations",
-			input: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						"key1": "value1",
-						"key2": "value2",
-					},
-				},
-			},
-			expected: map[string]string{
-				"key1": "value1",
-				"key2": "value2",
-			},
-		},
-		{
-			name: "when object has no annotations then return an empty map",
-			input: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{},
-			},
-			expected: map[string]string{},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			actual := ReadAnnotationsFromObject(tc.input)
-			if !reflect.DeepEqual(actual, tc.expected) {
-				t.Errorf("Expected annotations %v, but got %v", tc.expected, actual)
 			}
 		})
 	}
@@ -712,7 +608,7 @@ func TestGetServicePortNumber(t *testing.T) {
 				}
 			}
 
-			portNumber, err := GetServicePortNumber(ctx, k8sClient, tt.serviceKey, tt.servicePort)
+			portNumber, err := utils.GetServicePortNumber(ctx, k8sClient, tt.serviceKey, tt.servicePort)
 
 			if err != nil && tt.expectedErr == nil {
 				t.Errorf("unexpected error: %v", err)

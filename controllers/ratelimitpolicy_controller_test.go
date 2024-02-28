@@ -9,10 +9,6 @@ import (
 	"strings"
 	"time"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -25,6 +21,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
 var _ = Describe("RateLimitPolicy controller", func() {
@@ -48,7 +49,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
 				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-					Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  gatewayapiv1.ObjectName(routeName),
 				},
@@ -84,7 +85,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				return false
 			}
 
-			if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType) {
+			if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed)) {
 				logf.Log.V(1).Info("[WARN] Gateway not ready")
 				return false
 			}
@@ -135,7 +136,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingRoute.GetAnnotations()).To(HaveKeyWithValue(
-				common.RateLimitPolicyBackRefAnnotation, client.ObjectKeyFromObject(rlp).String()))
+				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
 
 			// check limits
 			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
@@ -211,7 +212,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			serialized, err := json.Marshal(refs)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
+				rlp.BackReferenceAnnotationName(), string(serialized)))
 		})
 
 		It("Creates the correct WasmPlugin for a complex HTTPRoute and a RateLimitPolicy", func() {
@@ -439,7 +440,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				common.RateLimitPolicyBackRefAnnotation, client.ObjectKeyFromObject(rlp).String()))
+				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
 
 			// check limits
 			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
@@ -512,7 +513,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			refs := []client.ObjectKey{rlpKey}
 			serialized, err := json.Marshal(refs)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
+			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(rlp.BackReferenceAnnotationName(), string(serialized)))
 		})
 
 		It("Creates all the resources for a basic Gateway and RateLimitPolicy when missing a HTTPRoute attached to the Gateway", func() {
@@ -535,7 +536,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				common.RateLimitPolicyBackRefAnnotation, client.ObjectKeyFromObject(rlp).String()))
+				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
 
 			// check limits
 			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
@@ -568,7 +569,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			refs := []client.ObjectKey{rlpKey}
 			serialized, err := json.Marshal(refs)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(common.RateLimitPoliciesBackRefAnnotation, string(serialized)))
+			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(rlp.BackReferenceAnnotationName(), string(serialized)))
 		})
 	})
 
@@ -660,7 +661,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
+						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  "my-target",
 					},
@@ -718,7 +719,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: "gateway.networking.k8s.io",
+						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  "my-gw",
 					},

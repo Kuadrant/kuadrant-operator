@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
@@ -20,7 +21,6 @@ import (
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 )
 
 var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
@@ -45,7 +45,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 				return false
 			}
 
-			if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType) {
+			if meta.IsStatusConditionFalse(existingGateway.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed)) {
 				logf.Log.V(1).Info("[WARN] Gateway not ready")
 				return false
 			}
@@ -86,7 +86,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
+						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},

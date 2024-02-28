@@ -30,7 +30,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
@@ -98,7 +98,7 @@ func (r *GatewayKuadrantReconciler) reconcileKuadrantNamespaceAnnotation(ctx con
 		return false, err
 	}
 
-	if common.IsKuadrantManaged(gw) {
+	if kuadrant.IsKuadrantManaged(gw) {
 		return false, nil
 	}
 
@@ -122,7 +122,7 @@ func (r *GatewayKuadrantReconciler) reconcileKuadrantNamespaceAnnotation(ctx con
 		return false, nil
 	}
 
-	common.AnnotateObject(gw, kuadrantList.Items[0].Namespace)
+	kuadrant.AnnotateObject(gw, kuadrantList.Items[0].Namespace)
 
 	return true, nil
 }

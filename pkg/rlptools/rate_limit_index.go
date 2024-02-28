@@ -6,10 +6,9 @@ import (
 	"strings"
 
 	"github.com/elliotchance/orderedmap/v2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 type RateLimitIndexKey = client.ObjectKey
@@ -108,18 +107,18 @@ func Equal(a, b RateLimitList) bool {
 	// two limits with reordered conditions/variables are effectively the same
 	// For comparison purposes, nil equals the empty array for conditions and variables
 	for idx := range aCopy {
-		aCopy[idx].Conditions = common.GetEmptySliceIfNil(aCopy[idx].Conditions)
+		aCopy[idx].Conditions = utils.GetEmptySliceIfNil(aCopy[idx].Conditions)
 		sort.Strings(aCopy[idx].Conditions)
 
-		aCopy[idx].Variables = common.GetEmptySliceIfNil(aCopy[idx].Variables)
+		aCopy[idx].Variables = utils.GetEmptySliceIfNil(aCopy[idx].Variables)
 		sort.Strings(aCopy[idx].Variables)
 	}
 
 	for idx := range bCopy {
-		bCopy[idx].Conditions = common.GetEmptySliceIfNil(bCopy[idx].Conditions)
+		bCopy[idx].Conditions = utils.GetEmptySliceIfNil(bCopy[idx].Conditions)
 		sort.Strings(bCopy[idx].Conditions)
 
-		bCopy[idx].Variables = common.GetEmptySliceIfNil(bCopy[idx].Variables)
+		bCopy[idx].Variables = utils.GetEmptySliceIfNil(bCopy[idx].Variables)
 		sort.Strings(bCopy[idx].Variables)
 	}
 

@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
 
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -19,9 +20,8 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
@@ -119,8 +119,8 @@ var _ = Describe("DNSPolicy controller", func() {
 					Name:      fmt.Sprintf("%s-%s-%s", TestIPAddressTwo, TestGatewayName, TestHostTwo),
 					Namespace: testNamespace,
 					Labels: map[string]string{
-						common.DNSPolicyBackRefAnnotation:                              "test-dns-policy",
-						fmt.Sprintf("%s-namespace", common.DNSPolicyBackRefAnnotation): testNamespace,
+						v1alpha1.DNSPolicyDirectReferenceAnnotationName:                              "test-dns-policy",
+						fmt.Sprintf("%s-namespace", v1alpha1.DNSPolicyDirectReferenceAnnotationName): testNamespace,
 						LabelGatewayNSRef:     testNamespace,
 						LabelGatewayReference: "test-gateway",
 					},
@@ -187,7 +187,7 @@ var _ = Describe("DNSPolicy controller", func() {
 					ContainElement(MatchFields(IgnoreExtras, Fields{
 						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
 						"Status":  Equal(metav1.ConditionFalse),
-						"Reason":  Equal(string(common.PolicyReasonUnknown)),
+						"Reason":  Equal(string(kuadrant.PolicyReasonUnknown)),
 						"Message": ContainSubstring("gateway is invalid: inconsistent status addresses"),
 					})),
 				)
@@ -244,8 +244,8 @@ var _ = Describe("DNSPolicy controller", func() {
 				gw := &gatewayapiv1.Gateway{}
 				err := k8sClient.Get(ctx, client.ObjectKey{Name: gateway.Name, Namespace: testNamespace}, gw)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gw.Annotations).To(HaveKeyWithValue(common.DNSPolicyBackRefAnnotation, policyBackRefValue))
-				g.Expect(gw.Annotations).To(HaveKeyWithValue(common.DNSPoliciesBackRefAnnotation, policiesBackRefValue))
+				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
+				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
 	})
@@ -345,8 +345,8 @@ var _ = Describe("DNSPolicy controller", func() {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(common.DNSPolicyBackRefAnnotation, policyBackRefValue))
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(common.DNSPoliciesBackRefAnnotation, policiesBackRefValue))
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
 
@@ -387,8 +387,8 @@ var _ = Describe("DNSPolicy controller", func() {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(common.DNSPolicyBackRefAnnotation, policyBackRefValue))
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(common.DNSPoliciesBackRefAnnotation, policiesBackRefValue))
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 				g.Expect(gateway.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
 						"Type":               Equal(DNSPolicyAffected),
@@ -409,8 +409,8 @@ var _ = Describe("DNSPolicy controller", func() {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).ToNot(HaveKey(common.DNSPolicyBackRefAnnotation))
-				g.Expect(gateway.Annotations).ToNot(HaveKeyWithValue(common.DNSPoliciesBackRefAnnotation, policiesBackRefValue))
+				g.Expect(gateway.Annotations).ToNot(HaveKey(v1alpha1.DNSPolicyDirectReferenceAnnotationName))
+				g.Expect(gateway.Annotations).ToNot(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 				g.Expect(gateway.Status.Conditions).ToNot(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
 						"Type": Equal(string(DNSPolicyAffected)),

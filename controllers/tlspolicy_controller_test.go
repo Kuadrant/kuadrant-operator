@@ -22,7 +22,6 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 var _ = Describe("TLSPolicy controller", Ordered, func() {
@@ -167,8 +166,8 @@ var _ = Describe("TLSPolicy controller", Ordered, func() {
 				err := k8sClient.Get(ctx, client.ObjectKey{Name: gateway.Name, Namespace: testNamespace}, gw)
 				//Check annotations
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gw.Annotations).To(HaveKeyWithValue(common.TLSPolicyBackRefAnnotation, policyBackRefValue))
-				g.Expect(gw.Annotations).To(HaveKeyWithValue(common.TLSPoliciesBackRefAnnotation, policiesBackRefValue))
+				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.TLSPolicyDirectReferenceAnnotationName, policyBackRefValue))
+				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.TLSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 				//Check status
 				g.Expect(gw.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{

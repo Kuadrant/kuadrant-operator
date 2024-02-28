@@ -5,13 +5,19 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+)
+
+const (
+	AuthPolicyBackReferenceAnnotationName   = "kuadrant.io/authpolicies"
+	AuthPolicyDirectReferenceAnnotationName = "kuadrant.io/authpolicy"
 )
 
 type AuthSchemeSpec struct {
@@ -186,8 +192,8 @@ func (s *AuthPolicyStatus) Equals(other *AuthPolicyStatus, logger logr.Logger) b
 	}
 
 	// Marshalling sorts by condition type
-	currentMarshaledJSON, _ := common.ConditionMarshal(s.Conditions)
-	otherMarshaledJSON, _ := common.ConditionMarshal(other.Conditions)
+	currentMarshaledJSON, _ := kuadrant.ConditionMarshal(s.Conditions)
+	otherMarshaledJSON, _ := kuadrant.ConditionMarshal(other.Conditions)
 	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
 		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
 		logger.V(1).Info("Conditions not equal", "difference", diff)
@@ -197,7 +203,8 @@ func (s *AuthPolicyStatus) Equals(other *AuthPolicyStatus, logger logr.Logger) b
 	return true
 }
 
-var _ common.KuadrantPolicy = &AuthPolicy{}
+var _ kuadrant.Policy = &AuthPolicy{}
+var _ kuadrant.Referrer = &AuthPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -251,7 +258,7 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 
 	appendRuleHosts := func(obj RouteSelectorsGetter) {
 		for _, routeSelector := range obj.GetRouteSelectors() {
-			ruleHosts = append(ruleHosts, common.HostnamesToStrings(routeSelector.Hostnames)...)
+			ruleHosts = append(ruleHosts, utils.HostnamesToStrings(routeSelector.Hostnames)...)
 		}
 	}
 
@@ -284,6 +291,14 @@ func (ap *AuthPolicy) Kind() string {
 	return ap.TypeMeta.Kind
 }
 
+func (ap *AuthPolicy) BackReferenceAnnotationName() string {
+	return AuthPolicyBackReferenceAnnotationName
+}
+
+func (ap *AuthPolicy) DirectReferenceAnnotationName() string {
+	return AuthPolicyDirectReferenceAnnotationName
+}
+
 //+kubebuilder:object:root=true
 
 // AuthPolicyList contains a list of AuthPolicy
@@ -293,8 +308,8 @@ type AuthPolicyList struct {
 	Items           []AuthPolicy `json:"items"`
 }
 
-func (l *AuthPolicyList) GetItems() []common.KuadrantPolicy {
-	return common.Map(l.Items, func(item AuthPolicy) common.KuadrantPolicy {
+func (l *AuthPolicyList) GetItems() []kuadrant.Policy {
+	return utils.Map(l.Items, func(item AuthPolicy) kuadrant.Policy {
 		return &item
 	})
 }

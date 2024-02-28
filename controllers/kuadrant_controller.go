@@ -20,31 +20,31 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/env"
-
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
-	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
-	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"golang.org/x/sync/errgroup"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/env"
 	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
+	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
@@ -421,8 +421,8 @@ func (r *KuadrantReconciler) reconcileClusterGateways(ctx context.Context, kObj 
 
 	for i := range gwList.Items {
 		gw := &gwList.Items[i]
-		if !common.IsKuadrantManaged(gw) {
-			common.AnnotateObject(gw, kObj.Namespace)
+		if !kuadrant.IsKuadrantManaged(gw) {
+			kuadrant.AnnotateObject(gw, kObj.Namespace)
 			errGroup.Go(func() error {
 				select {
 				case <-gctx.Done():
@@ -457,7 +457,7 @@ func (r *KuadrantReconciler) removeAnnotationFromGateways(ctx context.Context, k
 				return nil
 			default:
 				// When RFC defined, we could indicate which gateways based on a specific annotation/label
-				common.DeleteKuadrantAnnotationFromGateway(gw, kObj.Namespace)
+				kuadrant.DeleteKuadrantAnnotationFromGateway(gw, kObj.Namespace)
 				if err := r.Client().Update(ctx, gw); err != nil {
 					return err
 				}

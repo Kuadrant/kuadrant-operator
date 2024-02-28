@@ -25,7 +25,12 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+)
+
+const (
+	TLSPolicyBackReferenceAnnotationName   = "kuadrant.io/tlspolicies"
+	TLSPolicyDirectReferenceAnnotationName = "kuadrant.io/tlspolicy"
 )
 
 // TLSPolicySpec defines the desired state of TLSPolicy
@@ -111,7 +116,8 @@ type TLSPolicyStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
-var _ common.KuadrantPolicy = &TLSPolicy{}
+var _ kuadrant.Policy = &TLSPolicy{}
+var _ kuadrant.Referrer = &TLSPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -142,6 +148,14 @@ func (p *TLSPolicy) GetRulesHostnames() []string {
 
 func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 	return p.Spec.TargetRef
+}
+
+func (p *TLSPolicy) BackReferenceAnnotationName() string {
+	return TLSPolicyBackReferenceAnnotationName
+}
+
+func (p *TLSPolicy) DirectReferenceAnnotationName() string {
+	return TLSPolicyDirectReferenceAnnotationName
 }
 
 func (p *TLSPolicy) Validate() error {

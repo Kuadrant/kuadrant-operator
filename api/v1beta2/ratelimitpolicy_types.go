@@ -21,11 +21,13 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -51,6 +53,9 @@ const (
 	IncludeOperator    WhenConditionOperator = "incl"
 	ExcludeOperator    WhenConditionOperator = "excl"
 	MatchesOperator    WhenConditionOperator = "matches"
+
+	RateLimitPolicyBackReferenceAnnotationName   = "kuadrant.io/ratelimitpolicies"
+	RateLimitPolicyDirectReferenceAnnotationName = "kuadrant.io/ratelimitpolicy"
 )
 
 // +kubebuilder:validation:Enum:=second;minute;hour;day
@@ -110,7 +115,7 @@ func (l Limit) CountersAsStringList() []string {
 	if len(l.Counters) == 0 {
 		return nil
 	}
-	return common.Map(l.Counters, func(counter ContextSelector) string { return string(counter) })
+	return utils.Map(l.Counters, func(counter ContextSelector) string { return string(counter) })
 }
 
 // RateLimitPolicySpec defines the desired state of RateLimitPolicy
@@ -150,8 +155,8 @@ func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr
 	}
 
 	// Marshalling sorts by condition type
-	currentMarshaledJSON, _ := common.ConditionMarshal(s.Conditions)
-	otherMarshaledJSON, _ := common.ConditionMarshal(other.Conditions)
+	currentMarshaledJSON, _ := kuadrant.ConditionMarshal(s.Conditions)
+	otherMarshaledJSON, _ := kuadrant.ConditionMarshal(other.Conditions)
 	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
 		if logger.V(1).Enabled() {
 			diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
@@ -163,7 +168,8 @@ func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr
 	return true
 }
 
-var _ common.KuadrantPolicy = &RateLimitPolicy{}
+var _ kuadrant.Policy = &RateLimitPolicy{}
+var _ kuadrant.Referrer = &RateLimitPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -212,8 +218,8 @@ type RateLimitPolicyList struct {
 	Items           []RateLimitPolicy `json:"items"`
 }
 
-func (l *RateLimitPolicyList) GetItems() []common.KuadrantPolicy {
-	return common.Map(l.Items, func(item RateLimitPolicy) common.KuadrantPolicy {
+func (l *RateLimitPolicyList) GetItems() []kuadrant.Policy {
+	return utils.Map(l.Items, func(item RateLimitPolicy) kuadrant.Policy {
 		return &item
 	})
 }
@@ -245,6 +251,14 @@ func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 
 func (r *RateLimitPolicy) Kind() string {
 	return r.TypeMeta.Kind
+}
+
+func (r *RateLimitPolicy) BackReferenceAnnotationName() string {
+	return RateLimitPolicyBackReferenceAnnotationName
+}
+
+func (r *RateLimitPolicy) DirectReferenceAnnotationName() string {
+	return RateLimitPolicyDirectReferenceAnnotationName
 }
 
 func init() {

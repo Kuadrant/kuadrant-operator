@@ -26,7 +26,7 @@ import (
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -40,17 +40,17 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/log"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	//+kubebuilder:scaffold:imports
 )
@@ -146,10 +146,9 @@ var _ = BeforeSuite(func() {
 	)
 
 	err = (&AuthPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{
-			BaseReconciler: authPolicyBaseReconciler,
-		},
-		OverriddenPolicyMap: common.NewOverriddenPolicyMap(),
+		BaseReconciler:      authPolicyBaseReconciler,
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
+		OverriddenPolicyMap: kuadrant.NewOverriddenPolicyMap(),
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -160,9 +159,8 @@ var _ = BeforeSuite(func() {
 	)
 
 	err = (&RateLimitPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{
-			BaseReconciler: rateLimitPolicyBaseReconciler,
-		},
+		BaseReconciler:      rateLimitPolicyBaseReconciler,
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())
@@ -174,9 +172,8 @@ var _ = BeforeSuite(func() {
 	)
 
 	err = (&TLSPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{
-			BaseReconciler: tlsPolicyBaseReconciler,
-		},
+		BaseReconciler:      tlsPolicyBaseReconciler,
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())
@@ -188,9 +185,8 @@ var _ = BeforeSuite(func() {
 	)
 
 	err = (&DNSPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{
-			BaseReconciler: dnsPolicyBaseReconciler,
-		},
+		BaseReconciler:      dnsPolicyBaseReconciler,
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())

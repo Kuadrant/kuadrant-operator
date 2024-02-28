@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"unicode"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 const (
@@ -50,7 +50,7 @@ func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []limitado
 				MaxValue:   maxValue,
 				Seconds:    seconds,
 				Conditions: []string{fmt.Sprintf("%s == \"1\"", limitIdentifier)},
-				Variables:  common.GetEmptySliceIfNil(limit.CountersAsStringList()),
+				Variables:  utils.GetEmptySliceIfNil(limit.CountersAsStringList()),
 				Name:       LimitsNameFromRLP(rlp),
 			})
 		}

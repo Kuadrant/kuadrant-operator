@@ -6,13 +6,13 @@ import (
 	"reflect"
 	"testing"
 
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 func TestCommonAuthRuleSpecGetRouteSelectors(t *testing.T) {
@@ -55,7 +55,7 @@ func TestAuthPolicyTargetKey(t *testing.T) {
 		},
 		Spec: AuthPolicySpec{
 			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-				Group: "gateway.networking.k8s.io",
+				Group: gatewayapiv1.GroupName,
 				Kind:  "HTTPRoute",
 				Name:  "my-route",
 			},
@@ -86,9 +86,9 @@ func TestAuthPolicyListGetItems(t *testing.T) {
 	if len(result) != 1 {
 		t.Errorf("Expected 1 item, got %d", len(result))
 	}
-	_, ok := result[0].(common.KuadrantPolicy)
+	_, ok := result[0].(kuadrant.Policy)
 	if !ok {
-		t.Errorf("Expected item to be a KuadrantPolicy")
+		t.Errorf("Expected item to be a Policy")
 	}
 }
 
@@ -100,7 +100,7 @@ func TestAuthPolicyGetRulesHostnames(t *testing.T) {
 		},
 		Spec: AuthPolicySpec{
 			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-				Group: "gateway.networking.k8s.io",
+				Group: gatewayapiv1.GroupName,
 				Kind:  "HTTPRoute",
 				Name:  "my-route",
 			},
@@ -256,7 +256,7 @@ func TestAuthPolicyValidate(t *testing.T) {
 				},
 				Spec: AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group:     "gateway.networking.k8s.io",
+						Group:     gatewayapiv1.GroupName,
 						Kind:      "HTTPRoute",
 						Name:      "my-route",
 						Namespace: ptr.To(gatewayapiv1.Namespace("other-namespace")),

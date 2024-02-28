@@ -12,15 +12,16 @@ import (
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
-
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+
+	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
-func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, gwDiffObj *reconcilers.GatewayDiff) error {
+func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, gwDiffObj *reconcilerutils.GatewayDiffs) error {
 	log := crlog.FromContext(ctx)
 
 	log.V(3).Info("reconciling dns records")
@@ -69,7 +70,7 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 			continue
 		}
 
-		listenerGateways := common.Filter(clusterGateways, func(cgw multicluster.ClusterGateway) bool {
+		listenerGateways := utils.Filter(clusterGateways, func(cgw multicluster.ClusterGateway) bool {
 			hasAttachedRoute := false
 			for _, statusListener := range cgw.Status.Listeners {
 				if string(statusListener.Name) == string(listener.Name) {
@@ -113,7 +114,7 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(ctx context.Context, gateway *gat
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      dnsRecordName(gateway.Name, string(targetListener.Name)),
 			Namespace: managedZone.Namespace,
-			Labels:    commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(dnsPolicy)),
+			Labels:    commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy),
 		},
 		Spec: kuadrantdnsv1alpha1.DNSRecordSpec{
 			ManagedZoneRef: &kuadrantdnsv1alpha1.ManagedZoneReference{
@@ -142,11 +143,11 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(ctx context.Context, gateway *gat
 }
 
 func (r *DNSPolicyReconciler) deleteGatewayDNSRecords(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) error {
-	return r.deleteDNSRecordsWithLabels(ctx, commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(dnsPolicy)), dnsPolicy.Namespace)
+	return r.deleteDNSRecordsWithLabels(ctx, commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy), dnsPolicy.Namespace)
 }
 
 func (r *DNSPolicyReconciler) deleteDNSRecords(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy) error {
-	return r.deleteDNSRecordsWithLabels(ctx, policyDNSRecordLabels(client.ObjectKeyFromObject(dnsPolicy)), dnsPolicy.Namespace)
+	return r.deleteDNSRecordsWithLabels(ctx, policyDNSRecordLabels(dnsPolicy), dnsPolicy.Namespace)
 }
 
 func (r *DNSPolicyReconciler) deleteDNSRecordsWithLabels(ctx context.Context, lbls map[string]string, namespace string) error {

@@ -7,11 +7,11 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 func testRLP_1Limit_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
@@ -266,7 +266,7 @@ func TestLimitadorRateLimitsFromRLP(t *testing.T) {
 			}
 			// When both slices have equal length, items can be checked one by one.
 			for _, rl := range rateLimits {
-				if _, found := common.Find(tc.expected, func(expectedRateLimit limitadorv1alpha1.RateLimit) bool {
+				if _, found := utils.Find(tc.expected, func(expectedRateLimit limitadorv1alpha1.RateLimit) bool {
 					return reflect.DeepEqual(rl, expectedRateLimit)
 				}); !found {
 					subT.Errorf("returned rate limit (%+v) not within expected ones, expected: %v", rl, tc.expected)

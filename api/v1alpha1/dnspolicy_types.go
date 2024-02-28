@@ -26,7 +26,7 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 type RoutingStrategy string
@@ -38,6 +38,9 @@ const (
 	DefaultWeight Weight  = 120
 	DefaultGeo    GeoCode = "default"
 	WildcardGeo   GeoCode = "*"
+
+	DNSPolicyBackReferenceAnnotationName   = "kuadrant.io/dnspolicies"
+	DNSPolicyDirectReferenceAnnotationName = "kuadrant.io/dnspolicy"
 )
 
 // DNSPolicySpec defines the desired state of DNSPolicy
@@ -126,7 +129,8 @@ type DNSPolicyStatus struct {
 	HealthCheck *HealthCheckStatus `json:"healthCheck,omitempty"`
 }
 
-var _ common.KuadrantPolicy = &DNSPolicy{}
+var _ kuadrant.Policy = &DNSPolicy{}
+var _ kuadrant.Referrer = &DNSPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -158,6 +162,14 @@ func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 }
 
 func (p *DNSPolicy) Kind() string { return p.TypeMeta.Kind }
+
+func (p *DNSPolicy) BackReferenceAnnotationName() string {
+	return DNSPolicyBackReferenceAnnotationName
+}
+
+func (p *DNSPolicy) DirectReferenceAnnotationName() string {
+	return DNSPolicyDirectReferenceAnnotationName
+}
 
 // Validate ensures the resource is valid. Compatible with the validating interface
 // used by webhooks

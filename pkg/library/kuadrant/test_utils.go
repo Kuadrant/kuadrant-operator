@@ -1,10 +1,26 @@
-package common
+package kuadrant
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
+
+var _ Referrer = &PolicyKindStub{}
+
+type PolicyKindStub struct{}
+
+func (tpk *PolicyKindStub) Kind() string {
+	return "TestPolicy"
+}
+
+func (tpk *PolicyKindStub) BackReferenceAnnotationName() string {
+	return "kuadrant.io/testpolicies"
+}
+
+func (tpk *PolicyKindStub) DirectReferenceAnnotationName() string {
+	return "kuadrant.io/testpolicy"
+}
 
 type FakePolicy struct {
 	client.Object

@@ -1,11 +1,11 @@
 package v1beta2
 
 import (
+	"github.com/elliotchance/orderedmap/v2"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	orderedmap "github.com/elliotchance/orderedmap/v2"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // RouteSelector defines semantics for matching an HTTP request based on conditions
@@ -32,7 +32,7 @@ type RouteSelector struct {
 // returns nil.
 func (s *RouteSelector) SelectRules(route *gatewayapiv1.HTTPRoute) (rules []gatewayapiv1.HTTPRouteRule) {
 	rulesIndices := orderedmap.NewOrderedMap[int, gatewayapiv1.HTTPRouteRule]()
-	if len(s.Hostnames) > 0 && !common.Intersect(s.Hostnames, route.Spec.Hostnames) {
+	if len(s.Hostnames) > 0 && !utils.Intersect(s.Hostnames, route.Spec.Hostnames) {
 		return nil
 	}
 	if len(s.Matches) == 0 {
@@ -41,7 +41,7 @@ func (s *RouteSelector) SelectRules(route *gatewayapiv1.HTTPRoute) (rules []gate
 	for idx := range s.Matches {
 		routeSelectorMatch := s.Matches[idx]
 		for idx, rule := range route.Spec.Rules {
-			rs := common.HTTPRouteRuleSelector{HTTPRouteMatch: &routeSelectorMatch}
+			rs := kuadrant.HTTPRouteRuleSelector{HTTPRouteMatch: &routeSelectorMatch}
 			if rs.Selects(rule) {
 				rulesIndices.Set(idx, rule)
 			}
@@ -59,10 +59,10 @@ func (s *RouteSelector) HostnamesForConditions(route *gatewayapiv1.HTTPRoute) []
 	hostnames := route.Spec.Hostnames
 
 	if len(s.Hostnames) > 0 {
-		hostnames = common.Intersection(s.Hostnames, hostnames)
+		hostnames = utils.Intersection(s.Hostnames, hostnames)
 	}
 
-	if common.SameElements(hostnames, route.Spec.Hostnames) {
+	if utils.SameElements(hostnames, route.Spec.Hostnames) {
 		return []gatewayapiv1.Hostname{"*"}
 	}
 

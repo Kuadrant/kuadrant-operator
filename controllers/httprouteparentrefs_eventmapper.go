@@ -10,7 +10,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 // HTTPRouteParentRefsEventMapper is an EventHandler that maps HTTPRoute events to policy events,
@@ -45,7 +45,7 @@ func (m *HTTPRouteParentRefsEventMapper) mapToPolicyRequest(obj client.Object, p
 
 	for _, parentRef := range route.Spec.ParentRefs {
 		// skips if parentRef is not a Gateway
-		if (parentRef.Group != nil && *parentRef.Group != "gateway.networking.k8s.io") || (parentRef.Kind != nil && *parentRef.Kind != "Gateway") {
+		if (parentRef.Group != nil && *parentRef.Group != gatewayapiv1.GroupName) || (parentRef.Kind != nil && *parentRef.Kind != "Gateway") {
 			continue
 		}
 		// list policies in the same namespace as the parent gateway of the route
@@ -58,14 +58,14 @@ func (m *HTTPRouteParentRefsEventMapper) mapToPolicyRequest(obj client.Object, p
 			logger.Error(err, "failed to list policies")
 		}
 		// triggers the reconciliation of any policy that targets the parent gateway of the route
-		policies, ok := policyList.(common.KuadrantPolicyList)
+		policies, ok := policyList.(kuadrant.PolicyList)
 		if !ok {
-			logger.Info("mapToPolicyRequest:", "error", fmt.Sprintf("%T is not a KuadrantPolicyList", policyList))
+			logger.Info("mapToPolicyRequest:", "error", fmt.Sprintf("%T is not a PolicyList", policyList))
 			continue
 		}
 		for _, policy := range policies.GetItems() {
 			targetRef := policy.GetTargetRef()
-			if !common.IsTargetRefGateway(targetRef) {
+			if !kuadrant.IsTargetRefGateway(targetRef) {
 				continue
 			}
 			targetRefNamespace := targetRef.Namespace

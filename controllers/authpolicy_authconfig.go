@@ -8,14 +8,16 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
@@ -65,22 +67,22 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	case *gatewayapiv1.HTTPRoute:
 		route = obj
 		var err error
-		hosts, err = common.HostnamesFromHTTPRoute(ctx, obj, r.Client())
+		hosts, err = kuadrant.HostnamesFromHTTPRoute(ctx, obj, r.Client())
 		if err != nil {
 			return nil, err
 		}
 	case *gatewayapiv1.Gateway:
 		// fake a single httproute with all rules from all httproutes accepted by the gateway,
 		// that do not have an authpolicy of its own, so we can generate wasm rules for those cases
-		gw := common.GatewayWrapper{Gateway: obj}
+		gw := kuadrant.GatewayWrapper{Gateway: obj}
 		gwHostnames := gw.Hostnames()
 		if len(gwHostnames) == 0 {
 			gwHostnames = []gatewayapiv1.Hostname{"*"}
 		}
-		hosts = common.HostnamesToStrings(gwHostnames)
+		hosts = utils.HostnamesToStrings(gwHostnames)
 
 		rules := make([]gatewayapiv1.HTTPRouteRule, 0)
-		routes := r.FetchAcceptedGatewayHTTPRoutes(ctx, ap.TargetKey())
+		routes := r.TargetRefReconciler.FetchAcceptedGatewayHTTPRoutes(ctx, ap.TargetKey())
 		for idx := range routes {
 			route := routes[idx]
 			// skip routes that have an authpolicy of its own
@@ -362,7 +364,7 @@ func authorinoConditionsFromHTTPRouteRule(rule gatewayapiv1.HTTPRouteRule, hostn
 
 		if len(allOf) > 0 {
 			oneOf = append(oneOf, authorinoapi.PatternExpressionOrRef{
-				All: common.Map(allOf, toAuthorinoUnstructuredPatternExpressionOrRef),
+				All: utils.Map(allOf, toAuthorinoUnstructuredPatternExpressionOrRef),
 			})
 		}
 	}
@@ -380,7 +382,7 @@ func hostnameRuleToAuthorinoCondition(hostnames []string) authorinoapi.PatternEx
 }
 
 func hostnamesToRegex(hostnames []string) string {
-	return strings.Join(common.Map(hostnames, func(hostname string) string {
+	return strings.Join(utils.Map(hostnames, func(hostname string) string {
 		return strings.ReplaceAll(strings.ReplaceAll(hostname, ".", `\.`), "*", ".*")
 	}), "|")
 }
@@ -495,7 +497,7 @@ func toAuthorinoUnstructuredPatternExpressionOrRef(patternExpressionOrRef author
 func toAuthorinoOneOfPatternExpressionsOrRefs(oneOf []authorinoapi.PatternExpressionOrRef) []authorinoapi.PatternExpressionOrRef {
 	return []authorinoapi.PatternExpressionOrRef{
 		{
-			Any: common.Map(oneOf, toAuthorinoUnstructuredPatternExpressionOrRef),
+			Any: utils.Map(oneOf, toAuthorinoUnstructuredPatternExpressionOrRef),
 		},
 	}
 }

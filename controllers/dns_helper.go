@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-
 	"sort"
 	"strconv"
 	"strings"
@@ -17,8 +16,10 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
@@ -66,7 +67,7 @@ func findMatchingManagedZone(originalHost, host string, zones []kuadrantdnsv1alp
 		return findMatchingManagedZone(originalHost, parentDomain, zones)
 	}
 
-	zone, ok := common.Find(zones, func(zone kuadrantdnsv1alpha1.ManagedZone) bool {
+	zone, ok := utils.Find(zones, func(zone kuadrantdnsv1alpha1.ManagedZone) bool {
 		return strings.ToLower(zone.Spec.DomainName) == host
 	})
 
@@ -77,9 +78,9 @@ func findMatchingManagedZone(originalHost, host string, zones []kuadrantdnsv1alp
 	return findMatchingManagedZone(originalHost, parentDomain, zones)
 }
 
-func commonDNSRecordLabels(gwKey, apKey client.ObjectKey) map[string]string {
+func commonDNSRecordLabels(gwKey client.ObjectKey, p *v1alpha1.DNSPolicy) map[string]string {
 	commonLabels := map[string]string{}
-	for k, v := range policyDNSRecordLabels(apKey) {
+	for k, v := range policyDNSRecordLabels(p) {
 		commonLabels[k] = v
 	}
 	for k, v := range gatewayDNSRecordLabels(gwKey) {
@@ -88,10 +89,10 @@ func commonDNSRecordLabels(gwKey, apKey client.ObjectKey) map[string]string {
 	return commonLabels
 }
 
-func policyDNSRecordLabels(apKey client.ObjectKey) map[string]string {
+func policyDNSRecordLabels(p *v1alpha1.DNSPolicy) map[string]string {
 	return map[string]string{
-		common.DNSPolicyBackRefAnnotation:                              apKey.Name,
-		fmt.Sprintf("%s-namespace", common.DNSPolicyBackRefAnnotation): apKey.Namespace,
+		p.DirectReferenceAnnotationName():                              p.Name,
+		fmt.Sprintf("%s-namespace", p.DirectReferenceAnnotationName()): p.Namespace,
 	}
 }
 
@@ -102,7 +103,7 @@ func gatewayDNSRecordLabels(gwKey client.ObjectKey) map[string]string {
 	}
 }
 
-func withGatewayListener[T metav1.Object](gateway common.GatewayWrapper, listener gatewayapiv1.Listener, obj T) T {
+func withGatewayListener[T metav1.Object](gateway kuadrant.GatewayWrapper, listener gatewayapiv1.Listener, obj T) T {
 	if obj.GetAnnotations() == nil {
 		obj.SetAnnotations(map[string]string{})
 	}
@@ -364,13 +365,13 @@ func isWildCardHost(host string) bool {
 func (dh *dnsHelper) getDNSHealthCheckProbes(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) ([]*kuadrantdnsv1alpha1.DNSHealthCheckProbe, error) {
 	list := &kuadrantdnsv1alpha1.DNSHealthCheckProbeList{}
 	if err := dh.List(ctx, list, &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(dnsPolicy))),
+		LabelSelector: labels.SelectorFromSet(commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy)),
 		Namespace:     dnsPolicy.Namespace,
 	}); err != nil {
 		return nil, err
 	}
 
-	return common.Map(list.Items, func(obj kuadrantdnsv1alpha1.DNSHealthCheckProbe) *kuadrantdnsv1alpha1.DNSHealthCheckProbe {
+	return utils.Map(list.Items, func(obj kuadrantdnsv1alpha1.DNSHealthCheckProbe) *kuadrantdnsv1alpha1.DNSHealthCheckProbe {
 		return &obj
 	}), nil
 }

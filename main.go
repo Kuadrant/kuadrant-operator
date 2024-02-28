@@ -22,42 +22,38 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"k8s.io/utils/env"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
-	corev1 "k8s.io/api/core/v1"
-
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
-	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	istioextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	istioapis "istio.io/istio/operator/pkg/apis"
+	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/utils/env"
 	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
-
+	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	//+kubebuilder:scaffold:imports
@@ -160,9 +156,8 @@ func main() {
 	)
 
 	if err = (&controllers.RateLimitPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{
-			BaseReconciler: rateLimitPolicyBaseReconciler,
-		},
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
+		BaseReconciler:      rateLimitPolicyBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicy")
 		os.Exit(1)
@@ -175,10 +170,9 @@ func main() {
 	)
 
 	if err = (&controllers.AuthPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{
-			BaseReconciler: authPolicyBaseReconciler,
-		},
-		OverriddenPolicyMap: common.NewOverriddenPolicyMap(),
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
+		BaseReconciler:      authPolicyBaseReconciler,
+		OverriddenPolicyMap: kuadrant.NewOverriddenPolicyMap(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicy")
 		os.Exit(1)
@@ -191,9 +185,8 @@ func main() {
 	)
 
 	if err = (&controllers.DNSPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{
-			BaseReconciler: dnsPolicyBaseReconciler,
-		},
+		BaseReconciler:      dnsPolicyBaseReconciler,
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "DNSPolicy")
 		os.Exit(1)
@@ -206,9 +199,8 @@ func main() {
 	)
 
 	if err = (&controllers.TLSPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{
-			BaseReconciler: tlsPolicyBaseReconciler,
-		},
+		BaseReconciler:      tlsPolicyBaseReconciler,
+		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TLSPolicy")
 		os.Exit(1)

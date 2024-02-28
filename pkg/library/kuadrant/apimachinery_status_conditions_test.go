@@ -1,6 +1,6 @@
 //go:build unit
 
-package common
+package kuadrant
 
 import (
 	"errors"
@@ -12,6 +12,7 @@ import (
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -121,7 +122,7 @@ func TestConditionMarshal(t *testing.T) {
 
 func TestAcceptedCondition(t *testing.T) {
 	type args struct {
-		policy KuadrantPolicy
+		policy Policy
 		err    error
 	}
 	tests := []struct {
@@ -146,7 +147,7 @@ func TestAcceptedCondition(t *testing.T) {
 			args: args{
 				policy: &FakePolicy{},
 				err: NewErrTargetNotFound("FakePolicy", gatewayapiv1alpha2.PolicyTargetReference{
-					Group: "gateway.networking.k8s.io",
+					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  "my-target-ref",
 				}, apiErrors.NewNotFound(schema.GroupResource{}, "my-target-ref")),
@@ -163,7 +164,7 @@ func TestAcceptedCondition(t *testing.T) {
 			args: args{
 				policy: &FakePolicy{},
 				err: NewErrTargetNotFound("FakePolicy", gatewayapiv1alpha2.PolicyTargetReference{
-					Group: "gateway.networking.k8s.io",
+					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  "my-target-ref",
 				}, errors.New("deletion err")),
@@ -226,7 +227,7 @@ func TestAcceptedCondition(t *testing.T) {
 
 func TestEnforcedCondition(t *testing.T) {
 	type args struct {
-		policy KuadrantPolicy
+		policy Policy
 		err    PolicyError
 	}
 	policy := &FakePolicy{}

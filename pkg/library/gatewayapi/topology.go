@@ -1,4 +1,4 @@
-package common
+package gatewayapi
 
 import (
 	"errors"
@@ -8,12 +8,15 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/dag"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 const (
-	typeField      Field     = Field("type")
-	gatewayLabel   NodeLabel = NodeLabel("gateway")
-	httprouteLabel NodeLabel = NodeLabel("httproute")
+	typeField      dag.Field     = dag.Field("type")
+	gatewayLabel   dag.NodeLabel = dag.NodeLabel("gateway")
+	httprouteLabel dag.NodeLabel = dag.NodeLabel("httproute")
 )
 
 type RouteNode struct {
@@ -51,7 +54,7 @@ func (g *GatewayNode) ObjectKey() client.ObjectKey {
 }
 
 type GatewayAPITopology struct {
-	dag *DAG
+	graph *dag.DAG
 }
 
 type gatewayDAGNode struct {
@@ -60,7 +63,7 @@ type gatewayDAGNode struct {
 	attachedPolicies []GatewayAPIPolicy
 }
 
-func dagNodeIDFromObject(obj client.Object) NodeID {
+func dagNodeIDFromObject(obj client.Object) dag.NodeID {
 	return fmt.Sprintf("%s#%s", obj.GetObjectKind().GroupVersionKind().String(), client.ObjectKeyFromObject(obj).String())
 }
 
@@ -80,31 +83,31 @@ func (h httpRouteDAGNode) ID() string {
 
 func NewGatewayAPITopology(gateways []*gatewayapiv1.Gateway, routes []*gatewayapiv1.HTTPRoute, policies []GatewayAPIPolicy) (*GatewayAPITopology, error) {
 	// TODO logger
-	typeIndexer := WithFieldIndexer(typeField, func(n Node) []NodeLabel {
+	typeIndexer := dag.WithFieldIndexer(typeField, func(n dag.Node) []dag.NodeLabel {
 		switch n.(type) {
 		case gatewayDAGNode:
-			return []NodeLabel{gatewayLabel}
+			return []dag.NodeLabel{gatewayLabel}
 		case httpRouteDAGNode:
-			return []NodeLabel{httprouteLabel}
+			return []dag.NodeLabel{httprouteLabel}
 		default:
 			return nil
 		}
 	})
 
-	d := NewDAG(typeIndexer)
+	graph := dag.NewDAG(typeIndexer)
 
 	gatewayDAGNodes := buildGatewayDAGNodes(gateways, policies)
 
 	routeDAGNodes := buildHTTPRouteDAGNodes(routes, policies)
 
 	for _, node := range gatewayDAGNodes {
-		err := d.AddNode(node)
+		err := graph.AddNode(node)
 		if err != nil {
 			return nil, err
 		}
 	}
 	for _, node := range routeDAGNodes {
-		err := d.AddNode(node)
+		err := graph.AddNode(node)
 		if err != nil {
 			return nil, err
 		}
@@ -113,22 +116,22 @@ func NewGatewayAPITopology(gateways []*gatewayapiv1.Gateway, routes []*gatewayap
 	edges := buildDAGEdges(gatewayDAGNodes, routeDAGNodes)
 
 	for _, edge := range edges {
-		err := d.AddEdge(edge.parent.ID(), edge.child.ID())
+		err := graph.AddEdge(edge.parent.ID(), edge.child.ID())
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if !d.Validate() {
+	if !graph.Validate() {
 		return nil, errors.New("DAG is not valid")
 	}
 
-	return &GatewayAPITopology{dag: d}, nil
+	return &GatewayAPITopology{graph}, nil
 }
 
 type edge struct {
-	parent Node
-	child  Node
+	parent dag.Node
+	child  dag.Node
 }
 
 func buildDAGEdges(gateways []gatewayDAGNode, routes []httpRouteDAGNode) []edge {
@@ -153,13 +156,13 @@ func buildDAGEdges(gateways []gatewayDAGNode, routes []httpRouteDAGNode) []edge 
 }
 
 func buildGatewayDAGNodes(gateways []*gatewayapiv1.Gateway, policies []GatewayAPIPolicy) []gatewayDAGNode {
-	programmedGateways := Filter(gateways, func(g *gatewayapiv1.Gateway) bool {
+	programmedGateways := utils.Filter(gateways, func(g *gatewayapiv1.Gateway) bool {
 		return meta.IsStatusConditionTrue(g.Status.Conditions, GatewayProgrammedConditionType)
 	})
 
-	return Map(programmedGateways, func(g *gatewayapiv1.Gateway) gatewayDAGNode {
+	return utils.Map(programmedGateways, func(g *gatewayapiv1.Gateway) gatewayDAGNode {
 		// Compute attached policies
-		attachedPolicies := Filter(policies, func(p GatewayAPIPolicy) bool {
+		attachedPolicies := utils.Filter(policies, func(p GatewayAPIPolicy) bool {
 			group := p.GetTargetRef().Group
 			kind := p.GetTargetRef().Kind
 			name := p.GetTargetRef().Name
@@ -175,9 +178,9 @@ func buildGatewayDAGNodes(gateways []*gatewayapiv1.Gateway, policies []GatewayAP
 }
 
 func buildHTTPRouteDAGNodes(routes []*gatewayapiv1.HTTPRoute, policies []GatewayAPIPolicy) []httpRouteDAGNode {
-	return Map(routes, func(route *gatewayapiv1.HTTPRoute) httpRouteDAGNode {
+	return utils.Map(routes, func(route *gatewayapiv1.HTTPRoute) httpRouteDAGNode {
 		// Compute attached policies
-		attachedPolicies := Filter(policies, func(p GatewayAPIPolicy) bool {
+		attachedPolicies := utils.Filter(policies, func(p GatewayAPIPolicy) bool {
 			group := p.GetTargetRef().Group
 			kind := p.GetTargetRef().Kind
 			name := p.GetTargetRef().Name
@@ -193,18 +196,18 @@ func buildHTTPRouteDAGNodes(routes []*gatewayapiv1.HTTPRoute, policies []Gateway
 }
 
 func (g *GatewayAPITopology) Gateways() []GatewayNode {
-	gatewayNodes := g.dag.GetNodes(typeField, gatewayLabel)
+	gatewayNodes := g.graph.GetNodes(typeField, gatewayLabel)
 
-	return Map(gatewayNodes, func(n Node) GatewayNode {
+	return utils.Map(gatewayNodes, func(n dag.Node) GatewayNode {
 		gNode, ok := n.(gatewayDAGNode)
 		if !ok {
 			// TODO logger
 			panic("DAG gateway index returns nodes that are not gateways")
 		}
 
-		routeNodes := g.dag.Children(gNode.ID())
+		routeNodes := g.graph.Children(gNode.ID())
 		// convert to "RouteNode" from httpRouteDAGNode
-		routes := Map(routeNodes, func(r Node) RouteNode {
+		routes := utils.Map(routeNodes, func(r dag.Node) RouteNode {
 			rDAGNode, ok := r.(httpRouteDAGNode)
 			if !ok {
 				// TODO logger
@@ -226,9 +229,9 @@ func (g *GatewayAPITopology) Gateways() []GatewayNode {
 }
 
 func (g *GatewayAPITopology) Routes() []RouteNode {
-	routeNodes := g.dag.GetNodes(typeField, httprouteLabel)
+	routeNodes := g.graph.GetNodes(typeField, httprouteLabel)
 
-	return Map(routeNodes, func(r Node) RouteNode {
+	return utils.Map(routeNodes, func(r dag.Node) RouteNode {
 		rNode, ok := r.(httpRouteDAGNode)
 		if !ok {
 			// TODO logger

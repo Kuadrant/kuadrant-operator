@@ -1,6 +1,6 @@
 //go:build unit
 
-package common
+package gatewayapi
 
 import (
 	"strings"

@@ -1,4 +1,4 @@
-package common
+package istio
 
 import (
 	"context"
@@ -8,12 +8,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 )
 
 func IstioWorkloadSelectorFromGateway(ctx context.Context, k8sClient client.Client, gateway *gatewayapiv1.Gateway) *istiocommon.WorkloadSelector {
 	logger, _ := logr.FromContext(ctx)
-	gatewayWorkloadSelector, err := kuadrant.GetGatewayWorkloadSelector(ctx, k8sClient, gateway)
+	gatewayWorkloadSelector, err := kuadrantgatewayapi.GetGatewayWorkloadSelector(ctx, k8sClient, gateway)
 	if err != nil {
 		logger.V(1).Info("failed to build Istio WorkloadSelector from Gateway service - falling back to Gateway labels")
 		gatewayWorkloadSelector = gateway.Labels

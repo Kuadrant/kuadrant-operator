@@ -1,4 +1,4 @@
-package common
+package mappers
 
 import (
 	"context"
@@ -8,6 +8,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // HTTPRouteToParentGatewaysEventMapper is an EventHandler that maps HTTPRoute events to gateway events,
@@ -25,7 +28,7 @@ func (m *HTTPRouteToParentGatewaysEventMapper) Map(_ context.Context, obj client
 		return []reconcile.Request{}
 	}
 
-	return Map(GetRouteAcceptedGatewayParentKeys(route), func(key client.ObjectKey) reconcile.Request {
+	return utils.Map(kuadrantgatewayapi.GetRouteAcceptedGatewayParentKeys(route), func(key client.ObjectKey) reconcile.Request {
 		logger.V(1).Info("new gateway event", "key", key.String())
 		return reconcile.Request{NamespacedName: key}
 	})

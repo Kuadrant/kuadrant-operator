@@ -1,10 +1,12 @@
-package common
+package gatewayapi
 
 import (
 	"encoding/json"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 type TopologyIndexes struct {
@@ -70,7 +72,7 @@ func (k *TopologyIndexes) String() string {
 	policiesPerGateway := func() map[string][]string {
 		index := make(map[string][]string, 0)
 		for gatewayKey, policyList := range k.gatewayPolicies {
-			index[gatewayKey.String()] = Map(policyList, func(p GatewayAPIPolicy) string {
+			index[gatewayKey.String()] = utils.Map(policyList, func(p GatewayAPIPolicy) string {
 				return client.ObjectKeyFromObject(p).String()
 			})
 		}
@@ -94,7 +96,7 @@ func (k *TopologyIndexes) String() string {
 	untargetedRoutesPerGateway := func() map[string][]string {
 		index := make(map[string][]string, 0)
 		for gatewayKey, routeList := range k.untargetedRoutes {
-			index[gatewayKey.String()] = Map(routeList, func(route *gatewayapiv1.HTTPRoute) string {
+			index[gatewayKey.String()] = utils.Map(routeList, func(route *gatewayapiv1.HTTPRoute) string {
 				return client.ObjectKeyFromObject(route).String()
 			})
 		}

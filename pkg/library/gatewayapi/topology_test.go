@@ -1,10 +1,11 @@
 //go:build unit
 
-package common
+package gatewayapi
 
 import (
 	"testing"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"gotest.tools/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,7 +48,7 @@ func TestGatewayAPITopology_Gateways(t *testing.T) {
 		for _, gw := range topology.Gateways() {
 			returnedKeys = append(returnedKeys, client.ObjectKeyFromObject(gw.Gateway))
 		}
-		assert.Assert(subT, SameElements(gwKeys, returnedKeys))
+		assert.Assert(subT, utils.SameElements(gwKeys, returnedKeys))
 	})
 }
 
@@ -130,7 +131,7 @@ func TestGatewayAPITopology_GatewayNode_Routes(t *testing.T) {
 			client.ObjectKey{Name: "routeA", Namespace: NS},
 			client.ObjectKey{Name: "routeB", Namespace: NS},
 		}
-		assert.Assert(subT, SameElements(expectedKeys, returnedKeys))
+		assert.Assert(subT, utils.SameElements(expectedKeys, returnedKeys))
 
 		gw2Node, ok := gwIndex[client.ObjectKeyFromObject(gw2)]
 		assert.Assert(subT, ok, "expected gateway not found")

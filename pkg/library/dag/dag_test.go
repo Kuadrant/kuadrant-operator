@@ -1,12 +1,14 @@
 //go:build unit
 
-package common
+package dag
 
 import (
 	"errors"
 	"testing"
 
 	"gotest.tools/assert"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 type NodeTest string
@@ -199,7 +201,7 @@ func TestDAGParents(t *testing.T) {
 
 	t.Run("node with parent returns expected nodes", func(subT *testing.T) {
 		parents := d.Parents("1")
-		assert.Assert(subT, SameElements(parents, []Node{NodeTest("0")}), "unexpected parents", "parents", parents)
+		assert.Assert(subT, utils.SameElements(parents, []Node{NodeTest("0")}), "unexpected parents", "parents", parents)
 	})
 
 	t.Run("node without parent returns empty", func(subT *testing.T) {
@@ -224,7 +226,7 @@ func TestDAGChildren(t *testing.T) {
 
 	t.Run("node with children returns expected nodes", func(subT *testing.T) {
 		children := d.Children("0")
-		assert.Assert(subT, SameElements(children, []Node{NodeTest("1")}), "unexpected children", "children", children)
+		assert.Assert(subT, utils.SameElements(children, []Node{NodeTest("1")}), "unexpected children", "children", children)
 	})
 
 	t.Run("node without children returns empty", func(subT *testing.T) {
@@ -302,13 +304,13 @@ func TestDAGIndexes(t *testing.T) {
 		assert.NilError(subT, d.AddEdge("0", "1"))
 		assert.Assert(subT, d.Validate(), "DAG without cycles should be valid")
 
-		assert.Assert(subT, SameElements(
+		assert.Assert(subT, utils.SameElements(
 			d.GetNodes(Field("rootIndex"), NodeLabel("root")),
 			[]Node{NodeTest("0")},
 		), "index for Field rootIndex and root label failed")
 
 		for _, node := range nodes {
-			assert.Assert(subT, SameElements(
+			assert.Assert(subT, utils.SameElements(
 				d.GetNodes(Field("selfID"), NodeLabel(node.ID())),
 				[]Node{NodeTest(node.ID())},
 			), "index for Field selfID failed", "label", node.ID())
@@ -367,12 +369,12 @@ func TestDAGIndexes(t *testing.T) {
 		assert.Assert(subT, d.Validate(), "DAG without cycles should be valid")
 
 		indexedNodes := d.GetNodes(Field("1"), NodeLabel("NodeTest"))
-		assert.Assert(subT, SameElements(indexedNodes, []Node{NodeTest("00"), NodeTest("01")}),
+		assert.Assert(subT, utils.SameElements(indexedNodes, []Node{NodeTest("00"), NodeTest("01")}),
 			"index for Field 1 and label NodeTest failed")
 		indexedNodes = d.GetNodes(Field("1"), NodeLabel("NodeTest2"))
-		assert.Assert(subT, SameElements(indexedNodes, []Node{NodeTest2("20"), NodeTest2("21")}),
+		assert.Assert(subT, utils.SameElements(indexedNodes, []Node{NodeTest2("20"), NodeTest2("21")}),
 			"index for Field 1 and label NodeTest2 failed")
 		indexedNodes = d.GetNodes(Field("1"), NodeLabel("commonLabel"))
-		assert.Assert(subT, SameElements(indexedNodes, nodes), "index for Field 1 and label commonLabel failed")
+		assert.Assert(subT, utils.SameElements(indexedNodes, nodes), "index for Field 1 and label commonLabel failed")
 	})
 }

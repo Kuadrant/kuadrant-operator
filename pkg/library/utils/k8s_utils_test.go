@@ -1,6 +1,6 @@
 //go:build unit
 
-package common
+package utils
 
 import (
 	"context"
@@ -17,8 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/kuadrant/limitador-operator/api/v1alpha1"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 func TestObjectKeyListDifference(t *testing.T) {
@@ -608,7 +606,7 @@ func TestGetServicePortNumber(t *testing.T) {
 				}
 			}
 
-			portNumber, err := utils.GetServicePortNumber(ctx, k8sClient, tt.serviceKey, tt.servicePort)
+			portNumber, err := GetServicePortNumber(ctx, k8sClient, tt.serviceKey, tt.servicePort)
 
 			if err != nil && tt.expectedErr == nil {
 				t.Errorf("unexpected error: %v", err)

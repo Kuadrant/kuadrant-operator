@@ -1,8 +1,10 @@
-package common
+package dag
 
 import (
 	"errors"
 	"fmt"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // A Directed Acyclic Graph (DAG) is a graph representing a structure formed by vertices, or nodes,
@@ -249,7 +251,7 @@ func (d *DAG) Validate() bool {
 	g := build()
 
 	// S: Set of all nodes with no incoming edge
-	s := Filter(g.nodes, func(n *node) bool { return len(n.parents) == 0 })
+	s := utils.Filter(g.nodes, func(n *node) bool { return len(n.parents) == 0 })
 
 	for len(s) != 0 {
 		var n *node

@@ -1,4 +1,4 @@
-package common
+package mappers
 
 import (
 	"context"
@@ -11,6 +11,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // KuadrantPolicyToParentGatewaysEventMapper is an EventHandler that maps Kuadrant policies to gateway events,
@@ -23,24 +26,24 @@ type KuadrantPolicyToParentGatewaysEventMapper struct {
 func (k *KuadrantPolicyToParentGatewaysEventMapper) Map(ctx context.Context, obj client.Object) []reconcile.Request {
 	logger := k.Logger.WithValues("object", client.ObjectKeyFromObject(obj))
 
-	kuadrantPolicy, ok := obj.(KuadrantPolicy)
+	policy, ok := obj.(kuadrantgatewayapi.GatewayAPIPolicy)
 	if !ok {
-		logger.Error(fmt.Errorf("%T is not a KuadrantPolicy", obj), "cannot map")
+		logger.Error(fmt.Errorf("%T is not a GatewayAPIPolicy", obj), "cannot map")
 		return []reconcile.Request{}
 	}
 
-	if IsTargetRefGateway(kuadrantPolicy.GetTargetRef()) {
-		namespace := string(ptr.Deref(kuadrantPolicy.GetTargetRef().Namespace, kuadrantPolicy.GetWrappedNamespace()))
+	if kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef()) {
+		namespace := string(ptr.Deref(policy.GetTargetRef().Namespace, gatewayapiv1.Namespace(policy.GetNamespace())))
 
-		nn := types.NamespacedName{Name: string(kuadrantPolicy.GetTargetRef().Name), Namespace: namespace}
+		nn := types.NamespacedName{Name: string(policy.GetTargetRef().Name), Namespace: namespace}
 		logger.V(1).Info("map", " gateway", nn)
 
 		return []reconcile.Request{{NamespacedName: nn}}
 	}
 
-	if IsTargetRefHTTPRoute(kuadrantPolicy.GetTargetRef()) {
-		namespace := string(ptr.Deref(kuadrantPolicy.GetTargetRef().Namespace, kuadrantPolicy.GetWrappedNamespace()))
-		routeKey := client.ObjectKey{Name: string(kuadrantPolicy.GetTargetRef().Name), Namespace: namespace}
+	if kuadrantgatewayapi.IsTargetRefHTTPRoute(policy.GetTargetRef()) {
+		namespace := string(ptr.Deref(policy.GetTargetRef().Namespace, gatewayapiv1.Namespace(policy.GetNamespace())))
+		routeKey := client.ObjectKey{Name: string(policy.GetTargetRef().Name), Namespace: namespace}
 		route := &gatewayapiv1.HTTPRoute{}
 		if err := k.Client.Get(ctx, routeKey, route); err != nil {
 			if apierrors.IsNotFound(err) {
@@ -51,12 +54,12 @@ func (k *KuadrantPolicyToParentGatewaysEventMapper) Map(ctx context.Context, obj
 			return []reconcile.Request{}
 		}
 
-		return Map(GetRouteAcceptedGatewayParentKeys(route), func(key client.ObjectKey) reconcile.Request {
+		return utils.Map(kuadrantgatewayapi.GetRouteAcceptedGatewayParentKeys(route), func(key client.ObjectKey) reconcile.Request {
 			logger.V(1).Info("new gateway event", "key", key.String())
 			return reconcile.Request{NamespacedName: key}
 		})
 	}
 
-	logger.V(1).Info("policy targeting unexpected resource, skipping it", "key", client.ObjectKeyFromObject(kuadrantPolicy))
+	logger.V(1).Info("policy targeting unexpected resource, skipping it", "key", client.ObjectKeyFromObject(policy))
 	return []reconcile.Request{}
 }

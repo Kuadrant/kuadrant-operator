@@ -2,11 +2,11 @@ package gatewayapi
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/go-logr/logr"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -32,11 +32,8 @@ type TopologyIndexes struct {
 	internalTopology *GatewayAPITopology
 }
 
-func NewTopologyIndexes(gateways []*gatewayapiv1.Gateway, routes []*gatewayapiv1.HTTPRoute, policies []GatewayAPIPolicy) (*TopologyIndexes, error) {
-	fmt.Println("==================NewTopologyIndexes")
-	fmt.Printf("len policies %d\n", len(policies))
-	fmt.Printf("len routes %d\n", len(routes))
-	t, err := NewGatewayAPITopology(gateways, routes, policies)
+func NewTopologyIndexes(gateways []*gatewayapiv1.Gateway, routes []*gatewayapiv1.HTTPRoute, policies []GatewayAPIPolicy, logger logr.Logger) (*TopologyIndexes, error) {
+	t, err := NewGatewayAPITopology(gateways, routes, policies, logger)
 	if err != nil {
 		return nil, err
 	}

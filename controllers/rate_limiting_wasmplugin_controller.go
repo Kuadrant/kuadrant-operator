@@ -212,7 +212,6 @@ func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx contex
 
 	rlpList := &kuadrantv1beta2.RateLimitPolicyList{}
 	// Get all the rate limit policies
-	// TODO(eastizle): Add index field??
 	err = r.Client().List(ctx, rlpList)
 	logger.V(1).Info("topologyIndexesFromGateway: list rate limit policies",
 		"#RLPS", len(rlpList.Items),
@@ -225,6 +224,7 @@ func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx contex
 		[]*gatewayapiv1.Gateway{gw},
 		utils.Map(routeList.Items, ptr.To),
 		utils.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.GatewayAPIPolicy { return &p }),
+		logger,
 	)
 }
 
@@ -350,14 +350,14 @@ func (r *RateLimitingWASMPluginReconciler) SetupWithManager(mgr ctrl.Manager) er
 		return err
 	}
 
-	httpRouteToParentGatewaysEventMapper := &mappers.HTTPRouteToParentGatewaysEventMapper{
-		Logger: r.Logger().WithName("httpRouteToParentGatewaysEventMapper"),
-	}
+	httpRouteToParentGatewaysEventMapper := mappers.NewHTTPRouteToParentGatewaysEventMapper(
+		mappers.WithLogger(r.Logger().WithName("httpRouteToParentGatewaysEventMapper")),
+	)
 
-	rlpToParentGatewaysEventMapper := &mappers.KuadrantPolicyToParentGatewaysEventMapper{
-		Logger: r.Logger().WithName("ratelimitpolicyToParentGatewaysEventMapper"),
-		Client: r.Client(),
-	}
+	rlpToParentGatewaysEventMapper := mappers.NewPolicyToParentGatewaysEventMapper(
+		mappers.WithLogger(r.Logger().WithName("ratelimitpolicyToParentGatewaysEventMapper")),
+		mappers.WithClient(r.Client()),
+	)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		// Rate limiting WASMPlugin controller only cares about

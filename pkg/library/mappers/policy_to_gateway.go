@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -16,15 +15,18 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-// KuadrantPolicyToParentGatewaysEventMapper is an EventHandler that maps Kuadrant policies to gateway events,
+// PolicyToParentGatewaysEventMapper is an EventHandler that maps policies to gateway events,
 // by going through the policies targetRefs and parentRefs of the route
-type KuadrantPolicyToParentGatewaysEventMapper struct {
-	Logger logr.Logger
-	Client client.Client
+type PolicyToParentGatewaysEventMapper struct {
+	opts MapperOptions
 }
 
-func (k *KuadrantPolicyToParentGatewaysEventMapper) Map(ctx context.Context, obj client.Object) []reconcile.Request {
-	logger := k.Logger.WithValues("object", client.ObjectKeyFromObject(obj))
+func NewPolicyToParentGatewaysEventMapper(o ...MapperOption) *PolicyToParentGatewaysEventMapper {
+	return &PolicyToParentGatewaysEventMapper{opts: Apply(o...)}
+}
+
+func (k *PolicyToParentGatewaysEventMapper) Map(ctx context.Context, obj client.Object) []reconcile.Request {
+	logger := k.opts.Logger.WithValues("object", client.ObjectKeyFromObject(obj))
 
 	policy, ok := obj.(kuadrantgatewayapi.GatewayAPIPolicy)
 	if !ok {
@@ -45,7 +47,7 @@ func (k *KuadrantPolicyToParentGatewaysEventMapper) Map(ctx context.Context, obj
 		namespace := string(ptr.Deref(policy.GetTargetRef().Namespace, gatewayapiv1.Namespace(policy.GetNamespace())))
 		routeKey := client.ObjectKey{Name: string(policy.GetTargetRef().Name), Namespace: namespace}
 		route := &gatewayapiv1.HTTPRoute{}
-		if err := k.Client.Get(ctx, routeKey, route); err != nil {
+		if err := k.opts.Client.Get(ctx, routeKey, route); err != nil {
 			if apierrors.IsNotFound(err) {
 				logger.V(1).Info("no route found", "route", routeKey)
 				return []reconcile.Request{}

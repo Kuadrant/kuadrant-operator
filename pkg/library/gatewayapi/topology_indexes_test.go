@@ -9,11 +9,13 @@ import (
 	"gotest.tools/assert"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
 func TestTopologyIndexes_PoliciesFromGateway(t *testing.T) {
 	t.Run("empty topology", func(subT *testing.T) {
-		topologyIndexes, err := NewTopologyIndexes(nil, nil, nil)
+		topologyIndexes, err := NewTopologyIndexes(nil, nil, nil, log.NewLogger())
 		assert.NilError(subT, err)
 
 		policies := topologyIndexes.PoliciesFromGateway(testBasicGateway("gw1", NS))
@@ -26,7 +28,7 @@ func TestTopologyIndexes_PoliciesFromGateway(t *testing.T) {
 			testBasicGateway("gw2", NS),
 		}
 
-		topologyIndexes, err := NewTopologyIndexes(gateways, nil, nil)
+		topologyIndexes, err := NewTopologyIndexes(gateways, nil, nil, log.NewLogger())
 		assert.NilError(subT, err)
 
 		policies := topologyIndexes.PoliciesFromGateway(testBasicGateway("unknown", NS))
@@ -48,7 +50,7 @@ func TestTopologyIndexes_PoliciesFromGateway(t *testing.T) {
 		routePolicy := testBasicRoutePolicy("policy2", NS, route1)
 		policies := []GatewayAPIPolicy{gwPolicy, routePolicy}
 
-		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies)
+		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies, log.NewLogger())
 		assert.NilError(subT, err)
 
 		policiesFromGateway := topologyIndexes.PoliciesFromGateway(invalidGateway)
@@ -68,7 +70,7 @@ func TestTopologyIndexes_PoliciesFromGateway(t *testing.T) {
 		gwPolicy := testBasicGatewayPolicy("policy1", NS, gw1)
 		policies := []GatewayAPIPolicy{gwPolicy}
 
-		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies)
+		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies, log.NewLogger())
 		assert.NilError(subT, err)
 
 		policiesFromGateway := topologyIndexes.PoliciesFromGateway(gw1)
@@ -92,7 +94,7 @@ func TestTopologyIndexes_PoliciesFromGateway(t *testing.T) {
 		routePolicy := testBasicRoutePolicy("policy1", NS, route1)
 		policies := []GatewayAPIPolicy{routePolicy}
 
-		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies)
+		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies, log.NewLogger())
 		assert.NilError(subT, err)
 
 		policiesFromGateway := topologyIndexes.PoliciesFromGateway(gw1)
@@ -118,7 +120,7 @@ func TestTopologyIndexes_PoliciesFromGateway(t *testing.T) {
 		routePolicy := testBasicRoutePolicy("policy1", NS, route1)
 		policies := []GatewayAPIPolicy{routePolicy}
 
-		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies)
+		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies, log.NewLogger())
 		assert.NilError(subT, err)
 
 		policiesGw1 := topologyIndexes.PoliciesFromGateway(gw1)
@@ -144,7 +146,7 @@ func TestTopologyIndexes_GetPolicyHTTPRoute(t *testing.T) {
 		route1 := testBasicRoute("route1", NS, nil...)
 		policy := testBasicRoutePolicy("policy1", NS, route1)
 
-		topologyIndexes, err := NewTopologyIndexes(nil, nil, nil)
+		topologyIndexes, err := NewTopologyIndexes(nil, nil, nil, log.NewLogger())
 		assert.NilError(subT, err)
 
 		route := topologyIndexes.GetPolicyHTTPRoute(policy)
@@ -160,7 +162,7 @@ func TestTopologyIndexes_GetPolicyHTTPRoute(t *testing.T) {
 		gwPolicy := testBasicGatewayPolicy("policy1", NS, gw1)
 		policies := []GatewayAPIPolicy{gwPolicy}
 
-		topologyIndexes, err := NewTopologyIndexes(gateways, nil, policies)
+		topologyIndexes, err := NewTopologyIndexes(gateways, nil, policies, log.NewLogger())
 		assert.NilError(subT, err)
 
 		route := topologyIndexes.GetPolicyHTTPRoute(gwPolicy)
@@ -180,7 +182,7 @@ func TestTopologyIndexes_GetPolicyHTTPRoute(t *testing.T) {
 		routePolicy := testBasicRoutePolicy("policy1", NS, route1)
 		policies := []GatewayAPIPolicy{routePolicy}
 
-		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies)
+		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies, log.NewLogger())
 		assert.NilError(subT, err)
 
 		route := topologyIndexes.GetPolicyHTTPRoute(routePolicy)
@@ -202,7 +204,7 @@ func TestTopologyIndexes_GetUntargetedRoutes(t *testing.T) {
 		gatewayPolicy := testBasicGatewayPolicy("policy1", NS, gw1)
 		policies := []GatewayAPIPolicy{gatewayPolicy}
 
-		topologyIndexes, err := NewTopologyIndexes(gateways, nil, policies)
+		topologyIndexes, err := NewTopologyIndexes(gateways, nil, policies, log.NewLogger())
 		assert.NilError(subT, err)
 
 		untargetedRoutes := topologyIndexes.GetUntargetedRoutes(gw1)
@@ -226,7 +228,7 @@ func TestTopologyIndexes_GetUntargetedRoutes(t *testing.T) {
 		routePolicy2 := testBasicRoutePolicy("policy2", NS, route2)
 		policies := []GatewayAPIPolicy{routePolicy1, routePolicy2}
 
-		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies)
+		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies, log.NewLogger())
 		assert.NilError(subT, err)
 
 		untargetedRoutes := topologyIndexes.GetUntargetedRoutes(gw1)
@@ -248,7 +250,7 @@ func TestTopologyIndexes_GetUntargetedRoutes(t *testing.T) {
 		routePolicy1 := testBasicRoutePolicy("policy1", NS, route1)
 		policies := []GatewayAPIPolicy{routePolicy1}
 
-		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies)
+		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies, log.NewLogger())
 		assert.NilError(subT, err)
 
 		untargetedRoutes := topologyIndexes.GetUntargetedRoutes(gw1)
@@ -270,7 +272,7 @@ func TestTopologyIndexes_GetUntargetedRoutes(t *testing.T) {
 		route2 := testBasicRoute("route2", NS, gw1)
 		routes := []*gatewayapiv1.HTTPRoute{route1, route2}
 
-		topologyIndexes, err := NewTopologyIndexes(gateways, routes, nil)
+		topologyIndexes, err := NewTopologyIndexes(gateways, routes, nil, log.NewLogger())
 		assert.NilError(subT, err)
 
 		untargetedRoutes := topologyIndexes.GetUntargetedRoutes(gw1)
@@ -280,7 +282,7 @@ func TestTopologyIndexes_GetUntargetedRoutes(t *testing.T) {
 
 func TestTopologyIndexes_TopologyString(t *testing.T) {
 	t.Run("empty topology", func(subT *testing.T) {
-		topologyIndexes, err := NewTopologyIndexes(nil, nil, nil)
+		topologyIndexes, err := NewTopologyIndexes(nil, nil, nil, log.NewLogger())
 		assert.NilError(subT, err)
 
 		topologyStr := topologyIndexes.String()
@@ -302,7 +304,7 @@ func TestTopologyIndexes_TopologyString(t *testing.T) {
 		routePolicy := testBasicRoutePolicy("policy1", NS, route1)
 		policies := []GatewayAPIPolicy{routePolicy}
 
-		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies)
+		topologyIndexes, err := NewTopologyIndexes(gateways, routes, policies, log.NewLogger())
 		assert.NilError(subT, err)
 
 		topologyStr := topologyIndexes.String()

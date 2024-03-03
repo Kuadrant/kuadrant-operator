@@ -3,6 +3,7 @@ package mappers
 import (
 	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -21,16 +22,30 @@ func WithLogger(logger logr.Logger) MapperOption {
 	})
 }
 
+func WithClient(cl client.Client) MapperOption {
+	return &ClientOption{cl}
+}
+
+type ClientOption struct {
+	Client client.Client
+}
+
+func (c ClientOption) apply(opts *MapperOptions) {
+	opts.Client = c.Client
+}
+
 type MapperOption interface {
 	apply(*MapperOptions)
 }
 
 type MapperOptions struct {
 	Logger logr.Logger
+	Client client.Client
 }
 
 var defaultMapperOptions = MapperOptions{
 	Logger: logr.Discard(),
+	Client: fake.NewClientBuilder().Build(),
 }
 
 func newFuncMapperOption(f func(*MapperOptions)) *funcMapperOption {

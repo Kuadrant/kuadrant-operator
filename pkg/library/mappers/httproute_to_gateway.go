@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -16,11 +15,15 @@ import (
 // HTTPRouteToParentGatewaysEventMapper is an EventHandler that maps HTTPRoute events to gateway events,
 // by going through the parentRefs of the route
 type HTTPRouteToParentGatewaysEventMapper struct {
-	Logger logr.Logger
+	opts MapperOptions
+}
+
+func NewHTTPRouteToParentGatewaysEventMapper(o ...MapperOption) *HTTPRouteToParentGatewaysEventMapper {
+	return &HTTPRouteToParentGatewaysEventMapper{opts: Apply(o...)}
 }
 
 func (m *HTTPRouteToParentGatewaysEventMapper) Map(_ context.Context, obj client.Object) []reconcile.Request {
-	logger := m.Logger.WithValues("object", client.ObjectKeyFromObject(obj))
+	logger := m.opts.Logger.WithValues("object", client.ObjectKeyFromObject(obj))
 
 	route, ok := obj.(*gatewayapiv1.HTTPRoute)
 	if !ok {

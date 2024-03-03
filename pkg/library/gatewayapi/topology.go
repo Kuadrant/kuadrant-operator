@@ -94,6 +94,10 @@ func NewGatewayAPITopology(gateways []*gatewayapiv1.Gateway, routes []*gatewayap
 		}
 	})
 
+	fmt.Println("==================")
+	fmt.Printf("len policies %d\n", len(policies))
+	fmt.Printf("len routes %d\n", len(routes))
+
 	graph := dag.NewDAG(typeIndexer)
 
 	gatewayDAGNodes := buildGatewayDAGNodes(gateways, policies)
@@ -179,8 +183,12 @@ func buildGatewayDAGNodes(gateways []*gatewayapiv1.Gateway, policies []GatewayAP
 
 func buildHTTPRouteDAGNodes(routes []*gatewayapiv1.HTTPRoute, policies []GatewayAPIPolicy) []httpRouteDAGNode {
 	return utils.Map(routes, func(route *gatewayapiv1.HTTPRoute) httpRouteDAGNode {
+		fmt.Println("==================buildHTTPRouteDAGNodes route")
+		fmt.Println(client.ObjectKeyFromObject(route))
 		// Compute attached policies
 		attachedPolicies := utils.Filter(policies, func(p GatewayAPIPolicy) bool {
+			fmt.Println("==================buildHTTPRouteDAGNodes policy")
+			fmt.Println(client.ObjectKeyFromObject(p))
 			group := p.GetTargetRef().Group
 			kind := p.GetTargetRef().Kind
 			name := p.GetTargetRef().Name

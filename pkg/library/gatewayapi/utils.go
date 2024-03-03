@@ -84,53 +84,27 @@ func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway 
 }
 
 func IsHTTPRouteAccepted(httpRoute *gatewayapiv1.HTTPRoute) bool {
-	if httpRoute == nil {
+	acceptedParentRefs := GetRouteAcceptedParentRefs(httpRoute)
+
+	if len(acceptedParentRefs) == 0 {
 		return false
 	}
 
-	if len(httpRoute.Spec.CommonRouteSpec.ParentRefs) == 0 {
-		return false
-	}
-
-	// Check HTTProute parents (gateways) in the status object
-	// if any of the current parent gateways reports not "Admitted", return false
-	for _, parentRef := range httpRoute.Spec.CommonRouteSpec.ParentRefs {
-		routeParentStatus := func(pRef gatewayapiv1.ParentReference) *gatewayapiv1.RouteParentStatus {
-			for idx := range httpRoute.Status.RouteStatus.Parents {
-				if reflect.DeepEqual(pRef, httpRoute.Status.RouteStatus.Parents[idx].ParentRef) {
-					return &httpRoute.Status.RouteStatus.Parents[idx]
-				}
-			}
-
-			return nil
-		}(parentRef)
-
-		if routeParentStatus == nil {
-			return false
-		}
-
-		if meta.IsStatusConditionFalse(routeParentStatus.Conditions, "Accepted") {
-			return false
-		}
-	}
-
-	return true
+	return len(acceptedParentRefs) == len(httpRoute.Spec.ParentRefs)
 }
 
 func IsParentGateway(ref gatewayapiv1.ParentReference) bool {
 	return (ref.Kind == nil || *ref.Kind == "Gateway") && (ref.Group == nil || *ref.Group == gatewayapiv1.GroupName)
 }
 
-func GetRouteAcceptedGatewayParentKeys(route *gatewayapiv1.HTTPRoute) []client.ObjectKey {
+func GetRouteAcceptedParentRefs(route *gatewayapiv1.HTTPRoute) []gatewayapiv1.ParentReference {
 	if route == nil {
 		return nil
 	}
 
-	gatewayParentRefs := utils.Filter(route.Spec.ParentRefs, IsParentGateway)
-
-	acceptedParentRefs := utils.Filter(gatewayParentRefs, func(p gatewayapiv1.ParentReference) bool {
+	return utils.Filter(route.Spec.ParentRefs, func(p gatewayapiv1.ParentReference) bool {
 		parentStatus, found := utils.Find(route.Status.RouteStatus.Parents, func(pStatus gatewayapiv1.RouteParentStatus) bool {
-			return pStatus.ParentRef == p
+			return reflect.DeepEqual(pStatus.ParentRef, p)
 		})
 
 		if !found {
@@ -139,8 +113,14 @@ func GetRouteAcceptedGatewayParentKeys(route *gatewayapiv1.HTTPRoute) []client.O
 
 		return meta.IsStatusConditionTrue(parentStatus.Conditions, "Accepted")
 	})
+}
 
-	return utils.Map(acceptedParentRefs, func(p gatewayapiv1.ParentReference) client.ObjectKey {
+func GetRouteAcceptedGatewayParentKeys(route *gatewayapiv1.HTTPRoute) []client.ObjectKey {
+	acceptedParentRefs := GetRouteAcceptedParentRefs(route)
+
+	gatewayParentRefs := utils.Filter(acceptedParentRefs, IsParentGateway)
+
+	return utils.Map(gatewayParentRefs, func(p gatewayapiv1.ParentReference) client.ObjectKey {
 		return client.ObjectKey{
 			Name:      string(p.Name),
 			Namespace: string(ptr.Deref(p.Namespace, gatewayapiv1.Namespace(route.Namespace))),

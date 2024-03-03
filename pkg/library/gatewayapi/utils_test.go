@@ -7,9 +7,12 @@ import (
 	"reflect"
 	"testing"
 
+	"gotest.tools/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -231,6 +234,345 @@ func TestIsHTTPRouteAccepted(t *testing.T) {
 			if res != tc.expected {
 				subT.Errorf("result (%t) does not match expected (%t)", res, tc.expected)
 			}
+		})
+	}
+}
+
+func TestGetRouteAcceptedParentRefs(t *testing.T) {
+	testCases := []struct {
+		name     string
+		route    *gatewayapiv1.HTTPRoute
+		expected []gatewayapiv1.ParentReference
+	}{
+		{
+			"nil",
+			nil,
+			nil,
+		},
+		{
+			"empty parent refs",
+			&gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{},
+			},
+			[]gatewayapiv1.ParentReference{},
+		},
+		{
+			"single parentref accepted",
+			&gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{
+					CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+						ParentRefs: []gatewayapiv1.ParentReference{
+							{
+								Name: "a",
+							},
+						},
+					},
+				},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ParentRef: gatewayapiv1.ParentReference{
+									Name: "a",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			[]gatewayapiv1.ParentReference{
+				{
+					Name: "a",
+				},
+			},
+		},
+		{
+			"single parent ref not accepted",
+			&gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{
+					CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+						ParentRefs: []gatewayapiv1.ParentReference{
+							{
+								Name: "a",
+							},
+						},
+					},
+				},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ParentRef: gatewayapiv1.ParentReference{
+									Name: "a",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionFalse,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			[]gatewayapiv1.ParentReference{},
+		},
+		{
+			"wrong parent is accepted",
+			&gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{
+					CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+						ParentRefs: []gatewayapiv1.ParentReference{
+							{
+								Name: "a",
+							},
+						},
+					},
+				},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ParentRef: gatewayapiv1.ParentReference{
+									Name: "b",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			[]gatewayapiv1.ParentReference{},
+		},
+		{
+			"multiple parents only one is accepted",
+			&gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{
+					CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+						ParentRefs: []gatewayapiv1.ParentReference{
+							{
+								Name: "a",
+							},
+							{
+								Name: "b",
+							},
+						},
+					},
+				},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ParentRef: gatewayapiv1.ParentReference{
+									Name: "a",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+							{
+								ParentRef: gatewayapiv1.ParentReference{
+									Name: "b",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionFalse,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			[]gatewayapiv1.ParentReference{
+				{
+					Name: "a",
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			res := GetRouteAcceptedParentRefs(tc.route)
+			assert.DeepEqual(subT, res, tc.expected)
+		})
+	}
+}
+
+func TestGetRouteAcceptedGatewayParentKeys(t *testing.T) {
+	testCases := []struct {
+		name     string
+		route    *gatewayapiv1.HTTPRoute
+		expected []client.ObjectKey
+	}{
+		{
+			"nil",
+			nil,
+			[]client.ObjectKey{},
+		},
+		{
+			"empty parent refs",
+			&gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{},
+			},
+			[]client.ObjectKey{},
+		},
+		{
+			"single gateway parentref accepted",
+			&gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{
+					CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+						ParentRefs: []gatewayapiv1.ParentReference{
+							{
+								Kind:  ptr.To(gatewayapiv1.Kind("Gateway")),
+								Group: ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
+								Name:  "a",
+							},
+						},
+					},
+				},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ParentRef: gatewayapiv1.ParentReference{
+									Kind:  ptr.To(gatewayapiv1.Kind("Gateway")),
+									Group: ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
+									Name:  "a",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			[]client.ObjectKey{
+				{
+					Name: "a",
+				},
+			},
+		},
+		{
+			"single not gateway parent ref accepted",
+			&gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{
+					CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+						ParentRefs: []gatewayapiv1.ParentReference{
+							{
+								Kind:  ptr.To(gatewayapiv1.Kind("Other")),
+								Group: ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
+								Name:  "a",
+							},
+						},
+					},
+				},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ParentRef: gatewayapiv1.ParentReference{
+									Kind:  ptr.To(gatewayapiv1.Kind("Other")),
+									Group: ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
+									Name:  "a",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionFalse,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			[]client.ObjectKey{},
+		},
+		{
+			"multiple parents only gateway ones are accepted",
+			&gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{
+					CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
+						ParentRefs: []gatewayapiv1.ParentReference{
+							{
+								Kind:  ptr.To(gatewayapiv1.Kind("Gateway")),
+								Group: ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
+								Name:  "a",
+							},
+							{
+								Kind:  ptr.To(gatewayapiv1.Kind("Other")),
+								Group: ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
+								Name:  "b",
+							},
+						},
+					},
+				},
+				Status: gatewayapiv1.HTTPRouteStatus{
+					RouteStatus: gatewayapiv1.RouteStatus{
+						Parents: []gatewayapiv1.RouteParentStatus{
+							{
+								ParentRef: gatewayapiv1.ParentReference{
+									Kind:  ptr.To(gatewayapiv1.Kind("Gateway")),
+									Group: ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
+									Name:  "a",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionTrue,
+									},
+								},
+							},
+							{
+								ParentRef: gatewayapiv1.ParentReference{
+									Kind:  ptr.To(gatewayapiv1.Kind("Other")),
+									Group: ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
+									Name:  "b",
+								},
+								Conditions: []metav1.Condition{
+									{
+										Type:   "Accepted",
+										Status: metav1.ConditionFalse,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			[]client.ObjectKey{
+				{
+					Name: "a",
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			res := GetRouteAcceptedGatewayParentKeys(tc.route)
+			assert.DeepEqual(subT, res, tc.expected)
 		})
 	}
 }

@@ -2,6 +2,7 @@ package gatewayapi
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -32,6 +33,9 @@ type TopologyIndexes struct {
 }
 
 func NewTopologyIndexes(gateways []*gatewayapiv1.Gateway, routes []*gatewayapiv1.HTTPRoute, policies []GatewayAPIPolicy) (*TopologyIndexes, error) {
+	fmt.Println("==================NewTopologyIndexes")
+	fmt.Printf("len policies %d\n", len(policies))
+	fmt.Printf("len routes %d\n", len(routes))
 	t, err := NewGatewayAPITopology(gateways, routes, policies)
 	if err != nil {
 		return nil, err

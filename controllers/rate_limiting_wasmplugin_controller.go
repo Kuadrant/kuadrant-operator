@@ -27,6 +27,7 @@ import (
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -201,7 +202,10 @@ func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx contex
 	routeList := &gatewayapiv1.HTTPRouteList{}
 	// Get all the routes having the gateway as parent
 	err = r.Client().List(ctx, routeList, client.MatchingFields{HTTPRouteParents: client.ObjectKeyFromObject(gw).String()})
-	logger.V(1).Info("topologyIndexesFromGateway: list httproutes from gateway", "err", err)
+	logger.V(1).Info("topologyIndexesFromGateway: list httproutes from gateway",
+		"gateway", client.ObjectKeyFromObject(gw),
+		"#HTTPRoutes", len(routeList.Items),
+		"err", err)
 	if err != nil {
 		return nil, err
 	}
@@ -210,14 +214,16 @@ func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx contex
 	// Get all the rate limit policies
 	// TODO(eastizle): Add index field??
 	err = r.Client().List(ctx, rlpList)
-	logger.V(1).Info("topologyIndexesFromGateway: list rate limit policies", "err", err)
+	logger.V(1).Info("topologyIndexesFromGateway: list rate limit policies",
+		"#RLPS", len(rlpList.Items),
+		"err", err)
 	if err != nil {
 		return nil, err
 	}
 
 	return kuadrantgatewayapi.NewTopologyIndexes(
 		[]*gatewayapiv1.Gateway{gw},
-		utils.Map(routeList.Items, func(r gatewayapiv1.HTTPRoute) *gatewayapiv1.HTTPRoute { return &r }),
+		utils.Map(routeList.Items, ptr.To),
 		utils.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.GatewayAPIPolicy { return &p }),
 	)
 }

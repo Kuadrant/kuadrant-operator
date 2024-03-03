@@ -16,7 +16,6 @@ import (
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/google/uuid"
 	. "github.com/onsi/gomega"
-
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -38,7 +37,7 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -315,7 +314,7 @@ func testRouteIsAccepted(routeKey client.ObjectKey) func() bool {
 			return false
 		}
 
-		if !kuadrant.IsHTTPRouteAccepted(route) {
+		if !kuadrantgatewayapi.IsHTTPRouteAccepted(route) {
 			logf.Log.V(1).Info("httpRoute not accepted", "route", routeKey)
 			return false
 		}
@@ -333,7 +332,7 @@ func testGatewayIsReady(gateway *gatewayapiv1.Gateway) func() bool {
 			return false
 		}
 
-		if !meta.IsStatusConditionTrue(existingGateway.Status.Conditions, common.GatewayProgrammedConditionType) {
+		if !meta.IsStatusConditionTrue(existingGateway.Status.Conditions, kuadrantgatewayapi.GatewayProgrammedConditionType) {
 			logf.Log.V(1).Info("gateway not programmed", "gateway", client.ObjectKeyFromObject(gateway))
 			return false
 		}

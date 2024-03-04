@@ -21,7 +21,7 @@ const (
 )
 
 type Policy interface {
-	kuadrantgatewayapi.GatewayAPIPolicy
+	kuadrantgatewayapi.Policy
 	GetWrappedNamespace() gatewayapiv1.Namespace
 	GetRulesHostnames() []string
 	Kind() string

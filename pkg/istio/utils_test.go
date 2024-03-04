@@ -17,7 +17,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
-func TestIstioWorkloadSelectorFromGateway(t *testing.T) {
+func TestWorkloadSelectorFromGateway(t *testing.T) {
 	hostnameAddress := gatewayapiv1.AddressType("Hostname")
 	gateway := &gatewayapiv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
@@ -60,13 +60,13 @@ func TestIstioWorkloadSelectorFromGateway(t *testing.T) {
 
 	var selector *istiocommon.WorkloadSelector
 
-	selector = IstioWorkloadSelectorFromGateway(context.TODO(), k8sClient, gateway)
+	selector = WorkloadSelectorFromGateway(context.TODO(), k8sClient, gateway)
 	if selector == nil || len(selector.MatchLabels) != 1 || selector.MatchLabels["a-selector"] != "what-we-are-looking-for" {
 		t.Error("should have built the istio workload selector from the gateway service")
 	}
 }
 
-func TestIstioWorkloadSelectorFromGatewayMissingHostnameAddress(t *testing.T) {
+func TestWorkloadSelectorFromGatewayMissingHostnameAddress(t *testing.T) {
 	gateway := &gatewayapiv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "my-ns",
@@ -100,7 +100,7 @@ func TestIstioWorkloadSelectorFromGatewayMissingHostnameAddress(t *testing.T) {
 
 	var selector *istiocommon.WorkloadSelector
 
-	selector = IstioWorkloadSelectorFromGateway(logr.NewContext(context.TODO(), log.Log), k8sClient, gateway)
+	selector = WorkloadSelectorFromGateway(logr.NewContext(context.TODO(), log.Log), k8sClient, gateway)
 	if selector == nil || len(selector.MatchLabels) != 2 || selector.MatchLabels["app"] != "foo" || selector.MatchLabels["control-plane"] != "kuadrant" {
 		t.Error("should have built the istio workload selector from the gateway labels")
 	}

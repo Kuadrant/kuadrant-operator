@@ -243,7 +243,7 @@ func TestDAGGetNode(t *testing.T) {
 
 	t.Run("unknown id returns not found", func(subT *testing.T) {
 		_, err := d.GetNode("unknown")
-		assert.Assert(subT, IsNodeNotFound(err), "unkonwn id does not return not found")
+		assert.Assert(subT, IsNodeNotFound(err), "unknown id does not return not found")
 	})
 
 	t.Run("existing id returns node", func(subT *testing.T) {

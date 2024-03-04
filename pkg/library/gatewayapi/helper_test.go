@@ -84,7 +84,7 @@ func testBasicRoute(name, namespace string, parents ...*gatewayapiv1.Gateway) *g
 	}
 }
 
-func testBasicGatewayPolicy(name, namespace string, gateway *gatewayapiv1.Gateway) GatewayAPIPolicy {
+func testBasicGatewayPolicy(name, namespace string, gateway *gatewayapiv1.Gateway) Policy {
 	return &TestPolicy{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "example.com/v1",
@@ -103,7 +103,7 @@ func testBasicGatewayPolicy(name, namespace string, gateway *gatewayapiv1.Gatewa
 	}
 }
 
-func testBasicRoutePolicy(name, namespace string, route *gatewayapiv1.HTTPRoute) GatewayAPIPolicy {
+func testBasicRoutePolicy(name, namespace string, route *gatewayapiv1.HTTPRoute) Policy {
 	return &TestPolicy{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "example.com/v1",

@@ -117,7 +117,7 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 		},
 		Spec: istioapinetworkingv1alpha3.EnvoyFilter{
 			WorkloadSelector: &istioapinetworkingv1alpha3.WorkloadSelector{
-				Labels: kuadrantistioutils.IstioWorkloadSelectorFromGateway(ctx, r.Client(), gw).MatchLabels,
+				Labels: kuadrantistioutils.WorkloadSelectorFromGateway(ctx, r.Client(), gw).MatchLabels,
 			},
 			ConfigPatches: nil,
 		},

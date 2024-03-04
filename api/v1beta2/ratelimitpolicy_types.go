@@ -190,7 +190,7 @@ type RateLimitPolicy struct {
 	Status RateLimitPolicyStatus `json:"status,omitempty"`
 }
 
-var _ kuadrantgatewayapi.GatewayAPIPolicy = &RateLimitPolicy{}
+var _ kuadrantgatewayapi.Policy = &RateLimitPolicy{}
 
 func (r *RateLimitPolicy) Validate() error {
 	if r.Spec.TargetRef.Namespace != nil && string(*r.Spec.TargetRef.Namespace) != r.Namespace {

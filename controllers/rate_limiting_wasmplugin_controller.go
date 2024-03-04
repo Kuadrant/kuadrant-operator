@@ -113,7 +113,7 @@ func (r *RateLimitingWASMPluginReconciler) desiredRateLimitingWASMPlugin(ctx con
 			Namespace: gw.Namespace,
 		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{
-			Selector:     kuadrantistioutils.IstioWorkloadSelectorFromGateway(ctx, r.Client(), gw),
+			Selector:     kuadrantistioutils.WorkloadSelectorFromGateway(ctx, r.Client(), gw),
 			Url:          rlptools.WASMFilterImageURL,
 			PluginConfig: nil,
 			// Insert plugin before Istio stats filters and after Istio authorization filters.
@@ -220,9 +220,9 @@ func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx contex
 		return nil, err
 	}
 
-	policies := utils.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.GatewayAPIPolicy { return &p })
+	policies := utils.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })
 
-	t, err := kuadrantgatewayapi.NewGatewayAPITopology(
+	t, err := kuadrantgatewayapi.NewTopology(
 		kuadrantgatewayapi.WithGateways([]*gatewayapiv1.Gateway{gw}),
 		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To)),
 		kuadrantgatewayapi.WithPolicies(policies),

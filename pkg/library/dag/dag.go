@@ -24,8 +24,8 @@ func (e *nodeNotFoundError) Error() string {
 }
 
 func IsNodeNotFound(err error) bool {
-	notfoundErr, ok := err.(*nodeNotFoundError)
-	return ok || errors.As(err, &notfoundErr)
+	var nodeNotFoundErr *nodeNotFoundError
+	return errors.As(err, &nodeNotFoundErr)
 }
 
 type Node interface {
@@ -39,7 +39,7 @@ type internalNode struct {
 	children map[NodeID]*internalNode
 }
 
-type DAGOptions struct {
+type Options struct {
 	fieldIndexers []FieldIndexer
 }
 
@@ -57,16 +57,16 @@ type FieldIndexer struct {
 	indexer IndexerFunc
 }
 
-func (f FieldIndexer) ApplyTo(opts *DAGOptions) {
+func (f FieldIndexer) ApplyTo(opts *Options) {
 	opts.fieldIndexers = append(opts.fieldIndexers, f)
 }
 
-type DAGOpt interface {
+type Opt interface {
 	// ApplyTo applies this configuration to the given options.
-	ApplyTo(*DAGOptions)
+	ApplyTo(*Options)
 }
 
-var _ DAGOpt = FieldIndexer{}
+var _ Opt = FieldIndexer{}
 
 type DAG struct {
 	nodes         map[NodeID]*internalNode
@@ -74,9 +74,9 @@ type DAG struct {
 	nodeIndexes   map[Field]map[NodeLabel][]Node
 }
 
-func NewDAG(opts ...DAGOpt) *DAG {
+func NewDAG(opts ...Opt) *DAG {
 	// Capture options
-	dagOpts := &DAGOptions{}
+	dagOpts := &Options{}
 	for _, opt := range opts {
 		opt.ApplyTo(dagOpts)
 	}

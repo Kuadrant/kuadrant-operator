@@ -21,7 +21,7 @@ type TestPolicy struct {
 }
 
 var (
-	_ GatewayAPIPolicy = &TestPolicy{}
+	_ Policy = &TestPolicy{}
 )
 
 func (p *TestPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
@@ -54,8 +54,8 @@ func (p *TestPolicy) DeepCopyInto(out *TestPolicy) {
 func TestPolicyByCreationTimestamp(t *testing.T) {
 	testCases := []struct {
 		name           string
-		policies       []GatewayAPIPolicy
-		sortedPolicies []GatewayAPIPolicy
+		policies       []Policy
+		sortedPolicies []Policy
 	}{
 		{
 			name:           "nil input",
@@ -64,17 +64,17 @@ func TestPolicyByCreationTimestamp(t *testing.T) {
 		},
 		{
 			name:           "empty slices",
-			policies:       make([]GatewayAPIPolicy, 0),
-			sortedPolicies: make([]GatewayAPIPolicy, 0),
+			policies:       make([]Policy, 0),
+			sortedPolicies: make([]Policy, 0),
 		},
 		{
 			name: "by creation date",
-			policies: []GatewayAPIPolicy{
+			policies: []Policy{
 				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("bbb", time.Date(2010, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("aaa", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 			},
-			sortedPolicies: []GatewayAPIPolicy{
+			sortedPolicies: []Policy{
 				createTestPolicy("aaa", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("bbb", time.Date(2010, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC)),
@@ -82,12 +82,12 @@ func TestPolicyByCreationTimestamp(t *testing.T) {
 		},
 		{
 			name: "by name when creation date are equal",
-			policies: []GatewayAPIPolicy{
+			policies: []Policy{
 				createTestPolicy("ccc", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("bbb", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("aaa", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 			},
-			sortedPolicies: []GatewayAPIPolicy{
+			sortedPolicies: []Policy{
 				createTestPolicy("aaa", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("bbb", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),
 				createTestPolicy("ccc", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC)),

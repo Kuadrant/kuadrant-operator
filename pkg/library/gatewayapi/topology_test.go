@@ -16,7 +16,7 @@ import (
 
 func TestGatewayAPITopology_Gateways(t *testing.T) {
 	t.Run("no gateways", func(subT *testing.T) {
-		topology, err := NewGatewayAPITopology(WithLogger(log.NewLogger()))
+		topology, err := NewTopology(WithLogger(log.NewLogger()))
 		assert.NilError(subT, err)
 		assert.Assert(subT, len(topology.Gateways()) == 0, "topology should not return any gateway")
 	})
@@ -25,7 +25,7 @@ func TestGatewayAPITopology_Gateways(t *testing.T) {
 		invalidGateway := testInvalidGateway("gw1", NS)
 		gateways := []*gatewayapiv1.Gateway{invalidGateway}
 
-		topology, err := NewGatewayAPITopology(WithGateways(gateways), WithLogger(log.NewLogger()))
+		topology, err := NewTopology(WithGateways(gateways), WithLogger(log.NewLogger()))
 		assert.NilError(subT, err)
 
 		assert.Assert(subT, len(topology.Gateways()) == 0, "not ready gateways should not be added")
@@ -42,7 +42,7 @@ func TestGatewayAPITopology_Gateways(t *testing.T) {
 			gateways = append(gateways, testBasicGateway(gwKey.Name, gwKey.Namespace))
 		}
 
-		topology, err := NewGatewayAPITopology(WithGateways(gateways), WithLogger(log.NewLogger()))
+		topology, err := NewTopology(WithGateways(gateways), WithLogger(log.NewLogger()))
 		assert.NilError(subT, err)
 
 		assert.Assert(subT, len(topology.Gateways()) == 3, "expected gateways not returned")
@@ -61,7 +61,7 @@ func TestGatewayAPITopology_GatewayNode_Routes(t *testing.T) {
 		gw3 := testBasicGateway("gw3", NS)
 		gateways := []*gatewayapiv1.Gateway{gw1, gw2, gw3}
 
-		topology, err := NewGatewayAPITopology(WithGateways(gateways), WithLogger(log.NewLogger()))
+		topology, err := NewTopology(WithGateways(gateways), WithLogger(log.NewLogger()))
 		assert.NilError(subT, err)
 
 		for _, gw := range topology.Gateways() {
@@ -81,7 +81,7 @@ func TestGatewayAPITopology_GatewayNode_Routes(t *testing.T) {
 		route21 := testBasicRoute("route21", NS, gw2)
 		routes := []*gatewayapiv1.HTTPRoute{route11, route21}
 
-		topology, err := NewGatewayAPITopology(
+		topology, err := NewTopology(
 			WithGateways(gateways),
 			WithRoutes(routes),
 			WithLogger(log.NewLogger()),
@@ -118,7 +118,7 @@ func TestGatewayAPITopology_GatewayNode_Routes(t *testing.T) {
 		routeB.Status.Parents[1].Conditions[0].Status = metav1.ConditionFalse
 		routes := []*gatewayapiv1.HTTPRoute{routeA, routeB}
 
-		topology, err := NewGatewayAPITopology(
+		topology, err := NewTopology(
 			WithGateways(gateways),
 			WithRoutes(routes),
 			WithLogger(log.NewLogger()),
@@ -138,8 +138,8 @@ func TestGatewayAPITopology_GatewayNode_Routes(t *testing.T) {
 			returnedKeys = append(returnedKeys, client.ObjectKeyFromObject(route.Route()))
 		}
 		expectedKeys := []client.ObjectKey{
-			client.ObjectKey{Name: "routeA", Namespace: NS},
-			client.ObjectKey{Name: "routeB", Namespace: NS},
+			{Name: "routeA", Namespace: NS},
+			{Name: "routeB", Namespace: NS},
 		}
 		assert.Assert(subT, utils.SameElements(expectedKeys, returnedKeys))
 
@@ -158,9 +158,9 @@ func TestGatewayAPITopology_GatewayNode_AttachedPolicies(t *testing.T) {
 	gateways := []*gatewayapiv1.Gateway{gw1, gw2}
 
 	gwPolicy := testBasicGatewayPolicy("policy1", NS, gw1)
-	policies := []GatewayAPIPolicy{gwPolicy}
+	policies := []Policy{gwPolicy}
 
-	topology, err := NewGatewayAPITopology(
+	topology, err := NewTopology(
 		WithGateways(gateways),
 		WithPolicies(policies),
 		WithLogger(log.NewLogger()),
@@ -184,7 +184,7 @@ func TestGatewayAPITopology_GatewayNode_AttachedPolicies(t *testing.T) {
 
 func TestGatewayAPITopology_Routes(t *testing.T) {
 	t.Run("no routes", func(subT *testing.T) {
-		topology, err := NewGatewayAPITopology(WithLogger(log.NewLogger()))
+		topology, err := NewTopology(WithLogger(log.NewLogger()))
 		if err != nil {
 			subT.Fatal(err)
 		}
@@ -200,7 +200,7 @@ func TestGatewayAPITopology_Routes(t *testing.T) {
 			routes = append(routes, testBasicRoute(routeName, NS))
 		}
 
-		topology, err := NewGatewayAPITopology(WithRoutes(routes), WithLogger(log.NewLogger()))
+		topology, err := NewTopology(WithRoutes(routes), WithLogger(log.NewLogger()))
 		assert.NilError(subT, err)
 
 		assert.Assert(subT, len(topology.Routes()) == 3, "expected routes not returned")
@@ -216,9 +216,9 @@ func TestGatewayAPITopology_RouteNode_AttachedPolicies(t *testing.T) {
 	routes := []*gatewayapiv1.HTTPRoute{route1, route2}
 
 	routePolicy := testBasicRoutePolicy("policy1", NS, route1)
-	policies := []GatewayAPIPolicy{routePolicy}
+	policies := []Policy{routePolicy}
 
-	topology, err := NewGatewayAPITopology(
+	topology, err := NewTopology(
 		WithRoutes(routes),
 		WithPolicies(policies),
 		WithLogger(log.NewLogger()),

@@ -6,12 +6,12 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-type GatewayAPIPolicy interface {
+type Policy interface {
 	client.Object
 	GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference
 }
 
-type PolicyByCreationTimestamp []GatewayAPIPolicy
+type PolicyByCreationTimestamp []Policy
 
 func (a PolicyByCreationTimestamp) Len() int      { return len(a) }
 func (a PolicyByCreationTimestamp) Swap(i, j int) { a[i], a[j] = a[j], a[i] }

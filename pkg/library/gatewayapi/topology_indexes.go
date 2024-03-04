@@ -15,7 +15,7 @@ type TopologyIndexes struct {
 	// When a kuadrant policy directly or indirectly targets a gateway, the policy's configuration
 	// needs to be added to that gateway.
 	// Type: Gateway -> []Policy
-	gatewayPolicies map[client.ObjectKey][]GatewayAPIPolicy
+	gatewayPolicies map[client.ObjectKey][]Policy
 
 	// policyRoute is an index of policies mapping to HTTPRoutes
 	// The index only includes policies targeting only existing and accepted (by parent gateways) HTTPRoutes
@@ -28,10 +28,10 @@ type TopologyIndexes struct {
 
 	// Raw topology with gateways, routes and policies
 	// Currently only used for logging
-	internalTopology *GatewayAPITopology
+	internalTopology *Topology
 }
 
-func NewTopologyIndexes(t *GatewayAPITopology) *TopologyIndexes {
+func NewTopologyIndexes(t *Topology) *TopologyIndexes {
 	if t == nil {
 		return nil
 	}
@@ -47,14 +47,14 @@ func NewTopologyIndexes(t *GatewayAPITopology) *TopologyIndexes {
 // PoliciesFromGateway returns Kuadrant Policies which
 // directly or indirectly are targeting the gateway given as input.
 // Type: Gateway -> []Policy
-func (k *TopologyIndexes) PoliciesFromGateway(gateway *gatewayapiv1.Gateway) []GatewayAPIPolicy {
+func (k *TopologyIndexes) PoliciesFromGateway(gateway *gatewayapiv1.Gateway) []Policy {
 	return k.gatewayPolicies[client.ObjectKeyFromObject(gateway)]
 }
 
-// GetPolicyHTTPRoute returns the HTTPRoute being targetd by the policy.
+// GetPolicyHTTPRoute returns the HTTPRoute being targeted by the policy.
 // The method only returns existing and accepted (by parent gateways) HTTPRoutes
 // Type: Policy -> HTTPRoute
-func (k *TopologyIndexes) GetPolicyHTTPRoute(policy GatewayAPIPolicy) *gatewayapiv1.HTTPRoute {
+func (k *TopologyIndexes) GetPolicyHTTPRoute(policy Policy) *gatewayapiv1.HTTPRoute {
 	return k.policyRoute[client.ObjectKeyFromObject(policy)]
 }
 
@@ -71,7 +71,7 @@ func (k *TopologyIndexes) String() string {
 	policiesPerGateway := func() map[string][]string {
 		index := make(map[string][]string, 0)
 		for gatewayKey, policyList := range k.gatewayPolicies {
-			index[gatewayKey.String()] = utils.Map(policyList, func(p GatewayAPIPolicy) string {
+			index[gatewayKey.String()] = utils.Map(policyList, func(p Policy) string {
 				return client.ObjectKeyFromObject(p).String()
 			})
 		}
@@ -122,14 +122,14 @@ func (k *TopologyIndexes) String() string {
 	return string(jsonData)
 }
 
-func buildGatewayPoliciesIndex(t *GatewayAPITopology) map[client.ObjectKey][]GatewayAPIPolicy {
+func buildGatewayPoliciesIndex(t *Topology) map[client.ObjectKey][]Policy {
 	// Build Gateway -> []Policy index with all the policies affecting the indexed gateway
-	index := make(map[client.ObjectKey][]GatewayAPIPolicy, 0)
+	index := make(map[client.ObjectKey][]Policy, 0)
 	for _, gatewayNode := range t.Gateways() {
 		// Consisting of:
 		// - Policy targeting directly the gateway
 		// - Policies targeting the descendant routes of the gateway
-		policies := make([]GatewayAPIPolicy, 0)
+		policies := make([]Policy, 0)
 
 		policies = append(policies, gatewayNode.AttachedPolicies()...)
 
@@ -143,7 +143,7 @@ func buildGatewayPoliciesIndex(t *GatewayAPITopology) map[client.ObjectKey][]Gat
 	return index
 }
 
-func buildPolicyRouteIndex(t *GatewayAPITopology) map[client.ObjectKey]*gatewayapiv1.HTTPRoute {
+func buildPolicyRouteIndex(t *Topology) map[client.ObjectKey]*gatewayapiv1.HTTPRoute {
 	// Build Policy -> HTTPRoute index with the route targeted by the indexed policy
 	index := make(map[client.ObjectKey]*gatewayapiv1.HTTPRoute, 0)
 	for _, routeNode := range t.Routes() {
@@ -155,7 +155,7 @@ func buildPolicyRouteIndex(t *GatewayAPITopology) map[client.ObjectKey]*gatewaya
 	return index
 }
 
-func buildUntargetedRoutesIndex(t *GatewayAPITopology) map[client.ObjectKey][]*gatewayapiv1.HTTPRoute {
+func buildUntargetedRoutesIndex(t *Topology) map[client.ObjectKey][]*gatewayapiv1.HTTPRoute {
 	// Build Gateway -> []HTTPRoute index with all the routes not targeted by a policy
 	index := make(map[client.ObjectKey][]*gatewayapiv1.HTTPRoute, 0)
 

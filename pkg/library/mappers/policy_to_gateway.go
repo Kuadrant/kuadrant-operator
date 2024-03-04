@@ -28,9 +28,9 @@ func NewPolicyToParentGatewaysEventMapper(o ...MapperOption) *PolicyToParentGate
 func (k *PolicyToParentGatewaysEventMapper) Map(ctx context.Context, obj client.Object) []reconcile.Request {
 	logger := k.opts.Logger.WithValues("object", client.ObjectKeyFromObject(obj))
 
-	policy, ok := obj.(kuadrantgatewayapi.GatewayAPIPolicy)
+	policy, ok := obj.(kuadrantgatewayapi.Policy)
 	if !ok {
-		logger.Error(fmt.Errorf("%T is not a GatewayAPIPolicy", obj), "cannot map")
+		logger.Error(fmt.Errorf("%T is not a Policy", obj), "cannot map")
 		return []reconcile.Request{}
 	}
 

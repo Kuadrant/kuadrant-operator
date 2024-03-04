@@ -28,7 +28,7 @@ func testBasicGateway(name, namespace string) *gatewayapiv1.Gateway {
 		Status: gatewayapiv1.GatewayStatus{
 			Conditions: []metav1.Condition{
 				{
-					Type:   GatewayProgrammedConditionType,
+					Type:   string(gatewayapiv1.GatewayConditionProgrammed),
 					Status: metav1.ConditionTrue,
 				},
 			},

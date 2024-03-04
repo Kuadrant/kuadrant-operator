@@ -332,7 +332,7 @@ func testGatewayIsReady(gateway *gatewayapiv1.Gateway) func() bool {
 			return false
 		}
 
-		if !meta.IsStatusConditionTrue(existingGateway.Status.Conditions, kuadrantgatewayapi.GatewayProgrammedConditionType) {
+		if !meta.IsStatusConditionTrue(existingGateway.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed)) {
 			logf.Log.V(1).Info("gateway not programmed", "gateway", client.ObjectKeyFromObject(gateway))
 			return false
 		}

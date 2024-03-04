@@ -15,10 +15,6 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-const (
-	GatewayProgrammedConditionType = "Programmed"
-)
-
 func IsTargetRefHTTPRoute(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool {
 	return targetRef.Group == (gatewayapiv1.GroupName) && targetRef.Kind == ("HTTPRoute")
 }

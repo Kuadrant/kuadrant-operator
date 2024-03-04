@@ -4,12 +4,12 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/go-logr/logr"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/dag"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -201,7 +201,7 @@ func buildDAGEdges(gateways []gatewayDAGNode, routes []httpRouteDAGNode) []edge 
 
 func buildGatewayDAGNodes(gateways []*gatewayapiv1.Gateway, policies []Policy) []gatewayDAGNode {
 	programmedGateways := utils.Filter(gateways, func(g *gatewayapiv1.Gateway) bool {
-		return meta.IsStatusConditionTrue(g.Status.Conditions, GatewayProgrammedConditionType)
+		return meta.IsStatusConditionTrue(g.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed))
 	})
 
 	return utils.Map(programmedGateways, func(g *gatewayapiv1.Gateway) gatewayDAGNode {

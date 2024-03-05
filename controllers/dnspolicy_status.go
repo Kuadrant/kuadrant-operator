@@ -18,20 +18,24 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"slices"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 func (r *DNSPolicyReconciler) reconcileStatus(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, specErr error) (ctrl.Result, error) {
-	newStatus := r.calculateStatus(dnsPolicy, specErr)
+	newStatus := r.calculateStatus(ctx, dnsPolicy, specErr)
 
 	equalStatus := equality.Semantic.DeepEqual(newStatus, dnsPolicy.Status)
 	if equalStatus && dnsPolicy.Generation == dnsPolicy.Status.ObservedGeneration {
@@ -57,7 +61,7 @@ func (r *DNSPolicyReconciler) reconcileStatus(ctx context.Context, dnsPolicy *v1
 	return ctrl.Result{}, nil
 }
 
-func (r *DNSPolicyReconciler) calculateStatus(dnsPolicy *v1alpha1.DNSPolicy, specErr error) *v1alpha1.DNSPolicyStatus {
+func (r *DNSPolicyReconciler) calculateStatus(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, specErr error) *v1alpha1.DNSPolicyStatus {
 	newStatus := &v1alpha1.DNSPolicyStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions:         slices.Clone(dnsPolicy.Status.Conditions),
@@ -67,5 +71,32 @@ func (r *DNSPolicyReconciler) calculateStatus(dnsPolicy *v1alpha1.DNSPolicy, spe
 	acceptedCond := kuadrant.AcceptedCondition(dnsPolicy, specErr)
 	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)
 
+	// Do not set enforced condition if Accepted condition is false
+	if meta.IsStatusConditionFalse(newStatus.Conditions, string(v1alpha2.PolicyConditionAccepted)) {
+		return newStatus
+	}
+
+	enforcedCondition := r.enforcedCondition(ctx, dnsPolicy)
+	meta.SetStatusCondition(&newStatus.Conditions, *enforcedCondition)
+
 	return newStatus
+}
+
+func (r *DNSPolicyReconciler) enforcedCondition(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy) *metav1.Condition {
+	recordsList := &kuadrantdnsv1alpha1.DNSRecordList{}
+	if err := r.Client().List(ctx, recordsList); err != nil {
+		r.Logger().V(1).Error(err, "error listing dns records")
+		return kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(dnsPolicy.Kind(), err))
+	}
+
+	for _, record := range recordsList.Items {
+		record.SetResourceVersion("")
+		for _, reference := range record.GetOwnerReferences() {
+			if reference.Controller != nil && *reference.Controller && reference.Name == dnsPolicy.Name && reference.UID == dnsPolicy.UID {
+				return kuadrant.EnforcedCondition(dnsPolicy, nil)
+			}
+		}
+	}
+
+	return kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(dnsPolicy.Kind(), errors.New("policy is not enforced on any dns record")))
 }

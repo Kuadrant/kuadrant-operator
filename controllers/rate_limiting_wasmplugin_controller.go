@@ -169,11 +169,8 @@ func (r *RateLimitingWASMPluginReconciler) wasmPluginConfig(ctx context.Context,
 
 	logger.V(1).Info("wasmPluginConfig", "#RLPS", len(rateLimitPolicies))
 
-	// Shallow copy by assignment
-	rateLimitPoliciesSorted := rateLimitPolicies
-
 	// Sort RLPs for consistent comparison with existing objects
-	sort.Sort(kuadrantgatewayapi.PolicyByCreationTimestamp(rateLimitPoliciesSorted))
+	sort.Sort(kuadrantgatewayapi.PolicyByCreationTimestamp(rateLimitPolicies))
 
 	for _, policy := range rateLimitPolicies {
 		rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)

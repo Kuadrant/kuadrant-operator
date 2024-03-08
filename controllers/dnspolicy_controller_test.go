@@ -220,17 +220,24 @@ var _ = Describe("DNSPolicy controller", func() {
 			}, time.Second*15, time.Second).Should(BeEmpty())
 		})
 
-		It("should have accepted status", func() {
+		It("should have accepted and not enforced status", func() {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Status.Conditions).To(
-					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
-						"Status":  Equal(metav1.ConditionTrue),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
-						"Message": Equal("DNSPolicy has been accepted"),
-					})),
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Status":  Equal(metav1.ConditionTrue),
+							"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Message": Equal("DNSPolicy has been accepted"),
+						}),
+						MatchFields(IgnoreExtras, Fields{
+							"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
+							"Status":  Equal(metav1.ConditionFalse),
+							"Reason":  Equal(PolicyReasonUnknown),
+							"Message": Equal("DNSPolicy has encountered some issues: policy is not enforced on any dns record"),
+						})),
 				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
@@ -317,12 +324,19 @@ var _ = Describe("DNSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Finalizers).To(ContainElement(DNSPolicyFinalizer))
 				g.Expect(dnsPolicy.Status.Conditions).To(
-					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
-						"Status":  Equal(metav1.ConditionTrue),
-						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
-						"Message": Equal("DNSPolicy has been accepted"),
-					})),
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Status":  Equal(metav1.ConditionTrue),
+							"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Message": Equal("DNSPolicy has been accepted"),
+						}),
+						MatchFields(IgnoreExtras, Fields{
+							"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
+							"Status":  Equal(metav1.ConditionTrue),
+							"Reason":  Equal(string(kuadrant.PolicyReasonEnforced)),
+							"Message": Equal("DNSPolicy has been successfully enforced"),
+						})),
 				)
 				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())

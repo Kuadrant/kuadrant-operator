@@ -143,6 +143,11 @@ type CommonSpec struct {
 	Limits map[string]Limit `json:"limits,omitempty"`
 }
 
+// IsUsed determines if any fields within CommonSpec is used
+func (c CommonSpec) IsUsed() bool {
+	return c.Limits != nil
+}
+
 // RateLimitPolicyStatus defines the observed state of RateLimitPolicy
 type RateLimitPolicyStatus struct {
 	// ObservedGeneration reflects the generation of the most recently observed spec.
@@ -205,6 +210,10 @@ var _ kuadrantgatewayapi.Policy = &RateLimitPolicy{}
 func (r *RateLimitPolicy) Validate() error {
 	if r.Spec.TargetRef.Namespace != nil && string(*r.Spec.TargetRef.Namespace) != r.Namespace {
 		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *r.Spec.TargetRef.Namespace)
+	}
+
+	if r.Spec.Defaults.IsUsed() && r.Spec.CommonSpec.IsUsed() {
+		return fmt.Errorf("cannot use implicit defaults if explicit defaults are defined")
 	}
 
 	return nil

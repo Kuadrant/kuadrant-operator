@@ -3,10 +3,10 @@
 package v1beta2
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 
+	"gotest.tools/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -14,8 +14,8 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
-func testBuildBasicRLP(name string, kind gatewayapiv1.Kind) *RateLimitPolicy {
-	return &RateLimitPolicy{
+func testBuildBasicRLP(name string, kind gatewayapiv1.Kind, mutateFn func(*RateLimitPolicy)) *RateLimitPolicy {
+	p := &RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
 			APIVersion: GroupVersion.String(),
@@ -32,14 +32,16 @@ func testBuildBasicRLP(name string, kind gatewayapiv1.Kind) *RateLimitPolicy {
 			},
 		},
 	}
+
+	if mutateFn != nil {
+		mutateFn(p)
+	}
+
+	return p
 }
 
-func testBuildBasicGatewayRLP(name string) *RateLimitPolicy {
-	return testBuildBasicRLP(name, gatewayapiv1.Kind("Gateway"))
-}
-
-func testBuildBasicHTTPRouteRLP(name string) *RateLimitPolicy {
-	return testBuildBasicRLP(name, gatewayapiv1.Kind("HTTPRoute"))
+func testBuildBasicHTTPRouteRLP(name string, mutateFn func(*RateLimitPolicy)) *RateLimitPolicy {
+	return testBuildBasicRLP(name, "HTTPRoute", mutateFn)
 }
 
 // TestRateLimitPolicyValidation calls rlp.Validate()
@@ -47,17 +49,66 @@ func testBuildBasicHTTPRouteRLP(name string) *RateLimitPolicy {
 func TestRateLimitPolicyValidation(t *testing.T) {
 	name := "httproute-a"
 
-	// Different namespace
-	rlp := testBuildBasicHTTPRouteRLP(name)
-	otherNS := gatewayapiv1.Namespace(rlp.GetNamespace() + "other")
-	rlp.Spec.TargetRef.Namespace = &otherNS
-	err := rlp.Validate()
-	if err == nil {
-		t.Fatal(`rlp.Validate() did not return error and should`)
-	}
-	if !strings.Contains(err.Error(), "invalid targetRef.Namespace") {
-		t.Fatalf(`rlp.Validate() did not return expected error. Instead: %v`, err)
-	}
+	t.Run("Invalid - Different namespace", func(subT *testing.T) {
+		rlp := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
+			otherNS := gatewayapiv1.Namespace(policy.GetNamespace() + "other")
+			policy.Spec.TargetRef.Namespace = &otherNS
+		})
+		err := rlp.Validate()
+		if err == nil {
+			subT.Fatal(`rlp.Validate() did not return error and should`)
+		}
+		if !strings.Contains(err.Error(), "invalid targetRef.Namespace") {
+			subT.Fatalf(`rlp.Validate() did not return expected error. Instead: %v`, err)
+		}
+	})
+
+	t.Run("Valid - no implicit or explicit defaults", func(subT *testing.T) {
+		rlp := testBuildBasicHTTPRouteRLP(name, nil)
+		if err := rlp.Validate(); err != nil {
+			subT.Fatalf(`rlp.Validate() did return error and should not: %v`, err)
+		}
+	})
+
+	t.Run("Valid - Implicit defaults only", func(subT *testing.T) {
+		rlp := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
+			policy.Spec.Limits = map[string]Limit{
+				"implicit": {Rates: []Rate{{Limit: 0}}},
+			}
+		})
+		if err := rlp.Validate(); err != nil {
+			subT.Fatalf(`rlp.Validate() did return error and should not: %v`, err)
+		}
+	})
+
+	t.Run("Valid - Explicit defaults only", func(subT *testing.T) {
+		rlp := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
+			policy.Spec.Defaults.Limits = map[string]Limit{
+				"explicit": {Rates: []Rate{{Limit: 1}}},
+			}
+		})
+		if err := rlp.Validate(); err != nil {
+			subT.Fatalf(`rlp.Validate() did return error and should not: %v`, err)
+		}
+	})
+
+	t.Run("Invalid - Implicit and explicit defaults ", func(subT *testing.T) {
+		rlp := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
+			policy.Spec.Limits = map[string]Limit{
+				"implicit": {Rates: []Rate{{Limit: 0}}},
+			}
+			policy.Spec.Defaults.Limits = map[string]Limit{
+				"explicit": {Rates: []Rate{{Limit: 1}}},
+			}
+		})
+		err := rlp.Validate()
+		if err == nil {
+			subT.Fatal(`rlp.Validate() did not return error and should`)
+		}
+		if !strings.Contains(err.Error(), "cannot use implicit defaults if explicit defaults are defined") {
+			subT.Fatalf(`rlp.Validate() did not return expected error. Instead: %v`, err)
+		}
+	})
 }
 
 func TestRateLimitPolicyListGetItems(t *testing.T) {
@@ -78,82 +129,41 @@ func TestRateLimitPolicyListGetItems(t *testing.T) {
 }
 
 func TestRateLimitPolicy_GetLimits(t *testing.T) {
+	const name = "policy"
 	var (
 		defaultLimits = map[string]Limit{
 			"default": {
-				Rates: []Rate{
-					{
-						Limit:    10,
-						Duration: 1,
-						Unit:     "seconds",
-					},
-				},
+				Rates: []Rate{{Limit: 10, Duration: 1, Unit: "seconds"}},
 			},
 		}
-
 		implicitLimits = map[string]Limit{
 			"implicit": {
-				Rates: []Rate{
-					{
-						Limit:    20,
-						Duration: 2,
-						Unit:     "seconds",
-					},
-				},
+				Rates: []Rate{{Limit: 20, Duration: 2, Unit: "minutes"}},
 			},
 		}
 	)
 
-	type fields struct {
-		Spec RateLimitPolicySpec
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		want   map[string]Limit
-	}{
-		{
-			name:   "No limits defined",
-			fields: fields{Spec: RateLimitPolicySpec{}},
-			want:   nil,
-		},
-		{
-			name: "Defaults defined",
-			fields: fields{
-				Spec: RateLimitPolicySpec{
-					Defaults: CommonSpec{Limits: defaultLimits},
-				},
-			},
-			want: defaultLimits,
-		},
-		{
-			name: "implicit rules defined",
-			fields: fields{
-				Spec: RateLimitPolicySpec{
-					CommonSpec: CommonSpec{Limits: implicitLimits},
-				},
-			},
-			want: implicitLimits,
-		},
-		{
-			name: "default rules takes precedence over implicit rules",
-			fields: fields{
-				Spec: RateLimitPolicySpec{
-					CommonSpec: CommonSpec{Limits: implicitLimits},
-					Defaults:   CommonSpec{Limits: defaultLimits},
-				},
-			},
-			want: defaultLimits,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &RateLimitPolicy{
-				Spec: tt.fields.Spec,
-			}
-			if got := r.GetLimits(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetLimits() = %v, want %v", got, tt.want)
-			}
+	t.Run("No limits defined", func(subT *testing.T) {
+		r := testBuildBasicHTTPRouteRLP(name, nil)
+		assert.DeepEqual(subT, r.GetLimits(), map[string]Limit(nil))
+	})
+	t.Run("Defaults defined", func(subT *testing.T) {
+		r := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
+			policy.Spec.Defaults.Limits = defaultLimits
 		})
-	}
+		assert.DeepEqual(subT, r.GetLimits(), defaultLimits)
+	})
+	t.Run("Implicit rules defined", func(subT *testing.T) {
+		r := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
+			policy.Spec.Limits = implicitLimits
+		})
+		assert.DeepEqual(subT, r.GetLimits(), implicitLimits)
+	})
+	t.Run("Default rules takes precedence over implicit rules if validation is somehow bypassed", func(subT *testing.T) {
+		r := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
+			policy.Spec.Defaults.Limits = defaultLimits
+			policy.Spec.Limits = implicitLimits
+		})
+		assert.DeepEqual(subT, r.GetLimits(), defaultLimits)
+	})
 }

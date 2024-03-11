@@ -90,11 +90,13 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					CommonSpec: kuadrantv1beta2.CommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},

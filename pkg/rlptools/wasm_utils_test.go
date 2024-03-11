@@ -51,7 +51,9 @@ func TestWasmRules(t *testing.T) {
 				Namespace: "my-app",
 			},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				Limits: limits,
+				CommonSpec: kuadrantv1beta2.CommonSpec{
+					Limits: limits,
+				},
 			},
 		}
 	}

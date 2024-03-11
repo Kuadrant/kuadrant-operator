@@ -127,6 +127,16 @@ type RateLimitPolicySpec struct {
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
 
+	// Defaults define explicit default values for this policy and for policies inheriting this policy
+	// +optional
+	Defaults CommonSpec `json:"defaults"`
+
+	// Implicit default
+	CommonSpec `json:""`
+}
+
+// CommonSpec contains fields
+type CommonSpec struct {
 	// Limits holds the struct of limits indexed by a unique name
 	// +optional
 	// +kubebuilder:validation:MaxProperties=14

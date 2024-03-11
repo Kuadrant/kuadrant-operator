@@ -47,11 +47,13 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Kind:  "HTTPRoute",
 					Name:  gatewayapiv1.ObjectName(routeName),
 				},
-				Limits: map[string]kuadrantv1beta2.Limit{
-					"l1": {
-						Rates: []kuadrantv1beta2.Rate{
-							{
-								Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+				CommonSpec: kuadrantv1beta2.CommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
 							},
 						},
 					},
@@ -338,20 +340,22 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 						Kind:  "Gateway",
 						Name:  "my-gw",
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					CommonSpec: kuadrantv1beta2.CommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
-							},
-							RouteSelectors: []kuadrantv1beta2.RouteSelector{
-								{
-									Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
-									Matches: []gatewayapiv1.HTTPRouteMatch{
-										{
-											Path: &gatewayapiv1.HTTPPathMatch{
-												Value: ptr.To("/foo"),
+								RouteSelectors: []kuadrantv1beta2.RouteSelector{
+									{
+										Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
+										Matches: []gatewayapiv1.HTTPRouteMatch{
+											{
+												Path: &gatewayapiv1.HTTPPathMatch{
+													Value: ptr.To("/foo"),
+												},
 											},
 										},
 									},

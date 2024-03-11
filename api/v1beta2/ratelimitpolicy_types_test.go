@@ -3,6 +3,7 @@
 package v1beta2
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -73,5 +74,86 @@ func TestRateLimitPolicyListGetItems(t *testing.T) {
 	_, ok := result[0].(kuadrant.Policy)
 	if !ok {
 		t.Errorf("Expected item to be a Policy")
+	}
+}
+
+func TestRateLimitPolicy_GetLimits(t *testing.T) {
+	var (
+		defaultLimits = map[string]Limit{
+			"default": {
+				Rates: []Rate{
+					{
+						Limit:    10,
+						Duration: 1,
+						Unit:     "seconds",
+					},
+				},
+			},
+		}
+
+		implicitLimits = map[string]Limit{
+			"implicit": {
+				Rates: []Rate{
+					{
+						Limit:    20,
+						Duration: 2,
+						Unit:     "seconds",
+					},
+				},
+			},
+		}
+	)
+
+	type fields struct {
+		Spec RateLimitPolicySpec
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   map[string]Limit
+	}{
+		{
+			name:   "No limits defined",
+			fields: fields{Spec: RateLimitPolicySpec{}},
+			want:   nil,
+		},
+		{
+			name: "Defaults defined",
+			fields: fields{
+				Spec: RateLimitPolicySpec{
+					Defaults: CommonSpec{Limits: defaultLimits},
+				},
+			},
+			want: defaultLimits,
+		},
+		{
+			name: "implicit rules defined",
+			fields: fields{
+				Spec: RateLimitPolicySpec{
+					CommonSpec: CommonSpec{Limits: implicitLimits},
+				},
+			},
+			want: implicitLimits,
+		},
+		{
+			name: "default rules takes precedence over implicit rules",
+			fields: fields{
+				Spec: RateLimitPolicySpec{
+					CommonSpec: CommonSpec{Limits: implicitLimits},
+					Defaults:   CommonSpec{Limits: defaultLimits},
+				},
+			},
+			want: defaultLimits,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &RateLimitPolicy{
+				Spec: tt.fields.Spec,
+			}
+			if got := r.GetLimits(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetLimits() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

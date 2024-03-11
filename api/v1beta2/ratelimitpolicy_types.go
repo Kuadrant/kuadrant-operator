@@ -247,7 +247,7 @@ func (r *RateLimitPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
 
 func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 	ruleHosts = make([]string, 0)
-	for _, limit := range r.Spec.Limits {
+	for _, limit := range r.GetLimits() {
 		for _, routeSelector := range limit.RouteSelectors {
 			convertHostnamesToString := func(gwHostnames []gatewayapiv1.Hostname) []string {
 				hostnames := make([]string, 0, len(gwHostnames))
@@ -272,6 +272,15 @@ func (r *RateLimitPolicy) BackReferenceAnnotationName() string {
 
 func (r *RateLimitPolicy) DirectReferenceAnnotationName() string {
 	return RateLimitPolicyDirectReferenceAnnotationName
+}
+
+// GetLimits returns the limits based on whether default or implicit rules are defined.
+// Default rules takes precedence
+func (r *RateLimitPolicy) GetLimits() map[string]Limit {
+	if r.Spec.Defaults.Limits != nil {
+		return r.Spec.Defaults.Limits
+	}
+	return r.Spec.Limits
 }
 
 func init() {

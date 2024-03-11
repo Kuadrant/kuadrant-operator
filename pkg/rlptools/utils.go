@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"unicode"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
@@ -41,7 +42,7 @@ func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []limitado
 	limitsNamespace := LimitsNamespaceFromRLP(rlp)
 
 	rateLimits := make([]limitadorv1alpha1.RateLimit, 0)
-	for limitKey, limit := range rlp.Spec.Limits {
+	for limitKey, limit := range rlp.GetLimits() {
 		limitIdentifier := LimitNameToLimitadorIdentifier(limitKey)
 		for _, rate := range limit.Rates {
 			maxValue, seconds := rateToSeconds(rate)

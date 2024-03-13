@@ -5,6 +5,8 @@
 [![codecov](https://codecov.io/gh/Kuadrant/kuadrant-operator/branch/main/graph/badge.svg?token=4Z16KPS3HT)](https://codecov.io/gh/Kuadrant/kuadrant-operator)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0)
 
+This is a test 
+
 The Operator to install and manage the lifecycle of the [Kuadrant](https://github.com/Kuadrant/) components deployments.
 
 ## Overview

@@ -35,7 +35,11 @@ jobs:
       - name: Run make test
         run: |
           make test-unit
-      - name: Upload unit-test coverage reports to CodeCov # more at https://github.com/codecov/codecov-action
+      - name: Upload unit-test coverage reports to CodeCov
+        # more at https://github.com/codecov/codecov-action
+        # Only run if the feature branch is in your repo (not in a fork)
+        # as Tokenless uploading is rate limited for public repos
+        if: github.event.pull_request.head.repo.full_name == github.repository
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -90,7 +94,11 @@ jobs:
       - name: Run integration tests
         run: |
           make test-integration
-      - name: Upload integration-test coverage reports to CodeCov # more at https://github.com/codecov/codecov-action
+      - name: Upload integration-test coverage reports to CodeCov
+        # more at https://github.com/codecov/codecov-action
+        # Only run if the feature branch is in your repo (not in a fork)
+        # as Tokenless uploading is rate limited for public repos
+        if: github.event.pull_request.head.repo.full_name == github.repository
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

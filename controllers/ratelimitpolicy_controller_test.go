@@ -321,6 +321,48 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			Expect(err).To(Not(BeNil()))
 			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'")).To(BeTrue())
 		})
+
+		It("Valid only implicit defaults", func() {
+			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.Limits = map[string]kuadrantv1beta2.Limit{
+					"implicit": {
+						Rates: []kuadrantv1beta2.Rate{{Limit: 2, Duration: 20, Unit: "second"}},
+					},
+				}
+			})
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(BeNil())
+		})
+
+		It("Valid only explicit defaults", func() {
+			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.Defaults.Limits = map[string]kuadrantv1beta2.Limit{
+					"explicit": {
+						Rates: []kuadrantv1beta2.Rate{{Limit: 1, Duration: 10, Unit: "second"}},
+					},
+				}
+			})
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(BeNil())
+		})
+
+		It("Invalid implicit and explicit defaults are mutually exclusive", func() {
+			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.Defaults.Limits = map[string]kuadrantv1beta2.Limit{
+					"explicit": {
+						Rates: []kuadrantv1beta2.Rate{{Limit: 1, Duration: 10, Unit: "second"}},
+					},
+				}
+				policy.Spec.Limits = map[string]kuadrantv1beta2.Limit{
+					"implicit": {
+						Rates: []kuadrantv1beta2.Rate{{Limit: 2, Duration: 20, Unit: "second"}},
+					},
+				}
+			})
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "Implicit and explicit defaults are mutually exclusive")).To(BeTrue())
+		})
 	})
 
 	Context("Route Selector Validation", func() {

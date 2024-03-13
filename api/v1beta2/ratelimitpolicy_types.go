@@ -121,6 +121,7 @@ func (l Limit) CountersAsStringList() []string {
 
 // RateLimitPolicySpec defines the desired state of RateLimitPolicy
 // +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.limits) || !self.limits.exists(x, has(self.limits[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="!(has(self.defaults.limits) && has(self.limits))",message="Implicit and explicit defaults are mutually exclusive"
 type RateLimitPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
@@ -129,7 +130,7 @@ type RateLimitPolicySpec struct {
 
 	// Defaults define explicit default values for this policy and for policies inheriting this policy
 	// +optional
-	Defaults CommonSpec `json:"defaults"`
+	Defaults CommonSpec `json:"defaults,omitempty"`
 
 	// Implicit default
 	CommonSpec `json:""`
@@ -141,11 +142,6 @@ type CommonSpec struct {
 	// +optional
 	// +kubebuilder:validation:MaxProperties=14
 	Limits map[string]Limit `json:"limits,omitempty"`
-}
-
-// IsUsed determines if any fields within CommonSpec is used
-func (c CommonSpec) IsUsed() bool {
-	return c.Limits != nil
 }
 
 // RateLimitPolicyStatus defines the observed state of RateLimitPolicy
@@ -210,10 +206,6 @@ var _ kuadrantgatewayapi.Policy = &RateLimitPolicy{}
 func (r *RateLimitPolicy) Validate() error {
 	if r.Spec.TargetRef.Namespace != nil && string(*r.Spec.TargetRef.Namespace) != r.Namespace {
 		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *r.Spec.TargetRef.Namespace)
-	}
-
-	if r.Spec.Defaults.IsUsed() && r.Spec.CommonSpec.IsUsed() {
-		return fmt.Errorf("cannot use implicit defaults if explicit defaults are defined")
 	}
 
 	return nil

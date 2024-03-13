@@ -62,53 +62,6 @@ func TestRateLimitPolicyValidation(t *testing.T) {
 			subT.Fatalf(`rlp.Validate() did not return expected error. Instead: %v`, err)
 		}
 	})
-
-	t.Run("Valid - no implicit or explicit defaults", func(subT *testing.T) {
-		rlp := testBuildBasicHTTPRouteRLP(name, nil)
-		if err := rlp.Validate(); err != nil {
-			subT.Fatalf(`rlp.Validate() did return error and should not: %v`, err)
-		}
-	})
-
-	t.Run("Valid - Implicit defaults only", func(subT *testing.T) {
-		rlp := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
-			policy.Spec.Limits = map[string]Limit{
-				"implicit": {Rates: []Rate{{Limit: 0}}},
-			}
-		})
-		if err := rlp.Validate(); err != nil {
-			subT.Fatalf(`rlp.Validate() did return error and should not: %v`, err)
-		}
-	})
-
-	t.Run("Valid - Explicit defaults only", func(subT *testing.T) {
-		rlp := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
-			policy.Spec.Defaults.Limits = map[string]Limit{
-				"explicit": {Rates: []Rate{{Limit: 1}}},
-			}
-		})
-		if err := rlp.Validate(); err != nil {
-			subT.Fatalf(`rlp.Validate() did return error and should not: %v`, err)
-		}
-	})
-
-	t.Run("Invalid - Implicit and explicit defaults ", func(subT *testing.T) {
-		rlp := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
-			policy.Spec.Limits = map[string]Limit{
-				"implicit": {Rates: []Rate{{Limit: 0}}},
-			}
-			policy.Spec.Defaults.Limits = map[string]Limit{
-				"explicit": {Rates: []Rate{{Limit: 1}}},
-			}
-		})
-		err := rlp.Validate()
-		if err == nil {
-			subT.Fatal(`rlp.Validate() did not return error and should`)
-		}
-		if !strings.Contains(err.Error(), "cannot use implicit defaults if explicit defaults are defined") {
-			subT.Fatalf(`rlp.Validate() did not return expected error. Instead: %v`, err)
-		}
-	})
 }
 
 func TestRateLimitPolicyListGetItems(t *testing.T) {

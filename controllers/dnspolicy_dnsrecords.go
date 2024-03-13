@@ -14,10 +14,10 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
+	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
-
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
@@ -44,8 +44,11 @@ func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy
 
 func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) error {
 	log := crlog.FromContext(ctx)
-
-	gatewayWrapper := multicluster.NewGatewayWrapper(gw)
+	err, clusterID := common.GetClusterUID(ctx, r.Client())
+	if err != nil {
+		return fmt.Errorf("failed to generate cluster ID: %w", err)
+	}
+	gatewayWrapper := multicluster.NewGatewayWrapper(gw, clusterID)
 	if err := gatewayWrapper.Validate(); err != nil {
 		return err
 	}
@@ -90,7 +93,7 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 			return nil
 		}
 
-		dnsRecord, err := r.desiredDNSRecord(gatewayWrapper.Gateway, dnsPolicy, listener, listenerGateways, mz)
+		dnsRecord, err := r.desiredDNSRecord(gatewayWrapper, dnsPolicy, listener, listenerGateways, mz, clusterID)
 		if err != nil {
 			return err
 		}
@@ -109,14 +112,18 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 	return nil
 }
 
-func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener, clusterGateways []multicluster.ClusterGateway, managedZone *kuadrantdnsv1alpha1.ManagedZone) (*kuadrantdnsv1alpha1.DNSRecord, error) {
+func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *multicluster.GatewayWrapper, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener, clusterGateways []multicluster.ClusterGateway, managedZone *kuadrantdnsv1alpha1.ManagedZone, clusterID string) (*kuadrantdnsv1alpha1.DNSRecord, error) {
 	dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      dnsRecordName(gateway.Name, string(targetListener.Name)),
 			Namespace: managedZone.Namespace,
 			Labels:    commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy),
+			Annotations: map[string]string{
+				"hostname": string(*targetListener.Hostname),
+			},
 		},
 		Spec: kuadrantdnsv1alpha1.DNSRecordSpec{
+			OwnerID: &clusterID,
 			ManagedZoneRef: &kuadrantdnsv1alpha1.ManagedZoneReference{
 				Name: managedZone.Name,
 			},
@@ -124,7 +131,7 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *gatewayapiv1.Gateway, dn
 	}
 	dnsRecord.Labels[LabelListenerReference] = string(targetListener.Name)
 
-	mcgTarget, err := multicluster.NewGatewayTarget(gateway, clusterGateways, dnsPolicy.Spec.LoadBalancing)
+	mcgTarget, err := multicluster.NewGatewayTarget(gateway.Gateway, clusterGateways, dnsPolicy.Spec.LoadBalancing)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create multi cluster gateway target for listener %s : %w", targetListener.Name, err)
 	}

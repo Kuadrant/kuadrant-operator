@@ -17,10 +17,11 @@ const (
 
 type GatewayWrapper struct {
 	*gatewayapiv1.Gateway
+	ClusterID string
 }
 
-func NewGatewayWrapper(g *gatewayapiv1.Gateway) *GatewayWrapper {
-	return &GatewayWrapper{Gateway: g}
+func NewGatewayWrapper(g *gatewayapiv1.Gateway, clusterID string) *GatewayWrapper {
+	return &GatewayWrapper{Gateway: g, ClusterID: clusterID}
 }
 
 func isMultiClusterAddressType(addressType gatewayapiv1.AddressType) bool {
@@ -150,7 +151,7 @@ func (g *GatewayWrapper) GetClusterGateways() []ClusterGateway {
 		return []ClusterGateway{
 			{
 				Gateway:     *g.Gateway,
-				ClusterName: g.GetName(),
+				ClusterName: g.ClusterID,
 			},
 		}
 	}

@@ -8,11 +8,10 @@ import (
 	"strings"
 
 	"golang.org/x/net/publicsuffix"
-	externaldns "sigs.k8s.io/external-dns/endpoint"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	externaldns "sigs.k8s.io/external-dns/endpoint"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
@@ -110,7 +109,7 @@ func (dh *dnsHelper) setEndpoints(mcgTarget *multicluster.GatewayTarget, dnsReco
 	gwListenerHost := string(*listener.Hostname)
 	var endpoints []*externaldns.Endpoint
 
-	//Health Checks currently modify endpoints so we have to keep existing ones in order to not lose health check ids
+	//Health Checks currently modify endpoints, so we have to keep existing ones in order to not lose health check ids
 	currentEndpoints := make(map[string]*externaldns.Endpoint, len(dnsRecord.Spec.Endpoints))
 	for _, ep := range dnsRecord.Spec.Endpoints {
 		currentEndpoints[getSetID(ep)] = ep
@@ -215,7 +214,7 @@ func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.GatewayTar
 	var ep *externaldns.Endpoint
 	var defaultEndpoint *externaldns.Endpoint
 	endpoints := make([]*externaldns.Endpoint, 0)
-	lbName := strings.ToLower(fmt.Sprintf("lb-%s.%s", mcgTarget.GetShortCode(), cnameHost))
+	lbName := strings.ToLower(fmt.Sprintf("klb.%s", cnameHost))
 
 	for geoCode, cgwTargets := range mcgTarget.GroupTargetsByGeo() {
 		geoLbName := strings.ToLower(fmt.Sprintf("%s.%s", geoCode, lbName))
@@ -232,7 +231,7 @@ func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.GatewayTar
 			}
 
 			if len(ipValues) > 0 {
-				clusterLbName := strings.ToLower(fmt.Sprintf("%s.%s", cgwTarget.GetShortCode(), lbName))
+				clusterLbName := strings.ToLower(fmt.Sprintf("%s-%s.%s", cgwTarget.GetShortCode(), mcgTarget.GetShortCode(), lbName))
 				ep = createOrUpdateEndpoint(clusterLbName, ipValues, kuadrantdnsv1alpha1.ARecordType, "", DefaultTTL, currentEndpoints)
 				clusterEndpoints = append(clusterEndpoints, ep)
 				hostValues = append(hostValues, clusterLbName)
@@ -252,7 +251,7 @@ func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.GatewayTar
 		//Create lbName CNAME (lb-a1b2.shop.example.com -> default.lb-a1b2.shop.example.com)
 		ep = createOrUpdateEndpoint(lbName, []string{geoLbName}, kuadrantdnsv1alpha1.CNAMERecordType, string(geoCode), DefaultCnameTTL, currentEndpoints)
 
-		//Deal with the default geo externaldns first
+		//Deal with the default geo endpoint first
 		if geoCode.IsDefaultCode() {
 			defaultEndpoint = ep
 			// continue here as we will add the `defaultEndpoint` later

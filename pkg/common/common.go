@@ -17,9 +17,11 @@ limitations under the License.
 package common
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"strings"
 
+	"github.com/martinlindhe/base36"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -95,4 +97,14 @@ func FilterValidSubdomains(domains, subdomains []gatewayapiv1.Hostname) []gatewa
 		}
 	}
 	return arr
+}
+
+func ToBase36Hash(s string) string {
+	hash := sha256.Sum224([]byte(s))
+	// convert the hash to base36 (alphanumeric) to decrease collision probabilities
+	return strings.ToLower(base36.EncodeBytes(hash[:]))
+}
+
+func ToBase36HashLen(s string, l int) string {
+	return ToBase36Hash(s)[:l]
 }

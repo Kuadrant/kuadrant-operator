@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
+	externaldns "sigs.k8s.io/external-dns/endpoint"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -16,6 +17,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
@@ -128,7 +130,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 										"Targets":       ContainElements(TestIPAddressOne, TestIPAddressTwo),
 										"RecordType":    Equal("A"),
 										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
+										"RecordTTL":     Equal(externaldns.TTL(60)),
 									})),
 								),
 							}),
@@ -143,7 +145,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 										"Targets":       ContainElements(TestIPAddressOne, TestIPAddressTwo),
 										"RecordType":    Equal("A"),
 										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
+										"RecordTTL":     Equal(externaldns.TTL(60)),
 									})),
 								),
 							}),
@@ -181,30 +183,30 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 										"Targets":       ConsistOf(TestIPAddressOne, TestIPAddressTwo),
 										"RecordType":    Equal("A"),
 										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
+										"RecordTTL":     Equal(externaldns.TTL(60)),
 									})),
 									PointTo(MatchFields(IgnoreExtras, Fields{
 										"DNSName":          Equal("default.lb-" + lbHash + ".test.example.com"),
 										"Targets":          ConsistOf("19sc9b.lb-" + lbHash + ".test.example.com"),
 										"RecordType":       Equal("CNAME"),
 										"SetIdentifier":    Equal("19sc9b.lb-" + lbHash + ".test.example.com"),
-										"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
-										"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
+										"RecordTTL":        Equal(externaldns.TTL(60)),
+										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
 									})),
 									PointTo(MatchFields(IgnoreExtras, Fields{
 										"DNSName":          Equal("lb-" + lbHash + ".test.example.com"),
 										"Targets":          ConsistOf("default.lb-" + lbHash + ".test.example.com"),
 										"RecordType":       Equal("CNAME"),
 										"SetIdentifier":    Equal("default"),
-										"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
-										"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
+										"RecordTTL":        Equal(externaldns.TTL(300)),
+										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
 									})),
 									PointTo(MatchFields(IgnoreExtras, Fields{
 										"DNSName":       Equal(TestHostOne),
 										"Targets":       ConsistOf("lb-" + lbHash + ".test.example.com"),
 										"RecordType":    Equal("CNAME"),
 										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(300)),
+										"RecordTTL":     Equal(externaldns.TTL(300)),
 									})),
 								),
 							}),
@@ -219,30 +221,30 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 										"Targets":       ConsistOf(TestIPAddressOne, TestIPAddressTwo),
 										"RecordType":    Equal("A"),
 										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(60)),
+										"RecordTTL":     Equal(externaldns.TTL(60)),
 									})),
 									PointTo(MatchFields(IgnoreExtras, Fields{
 										"DNSName":          Equal("default.lb-" + lbHash + ".example.com"),
 										"Targets":          ConsistOf("19sc9b.lb-" + lbHash + ".example.com"),
 										"RecordType":       Equal("CNAME"),
 										"SetIdentifier":    Equal("19sc9b.lb-" + lbHash + ".example.com"),
-										"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(60)),
-										"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "weight", Value: "120"}}),
+										"RecordTTL":        Equal(externaldns.TTL(60)),
+										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
 									})),
 									PointTo(MatchFields(IgnoreExtras, Fields{
 										"DNSName":          Equal("lb-" + lbHash + ".example.com"),
 										"Targets":          ConsistOf("default.lb-" + lbHash + ".example.com"),
 										"RecordType":       Equal("CNAME"),
 										"SetIdentifier":    Equal("default"),
-										"RecordTTL":        Equal(kuadrantdnsv1alpha1.TTL(300)),
-										"ProviderSpecific": Equal(kuadrantdnsv1alpha1.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
+										"RecordTTL":        Equal(externaldns.TTL(300)),
+										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
 									})),
 									PointTo(MatchFields(IgnoreExtras, Fields{
 										"DNSName":       Equal(TestHostWildcard),
 										"Targets":       ConsistOf("lb-" + lbHash + ".example.com"),
 										"RecordType":    Equal("CNAME"),
 										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(kuadrantdnsv1alpha1.TTL(300)),
+										"RecordTTL":     Equal(externaldns.TTL(300)),
 									})),
 								),
 							}),

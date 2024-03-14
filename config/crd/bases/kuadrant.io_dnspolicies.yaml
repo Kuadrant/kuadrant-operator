@@ -67,12 +67,7 @@ spec:
                   the listeners assigned to the target gateway
                 properties:
                   additionalHeadersRef:
-                    properties:
-                      name:
-                        type: string
-                    required:
-                    - name
-                    type: object
+                    type: string
                   allowInsecureCertificates:
                     type: boolean
                   endpoint:
@@ -88,8 +83,6 @@ spec:
                   port:
                     type: integer
                   protocol:
-                    description: HealthProtocol represents the protocol to use when
-                      making a health check request
                     type: string
                 type: object
               loadBalancing:

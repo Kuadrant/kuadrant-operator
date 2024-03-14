@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"golang.org/x/net/publicsuffix"
+	externaldns "sigs.k8s.io/external-dns/endpoint"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,6 +38,10 @@ var (
 
 type dnsHelper struct {
 	client.Client
+}
+
+func getSetID(e *externaldns.Endpoint) string {
+	return e.DNSName + e.SetIdentifier
 }
 
 func findMatchingManagedZone(originalHost, host string, zones []kuadrantdnsv1alpha1.ManagedZone) (*kuadrantdnsv1alpha1.ManagedZone, string, error) {
@@ -103,12 +108,12 @@ func gatewayDNSRecordLabels(gwKey client.ObjectKey) map[string]string {
 
 func (dh *dnsHelper) setEndpoints(mcgTarget *multicluster.GatewayTarget, dnsRecord *kuadrantdnsv1alpha1.DNSRecord, listener gatewayapiv1.Listener, strategy v1alpha1.RoutingStrategy) error {
 	gwListenerHost := string(*listener.Hostname)
-	var endpoints []*kuadrantdnsv1alpha1.Endpoint
+	var endpoints []*externaldns.Endpoint
 
 	//Health Checks currently modify endpoints so we have to keep existing ones in order to not lose health check ids
-	currentEndpoints := make(map[string]*kuadrantdnsv1alpha1.Endpoint, len(dnsRecord.Spec.Endpoints))
-	for _, endpoint := range dnsRecord.Spec.Endpoints {
-		currentEndpoints[endpoint.SetID()] = endpoint
+	currentEndpoints := make(map[string]*externaldns.Endpoint, len(dnsRecord.Spec.Endpoints))
+	for _, ep := range dnsRecord.Spec.Endpoints {
+		currentEndpoints[getSetID(ep)] = ep
 	}
 
 	switch strategy {
@@ -121,7 +126,7 @@ func (dh *dnsHelper) setEndpoints(mcgTarget *multicluster.GatewayTarget, dnsReco
 	}
 
 	sort.Slice(endpoints, func(i, j int) bool {
-		return endpoints[i].SetID() < endpoints[j].SetID()
+		return getSetID(endpoints[i]) < getSetID(endpoints[j])
 	})
 
 	dnsRecord.Spec.Endpoints = endpoints
@@ -131,9 +136,9 @@ func (dh *dnsHelper) setEndpoints(mcgTarget *multicluster.GatewayTarget, dnsReco
 
 // getSimpleEndpoints returns the endpoints for the given GatewayTarget using the simple routing strategy
 
-func (dh *dnsHelper) getSimpleEndpoints(mcgTarget *multicluster.GatewayTarget, hostname string, currentEndpoints map[string]*kuadrantdnsv1alpha1.Endpoint) []*kuadrantdnsv1alpha1.Endpoint {
+func (dh *dnsHelper) getSimpleEndpoints(mcgTarget *multicluster.GatewayTarget, hostname string, currentEndpoints map[string]*externaldns.Endpoint) []*externaldns.Endpoint {
 	var (
-		endpoints  []*kuadrantdnsv1alpha1.Endpoint
+		endpoints  []*externaldns.Endpoint
 		ipValues   []string
 		hostValues []string
 	)
@@ -149,14 +154,14 @@ func (dh *dnsHelper) getSimpleEndpoints(mcgTarget *multicluster.GatewayTarget, h
 	}
 
 	if len(ipValues) > 0 {
-		endpoint := createOrUpdateEndpoint(hostname, ipValues, kuadrantdnsv1alpha1.ARecordType, "", DefaultTTL, currentEndpoints)
-		endpoints = append(endpoints, endpoint)
+		ep := createOrUpdateEndpoint(hostname, ipValues, kuadrantdnsv1alpha1.ARecordType, "", DefaultTTL, currentEndpoints)
+		endpoints = append(endpoints, ep)
 	}
 
 	//ToDO This could possibly result in an invalid record since you can't have multiple CNAME target values https://github.com/kuadrant/kuadrant-operator/issues/663
 	if len(hostValues) > 0 {
-		endpoint := createOrUpdateEndpoint(hostname, hostValues, kuadrantdnsv1alpha1.CNAMERecordType, "", DefaultTTL, currentEndpoints)
-		endpoints = append(endpoints, endpoint)
+		ep := createOrUpdateEndpoint(hostname, hostValues, kuadrantdnsv1alpha1.CNAMERecordType, "", DefaultTTL, currentEndpoints)
+		endpoints = append(endpoints, ep)
 	}
 
 	return endpoints
@@ -164,7 +169,7 @@ func (dh *dnsHelper) getSimpleEndpoints(mcgTarget *multicluster.GatewayTarget, h
 
 // getLoadBalancedEndpoints returns the endpoints for the given GatewayTarget using the loadbalanced routing strategy
 //
-// Builds an array of kuadrantdnsv1alpha1.Endpoint resources and sets them on the given DNSRecord. The endpoints expected are calculated
+// Builds an array of externaldns.Endpoint resources and sets them on the given DNSRecord. The endpoints expected are calculated
 // from the GatewayTarget using the target Gateway (GatewayTarget.Gateway), the LoadBalancing Spec
 // from the DNSPolicy attached to the target gateway (GatewayTarget.LoadBalancing) and the list of clusters the
 // target gateway is currently placed on (GatewayTarget.ClusterGatewayTargets).
@@ -201,20 +206,20 @@ func (dh *dnsHelper) getSimpleEndpoints(mcgTarget *multicluster.GatewayTarget, h
 // ab2.lb-a1b2.shop.example.com A 192.22.2.3
 // ab3.lb-a1b2.shop.example.com A 192.22.2.4
 
-func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.GatewayTarget, hostname string, currentEndpoints map[string]*kuadrantdnsv1alpha1.Endpoint) []*kuadrantdnsv1alpha1.Endpoint {
+func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.GatewayTarget, hostname string, currentEndpoints map[string]*externaldns.Endpoint) []*externaldns.Endpoint {
 	cnameHost := hostname
 	if isWildCardHost(hostname) {
 		cnameHost = strings.Replace(hostname, "*.", "", -1)
 	}
 
-	var endpoint *kuadrantdnsv1alpha1.Endpoint
-	var defaultEndpoint *kuadrantdnsv1alpha1.Endpoint
-	endpoints := make([]*kuadrantdnsv1alpha1.Endpoint, 0)
+	var ep *externaldns.Endpoint
+	var defaultEndpoint *externaldns.Endpoint
+	endpoints := make([]*externaldns.Endpoint, 0)
 	lbName := strings.ToLower(fmt.Sprintf("lb-%s.%s", mcgTarget.GetShortCode(), cnameHost))
 
 	for geoCode, cgwTargets := range mcgTarget.GroupTargetsByGeo() {
 		geoLbName := strings.ToLower(fmt.Sprintf("%s.%s", geoCode, lbName))
-		var clusterEndpoints []*kuadrantdnsv1alpha1.Endpoint
+		var clusterEndpoints []*externaldns.Endpoint
 		for _, cgwTarget := range cgwTargets {
 			var ipValues []string
 			var hostValues []string
@@ -228,15 +233,15 @@ func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.GatewayTar
 
 			if len(ipValues) > 0 {
 				clusterLbName := strings.ToLower(fmt.Sprintf("%s.%s", cgwTarget.GetShortCode(), lbName))
-				endpoint = createOrUpdateEndpoint(clusterLbName, ipValues, kuadrantdnsv1alpha1.ARecordType, "", DefaultTTL, currentEndpoints)
-				clusterEndpoints = append(clusterEndpoints, endpoint)
+				ep = createOrUpdateEndpoint(clusterLbName, ipValues, kuadrantdnsv1alpha1.ARecordType, "", DefaultTTL, currentEndpoints)
+				clusterEndpoints = append(clusterEndpoints, ep)
 				hostValues = append(hostValues, clusterLbName)
 			}
 
 			for _, hostValue := range hostValues {
-				endpoint = createOrUpdateEndpoint(geoLbName, []string{hostValue}, kuadrantdnsv1alpha1.CNAMERecordType, hostValue, DefaultTTL, currentEndpoints)
-				endpoint.SetProviderSpecific(kuadrantdnsv1alpha1.ProviderSpecificWeight, strconv.Itoa(cgwTarget.GetWeight()))
-				clusterEndpoints = append(clusterEndpoints, endpoint)
+				ep = createOrUpdateEndpoint(geoLbName, []string{hostValue}, kuadrantdnsv1alpha1.CNAMERecordType, hostValue, DefaultTTL, currentEndpoints)
+				ep.SetProviderSpecificProperty(kuadrantdnsv1alpha1.ProviderSpecificWeight, strconv.Itoa(cgwTarget.GetWeight()))
+				clusterEndpoints = append(clusterEndpoints, ep)
 			}
 		}
 		if len(clusterEndpoints) == 0 {
@@ -245,11 +250,11 @@ func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.GatewayTar
 		endpoints = append(endpoints, clusterEndpoints...)
 
 		//Create lbName CNAME (lb-a1b2.shop.example.com -> default.lb-a1b2.shop.example.com)
-		endpoint = createOrUpdateEndpoint(lbName, []string{geoLbName}, kuadrantdnsv1alpha1.CNAMERecordType, string(geoCode), DefaultCnameTTL, currentEndpoints)
+		ep = createOrUpdateEndpoint(lbName, []string{geoLbName}, kuadrantdnsv1alpha1.CNAMERecordType, string(geoCode), DefaultCnameTTL, currentEndpoints)
 
-		//Deal with the default geo endpoint first
+		//Deal with the default geo externaldns first
 		if geoCode.IsDefaultCode() {
-			defaultEndpoint = endpoint
+			defaultEndpoint = ep
 			// continue here as we will add the `defaultEndpoint` later
 			continue
 		} else if (geoCode == mcgTarget.GetDefaultGeo()) || defaultEndpoint == nil {
@@ -257,38 +262,38 @@ func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.GatewayTar
 			defaultEndpoint = createOrUpdateEndpoint(lbName, []string{geoLbName}, kuadrantdnsv1alpha1.CNAMERecordType, "default", DefaultCnameTTL, currentEndpoints)
 		}
 
-		endpoint.SetProviderSpecific(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(geoCode))
+		ep.SetProviderSpecificProperty(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(geoCode))
 
-		endpoints = append(endpoints, endpoint)
+		endpoints = append(endpoints, ep)
 	}
 
 	if len(endpoints) > 0 {
 		// Add the `defaultEndpoint`, this should always be set by this point if `endpoints` isn't empty
-		defaultEndpoint.SetProviderSpecific(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(v1alpha1.WildcardGeo))
+		defaultEndpoint.SetProviderSpecificProperty(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(v1alpha1.WildcardGeo))
 		endpoints = append(endpoints, defaultEndpoint)
 		//Create gwListenerHost CNAME (shop.example.com -> lb-a1b2.shop.example.com)
-		endpoint = createOrUpdateEndpoint(hostname, []string{lbName}, kuadrantdnsv1alpha1.CNAMERecordType, "", DefaultCnameTTL, currentEndpoints)
-		endpoints = append(endpoints, endpoint)
+		ep = createOrUpdateEndpoint(hostname, []string{lbName}, kuadrantdnsv1alpha1.CNAMERecordType, "", DefaultCnameTTL, currentEndpoints)
+		endpoints = append(endpoints, ep)
 	}
 
 	return endpoints
 }
 
-func createOrUpdateEndpoint(dnsName string, targets kuadrantdnsv1alpha1.Targets, recordType kuadrantdnsv1alpha1.DNSRecordType, setIdentifier string,
-	recordTTL kuadrantdnsv1alpha1.TTL, currentEndpoints map[string]*kuadrantdnsv1alpha1.Endpoint) (endpoint *kuadrantdnsv1alpha1.Endpoint) {
+func createOrUpdateEndpoint(dnsName string, targets externaldns.Targets, recordType kuadrantdnsv1alpha1.DNSRecordType, setIdentifier string,
+	recordTTL externaldns.TTL, currentEndpoints map[string]*externaldns.Endpoint) (ep *externaldns.Endpoint) {
 	ok := false
 	endpointID := dnsName + setIdentifier
-	if endpoint, ok = currentEndpoints[endpointID]; !ok {
-		endpoint = &kuadrantdnsv1alpha1.Endpoint{}
+	if ep, ok = currentEndpoints[endpointID]; !ok {
+		ep = &externaldns.Endpoint{}
 		if setIdentifier != "" {
-			endpoint.SetIdentifier = setIdentifier
+			ep.SetIdentifier = setIdentifier
 		}
 	}
-	endpoint.DNSName = dnsName
-	endpoint.RecordType = string(recordType)
-	endpoint.Targets = targets
-	endpoint.RecordTTL = recordTTL
-	return endpoint
+	ep.DNSName = dnsName
+	ep.RecordType = string(recordType)
+	ep.Targets = targets
+	ep.RecordTTL = recordTTL
+	return ep
 }
 
 // removeDNSForDeletedListeners remove any DNSRecords that are associated with listeners that no longer exist in this gateway

@@ -1,0 +1,21 @@
+- op: replace
+  path: /spec/template/spec/containers/0/image
+  value: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.10.1
+- op: add
+  path: /spec/template/spec/volumes
+  value:
+      - name: custom-resource-state
+        configMap:
+          defaultMode: 420
+          name: custom-resource-state
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts
+  value:
+    - name: custom-resource-state
+      mountPath: /custom-resource-state
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --custom-resource-state-config-file
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: /custom-resource-state/custom-resource-state.yaml

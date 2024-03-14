@@ -53,7 +53,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Kind:  "HTTPRoute",
 					Name:  gatewayapiv1.ObjectName(routeName),
 				},
-				CommonSpec: kuadrantv1beta2.CommonSpec{
+				Defaults: kuadrantv1beta2.CommonSpec{
 					Limits: map[string]kuadrantv1beta2.Limit{
 						"l1": {
 							Rates: []kuadrantv1beta2.Rate{
@@ -256,7 +256,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// create ratelimitpolicy
 			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
-				policy.Spec.Limits = map[string]kuadrantv1beta2.Limit{
+				policy.Spec.Defaults.Limits = map[string]kuadrantv1beta2.Limit{
 					"toys": {
 						Rates: []kuadrantv1beta2.Rate{
 							{Limit: 50, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},

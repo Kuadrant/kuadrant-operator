@@ -10,7 +10,6 @@ import (
 	"golang.org/x/net/publicsuffix"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -360,18 +359,4 @@ func (dh *dnsHelper) deleteDNSRecordForListener(ctx context.Context, owner metav
 
 func isWildCardHost(host string) bool {
 	return strings.HasPrefix(host, "*")
-}
-
-func (dh *dnsHelper) getDNSHealthCheckProbes(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) ([]*kuadrantdnsv1alpha1.DNSHealthCheckProbe, error) {
-	list := &kuadrantdnsv1alpha1.DNSHealthCheckProbeList{}
-	if err := dh.List(ctx, list, &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy)),
-		Namespace:     dnsPolicy.Namespace,
-	}); err != nil {
-		return nil, err
-	}
-
-	return utils.Map(list.Items, func(obj kuadrantdnsv1alpha1.DNSHealthCheckProbe) *kuadrantdnsv1alpha1.DNSHealthCheckProbe {
-		return &obj
-	}), nil
 }

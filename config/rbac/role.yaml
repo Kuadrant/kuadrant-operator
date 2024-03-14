@@ -198,24 +198,6 @@ rules:
 - apiGroups:
   - kuadrant.io
   resources:
-  - dnshealthcheckprobes
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - kuadrant.io
-  resources:
-  - dnshealthcheckprobes/status
-  verbs:
-  - get
-- apiGroups:
-  - kuadrant.io
-  resources:
   - dnspolicies
   verbs:
   - delete

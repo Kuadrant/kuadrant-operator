@@ -11,6 +11,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -844,6 +845,52 @@ func TestGetLabel(t *testing.T) {
 			if got != tc.expect {
 				t.Errorf("expected '%v' got '%v'", tc.expect, got)
 			}
+		})
+	}
+}
+
+func TestGetClusterUID(t *testing.T) {
+	var testCases = []struct {
+		Name       string
+		Objects    []client.Object
+		Validation func(t *testing.T, e error, id string)
+	}{
+		{
+			Name:    "an absent namespace generates an error",
+			Objects: []client.Object{},
+			Validation: func(t *testing.T, e error, id string) {
+				if !errors.IsNotFound(e) {
+					t.Errorf("expected not found error, got '%v'", e)
+				}
+			},
+		},
+		{
+			Name: "a UID generates a valid deterministic cluster ID",
+			Objects: []client.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: clusterIDNamespace,
+						UID:  "random-uid",
+					},
+				},
+			},
+			Validation: func(t *testing.T, e error, id string) {
+				if e != nil {
+					t.Errorf("unexpected error, got '%v', expected nil", e)
+				}
+
+				if id != "random-uid" {
+					t.Errorf("unexpected cluster ID got '%s', expected 'random-uid'", id)
+				}
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.Name, func(t *testing.T) {
+			fc := fake.NewClientBuilder().WithObjects(testCase.Objects...).Build()
+			id, err := GetClusterUID(context.Background(), fc)
+			testCase.Validation(t, err, id)
 		})
 	}
 }

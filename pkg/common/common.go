@@ -17,9 +17,11 @@ limitations under the License.
 package common
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"strings"
 
+	"github.com/martinlindhe/base36"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -79,4 +81,14 @@ func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 	}
 
 	return client.ObjectKey{Namespace: keyStr[:namespaceEndIndex], Name: keyStr[namespaceEndIndex+1:]}, nil
+}
+
+func ToBase36Hash(s string) string {
+	hash := sha256.Sum224([]byte(s))
+	// convert the hash to base36 (alphanumeric) to decrease collision probabilities
+	return strings.ToLower(base36.EncodeBytes(hash[:]))
+}
+
+func ToBase36HashLen(s string, l int) string {
+	return ToBase36Hash(s)[:l]
 }

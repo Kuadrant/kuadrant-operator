@@ -129,12 +129,6 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(ctx context.Context, gateway *gat
 		return nil, fmt.Errorf("failed to create multi cluster gateway target for listener %s : %w", targetListener.Name, err)
 	}
 
-	probes, err := r.dnsHelper.getDNSHealthCheckProbes(ctx, mcgTarget.Gateway, dnsPolicy)
-	if err != nil {
-		return nil, err
-	}
-	mcgTarget.RemoveUnhealthyGatewayAddresses(probes, targetListener)
-
 	if err = r.dnsHelper.setEndpoints(mcgTarget, dnsRecord, targetListener, dnsPolicy.Spec.RoutingStrategy); err != nil {
 		return nil, fmt.Errorf("failed to add dns record dnsTargets %w %v", err, mcgTarget)
 	}

@@ -10,7 +10,7 @@ dependencies:
   - type: olm.package
     value:
       packageName: dns-operator
-      version: "0.1.0"
+      version: "0.0.0"
   - type: olm.package
     value:
       packageName: cert-manager

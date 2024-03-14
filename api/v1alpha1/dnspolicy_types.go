@@ -24,8 +24,6 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
-
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
@@ -215,14 +213,14 @@ type DNSPolicyList struct {
 // By default, this health check will be applied to each unique DNS A Record for
 // the listeners assigned to the target gateway
 type HealthCheckSpec struct {
-	Endpoint                  string                                    `json:"endpoint,omitempty"`
-	Port                      *int                                      `json:"port,omitempty"`
-	Protocol                  *kuadrantdnsv1alpha1.HealthProtocol       `json:"protocol,omitempty"`
-	FailureThreshold          *int                                      `json:"failureThreshold,omitempty"`
-	AdditionalHeadersRef      *kuadrantdnsv1alpha1.AdditionalHeadersRef `json:"additionalHeadersRef,omitempty"`
-	ExpectedResponses         []int                                     `json:"expectedResponses,omitempty"`
-	AllowInsecureCertificates bool                                      `json:"allowInsecureCertificates,omitempty"`
-	Interval                  *metav1.Duration                          `json:"interval,omitempty"`
+	Endpoint                  string           `json:"endpoint,omitempty"`
+	Port                      *int             `json:"port,omitempty"`
+	Protocol                  *string          `json:"protocol,omitempty"`
+	FailureThreshold          *int             `json:"failureThreshold,omitempty"`
+	AdditionalHeadersRef      *string          `json:"additionalHeadersRef,omitempty"`
+	ExpectedResponses         []int            `json:"expectedResponses,omitempty"`
+	AllowInsecureCertificates bool             `json:"allowInsecureCertificates,omitempty"`
+	Interval                  *metav1.Duration `json:"interval,omitempty"`
 }
 
 func (s *HealthCheckSpec) Validate() error {
@@ -243,7 +241,7 @@ func (s *HealthCheckSpec) Default() {
 	}
 
 	if s.Protocol == nil {
-		protocol := kuadrantdnsv1alpha1.HttpsProtocol
+		protocol := "HTTPS"
 		s.Protocol = &protocol
 	}
 }
@@ -311,7 +309,7 @@ func (p *DNSPolicy) WithTargetGateway(gwName string) *DNSPolicy {
 
 //HealthCheck
 
-func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port *int, protocol kuadrantdnsv1alpha1.HealthProtocol, failureThreshold *int) *DNSPolicy {
+func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port *int, protocol string, failureThreshold *int) *DNSPolicy {
 	return p.WithHealthCheck(HealthCheckSpec{
 		Endpoint:                  endpoint,
 		Port:                      port,

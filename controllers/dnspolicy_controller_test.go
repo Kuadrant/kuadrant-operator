@@ -122,30 +122,6 @@ var _ = Describe("DNSPolicy controller", func() {
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
 
-		It("should not have any health check records created", func() {
-			// create a health check with the labels for the dnspolicy and the gateway name and namespace that would be expected in a valid target scenario
-			// this one should get deleted if the gateway is invalid policy ref
-			probe := &kuadrantdnsv1alpha1.DNSHealthCheckProbe{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      fmt.Sprintf("%s-%s-%s", TestIPAddressTwo, TestGatewayName, TestHostTwo),
-					Namespace: testNamespace,
-					Labels: map[string]string{
-						v1alpha1.DNSPolicyDirectReferenceAnnotationName:                              "test-dns-policy",
-						fmt.Sprintf("%s-namespace", v1alpha1.DNSPolicyDirectReferenceAnnotationName): testNamespace,
-						LabelGatewayNSRef:     testNamespace,
-						LabelGatewayReference: "test-gateway",
-					},
-				},
-			}
-			Expect(k8sClient.Create(ctx, probe)).To(Succeed())
-
-			Eventually(func(g Gomega) { // probe should be removed
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: probe.Name, Namespace: probe.Namespace}, &kuadrantdnsv1alpha1.DNSHealthCheckProbe{})
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err).To(MatchError(ContainSubstring("not found")))
-			}, TestTimeoutMedium, time.Second).Should(Succeed())
-		})
-
 		It("should not process gateway with inconsistent addresses", func() {
 			// build invalid gateway
 			gateway = NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).

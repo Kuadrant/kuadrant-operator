@@ -90,7 +90,7 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 			return nil
 		}
 
-		dnsRecord, err := r.desiredDNSRecord(ctx, gatewayWrapper.Gateway, dnsPolicy, listener, listenerGateways, mz)
+		dnsRecord, err := r.desiredDNSRecord(gatewayWrapper.Gateway, dnsPolicy, listener, listenerGateways, mz)
 		if err != nil {
 			return err
 		}
@@ -109,7 +109,7 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 	return nil
 }
 
-func (r *DNSPolicyReconciler) desiredDNSRecord(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener, clusterGateways []multicluster.ClusterGateway, managedZone *kuadrantdnsv1alpha1.ManagedZone) (*kuadrantdnsv1alpha1.DNSRecord, error) {
+func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener, clusterGateways []multicluster.ClusterGateway, managedZone *kuadrantdnsv1alpha1.ManagedZone) (*kuadrantdnsv1alpha1.DNSRecord, error) {
 	dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      dnsRecordName(gateway.Name, string(targetListener.Name)),

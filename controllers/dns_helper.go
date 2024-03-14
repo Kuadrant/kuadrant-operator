@@ -17,7 +17,6 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
@@ -100,17 +99,6 @@ func gatewayDNSRecordLabels(gwKey client.ObjectKey) map[string]string {
 		LabelGatewayNSRef:     gwKey.Namespace,
 		LabelGatewayReference: gwKey.Name,
 	}
-}
-
-func withGatewayListener[T metav1.Object](gateway kuadrant.GatewayWrapper, listener gatewayapiv1.Listener, obj T) T {
-	if obj.GetAnnotations() == nil {
-		obj.SetAnnotations(map[string]string{})
-	}
-
-	obj.GetAnnotations()["dnsrecord-name"] = fmt.Sprintf("%s-%s", gateway.Name, listener.Name)
-	obj.GetAnnotations()["dnsrecord-namespace"] = gateway.Namespace
-
-	return obj
 }
 
 func (dh *dnsHelper) setEndpoints(mcgTarget *multicluster.GatewayTarget, dnsRecord *kuadrantdnsv1alpha1.DNSRecord, listener gatewayapiv1.Listener, strategy v1alpha1.RoutingStrategy) error {

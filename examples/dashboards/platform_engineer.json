@@ -26,8 +26,8 @@
   "fiscalYearStartMonth": 0,
   "gnetId": 7630,
   "graphTooltip": 0,
-  "id": 15,
-  "iteration": 1700061613956,
+  "id": 33,
+  "iteration": 1710847753319,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -103,7 +103,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "count(gatewayapi_gateway_status{type=\"Accepted\"} > 0)",
+          "expr": "count(gatewayapi_gateway_status{namespace=~\"${gateway_namespace}\",type=\"Accepted\"} > 0)",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -117,6 +117,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "List of all Gateways, their class and status.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -240,7 +241,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_gateway_info",
+          "expr": "gatewayapi_gateway_info{namespace=~\"${gateway_namespace}\"}",
           "format": "table",
           "instant": true,
           "range": false,
@@ -253,7 +254,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_gateway_status{type=\"Programmed\"}",
+          "expr": "gatewayapi_gateway_status{namespace=~\"${gateway_namespace}\",type=\"Programmed\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -267,7 +268,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_gateway_status{type=\"Accepted\"}",
+          "expr": "gatewayapi_gateway_status{namespace=~\"${gateway_namespace}\",type=\"Accepted\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -317,7 +318,7 @@
               "name 1": false,
               "name 2": true,
               "name 3": true,
-              "namespace 1": true,
+              "namespace 1": false,
               "namespace 2": true,
               "namespace 3": true,
               "prometheus 1": true,
@@ -376,7 +377,8 @@
               "exported_namespace 1": "Namespace",
               "gatewayclass_name": "Gateway Class",
               "job 1": "",
-              "name 1": "Name"
+              "name 1": "Name",
+              "namespace 1": "Namespace"
             }
           }
         }
@@ -442,7 +444,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "count(gatewayapi_gateway_status{type=\"Programmed\"} > 0)",
+          "expr": "count(gatewayapi_gateway_status{namespace=~\"${gateway_namespace}\",type=\"Programmed\"} > 0)",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -456,6 +458,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "List of all Policies targeting a Gateway",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -501,8 +504,7 @@
             },
             "properties": [
               {
-                "id": "custom.width",
-                "value": 89
+                "id": "custom.width"
               }
             ]
           },
@@ -548,7 +550,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_tlspolicy_target_info{target_kind=\"Gateway\"}",
+          "expr": "gatewayapi_tlspolicy_target_info{namespace=~\"${gateway_namespace}\",target_kind=\"Gateway\"}",
           "format": "table",
           "instant": true,
           "range": false,
@@ -561,7 +563,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_ratelimitpolicy_target_info{target_kind=\"Gateway\"}",
+          "expr": "gatewayapi_ratelimitpolicy_target_info{namespace=~\"${gateway_namespace}\",target_kind=\"Gateway\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -575,7 +577,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_authpolicy_target_info{target_kind=\"Gateway\"}",
+          "expr": "gatewayapi_authpolicy_target_info{namespace=~\"${gateway_namespace}\",target_kind=\"Gateway\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -589,7 +591,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_dnspolicy_target_info{target_kind=\"Gateway\"}",
+          "expr": "gatewayapi_dnspolicy_target_info{namespace=~\"${gateway_namespace}\",target_kind=\"Gateway\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -611,6 +613,7 @@
               "Value": true,
               "Value #A": true,
               "Value #B": true,
+              "Value #C": true,
               "Value #D": true,
               "__name__": true,
               "container": true,
@@ -618,7 +621,7 @@
               "customresource_version": true,
               "instance": true,
               "job": true,
-              "namespace": true,
+              "namespace": false,
               "prometheus": true,
               "target_group": true
             },
@@ -646,6 +649,7 @@
               "customresource_kind": "Kind",
               "exported_namespace": "Namespace",
               "name": "Name",
+              "namespace": "Namespace",
               "target_kind": "Target Kind",
               "target_name": "Target Name"
             }
@@ -659,6 +663,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "List of all Policies targeting HTTPRoutes",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -774,7 +779,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_tlspolicy_target_info{target_kind!=\"Gateway\"}",
+          "expr": "gatewayapi_tlspolicy_target_info{namespace=~\"${api_policy_namespace}\",target_kind!=\"Gateway\",target_name=~\"${route_name}\"}",
           "format": "table",
           "instant": true,
           "range": false,
@@ -787,7 +792,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_ratelimitpolicy_target_info{target_kind!=\"Gateway\"}",
+          "expr": "gatewayapi_ratelimitpolicy_target_info{namespace=~\"${api_policy_namespace}\",target_kind!=\"Gateway\",target_name=~\"${route_name}\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -801,7 +806,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_authpolicy_target_info{target_kind!=\"Gateway\"}",
+          "expr": "gatewayapi_authpolicy_target_info{namespace=~\"${api_policy_namespace}\",target_kind!=\"Gateway\",target_name=~\"${route_name}\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -815,7 +820,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_dnspolicy_target_info{target_kind!=\"Gateway\"}",
+          "expr": "gatewayapi_dnspolicy_target_info{namespace=~\"${api_policy_namespace}\",target_kind!=\"Gateway\",target_name=~\"${route_name}\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -837,13 +842,14 @@
               "Value": true,
               "Value #A": true,
               "Value #B": true,
+              "Value #C": true,
               "__name__": true,
               "container": true,
               "customresource_group": true,
               "customresource_version": true,
               "instance": true,
               "job": true,
-              "namespace": true,
+              "namespace": false,
               "prometheus": true,
               "target_group": true
             },
@@ -871,6 +877,7 @@
               "customresource_kind": "Kind",
               "exported_namespace": "Namespace",
               "name": "Name",
+              "namespace": "Namespace",
               "target_kind": "Target Kind",
               "target_name": "Target Name",
               "target_namespace": "Target Namespace"
@@ -888,329 +895,6 @@
         "x": 0,
         "y": 13
       },
-      "id": 130,
-      "panels": [],
-      "title": "Constraints and Violations",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P8D9ADF90DB2E3ECF"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "dark-purple",
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "noValue": "0",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "deny"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Deny"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "red",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "warn"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Warn"
-              },
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "orange",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 4,
-        "x": 0,
-        "y": 14
-      },
-      "id": 6,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "8.5.5",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P8D9ADF90DB2E3ECF"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "sum(gatekeeper_violations{enforcement_action=~\"(warn|deny)\"}) by (enforcement_action)",
-          "instant": false,
-          "legendFormat": "{{label_name}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Current number of violations",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "P8D9ADF90DB2E3ECF"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "center",
-            "displayMode": "auto",
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Resource in violation"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 159
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Enforcemant type for violation"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 214
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Name of resource in violation"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 210
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Constraint Kind"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 317
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Constraint Name"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 282
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Namespace of resource in violation"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 250
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Violation message"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 487
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 20,
-        "x": 4,
-        "y": 14
-      },
-      "id": 35,
-      "options": {
-        "footer": {
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true,
-        "sortBy": []
-      },
-      "pluginVersion": "8.5.5",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "P8D9ADF90DB2E3ECF"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "opa_scorecard_violations",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "__auto",
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Current violations ",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "Value": true,
-              "__name__": true,
-              "endpoint": true,
-              "instance": true,
-              "job": true,
-              "namespace": true,
-              "pod": true,
-              "prometheus": true,
-              "service": true
-            },
-            "indexByName": {
-              "Time": 0,
-              "Value": 16,
-              "__name__": 1,
-              "endpoint": 2,
-              "instance": 3,
-              "job": 4,
-              "kind": 5,
-              "name": 6,
-              "namespace": 8,
-              "pod": 9,
-              "prometheus": 10,
-              "service": 11,
-              "violating_kind": 12,
-              "violating_name": 13,
-              "violating_namespace": 14,
-              "violation_enforcement": 15,
-              "violation_msg": 7
-            },
-            "renameByName": {
-              "kind": "Constraint Kind",
-              "name": "Constraint Name",
-              "violating_kind": "Resource in violation",
-              "violating_name": "Name of resource in violation",
-              "violating_namespace": "Namespace of resource in violation",
-              "violation_enforcement": "Enforcemant type for violation",
-              "violation_msg": "Violation message"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 22
-      },
       "id": 132,
       "panels": [],
       "title": "APIs",
@@ -1221,6 +905,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "List of all APIs (HTTPRoutes) and their hostnames & corresponding Deployment names.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1249,10 +934,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 24,
+        "h": 6,
+        "w": 12,
         "x": 0,
-        "y": 23
+        "y": 14
       },
       "id": 97,
       "options": {
@@ -1274,7 +959,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_httproute_hostname_info{}",
+          "expr": "gatewayapi_httproute_hostname_info{name=~\"${route_name}\",namespace=~\"${api_policy_namespace}\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -1288,7 +973,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_httproute_labels{}",
+          "expr": "gatewayapi_httproute_labels{name=~\"${route_name}\",namespace=~\"${api_policy_namespace}\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -1327,7 +1012,7 @@
               "instance 2": true,
               "job 1": true,
               "job 2": true,
-              "namespace 1": true,
+              "namespace 1": false,
               "namespace 2": true,
               "prometheus 1": true,
               "prometheus 2": true
@@ -1363,11 +1048,13 @@
             },
             "renameByName": {
               "Time 1": "",
-              "deployment": "Service Name",
+              "deployment": "Deployment Name",
               "exported_namespace 1": "Namespace",
               "exported_namespace 2": "",
               "hostname": "Hostname",
+              "job 1": "",
               "name": "Name",
+              "namespace 1": "Namespace",
               "owner": "Owner"
             }
           }
@@ -1380,8 +1067,7 @@
                 "Name",
                 "Hostname",
                 "Namespace",
-                "Service Name",
-                "owner"
+                "Deployment Name"
               ]
             }
           }
@@ -1394,6 +1080,115 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "List of all Deployments linked to a HTTPRoute. That is, they have a corresponding HTTPRoute with a deployment label.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "index": 1,
+                  "text": "False"
+                },
+                "1": {
+                  "index": 0,
+                  "text": "True"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "id": 136,
+      "options": {
+        "footer": {
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "8.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "kube_deployment_status_condition{condition=\"Available\",status=\"true\"} * on(deployment) group_left gatewayapi_httproute_labels",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "API Deployments",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": false,
+              "__name__": true,
+              "condition": true,
+              "container": true,
+              "instance": true,
+              "job": true,
+              "status": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "Available",
+              "deployment": "Name",
+              "namespace": "Namespace"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Aggregated rate of requests per API (HTTPRoute). The API name can be cross referenced with the API list to see additional details.\n\nNote: HTTPRoutes require a label `deployment` with the name of the corresponding Deployment so that istio request metrics can be paired with HTTPRoute metrics.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1402,6 +1197,7 @@
           "custom": {
             "axisLabel": "",
             "axisPlacement": "auto",
+            "axisSoftMin": 0,
             "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 0,
@@ -1450,10 +1246,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 24,
+        "h": 6,
+        "w": 12,
         "x": 0,
-        "y": 27
+        "y": 20
       },
       "id": 120,
       "options": {
@@ -1474,13 +1270,529 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total[5m])) by (destination_workload) * on(destination_workload) group_right label_replace(gatewayapi_httproute_labels{}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{destination_service_namespace=~\"${api_policy_namespace}\"}[5m])) by (destination_workload) * on(destination_workload) group_right label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",namespace=~\"${api_policy_namespace}\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
           "legendFormat": "API: {{name}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "API Traffic Summary (requests/sec)",
+      "type": "timeseries"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "description": "CPU Usage of all workloads (Deployments) linked to a HTTPRoute. That is, they have a corresponding HTTPRoute with a deployment label.",
+      "fill": 10,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "hiddenSeries": false,
+      "id": 141,
+      "interval": "1m",
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 0,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "8.5.5",
+      "pointradius": 5,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [
+        {
+          "alias": "quota - requests",
+          "color": "#F2495C",
+          "dashes": true,
+          "fill": 0,
+          "hiddenSeries": true,
+          "hideTooltip": true,
+          "legend": true,
+          "linewidth": 2,
+          "stack": false
+        },
+        {
+          "alias": "quota - limits",
+          "color": "#FF9830",
+          "dashes": true,
+          "fill": 0,
+          "hiddenSeries": true,
+          "hideTooltip": true,
+          "legend": true,
+          "linewidth": 2,
+          "stack": false
+        }
+      ],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "sum(\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$api_policy_namespace\"}\n* on(namespace,pod)\n  group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$api_policy_namespace\", workload_type=\"deployment\"}\n) by (workload, workload_type)\n* on(workload) label_replace(gatewayapi_httproute_labels{namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")\n",
+          "format": "time_series",
+          "legendFormat": "API: {{workload}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "API CPU Usage",
+      "tooltip": {
+        "shared": false,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "logBase": 1,
+          "min": 0,
+          "show": true
+        },
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Aggregated rate of bytes per API (HTTPRoute). The API name can be cross referenced with the API list to see additional details.\n\nNote: HTTPRoutes require a label `deployment` with the name of the corresponding Deployment so that istio request metrics can be paired with HTTPRoute metrics.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 26
+      },
+      "id": 137,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "(sort_desc(sum(irate(container_network_receive_bytes_total{namespace=~\"$api_policy_namespace\"}[1h:5m])\n* on (namespace,pod)\ngroup_left(workload,workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$api_policy_namespace\", workload=~\".+\"}) by (workload))) * on(workload) label_replace(gatewayapi_httproute_labels{namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")\n",
+          "legendFormat": "API: {{workload}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "API Traffic Summary (bytes/sec)",
+      "type": "timeseries"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "$datasource"
+      },
+      "description": "Memory Usage of all workloads (Deployments) linked to a HTTPRoute. That is, they have a corresponding HTTPRoute with a deployment label.",
+      "fill": 10,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 26
+      },
+      "hiddenSeries": false,
+      "id": 143,
+      "interval": "1m",
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "rightSide": true,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 0,
+      "links": [],
+      "nullPointMode": "null as zero",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "8.5.5",
+      "pointradius": 5,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [
+        {
+          "alias": "quota - requests",
+          "color": "#F2495C",
+          "dashes": true,
+          "fill": 0,
+          "hiddenSeries": true,
+          "hideTooltip": true,
+          "legend": true,
+          "linewidth": 2,
+          "stack": false
+        },
+        {
+          "alias": "quota - limits",
+          "color": "#FF9830",
+          "dashes": true,
+          "fill": 0,
+          "hiddenSeries": true,
+          "hideTooltip": true,
+          "legend": true,
+          "linewidth": 2,
+          "stack": false
+        }
+      ],
+      "spaceLength": 10,
+      "stack": true,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "sum(\n    container_memory_working_set_bytes{job=\"kubelet\", metrics_path=\"/metrics/cadvisor\", namespace=~\"$api_policy_namespace\", container!=\"\", image!=\"\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$api_policy_namespace\", workload_type=\"deployment\"}\n) by (workload, workload_type)\n* on(workload) label_replace(gatewayapi_httproute_labels{namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")\n",
+          "format": "time_series",
+          "legendFormat": "API: {{workload}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "API Memory Usage",
+      "tooltip": {
+        "shared": false,
+        "sort": 2,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "bytes",
+          "logBase": 1,
+          "min": 0,
+          "show": true
+        },
+        {
+          "format": "short",
+          "logBase": 1,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Rate of 4xx, 5xx and total HTTP response code errors by API/HTTPRoute",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "id": 139,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "legendFormat": "Total Errors: {{name}} ",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "legendFormat": "4xx: {{name}} ",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "legendFormat": "5xx: {{name}} ",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"404\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "legendFormat": "404: {{name}}",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"401\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "legendFormat": "401: {{name}}",
+          "range": true,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"429\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "legendFormat": "429: {{name}}",
+          "range": true,
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"500\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "legendFormat": "500: {{name}}",
+          "range": true,
+          "refId": "G"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"501\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "legendFormat": "501: {{name}}",
+          "range": true,
+          "refId": "H"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"503\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "legendFormat": "503: {{name}}",
+          "range": true,
+          "refId": "I"
+        }
+      ],
+      "title": "API Error Rate",
       "type": "timeseries"
     }
   ],
@@ -1493,8 +1805,8 @@
       {
         "current": {
           "selected": false,
-          "text": "thanos-query",
-          "value": "thanos-query"
+          "text": "prometheus",
+          "value": "prometheus"
         },
         "hide": 0,
         "includeAll": false,
@@ -1507,6 +1819,102 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(gatewayapi_gateway_info, namespace)",
+        "description": "",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Gateway Namespace",
+        "multi": true,
+        "name": "gateway_namespace",
+        "options": [],
+        "query": {
+          "query": "label_values(gatewayapi_gateway_info, namespace)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(kube_namespace_created, namespace)",
+        "description": "Namespace of HTTPRoute & Policy resources",
+        "hide": 0,
+        "includeAll": true,
+        "label": "API/Route & Policy Namespace",
+        "multi": true,
+        "name": "api_policy_namespace",
+        "options": [],
+        "query": {
+          "query": "label_values(kube_namespace_created, namespace)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(gatewayapi_httproute_labels, name)",
+        "description": "Name of the HTTPRoute resource",
+        "hide": 0,
+        "includeAll": true,
+        "label": "API/Route Name",
+        "multi": true,
+        "name": "route_name",
+        "options": [],
+        "query": {
+          "query": "label_values(gatewayapi_httproute_labels, name)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
       }
     ]
   },
@@ -1539,6 +1947,6 @@
   "timezone": "",
   "title": "Platform Engineer Dashboard",
   "uid": "djqDaDISk",
-  "version": 1,
+  "version": 9,
   "weekStart": ""
 }

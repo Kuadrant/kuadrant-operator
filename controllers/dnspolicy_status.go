@@ -86,17 +86,31 @@ func (r *DNSPolicyReconciler) enforcedCondition(ctx context.Context, dnsPolicy *
 	recordsList := &kuadrantdnsv1alpha1.DNSRecordList{}
 	if err := r.Client().List(ctx, recordsList); err != nil {
 		r.Logger().V(1).Error(err, "error listing dns records")
-		return kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(dnsPolicy.Kind(), err))
+		return kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(dnsPolicy.Kind(), err), false)
 	}
 
+	var controlled bool
 	for _, record := range recordsList.Items {
-		record.SetResourceVersion("")
+		// check that DNS record is controller by this policy
 		for _, reference := range record.GetOwnerReferences() {
 			if reference.Controller != nil && *reference.Controller && reference.Name == dnsPolicy.Name && reference.UID == dnsPolicy.UID {
-				return kuadrant.EnforcedCondition(dnsPolicy, nil)
+				controlled = true
+				// if at least one record not ready the policy is not enforced
+				for _, condition := range record.Status.Conditions {
+					if condition.Type == string(v1alpha2.PolicyConditionAccepted) && condition.Status == metav1.ConditionFalse {
+						return kuadrant.EnforcedCondition(dnsPolicy, nil, false)
+					}
+				}
+				break
 			}
 		}
 	}
 
-	return kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(dnsPolicy.Kind(), errors.New("policy is not enforced on any dns record")))
+	// at least one DNS record is controlled byt the policy
+	// and all controlled records are accepted
+	if controlled {
+		return kuadrant.EnforcedCondition(dnsPolicy, nil, true)
+	}
+	// there are no controlled DNS records present
+	return kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(dnsPolicy.Kind(), errors.New("policy is not enforced on any dns record")), false)
 }

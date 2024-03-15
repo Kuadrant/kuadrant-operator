@@ -277,7 +277,7 @@ func TestEnforcedCondition(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := EnforcedCondition(tt.args.policy, tt.args.err); !reflect.DeepEqual(got, tt.want) {
+			if got := EnforcedCondition(tt.args.policy, tt.args.err, true); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("EnforcedCondition() = %v, want %v", got, tt.want)
 			}
 		})

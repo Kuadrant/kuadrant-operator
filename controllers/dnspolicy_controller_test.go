@@ -349,6 +349,18 @@ var _ = Describe("DNSPolicy controller", func() {
 					})),
 				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
+
+			// ensure there are no policies with not accepted condition
+			// in this case the "enforced" on the policy should be false
+			Eventually(func(g Gomega) {
+				dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, dnsRecord)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsRecord.Status.Conditions).ToNot(ContainElement(MatchFields(IgnoreExtras, Fields{
+					"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+					"Status": Equal(metav1.ConditionFalse),
+				})))
+			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
 
 		It("should set gateway back reference", func() {

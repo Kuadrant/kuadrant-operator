@@ -24,7 +24,7 @@
 | `targetRef`       | [Gateway API PolicyTargetReference](https://gateway-api.sigs.k8s.io/geps/gep-713/?h=policytargetreference#policy-targetref-api)    |      Yes       | Reference to a Kuberentes resource that the policy attaches to |
 | `healthCheck`     | [HealthCheckSpec](#healthcheckspec)                                                                                                         |       No       | HealthCheck spec                                               |
 | `loadBalancing`   | [LoadBalancingSpec](#loadbalancingspec)                                                                                                     |       No       | LoadBancking Spec                                              |
-| `routingStrategy` | String                                                                                                                                      |      Yes       | Routing Strategy to use, one of "simple" or "loadbalacned"     |
+| `routingStrategy` | String (immutable)                                                                                                                                     |      Yes       | **Immutable!** Routing Strategy to use, one of "simple" or "loadbalacned"     |
 
 ## HealthCheckSpec
 

@@ -111,6 +111,17 @@ var _ = Describe("DNSPolicy controller", func() {
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
 
+		It("should not allow changing routing strategy", func() {
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+				g.Expect(err).NotTo(HaveOccurred())
+				dnsPolicy.Spec.RoutingStrategy = v1alpha1.LoadBalancedRoutingStrategy
+				err = k8sClient.Update(ctx, dnsPolicy)
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err).To(MatchError(ContainSubstring("RoutingStrategy is immutable")))
+			}, TestTimeoutMedium, time.Second).Should(Succeed())
+		})
+
 		It("should not have any health check records created", func() {
 			// create a health check with the labels for the dnspolicy and the gateway name and namespace that would be expected in a valid target scenario
 			// this one should get deleted if the gateway is invalid policy ref

@@ -174,7 +174,7 @@ func (r *RateLimitingWASMPluginReconciler) wasmPluginConfig(ctx context.Context,
 
 	for _, policy := range rateLimitPolicies {
 		rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)
-		wasmRLP, err := r.WASMRateLimitPolicy(ctx, t, rlp, gw)
+		wasmRLP, err := r.wasmRateLimitPolicy(ctx, t, rlp, gw)
 		if err != nil {
 			return nil, err
 		}
@@ -232,8 +232,8 @@ func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx contex
 	return kuadrantgatewayapi.NewTopologyIndexes(t), nil
 }
 
-func (r *RateLimitingWASMPluginReconciler) WASMRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*wasm.RateLimitPolicy, error) {
-	route, err := r.RouteFromRLP(ctx, t, rlp, gw)
+func (r *RateLimitingWASMPluginReconciler) wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*wasm.RateLimitPolicy, error) {
+	route, err := r.routeFromRLP(ctx, t, rlp, gw)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +280,7 @@ func (r *RateLimitingWASMPluginReconciler) WASMRateLimitPolicy(ctx context.Conte
 	}, nil
 }
 
-func (r *RateLimitingWASMPluginReconciler) RouteFromRLP(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*gatewayapiv1.HTTPRoute, error) {
+func (r *RateLimitingWASMPluginReconciler) routeFromRLP(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*gatewayapiv1.HTTPRoute, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -321,7 +321,7 @@ func (r *RateLimitingWASMPluginReconciler) RouteFromRLP(ctx context.Context, t *
 }
 
 // addHTTPRouteByGatewayIndexer declares an index key that we can later use with the client as a pseudo-field name,
-// allowing to query all the routes parenting a given gateway
+// allowing to query all the routes parented by a given gateway
 // to prevent creating the same index field multiple times, the function is declared private to be
 // called only by this controller
 func addHTTPRouteByGatewayIndexer(mgr ctrl.Manager, baseLogger logr.Logger) error {

@@ -354,7 +354,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(wasmRLP.Service).To(Equal(common.KuadrantRateLimitClusterName))
 		})
 
-		It("Simple RLP targeting Gateway parenting one HTTPRoute creates wasmplugin", func() {
+		It("Simple RLP targeting Gateway parented by one HTTPRoute creates wasmplugin", func() {
 			// create httproute
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
 			err := k8sClient.Create(context.Background(), httpRoute)
@@ -947,7 +947,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			})
 
 			// Check wasm plugin for gateway B does not exist
-			// There is not RLP targeting Gateway B or any route parenting Gateway B
+			// There is not RLP targeting Gateway B or any route parented by Gateway B
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gwB), Namespace: testNamespace}

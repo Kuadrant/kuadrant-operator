@@ -57,6 +57,7 @@ type DNSPolicySpec struct {
 
 	// +required
 	// +kubebuilder:validation:Enum=simple;loadbalanced
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="RoutingStrategy is immutable"
 	// +kubebuilder:default=loadbalanced
 	RoutingStrategy RoutingStrategy `json:"routingStrategy"`
 }

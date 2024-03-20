@@ -185,6 +185,9 @@ spec:
                 - simple
                 - loadbalanced
                 type: string
+                x-kubernetes-validations:
+                - message: RoutingStrategy is immutable
+                  rule: self == oldSelf
               targetRef:
                 description: |-
                   PolicyTargetReference identifies an API object to apply a direct or

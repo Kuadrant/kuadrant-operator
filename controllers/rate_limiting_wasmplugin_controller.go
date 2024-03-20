@@ -45,7 +45,7 @@ import (
 )
 
 const (
-	HTTPRouteParents = ".metadata.route.parent"
+	HTTPRouteGatewayParentField = ".metadata.parentRefs.gateway"
 )
 
 // RateLimitingWASMPluginReconciler reconciles a WASMPlugin object for rate limiting
@@ -198,7 +198,7 @@ func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx contex
 
 	routeList := &gatewayapiv1.HTTPRouteList{}
 	// Get all the routes having the gateway as parent
-	err = r.Client().List(ctx, routeList, client.MatchingFields{HTTPRouteParents: client.ObjectKeyFromObject(gw).String()})
+	err = r.Client().List(ctx, routeList, client.MatchingFields{HTTPRouteGatewayParentField: client.ObjectKeyFromObject(gw).String()})
 	logger.V(1).Info("topologyIndexesFromGateway: list httproutes from gateway",
 		"gateway", client.ObjectKeyFromObject(gw),
 		"#HTTPRoutes", len(routeList.Items),
@@ -325,7 +325,7 @@ func (r *RateLimitingWASMPluginReconciler) RouteFromRLP(ctx context.Context, t *
 // to prevent creating the same index field multiple times, the function is declared private to be
 // called only by this controller
 func addHTTPRouteByGatewayIndexer(mgr ctrl.Manager, baseLogger logr.Logger) error {
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &gatewayapiv1.HTTPRoute{}, HTTPRouteParents, func(rawObj client.Object) []string {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &gatewayapiv1.HTTPRoute{}, HTTPRouteGatewayParentField, func(rawObj client.Object) []string {
 		// grab the route object, extract the parents
 		route, assertionOk := rawObj.(*gatewayapiv1.HTTPRoute)
 		if !assertionOk {

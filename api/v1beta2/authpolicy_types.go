@@ -144,7 +144,7 @@ type AuthPolicySpec struct {
 	// Defaults define explicit default values for this policy and for policies inheriting this policy.
 	// Defaults are mutually exclusive with implicit defaults defined by CommonSpec.
 	// +optional
-	Defaults CommonSpec `json:"defaults"`
+	Defaults *CommonSpec `json:"defaults"`
 
 	// CommonSpec defines implicit default values for this policy and for policies inheriting this policy.
 	// CommonSpec is mutually exclusive with explicit defaults defined by Defaults.
@@ -179,6 +179,9 @@ type CommonSpec struct {
 // GetRouteSelectors returns the top-level route selectors of the auth scheme.
 // impl: RouteSelectorsGetter
 func (s AuthPolicySpec) GetRouteSelectors() []RouteSelector {
+	if s.Defaults != nil {
+		return s.Defaults.RouteSelectors
+	}
 	return s.RouteSelectors
 }
 
@@ -274,27 +277,31 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 		}
 	}
 
+	appendCommonSpecRuleHosts := func(c CommonSpec) {
+		for _, config := range c.AuthScheme.Authentication {
+			appendRuleHosts(config)
+		}
+		for _, config := range c.AuthScheme.Metadata {
+			appendRuleHosts(config)
+		}
+		for _, config := range c.AuthScheme.Authorization {
+			appendRuleHosts(config)
+		}
+		if response := c.AuthScheme.Response; response != nil {
+			for _, config := range response.Success.Headers {
+				appendRuleHosts(config)
+			}
+			for _, config := range response.Success.DynamicMetadata {
+				appendRuleHosts(config)
+			}
+		}
+		for _, config := range c.AuthScheme.Callbacks {
+			appendRuleHosts(config)
+		}
+	}
+
 	appendRuleHosts(ap.Spec)
-	for _, config := range ap.Spec.AuthScheme.Authentication {
-		appendRuleHosts(config)
-	}
-	for _, config := range ap.Spec.AuthScheme.Metadata {
-		appendRuleHosts(config)
-	}
-	for _, config := range ap.Spec.AuthScheme.Authorization {
-		appendRuleHosts(config)
-	}
-	if response := ap.Spec.AuthScheme.Response; response != nil {
-		for _, config := range response.Success.Headers {
-			appendRuleHosts(config)
-		}
-		for _, config := range response.Success.DynamicMetadata {
-			appendRuleHosts(config)
-		}
-	}
-	for _, config := range ap.Spec.AuthScheme.Callbacks {
-		appendRuleHosts(config)
-	}
+	appendCommonSpecRuleHosts(ap.GetCommonSpec())
 
 	return
 }
@@ -309,6 +316,26 @@ func (ap *AuthPolicy) BackReferenceAnnotationName() string {
 
 func (ap *AuthPolicy) DirectReferenceAnnotationName() string {
 	return AuthPolicyDirectReferenceAnnotationName
+}
+
+func (ap *AuthPolicy) GetCommonSpec() CommonSpec {
+	if ap.Spec.Defaults != nil {
+		return *ap.Spec.Defaults
+	}
+
+	return ap.Spec.CommonSpec
+}
+
+func (ap *AuthPolicy) GetNamedPatterns() map[string]authorinoapi.PatternExpressions {
+	return ap.GetCommonSpec().NamedPatterns
+}
+
+func (ap *AuthPolicy) GetConditions() []authorinoapi.PatternExpressionOrRef {
+	return ap.GetCommonSpec().Conditions
+}
+
+func (ap *AuthPolicy) GetAuthScheme() AuthSchemeSpec {
+	return ap.GetCommonSpec().AuthScheme
 }
 
 //+kubebuilder:object:root=true

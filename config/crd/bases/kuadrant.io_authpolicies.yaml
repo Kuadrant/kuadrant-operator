@@ -395,7 +395,7 @@ spec:
                           maxItems: 8
                           type: array
                       type: object
-                    maxItems: 15
+                    maxItems: 8
                     type: array
                   rules:
                     description: |-
@@ -946,7 +946,7 @@ spec:
                                     maxItems: 8
                                     type: array
                                 type: object
-                              maxItems: 15
+                              maxItems: 8
                               type: array
                             when:
                               description: |-
@@ -1790,7 +1790,7 @@ spec:
                                     maxItems: 8
                                     type: array
                                 type: object
-                              maxItems: 15
+                              maxItems: 8
                               type: array
                             spicedb:
                               description: Authorization decision delegated to external
@@ -2479,7 +2479,7 @@ spec:
                                     maxItems: 8
                                     type: array
                                 type: object
-                              maxItems: 15
+                              maxItems: 8
                               type: array
                             when:
                               description: |-
@@ -3067,7 +3067,7 @@ spec:
                                     maxItems: 8
                                     type: array
                                 type: object
-                              maxItems: 15
+                              maxItems: 8
                               type: array
                             uma:
                               description: User-Managed Access (UMA) source of resource
@@ -3565,7 +3565,7 @@ spec:
                                             maxItems: 8
                                             type: array
                                         type: object
-                                      maxItems: 15
+                                      maxItems: 8
                                       type: array
                                     when:
                                       description: |-
@@ -4079,7 +4079,7 @@ spec:
                                             maxItems: 8
                                             type: array
                                         type: object
-                                      maxItems: 15
+                                      maxItems: 8
                                       type: array
                                     when:
                                       description: |-
@@ -4690,7 +4690,7 @@ spec:
                       maxItems: 8
                       type: array
                   type: object
-                maxItems: 15
+                maxItems: 8
                 type: array
               rules:
                 description: |-
@@ -5239,7 +5239,7 @@ spec:
                                 maxItems: 8
                                 type: array
                             type: object
-                          maxItems: 15
+                          maxItems: 8
                           type: array
                         when:
                           description: |-
@@ -6078,7 +6078,7 @@ spec:
                                 maxItems: 8
                                 type: array
                             type: object
-                          maxItems: 15
+                          maxItems: 8
                           type: array
                         spicedb:
                           description: Authorization decision delegated to external
@@ -6764,7 +6764,7 @@ spec:
                                 maxItems: 8
                                 type: array
                             type: object
-                          maxItems: 15
+                          maxItems: 8
                           type: array
                         when:
                           description: |-
@@ -7348,7 +7348,7 @@ spec:
                                 maxItems: 8
                                 type: array
                             type: object
-                          maxItems: 15
+                          maxItems: 8
                           type: array
                         uma:
                           description: User-Managed Access (UMA) source of resource
@@ -7842,7 +7842,7 @@ spec:
                                         maxItems: 8
                                         type: array
                                     type: object
-                                  maxItems: 15
+                                  maxItems: 8
                                   type: array
                                 when:
                                   description: |-
@@ -8352,7 +8352,7 @@ spec:
                                         maxItems: 8
                                         type: array
                                     type: object
-                                  maxItems: 15
+                                  maxItems: 8
                                   type: array
                                 when:
                                   description: |-

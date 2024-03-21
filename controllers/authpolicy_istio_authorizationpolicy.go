@@ -193,7 +193,7 @@ func istioAuthorizationPolicyLabels(gwKey, apKey client.ObjectKey) map[string]st
 // If the route selectors specified in the policy do not match any route rules, an error is returned.
 func istioAuthorizationPolicyRules(ap *api.AuthPolicy, route *gatewayapiv1.HTTPRoute) ([]*istiosecurity.Rule, error) {
 	// use only the top level route selectors if defined
-	if topLevelRouteSelectors := ap.Spec.RouteSelectors; len(topLevelRouteSelectors) > 0 {
+	if topLevelRouteSelectors := ap.Spec.GetRouteSelectors(); len(topLevelRouteSelectors) > 0 {
 		return istioAuthorizationPolicyRulesFromRouteSelectors(route, topLevelRouteSelectors)
 	}
 	return istioAuthorizationPolicyRulesFromHTTPRoute(route), nil

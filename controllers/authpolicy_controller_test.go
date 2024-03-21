@@ -66,7 +66,9 @@ var _ = Describe("AuthPolicy controller", func() {
 					Name:      testHTTPRouteName,
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				},
-				AuthScheme: testBasicAuthScheme(),
+				CommonSpec: api.CommonSpec{
+					AuthScheme: testBasicAuthScheme(),
+				},
 			},
 		}
 		for _, mutateFn := range mutateFns {

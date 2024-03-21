@@ -1,0 +1,39 @@
+- op: add
+  path: /rules/-
+  value:
+    apiGroups:
+    - "apiextensions.k8s.io"
+    resources:
+    - customresourcedefinitions
+    verbs:
+    - list
+    - watch
+- op: add
+  path: /rules/-
+  value:
+    apiGroups:
+    - "gateway.networking.k8s.io"
+    resources:
+    - gateways
+    - gatewayclasses
+    - httproutes
+    - grpcroutes
+    - tcproutes
+    - tlsroutes
+    - udproutes
+    verbs:
+    - list
+    - watch
+- op: add
+  path: /rules/-
+  value:
+    apiGroups:
+    - "kuadrant.io"
+    resources:
+    - tlspolicies
+    - dnspolicies
+    - ratelimitpolicies
+    - authpolicies
+    verbs:
+    - list
+    - watch

@@ -1,0 +1,95 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - github.com/prometheus-operator/kube-prometheus?ref=release-0.11
+  - github.com/Kuadrant/gateway-api-state-metrics?ref=main
+  - github.com/Kuadrant/gateway-api-state-metrics/config/examples/dashboards?ref=main
+# To scrape istio metrics, 3 configurations are required:
+# 1. Envoy metrics directly from the istio ingress gateway pod
+  - podmonitor-envoy.yaml
+# 2. Istiod metrics via the istiod service
+  - servicemonitor-istiod.yaml
+# 3. Istio metrics exposed via envoy on 15020 in each application.
+# We're using the additionalScrapeConfigs field of the Prometheus CR
+# here to read existing prometheus scrape annotations on pods.
+# Ideally this would be done via another PodMonitor or ServicMonitor,
+# however that isn't possible as the container port 15020 is not 
+# exposed or named, so we need to drop to raw custom prometheus
+# scrape config.
+# See https://github.com/prometheus-operator/prometheus-operator/issues/3071#issuecomment-763746836
+  - additional-scrape-configs.yaml
+
+patchesStrategicMerge:
+  - cluster_role.yaml
+
+patches:
+  - target:
+      kind: Prometheus
+      name: k8s
+    patch: |-
+      kind: Prometheus
+      metadata:
+        name: k8s
+      spec:
+        replicas: 1
+        additionalScrapeConfigs:
+          name: additional-scrape-configs
+          key: prometheus-additional.yaml
+  - target:
+      kind: Alertmanager
+      name: main
+    patch: |-
+      kind: Alertmanager
+      metadata:
+        name: main
+      spec:
+        replicas: 1
+  - target:
+      kind: ClusterRole
+      name: prometheus-k8s
+    patch: |-
+      - op: add
+        path: /rules/-
+        value:
+          apiGroups:
+            - ""
+          resources:
+            - services
+            - endpoints
+          verbs:
+            - get
+            - list
+            - watch
+
+# Patch grafana deployment to include dashboard configmaps
+patchesJson6902:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: kube-state-metrics
+    path: ksm_deployment_patch.yaml
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: kube-state-metrics
+    path: ksm_clusterrole_patch.yaml
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: grafana
+    path: grafana_deployment_patch.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+secretGenerator:
+- name: grafana-datasources
+  namespace: monitoring
+  behavior: replace
+  files:
+  - grafana_datasources.yaml
+

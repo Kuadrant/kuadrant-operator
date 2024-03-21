@@ -10,7 +10,7 @@ require (
 	github.com/google/uuid v1.4.0
 	github.com/kuadrant/authorino v0.15.0
 	github.com/kuadrant/authorino-operator v0.9.0
-	github.com/kuadrant/dns-operator v0.1.0
+	github.com/kuadrant/dns-operator v0.0.0-20240321074453-b11e4521d05d
 	github.com/kuadrant/limitador-operator v0.7.0
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/onsi/ginkgo/v2 v2.13.2
@@ -31,6 +31,7 @@ require (
 	k8s.io/utils v0.0.0-20231127182322-b307cd553661
 	maistra.io/istio-operator v0.0.0-20231214211859-76e404c8df41
 	sigs.k8s.io/controller-runtime v0.16.3
+	sigs.k8s.io/external-dns v0.14.0
 	sigs.k8s.io/gateway-api v1.0.1-0.20231204134048-c7da42e6eafc
 )
 
@@ -45,6 +46,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.4 // indirect
 	github.com/Microsoft/hcsshim v0.11.4 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
+	github.com/aws/aws-sdk-go v1.44.311 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/chai2010/gettext-go v1.0.2 // indirect
@@ -92,6 +94,7 @@ require (
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/imdario/mergo v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/jmoiron/sqlx v1.3.5 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -170,7 +173,6 @@ require (
 	k8s.io/kube-openapi v0.0.0-20231129212854-f0671cc7e66a // indirect
 	k8s.io/kubectl v0.28.4 // indirect
 	oras.land/oras-go v1.2.4 // indirect
-	sigs.k8s.io/external-dns v0.14.0 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.13.5-0.20230601165947-6ce0bf390ce3 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.15.0 // indirect
@@ -181,5 +183,3 @@ require (
 replace maistra.io/istio-operator => github.com/maistra/istio-operator v0.0.0-20231214211859-76e404c8df41
 
 replace github.com/imdario/mergo => dario.cat/mergo v0.3.5
-
-replace github.com/kuadrant/dns-operator => github.com/kuadrant/dns-operator v0.0.0-20240315125613-515b614d70e5

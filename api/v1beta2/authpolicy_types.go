@@ -141,6 +141,18 @@ type AuthPolicySpec struct {
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
 
+	// Defaults define explicit default values for this policy and for policies inheriting this policy.
+	// Defaults are mutually exclusive with implicit defaults defined by CommonSpec.
+	// +optional
+	Defaults CommonSpec `json:"defaults"`
+
+	// CommonSpec defines implicit default values for this policy and for policies inheriting this policy.
+	// CommonSpec is mutually exclusive with explicit defaults defined by Defaults.
+	CommonSpec `json:""`
+}
+
+// CommonSpec contains common shared fields for defaults and overrides
+type CommonSpec struct {
 	// Top-level route selectors.
 	// If present, the elements will be used to select HTTPRoute rules that, when activated, trigger the external authorization service.
 	// At least one selected HTTPRoute rule must match to trigger the AuthPolicy.

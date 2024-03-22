@@ -101,16 +101,16 @@ func (r *AuthPolicyReconciler) enforcedCondition(ctx context.Context, policy *ap
 	authConfigReady, err := r.isAuthConfigReady(ctx, policy)
 	if err != nil {
 		logger.Error(err, "Failed to check AuthConfig and Gateway")
-		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err))
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err), false)
 	}
 
 	if !authConfigReady {
 		logger.V(1).Info("AuthConfig is not ready")
-		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), errors.New("AuthScheme is not ready yet")))
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), errors.New("AuthScheme is not ready yet")), false)
 	}
 
 	logger.V(1).Info("AuthPolicy is enforced")
-	return kuadrant.EnforcedCondition(policy, nil)
+	return kuadrant.EnforcedCondition(policy, nil, true)
 }
 
 // isAuthConfigReady checks if the AuthConfig is ready.
@@ -142,7 +142,7 @@ func (r *AuthPolicyReconciler) handleGatewayPolicyOverride(logger logr.Logger, p
 	jsonData, err := json.Marshal(filteredRef)
 	if err != nil {
 		logger.Error(err, "Failed to marshal filtered references")
-		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err))
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err), false)
 	}
-	return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), string(jsonData)))
+	return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), string(jsonData)), false)
 }

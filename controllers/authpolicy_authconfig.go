@@ -117,7 +117,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	}
 
 	// top-level conditions
-	topLevelConditionsFromRouteSelectors, err := authorinoConditionsFromRouteSelectors(route, ap.Spec)
+	topLevelConditionsFromRouteSelectors, err := authorinoConditionsFromRouteSelectors(route, ap)
 	if err != nil {
 		return nil, err
 	}

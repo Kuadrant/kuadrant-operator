@@ -259,7 +259,7 @@ kubectl wait dnspolicy simple-dnspolicy -n kuadrant-system --for=condition=ready
 If you want to see the DNSRecord created by the this policy, execute the following command:
 
 ```sh
-kubectl get dnsrecord api-gateway-api -n kuadrant-system -o=yaml
+kubectl get dnsrecord.kuadrant.io api-gateway-api -n kuadrant-system -o=yaml
 ```
 
 So now we have a wildcard DNS record to bring traffic to our gateway.
@@ -277,7 +277,7 @@ Next, we are going to allow authenticated access to our Toystore API. To do this
 Let's define an API Key for users **bob** and **alice**.
 
 ```sh
-kubectl apply -f - <<EOF
+kubectl --context kind-kuadrant-local apply -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
@@ -309,7 +309,7 @@ EOF
 Now, we will override the AuthPolicy to start accepting the API keys:
 
 ```sh
-kubectl apply -f - <<EOF
+kubectl --context kind-kuadrant-local apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta2
 kind: AuthPolicy
 metadata:
@@ -329,6 +329,14 @@ spec:
         credentials:
           authorizationHeader:
             prefix: APIKEY
+    response:
+      success:
+        dynamicMetadata:
+          "identity":
+            json:
+              properties:
+                "userid":
+                  selector: auth.identity.metadata.annotations.secret\.kuadrant\.io/user-id
 EOF
 ```
 
@@ -337,7 +345,7 @@ EOF
 The gateway limits are a good set of limits for the general case, but as the developers of this API we know that we only want to allow a certain number of requests to specific users, and a general limit for all other users.
 
 ```sh
-kubectl apply -f - <<EOF
+kubectl --context kind-kuadrant-local apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta2
 kind: RateLimitPolicy
 metadata:
@@ -353,6 +361,12 @@ spec:
       - limit: 1
         duration: 3
         unit: second
+      counters:
+      - metadata.filter_metadata.envoy\.filters\.http\.ext_authz.identity.userid
+      when:
+      - selector: metadata.filter_metadata.envoy\.filters\.http\.ext_authz.identity.userid
+        operator: neq
+        value: bob
     "bob-limit":
       rates:
       - limit: 2
@@ -382,3 +396,5 @@ By sending requests as **bob**:
 ```sh
 while :; do curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST} --write-out '%{http_code}\n' --silent --output /dev/null -H 'Authorization: APIKEY IAMBOB' "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" | grep -E --color "\b(429)\b|$"; sleep 1; done
 ```
+
+> **Note:** If you configured a DNS provider during the setup and defined the DNSPolicy as described in one of the previous chapters you can omit the `--resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST}` flag.

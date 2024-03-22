@@ -124,7 +124,7 @@
             "mode": "thresholds"
           },
           "custom": {
-            "align": "auto",
+            "align": "center",
             "displayMode": "auto",
             "inspect": false
           },
@@ -153,10 +153,6 @@
               {
                 "id": "unit",
                 "value": "bool"
-              },
-              {
-                "id": "custom.width",
-                "value": 100
               }
             ]
           },
@@ -169,10 +165,6 @@
               {
                 "id": "unit",
                 "value": "bool"
-              },
-              {
-                "id": "custom.width",
-                "value": 92
               }
             ]
           },
@@ -181,24 +173,14 @@
               "id": "byName",
               "options": "Gateway Class"
             },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 395
-              }
-            ]
+            "properties": []
           },
           {
             "matcher": {
               "id": "byName",
               "options": "Name"
             },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 136
-              }
-            ]
+            "properties": []
           },
           {
             "matcher": {

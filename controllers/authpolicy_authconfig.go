@@ -125,7 +125,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 		topLevelConditionsFromRouteSelectors = authorinoConditionsFromHTTPRoute(route)
 	}
 	if len(topLevelConditionsFromRouteSelectors) > 0 || len(ap.GetConditions()) > 0 {
-		authConfig.Spec.Conditions = append(ap.Spec.Conditions, topLevelConditionsFromRouteSelectors...)
+		authConfig.Spec.Conditions = append(ap.GetConditions(), topLevelConditionsFromRouteSelectors...)
 	}
 
 	// authentication

@@ -66,7 +66,7 @@ var _ = Describe("AuthPolicy controller", func() {
 					Name:      testHTTPRouteName,
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				},
-				CommonSpec: api.CommonSpec{
+				Defaults: &api.CommonSpec{
 					AuthScheme: testBasicAuthScheme(),
 				},
 			},
@@ -94,7 +94,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = testGatewayName
-				policy.Spec.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+				policy.Spec.Defaults.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
 			})
 
 			err := k8sClient.Create(context.Background(), policy)
@@ -314,7 +314,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 		It("Rejects policy with only unmatching top-level route selectors while trying to configure the gateway", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.RouteSelectors = []api.RouteSelector{
+				policy.Spec.Defaults.RouteSelectors = []api.RouteSelector{
 					{ // does not select any HTTPRouteRule
 						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
 							{
@@ -358,7 +358,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 		It("Rejects policy with only unmatching config-level route selectors post-configuring the gateway", func() {
 			policy := policyFactory()
-			config := policy.Spec.AuthScheme.Authentication["apiKey"]
+			config := policy.Spec.Defaults.AuthScheme.Authentication["apiKey"]
 			config.RouteSelectors = []api.RouteSelector{
 				{ // does not select any HTTPRouteRule
 					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
@@ -368,7 +368,7 @@ var _ = Describe("AuthPolicy controller", func() {
 					},
 				},
 			}
-			policy.Spec.AuthScheme.Authentication["apiKey"] = config
+			policy.Spec.Defaults.AuthScheme.Authentication["apiKey"] = config
 
 			err := k8sClient.Create(context.Background(), policy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
@@ -440,7 +440,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 		It("Maps to all fields of the AuthConfig", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.NamedPatterns = map[string]authorinoapi.PatternExpressions{
+				policy.Spec.Defaults.NamedPatterns = map[string]authorinoapi.PatternExpressions{
 					"internal-source": []authorinoapi.PatternExpression{
 						{
 							Selector: "source.ip",
@@ -456,14 +456,14 @@ var _ = Describe("AuthPolicy controller", func() {
 						},
 					},
 				}
-				policy.Spec.Conditions = []authorinoapi.PatternExpressionOrRef{
+				policy.Spec.Defaults.Conditions = []authorinoapi.PatternExpressionOrRef{
 					{
 						PatternRef: authorinoapi.PatternRef{
 							Name: "internal-source",
 						},
 					},
 				}
-				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
 					Authentication: map[string]api.AuthenticationSpec{
 						"jwt": {
 							AuthenticationSpec: authorinoapi.AuthenticationSpec{
@@ -757,7 +757,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 		It("Attaches policy with top-level route selectors to the HTTPRoute", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.RouteSelectors = []api.RouteSelector{
+				policy.Spec.Defaults.RouteSelectors = []api.RouteSelector{
 					{ // Selects: POST|DELETE *.admin.toystore.com/admin*
 						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
 							{
@@ -862,7 +862,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 		It("Attaches policy with config-level route selectors to the HTTPRoute", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				config := policy.Spec.AuthScheme.Authentication["apiKey"]
+				config := policy.Spec.Defaults.AuthScheme.Authentication["apiKey"]
 				config.RouteSelectors = []api.RouteSelector{
 					{ // Selects: POST|DELETE *.admin.toystore.com/admin*
 						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
@@ -876,7 +876,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						Hostnames: []gatewayapiv1.Hostname{"*.admin.toystore.com"},
 					},
 				}
-				policy.Spec.AuthScheme.Authentication["apiKey"] = config
+				policy.Spec.Defaults.AuthScheme.Authentication["apiKey"] = config
 			})
 
 			err := k8sClient.Create(context.Background(), policy)
@@ -977,7 +977,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 		It("Mixes route selectors into other conditions", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				config := policy.Spec.AuthScheme.Authentication["apiKey"]
+				config := policy.Spec.Defaults.AuthScheme.Authentication["apiKey"]
 				config.RouteSelectors = []api.RouteSelector{
 					{ // Selects: GET /private*
 						Matches: []gatewayapiv1.HTTPRouteMatch{
@@ -1000,7 +1000,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						},
 					},
 				}
-				policy.Spec.AuthScheme.Authentication["apiKey"] = config
+				policy.Spec.Defaults.AuthScheme.Authentication["apiKey"] = config
 			})
 
 			err := k8sClient.Create(context.Background(), policy)
@@ -1371,7 +1371,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		}
 		It("invalid usage of top-level route selectors with a gateway targetRef", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.RouteSelectors = routeSelectors
+				policy.Spec.Defaults.RouteSelectors = routeSelectors
 			})
 
 			err := k8sClient.Create(context.Background(), policy)
@@ -1381,7 +1381,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - authentication", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
 					Authentication: map[string]api.AuthenticationSpec{
 						"my-rule": {
 							AuthenticationSpec: authorinoapi.AuthenticationSpec{
@@ -1402,7 +1402,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - metadata", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
 					Metadata: map[string]api.MetadataSpec{
 						"my-metadata": {
 							CommonAuthRuleSpec: commonAuthRuleSpec,
@@ -1418,7 +1418,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - authorization", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
 					Authorization: map[string]api.AuthorizationSpec{
 						"my-authZ": {
 							CommonAuthRuleSpec: commonAuthRuleSpec,
@@ -1434,7 +1434,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - response success headers", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
 					Response: &api.ResponseSpec{
 						Success: api.WrappedSuccessResponseSpec{
 							Headers: map[string]api.HeaderSuccessResponseSpec{
@@ -1456,7 +1456,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - response success dynamic metadata", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
 					Response: &api.ResponseSpec{
 						Success: api.WrappedSuccessResponseSpec{
 							DynamicMetadata: map[string]api.SuccessResponseSpec{
@@ -1476,7 +1476,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - callbacks", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
 					Callbacks: map[string]api.CallbackSpec{
 						"callback": {
 							CallbackSpec: authorinoapi.CallbackSpec{

@@ -27,7 +27,7 @@
   "gnetId": 7630,
   "graphTooltip": 0,
   "id": 33,
-  "iteration": 1710847753319,
+  "iteration": 1711118834317,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -49,7 +49,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Total Gateways with an Accepted state of True",
+      "description": "Total Gateways with an [Accepted](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io%2fv1.GatewayConditionType) state of True",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -75,7 +75,7 @@
       },
       "gridPos": {
         "h": 3,
-        "w": 2,
+        "w": 3,
         "x": 0,
         "y": 1
       },
@@ -215,8 +215,8 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 22,
-        "x": 2,
+        "w": 21,
+        "x": 3,
         "y": 1
       },
       "id": 115,
@@ -390,7 +390,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Total Gateways with a Programmed state of True",
+      "description": "Total Gateways with a [Programmed](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io%2fv1.GatewayConditionType) state of True",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -416,7 +416,7 @@
       },
       "gridPos": {
         "h": 3,
-        "w": 2,
+        "w": 3,
         "x": 0,
         "y": 4
       },
@@ -465,7 +465,7 @@
             "mode": "thresholds"
           },
           "custom": {
-            "align": "auto",
+            "align": "center",
             "displayMode": "auto",
             "inspect": false
           },
@@ -490,35 +490,21 @@
               "id": "byName",
               "options": "Kind"
             },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 142
-              }
-            ]
+            "properties": []
           },
           {
             "matcher": {
               "id": "byName",
               "options": "Name"
             },
-            "properties": [
-              {
-                "id": "custom.width"
-              }
-            ]
+            "properties": []
           },
           {
             "matcher": {
               "id": "byName",
               "options": "Target Kind"
             },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 121
-              }
-            ]
+            "properties": []
           }
         ]
       },
@@ -670,7 +656,7 @@
             "mode": "thresholds"
           },
           "custom": {
-            "align": "auto",
+            "align": "center",
             "displayMode": "auto",
             "inspect": false
           },
@@ -695,59 +681,35 @@
               "id": "byName",
               "options": "Name"
             },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 84
-              }
-            ]
+            "properties": []
           },
           {
             "matcher": {
               "id": "byName",
               "options": "Kind"
             },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 129
-              }
-            ]
+            "properties": []
           },
           {
             "matcher": {
               "id": "byName",
               "options": "Namespace"
             },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 197
-              }
-            ]
+            "properties": []
           },
           {
             "matcher": {
               "id": "byName",
               "options": "Target Kind"
             },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 143
-              }
-            ]
+            "properties": []
           },
           {
             "matcher": {
               "id": "byName",
               "options": "Target Name"
             },
-            "properties": [
-              {
-                "id": "custom.width"
-              }
-            ]
+            "properties": []
           }
         ]
       },
@@ -912,7 +874,7 @@
             "mode": "thresholds"
           },
           "custom": {
-            "align": "auto",
+            "align": "center",
             "displayMode": "auto",
             "inspect": false
           },
@@ -1087,7 +1049,7 @@
             "mode": "thresholds"
           },
           "custom": {
-            "align": "auto",
+            "align": "center",
             "displayMode": "auto",
             "inspect": false
           },
@@ -1947,6 +1909,6 @@
   "timezone": "",
   "title": "Platform Engineer Dashboard",
   "uid": "djqDaDISk",
-  "version": 9,
+  "version": 4,
   "weekStart": ""
 }

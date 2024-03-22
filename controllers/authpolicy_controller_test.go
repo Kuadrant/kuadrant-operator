@@ -463,7 +463,7 @@ var _ = Describe("AuthPolicy controller", func() {
 						},
 					},
 				}
-				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Authentication: map[string]api.AuthenticationSpec{
 						"jwt": {
 							AuthenticationSpec: authorinoapi.AuthenticationSpec{
@@ -1270,29 +1270,29 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
-	Context("Spec TargetRef Validations", func() {
-		policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
+	policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
+		policy := &api.AuthPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-policy",
+				Namespace: testNamespace,
+			},
+			Spec: api.AuthPolicySpec{
+				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					Group: gatewayapiv1.GroupName,
+					Kind:  "HTTPRoute",
+					Name:  "my-target",
 				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  "my-target",
-					},
-				},
-			}
-
-			for _, mutateFn := range mutateFns {
-				mutateFn(policy)
-			}
-
-			return policy
+			},
 		}
 
+		for _, mutateFn := range mutateFns {
+			mutateFn(policy)
+		}
+
+		return policy
+	}
+
+	Context("Spec TargetRef Validations", func() {
 		It("Valid policy targeting HTTPRoute", func() {
 			policy := policyFactory()
 			err := k8sClient.Create(context.Background(), policy)
@@ -1323,6 +1323,89 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
 			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'")).To(BeTrue())
+		})
+	})
+
+	Context("Defaults mutual exclusivity validation", func() {
+		It("Valid when only implicit defaults are used", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.AuthScheme = testBasicAuthScheme()
+			})
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+		})
+
+		It("Valid when only explicit defaults are used", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Defaults = &api.CommonSpec{
+					AuthScheme: testBasicAuthScheme(),
+				}
+			})
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+		})
+
+		It("Invalid when both implicit and explicit defaults are used - authScheme", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.AuthScheme = testBasicAuthScheme()
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "Implicit and explicit defaults are mutually exclusive")).To(BeTrue())
+		})
+
+		It("Invalid when both implicit and explicit defaults are used - routeSelectors", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.RouteSelectors = []api.RouteSelector{
+					{
+						Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
+						Matches: []gatewayapiv1.HTTPRouteMatch{
+							{
+								Path: &gatewayapiv1.HTTPPathMatch{
+									Value: ptr.To("/foo"),
+								},
+							},
+						},
+					},
+				}
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "Implicit and explicit defaults are mutually exclusive")).To(BeTrue())
+		})
+
+		It("Invalid when both implicit and explicit defaults are used - namedPatterns", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.NamedPatterns = map[string]authorinoapi.PatternExpressions{
+					"internal-source": []authorinoapi.PatternExpression{
+						{
+							Selector: "source.ip",
+							Operator: authorinoapi.PatternExpressionOperator("matches"),
+							Value:    `192\.168\..*`,
+						},
+					},
+				}
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "Implicit and explicit defaults are mutually exclusive")).To(BeTrue())
+		})
+
+		It("Invalid when both implicit and explicit defaults are used - conditions", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Conditions = []authorinoapi.PatternExpressionOrRef{
+					{
+						PatternRef: authorinoapi.PatternRef{
+							Name: "internal-source",
+						},
+					},
+				}
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "Implicit and explicit defaults are mutually exclusive")).To(BeTrue())
 		})
 	})
 
@@ -1371,6 +1454,17 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		}
 		It("invalid usage of top-level route selectors with a gateway targetRef", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.RouteSelectors = routeSelectors
+			})
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of top-level route selectors with a gateway targetRef - defaults", func() {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Defaults = &api.CommonSpec{}
 				policy.Spec.Defaults.RouteSelectors = routeSelectors
 			})
 
@@ -1381,7 +1475,29 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - authentication", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.AuthScheme = &api.AuthSchemeSpec{
+					Authentication: map[string]api.AuthenticationSpec{
+						"my-rule": {
+							AuthenticationSpec: authorinoapi.AuthenticationSpec{
+								AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+									AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
+								},
+							},
+							CommonAuthRuleSpec: commonAuthRuleSpec,
+						},
+					},
+				}
+			})
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - authentication - defaults", func() {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Authentication: map[string]api.AuthenticationSpec{
 						"my-rule": {
 							AuthenticationSpec: authorinoapi.AuthenticationSpec{
@@ -1402,7 +1518,24 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - metadata", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.AuthScheme = &api.AuthSchemeSpec{
+					Metadata: map[string]api.MetadataSpec{
+						"my-metadata": {
+							CommonAuthRuleSpec: commonAuthRuleSpec,
+						},
+					},
+				}
+			})
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - metadata - defaults", func() {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Metadata: map[string]api.MetadataSpec{
 						"my-metadata": {
 							CommonAuthRuleSpec: commonAuthRuleSpec,
@@ -1418,7 +1551,24 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - authorization", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.AuthScheme = &api.AuthSchemeSpec{
+					Authorization: map[string]api.AuthorizationSpec{
+						"my-authZ": {
+							CommonAuthRuleSpec: commonAuthRuleSpec,
+						},
+					},
+				}
+			})
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - authorization - defaults", func() {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Authorization: map[string]api.AuthorizationSpec{
 						"my-authZ": {
 							CommonAuthRuleSpec: commonAuthRuleSpec,
@@ -1434,7 +1584,30 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - response success headers", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.AuthScheme = &api.AuthSchemeSpec{
+					Response: &api.ResponseSpec{
+						Success: api.WrappedSuccessResponseSpec{
+							Headers: map[string]api.HeaderSuccessResponseSpec{
+								"header": {
+									SuccessResponseSpec: api.SuccessResponseSpec{
+										CommonAuthRuleSpec: commonAuthRuleSpec,
+									},
+								},
+							},
+						},
+					},
+				}
+			})
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - response success headers - defaults", func() {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Response: &api.ResponseSpec{
 						Success: api.WrappedSuccessResponseSpec{
 							Headers: map[string]api.HeaderSuccessResponseSpec{
@@ -1456,7 +1629,29 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - response success dynamic metadata", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
+					Response: &api.ResponseSpec{
+						Success: api.WrappedSuccessResponseSpec{
+							DynamicMetadata: map[string]api.SuccessResponseSpec{
+								"header": {
+									CommonAuthRuleSpec: commonAuthRuleSpec,
+								},
+							},
+						},
+					},
+				}
+			})
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - response success dynamic metadata - defaults", func() {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Response: &api.ResponseSpec{
 						Success: api.WrappedSuccessResponseSpec{
 							DynamicMetadata: map[string]api.SuccessResponseSpec{
@@ -1476,7 +1671,31 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - callbacks", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults.AuthScheme = api.AuthSchemeSpec{
+				policy.Spec.AuthScheme = &api.AuthSchemeSpec{
+					Callbacks: map[string]api.CallbackSpec{
+						"callback": {
+							CallbackSpec: authorinoapi.CallbackSpec{
+								CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
+									Http: &authorinoapi.HttpEndpointSpec{
+										Url: "test.com",
+									},
+								},
+							},
+							CommonAuthRuleSpec: commonAuthRuleSpec,
+						},
+					},
+				}
+			})
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of config-level route selectors with a gateway targetRef - callbacks - defaults", func() {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Callbacks: map[string]api.CallbackSpec{
 						"callback": {
 							CallbackSpec: authorinoapi.CallbackSpec{
@@ -1499,8 +1718,8 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 	})
 })
 
-func testBasicAuthScheme() api.AuthSchemeSpec {
-	return api.AuthSchemeSpec{
+func testBasicAuthScheme() *api.AuthSchemeSpec {
+	return &api.AuthSchemeSpec{
 		Authentication: map[string]api.AuthenticationSpec{
 			"apiKey": {
 				AuthenticationSpec: authorinoapi.AuthenticationSpec{

@@ -128,13 +128,24 @@ type CallbackSpec struct {
 	CommonAuthRuleSpec        `json:""`
 }
 
+// RouteSelectors - implicit default validation
 // +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.routeSelectors)",message="route selectors not supported when targeting a Gateway"
-// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.rules.authentication) || !self.rules.authentication.exists(x, has(self.rules.authentication[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
-// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.rules.metadata) || !self.rules.metadata.exists(x, has(self.rules.metadata[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
-// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.rules.authorization) || !self.rules.authorization.exists(x, has(self.rules.authorization[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
-// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.rules.response) || !has(self.rules.response.success) || !has(self.rules.response.success.headers) || !self.rules.response.success.headers.exists(x, has(self.rules.response.success.headers[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
-// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.rules.response) || !has(self.rules.response.success) || !has(self.rules.response.success.dynamicMetadata) || !self.rules.response.success.dynamicMetadata.exists(x, has(self.rules.response.success.dynamicMetadata[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
-// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.rules.callbacks) || !self.rules.callbacks.exists(x, has(self.rules.callbacks[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.rules) || !has(self.rules.authentication) || !self.rules.authentication.exists(x, has(self.rules.authentication[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.rules) || !has(self.rules.metadata) || !self.rules.metadata.exists(x, has(self.rules.metadata[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.rules) || !has(self.rules.authorization) || !self.rules.authorization.exists(x, has(self.rules.authorization[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.rules) || !has(self.rules.response) || !has(self.rules.response.success) || !has(self.rules.response.success.headers) || !self.rules.response.success.headers.exists(x, has(self.rules.response.success.headers[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.rules) || !has(self.rules.response) || !has(self.rules.response.success) || !has(self.rules.response.success.dynamicMetadata) || !self.rules.response.success.dynamicMetadata.exists(x, has(self.rules.response.success.dynamicMetadata[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.rules) || !has(self.rules.callbacks) || !self.rules.callbacks.exists(x, has(self.rules.callbacks[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// RouteSelectors - explicit default validation
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.defaults) || !has(self.defaults.routeSelectors)",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.defaults) || !has(self.defaults.rules) || !has(self.defaults.rules.authentication) || !self.defaults.rules.authentication.exists(x, has(self.defaults.rules.authentication[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.defaults) || !has(self.defaults.rules) || !has(self.defaults.rules.metadata) || !self.defaults.rules.metadata.exists(x, has(self.defaults.rules.metadata[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.defaults) || !has(self.defaults.rules) || !has(self.defaults.rules.authorization) || !self.defaults.rules.authorization.exists(x, has(self.defaults.rules.authorization[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.defaults) || !has(self.defaults.rules) || !has(self.defaults.rules.response) || !has(self.defaults.rules.response.success) || !has(self.defaults.rules.response.success.headers) || !self.defaults.rules.response.success.headers.exists(x, has(self.defaults.rules.response.success.headers[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.defaults) || !has(self.defaults.rules) || !has(self.defaults.rules.response) || !has(self.defaults.rules.response.success) || !has(self.defaults.rules.response.success.dynamicMetadata) || !self.defaults.rules.response.success.dynamicMetadata.exists(x, has(self.defaults.rules.response.success.dynamicMetadata[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.defaults) || !has(self.defaults.rules) || !has(self.defaults.rules.callbacks) || !self.defaults.rules.callbacks.exists(x, has(self.defaults.rules.callbacks[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// Mutual Exclusivity Validation
+// +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && (has(self.routeSelectors) || has(self.patterns) || has(self.when) || has(self.rules)))",message="Implicit and explicit defaults are mutually exclusive"
 type AuthPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
@@ -144,7 +155,7 @@ type AuthPolicySpec struct {
 	// Defaults define explicit default values for this policy and for policies inheriting this policy.
 	// Defaults are mutually exclusive with implicit defaults defined by CommonSpec.
 	// +optional
-	Defaults *CommonSpec `json:"defaults"`
+	Defaults *CommonSpec `json:"defaults,omitempty"`
 
 	// CommonSpec defines implicit default values for this policy and for policies inheriting this policy.
 	// CommonSpec is mutually exclusive with explicit defaults defined by Defaults.
@@ -173,16 +184,7 @@ type CommonSpec struct {
 
 	// The auth rules of the policy.
 	// See Authorino's AuthConfig CRD for more details.
-	AuthScheme AuthSchemeSpec `json:"rules,omitempty"`
-}
-
-// GetRouteSelectors returns the top-level route selectors of the auth scheme.
-// impl: RouteSelectorsGetter
-func (s AuthPolicySpec) GetRouteSelectors() []RouteSelector {
-	if s.Defaults != nil {
-		return s.Defaults.RouteSelectors
-	}
-	return s.RouteSelectors
+	AuthScheme *AuthSchemeSpec `json:"rules,omitempty"`
 }
 
 type AuthPolicyStatus struct {
@@ -278,6 +280,10 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 	}
 
 	appendCommonSpecRuleHosts := func(c CommonSpec) {
+		if c.AuthScheme == nil {
+			return
+		}
+
 		for _, config := range c.AuthScheme.Authentication {
 			appendRuleHosts(config)
 		}
@@ -300,7 +306,7 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 		}
 	}
 
-	appendRuleHosts(ap.Spec)
+	appendRuleHosts(ap)
 	appendCommonSpecRuleHosts(ap.GetCommonSpec())
 
 	return
@@ -334,8 +340,14 @@ func (ap *AuthPolicy) GetConditions() []authorinoapi.PatternExpressionOrRef {
 	return ap.GetCommonSpec().Conditions
 }
 
-func (ap *AuthPolicy) GetAuthScheme() AuthSchemeSpec {
+func (ap *AuthPolicy) GetAuthScheme() *AuthSchemeSpec {
 	return ap.GetCommonSpec().AuthScheme
+}
+
+// GetRouteSelectors returns the top-level route selectors of the auth scheme.
+// impl: RouteSelectorsGetter
+func (ap *AuthPolicy) GetRouteSelectors() []RouteSelector {
+	return ap.GetCommonSpec().RouteSelectors
 }
 
 //+kubebuilder:object:root=true

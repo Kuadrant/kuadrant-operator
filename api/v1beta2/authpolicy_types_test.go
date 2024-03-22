@@ -32,13 +32,13 @@ func TestCommonAuthRuleSpecGetRouteSelectors(t *testing.T) {
 }
 
 func TestAuthPolicySpecGetRouteSelectors(t *testing.T) {
-	spec := &AuthPolicySpec{}
-	if spec.GetRouteSelectors() != nil {
+	p := &AuthPolicy{}
+	if p.GetRouteSelectors() != nil {
 		t.Errorf("Expected nil route selectors")
 	}
 	routeSelector := testBuildRouteSelector()
-	spec.RouteSelectors = []RouteSelector{routeSelector}
-	result := spec.GetRouteSelectors()
+	p.Spec.RouteSelectors = []RouteSelector{routeSelector}
+	result := p.GetRouteSelectors()
 	if len(result) != 1 {
 		t.Errorf("Expected 1 route selector, got %d", len(result))
 	}
@@ -128,6 +128,7 @@ func TestAuthPolicyGetRulesHostnames(t *testing.T) {
 		t.Errorf("Expected hostname to be %s, got %s", expected, result[1])
 	}
 	// + 1 authentication route selector with 1 hostname
+	policy.Spec.AuthScheme = &AuthSchemeSpec{}
 	policy.Spec.AuthScheme.Authentication = map[string]AuthenticationSpec{
 		"my-authn": {
 			CommonAuthRuleSpec: CommonAuthRuleSpec{
@@ -262,7 +263,7 @@ func TestAuthPolicyValidate(t *testing.T) {
 						Namespace: ptr.To(gatewayapiv1.Namespace("other-namespace")),
 					},
 					CommonSpec: CommonSpec{
-						AuthScheme: AuthSchemeSpec{
+						AuthScheme: &AuthSchemeSpec{
 							Authentication: map[string]AuthenticationSpec{
 								"my-rule": {
 									AuthenticationSpec: authorinoapi.AuthenticationSpec{

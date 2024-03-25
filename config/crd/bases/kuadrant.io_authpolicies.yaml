@@ -72,7 +72,7 @@ spec:
               defaults:
                 description: |-
                   Defaults define explicit default values for this policy and for policies inheriting this policy.
-                  Defaults are mutually exclusive with implicit defaults defined by CommonSpec.
+                  Defaults are mutually exclusive with implicit defaults defined by AuthPolicyCommonSpec.
                 properties:
                   patterns:
                     additionalProperties:

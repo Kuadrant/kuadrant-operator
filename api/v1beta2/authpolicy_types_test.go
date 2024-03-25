@@ -262,7 +262,7 @@ func TestAuthPolicyValidate(t *testing.T) {
 						Name:      "my-route",
 						Namespace: ptr.To(gatewayapiv1.Namespace("other-namespace")),
 					},
-					CommonSpec: CommonSpec{
+					AuthPolicyCommonSpec: AuthPolicyCommonSpec{
 						AuthScheme: &AuthSchemeSpec{
 							Authentication: map[string]AuthenticationSpec{
 								"my-rule": {

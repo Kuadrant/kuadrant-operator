@@ -66,7 +66,7 @@ var _ = Describe("AuthPolicy controller", func() {
 					Name:      testHTTPRouteName,
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				},
-				Defaults: &api.CommonSpec{
+				Defaults: &api.AuthPolicyCommonSpec{
 					AuthScheme: testBasicAuthScheme(),
 				},
 			},
@@ -1336,7 +1336,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("Valid when only explicit defaults are used", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.CommonSpec{
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{
 					AuthScheme: testBasicAuthScheme(),
 				}
 			})
@@ -1345,7 +1345,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("Invalid when both implicit and explicit defaults are used - authScheme", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
 				policy.Spec.AuthScheme = testBasicAuthScheme()
 			})
 			err := k8sClient.Create(ctx, policy)
@@ -1355,7 +1355,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("Invalid when both implicit and explicit defaults are used - routeSelectors", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
 				policy.Spec.RouteSelectors = []api.RouteSelector{
 					{
 						Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
@@ -1376,7 +1376,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("Invalid when both implicit and explicit defaults are used - namedPatterns", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
 				policy.Spec.NamedPatterns = map[string]authorinoapi.PatternExpressions{
 					"internal-source": []authorinoapi.PatternExpression{
 						{
@@ -1394,7 +1394,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("Invalid when both implicit and explicit defaults are used - conditions", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
 				policy.Spec.Conditions = []authorinoapi.PatternExpressionOrRef{
 					{
 						PatternRef: authorinoapi.PatternRef{
@@ -1464,7 +1464,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of top-level route selectors with a gateway targetRef - defaults", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
 				policy.Spec.Defaults.RouteSelectors = routeSelectors
 			})
 
@@ -1496,7 +1496,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - authentication - defaults", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
 				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Authentication: map[string]api.AuthenticationSpec{
 						"my-rule": {
@@ -1534,7 +1534,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - metadata - defaults", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
 				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Metadata: map[string]api.MetadataSpec{
 						"my-metadata": {
@@ -1567,7 +1567,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - authorization - defaults", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
 				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Authorization: map[string]api.AuthorizationSpec{
 						"my-authZ": {
@@ -1606,7 +1606,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - response success headers - defaults", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
 				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Response: &api.ResponseSpec{
 						Success: api.WrappedSuccessResponseSpec{
@@ -1629,7 +1629,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - response success dynamic metadata", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
 				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Response: &api.ResponseSpec{
 						Success: api.WrappedSuccessResponseSpec{
@@ -1650,7 +1650,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - response success dynamic metadata - defaults", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
 				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Response: &api.ResponseSpec{
 						Success: api.WrappedSuccessResponseSpec{
@@ -1694,7 +1694,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("invalid usage of config-level route selectors with a gateway targetRef - callbacks - defaults", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.CommonSpec{}
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
 				policy.Spec.Defaults.AuthScheme = &api.AuthSchemeSpec{
 					Callbacks: map[string]api.CallbackSpec{
 						"callback": {

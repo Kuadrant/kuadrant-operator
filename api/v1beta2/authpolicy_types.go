@@ -153,17 +153,17 @@ type AuthPolicySpec struct {
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
 
 	// Defaults define explicit default values for this policy and for policies inheriting this policy.
-	// Defaults are mutually exclusive with implicit defaults defined by CommonSpec.
+	// Defaults are mutually exclusive with implicit defaults defined by AuthPolicyCommonSpec.
 	// +optional
-	Defaults *CommonSpec `json:"defaults,omitempty"`
+	Defaults *AuthPolicyCommonSpec `json:"defaults,omitempty"`
 
-	// CommonSpec defines implicit default values for this policy and for policies inheriting this policy.
-	// CommonSpec is mutually exclusive with explicit defaults defined by Defaults.
-	CommonSpec `json:""`
+	// AuthPolicyCommonSpec defines implicit default values for this policy and for policies inheriting this policy.
+	// AuthPolicyCommonSpec is mutually exclusive with explicit defaults defined by Defaults.
+	AuthPolicyCommonSpec `json:""`
 }
 
-// CommonSpec contains common shared fields for defaults and overrides
-type CommonSpec struct {
+// AuthPolicyCommonSpec contains common shared fields for defaults and overrides
+type AuthPolicyCommonSpec struct {
 	// Top-level route selectors.
 	// If present, the elements will be used to select HTTPRoute rules that, when activated, trigger the external authorization service.
 	// At least one selected HTTPRoute rule must match to trigger the AuthPolicy.
@@ -279,7 +279,7 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 		}
 	}
 
-	appendCommonSpecRuleHosts := func(c CommonSpec) {
+	appendCommonSpecRuleHosts := func(c AuthPolicyCommonSpec) {
 		if c.AuthScheme == nil {
 			return
 		}
@@ -324,12 +324,12 @@ func (ap *AuthPolicy) DirectReferenceAnnotationName() string {
 	return AuthPolicyDirectReferenceAnnotationName
 }
 
-func (ap *AuthPolicy) GetCommonSpec() CommonSpec {
+func (ap *AuthPolicy) GetCommonSpec() AuthPolicyCommonSpec {
 	if ap.Spec.Defaults != nil {
 		return *ap.Spec.Defaults
 	}
 
-	return ap.Spec.CommonSpec
+	return ap.Spec.AuthPolicyCommonSpec
 }
 
 func (ap *AuthPolicy) GetNamedPatterns() map[string]authorinoapi.PatternExpressions {

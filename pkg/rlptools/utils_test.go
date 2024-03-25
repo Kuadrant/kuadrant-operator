@@ -25,7 +25,7 @@ func testRLP_1Limit_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 			Namespace: ns,
 		},
 		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			CommonSpec: kuadrantv1beta2.CommonSpec{
+			RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
 				Limits: map[string]kuadrantv1beta2.Limit{
 					"l1": {
 						Rates: []kuadrantv1beta2.Rate{
@@ -53,7 +53,7 @@ func testRLP_2Limits_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 			Namespace: ns,
 		},
 		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			CommonSpec: kuadrantv1beta2.CommonSpec{
+			RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
 				Limits: map[string]kuadrantv1beta2.Limit{
 					"l1": {
 						Rates: []kuadrantv1beta2.Rate{
@@ -90,7 +90,7 @@ func testRLP_1Limit_2Rates(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 			Namespace: ns,
 		},
 		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			CommonSpec: kuadrantv1beta2.CommonSpec{
+			RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
 				Limits: map[string]kuadrantv1beta2.Limit{
 					"l1": {
 						Rates: []kuadrantv1beta2.Rate{
@@ -123,7 +123,7 @@ func testRLP_1Limit_1Rate_1Counter(ns, name string) *kuadrantv1beta2.RateLimitPo
 			Namespace: ns,
 		},
 		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			CommonSpec: kuadrantv1beta2.CommonSpec{
+			RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
 				Limits: map[string]kuadrantv1beta2.Limit{
 					"l1": {
 						Counters: []kuadrantv1beta2.ContextSelector{

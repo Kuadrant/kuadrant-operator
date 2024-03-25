@@ -53,7 +53,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Kind:  "HTTPRoute",
 					Name:  gatewayapiv1.ObjectName(routeName),
 				},
-				Defaults: kuadrantv1beta2.CommonSpec{
+				Defaults: &kuadrantv1beta2.RateLimitPolicyCommonSpec{
 					Limits: map[string]kuadrantv1beta2.Limit{
 						"l1": {
 							Rates: []kuadrantv1beta2.Rate{
@@ -256,45 +256,47 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// create ratelimitpolicy
 			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
-				policy.Spec.Defaults.Limits = map[string]kuadrantv1beta2.Limit{
-					"toys": {
-						Rates: []kuadrantv1beta2.Rate{
-							{Limit: 50, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
-						},
-						Counters: []kuadrantv1beta2.ContextSelector{"auth.identity.username"},
-						RouteSelectors: []kuadrantv1beta2.RouteSelector{
-							{ // selects the 1st HTTPRouteRule (i.e. get|post /toys*) for one of the hostnames
-								Matches: []gatewayapiv1.HTTPRouteMatch{
-									{
-										Path: &gatewayapiv1.HTTPPathMatch{
-											Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-											Value: ptr.To("/toys"),
+				policy.Spec.Defaults = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"toys": {
+							Rates: []kuadrantv1beta2.Rate{
+								{Limit: 50, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
+							},
+							Counters: []kuadrantv1beta2.ContextSelector{"auth.identity.username"},
+							RouteSelectors: []kuadrantv1beta2.RouteSelector{
+								{ // selects the 1st HTTPRouteRule (i.e. get|post /toys*) for one of the hostnames
+									Matches: []gatewayapiv1.HTTPRouteMatch{
+										{
+											Path: &gatewayapiv1.HTTPPathMatch{
+												Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+												Value: ptr.To("/toys"),
+											},
 										},
 									},
+									Hostnames: []gatewayapiv1.Hostname{"*.toystore.acme.com"},
 								},
-								Hostnames: []gatewayapiv1.Hostname{"*.toystore.acme.com"},
+							},
+							When: []kuadrantv1beta2.WhenCondition{
+								{
+									Selector: "auth.identity.group",
+									Operator: kuadrantv1beta2.WhenConditionOperator("neq"),
+									Value:    "admin",
+								},
 							},
 						},
-						When: []kuadrantv1beta2.WhenCondition{
-							{
-								Selector: "auth.identity.group",
-								Operator: kuadrantv1beta2.WhenConditionOperator("neq"),
-								Value:    "admin",
+						"assets": {
+							Rates: []kuadrantv1beta2.Rate{
+								{Limit: 5, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
+								{Limit: 100, Duration: 12, Unit: kuadrantv1beta2.TimeUnit("hour")},
 							},
-						},
-					},
-					"assets": {
-						Rates: []kuadrantv1beta2.Rate{
-							{Limit: 5, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
-							{Limit: 100, Duration: 12, Unit: kuadrantv1beta2.TimeUnit("hour")},
-						},
-						RouteSelectors: []kuadrantv1beta2.RouteSelector{
-							{ // selects the 2nd HTTPRouteRule (i.e. /assets*) for all hostnames
-								Matches: []gatewayapiv1.HTTPRouteMatch{
-									{
-										Path: &gatewayapiv1.HTTPPathMatch{
-											Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-											Value: ptr.To("/assets"),
+							RouteSelectors: []kuadrantv1beta2.RouteSelector{
+								{ // selects the 2nd HTTPRouteRule (i.e. /assets*) for all hostnames
+									Matches: []gatewayapiv1.HTTPRouteMatch{
+										{
+											Path: &gatewayapiv1.HTTPPathMatch{
+												Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+												Value: ptr.To("/assets"),
+											},
 										},
 									},
 								},
@@ -654,27 +656,28 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
-	Context("Spec TargetRef Validations", func() {
-		policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
-			policy := &kuadrantv1beta2.RateLimitPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
+		policy := &kuadrantv1beta2.RateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-policy",
+				Namespace: testNamespace,
+			},
+			Spec: kuadrantv1beta2.RateLimitPolicySpec{
+				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					Group: gatewayapiv1.GroupName,
+					Kind:  "HTTPRoute",
+					Name:  "my-target",
 				},
-				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  "my-target",
-					},
-				},
-			}
-			for _, mutateFn := range mutateFns {
-				mutateFn(policy)
-			}
-
-			return policy
+			},
 		}
+		for _, mutateFn := range mutateFns {
+			mutateFn(policy)
+		}
+
+		return policy
+	}
+
+	Context("Spec TargetRef Validations", func() {
 		It("Valid policy targeting HTTPRoute", func() {
 			policy := policyFactory()
 			err := k8sClient.Create(context.Background(), policy)
@@ -706,8 +709,10 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			Expect(err).To(Not(BeNil()))
 			Expect(strings.Contains(err.Error(), "Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'")).To(BeTrue())
 		})
+	})
 
-		It("Valid only implicit defaults", func() {
+	Context("Defaults validation", func() {
+		It("Valid only implicit defaults", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Spec.Limits = map[string]kuadrantv1beta2.Limit{
 					"implicit": {
@@ -715,27 +720,31 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 					},
 				}
 			})
-			err := k8sClient.Create(context.Background(), policy)
+			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(BeNil())
 		})
 
-		It("Valid only explicit defaults", func() {
+		It("Valid only explicit defaults", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
-				policy.Spec.Defaults.Limits = map[string]kuadrantv1beta2.Limit{
-					"explicit": {
-						Rates: []kuadrantv1beta2.Rate{{Limit: 1, Duration: 10, Unit: "second"}},
+				policy.Spec.Defaults = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"explicit": {
+							Rates: []kuadrantv1beta2.Rate{{Limit: 1, Duration: 10, Unit: "second"}},
+						},
 					},
 				}
 			})
-			err := k8sClient.Create(context.Background(), policy)
+			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(BeNil())
 		})
 
-		It("Invalid implicit and explicit defaults are mutually exclusive", func() {
+		It("Invalid implicit and explicit defaults are mutually exclusive", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
-				policy.Spec.Defaults.Limits = map[string]kuadrantv1beta2.Limit{
-					"explicit": {
-						Rates: []kuadrantv1beta2.Rate{{Limit: 1, Duration: 10, Unit: "second"}},
+				policy.Spec.Defaults = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"explicit": {
+							Rates: []kuadrantv1beta2.Rate{{Limit: 1, Duration: 10, Unit: "second"}},
+						},
 					},
 				}
 				policy.Spec.Limits = map[string]kuadrantv1beta2.Limit{
@@ -744,7 +753,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 					},
 				}
 			})
-			err := k8sClient.Create(context.Background(), policy)
+			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(Not(BeNil()))
 			Expect(strings.Contains(err.Error(), "Implicit and explicit defaults are mutually exclusive")).To(BeTrue())
 		})
@@ -755,34 +764,25 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			gateWayRouteSelectorErrorMessage = "route selectors not supported when targeting a Gateway"
 		)
 
-		It("invalid usage of limit route selectors with a gateway targetRef", func() {
-			policy := &kuadrantv1beta2.RateLimitPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
-				},
-				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "Gateway",
-						Name:  "my-gw",
-					},
-					CommonSpec: kuadrantv1beta2.CommonSpec{
-						Limits: map[string]kuadrantv1beta2.Limit{
-							"l1": {
-								Rates: []kuadrantv1beta2.Rate{
-									{
-										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
-									},
+		It("invalid usage of limit route selectors with a gateway targetRef", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = "my-gw"
+				policy.Spec.RateLimitPolicyCommonSpec = kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
 								},
-								RouteSelectors: []kuadrantv1beta2.RouteSelector{
-									{
-										Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
-										Matches: []gatewayapiv1.HTTPRouteMatch{
-											{
-												Path: &gatewayapiv1.HTTPPathMatch{
-													Value: ptr.To("/foo"),
-												},
+							},
+							RouteSelectors: []kuadrantv1beta2.RouteSelector{
+								{
+									Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
+									Matches: []gatewayapiv1.HTTPRouteMatch{
+										{
+											Path: &gatewayapiv1.HTTPPathMatch{
+												Value: ptr.To("/foo"),
 											},
 										},
 									},
@@ -790,10 +790,10 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 							},
 						},
 					},
-				},
-			}
+				}
+			})
 
-			err := k8sClient.Create(context.Background(), policy)
+			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(Not(BeNil()))
 			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
 		})

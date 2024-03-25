@@ -90,7 +90,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
-					CommonSpec: kuadrantv1beta2.CommonSpec{
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
 						Limits: map[string]kuadrantv1beta2.Limit{
 							"l1": {
 								Rates: []kuadrantv1beta2.Rate{

@@ -70,7 +70,7 @@ spec:
               defaults:
                 description: |-
                   Defaults define explicit default values for this policy and for policies inheriting this policy.
-                  Defaults are mutually exclusive with implicit defaults defined by CommonSpec.
+                  Defaults are mutually exclusive with implicit defaults defined by RateLimitPolicyCommonSpec.
                 properties:
                   limits:
                     additionalProperties:
@@ -895,7 +895,7 @@ spec:
               rule: self.targetRef.kind != 'Gateway' || !has(self.limits) || !self.limits.exists(x,
                 has(self.limits[x].routeSelectors))
             - message: Implicit and explicit defaults are mutually exclusive
-              rule: '!(has(self.defaults.limits) && has(self.limits))'
+              rule: '!(has(self.defaults) && has(self.limits))'
           status:
             description: RateLimitPolicyStatus defines the observed state of RateLimitPolicy
             properties:

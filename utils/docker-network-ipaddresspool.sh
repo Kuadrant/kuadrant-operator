@@ -9,11 +9,27 @@
 set -euo pipefail
 
 networkName=$1
+YQ="${2:-yq}"
+
+SUBNET=""
+if command -v podman &> /dev/null; then
+  SUBNET=$(podman network inspect kind | grep -Eo '"subnet": "[0-9.]+/[0-9]+' | awk -F\" '{print $4}' | head -n 1)
+elif command -v docker &> /dev/null; then
+  ## Parse kind network subnet
+  ## Take only IPv4 subnets, exclude IPv6
+  SUBNET=$(docker network inspect $networkName --format '{{json .IPAM.Config }}' | \
+      ${YQ} '.[] | select( .Subnet | test("^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\d+$")) | .Subnet')
+fi
+
+if [[ -z "$SUBNET" ]]; then
+   echo "Error: parsing IPv4 network address for '$networkName' docker network"
+   exit 1
+fi
 
 subnet=`docker network inspect $networkName -f '{{ (index .IPAM.Config 0).Subnet }}'`
 # shellcheck disable=SC2206
-subnetParts=(${subnet//./ })
-cidr="${subnetParts[0]}.${subnetParts[1]}.200.0/24"
+subnetParts=(${SUBNET//./ })
+cidr="${subnetParts[0]}.${subnetParts[1]}.0.252/30"
 
 cat <<EOF
 apiVersion: metallb.io/v1beta1

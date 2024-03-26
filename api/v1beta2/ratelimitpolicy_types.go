@@ -274,7 +274,7 @@ func (r *RateLimitPolicy) DirectReferenceAnnotationName() string {
 	return RateLimitPolicyDirectReferenceAnnotationName
 }
 
-func (r *RateLimitPolicy) GetRateLimitPolicyCommonSpec() *RateLimitPolicyCommonSpec {
+func (r *RateLimitPolicy) CommonSpec() *RateLimitPolicyCommonSpec {
 	if r.Spec.Defaults != nil {
 		return r.Spec.Defaults
 	}
@@ -285,7 +285,7 @@ func (r *RateLimitPolicy) GetRateLimitPolicyCommonSpec() *RateLimitPolicyCommonS
 // GetLimits returns the limits based on whether default or implicit rules are defined.
 // Default rules takes precedence
 func (r *RateLimitPolicy) GetLimits() map[string]Limit {
-	return r.GetRateLimitPolicyCommonSpec().Limits
+	return r.CommonSpec().Limits
 }
 
 func init() {

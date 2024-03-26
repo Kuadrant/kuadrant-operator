@@ -577,6 +577,116 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		})
 	})
 
+	Context("RLP Defaults", func() {
+		It("HTTPRoute atomic default taking precedence over Gateway defaults", func(ctx SpecContext) {
+			// create httproute
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
+			Expect(k8sClient.Create(ctx, httpRoute)).To(Succeed())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			// create GW RLP
+			gwRLP := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gwName)
+			})
+			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())
+			rlpKey := client.ObjectKey{Name: gwRLP.Name, Namespace: testNamespace}
+			Eventually(testRLPIsAccepted(rlpKey)).WithContext(ctx).Should(BeTrue())
+
+			// Create HTTPRoute RLP with new default limits
+			routeRLP := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Name = "httproute-rlp"
+				policy.Spec.Defaults.Limits = map[string]kuadrantv1beta2.Limit{
+					"l1": {
+						Rates: []kuadrantv1beta2.Rate{
+							{
+								Limit: 10, Duration: 5, Unit: kuadrantv1beta2.TimeUnit("second"),
+							},
+						},
+					},
+				}
+			})
+			Expect(k8sClient.Create(ctx, routeRLP)).To(Succeed())
+			rlpKey = client.ObjectKey{Name: routeRLP.Name, Namespace: testNamespace}
+			Eventually(testRLPIsAccepted(rlpKey)).WithContext(ctx).Should(BeTrue())
+
+			// Check Gateway direct back reference
+			gwKey := client.ObjectKeyFromObject(gateway)
+			existingGateway := &gatewayapiv1.Gateway{}
+			Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
+			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
+				gwRLP.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(gwRLP).String()))
+
+			// check limits
+			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+			existingLimitador := &limitadorv1alpha1.Limitador{}
+			Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
+			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+				MaxValue:   10,
+				Seconds:    5,
+				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+				Conditions: []string{`limit.l1__2804bad6 == "1"`},
+				Variables:  []string{},
+				Name:       rlptools.LimitsNameFromRLP(routeRLP),
+			}))
+
+			// Check wasm plugin
+			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			Eventually(testWasmPluginIsAvailable(wasmPluginKey)).WithContext(ctx).Should(BeTrue())
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			Expect(k8sClient.Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingWASMConfig).To(Equal(&wasm.Plugin{
+				FailureMode: wasm.FailureModeDeny,
+				RateLimitPolicies: []wasm.RateLimitPolicy{
+					{
+						Name:   rlpKey.String(),
+						Domain: rlptools.LimitsNamespaceFromRLP(routeRLP),
+						Rules: []wasm.Rule{
+							{
+								Conditions: []wasm.Condition{
+									{
+										AllOf: []wasm.PatternExpression{
+											{
+												Selector: "request.url_path",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+												Value:    "/toy",
+											},
+											{
+												Selector: "request.method",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+												Value:    "GET",
+											},
+										},
+									},
+								},
+								Data: []wasm.DataItem{
+									{
+										Static: &wasm.StaticSpec{
+											Key:   `limit.l1__2804bad6`,
+											Value: "1",
+										},
+									},
+								},
+							},
+						},
+						Hostnames: []string{"*.example.com"},
+						Service:   common.KuadrantRateLimitClusterName,
+					},
+				},
+			}))
+
+			// Gateway should contain HTTPRoute RLP in backreference
+			Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
+			serialized, err := json.Marshal(rlpKey)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingGateway.GetAnnotations()).To(HaveKey(routeRLP.BackReferenceAnnotationName()))
+			Expect(existingGateway.GetAnnotations()[routeRLP.BackReferenceAnnotationName()]).To(ContainSubstring(string(serialized)))
+
+		}, SpecTimeout(1*time.Minute))
+	})
+
 	Context("RLP accepted condition reasons", func() {
 		assertAcceptedConditionFalse := func(rlp *kuadrantv1beta2.RateLimitPolicy, reason, message string) func() bool {
 			return func() bool {

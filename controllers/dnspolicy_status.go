@@ -112,5 +112,5 @@ func (r *DNSPolicyReconciler) enforcedCondition(ctx context.Context, dnsPolicy *
 		return kuadrant.EnforcedCondition(dnsPolicy, nil, true)
 	}
 	// there are no controlled DNS records present
-	return kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(dnsPolicy.Kind(), errors.New("policy is not enforced on any dns record")), false)
+	return kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(dnsPolicy.Kind(), errors.New("policy is not enforced on any dns record: no routes attached for listeners")), false)
 }

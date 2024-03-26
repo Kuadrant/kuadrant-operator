@@ -247,7 +247,7 @@ var _ = Describe("DNSPolicy controller", func() {
 							"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
 							"Status":  Equal(metav1.ConditionFalse),
 							"Reason":  Equal(PolicyReasonUnknown),
-							"Message": Equal("DNSPolicy has encountered some issues: policy is not enforced on any dns record"),
+							"Message": Equal("DNSPolicy has encountered some issues: policy is not enforced on any dns record: no routes attached for listeners"),
 						})),
 				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())

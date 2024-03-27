@@ -49,9 +49,8 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -147,7 +146,7 @@ var _ = BeforeSuite(func() {
 
 	err = (&AuthPolicyReconciler{
 		BaseReconciler:      authPolicyBaseReconciler,
-		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 		OverriddenPolicyMap: kuadrant.NewOverriddenPolicyMap(),
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
@@ -160,7 +159,7 @@ var _ = BeforeSuite(func() {
 
 	err = (&RateLimitPolicyReconciler{
 		BaseReconciler:      rateLimitPolicyBaseReconciler,
-		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())
@@ -173,7 +172,7 @@ var _ = BeforeSuite(func() {
 
 	err = (&TLSPolicyReconciler{
 		BaseReconciler:      tlsPolicyBaseReconciler,
-		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())
@@ -186,7 +185,7 @@ var _ = BeforeSuite(func() {
 
 	err = (&DNSPolicyReconciler{
 		BaseReconciler:      dnsPolicyBaseReconciler,
-		TargetRefReconciler: reconcilerutils.TargetRefReconciler{Client: mgr.GetClient()},
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())
@@ -223,6 +222,18 @@ var _ = BeforeSuite(func() {
 
 	err = (&GatewayKuadrantReconciler{
 		BaseReconciler: gatewayKuadrantBaseReconciler,
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
+	rateLimitingWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("wasmplugin"),
+		mgr.GetEventRecorderFor("RateLimitingWASMPlugin"),
+	)
+
+	err = (&RateLimitingWASMPluginReconciler{
+		BaseReconciler: rateLimitingWASMPluginBaseReconciler,
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())

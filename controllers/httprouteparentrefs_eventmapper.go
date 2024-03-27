@@ -10,6 +10,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
@@ -65,7 +66,7 @@ func (m *HTTPRouteParentRefsEventMapper) mapToPolicyRequest(obj client.Object, p
 		}
 		for _, policy := range policies.GetItems() {
 			targetRef := policy.GetTargetRef()
-			if !kuadrant.IsTargetRefGateway(targetRef) {
+			if !kuadrantgatewayapi.IsTargetRefGateway(targetRef) {
 				continue
 			}
 			targetRefNamespace := targetRef.Namespace

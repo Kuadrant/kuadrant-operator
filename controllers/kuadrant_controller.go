@@ -30,7 +30,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/env"
 	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -45,8 +44,8 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
-	"github.com/kuadrant/kuadrant-operator/pkg/reconcilers"
 )
 
 const (
@@ -58,7 +57,6 @@ const (
 // KuadrantReconciler reconciles a Kuadrant object
 type KuadrantReconciler struct {
 	*reconcilers.BaseReconciler
-	Scheme *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants,verbs=get;list;watch;create;update;patch;delete

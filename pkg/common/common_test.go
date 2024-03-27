@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 func TestMergeMapStringString(t *testing.T) {
@@ -216,54 +215,6 @@ func TestUnMarshallObjectKey(t *testing.T) {
 
 			if output != tc.expectedOutput {
 				t.Errorf("unexpected output: got %v, want %v", output, tc.expectedOutput)
-			}
-		})
-	}
-}
-
-func TestFilterValidSubdomains(t *testing.T) {
-	testCases := []struct {
-		name       string
-		domains    []gatewayapiv1.Hostname
-		subdomains []gatewayapiv1.Hostname
-		expected   []gatewayapiv1.Hostname
-	}{
-		{
-			name:       "when all subdomains are valid",
-			domains:    []gatewayapiv1.Hostname{"my-app.apps.io", "*.acme.com"},
-			subdomains: []gatewayapiv1.Hostname{"toystore.acme.com", "my-app.apps.io", "carstore.acme.com"},
-			expected:   []gatewayapiv1.Hostname{"toystore.acme.com", "my-app.apps.io", "carstore.acme.com"},
-		},
-		{
-			name:       "when some subdomains are valid and some are not",
-			domains:    []gatewayapiv1.Hostname{"my-app.apps.io", "*.acme.com"},
-			subdomains: []gatewayapiv1.Hostname{"toystore.acme.com", "my-app.apps.io", "other-app.apps.io"},
-			expected:   []gatewayapiv1.Hostname{"toystore.acme.com", "my-app.apps.io"},
-		},
-		{
-			name:       "when none of subdomains are valid",
-			domains:    []gatewayapiv1.Hostname{"my-app.apps.io", "*.acme.com"},
-			subdomains: []gatewayapiv1.Hostname{"other-app.apps.io"},
-			expected:   []gatewayapiv1.Hostname{},
-		},
-		{
-			name:       "when the set of super domains is empty",
-			domains:    []gatewayapiv1.Hostname{},
-			subdomains: []gatewayapiv1.Hostname{"toystore.acme.com"},
-			expected:   []gatewayapiv1.Hostname{},
-		},
-		{
-			name:       "when the set of subdomains is empty",
-			domains:    []gatewayapiv1.Hostname{"my-app.apps.io", "*.acme.com"},
-			subdomains: []gatewayapiv1.Hostname{},
-			expected:   []gatewayapiv1.Hostname{},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			if r := FilterValidSubdomains(tc.domains, tc.subdomains); !reflect.DeepEqual(r, tc.expected) {
-				t.Errorf("expected=%v; got=%v", tc.expected, r)
 			}
 		})
 	}

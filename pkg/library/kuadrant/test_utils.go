@@ -1,3 +1,5 @@
+//go:build unit
+
 package kuadrant
 
 import (
@@ -21,6 +23,10 @@ func (tpk *PolicyKindStub) BackReferenceAnnotationName() string {
 func (tpk *PolicyKindStub) DirectReferenceAnnotationName() string {
 	return "kuadrant.io/testpolicy"
 }
+
+const (
+	NS = "nsA"
+)
 
 type FakePolicy struct {
 	client.Object

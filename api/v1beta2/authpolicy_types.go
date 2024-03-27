@@ -169,7 +169,7 @@ type AuthPolicyCommonSpec struct {
 	// At least one selected HTTPRoute rule must match to trigger the AuthPolicy.
 	// If no route selectors are specified, the AuthPolicy will be enforced at all requests to the protected routes.
 	// +optional
-	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:MaxItems=15
 	RouteSelectors []RouteSelector `json:"routeSelectors,omitempty"`
 
 	// Named sets of patterns that can be referred in `when` conditions and in pattern-matching authorization policy rules.
@@ -279,7 +279,7 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 		}
 	}
 
-	appendCommonSpecRuleHosts := func(c AuthPolicyCommonSpec) {
+	appendCommonSpecRuleHosts := func(c *AuthPolicyCommonSpec) {
 		if c.AuthScheme == nil {
 			return
 		}
@@ -324,12 +324,12 @@ func (ap *AuthPolicy) DirectReferenceAnnotationName() string {
 	return AuthPolicyDirectReferenceAnnotationName
 }
 
-func (ap *AuthPolicy) GetCommonSpec() AuthPolicyCommonSpec {
+func (ap *AuthPolicy) GetCommonSpec() *AuthPolicyCommonSpec {
 	if ap.Spec.Defaults != nil {
-		return *ap.Spec.Defaults
+		return ap.Spec.Defaults
 	}
 
-	return ap.Spec.AuthPolicyCommonSpec
+	return &ap.Spec.AuthPolicyCommonSpec
 }
 
 func (ap *AuthPolicy) GetNamedPatterns() map[string]authorinoapi.PatternExpressions {

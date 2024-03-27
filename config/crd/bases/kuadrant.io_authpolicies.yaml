@@ -399,7 +399,7 @@ spec:
                           maxItems: 8
                           type: array
                       type: object
-                    maxItems: 8
+                    maxItems: 15
                     type: array
                   rules:
                     description: |-
@@ -4694,7 +4694,7 @@ spec:
                       maxItems: 8
                       type: array
                   type: object
-                maxItems: 8
+                maxItems: 15
                 type: array
               rules:
                 description: |-

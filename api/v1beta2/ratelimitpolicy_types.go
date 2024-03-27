@@ -120,12 +120,25 @@ func (l Limit) CountersAsStringList() []string {
 
 // RateLimitPolicySpec defines the desired state of RateLimitPolicy
 // +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.limits) || !self.limits.exists(x, has(self.limits[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && has(self.limits))",message="Implicit and explicit defaults are mutually exclusive"
 type RateLimitPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
 
+	// Defaults define explicit default values for this policy and for policies inheriting this policy.
+	// Defaults are mutually exclusive with implicit defaults defined by RateLimitPolicyCommonSpec.
+	// +optional
+	Defaults *RateLimitPolicyCommonSpec `json:"defaults,omitempty"`
+
+	// RateLimitPolicyCommonSpec defines implicit default values for this policy and for policies inheriting this policy.
+	// RateLimitPolicyCommonSpec is mutually exclusive with explicit defaults defined by Defaults.
+	RateLimitPolicyCommonSpec `json:""`
+}
+
+// RateLimitPolicyCommonSpec contains common shared fields.
+type RateLimitPolicyCommonSpec struct {
 	// Limits holds the struct of limits indexed by a unique name
 	// +optional
 	// +kubebuilder:validation:MaxProperties=14
@@ -234,7 +247,7 @@ func (r *RateLimitPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
 
 func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 	ruleHosts = make([]string, 0)
-	for _, limit := range r.Spec.Limits {
+	for _, limit := range r.GetLimits() {
 		for _, routeSelector := range limit.RouteSelectors {
 			convertHostnamesToString := func(gwHostnames []gatewayapiv1.Hostname) []string {
 				hostnames := make([]string, 0, len(gwHostnames))
@@ -259,6 +272,20 @@ func (r *RateLimitPolicy) BackReferenceAnnotationName() string {
 
 func (r *RateLimitPolicy) DirectReferenceAnnotationName() string {
 	return RateLimitPolicyDirectReferenceAnnotationName
+}
+
+func (r *RateLimitPolicy) CommonSpec() *RateLimitPolicyCommonSpec {
+	if r.Spec.Defaults != nil {
+		return r.Spec.Defaults
+	}
+
+	return &r.Spec.RateLimitPolicyCommonSpec
+}
+
+// GetLimits returns the limits based on whether default or implicit rules are defined.
+// Default rules takes precedence
+func (r *RateLimitPolicy) GetLimits() map[string]Limit {
+	return r.CommonSpec().Limits
 }
 
 func init() {

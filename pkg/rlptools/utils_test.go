@@ -7,11 +7,11 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 func testRLP_1Limit_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
@@ -25,13 +25,15 @@ func testRLP_1Limit_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 			Namespace: ns,
 		},
 		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			Limits: map[string]kuadrantv1beta2.Limit{
-				"l1": {
-					Rates: []kuadrantv1beta2.Rate{
-						{
-							Limit:    5,
-							Duration: 10,
-							Unit:     "second",
+			RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+				Limits: map[string]kuadrantv1beta2.Limit{
+					"l1": {
+						Rates: []kuadrantv1beta2.Rate{
+							{
+								Limit:    5,
+								Duration: 10,
+								Unit:     "second",
+							},
 						},
 					},
 				},
@@ -51,22 +53,24 @@ func testRLP_2Limits_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 			Namespace: ns,
 		},
 		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			Limits: map[string]kuadrantv1beta2.Limit{
-				"l1": {
-					Rates: []kuadrantv1beta2.Rate{
-						{
-							Limit:    5,
-							Duration: 10,
-							Unit:     "second",
+			RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+				Limits: map[string]kuadrantv1beta2.Limit{
+					"l1": {
+						Rates: []kuadrantv1beta2.Rate{
+							{
+								Limit:    5,
+								Duration: 10,
+								Unit:     "second",
+							},
 						},
 					},
-				},
-				"l2": {
-					Rates: []kuadrantv1beta2.Rate{
-						{
-							Limit:    3,
-							Duration: 1,
-							Unit:     "hour",
+					"l2": {
+						Rates: []kuadrantv1beta2.Rate{
+							{
+								Limit:    3,
+								Duration: 1,
+								Unit:     "hour",
+							},
 						},
 					},
 				},
@@ -86,18 +90,20 @@ func testRLP_1Limit_2Rates(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 			Namespace: ns,
 		},
 		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			Limits: map[string]kuadrantv1beta2.Limit{
-				"l1": {
-					Rates: []kuadrantv1beta2.Rate{
-						{
-							Limit:    5,
-							Duration: 10,
-							Unit:     "second",
-						},
-						{
-							Limit:    3,
-							Duration: 1,
-							Unit:     "minute",
+			RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+				Limits: map[string]kuadrantv1beta2.Limit{
+					"l1": {
+						Rates: []kuadrantv1beta2.Rate{
+							{
+								Limit:    5,
+								Duration: 10,
+								Unit:     "second",
+							},
+							{
+								Limit:    3,
+								Duration: 1,
+								Unit:     "minute",
+							},
 						},
 					},
 				},
@@ -117,16 +123,18 @@ func testRLP_1Limit_1Rate_1Counter(ns, name string) *kuadrantv1beta2.RateLimitPo
 			Namespace: ns,
 		},
 		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			Limits: map[string]kuadrantv1beta2.Limit{
-				"l1": {
-					Counters: []kuadrantv1beta2.ContextSelector{
-						"request.path",
-					},
-					Rates: []kuadrantv1beta2.Rate{
-						{
-							Limit:    5,
-							Duration: 10,
-							Unit:     "second",
+			RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+				Limits: map[string]kuadrantv1beta2.Limit{
+					"l1": {
+						Counters: []kuadrantv1beta2.ContextSelector{
+							"request.path",
+						},
+						Rates: []kuadrantv1beta2.Rate{
+							{
+								Limit:    5,
+								Duration: 10,
+								Unit:     "second",
+							},
 						},
 					},
 				},

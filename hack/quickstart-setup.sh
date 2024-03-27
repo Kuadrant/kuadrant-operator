@@ -30,9 +30,16 @@ if [ -z $ISTIO_INSTALL_SAIL ]; then
   ISTIO_INSTALL_SAIL=${ISTIO_INSTALL_SAIL:=false}
 fi
 
-echo "Loading quickstart scripts from GitHub"
-source /dev/stdin <<< "$(curl -s https://raw.githubusercontent.com/${KUADRANT_ORG}/multicluster-gateway-controller/${MGC_REF}/hack/.quickstartEnv)"
-source /dev/stdin <<< "$(curl -s https://raw.githubusercontent.com/${KUADRANT_ORG}/multicluster-gateway-controller/${MGC_REF}/hack/.deployUtils)"
+if [ -n "$MGC_LOCAL_QUICKSTART_SCRIPTS_MODE" ]; then
+    echo "Loading quickstart scripts locally"
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    source "${SCRIPT_DIR}/../../multicluster-gateway-controller/hack/.quickstartEnv"
+    source "${SCRIPT_DIR}/../../multicluster-gateway-controller/hack/.deployUtils"
+  else
+    echo "Loading quickstart scripts from GitHub"
+    source /dev/stdin <<< "$(curl -s https://raw.githubusercontent.com/${KUADRANT_ORG}/multicluster-gateway-controller/${MGC_REF}/hack/.quickstartEnv)"
+    source /dev/stdin <<< "$(curl -s https://raw.githubusercontent.com/${KUADRANT_ORG}/multicluster-gateway-controller/${MGC_REF}/hack/.deployUtils)"
+fi
 
 YQ_BIN=$(dockerBinCmd "yq")
 
@@ -111,7 +118,15 @@ ${KUSTOMIZE_BIN} build ${KUADRANT_METALLB_KUSTOMIZATION} | kubectl apply -f -
 echo "Waiting for metallb-system deployments to be ready"
 kubectl -n metallb-system wait --for=condition=Available deployments controller --timeout=300s
 kubectl -n metallb-system wait --for=condition=ready pod --selector=app=metallb --timeout=60s
-kubectl apply -n metallb-system -f - <<< "$(curl -s ${KUADRANT_REPO_RAW}/utils/docker-network-ipaddresspool.sh | bash -s -- kind)"
+
+if [ -n "$MGC_LOCAL_QUICKSTART_SCRIPTS_MODE" ]; then
+    echo "Loading docker-network-ipaddresspool.sh script locally"
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    kubectl apply -n metallb-system -f - <<< "$(bash ${SCRIPT_DIR}/../utils/docker-network-ipaddresspool.sh kind)"
+  else
+    echo "Loading docker-network-ipaddresspool.sh script from GitHub"
+    kubectl apply -n metallb-system -f - <<< "$(curl -s ${KUADRANT_REPO_RAW}/utils/docker-network-ipaddresspool.sh | bash -s -- kind)"
+fi
 
 # Install kuadrant
 echo "Installing Kuadrant in ${KUADRANT_CLUSTER_NAME}"

@@ -33,12 +33,12 @@ fi
 if [ -n "$MGC_LOCAL_QUICKSTART_SCRIPTS_MODE" ]; then
     echo "Loading quickstart scripts locally"
     SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    source "${SCRIPT_DIR}/../../multicluster-gateway-controller/hack/.quickstartEnv"
-    source "${SCRIPT_DIR}/../../multicluster-gateway-controller/hack/.deployUtils"
+    source "${SCRIPT_DIR}/.quickstartEnv"
+    source "${SCRIPT_DIR}/.deployUtils"
   else
     echo "Loading quickstart scripts from GitHub"
-    source /dev/stdin <<< "$(curl -s https://raw.githubusercontent.com/${KUADRANT_ORG}/multicluster-gateway-controller/${MGC_REF}/hack/.quickstartEnv)"
-    source /dev/stdin <<< "$(curl -s https://raw.githubusercontent.com/${KUADRANT_ORG}/multicluster-gateway-controller/${MGC_REF}/hack/.deployUtils)"
+    source /dev/stdin <<< "$(curl -s https://raw.githubusercontent.com/${KUADRANT_ORG}/kuadrant-operator/${KUADRANT_REF}/hack/.quickstartEnv)"
+    source /dev/stdin <<< "$(curl -s https://raw.githubusercontent.com/${KUADRANT_ORG}/kuadrant-operator/${KUADRANT_REF}/hack/.deployUtils)"
 fi
 
 YQ_BIN=$(dockerBinCmd "yq")

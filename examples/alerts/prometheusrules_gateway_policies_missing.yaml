@@ -1,0 +1,33 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: gateway-policies-missing
+  namespace: monitoring
+spec:
+  groups:
+  - name: gateway-policy-rules
+    rules:
+    - alert: GatewayWithoutDnsPolicy
+      expr: |
+        label_replace(gatewayapi_gateway_info, "gateway_name", "$1", "name", "(.*)") unless 
+        (label_replace(gatewayapi_gateway_info, "gateway_name", "$1", "name", "(.*)") 
+        * on(gateway_name) group_left 
+        label_replace(gatewayapi_dnspolicy_target_info{target_kind="Gateway"}, "gateway_name", "$1", "target_name", "(.*)"))
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "No DNSPolicy targeting Gateway '{{ $labels.gateway_name }}'"
+        description: "This alert fires if a gateway does not have an associated DNSPolicy."
+    - alert: GatewayWithoutTlsPolicy
+      expr: |
+        label_replace(gatewayapi_gateway_info, "gateway_name", "$1", "name", "(.*)") unless 
+        (label_replace(gatewayapi_gateway_info, "gateway_name", "$1", "name", "(.*)") 
+        * on(gateway_name) group_left 
+        label_replace(gatewayapi_tlspolicy_target_info{target_kind="Gateway"}, "gateway_name", "$1", "target_name", "(.*)"))
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "No TLSPolicy targeting Gateway '{{ $labels.gateway_name }}'"
+        description: "This alert fires if a gateway does not have an associated TLSPolicy."

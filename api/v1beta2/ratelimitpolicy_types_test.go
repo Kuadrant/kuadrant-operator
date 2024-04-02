@@ -98,7 +98,7 @@ func TestRateLimitPolicy_GetLimits(t *testing.T) {
 
 	t.Run("No limits defined", func(subT *testing.T) {
 		r := testBuildBasicHTTPRouteRLP(name, nil)
-		assert.DeepEqual(subT, r.GetLimits(), map[string]Limit(nil))
+		assert.DeepEqual(subT, r.Spec.CommonSpec().Limits, map[string]Limit(nil))
 	})
 	t.Run("Defaults defined", func(subT *testing.T) {
 		r := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
@@ -106,13 +106,13 @@ func TestRateLimitPolicy_GetLimits(t *testing.T) {
 				Limits: defaultLimits,
 			}
 		})
-		assert.DeepEqual(subT, r.GetLimits(), defaultLimits)
+		assert.DeepEqual(subT, r.Spec.CommonSpec().Limits, defaultLimits)
 	})
 	t.Run("Implicit rules defined", func(subT *testing.T) {
 		r := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
 			policy.Spec.Limits = implicitLimits
 		})
-		assert.DeepEqual(subT, r.GetLimits(), implicitLimits)
+		assert.DeepEqual(subT, r.Spec.CommonSpec().Limits, implicitLimits)
 	})
 	t.Run("Default rules takes precedence over implicit rules if validation is somehow bypassed", func(subT *testing.T) {
 		r := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
@@ -121,6 +121,6 @@ func TestRateLimitPolicy_GetLimits(t *testing.T) {
 			}
 			policy.Spec.Limits = implicitLimits
 		})
-		assert.DeepEqual(subT, r.GetLimits(), defaultLimits)
+		assert.DeepEqual(subT, r.Spec.CommonSpec().Limits, defaultLimits)
 	})
 }

@@ -259,7 +259,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			serialized, err := json.Marshal(refs)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				rlp.BackReferenceAnnotationName(), string(serialized)))		})
+				rlp.BackReferenceAnnotationName(), string(serialized)))
+		})
 	})
 
 	Context("RLP Defaults", func() {
@@ -281,7 +282,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Create HTTPRoute RLP with new default limits
 			routeRLP := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Name = "httproute-rlp"
-				policy.Spec.Defaults.Limits = map[string]kuadrantv1beta2.Limit{
+				policy.Spec.CommonSpec().Limits = map[string]kuadrantv1beta2.Limit{
 					"l1": {
 						Rates: []kuadrantv1beta2.Rate{
 							{
@@ -322,7 +323,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(existingGateway.GetAnnotations()).To(HaveKey(routeRLP.BackReferenceAnnotationName()))
 			Expect(existingGateway.GetAnnotations()[routeRLP.BackReferenceAnnotationName()]).To(ContainSubstring(string(serialized)))
 
-		}, SpecTimeout(1*time.Minute))
+		}, SpecTimeout(time.Minute))
 	})
 
 	Context("RLP accepted condition reasons", func() {

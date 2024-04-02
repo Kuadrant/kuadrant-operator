@@ -33,7 +33,8 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1.HTTPRou
 
 	// Sort RLP limits for consistent comparison with existing wasmplugin objects
 	limitNames := make([]string, 0, len(rlp.Spec.Limits))
-	for name := range rlp.GetLimits() {
+	limits := rlp.Spec.CommonSpec().Limits
+	for name := range limits {
 		limitNames = append(limitNames, name)
 	}
 
@@ -42,7 +43,7 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1.HTTPRou
 
 	for _, limitName := range limitNames {
 		// 1 RLP limit <---> 1 WASM rule
-		limit := rlp.GetLimits()[limitName]
+		limit := limits[limitName]
 		limitIdentifier := LimitNameToLimitadorIdentifier(limitName)
 		rule, err := ruleFromLimit(limitIdentifier, &limit, route)
 		if err == nil {

@@ -41,7 +41,7 @@ func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []limitado
 	limitsNamespace := LimitsNamespaceFromRLP(rlp)
 
 	rateLimits := make([]limitadorv1alpha1.RateLimit, 0)
-	for limitKey, limit := range rlp.GetLimits() {
+	for limitKey, limit := range rlp.Spec.CommonSpec().Limits {
 		limitIdentifier := LimitNameToLimitadorIdentifier(limitKey)
 		for _, rate := range limit.Rates {
 			maxValue, seconds := rateToSeconds(rate)

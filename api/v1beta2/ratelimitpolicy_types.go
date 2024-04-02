@@ -250,7 +250,7 @@ func (r *RateLimitPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
 
 func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 	ruleHosts = make([]string, 0)
-	for _, limit := range r.GetLimits() {
+	for _, limit := range r.Spec.CommonSpec().Limits {
 		for _, routeSelector := range limit.RouteSelectors {
 			convertHostnamesToString := func(gwHostnames []gatewayapiv1.Hostname) []string {
 				hostnames := make([]string, 0, len(gwHostnames))
@@ -277,18 +277,16 @@ func (r *RateLimitPolicy) DirectReferenceAnnotationName() string {
 	return RateLimitPolicyDirectReferenceAnnotationName
 }
 
-func (r *RateLimitPolicy) GetRateLimitPolicyCommonSpec() *RateLimitPolicyCommonSpec {
-	if r.Spec.Defaults != nil {
-		return r.Spec.Defaults
+// CommonSpec returns the Default RateLimitPolicyCommonSpec if it is defined.
+// Otherwise, it returns the RateLimitPolicyCommonSpec from the spec.
+// This function should be used instead of accessing the fields directly, so that either the explicit or implicit default
+// is returned.
+func (r *RateLimitPolicySpec) CommonSpec() *RateLimitPolicyCommonSpec {
+	if r.Defaults != nil {
+		return r.Defaults
 	}
 
-	return &r.Spec.RateLimitPolicyCommonSpec
-}
-
-// GetLimits returns the limits based on whether default or implicit rules are defined.
-// Default rules takes precedence
-func (r *RateLimitPolicy) GetLimits() map[string]Limit {
-	return r.GetRateLimitPolicyCommonSpec().Limits
+	return &r.RateLimitPolicyCommonSpec
 }
 
 func init() {

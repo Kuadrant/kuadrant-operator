@@ -192,8 +192,9 @@ func istioAuthorizationPolicyLabels(gwKey, apKey client.ObjectKey) map[string]st
 // If no rules are specified, the gateway will call external authorization for all requests.
 // If the route selectors specified in the policy do not match any route rules, an error is returned.
 func istioAuthorizationPolicyRules(ap *api.AuthPolicy, route *gatewayapiv1.HTTPRoute) ([]*istiosecurity.Rule, error) {
+	commonSpec := ap.Spec.CommonSpec()
 	// use only the top level route selectors if defined
-	if topLevelRouteSelectors := ap.GetRouteSelectors(); len(topLevelRouteSelectors) > 0 {
+	if topLevelRouteSelectors := commonSpec.RouteSelectors; len(topLevelRouteSelectors) > 0 {
 		return istioAuthorizationPolicyRulesFromRouteSelectors(route, topLevelRouteSelectors)
 	}
 	return istioAuthorizationPolicyRulesFromHTTPRoute(route), nil

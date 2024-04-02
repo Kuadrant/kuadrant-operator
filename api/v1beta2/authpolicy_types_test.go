@@ -32,13 +32,13 @@ func TestCommonAuthRuleSpecGetRouteSelectors(t *testing.T) {
 }
 
 func TestAuthPolicySpecGetRouteSelectors(t *testing.T) {
-	p := &AuthPolicy{}
-	if p.GetRouteSelectors() != nil {
+	spec := &AuthPolicySpec{}
+	if spec.GetRouteSelectors() != nil {
 		t.Errorf("Expected nil route selectors")
 	}
 	routeSelector := testBuildRouteSelector()
-	p.Spec.RouteSelectors = []RouteSelector{routeSelector}
-	result := p.GetRouteSelectors()
+	spec.RouteSelectors = []RouteSelector{routeSelector}
+	result := spec.GetRouteSelectors()
 	if len(result) != 1 {
 		t.Errorf("Expected 1 route selector, got %d", len(result))
 	}

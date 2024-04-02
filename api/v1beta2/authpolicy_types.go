@@ -187,6 +187,12 @@ type AuthPolicyCommonSpec struct {
 	AuthScheme *AuthSchemeSpec `json:"rules,omitempty"`
 }
 
+// GetRouteSelectors returns the top-level route selectors of the auth scheme.
+// impl: RouteSelectorsGetter
+func (c AuthPolicyCommonSpec) GetRouteSelectors() []RouteSelector {
+	return c.RouteSelectors
+}
+
 type AuthPolicyStatus struct {
 	// ObservedGeneration reflects the generation of the most recently observed spec.
 	// +optional
@@ -279,7 +285,7 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 		}
 	}
 
-	appendCommonSpecRuleHosts := func(c AuthPolicyCommonSpec) {
+	appendCommonSpecRuleHosts := func(c *AuthPolicyCommonSpec) {
 		if c.AuthScheme == nil {
 			return
 		}
@@ -306,8 +312,8 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 		}
 	}
 
-	appendRuleHosts(ap)
-	appendCommonSpecRuleHosts(ap.GetCommonSpec())
+	appendRuleHosts(ap.Spec.CommonSpec())
+	appendCommonSpecRuleHosts(ap.Spec.CommonSpec())
 
 	return
 }
@@ -324,30 +330,12 @@ func (ap *AuthPolicy) DirectReferenceAnnotationName() string {
 	return AuthPolicyDirectReferenceAnnotationName
 }
 
-func (ap *AuthPolicy) GetCommonSpec() AuthPolicyCommonSpec {
-	if ap.Spec.Defaults != nil {
-		return *ap.Spec.Defaults
+func (ap *AuthPolicySpec) CommonSpec() *AuthPolicyCommonSpec {
+	if ap.Defaults != nil {
+		return ap.Defaults
 	}
 
-	return ap.Spec.AuthPolicyCommonSpec
-}
-
-func (ap *AuthPolicy) GetNamedPatterns() map[string]authorinoapi.PatternExpressions {
-	return ap.GetCommonSpec().NamedPatterns
-}
-
-func (ap *AuthPolicy) GetConditions() []authorinoapi.PatternExpressionOrRef {
-	return ap.GetCommonSpec().Conditions
-}
-
-func (ap *AuthPolicy) GetAuthScheme() *AuthSchemeSpec {
-	return ap.GetCommonSpec().AuthScheme
-}
-
-// GetRouteSelectors returns the top-level route selectors of the auth scheme.
-// impl: RouteSelectorsGetter
-func (ap *AuthPolicy) GetRouteSelectors() []RouteSelector {
-	return ap.GetCommonSpec().RouteSelectors
+	return &ap.AuthPolicyCommonSpec
 }
 
 //+kubebuilder:object:root=true

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 
 	_struct "google.golang.org/protobuf/types/known/structpb"
@@ -30,7 +31,16 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1.HTTPRou
 		return rules
 	}
 
-	for limitName := range rlp.Spec.Limits {
+	// Sort RLP limits for consistent comparison with existing wasmplugin objects
+	limitNames := make([]string, 0, len(rlp.Spec.Limits))
+	for name := range rlp.Spec.Limits {
+		limitNames = append(limitNames, name)
+	}
+
+	// sort the slice by limit name
+	slices.Sort(limitNames)
+
+	for _, limitName := range limitNames {
 		// 1 RLP limit <---> 1 WASM rule
 		limit := rlp.Spec.Limits[limitName]
 		limitIdentifier := LimitNameToLimitadorIdentifier(limitName)

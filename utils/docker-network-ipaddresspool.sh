@@ -17,9 +17,11 @@ SUBNET=""
 
 # Try podman version of cmd first. docker alias may be used for podman, so network
 # command will be different
+set +e
 if command -v podman &> /dev/null; then
   SUBNET=`podman network inspect -f '{{range .Subnets}}{{if eq (len .Subnet.IP) 4}}{{.Subnet}}{{end}}{{end}}' $networkName`
 fi
+set -e
 
 # Fallback to docker version of cmd
 if [[ -z "$SUBNET" ]]; then

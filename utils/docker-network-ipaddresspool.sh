@@ -13,8 +13,20 @@ YQ="${2:-yq}"
 
 ## Parse kind network subnet
 ## Take only IPv4 subnets, exclude IPv6
-SUBNET=$(docker network inspect $networkName --format '{{json .IPAM.Config }}' | \
-    ${YQ} '.[] | select( .Subnet | test("^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}/\d+$")) | .Subnet')
+SUBNET=""
+
+# Try podman version of cmd first. docker alias may be used for podman, so network
+# command will be different
+if command -v podman &> /dev/null; then
+  SUBNET=`podman network inspect -f '{{range .Subnets}}{{if eq (len .Subnet.IP) 4}}{{.Subnet}}{{end}}{{end}}' $networkName`
+fi
+
+# Fallback to docker version of cmd
+if [[ -z "$SUBNET" ]]; then
+  SUBNET=`docker network inspect $networkName -f '{{ (index .IPAM.Config 0).Subnet }}'`
+fi
+
+# Neither worked, error out
 if [[ -z "$SUBNET" ]]; then
    echo "Error: parsing IPv4 network address for '$networkName' docker network"
    exit 1
@@ -22,7 +34,7 @@ fi
 
 # shellcheck disable=SC2206
 subnetParts=(${SUBNET//./ })
-cidr="${subnetParts[0]}.${subnetParts[1]}.200.0/24"
+cidr="${subnetParts[0]}.${subnetParts[1]}.0.252/30"
 
 cat <<EOF | ADDRESS=$cidr ${YQ} '(select(.kind == "IPAddressPool") | .spec.addresses[0]) = env(ADDRESS)'
 ---

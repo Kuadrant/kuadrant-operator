@@ -12,6 +12,7 @@ import (
 // In a DAG, each edge has an initial node, called the parent, and a final node, called the child.
 // The graph is considered acyclic because it does not contain any cycles,
 // meaning there are no sequences of consecutive directed edges that form a closed loop.
+// NOTE: this package is not thread-safe
 
 type NodeID = string
 

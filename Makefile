@@ -356,6 +356,7 @@ local-cleanup: ## Delete local cluster
 local-cluster-setup: ## Sets up Kind cluster with GatewayAPI manifests and istio GW, nothing Kuadrant.
 	$(MAKE) kind-delete-cluster
 	$(MAKE) kind-create-cluster
+	$(MAKE) deploy-metrics-server
 	$(MAKE) namespace
 	$(MAKE) gateway-api-install
 	$(MAKE) install-metallb

@@ -169,7 +169,7 @@ type AuthPolicyCommonSpec struct {
 	// At least one selected HTTPRoute rule must match to trigger the AuthPolicy.
 	// If no route selectors are specified, the AuthPolicy will be enforced at all requests to the protected routes.
 	// +optional
-	// +kubebuilder:validation:MaxItems=8
+	// +kubebuilder:validation:MaxItems=15
 	RouteSelectors []RouteSelector `json:"routeSelectors,omitempty"`
 
 	// Named sets of patterns that can be referred in `when` conditions and in pattern-matching authorization policy rules.

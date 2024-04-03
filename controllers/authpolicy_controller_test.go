@@ -1428,19 +1428,17 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		)
 
 		var (
-			routeSelectors = []api.RouteSelector{
-				{
-					Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
-					Matches: []gatewayapiv1.HTTPRouteMatch{
-						{
-							Path: &gatewayapiv1.HTTPPathMatch{
-								Value: ptr.To("/foo"),
-							},
+			routeSelector = api.RouteSelector{
+				Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
+				Matches: []gatewayapiv1.HTTPRouteMatch{
+					{
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Value: ptr.To("/foo"),
 						},
 					},
 				},
 			}
-
+			routeSelectors     = []api.RouteSelector{routeSelector}
 			commonAuthRuleSpec = api.CommonAuthRuleSpec{RouteSelectors: routeSelectors}
 		)
 
@@ -1727,6 +1725,75 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 			err := k8sClient.Create(context.Background(), policy)
 			Expect(err).To(Not(BeNil()))
 			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
+		})
+
+		It("invalid usage of root level route selectors for HTTPRoute - max number is 15", func() {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.TargetRef.Kind = "HTTPRoute"
+				policy.Spec.TargetRef.Name = "my-route"
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
+				policy.Spec.CommonSpec().RouteSelectors = []api.RouteSelector{
+					routeSelector,
+					routeSelector,
+					routeSelector,
+					routeSelector,
+					routeSelector,
+					routeSelector,
+					routeSelector,
+					routeSelector,
+					routeSelector,
+					routeSelector,
+					routeSelector,
+					routeSelector,
+					routeSelector,
+					routeSelector,
+					routeSelector,
+					routeSelector,
+				}
+			})
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			logf.Log.V(1).Error(err, "theError")
+			Expect(strings.Contains(err.Error(), "Too many: 16: must have at most 15 items")).To(BeTrue())
+		})
+
+		It("invalid usage of config level route selectors for HTTPRoute - max number is 8", func() {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.TargetRef.Kind = "HTTPRoute"
+				policy.Spec.TargetRef.Name = "my-route"
+				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
+				policy.Spec.CommonSpec().AuthScheme = &api.AuthSchemeSpec{
+					Callbacks: map[string]api.CallbackSpec{
+						"callback": {
+							CallbackSpec: authorinoapi.CallbackSpec{
+								CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
+									Http: &authorinoapi.HttpEndpointSpec{
+										Url: "test.com",
+									},
+								},
+							},
+							CommonAuthRuleSpec: api.CommonAuthRuleSpec{
+								RouteSelectors: []api.RouteSelector{
+									routeSelector,
+									routeSelector,
+									routeSelector,
+									routeSelector,
+									routeSelector,
+									routeSelector,
+									routeSelector,
+									routeSelector,
+									routeSelector,
+								},
+							},
+						},
+					},
+				}
+			})
+
+			err := k8sClient.Create(context.Background(), policy)
+			Expect(err).To(Not(BeNil()))
+			logf.Log.V(1).Error(err, "theError")
+			Expect(strings.Contains(err.Error(), "Too many: 9: must have at most 8 items")).To(BeTrue())
 		})
 	})
 })

@@ -1752,9 +1752,8 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 				}
 			})
 			err := k8sClient.Create(context.Background(), policy)
-			Expect(err).To(Not(BeNil()))
-			logf.Log.V(1).Error(err, "theError")
-			Expect(strings.Contains(err.Error(), "Too many: 16: must have at most 15 items")).To(BeTrue())
+			Expect(err).ToNot(BeNil())
+			Expect(err.Error(), ContainSubstring("Too many: 16: must have at most 15 items"))
 		})
 
 		It("invalid usage of config level route selectors for HTTPRoute - max number is 8", func() {
@@ -1791,9 +1790,8 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 			})
 
 			err := k8sClient.Create(context.Background(), policy)
-			Expect(err).To(Not(BeNil()))
-			logf.Log.V(1).Error(err, "theError")
-			Expect(strings.Contains(err.Error(), "Too many: 9: must have at most 8 items")).To(BeTrue())
+			Expect(err).ToNot(BeNil())
+			Expect(err.Error(), ContainSubstring("Too many: 9: must have at most 8 items"))
 		})
 	})
 })

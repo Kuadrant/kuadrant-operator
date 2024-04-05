@@ -10,7 +10,7 @@ require (
 	github.com/google/uuid v1.4.0
 	github.com/kuadrant/authorino v0.15.0
 	github.com/kuadrant/authorino-operator v0.9.0
-	github.com/kuadrant/dns-operator v0.0.0-20240321074453-b11e4521d05d
+	github.com/kuadrant/dns-operator v0.0.0-20240405095001-9e88ad4a7303
 	github.com/kuadrant/limitador-operator v0.7.0
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/onsi/ginkgo/v2 v2.13.2
@@ -173,7 +173,6 @@ require (
 	k8s.io/kube-openapi v0.0.0-20231129212854-f0671cc7e66a // indirect
 	k8s.io/kubectl v0.28.4 // indirect
 	oras.land/oras-go v1.2.4 // indirect
-	sigs.k8s.io/external-dns v0.14.0 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.13.5-0.20230601165947-6ce0bf390ce3 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.15.0 // indirect
@@ -184,5 +183,3 @@ require (
 replace maistra.io/istio-operator => github.com/maistra/istio-operator v0.0.0-20231214211859-76e404c8df41
 
 replace github.com/imdario/mergo => dario.cat/mergo v0.3.5
-
-replace github.com/kuadrant/dns-operator => github.com/kuadrant/dns-operator v0.0.0-20240315125613-515b614d70e5

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -59,11 +58,26 @@ const (
 )
 
 func ApplyKuadrantCR(namespace string) {
-	err := ApplyResources(filepath.Join("..", "examples", "toystore", "kuadrant.yaml"), k8sClient, namespace)
+	ApplyKuadrantCRWithName(namespace, "kuadrant-sample")
+}
+
+func ApplyKuadrantCRWithName(namespace, name string) {
+	kuadrantCR := &kuadrantv1beta1.Kuadrant{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Kuadrant",
+			APIVersion: kuadrantv1beta1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+	}
+	err := k8sClient.Create(context.Background(), kuadrantCR)
 	Expect(err).ToNot(HaveOccurred())
+
 	Eventually(func() bool {
 		kuadrant := &kuadrantv1beta1.Kuadrant{}
-		err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "kuadrant-sample", Namespace: namespace}, kuadrant)
+		err := k8sClient.Get(context.Background(), client.ObjectKey{Name: name, Namespace: namespace}, kuadrant)
 		if err != nil {
 			return false
 		}

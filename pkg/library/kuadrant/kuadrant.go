@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	KuadrantNamespaceLabel = "kuadrant.io/namespace"
+	KuadrantNamespaceAnnotation = "kuadrant.io/namespace"
 )
 
 type Policy interface {
@@ -38,7 +38,7 @@ type HTTPRouteRule struct {
 }
 
 func IsKuadrantManaged(obj client.Object) bool {
-	_, isSet := obj.GetAnnotations()[KuadrantNamespaceLabel]
+	_, isSet := obj.GetAnnotations()[KuadrantNamespaceAnnotation]
 	return isSet
 }
 
@@ -66,7 +66,7 @@ func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Cli
 }
 
 func GetKuadrantNamespaceFromPolicy(p Policy) (string, bool) {
-	if kuadrantNamespace, isSet := p.GetAnnotations()[KuadrantNamespaceLabel]; isSet {
+	if kuadrantNamespace, isSet := p.GetAnnotations()[KuadrantNamespaceAnnotation]; isSet {
 		return kuadrantNamespace, true
 	}
 	return "", false
@@ -76,7 +76,7 @@ func GetKuadrantNamespace(obj client.Object) (string, error) {
 	if !IsKuadrantManaged(obj) {
 		return "", errors.NewInternalError(fmt.Errorf("object %T is not Kuadrant managed", obj))
 	}
-	return obj.GetAnnotations()[KuadrantNamespaceLabel], nil
+	return obj.GetAnnotations()[KuadrantNamespaceAnnotation], nil
 }
 
 func AnnotateObject(obj client.Object, namespace string) {
@@ -84,21 +84,12 @@ func AnnotateObject(obj client.Object, namespace string) {
 	if len(annotations) == 0 {
 		obj.SetAnnotations(
 			map[string]string{
-				KuadrantNamespaceLabel: namespace,
+				KuadrantNamespaceAnnotation: namespace,
 			},
 		)
 	} else {
-		if !IsKuadrantManaged(obj) {
-			annotations[KuadrantNamespaceLabel] = namespace
-			obj.SetAnnotations(annotations)
-		}
-	}
-}
-
-func DeleteKuadrantAnnotationFromGateway(gw *gatewayapiv1.Gateway, namespace string) {
-	annotations := gw.GetAnnotations()
-	if IsKuadrantManaged(gw) && annotations[KuadrantNamespaceLabel] == namespace {
-		delete(gw.Annotations, KuadrantNamespaceLabel)
+		annotations[KuadrantNamespaceAnnotation] = namespace
+		obj.SetAnnotations(annotations)
 	}
 }
 

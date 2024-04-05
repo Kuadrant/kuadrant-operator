@@ -23,7 +23,6 @@ import (
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
-	"golang.org/x/sync/errgroup"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,7 +34,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
 	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
@@ -43,7 +41,6 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
@@ -110,10 +107,6 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 			return ctrl.Result{}, err
 		}
 
-		if err := r.removeAnnotationFromGateways(ctx, kObj); err != nil {
-			return ctrl.Result{}, err
-		}
-
 		logger.Info("removing finalizer")
 		controllerutil.RemoveFinalizer(kObj, kuadrantFinalizer)
 		if err := r.Client().Update(ctx, kObj); client.IgnoreNotFound(err) != nil {
@@ -133,10 +126,6 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 		if err := r.Client().Update(ctx, kObj); client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{Requeue: true}, err
 		}
-	}
-
-	if gwErr := r.reconcileClusterGateways(ctx, kObj); gwErr != nil {
-		logger.V(1).Error(gwErr, "Reconciling cluster gateways failed")
 	}
 
 	specErr := r.reconcileSpec(ctx, kObj)
@@ -407,64 +396,6 @@ func buildServiceMeshMember(kObj *kuadrantv1beta1.Kuadrant) *maistrav1.ServiceMe
 			},
 		},
 	}
-}
-
-func (r *KuadrantReconciler) reconcileClusterGateways(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	// TODO: After the RFC defined, we might want to get the gw to label/annotate from Kuadrant.Spec or manual labeling/annotation
-	gwList := &gatewayapiv1.GatewayList{}
-	if err := r.Client().List(ctx, gwList); err != nil {
-		return err
-	}
-	errGroup, gctx := errgroup.WithContext(ctx)
-
-	for i := range gwList.Items {
-		gw := &gwList.Items[i]
-		if !kuadrant.IsKuadrantManaged(gw) {
-			kuadrant.AnnotateObject(gw, kObj.Namespace)
-			errGroup.Go(func() error {
-				select {
-				case <-gctx.Done():
-					// context cancelled
-					return nil
-				default:
-					if err := r.Client().Update(ctx, gw); err != nil {
-						return err
-					}
-					return nil
-				}
-			})
-		}
-	}
-
-	return errGroup.Wait()
-}
-
-func (r *KuadrantReconciler) removeAnnotationFromGateways(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	gwList := &gatewayapiv1.GatewayList{}
-	if err := r.Client().List(ctx, gwList); err != nil {
-		return err
-	}
-	errGroup, gctx := errgroup.WithContext(ctx)
-
-	for i := range gwList.Items {
-		gw := &gwList.Items[i]
-		errGroup.Go(func() error {
-			select {
-			case <-gctx.Done():
-				// context cancelled
-				return nil
-			default:
-				// When RFC defined, we could indicate which gateways based on a specific annotation/label
-				kuadrant.DeleteKuadrantAnnotationFromGateway(gw, kObj.Namespace)
-				if err := r.Client().Update(ctx, gw); err != nil {
-					return err
-				}
-				return nil
-			}
-		})
-	}
-
-	return errGroup.Wait()
 }
 
 func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {

@@ -26,15 +26,22 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
-// GatewayKuadrantReconciler reconciles Gateway object with kuadrant metadata
+// GatewayKuadrantReconciler is responsible of assiging gateways to a kuadrant instances
+// Currently only one kuadrant instance is allowed per cluster
+// This controller will annotate every gateway in the cluster
+// with the namespace of the kuadrant instance
+// TODO: After the RFC defined, we might want to get the gw to label/annotate from Kuadrant.Spec or manual labeling/annotation
 type GatewayKuadrantReconciler struct {
 	*reconcilers.BaseReconciler
 }
@@ -67,7 +74,7 @@ func (r *GatewayKuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl
 		logger.V(1).Info(string(jsonData))
 	}
 
-	err := r.reconcileGatewayKuadrantMetadata(ctx, gw)
+	err := r.reconcileGatewayWithKuadrantMetadata(ctx, gw)
 
 	if err != nil {
 		return ctrl.Result{}, err
@@ -77,39 +84,15 @@ func (r *GatewayKuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl
 	return ctrl.Result{}, nil
 }
 
-func (r *GatewayKuadrantReconciler) reconcileGatewayKuadrantMetadata(ctx context.Context, gw *gatewayapiv1.Gateway) error {
-	updated, err := r.reconcileKuadrantNamespaceAnnotation(ctx, gw)
+func (r *GatewayKuadrantReconciler) reconcileGatewayWithKuadrantMetadata(ctx context.Context, gw *gatewayapiv1.Gateway) error {
+	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return err
 	}
 
-	if updated {
-		if err := r.Client().Update(ctx, gw); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (r *GatewayKuadrantReconciler) reconcileKuadrantNamespaceAnnotation(ctx context.Context, gw *gatewayapiv1.Gateway) (bool, error) {
-	logger, err := logr.FromContext(ctx)
-	if err != nil {
-		return false, err
-	}
-
-	if kuadrant.IsKuadrantManaged(gw) {
-		return false, nil
-	}
-
 	kuadrantList := &kuadrantv1beta1.KuadrantList{}
 	if err := r.Client().List(ctx, kuadrantList); err != nil {
-		return false, err
-	}
-	if len(kuadrantList.Items) == 0 {
-		// Kuadrant was not found
-		logger.Info("Kuadrant instance not found in the cluster")
-		return false, nil
+		return err
 	}
 
 	if len(kuadrantList.Items) > 1 {
@@ -119,18 +102,67 @@ func (r *GatewayKuadrantReconciler) reconcileKuadrantNamespaceAnnotation(ctx con
 			keys[idx] = client.ObjectKeyFromObject(&kuadrantList.Items[idx]).String()
 		}
 		logger.Info("Multiple kuadrant instances found", "num", len(kuadrantList.Items), "keys", strings.Join(keys[:], ","))
-		return false, nil
+		return nil
 	}
 
-	kuadrant.AnnotateObject(gw, kuadrantList.Items[0].Namespace)
+	if len(kuadrantList.Items) == 0 {
+		logger.Info("Kuadrant instance not found in the cluster")
+		return r.removeKuadrantNamespaceAnnotation(ctx, gw)
+	}
 
-	return true, nil
+	val, ok := gw.GetAnnotations()[kuadrant.KuadrantNamespaceAnnotation]
+	if !ok || val != kuadrantList.Items[0].Namespace {
+		// either the does not exist or is different, hence update
+		annotations := gw.GetAnnotations()
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		annotations[kuadrant.KuadrantNamespaceAnnotation] = kuadrantList.Items[0].Namespace
+		gw.SetAnnotations(annotations)
+		logger.Info("annotate gateway with kuadrant namespace", "namespace", kuadrantList.Items[0].Namespace)
+		return r.UpdateResource(ctx, gw)
+	}
+
+	return nil
+}
+
+func (r *GatewayKuadrantReconciler) removeKuadrantNamespaceAnnotation(ctx context.Context, gw *gatewayapiv1.Gateway) error {
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	if _, ok := gw.GetAnnotations()[kuadrant.KuadrantNamespaceAnnotation]; ok {
+		delete(gw.Annotations, kuadrant.KuadrantNamespaceAnnotation)
+		logger.Info("remove gateway annotation with kuadrant namespace")
+		return r.UpdateResource(ctx, gw)
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *GatewayKuadrantReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// maps any kuadrant event to gateway event
+	// on any kuadrant event, one reconciliation request for every gateway in the cluster is created
+	kuadrantToGatewayEventMapper := mappers.NewKuadrantToGatewayEventMapper(
+		mappers.WithLogger(r.Logger().WithName("kuadrantToGatewayEventMapper")),
+		mappers.WithClient(r.Client()),
+	)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		// Gateway Kuadrant controller only cares about the annotations
 		For(&gatewayapiv1.Gateway{}, builder.WithPredicates(predicate.AnnotationChangedPredicate{})).
+		// Watch for any kuadrant CR being created or deleted
+		Watches(
+			&kuadrantv1beta1.Kuadrant{},
+			handler.EnqueueRequestsFromMapFunc(kuadrantToGatewayEventMapper.Map),
+			builder.WithPredicates(predicate.Funcs{
+				UpdateFunc: func(event.UpdateEvent) bool {
+					// The reconciler only cares about creation/deletion events
+					return false
+				},
+			}),
+		).
 		Complete(r)
 }

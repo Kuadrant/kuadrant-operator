@@ -9,6 +9,20 @@
             "type": "prometheus",
             "url": "http://prometheus-k8s.monitoring.svc:9090",
             "version": 1
+        },
+        {
+            "access": "proxy",
+            "editable": false,
+            "name": "Tempo",
+            "orgId": 1,
+            "type": "tempo",
+            "url": "http://tempo.tempo.svc.cluster.local:3100",
+            "version": 1,
+            "jsonData": {
+                "nodeGraph": {
+                    "enabled": true
+                }
+            }
         }
     ]
 }

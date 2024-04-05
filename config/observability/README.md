@@ -9,6 +9,22 @@
 
 This will deploy prometheus, alertmanager and grafana into the `monitoring` namespace,
 along with metrics scrape configuration for Istio and Envoy.
+Grafana is configured with data sources for Prometheus and Tempo.
+
+To install tempo & enable traces in istio, authorino and limitador, run the
+tracing setup script for tempo:
+
+```bash
+./hack/tracing-setup-tempo.sh
+```
+
+To view a trace, make a curl request and check for the `HTTP_TRACEPARENT` header in the response.
+The value will be in [this format](https://www.w3.org/TR/trace-context/#traceparent-header).
+For example, `00-f494ab6c7455f62f31408628818e0269-f76daf8666788647-01`,
+where the trace id is `f494ab6c7455f62f31408628818e0269`.
+You can search for the trace id in the Grafana explore view with the 'Tempo' data source.
+
+![Grafana Tempo Trace Example](grafana_tempo_trace_example.png)
 
 ## Accessing Grafana & Prometheus
 

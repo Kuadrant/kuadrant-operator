@@ -92,4 +92,9 @@ secretGenerator:
   behavior: replace
   files:
   - grafana_datasources.yaml
+- name: grafana-config
+  namespace: monitoring
+  behavior: replace
+  files:
+  - grafana.ini
 

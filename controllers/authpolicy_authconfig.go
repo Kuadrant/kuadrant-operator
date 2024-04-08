@@ -65,8 +65,17 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 
 	switch obj := targetNetworkObject.(type) {
 	case *gatewayapiv1.HTTPRoute:
+		ok, err := routeGatewayHasAuthOverrides(ctx, obj, r.Client())
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			logger.V(1).Info("targeted gateway has authpolicy with atomic overrides, skipping authorino authconfig for the HTTPRoute authpolicy")
+			utils.TagObjectToDelete(authConfig)
+			r.OverriddenPolicyMap.SetOverriddenPolicy(ap)
+			return authConfig, nil
+		}
 		route = obj
-		var err error
 		hosts, err = kuadrant.HostnamesFromHTTPRoute(ctx, obj, r.Client())
 		if err != nil {
 			return nil, err
@@ -85,8 +94,8 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 		routes := r.TargetRefReconciler.FetchAcceptedGatewayHTTPRoutes(ctx, ap.TargetKey())
 		for idx := range routes {
 			route := routes[idx]
-			// skip routes that have an authpolicy of its own
-			if route.GetAnnotations()[common.AuthPolicyBackRefAnnotation] != "" {
+			// skip routes that have an authpolicy of its own and Gateway authpolicy does not define atomic overrides
+			if route.GetAnnotations()[common.AuthPolicyBackRefAnnotation] != "" && !ap.IsAtomicOverride() {
 				continue
 			}
 			rules = append(rules, route.Spec.Rules...)
@@ -172,6 +181,35 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	}
 
 	return mergeConditionsFromRouteSelectorsIntoConfigs(ap, route, authConfig)
+}
+
+// routeGatewayHasAuthOverrides return true when the gateway which a route is attached to has an attached authPolicy that defines atomic overrides
+func routeGatewayHasAuthOverrides(ctx context.Context, route *gatewayapiv1.HTTPRoute, c client.Client) (bool, error) {
+	for idx := range route.Spec.ParentRefs {
+		parentRef := route.Spec.ParentRefs[idx]
+		gw := &gatewayapiv1.Gateway{}
+		err := c.Get(ctx, client.ObjectKey{Name: string(parentRef.Name), Namespace: string(*parentRef.Namespace)}, gw)
+		if err != nil {
+			return false, err
+		}
+
+		annotation, ok := gw.GetAnnotations()[common.AuthPolicyBackRefAnnotation]
+		if !ok {
+			continue
+		}
+		anno := strings.Split(annotation, "/")
+		ap := &api.AuthPolicy{}
+		err = c.Get(ctx, client.ObjectKey{Name: anno[1], Namespace: anno[0]}, ap)
+		if err != nil {
+			return false, err
+		}
+
+		override := ap.IsAtomicOverride()
+		if override {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // authConfigName returns the name of Authorino AuthConfig CR.

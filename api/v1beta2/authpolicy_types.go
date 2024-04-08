@@ -262,6 +262,10 @@ type AuthPolicy struct {
 	Status AuthPolicyStatus `json:"status,omitempty"`
 }
 
+func (ap *AuthPolicy) IsAtomicOverride() bool {
+	return ap.Spec.Overrides != nil
+}
+
 func (ap *AuthPolicy) TargetKey() client.ObjectKey {
 	ns := ap.Namespace
 	if ap.Spec.TargetRef.Namespace != nil {
@@ -348,6 +352,10 @@ func (ap *AuthPolicy) DirectReferenceAnnotationName() string {
 func (ap *AuthPolicySpec) CommonSpec() *AuthPolicyCommonSpec {
 	if ap.Defaults != nil {
 		return ap.Defaults
+	}
+
+	if ap.Overrides != nil {
+		return ap.Overrides
 	}
 
 	return &ap.AuthPolicyCommonSpec

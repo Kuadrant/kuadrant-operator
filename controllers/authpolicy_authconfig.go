@@ -111,40 +111,47 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	// hosts
 	authConfig.Spec.Hosts = hosts
 
+	commonSpec := ap.Spec.CommonSpec()
+
 	// named patterns
-	if namedPatterns := ap.Spec.NamedPatterns; len(namedPatterns) > 0 {
+	if namedPatterns := commonSpec.NamedPatterns; len(namedPatterns) > 0 {
 		authConfig.Spec.NamedPatterns = namedPatterns
 	}
 
 	// top-level conditions
-	topLevelConditionsFromRouteSelectors, err := authorinoConditionsFromRouteSelectors(route, ap.Spec)
+	topLevelConditionsFromRouteSelectors, err := authorinoConditionsFromRouteSelectors(route, commonSpec)
 	if err != nil {
 		return nil, err
 	}
 	if len(topLevelConditionsFromRouteSelectors) == 0 {
 		topLevelConditionsFromRouteSelectors = authorinoConditionsFromHTTPRoute(route)
 	}
-	if len(topLevelConditionsFromRouteSelectors) > 0 || len(ap.Spec.Conditions) > 0 {
-		authConfig.Spec.Conditions = append(ap.Spec.Conditions, topLevelConditionsFromRouteSelectors...)
+	if len(topLevelConditionsFromRouteSelectors) > 0 || len(commonSpec.Conditions) > 0 {
+		authConfig.Spec.Conditions = append(commonSpec.Conditions, topLevelConditionsFromRouteSelectors...)
+	}
+
+	// return early if authScheme is nil
+	if commonSpec.AuthScheme == nil {
+		return authConfig, nil
 	}
 
 	// authentication
-	if authentication := ap.Spec.AuthScheme.Authentication; len(authentication) > 0 {
+	if authentication := commonSpec.AuthScheme.Authentication; len(authentication) > 0 {
 		authConfig.Spec.Authentication = authorinoSpecsFromConfigs(authentication, func(config api.AuthenticationSpec) authorinoapi.AuthenticationSpec { return config.AuthenticationSpec })
 	}
 
 	// metadata
-	if metadata := ap.Spec.AuthScheme.Metadata; len(metadata) > 0 {
+	if metadata := commonSpec.AuthScheme.Metadata; len(metadata) > 0 {
 		authConfig.Spec.Metadata = authorinoSpecsFromConfigs(metadata, func(config api.MetadataSpec) authorinoapi.MetadataSpec { return config.MetadataSpec })
 	}
 
 	// authorization
-	if authorization := ap.Spec.AuthScheme.Authorization; len(authorization) > 0 {
+	if authorization := commonSpec.AuthScheme.Authorization; len(authorization) > 0 {
 		authConfig.Spec.Authorization = authorinoSpecsFromConfigs(authorization, func(config api.AuthorizationSpec) authorinoapi.AuthorizationSpec { return config.AuthorizationSpec })
 	}
 
 	// response
-	if response := ap.Spec.AuthScheme.Response; response != nil {
+	if response := commonSpec.AuthScheme.Response; response != nil {
 		authConfig.Spec.Response = &authorinoapi.ResponseSpec{
 			Unauthenticated: response.Unauthenticated,
 			Unauthorized:    response.Unauthorized,
@@ -160,7 +167,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	}
 
 	// callbacks
-	if callbacks := ap.Spec.AuthScheme.Callbacks; len(callbacks) > 0 {
+	if callbacks := commonSpec.AuthScheme.Callbacks; len(callbacks) > 0 {
 		authConfig.Spec.Callbacks = authorinoSpecsFromConfigs(callbacks, func(config api.CallbackSpec) authorinoapi.CallbackSpec { return config.CallbackSpec })
 	}
 
@@ -187,8 +194,10 @@ func authorinoSpecsFromConfigs[T, U any](configs map[string]U, extractAuthorinoS
 }
 
 func mergeConditionsFromRouteSelectorsIntoConfigs(ap *api.AuthPolicy, route *gatewayapiv1.HTTPRoute, authConfig *authorinoapi.AuthConfig) (*authorinoapi.AuthConfig, error) {
+	commonSpec := ap.Spec.CommonSpec()
+
 	// authentication
-	for name, config := range ap.Spec.AuthScheme.Authentication {
+	for name, config := range commonSpec.AuthScheme.Authentication {
 		conditions, err := authorinoConditionsFromRouteSelectors(route, config)
 		if err != nil {
 			return nil, err
@@ -202,7 +211,7 @@ func mergeConditionsFromRouteSelectorsIntoConfigs(ap *api.AuthPolicy, route *gat
 	}
 
 	// metadata
-	for name, config := range ap.Spec.AuthScheme.Metadata {
+	for name, config := range commonSpec.AuthScheme.Metadata {
 		conditions, err := authorinoConditionsFromRouteSelectors(route, config)
 		if err != nil {
 			return nil, err
@@ -216,7 +225,7 @@ func mergeConditionsFromRouteSelectorsIntoConfigs(ap *api.AuthPolicy, route *gat
 	}
 
 	// authorization
-	for name, config := range ap.Spec.AuthScheme.Authorization {
+	for name, config := range commonSpec.AuthScheme.Authorization {
 		conditions, err := authorinoConditionsFromRouteSelectors(route, config)
 		if err != nil {
 			return nil, err
@@ -230,7 +239,7 @@ func mergeConditionsFromRouteSelectorsIntoConfigs(ap *api.AuthPolicy, route *gat
 	}
 
 	// response
-	if response := ap.Spec.AuthScheme.Response; response != nil {
+	if response := commonSpec.AuthScheme.Response; response != nil {
 		// response success headers
 		for name, config := range response.Success.Headers {
 			conditions, err := authorinoConditionsFromRouteSelectors(route, config)
@@ -261,7 +270,7 @@ func mergeConditionsFromRouteSelectorsIntoConfigs(ap *api.AuthPolicy, route *gat
 	}
 
 	// callbacks
-	for name, config := range ap.Spec.AuthScheme.Callbacks {
+	for name, config := range commonSpec.AuthScheme.Callbacks {
 		conditions, err := authorinoConditionsFromRouteSelectors(route, config)
 		if err != nil {
 			return nil, err

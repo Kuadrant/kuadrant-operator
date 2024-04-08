@@ -128,6 +128,7 @@ func TestAuthPolicyGetRulesHostnames(t *testing.T) {
 		t.Errorf("Expected hostname to be %s, got %s", expected, result[1])
 	}
 	// + 1 authentication route selector with 1 hostname
+	policy.Spec.AuthScheme = &AuthSchemeSpec{}
 	policy.Spec.AuthScheme.Authentication = map[string]AuthenticationSpec{
 		"my-authn": {
 			CommonAuthRuleSpec: CommonAuthRuleSpec{
@@ -261,22 +262,24 @@ func TestAuthPolicyValidate(t *testing.T) {
 						Name:      "my-route",
 						Namespace: ptr.To(gatewayapiv1.Namespace("other-namespace")),
 					},
-					AuthScheme: AuthSchemeSpec{
-						Authentication: map[string]AuthenticationSpec{
-							"my-rule": {
-								AuthenticationSpec: authorinoapi.AuthenticationSpec{
-									AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-										AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
+					AuthPolicyCommonSpec: AuthPolicyCommonSpec{
+						AuthScheme: &AuthSchemeSpec{
+							Authentication: map[string]AuthenticationSpec{
+								"my-rule": {
+									AuthenticationSpec: authorinoapi.AuthenticationSpec{
+										AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+											AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
+										},
 									},
-								},
-								CommonAuthRuleSpec: CommonAuthRuleSpec{
-									RouteSelectors: []RouteSelector{
-										{
-											Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
-											Matches: []gatewayapiv1.HTTPRouteMatch{
-												{
-													Path: &gatewayapiv1.HTTPPathMatch{
-														Value: ptr.To("/foo"),
+									CommonAuthRuleSpec: CommonAuthRuleSpec{
+										RouteSelectors: []RouteSelector{
+											{
+												Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
+												Matches: []gatewayapiv1.HTTPRouteMatch{
+													{
+														Path: &gatewayapiv1.HTTPPathMatch{
+															Value: ptr.To("/foo"),
+														},
 													},
 												},
 											},

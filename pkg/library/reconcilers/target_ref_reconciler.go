@@ -249,7 +249,7 @@ func (r *TargetRefReconciler) ReconcileGatewayPolicyReferences(ctx context.Conte
 	for _, gw := range gwDiffObj.GatewaysMissingPolicyRef {
 		if gw.AddPolicy(client.ObjectKeyFromObject(policy)) {
 			err := r.Client.Update(ctx, gw.Gateway)
-			logger.V(1).Info("ReconcileGatewayPolicyReferences: update gateway", "gateway missinf policy ref", gw.Key(), "err", err)
+			logger.V(1).Info("ReconcileGatewayPolicyReferences: update gateway", "gateway missing policy ref", gw.Key(), "err", err)
 			if err != nil {
 				return err
 			}

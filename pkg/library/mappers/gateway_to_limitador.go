@@ -26,7 +26,7 @@ func NewGatewayToLimitadorEventMapper(o ...MapperOption) *GatewayToLimitadorEven
 // approach:
 // Gateway -> get Kuadrant NS
 // Kuadrant NS -> Limitador CR NS/name
-func (k *GatewayToLimitadorEventMapper) Map(ctx context.Context, obj client.Object) []reconcile.Request {
+func (k *GatewayToLimitadorEventMapper) Map(_ context.Context, obj client.Object) []reconcile.Request {
 	logger := k.opts.Logger.WithValues("object", client.ObjectKeyFromObject(obj))
 
 	gateway, ok := obj.(*gatewayapiv1.Gateway)

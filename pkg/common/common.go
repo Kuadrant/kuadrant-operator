@@ -92,3 +92,7 @@ func ToBase36Hash(s string) string {
 func ToBase36HashLen(s string, l int) string {
 	return ToBase36Hash(s)[:l]
 }
+
+func LimitadorObjectKey(kuadrantNS string) client.ObjectKey {
+	return client.ObjectKey{Name: LimitadorName, Namespace: kuadrantNS}
+}

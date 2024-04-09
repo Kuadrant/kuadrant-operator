@@ -25,13 +25,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
@@ -46,7 +42,6 @@ type RateLimitPolicyReconciler struct {
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
-//+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;update;patch
 
@@ -169,36 +164,15 @@ func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp 
 		return err
 	}
 
-	// reconcile based on gateway diffs
-	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
-	if err != nil {
-		return err
-	}
-
-	if err := r.reconcileLimits(ctx, rlp); err != nil {
-		return err
-	}
-
 	// set direct back ref - i.e. claim the target network object as taken asap
 	if err := r.reconcileNetworkResourceDirectBackReference(ctx, rlp, targetNetworkObject); err != nil {
 		return err
 	}
 
-	// set annotation of policies affecting the gateway - should be the last step, only when all the reconciliation steps succeed
-	return r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
+	return nil
 }
 
 func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
-	// delete based on gateway diffs
-	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), rlp, targetNetworkObject)
-	if err != nil {
-		return err
-	}
-
-	if err := r.deleteLimits(ctx, rlp); err != nil && !apierrors.IsNotFound(err) {
-		return err
-	}
-
 	// remove direct back ref
 	if targetNetworkObject != nil {
 		if err := r.deleteNetworkResourceDirectBackReference(ctx, targetNetworkObject, rlp); err != nil {
@@ -206,8 +180,7 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 		}
 	}
 
-	// update annotation of policies affecting the gateway
-	return r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, rlp, gatewayDiffObj)
+	return nil
 }
 
 // Ensures only one RLP targets the network resource
@@ -221,24 +194,7 @@ func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httpRouteEventMapper")))
-	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta2.RateLimitPolicy{}).
-		Watches(
-			&gatewayapiv1.HTTPRoute{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return httpRouteEventMapper.MapToPolicy(object, &kuadrantv1beta2.RateLimitPolicy{})
-			}),
-		).
-		// Currently the purpose is to generate events when rlp references change in gateways
-		// so the status of the rlps targeting a route can be keep in sync
-		Watches(
-			&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return gatewayEventMapper.MapToPolicy(object, &kuadrantv1beta2.RateLimitPolicy{})
-			}),
-		).
 		Complete(r)
 }

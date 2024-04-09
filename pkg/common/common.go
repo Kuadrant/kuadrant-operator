@@ -80,3 +80,7 @@ func UnMarshallObjectKey(keyStr string) (client.ObjectKey, error) {
 
 	return client.ObjectKey{Namespace: keyStr[:namespaceEndIndex], Name: keyStr[namespaceEndIndex+1:]}, nil
 }
+
+func LimitadorObjectKey(kuadrantNS string) client.ObjectKey {
+	return client.ObjectKey{Name: LimitadorName, Namespace: kuadrantNS}
+}

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 
 	"github.com/go-logr/logr"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -223,9 +224,13 @@ func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx
 func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httpRouteEventMapper")))
 	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
+	limitadorToRLPsEventMapper := mappers.NewLimitadorToRateLimitPoliciesEventMapper(
+		mappers.WithLogger(r.Logger().WithName("limitadorToRLPsEventMapper")),
+		mappers.WithClient(r.Client()))
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta2.RateLimitPolicy{}).
+		Watches(&limitadorv1alpha1.Limitador{}, handler.EnqueueRequestsFromMapFunc(limitadorToRLPsEventMapper.Map)).
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {

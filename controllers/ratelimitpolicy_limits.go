@@ -43,33 +43,11 @@ func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp 
 	if err != nil {
 		return err
 	}
-
 	// get the current limitador cr for the kuadrant instance so we can compare if it needs to be updated
-	logger.V(1).Info("get kuadrant namespace")
-	var kuadrantNamespace string
-	kuadrantNamespace, isSet := kuadrant.GetKuadrantNamespaceFromPolicy(rlp)
-	if !isSet {
-		var err error
-		kuadrantNamespace, err = kuadrant.GetKuadrantNamespaceFromPolicyTargetRef(ctx, r.Client(), rlp)
-		if err != nil {
-			logger.Error(err, "failed to get kuadrant namespace")
-			return err
-		}
-		kuadrant.AnnotateObject(rlp, kuadrantNamespace)
-		err = r.UpdateResource(ctx, rlp) // @guicassolato: not sure if this belongs to here
-		if err != nil {
-			logger.Error(err, "failed to update policy, re-queuing")
-			return err
-		}
-	}
-	limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantNamespace}
-	limitador := &limitadorv1alpha1.Limitador{}
-	err = r.Client().Get(ctx, limitadorKey, limitador)
-	logger.V(1).Info("get limitador", "limitador", limitadorKey, "err", err)
+	limitador, err := r.getLimitador(ctx, rlp)
 	if err != nil {
 		return err
 	}
-
 	// return if limitador is up to date
 	if rlptools.Equal(rateLimitIndex.ToRateLimits(), limitador.Spec.Limits) {
 		logger.V(1).Info("limitador is up to date, skipping update")
@@ -79,12 +57,43 @@ func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp 
 	// update limitador
 	limitador.Spec.Limits = rateLimitIndex.ToRateLimits()
 	err = r.UpdateResource(ctx, limitador)
-	logger.V(1).Info("update limitador", "limitador", limitadorKey, "err", err)
+	logger.V(1).Info("update limitador", "limitador", client.ObjectKeyFromObject(limitador), "err", err)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (r *RateLimitPolicyReconciler) getLimitador(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy) (*limitadorv1alpha1.Limitador, error) {
+	logger, _ := logr.FromContext(ctx)
+
+	logger.V(1).Info("get kuadrant namespace")
+	var kuadrantNamespace string
+	kuadrantNamespace, isSet := kuadrant.GetKuadrantNamespaceFromPolicy(rlp)
+	if !isSet {
+		var err error
+		kuadrantNamespace, err = kuadrant.GetKuadrantNamespaceFromPolicyTargetRef(ctx, r.Client(), rlp)
+		if err != nil {
+			logger.Error(err, "failed to get kuadrant namespace")
+			return nil, err
+		}
+		kuadrant.AnnotateObject(rlp, kuadrantNamespace)
+		err = r.UpdateResource(ctx, rlp) // @guicassolato: not sure if this belongs to here
+		if err != nil {
+			logger.Error(err, "failed to update policy, re-queuing")
+			return nil, err
+		}
+	}
+	limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantNamespace}
+	limitador := &limitadorv1alpha1.Limitador{}
+	err := r.Client().Get(ctx, limitadorKey, limitador)
+	logger.V(1).Info("get limitador", "limitador", limitadorKey, "err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	return limitador, nil
 }
 
 func (r *RateLimitPolicyReconciler) buildRateLimitIndex(ctx context.Context, rlpRefs []client.ObjectKey) (*rlptools.RateLimitIndex, error) {

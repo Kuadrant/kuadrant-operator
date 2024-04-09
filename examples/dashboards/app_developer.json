@@ -977,7 +977,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "List of current succesful requests API is encountering ",
+      "description": "List of current successful requests API is encountering ",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1127,7 +1127,7 @@
           "refId": "C"
         }
       ],
-      "title": "API Sucessful Requests",
+      "title": "API Successful Requests",
       "transformations": [
         {
           "id": "merge",

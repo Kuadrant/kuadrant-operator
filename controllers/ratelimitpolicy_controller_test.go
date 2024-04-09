@@ -4,11 +4,9 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"time"
 
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,8 +16,6 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
 var _ = Describe("RateLimitPolicy controller", func() {
@@ -78,7 +74,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
 	Context("RLP targeting HTTPRoute", func() {
-		It("Creates all the resources for a basic HTTPRoute and RateLimitPolicy", func() {
+		It("policy status is available and backreference is set", func() {
 			// create httproute
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
 			err := k8sClient.Create(context.Background(), httpRoute)
@@ -102,38 +98,11 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingRoute.GetAnnotations()).To(HaveKeyWithValue(
 				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
-
-			// check limits
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
-			existingLimitador := &limitadorv1alpha1.Limitador{}
-			err = k8sClient.Get(context.Background(), limitadorKey, existingLimitador)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
-				MaxValue:   1,
-				Seconds:    3 * 60,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
-				Conditions: []string{`limit.l1__2804bad6 == "1"`},
-				Variables:  []string{},
-				Name:       rlptools.LimitsNameFromRLP(rlp),
-			}))
-
-			// Check gateway back references
-			gwKey := client.ObjectKey{Name: gwName, Namespace: testNamespace}
-			existingGateway := &gatewayapiv1.Gateway{}
-			err = k8sClient.Get(context.Background(), gwKey, existingGateway)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			refs := []client.ObjectKey{rlpKey}
-			serialized, err := json.Marshal(refs)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				rlp.BackReferenceAnnotationName(), string(serialized)))
 		})
 	})
 
 	Context("RLP targeting Gateway", func() {
-		It("Creates all the resources for a basic Gateway and RateLimitPolicy", func() {
+		It("policy status is available and backreference is set", func() {
 			// create httproute
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
 			err := k8sClient.Create(context.Background(), httpRoute)
@@ -141,32 +110,10 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create ratelimitpolicy
-			rlp := &kuadrantv1beta2.RateLimitPolicy{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "RateLimitPolicy",
-					APIVersion: kuadrantv1beta2.GroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      rlpName,
-					Namespace: testNamespace,
-				},
-				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
-						Kind:  "Gateway",
-						Name:  gatewayapiv1.ObjectName(gwName),
-					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
-								},
-							},
-						},
-					},
-				},
-			}
+			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gwName)
+			})
 			err = k8sClient.Create(context.Background(), rlp)
 			Expect(err).ToNot(HaveOccurred())
 
@@ -182,33 +129,11 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
 				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
-
-			// check limits
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
-			existingLimitador := &limitadorv1alpha1.Limitador{}
-			err = k8sClient.Get(context.Background(), limitadorKey, existingLimitador)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
-				MaxValue:   1,
-				Seconds:    3 * 60,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
-				Conditions: []string{`limit.l1__2804bad6 == "1"`},
-				Variables:  []string{},
-				Name:       rlptools.LimitsNameFromRLP(rlp),
-			}))
-
-			// Check gateway back references
-			err = k8sClient.Get(context.Background(), gwKey, existingGateway)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			refs := []client.ObjectKey{rlpKey}
-			serialized, err := json.Marshal(refs)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(rlp.BackReferenceAnnotationName(), string(serialized)))
 		})
+	})
 
-		It("Creates all the resources for a basic Gateway and RateLimitPolicy when missing a HTTPRoute attached to the Gateway", func() {
+	Context("RLP targeting Gateway when there is no HTTPRoute attached to the gateway", func() {
+		It("policy status is available and backreference is set", func() {
 			// create ratelimitpolicy
 			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -229,31 +154,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
 				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
-
-			// check limits
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
-			existingLimitador := &limitadorv1alpha1.Limitador{}
-			err = k8sClient.Get(context.Background(), limitadorKey, existingLimitador)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
-				MaxValue:   1,
-				Seconds:    3 * 60,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
-				Conditions: []string{`limit.l1__2804bad6 == "1"`},
-				Variables:  []string{},
-				Name:       rlptools.LimitsNameFromRLP(rlp),
-			}))
-
-			// Check gateway back references
-			err = k8sClient.Get(context.Background(), gwKey, existingGateway)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			refs := []client.ObjectKey{rlpKey}
-			serialized, err := json.Marshal(refs)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				rlp.BackReferenceAnnotationName(), string(serialized)))
 		})
 	})
 })

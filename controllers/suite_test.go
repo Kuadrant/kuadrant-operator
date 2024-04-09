@@ -238,6 +238,18 @@ var _ = BeforeSuite(func() {
 
 	Expect(err).NotTo(HaveOccurred())
 
+	rateLimitingLimitsBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("limits"),
+		mgr.GetEventRecorderFor("RateLimitingLimits"),
+	)
+
+	err = (&RateLimitingLimitsReconciler{
+		BaseReconciler: rateLimitingLimitsBaseReconciler,
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		err = mgr.Start(ctrl.SetupSignalHandler())

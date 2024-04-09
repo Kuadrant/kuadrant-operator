@@ -29,17 +29,18 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
 // LimitadorClusterEnvoyFilterReconciler reconciles a EnvoyFilter object with limitador's cluster
@@ -76,7 +77,15 @@ func (r *LimitadorClusterEnvoyFilterReconciler) Reconcile(eventCtx context.Conte
 		logger.V(1).Info(string(jsonData))
 	}
 
-	err := r.reconcileRateLimitingClusterEnvoyFilter(ctx, gw)
+	desired, err := r.desiredRateLimitingClusterEnvoyFilter(ctx, gw)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	err = r.ReconcileResource(ctx, &istioclientnetworkingv1alpha3.EnvoyFilter{}, desired, kuadrantistioutils.AlwaysUpdateEnvoyFilter)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	if err != nil {
 		return ctrl.Result{}, err
@@ -84,20 +93,6 @@ func (r *LimitadorClusterEnvoyFilterReconciler) Reconcile(eventCtx context.Conte
 
 	logger.Info("EnvoyFilter reconciled successfully")
 	return ctrl.Result{}, nil
-}
-
-func (r *LimitadorClusterEnvoyFilterReconciler) reconcileRateLimitingClusterEnvoyFilter(ctx context.Context, gw *gatewayapiv1.Gateway) error {
-	desired, err := r.desiredRateLimitingClusterEnvoyFilter(ctx, gw)
-	if err != nil {
-		return err
-	}
-
-	err = r.ReconcileResource(ctx, &istioclientnetworkingv1alpha3.EnvoyFilter{}, desired, kuadrantistioutils.AlwaysUpdateEnvoyFilter)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyFilter(ctx context.Context, gw *gatewayapiv1.Gateway) (*istioclientnetworkingv1alpha3.EnvoyFilter, error) {
@@ -123,11 +118,15 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 		},
 	}
 
-	gateway := kuadrant.GatewayWrapper{Gateway: gw, Referrer: &v1beta2.RateLimitPolicy{}}
-	rlpRefs := gateway.PolicyRefs()
-	logger.V(1).Info("desiredRateLimitingClusterEnvoyFilter", "rlpRefs", rlpRefs)
+	t, err := rlptools.TopologyIndexesFromGateway(ctx, r.Client(), gw)
+	if err != nil {
+		return nil, err
+	}
+	rateLimitPolicies := t.PoliciesFromGateway(gw)
 
-	if len(rlpRefs) < 1 {
+	logger.V(1).Info("desiredRateLimitingClusterEnvoyFilter", "#RLPS", len(rateLimitPolicies))
+
+	if len(rateLimitPolicies) < 1 {
 		utils.TagObjectToDelete(ef)
 		return ef, nil
 	}
@@ -165,11 +164,25 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *LimitadorClusterEnvoyFilterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	httpRouteToParentGatewaysEventMapper := mappers.NewHTTPRouteToParentGatewaysEventMapper(
+		mappers.WithLogger(r.Logger().WithName("httpRouteToParentGatewaysEventMapper")),
+	)
+
+	rlpToParentGatewaysEventMapper := mappers.NewPolicyToParentGatewaysEventMapper(
+		mappers.WithLogger(r.Logger().WithName("ratelimitpolicyToParentGatewaysEventMapper")),
+		mappers.WithClient(r.Client()),
+	)
+
 	return ctrl.NewControllerManagedBy(mgr).
-		// Limitador cluster EnvoyFilter controller only cares about
-		// the annotation having references to RLP's
-		// kuadrant.io/ratelimitpolicies
-		For(&gatewayapiv1.Gateway{}, builder.WithPredicates(predicate.AnnotationChangedPredicate{})).
+		For(&gatewayapiv1.Gateway{}).
 		Owns(&istioclientnetworkingv1alpha3.EnvoyFilter{}).
+		Watches(
+			&gatewayapiv1.HTTPRoute{},
+			handler.EnqueueRequestsFromMapFunc(httpRouteToParentGatewaysEventMapper.Map),
+		).
+		Watches(
+			&kuadrantv1beta2.RateLimitPolicy{},
+			handler.EnqueueRequestsFromMapFunc(rlpToParentGatewaysEventMapper.Map),
+		).
 		Complete(r)
 }

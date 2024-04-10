@@ -25,939 +25,32 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "gnetId": 7630,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": 33,
-  "iteration": 1712678750650,
+  "iteration": 1712855114774,
   "links": [],
   "liveNow": false,
   "panels": [
     {
-      "collapsed": false,
+      "datasource": {
+        "type": "datasource",
+        "uid": "grafana"
+      },
+      "description": "",
       "gridPos": {
-        "h": 1,
+        "h": 5,
         "w": 24,
         "x": 0,
         "y": 0
       },
-      "id": 133,
-      "panels": [],
-      "title": "API Error Request",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "List of current error requests API is encountering ",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "center",
-            "displayMode": "color-text",
-            "filterable": false,
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #A"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Current Error Request Rate"
-              },
-              {
-                "id": "unit",
-                "value": "reqps"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #B"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Increase/Decrease"
-              },
-              {
-                "id": "unit",
-                "value": "reqps"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #C"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Total  Unsuccessful Requests"
-              },
-              {
-                "id": "unit",
-                "value": "none"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #D"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Cur. Error Rate"
-              },
-              {
-                "id": "unit",
-                "value": "reqps"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "red",
-                      "value": 0.01
-                    }
-                  ]
-                }
-              },
-              {
-                "id": "noValue",
-                "value": "0"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #E"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Cur. 4xx Rate"
-              },
-              {
-                "id": "unit",
-                "value": "reqps"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "noValue",
-                "value": "0"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #F"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Cur. 5xx Rate"
-              },
-              {
-                "id": "unit",
-                "value": "reqps"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "noValue",
-                "value": "0"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #G"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Total Errors"
-              },
-              {
-                "id": "unit",
-                "value": "none"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "noValue",
-                "value": "0"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #H"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Cur. Error Rate %"
-              },
-              {
-                "id": "unit",
-                "value": "percentunit"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "noValue",
-                "value": "0"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #I"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Cur. 4xx Rate %"
-              },
-              {
-                "id": "unit",
-                "value": "percentunit"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "noValue",
-                "value": "0"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #J"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Cur. 5xx Rate %"
-              },
-              {
-                "id": "unit",
-                "value": "percentunit"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "noValue",
-                "value": "0"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #K"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Total Errors %"
-              },
-              {
-                "id": "unit",
-                "value": "percentunit"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "red",
-                      "value": 0.01
-                    }
-                  ]
-                }
-              },
-              {
-                "id": "noValue",
-                "value": "0"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 24,
-        "x": 0,
-        "y": 1
-      },
-      "id": 127,
+      "id": 153,
       "options": {
-        "footer": {
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Total  Unsuccessful Requests"
-          }
-        ]
+        "content": "The row of panels below is repeated for each HTTPRoute resource in your cluster.\nThey provide real-time & historical insights into the performance and health of each API.\nMetrics displayed include request rates, success/error breakdown, and latency percentiles, giving a snapshot of API efficiency and reliability.\nUse this dashboard to monitor traffic patterns, identify potential issues, and ensure optimal performance of your services.\n\n*Important: HTTPRoutes must include a \"service\" label with a value that matches the name of the service being routed to. eg. \"service=myapp\"*",
+        "mode": "markdown"
       },
       "pluginVersion": "8.5.5",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "sum(rate(istio_requests_total{response_code=~\"5.*\", destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "range": false,
-          "refId": "F"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "(sum(rate(istio_requests_total{response_code=~\"5.*\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")) / (sum(rate(istio_requests_total{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "range": false,
-          "refId": "J"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "range": false,
-          "refId": "E"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "(sum(rate(istio_requests_total{response_code=~\"4.*\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")) / (sum(rate(istio_requests_total{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "range": false,
-          "refId": "I"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "range": false,
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "sum(increase(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[$__range])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "range": false,
-          "refId": "G"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "(sum(rate(istio_requests_total{response_code=~\"4.*|5.*\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")) / (sum(rate(istio_requests_totalP{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "range": false,
-          "refId": "H"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "(sum(increase(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[$__range])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")) / (sum(increase(istio_requests_total{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[$__range])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "range": false,
-          "refId": "K"
-        }
-      ],
-      "title": "API Error Requests ",
-      "transformations": [
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "Value #A": false,
-              "Value #B": false,
-              "Value #C": false,
-              "Value #D": false,
-              "Value #E": false,
-              "Value #G": false,
-              "Value #H": false,
-              "Value #K": false,
-              "container": true,
-              "customresource_group": true,
-              "customresource_kind": true,
-              "customresource_version": true,
-              "deployment": true,
-              "destination_service_name": true,
-              "destination_workload": true,
-              "exported_namespace": true,
-              "instance": true,
-              "job": true,
-              "namespace": true,
-              "prometheus": true
-            },
-            "indexByName": {
-              "Time": 1,
-              "Value #A": 14,
-              "Value #B": 15,
-              "Value #C": 13,
-              "Value #D": 18,
-              "Value #E": 20,
-              "Value #F": 22,
-              "Value #G": 16,
-              "Value #H": 19,
-              "Value #I": 21,
-              "Value #J": 23,
-              "Value #K": 17,
-              "container": 2,
-              "customresource_group": 3,
-              "customresource_kind": 4,
-              "customresource_version": 5,
-              "deployment": 6,
-              "destination_workload": 7,
-              "exported_namespace": 8,
-              "instance": 9,
-              "job": 10,
-              "name": 0,
-              "namespace": 11,
-              "prometheus": 12
-            },
-            "renameByName": {
-              "Time": "",
-              "deployment": "",
-              "exported_namespace": "",
-              "name": "API"
-            }
-          }
-        },
-        {
-          "id": "filterFieldsByName",
-          "options": {
-            "include": {
-              "names": [
-                "API",
-                "Value #K",
-                "Value #D",
-                "Value #H",
-                "Value #E",
-                "Value #I",
-                "Value #G"
-              ]
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "API Error rate for different response codes over time the API name can be cross referenced with the API list to see additional details.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 0,
-        "y": 7
-      },
-      "id": 101,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "legendFormat": "Total Errors: {{name}} ",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "hide": false,
-          "legendFormat": "4xx: {{name}} ",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"5.*\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "hide": false,
-          "legendFormat": "5xx: {{name}} ",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"404\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "hide": false,
-          "legendFormat": "404: {{name}}",
-          "range": true,
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"401\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "hide": false,
-          "legendFormat": "401: {{name}}",
-          "range": true,
-          "refId": "E"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"429\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "hide": false,
-          "legendFormat": "429: {{name}}",
-          "range": true,
-          "refId": "F"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"500\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "hide": false,
-          "legendFormat": "500: {{name}}",
-          "range": true,
-          "refId": "G"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"501\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "hide": false,
-          "legendFormat": "501: {{name}}",
-          "range": true,
-          "refId": "H"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"503\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "hide": false,
-          "legendFormat": "503: {{name}}",
-          "range": true,
-          "refId": "I"
-        }
-      ],
-      "title": "API Error Rate  (/sec)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "API % Error rate for different response codes over time the API name can be cross referenced with the API list to see additional details.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 7
-      },
-      "id": 124,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(sum(rate(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")) / (sum(rate(istio_requests_total{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))",
-          "legendFormat": "Total Errors: {{name}} ",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(sum(rate(istio_requests_total{response_code=~\"4.*\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")) / (sum(rate(istio_requests_total{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))",
-          "hide": false,
-          "legendFormat": "4xx: {{name}} ",
-          "range": true,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(sum(rate(istio_requests_total{response_code=~\"5.*\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))/ (sum(rate(istio_requests_total{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))",
-          "hide": false,
-          "legendFormat": "5xx: {{name}} ",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(sum(rate(istio_requests_total{response_code=~\"401\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")) / (sum(rate(istio_requests_total{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))",
-          "hide": false,
-          "legendFormat": "401: {{name}}",
-          "range": true,
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(sum(rate(istio_requests_total{response_code=~\"429\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")) / (sum(rate(istio_requests_total{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))",
-          "hide": false,
-          "legendFormat": "429: {{name}}",
-          "range": true,
-          "refId": "E"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(sum(rate(istio_requests_total{response_code=~\"404\",destination_service_name=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")) / (sum(rate(istio_requests_total{destination_service_name=~\"$api\",destination_service_name=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))",
-          "hide": false,
-          "legendFormat": "404: {{name}}",
-          "range": true,
-          "refId": "F"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(sum(rate(istio_requests_total{response_code=~\"500\",destination_service_name=~\"$api\",destination_service_name=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))/ (sum(rate(istio_requests_total{destination_service_name=~\"$api\",destination_service_name=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))",
-          "hide": false,
-          "legendFormat": "500: {{name}}",
-          "range": true,
-          "refId": "G"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(sum(rate(istio_requests_total{response_code=~\"501\",destination_service_name=~\"$api\",destination_service_name=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))/ (sum(rate(istio_requests_total{destination_service_name=~\"$api\",destination_service_name=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))",
-          "hide": false,
-          "legendFormat": "501: {{name}}",
-          "range": true,
-          "refId": "H"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(sum(rate(istio_requests_total{response_code=~\"503\",destination_service_name=~\"$api\",destination_service_name=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))/ (sum(rate(istio_requests_total{destination_service_name=~\"$api\",destination_service_name=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\"))",
-          "hide": false,
-          "legendFormat": "503: {{name}}",
-          "range": true,
-          "refId": "I"
-        }
-      ],
-      "title": "API Error Rate %",
-      "type": "timeseries"
+      "title": "Overview of API/HTTPRoute Metrics",
+      "type": "text"
     },
     {
       "collapsed": false,
@@ -965,11 +58,12 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 14
+        "y": 5
       },
-      "id": 131,
+      "id": 141,
       "panels": [],
-      "title": "API Successful Request",
+      "repeat": "api",
+      "title": "\"$api\" API - Requests, latency and errors",
       "type": "row"
     },
     {
@@ -977,693 +71,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "List of current successful requests API is encountering ",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "green",
-            "mode": "fixed"
-          },
-          "custom": {
-            "align": "center",
-            "displayMode": "color-text",
-            "filterable": false,
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #A"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Current Successful Request Rate"
-              },
-              {
-                "id": "unit",
-                "value": "reqps"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #B"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Increase/Decrease"
-              },
-              {
-                "id": "unit",
-                "value": "reqps"
-              },
-              {
-                "id": "decimals",
-                "value": 2
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Value #C"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Total Successful Requests"
-              },
-              {
-                "id": "unit",
-                "value": "none"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 24,
-        "x": 0,
-        "y": 15
-      },
-      "id": 134,
-      "options": {
-        "footer": {
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true,
-        "sortBy": []
-      },
-      "pluginVersion": "8.5.5",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "sum(rate(istio_requests_total{response_code=\"200\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "(sum(rate(istio_requests_total{response_code=\"200\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) - sum(rate(istio_requests_total{response_code=\"200\",destination_service_name=~\"$api\"}[5m] offset $__range)) by (destination_service_name))\n* on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "range": false,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "sum(increase(istio_requests_total{response_code=\"200\",destination_service_name=~\"$api\"}[$__range])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "range": false,
-          "refId": "C"
-        }
-      ],
-      "title": "API Successful Requests",
-      "transformations": [
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "Value #A": false,
-              "Value #B": false,
-              "Value #C": false,
-              "Value #D": false,
-              "Value #E": false,
-              "Value #G": false,
-              "Value #H": false,
-              "Value #K": false,
-              "container": true,
-              "customresource_group": true,
-              "customresource_kind": true,
-              "customresource_version": true,
-              "deployment": true,
-              "destination_service_name": true,
-              "destination_workload": true,
-              "exported_namespace": true,
-              "instance": true,
-              "job": true,
-              "namespace": true,
-              "prometheus": true
-            },
-            "indexByName": {
-              "Time": 1,
-              "Value #A": 14,
-              "Value #B": 15,
-              "Value #C": 13,
-              "Value #D": 18,
-              "Value #E": 20,
-              "Value #F": 22,
-              "Value #G": 16,
-              "Value #H": 19,
-              "Value #I": 21,
-              "Value #J": 23,
-              "Value #K": 17,
-              "container": 2,
-              "customresource_group": 3,
-              "customresource_kind": 4,
-              "customresource_version": 5,
-              "deployment": 6,
-              "destination_workload": 7,
-              "exported_namespace": 8,
-              "instance": 9,
-              "job": 10,
-              "name": 0,
-              "namespace": 11,
-              "prometheus": 12
-            },
-            "renameByName": {
-              "Time": "",
-              "deployment": "",
-              "exported_namespace": "",
-              "name": "API"
-            }
-          }
-        },
-        {
-          "id": "filterFieldsByName",
-          "options": {
-            "include": {
-              "names": [
-                "API",
-                "Value #C",
-                "Value #B",
-                "Value #G",
-                "Value #K",
-                "Value #D",
-                "Value #H",
-                "Value #E",
-                "Value #I",
-                "Value #A"
-              ]
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "API successful request rate for 200 response code over time the API name can be cross referenced with the API list to see additional details.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 24,
-        "x": 0,
-        "y": 21
-      },
-      "id": 99,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=\"200\",destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "legendFormat": "API: {{name}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "API Successful Request Rate (/sec)",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 27
-      },
-      "id": 136,
-      "panels": [],
-      "title": "API Duration",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "Shows that 50% of API requests were completed inside the latency value, while the remaining 50% took longer.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "ms"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 3,
-        "x": 0,
-        "y": 28
-      },
-      "id": 137,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "8.5.5",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "histogram_quantile(0.50, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "hide": false,
-          "instant": true,
-          "legendFormat": "P50 {{destination_service_name}}",
-          "range": false,
-          "refId": "C"
-        }
-      ],
-      "title": "API Request Duration P50",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "Shows that 99% of API requests were completed inside the latency value, while the remaining 1% took longer.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "ms"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 11,
-        "w": 3,
-        "x": 3,
-        "y": 28
-      },
-      "id": 139,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "8.5.5",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "hide": false,
-          "instant": true,
-          "legendFormat": "P99 {{destination_service_name}}",
-          "range": false,
-          "refId": "B"
-        }
-      ],
-      "title": "API Request Duration P99",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "Different percentiles over time can be cross referenced with the API list to see additional details.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "ms"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 11,
-        "w": 18,
-        "x": 6,
-        "y": 28
-      },
-      "id": 129,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "hide": false,
-          "legendFormat": "P50 {{destination_service_name}}",
-          "range": true,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.90, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "legendFormat": "P90 {{destination_service_name}}",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "hide": false,
-          "legendFormat": "P99 {{destination_service_name}}",
-          "range": true,
-          "refId": "B"
-        }
-      ],
-      "title": "API Request Duration",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "Shows that 90% of API requests were completed inside the latency value, while the remaining 10% took longer.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "ms"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 3,
-        "x": 0,
-        "y": 34
-      },
-      "id": 138,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "8.5.5",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "histogram_quantile(0.90, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\",request_url_path=~\"$api_path\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
-          "instant": true,
-          "legendFormat": "P90 {{destination_service_name}}",
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "API Request Duration P90",
-      "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 39
-      },
-      "id": 109,
-      "panels": [],
-      "title": "API Summary",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "Summary of API",
+      "description": "Hostname: \"Domain name for the API server.\" | API Namespace: \"Kubernetes namespace where the API is deployed.\" | Gateway name: \"Name of the Gateway API gateway the HTTPRoute is targeting\" | Gateway name: \"Name of the Gateway API gateway namespace\"\n",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1681,10 +89,6 @@
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           }
@@ -1692,10 +96,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
+        "h": 2,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 6
       },
       "id": 97,
       "options": {
@@ -1754,7 +158,6 @@
           "refId": "C"
         }
       ],
-      "title": "API Summary",
       "transformations": [
         {
           "id": "seriesToColumns",
@@ -1780,17 +183,21 @@
               "customresource_kind 2": true,
               "customresource_version 1": true,
               "customresource_version 2": true,
+              "deployment": false,
               "exported_namespace 2": true,
               "instance 1": true,
               "instance 2": true,
               "job 1": true,
               "job 2": true,
+              "name": true,
               "namespace 1": false,
               "namespace 2": true,
               "namespace 3": false,
               "parent_name": false,
+              "parent_namespace": false,
               "prometheus 1": true,
-              "prometheus 2": true
+              "prometheus 2": true,
+              "service": false
             },
             "indexByName": {
               "Time 1": 1,
@@ -1832,8 +239,9 @@
               "name": "API Name (HTTPRoute)",
               "namespace 1": "API Namespace",
               "owner": "Owner",
-              "parent_name": "Parent Name (Gateway)",
-              "parent_namespace": "Parent Namespace (Gateway)"
+              "parent_name": "Gateway name",
+              "parent_namespace": "Gateway namespace",
+              "service": "Service"
             }
           }
         },
@@ -1842,17 +250,944 @@
           "options": {
             "include": {
               "names": [
-                "API Name (HTTPRoute)",
                 "Hostname",
-                "Parent Name (Gateway)",
-                "Parent Namespace (Gateway)",
-                "API Namespace"
+                "API Namespace",
+                "Gateway name",
+                "Gateway namespace"
               ]
             }
           }
         }
       ],
       "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Requests per second, broken down by success (2xx,3xxx) and error (4xx,5xx)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "light-yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "light-green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 9,
+        "x": 0,
+        "y": 8
+      },
+      "id": 99,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "legendFormat": "total",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "legendFormat": "error (4xx,5xx)",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"2.*|3.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "legendFormat": "success (2xx,3xx)",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "request breakdown (req/s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Total requests per second",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 2,
+        "x": 9,
+        "y": 8
+      },
+      "id": 137,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(rate(istio_requests_total{destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "P50 {{destination_service_name}}",
+          "range": false,
+          "refId": "C"
+        }
+      ],
+      "title": "total",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Total number of responses.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 2,
+        "x": 11,
+        "y": 8
+      },
+      "id": 149,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(increase(istio_requests_total{destination_service_name=~\"$api\"}[$__range])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{service=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "P50 {{destination_service_name}}",
+          "range": false,
+          "refId": "C"
+        }
+      ],
+      "title": "total",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Time it takes to process a request",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "light-blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 9,
+        "x": 13,
+        "y": 8
+      },
+      "id": 129,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "legendFormat": "P95",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.90, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "legendFormat": "P90",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "legendFormat": "P99",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "request latency (percentiles)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "99% of API requests were completed inside this value, while the remaining 1% took longer.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 2,
+        "x": 22,
+        "y": 8
+      },
+      "id": 139,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "P99 {{destination_service_name}}",
+          "range": false,
+          "refId": "B"
+        }
+      ],
+      "title": "P99",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Requests per second that resulted in a success (2xx, 3xx).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "light-green",
+            "mode": "fixed"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 2,
+        "x": 9,
+        "y": 10
+      },
+      "id": 147,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(rate(istio_requests_total{response_code=~\"2.*|3.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "P50 {{destination_service_name}}",
+          "range": false,
+          "refId": "C"
+        }
+      ],
+      "title": "success",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Total number of success response (2xx, 3xx).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "light-green",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 2,
+        "x": 11,
+        "y": 10
+      },
+      "id": 150,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(increase(istio_requests_total{response_code=~\"2.*|3.*\",destination_service_name=~\"$api\"}[$__range])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{service=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "P50 {{destination_service_name}}",
+          "range": false,
+          "refId": "C"
+        }
+      ],
+      "title": "success",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "95% of API requests were completed inside this value, while the remaining 5% took longer.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "light-blue",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 2,
+        "x": 22,
+        "y": 10
+      },
+      "id": 146,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "histogram_quantile(0.50, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "P50 {{destination_service_name}}",
+          "range": false,
+          "refId": "C"
+        }
+      ],
+      "title": "P95",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Requests per second that resulted in an error (4xx, 5xx).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "light-yellow",
+            "mode": "fixed"
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 2,
+        "x": 9,
+        "y": 12
+      },
+      "id": 148,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "P50 {{destination_service_name}}",
+          "range": false,
+          "refId": "C"
+        }
+      ],
+      "title": "error",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Total number of error response (4xx, 5xx).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "light-yellow",
+            "mode": "fixed"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 2,
+        "x": 11,
+        "y": 12
+      },
+      "id": 151,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(increase(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\"}[$__range])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{service=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
+          "hide": false,
+          "instant": true,
+          "legendFormat": "P50 {{destination_service_name}}",
+          "range": false,
+          "refId": "C"
+        }
+      ],
+      "title": "error",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Shows that 90% of API requests were completed inside this value, while the remaining 10% took longer.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "super-light-blue",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 2,
+        "x": 22,
+        "y": 12
+      },
+      "id": 138,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "histogram_quantile(0.90, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "instant": true,
+          "legendFormat": "P90 {{destination_service_name}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "P90",
+      "type": "stat"
     }
   ],
   "refresh": "",
@@ -1863,7 +1198,7 @@
     "list": [
       {
         "current": {
-          "selected": true,
+          "selected": false,
           "text": "prometheus",
           "value": "prometheus"
         },
@@ -1911,43 +1246,11 @@
         "skipUrlSync": false,
         "sort": 0,
         "type": "query"
-      },
-      {
-        "current": {
-          "selected": true,
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${datasource}"
-        },
-        "definition": "label_values(istio_requests_total{destination_service_name=~\"$api\"}, request_url_path)",
-        "description": "API endpoint path ",
-        "hide": 0,
-        "includeAll": true,
-        "label": "API path",
-        "multi": true,
-        "name": "api_path",
-        "options": [],
-        "query": {
-          "query": "label_values(istio_requests_total{destination_service_name=~\"$api\"}, request_url_path)",
-          "refId": "StandardVariableQuery"
-        },
-        "refresh": 1,
-        "regex": "",
-        "skipUrlSync": false,
-        "sort": 0,
-        "type": "query"
       }
     ]
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {
@@ -1973,7 +1276,7 @@
   },
   "timezone": "",
   "title": "Stitch: App Developer Dashboard",
-  "uid": "6bHBHa7Izx",
-  "version": 11,
+  "uid": "J_sdY4-Ik",
+  "version": 8,
   "weekStart": ""
 }

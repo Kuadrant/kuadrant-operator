@@ -1272,6 +1272,209 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(isAuthPolicyEnforced(gwPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
 	})
+
+	Context("AuthPolicies configured with overrides", func() {
+		BeforeEach(func() {
+			err := ApplyResources(filepath.Join("..", "examples", "toystore", "toystore.yaml"), k8sClient, testNamespace)
+			Expect(err).ToNot(HaveOccurred())
+
+			route := testBuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
+			err = k8sClient.Create(context.Background(), route)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route)), time.Minute, 5*time.Second).Should(BeTrue())
+		})
+
+		It("Gateway AuthPolicy has overrides and Route AuthPolicy is added.", func() {
+			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = testGatewayName
+				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Defaults = nil
+				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
+				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+			})
+
+			err := k8sClient.Create(context.Background(), gatewayPolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(isAuthPolicyAccepted(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(isAuthPolicyEnforced(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			routePolicy := policyFactory()
+			err = k8sClient.Create(context.Background(), routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(isAuthPolicyAccepted(routePolicy), 30*time.Second, 5*time.Second).Should(BeFalse())
+		})
+
+		It("Route AuthPolicy exists and Gateway AuthPolicy with overrides is added.", func() {
+			routePolicy := policyFactory()
+			err := k8sClient.Create(context.Background(), routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(isAuthPolicyAccepted(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = testGatewayName
+				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Defaults = nil
+				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
+				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+			})
+
+			err = k8sClient.Create(context.Background(), gatewayPolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(isAuthPolicyAccepted(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(isAuthPolicyEnforced(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(isAuthPolicyEnforced(routePolicy), 30*time.Second, 5*time.Second).Should(BeFalse())
+		})
+
+		It("Route AuthPolicy exists and Gateway AuthPolicy with overrides is removed.", func() {
+			routePolicy := policyFactory()
+			err := k8sClient.Create(context.Background(), routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(isAuthPolicyAccepted(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = testGatewayName
+				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Defaults = nil
+				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
+				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+			})
+
+			err = k8sClient.Create(context.Background(), gatewayPolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(isAuthPolicyAccepted(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(isAuthPolicyEnforced(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(isAuthPolicyEnforced(routePolicy), 30*time.Second, 5*time.Second).Should(BeFalse())
+
+			err = k8sClient.Delete(context.Background(), gatewayPolicy)
+			logf.Log.V(1).Info("Deleting AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(isAuthPolicyEnforced(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+		})
+
+		It("Route and Gateway AuthPolicies exist. Gateway AuthPolicy updated to include overrides.", func() {
+			routePolicy := policyFactory()
+			err := k8sClient.Create(context.Background(), routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(isAuthPolicyAccepted(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = testGatewayName
+				policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+			})
+
+			err = k8sClient.Create(context.Background(), gatewayPolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(isAuthPolicyAccepted(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(isAuthPolicyEnforced(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeFalse())
+			Eventually(isAuthPolicyEnforced(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			Eventually(func() bool {
+				err = k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gatewayPolicy), gatewayPolicy)
+				if err != nil {
+					return false
+				}
+				gatewayPolicy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				gatewayPolicy.Spec.Defaults = nil
+				gatewayPolicy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
+				gatewayPolicy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+				err = k8sClient.Update(context.Background(), gatewayPolicy)
+				logf.Log.V(1).Info("Updating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+				return err == nil
+			}, 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// check policy status
+			Eventually(isAuthPolicyAccepted(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(isAuthPolicyEnforced(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(isAuthPolicyEnforced(routePolicy), 30*time.Second, 5*time.Second).Should(BeFalse())
+
+		})
+
+		It("Route and Gateway AuthPolicies exist. Gateway AuthPolicy updated to remove overrides.", func() {
+			routePolicy := policyFactory()
+			err := k8sClient.Create(context.Background(), routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(isAuthPolicyAccepted(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = testGatewayName
+				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Defaults = nil
+				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
+				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+			})
+
+			err = k8sClient.Create(context.Background(), gatewayPolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(isAuthPolicyAccepted(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(isAuthPolicyEnforced(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(isAuthPolicyEnforced(routePolicy), 30*time.Second, 5*time.Second).Should(BeFalse())
+
+			Eventually(func() bool {
+				err = k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gatewayPolicy), gatewayPolicy)
+				if err != nil {
+					return false
+				}
+				gatewayPolicy.Spec.Overrides = nil
+				gatewayPolicy.Spec.CommonSpec().AuthScheme = testBasicAuthScheme()
+				gatewayPolicy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+				err = k8sClient.Update(context.Background(), gatewayPolicy)
+				logf.Log.V(1).Info("Updating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+				return err == nil
+			}, 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// check policy status
+			Eventually(isAuthPolicyAccepted(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(isAuthPolicyEnforced(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeFalse())
+			Eventually(isAuthPolicyEnforced(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+		})
+	})
 })
 
 var _ = Describe("AuthPolicy CEL Validations", func() {

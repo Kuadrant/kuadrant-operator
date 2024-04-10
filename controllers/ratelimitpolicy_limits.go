@@ -6,23 +6,25 @@ import (
 	"github.com/go-logr/logr"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy) error {
+func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
 	rlpRefs, err := r.TargetRefReconciler.GetAllGatewayPolicyRefs(ctx, rlp)
 	if err != nil {
 		return err
 	}
-	return r.reconcileLimitador(ctx, rlp, append(rlpRefs, client.ObjectKeyFromObject(rlp)))
+	return r.reconcileLimitador(ctx, rlp, append(rlpRefs, client.ObjectKeyFromObject(rlp)), targetNetworkObject)
 }
 
-func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy) error {
+func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
 	rlpRefs, err := r.TargetRefReconciler.GetAllGatewayPolicyRefs(ctx, rlp)
 	if err != nil {
 		return err
@@ -32,14 +34,14 @@ func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadr
 		return rlpRef.Name != rlp.Name || rlpRef.Namespace != rlp.Namespace
 	})
 
-	return r.reconcileLimitador(ctx, rlp, rlpRefsWithoutRLP)
+	return r.reconcileLimitador(ctx, rlp, rlpRefsWithoutRLP, targetNetworkObject)
 }
 
-func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, rlpRefs []client.ObjectKey) error {
+func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, rlpRefs []client.ObjectKey, targetNetworkObject client.Object) error {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("reconcileLimitador").WithValues("rlp refs", utils.Map(rlpRefs, func(ref client.ObjectKey) string { return ref.String() }))
 
-	rateLimitIndex, err := r.buildRateLimitIndex(ctx, rlpRefs)
+	rateLimitIndex, err := r.buildRateLimitIndex(ctx, rlpRefs, targetNetworkObject)
 	if err != nil {
 		return err
 	}
@@ -87,7 +89,7 @@ func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp 
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) buildRateLimitIndex(ctx context.Context, rlpRefs []client.ObjectKey) (*rlptools.RateLimitIndex, error) {
+func (r *RateLimitPolicyReconciler) buildRateLimitIndex(ctx context.Context, rlpRefs []client.ObjectKey, targetNetworkObject client.Object) (*rlptools.RateLimitIndex, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("buildRateLimitIndex").WithValues("ratelimitpolicies", rlpRefs)
 
@@ -105,8 +107,38 @@ func (r *RateLimitPolicyReconciler) buildRateLimitIndex(ctx context.Context, rlp
 			return nil, err
 		}
 
+		if err := r.applyOverrides(ctx, rlp, targetNetworkObject); err != nil {
+			return nil, err
+		}
+
 		rateLimitIndex.Set(rlpKey, rlptools.LimitadorRateLimitsFromRLP(rlp))
 	}
 
 	return rateLimitIndex, nil
+}
+
+// applyOverrides checks for any overrides set for the RateLimitPolicy.
+// It iterates through the RateLimitPolicyList to find overrides for the provided target HTTPRoute.
+// If an override is found, it updates the limits in the RateLimitPolicySpec in accordingly.
+func (r *RateLimitPolicyReconciler) applyOverrides(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
+	if route, ok := targetNetworkObject.(*gatewayapiv1.HTTPRoute); ok {
+		rlpList := &kuadrantv1beta2.RateLimitPolicyList{}
+		if err := r.Client().List(ctx, rlpList); err != nil {
+			return err
+		}
+
+		for _, p := range rlpList.Items {
+			clientKeys := gatewayapi.GetRouteAcceptedGatewayParentKeys(route)
+			for _, clientKey := range clientKeys {
+				if gatewayapi.IsTargetRefGateway(p.GetTargetRef()) &&
+					clientKey.Name == string(p.Spec.TargetRef.Name) && clientKey.Namespace == p.Namespace {
+					if p.Spec.Overrides != nil {
+						rlp.Spec.CommonSpec().Limits = p.Spec.Overrides.Limits
+					}
+				}
+			}
+		}
+	}
+
+	return nil
 }

@@ -229,7 +229,7 @@ $(OPM):
 opm: $(OPM) ## Download opm locally if necessary.
 
 KIND = $(PROJECT_PATH)/bin/kind
-KIND_VERSION = v0.20.0
+KIND_VERSION = v0.22.0
 $(KIND):
 	$(call go-install-tool,$(KIND),sigs.k8s.io/kind@$(KIND_VERSION))
 
@@ -393,7 +393,7 @@ run: generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
 docker-build: ## Build docker image with the manager.
-	docker build -t $(IMG) .
+	docker build -t $(IMG) .  --load
 
 docker-push: ## Push docker image with the manager.
 	docker push $(IMG)

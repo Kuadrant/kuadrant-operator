@@ -74,11 +74,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -195,45 +197,47 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"toys": {
-							Rates: []kuadrantv1beta2.Rate{
-								{Limit: 50, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
-							},
-							Counters: []kuadrantv1beta2.ContextSelector{"auth.identity.username"},
-							RouteSelectors: []kuadrantv1beta2.RouteSelector{
-								{ // selects the 1st HTTPRouteRule (i.e. get|post /toys*) for one of the hostnames
-									Matches: []gatewayapiv1.HTTPRouteMatch{
-										{
-											Path: &gatewayapiv1.HTTPPathMatch{
-												Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-												Value: ptr.To("/toys"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"toys": {
+								Rates: []kuadrantv1beta2.Rate{
+									{Limit: 50, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
+								},
+								Counters: []kuadrantv1beta2.ContextSelector{"auth.identity.username"},
+								RouteSelectors: []kuadrantv1beta2.RouteSelector{
+									{ // selects the 1st HTTPRouteRule (i.e. get|post /toys*) for one of the hostnames
+										Matches: []gatewayapiv1.HTTPRouteMatch{
+											{
+												Path: &gatewayapiv1.HTTPPathMatch{
+													Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+													Value: ptr.To("/toys"),
+												},
 											},
 										},
+										Hostnames: []gatewayapiv1.Hostname{"*.toystore.acme.com"},
 									},
-									Hostnames: []gatewayapiv1.Hostname{"*.toystore.acme.com"},
+								},
+								When: []kuadrantv1beta2.WhenCondition{
+									{
+										Selector: "auth.identity.group",
+										Operator: kuadrantv1beta2.WhenConditionOperator("neq"),
+										Value:    "admin",
+									},
 								},
 							},
-							When: []kuadrantv1beta2.WhenCondition{
-								{
-									Selector: "auth.identity.group",
-									Operator: kuadrantv1beta2.WhenConditionOperator("neq"),
-									Value:    "admin",
+							"assets": {
+								Rates: []kuadrantv1beta2.Rate{
+									{Limit: 5, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
+									{Limit: 100, Duration: 12, Unit: kuadrantv1beta2.TimeUnit("hour")},
 								},
-							},
-						},
-						"assets": {
-							Rates: []kuadrantv1beta2.Rate{
-								{Limit: 5, Duration: 1, Unit: kuadrantv1beta2.TimeUnit("minute")},
-								{Limit: 100, Duration: 12, Unit: kuadrantv1beta2.TimeUnit("hour")},
-							},
-							RouteSelectors: []kuadrantv1beta2.RouteSelector{
-								{ // selects the 2nd HTTPRouteRule (i.e. /assets*) for all hostnames
-									Matches: []gatewayapiv1.HTTPRouteMatch{
-										{
-											Path: &gatewayapiv1.HTTPPathMatch{
-												Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-												Value: ptr.To("/assets"),
+								RouteSelectors: []kuadrantv1beta2.RouteSelector{
+									{ // selects the 2nd HTTPRouteRule (i.e. /assets*) for all hostnames
+										Matches: []gatewayapiv1.HTTPRouteMatch{
+											{
+												Path: &gatewayapiv1.HTTPPathMatch{
+													Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+													Value: ptr.To("/assets"),
+												},
 											},
 										},
 									},
@@ -373,11 +377,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -471,11 +477,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -536,23 +544,25 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							RouteSelectors: []kuadrantv1beta2.RouteSelector{
-								{ // does no select any HTTPRouteRule (i.e. GET /toys*)
-									Matches: []gatewayapiv1.HTTPRouteMatch{
-										{
-											Path: &gatewayapiv1.HTTPPathMatch{
-												Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-												Value: ptr.To("/other"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"l1": {
+								RouteSelectors: []kuadrantv1beta2.RouteSelector{
+									{ // does no select any HTTPRouteRule (i.e. GET /toys*)
+										Matches: []gatewayapiv1.HTTPRouteMatch{
+											{
+												Path: &gatewayapiv1.HTTPPathMatch{
+													Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+													Value: ptr.To("/other"),
+												},
 											},
 										},
 									},
 								},
-							},
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -608,11 +618,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -658,23 +670,25 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeCName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							RouteSelectors: []kuadrantv1beta2.RouteSelector{
-								{ // does no select any HTTPRouteRule (i.e. GET /otherPathRouteC*)
-									Matches: []gatewayapiv1.HTTPRouteMatch{
-										{
-											Path: &gatewayapiv1.HTTPPathMatch{
-												Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-												Value: ptr.To("/notmatchingpath"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"l1": {
+								RouteSelectors: []kuadrantv1beta2.RouteSelector{
+									{ // does no select any HTTPRouteRule (i.e. GET /otherPathRouteC*)
+										Matches: []gatewayapiv1.HTTPRouteMatch{
+											{
+												Path: &gatewayapiv1.HTTPPathMatch{
+													Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+													Value: ptr.To("/notmatchingpath"),
+												},
 											},
 										},
 									},
 								},
-							},
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -802,11 +816,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -1005,11 +1021,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -1298,11 +1316,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeAName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -1529,11 +1549,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"gatewaylimit": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"gatewaylimit": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -1631,11 +1653,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeAName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"routelimit": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 4, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"routelimit": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 4, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -1788,11 +1812,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"gatewaylimit": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"gatewaylimit": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -1817,11 +1843,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeAName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"routelimit": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 4, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"routelimit": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 4, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -2072,19 +2100,21 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							RouteSelectors: []kuadrantv1beta2.RouteSelector{
-								{
-									// Route does not specify any hostname
-									// gateway's listener specifies *.gw.example.com
-									Hostnames: []gatewayapiv1.Hostname{"*.gw.example.com"},
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"l1": {
+								RouteSelectors: []kuadrantv1beta2.RouteSelector{
+									{
+										// Route does not specify any hostname
+										// gateway's listener specifies *.gw.example.com
+										Hostnames: []gatewayapiv1.Hostname{"*.gw.example.com"},
+									},
 								},
-							},
 
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},

@@ -5,12 +5,14 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,11 +49,13 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Kind:  "HTTPRoute",
 					Name:  gatewayapiv1.ObjectName(routeName),
 				},
-				Limits: map[string]kuadrantv1beta2.Limit{
-					"l1": {
-						Rates: []kuadrantv1beta2.Rate{
-							{
-								Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+				Defaults: &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
 							},
 						},
 					},
@@ -156,11 +160,13 @@ var _ = Describe("RateLimitPolicy controller", func() {
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(gwName),
 					},
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+					Defaults: &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
 								},
 							},
 						},
@@ -256,6 +262,138 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				rlp.BackReferenceAnnotationName(), string(serialized)))
 		})
 	})
+
+	Context("RLP Defaults", func() {
+		It("HTTPRoute atomic default taking precedence over Gateway defaults", func(ctx SpecContext) {
+			// create httproute
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
+			Expect(k8sClient.Create(ctx, httpRoute)).To(Succeed())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			// create GW RLP
+			gwRLP := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gwName)
+			})
+			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())
+			rlpKey := client.ObjectKey{Name: gwRLP.Name, Namespace: testNamespace}
+			Eventually(testRLPIsAccepted(rlpKey)).WithContext(ctx).Should(BeTrue())
+
+			// Create HTTPRoute RLP with new default limits
+			routeRLP := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Name = "httproute-rlp"
+				policy.Spec.CommonSpec().Limits = map[string]kuadrantv1beta2.Limit{
+					"l1": {
+						Rates: []kuadrantv1beta2.Rate{
+							{
+								Limit: 10, Duration: 5, Unit: kuadrantv1beta2.TimeUnit("second"),
+							},
+						},
+					},
+				}
+			})
+			Expect(k8sClient.Create(ctx, routeRLP)).To(Succeed())
+			rlpKey = client.ObjectKey{Name: routeRLP.Name, Namespace: testNamespace}
+			Eventually(testRLPIsAccepted(rlpKey)).WithContext(ctx).Should(BeTrue())
+
+			// Check Gateway direct back reference
+			gwKey := client.ObjectKeyFromObject(gateway)
+			existingGateway := &gatewayapiv1.Gateway{}
+			Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
+			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
+				gwRLP.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(gwRLP).String()))
+
+			// check limits
+			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+			existingLimitador := &limitadorv1alpha1.Limitador{}
+			Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
+			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+				MaxValue:   10,
+				Seconds:    5,
+				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+				Conditions: []string{`limit.l1__2804bad6 == "1"`},
+				Variables:  []string{},
+				Name:       rlptools.LimitsNameFromRLP(routeRLP),
+			}))
+
+			// Gateway should contain HTTPRoute RLP in backreference
+			Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
+			serialized, err := json.Marshal(rlpKey)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingGateway.GetAnnotations()).To(HaveKey(routeRLP.BackReferenceAnnotationName()))
+			Expect(existingGateway.GetAnnotations()[routeRLP.BackReferenceAnnotationName()]).To(ContainSubstring(string(serialized)))
+
+		}, SpecTimeout(time.Minute))
+	})
+
+	Context("RLP accepted condition reasons", func() {
+		assertAcceptedConditionFalse := func(rlp *kuadrantv1beta2.RateLimitPolicy, reason, message string) func() bool {
+			return func() bool {
+				rlpKey := client.ObjectKeyFromObject(rlp)
+				existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+				err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+				if err != nil {
+					return false
+				}
+
+				cond := meta.FindStatusCondition(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				if cond == nil {
+					return false
+				}
+
+				return cond.Status == metav1.ConditionFalse && cond.Reason == reason && cond.Message == message
+			}
+		}
+
+		// Accepted reason is already tested generally by the existing tests
+
+		It("Target not found reason", func() {
+			rlp := policyFactory()
+			err := k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(assertAcceptedConditionFalse(rlp, string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
+				fmt.Sprintf("RateLimitPolicy target %s was not found", routeName)),
+				time.Minute, 5*time.Second).Should(BeTrue())
+		})
+
+		It("Conflict reason", func() {
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
+			err := k8sClient.Create(context.Background(), httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			rlp := policyFactory()
+			err = k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			rlp2 := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Name = "conflicting-rlp"
+			})
+			err = k8sClient.Create(context.Background(), rlp2)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(assertAcceptedConditionFalse(rlp2, string(gatewayapiv1alpha2.PolicyReasonConflicted),
+				fmt.Sprintf("RateLimitPolicy is conflicted by %[1]v/toystore-rlp: the gateway.networking.k8s.io/v1, Kind=HTTPRoute target %[1]v/toystore-route is already referenced by policy %[1]v/toystore-rlp", testNamespace)),
+				time.Minute, 5*time.Second).Should(BeTrue())
+		})
+
+		It("Validation reason", func() {
+			const targetRefName, targetRefNamespace = "istio-ingressgateway", "istio-system"
+
+			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = targetRefName
+				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(targetRefNamespace))
+			})
+			err := k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(assertAcceptedConditionFalse(rlp, string(gatewayapiv1alpha2.PolicyReasonInvalid),
+				fmt.Sprintf("RateLimitPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", targetRefNamespace)),
+				time.Minute, 5*time.Second).Should(BeTrue())
+		})
+	})
 })
 
 var _ = Describe("RateLimitPolicy CEL Validations", func() {
@@ -267,27 +405,28 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
-	Context("Spec TargetRef Validations", func() {
-		policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
-			policy := &kuadrantv1beta2.RateLimitPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
+		policy := &kuadrantv1beta2.RateLimitPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-policy",
+				Namespace: testNamespace,
+			},
+			Spec: kuadrantv1beta2.RateLimitPolicySpec{
+				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					Group: gatewayapiv1.GroupName,
+					Kind:  "HTTPRoute",
+					Name:  "my-target",
 				},
-				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  "my-target",
-					},
-				},
-			}
-			for _, mutateFn := range mutateFns {
-				mutateFn(policy)
-			}
-
-			return policy
+			},
 		}
+		for _, mutateFn := range mutateFns {
+			mutateFn(policy)
+		}
+
+		return policy
+	}
+
+	Context("Spec TargetRef Validations", func() {
 		It("Valid policy targeting HTTPRoute", func() {
 			policy := policyFactory()
 			err := k8sClient.Create(context.Background(), policy)
@@ -321,23 +460,64 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 		})
 	})
 
+	Context("Defaults validation", func() {
+		It("Valid only implicit defaults", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.Limits = map[string]kuadrantv1beta2.Limit{
+					"implicit": {
+						Rates: []kuadrantv1beta2.Rate{{Limit: 2, Duration: 20, Unit: "second"}},
+					},
+				}
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(BeNil())
+		})
+
+		It("Valid only explicit defaults", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.Defaults = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"explicit": {
+							Rates: []kuadrantv1beta2.Rate{{Limit: 1, Duration: 10, Unit: "second"}},
+						},
+					},
+				}
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(BeNil())
+		})
+
+		It("Invalid implicit and explicit defaults are mutually exclusive", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.Defaults = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"explicit": {
+							Rates: []kuadrantv1beta2.Rate{{Limit: 1, Duration: 10, Unit: "second"}},
+						},
+					},
+				}
+				policy.Spec.Limits = map[string]kuadrantv1beta2.Limit{
+					"implicit": {
+						Rates: []kuadrantv1beta2.Rate{{Limit: 2, Duration: 20, Unit: "second"}},
+					},
+				}
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).To(Not(BeNil()))
+			Expect(strings.Contains(err.Error(), "Implicit and explicit defaults are mutually exclusive")).To(BeTrue())
+		})
+	})
+
 	Context("Route Selector Validation", func() {
 		const (
 			gateWayRouteSelectorErrorMessage = "route selectors not supported when targeting a Gateway"
 		)
 
-		It("invalid usage of limit route selectors with a gateway targetRef", func() {
-			policy := &kuadrantv1beta2.RateLimitPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
-				},
-				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "Gateway",
-						Name:  "my-gw",
-					},
+		It("invalid usage of limit route selectors with a gateway targetRef", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = "my-gw"
+				policy.Spec.RateLimitPolicyCommonSpec = kuadrantv1beta2.RateLimitPolicyCommonSpec{
 					Limits: map[string]kuadrantv1beta2.Limit{
 						"l1": {
 							Rates: []kuadrantv1beta2.Rate{
@@ -359,10 +539,10 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 							},
 						},
 					},
-				},
-			}
+				}
+			})
 
-			err := k8sClient.Create(context.Background(), policy)
+			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(Not(BeNil()))
 			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
 		})

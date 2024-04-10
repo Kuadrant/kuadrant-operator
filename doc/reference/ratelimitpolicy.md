@@ -2,7 +2,7 @@
 
 - [RateLimitPolicy](#ratelimitpolicy)
 - [RateLimitPolicySpec](#ratelimitpolicyspec)
-    - [Defaults](#defaults)
+    - [RateLimitPolicyCommonSpec](#rateLimitPolicyCommonSpec)
     - [Limit](#limit)
         - [RateLimit](#ratelimit)
         - [WhenCondition](#whencondition)
@@ -18,13 +18,13 @@
 
 ## RateLimitPolicySpec
 
-| **Field**   | **Type**                                                                                                                                    | **Required** | **Description**                                                                                        |
-|-------------|---------------------------------------------------------------------------------------------------------------------------------------------|--------------|--------------------------------------------------------------------------------------------------------|
-| `targetRef` | [PolicyTargetReference](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.PolicyTargetReference) | Yes          | Reference to a Kubernetes resource that the policy attaches to                                         |
-| `defaults`  | Map<String: [Limit](#limit)>                                                                                                                | No           | Explicit Limit definitions. This field is mutually exclusive with [Defaults](#defaults) `limits` field |
-| `limits`    | [Defaults](#defaults)                                                                                                                       | No           | Implicit default definitions                                                                           |
+| **Field**   | **Type**                                                                                                                                    | **Required** | **Description**                                                                                             |
+|-------------|---------------------------------------------------------------------------------------------------------------------------------------------|--------------|-------------------------------------------------------------------------------------------------------------|
+| `targetRef` | [PolicyTargetReference](https://gateway-api.sigs.k8s.io/v1alpha2/references/spec/#gateway.networking.k8s.io/v1alpha2.PolicyTargetReference) | Yes          | Reference to a Kubernetes resource that the policy attaches to                                              |
+| `defaults`  | [RateLimitPolicyCommonSpec](#rateLimitPolicyCommonSpec)                                                                                     | No           | Default limit definitions. This field is mutually exclusive with the `limits` field                         |
+| `limits`    | Map<String: [Limit](#limit)>                                                                                                                | No           | Limit definitions. This field is mutually exclusive with the [`defaults`](#rateLimitPolicyCommonSpec) field |
 
-### Defaults
+### RateLimitPolicyCommonSpec
 
 | **Field** | **Type**                     | **Required** | **Description**                                                                                                              |
 |-----------|------------------------------|--------------|------------------------------------------------------------------------------------------------------------------------------|

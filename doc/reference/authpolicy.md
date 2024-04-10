@@ -20,7 +20,7 @@
 
 | **Field** | **Type**                              | **Required** | **Description**                                 |
 |-----------|---------------------------------------|:------------:|-------------------------------------------------|
-| `spec`    | [AuthPolicySpec](#authpolicyspec)     | Yes          | The specfication for AuthPolicy custom resource |
+| `spec`    | [AuthPolicySpec](#authpolicyspec)     | Yes          | The specification for AuthPolicy custom resource |
 | `status`  | [AuthPolicyStatus](#authpolicystatus) | No           | The status for the custom resource              |
 
 ## AuthPolicySpec
@@ -33,6 +33,7 @@
 | `patterns`       | Map<String: [NamedPattern](#namedpattern)>                                                                                                  | No           | Implicit default named patterns of lists of `selector`, `operator` and `value` tuples, to be reused in `when` conditions and pattern-matching authorization rules.                                                                                                                              |
 | `when`           | [][PatternExpressionOrRef](https://docs.kuadrant.io/authorino/docs/features/#common-feature-conditions-when)                                | No           | List of implicit default additional dynamic conditions (expressions) to activate the policy. Use it for filtering attributes that cannot be expressed in the targeted HTTPRoute's `spec.hostnames` and `spec.rules.matches` fields, or when targeting a Gateway.                                |
 | `defaults`       | [AuthPolicyCommonSpec](#authPolicyCommonSpec)                                                                                               | No           | Explicit default definitions. This field is mutually exclusive with any of the implicit default definitions: `spec.rules`, `spec.routeSelectors`, `spec.patterns`, `spec.when`                                                                                                                  |
+| `overrides`      | [AuthPolicyCommonSpec](#authPolicyCommonSpec)                                                                                               | No           | Atomic overrides definitions. This field is mutually exclusive with any of the implicit or explicit default definitions: `spec.rules`, `spec.routeSelectors`, `spec.patterns`, `spec.when`, `spec.default`                                                                                      |
 
 
 ## AuthPolicyCommonSpec

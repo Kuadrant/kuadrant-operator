@@ -112,7 +112,8 @@ func (r *GatewayKuadrantReconciler) reconcileGatewayWithKuadrantMetadata(ctx con
 
 	val, ok := gw.GetAnnotations()[kuadrant.KuadrantNamespaceAnnotation]
 	if !ok || val != kuadrantList.Items[0].Namespace {
-		// either the does not exist or is different, hence update
+		// Either the annotation does not exist or
+		// the namespace differs from the available Kuadrant CR, hence the gateway is updated.
 		annotations := gw.GetAnnotations()
 		if annotations == nil {
 			annotations = map[string]string{}

@@ -18,6 +18,24 @@
 
 set -e pipefail
 
+check_dependencies() {
+  # Check for Docker or Podman
+  if ! command -v docker &>/dev/null && ! command -v podman &>/dev/null; then
+    echo "Error: neither docker nor podman could be found. Please install docker or podman."
+    exit 1
+  fi
+
+  # Check for other dependencies
+  for cmd in kind kubectl; do
+    if ! command -v $cmd &>/dev/null; then
+      echo "Error: $cmd could not be found. Please install $cmd."
+      exit 1
+    fi
+  done
+}
+
+check_dependencies
+
 if [ -z $KUADRANT_ORG ]; then
   KUADRANT_ORG=${KUADRANT_ORG:="kuadrant"}
 fi
@@ -332,24 +350,14 @@ LOCAL_SETUP_DIR="$(dirname "${BASH_SOURCE[0]}")"
 YQ_BIN=$(dockerBinCmd "yq")
 
 KUADRANT_REPO="github.com/${KUADRANT_ORG}/kuadrant-operator.git"
-MGC_REPO="github.com/${KUADRANT_ORG}/multicluster-gateway-controller.git"
 KUADRANT_REPO_RAW="https://raw.githubusercontent.com/${KUADRANT_ORG}/kuadrant-operator/${KUADRANT_REF}"
-KUADRANT_DEPLOY_KUSTOMIZATION="${KUADRANT_REPO}/config/deploy"
-KUADRANT_GATEWAY_API_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/gateway-api"
-KUADRANT_ISTIO_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/istio/sail"
-MGC_ISTIO_KUSTOMIZATION="${MGC_REPO}/config/istio"
-KUADRANT_CERT_MANAGER_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/cert-manager"
-KUADRANT_METALLB_KUSTOMIZATION="${KUADRANT_REPO}/config/metallb"
-
-if [[ "${KUADRANT_REF}" != "main" ]]; then
-  echo "setting KUADRANT_REPO to use branch ${KUADRANT_REF}"
-  KUADRANT_DEPLOY_KUSTOMIZATION=${KUADRANT_DEPLOY_KUSTOMIZATION}?ref=${KUADRANT_REF}
-  KUADRANT_GATEWAY_API_KUSTOMIZATION=${KUADRANT_GATEWAY_API_KUSTOMIZATION}?ref=${KUADRANT_REF}
-  KUADRANT_ISTIO_KUSTOMIZATION=${KUADRANT_ISTIO_KUSTOMIZATION}?ref=${KUADRANT_REF}
-  KUADRANT_CERT_MANAGER_KUSTOMIZATION=${KUADRANT_CERT_MANAGER_KUSTOMIZATION}?ref=${KUADRANT_REF}
-  KUADRANT_METALLB_KUSTOMIZATION=${KUADRANT_METALLB_KUSTOMIZATION}?ref=${KUADRANT_REF}
-  MGC_ISTIO_KUSTOMIZATION=${MGC_ISTIO_KUSTOMIZATION}?ref=${MGC_REF}
-fi
+KUADRANT_DEPLOY_KUSTOMIZATION="${KUADRANT_REPO}/config/deploy?ref=${KUADRANT_REF}"
+KUADRANT_GATEWAY_API_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/gateway-api?ref=${KUADRANT_REF}"
+KUADRANT_ISTIO_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/istio/sail?ref=${KUADRANT_REF}"
+KUADRANT_CERT_MANAGER_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/cert-manager?ref=${KUADRANT_REF}"
+KUADRANT_METALLB_KUSTOMIZATION="${KUADRANT_REPO}/config/metallb?ref=${KUADRANT_REF}"
+MGC_REPO="github.com/${KUADRANT_ORG}/multicluster-gateway-controller.git"
+MGC_ISTIO_KUSTOMIZATION="${MGC_REPO}/config/istio?ref=${MGC_REF}"
 
 # Make temporary directory
 mkdir -p ${TMP_DIR}
@@ -375,17 +383,19 @@ kubectl create namespace ${KUADRANT_NAMESPACE}
 
 # Install gateway api
 echo "Installing Gateway API in ${KUADRANT_CLUSTER_NAME}"
-${KUSTOMIZE_BIN} build ${KUADRANT_GATEWAY_API_KUSTOMIZATION} | kubectl apply -f -
+kubectl apply -k ${KUADRANT_GATEWAY_API_KUSTOMIZATION}
 
 # Install istio
 echo "Installing Istio in ${KUADRANT_CLUSTER_NAME}"
 if [ "$ISTIO_INSTALL_SAIL" = true ]; then
-  ${KUSTOMIZE_BIN} build ${KUADRANT_ISTIO_KUSTOMIZATION} | kubectl apply -f -
+  echo "Installing via Sail"
+  kubectl apply -k ${KUADRANT_ISTIO_KUSTOMIZATION}
   kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
   kubectl apply -f ${KUADRANT_REPO_RAW}/config/dependencies/istio/sail/istio.yaml
 else
   # Create CRD first to prevent race condition with creating CR
-  ${KUSTOMIZE_BIN} build ${MGC_ISTIO_KUSTOMIZATION} >${TMP_DIR}/doctmp
+  echo "Installing without Sail"
+  kubectl kustomize ${MGC_ISTIO_KUSTOMIZATION} | tee ${TMP_DIR}/doctmp
   ${YQ_BIN} 'select(.kind == "CustomResourceDefinition")' ${TMP_DIR}/doctmp | kubectl apply -f -
   kubectl -n istio-system wait --for=condition=established crd/istiooperators.install.istio.io --timeout=60s
   cat ${TMP_DIR}/doctmp | kubectl apply -f -
@@ -394,13 +404,13 @@ fi
 
 # Install cert-manager
 echo "Installing cert-manager in ${KUADRANT_CLUSTER_NAME}"
-${KUSTOMIZE_BIN} build ${KUADRANT_CERT_MANAGER_KUSTOMIZATION} | kubectl apply -f -
+kubectl apply -k ${KUADRANT_CERT_MANAGER_KUSTOMIZATION}
 echo "Waiting for cert-manager deployments to be ready"
 kubectl -n cert-manager wait --for=condition=Available deployments --all --timeout=300s
 
 # Install metallb
 echo "Installing metallb in ${KUADRANT_CLUSTER_NAME}"
-${KUSTOMIZE_BIN} build ${KUADRANT_METALLB_KUSTOMIZATION} | kubectl apply -f -
+kubectl apply -k ${KUADRANT_METALLB_KUSTOMIZATION}
 echo "Waiting for metallb-system deployments to be ready"
 kubectl -n metallb-system wait --for=condition=Available deployments controller --timeout=300s
 kubectl -n metallb-system wait --for=condition=ready pod --selector=app=metallb --timeout=60s
@@ -408,7 +418,7 @@ generate_ip_address_pool "kind" | kubectl apply -n metallb-system -f -
 
 # Install kuadrant
 echo "Installing Kuadrant in ${KUADRANT_CLUSTER_NAME}"
-${KUSTOMIZE_BIN} build ${KUADRANT_DEPLOY_KUSTOMIZATION} | kubectl apply --server-side --validate=false -f -
+kubectl apply -k ${KUADRANT_DEPLOY_KUSTOMIZATION} --server-side --validate=false
 
 # Configure managedzone
 if [ ! -z "$DNS_PROVIDER" ]; then

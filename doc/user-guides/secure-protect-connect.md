@@ -117,6 +117,9 @@ apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
   name: toystore
+  labels:
+    deployment: toystore
+    service: toystore
 spec:
   parentRefs:
   - name: api-gateway

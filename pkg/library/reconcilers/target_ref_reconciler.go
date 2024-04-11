@@ -122,7 +122,7 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, 
 		return err
 	}
 
-	var networkObjectList []client.Object = utils.Map(gwList.Items, func(g gatewayapiv1.Gateway) client.Object { return &g })
+	networkObjectList := utils.Map(gwList.Items, func(g gatewayapiv1.Gateway) client.Object { return &g })
 	networkObjectList = append(networkObjectList, utils.Map(routeList.Items, func(g gatewayapiv1.HTTPRoute) client.Object { return &g })...)
 	// remove currently targeted network resource from the list
 	networkObjectList = utils.Filter(networkObjectList, func(obj client.Object) bool {

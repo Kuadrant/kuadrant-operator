@@ -88,6 +88,16 @@ func ApplyKuadrantCRWithName(namespace, name string) {
 	}, time.Minute, 5*time.Second).Should(BeTrue())
 }
 
+func CreateNamespaceWithContext(ctx context.Context, namespace *string) {
+	nsObject := &v1.Namespace{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
+		ObjectMeta: metav1.ObjectMeta{GenerateName: "test-namespace-"},
+	}
+	Expect(testClient().Create(context.Background(), nsObject)).To(Succeed())
+
+	*namespace = nsObject.Name
+}
+
 func CreateNamespace(namespace *string) {
 	var generatedTestNamespace = "test-namespace-" + uuid.New().String()
 
@@ -106,6 +116,16 @@ func CreateNamespace(namespace *string) {
 	}, time.Minute, 5*time.Second).Should(BeTrue())
 
 	*namespace = existingNamespace.Name
+}
+
+func DeleteNamespaceCallbackWithContext(ctx context.Context, namespace *string) {
+	desiredTestNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: *namespace}}
+	Eventually(func(g Gomega) {
+		err := k8sClient.Delete(ctx, desiredTestNamespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
+		g.Expect(err).ToNot(BeNil())
+		g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+	}).WithContext(ctx).Should(Succeed())
+
 }
 
 func DeleteNamespaceCallback(namespace *string) func() {

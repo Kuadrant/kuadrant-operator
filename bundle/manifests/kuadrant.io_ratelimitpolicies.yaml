@@ -1290,6 +1290,9 @@ spec:
                 has(self.limits[x].routeSelectors))
             - message: Implicit and explicit defaults are mutually exclusive
               rule: '!(has(self.defaults) && has(self.limits))'
+            - message: Overrides and implicit defaults are mutually exclusive. Use
+                defaults block instead to set defaults explicitly
+              rule: '!(has(self.overrides) && has(self.limits))'
           status:
             description: RateLimitPolicyStatus defines the observed state of RateLimitPolicy
             properties:

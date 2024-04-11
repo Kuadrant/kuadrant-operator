@@ -338,10 +338,13 @@ func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context, logger l
 
 	istioConfigMap := &corev1.ConfigMap{}
 	if err := r.GetResource(ctx, client.ObjectKey{Name: controlPlaneConfigMapName(), Namespace: controlPlaneProviderNamespace()}, istioConfigMap); err != nil {
-		logger.V(1).Info("failed to get istio configMap", "key", istKey, "err", err)
-		return configsToUpdate, err
+		if !apierrors.IsNotFound(err) {
+			logger.V(1).Info("failed to get istio configMap", "key", istKey, "err", err)
+			return configsToUpdate, err
+		}
+	} else {
+		configsToUpdate = append(configsToUpdate, istio.NewConfigMapWrapper(istioConfigMap))
 	}
-	configsToUpdate = append(configsToUpdate, istio.NewConfigMapWrapper(istioConfigMap))
 	return configsToUpdate, nil
 }
 

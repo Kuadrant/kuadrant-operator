@@ -37,11 +37,13 @@ var _ = Describe("Rate Limiting limits controller", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
 				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{},
-				Limits: map[string]kuadrantv1beta2.Limit{
-					"l1": {
-						Rates: []kuadrantv1beta2.Rate{
-							{
-								Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+				RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+								},
 							},
 						},
 					},

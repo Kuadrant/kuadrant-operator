@@ -394,6 +394,425 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				time.Minute, 5*time.Second).Should(BeTrue())
 		})
 	})
+
+	Context("When RLP switches target from one HTTPRoute to another HTTPRoute", func() {
+		var (
+			routeAName = "route-a"
+			routeBName = "route-b"
+		)
+
+		It("direct references are updated", func() {
+			// Initial state
+			// Route A
+			// RLP A -> Route A
+
+			// Switch target to another route
+			// Route A
+			// Route B
+			// RLP A -> Route B
+
+			// create httproute A
+			httpRouteA := testBuildBasicHttpRoute(routeAName, gwName, testNamespace, []string{"*.a.example.com"})
+			err := k8sClient.Create(context.Background(), httpRouteA)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRouteA)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create ratelimitpolicy
+			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.TargetRef.Kind = "HTTPRoute"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeAName)
+			})
+			err = k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check RLP status is available
+			rlpKey := client.ObjectKeyFromObject(rlp)
+			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check HTTPRoute A direct back reference
+			routeAKey := client.ObjectKey{Name: routeAName, Namespace: testNamespace}
+			Eventually(
+				testHTTPRouteHasDirectBackReference(
+					routeAKey, rlp.DirectReferenceAnnotationName(),
+					client.ObjectKeyFromObject(rlp).String(),
+				),
+				time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Proceed with the update:
+			// From  RLP A -> Route A
+			// To RLP A -> Route B
+
+			// create httproute B
+			httpRouteB := testBuildBasicHttpRoute(routeBName, gwName, testNamespace, []string{"*.b.example.com"})
+			err = k8sClient.Create(context.Background(), httpRouteB)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRouteB)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
+			err = k8sClient.Get(context.Background(), client.ObjectKeyFromObject(rlp), rlpUpdated)
+			Expect(err).ToNot(HaveOccurred())
+			rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeBName)
+			err = k8sClient.Update(context.Background(), rlpUpdated)
+			Expect(err).ToNot(HaveOccurred())
+			// Check RLP status is available
+			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check HTTPRoute A direct back reference is gone
+			Eventually(
+				testHTTPRouteWithoutDirectBackReference(routeAKey, rlp.DirectReferenceAnnotationName()),
+				time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check HTTPRoute B direct back reference
+			routeBKey := client.ObjectKey{Name: routeBName, Namespace: testNamespace}
+			Eventually(
+				testHTTPRouteHasDirectBackReference(
+					routeBKey, rlp.DirectReferenceAnnotationName(),
+					client.ObjectKeyFromObject(rlp).String(),
+				),
+				time.Minute, 5*time.Second).Should(BeTrue())
+		})
+	})
+
+	Context("When RLP switches target from one Gateway to another Gateway", func() {
+		var (
+			gwAName = "gw-a"
+			gwBName = "gw-b"
+		)
+
+		It("direct references are updated", func() {
+			// Initial state
+			// Gw A
+			// RLP A -> Gw A
+
+			// Switch target to another gw
+			// Gw A
+			// Gw B
+			// RLP A -> Gw B
+
+			// create Gw A
+			gatewayA := testBuildBasicGateway(gwAName, testNamespace)
+			err := k8sClient.Create(context.Background(), gatewayA)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testGatewayIsReady(gatewayA), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			// create ratelimitpolicy
+			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gwAName)
+			})
+			err = k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check RLP status is available
+			rlpKey := client.ObjectKeyFromObject(rlp)
+			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check Gateway direct back reference
+			gwAKey := client.ObjectKey{Name: gwAName, Namespace: testNamespace}
+			Eventually(
+				testGatewayHasDirectBackReference(
+					gwAKey, rlp.DirectReferenceAnnotationName(),
+					client.ObjectKeyFromObject(rlp).String(),
+				),
+				time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Proceed with the update:
+			// From  RLP A -> Gw A
+			// To RLP A -> Gw B
+
+			// create Gw B
+			gatewayB := testBuildBasicGateway(gwBName, testNamespace)
+			err = k8sClient.Create(context.Background(), gatewayB)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testGatewayIsReady(gatewayB), 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
+			err = k8sClient.Get(context.Background(), client.ObjectKeyFromObject(rlp), rlpUpdated)
+			Expect(err).ToNot(HaveOccurred())
+			rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gwBName)
+			err = k8sClient.Update(context.Background(), rlpUpdated)
+			Expect(err).ToNot(HaveOccurred())
+			// Check RLP status is available
+			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check Gw A direct back reference is gone
+			Eventually(
+				testGatewayWithoutDirectBackReference(gwAKey, rlp.DirectReferenceAnnotationName()),
+				time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check Gateway B direct back reference
+			gwBKey := client.ObjectKey{Name: gwBName, Namespace: testNamespace}
+			Eventually(
+				testGatewayHasDirectBackReference(
+					gwBKey, rlp.DirectReferenceAnnotationName(),
+					client.ObjectKeyFromObject(rlp).String(),
+				),
+				time.Minute, 5*time.Second).Should(BeTrue())
+		})
+	})
+
+	Context("When RLP switches target from one HTTPRoute to another taken HTTPRoute", func() {
+		var (
+			routeAName = "route-a"
+			routeBName = "route-b"
+			rlpAName   = "rlp-a"
+			rlpBName   = "rlp-b"
+		)
+
+		It("direct references are updated", func() {
+			// Initial state
+			// Route A
+			// Route B
+			// RLP A -> Route A
+			// RLP B -> Route B
+
+			// Switch target to another route
+			// Route A
+			// Route B
+			// RLP A -> Route B
+			// RLP B -> Route B
+
+			// create httproute A
+			httpRouteA := testBuildBasicHttpRoute(routeAName, gwName, testNamespace, []string{"*.a.example.com"})
+			err := k8sClient.Create(context.Background(), httpRouteA)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRouteA)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create httproute B
+			httpRouteB := testBuildBasicHttpRoute(routeBName, gwName, testNamespace, []string{"*.b.example.com"})
+			err = k8sClient.Create(context.Background(), httpRouteB)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRouteB)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create rlpA
+			rlpA := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.ObjectMeta.Name = rlpAName
+				policy.Spec.TargetRef.Kind = "HTTPRoute"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeAName)
+			})
+			err = k8sClient.Create(context.Background(), rlpA)
+			Expect(err).ToNot(HaveOccurred())
+
+			rlpAKey := client.ObjectKeyFromObject(rlpA)
+			Eventually(testRLPIsAccepted(rlpAKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create rlpB
+			rlpB := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.ObjectMeta.Name = rlpBName
+				policy.Spec.TargetRef.Kind = "HTTPRoute"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeBName)
+			})
+			err = k8sClient.Create(context.Background(), rlpB)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check RLP status is available
+			rlpBKey := client.ObjectKeyFromObject(rlpB)
+			Eventually(testRLPIsAccepted(rlpBKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check HTTPRoute A direct back reference
+			routeAKey := client.ObjectKey{Name: routeAName, Namespace: testNamespace}
+			Eventually(
+				testHTTPRouteHasDirectBackReference(
+					routeAKey, rlpA.DirectReferenceAnnotationName(),
+					client.ObjectKeyFromObject(rlpA).String(),
+				),
+				time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check HTTPRoute B direct back reference
+			routeBKey := client.ObjectKey{Name: routeBName, Namespace: testNamespace}
+			Eventually(
+				testHTTPRouteHasDirectBackReference(
+					routeBKey, rlpB.DirectReferenceAnnotationName(),
+					client.ObjectKeyFromObject(rlpB).String(),
+				),
+				time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Proceed with the update:
+			// From  RLP A -> Route A
+			// To RLP A -> Route B (already taken)
+
+			rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
+			err = k8sClient.Get(context.Background(), client.ObjectKeyFromObject(rlpA), rlpUpdated)
+			Expect(err).ToNot(HaveOccurred())
+			rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeBName)
+			err = k8sClient.Update(context.Background(), rlpUpdated)
+			Expect(err).ToNot(HaveOccurred())
+			// Check RLP status is available
+			Eventually(testRLPIsNotAccepted(rlpAKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check HTTPRoute A direct back reference is gone
+			Eventually(
+				testHTTPRouteWithoutDirectBackReference(routeAKey, rlpA.DirectReferenceAnnotationName()),
+				time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check HTTPRoute B direct back reference
+			Eventually(
+				testHTTPRouteHasDirectBackReference(
+					routeBKey, rlpB.DirectReferenceAnnotationName(),
+					client.ObjectKeyFromObject(rlpB).String(),
+				),
+				time.Minute, 5*time.Second).Should(BeTrue())
+		})
+	})
+
+	Context("When target is deleted", func() {
+		var (
+			routeName = "route-a"
+		)
+
+		It("policy status reports error", func() {
+			// Initial state
+			// Route A
+			// RLP A -> Route A
+
+			// Delete route
+			// RLP A
+
+			// create httproute A
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
+			err := k8sClient.Create(context.Background(), httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create rlp
+			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.TargetRef.Kind = "HTTPRoute"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeName)
+			})
+			err = k8sClient.Create(context.Background(), rlp)
+			Expect(err).ToNot(HaveOccurred())
+
+			rlpKey := client.ObjectKeyFromObject(rlp)
+			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check HTTPRoute A direct back reference
+			routeKey := client.ObjectKey{Name: routeName, Namespace: testNamespace}
+			Eventually(
+				testHTTPRouteHasDirectBackReference(
+					routeKey, rlp.DirectReferenceAnnotationName(),
+					client.ObjectKeyFromObject(rlp).String(),
+				),
+				time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Proceed with the update:
+			// Delete Route A
+			err = k8sClient.Delete(context.Background(), httpRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testObjectDoesNotExist(httpRoute), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check RLP status is available
+			Eventually(testRLPIsNotAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+		})
+	})
+
+	Context("When RLP targets already taken HTTPRoute and the route is being released", func() {
+		var (
+			routeAName = "route-a"
+			routeBName = "route-b"
+			rlpAName   = "rlp-a"
+			rlpBName   = "rlp-b"
+		)
+
+		It("direct references are updated and RLP status is ready", func() {
+			// Initial state
+			// Route A
+			// RLP A -> Route A
+
+			// New RLP targets already taken route
+			// Route A
+			// RLP A -> Route A
+			// RLP B -> Route A (already taken)
+
+			// already taken route is being released by owner policy
+			// Route A
+			// Route B
+			// RLP A -> Route B
+			// RLP B -> Route A
+
+			// create httproute A
+			httpRouteA := testBuildBasicHttpRoute(routeAName, gwName, testNamespace, []string{"*.a.example.com"})
+			err := k8sClient.Create(context.Background(), httpRouteA)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRouteA)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// create rlpA
+			rlpA := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.ObjectMeta.Name = rlpAName
+				policy.Spec.TargetRef.Kind = "HTTPRoute"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeAName)
+			})
+			err = k8sClient.Create(context.Background(), rlpA)
+			Expect(err).ToNot(HaveOccurred())
+
+			rlpAKey := client.ObjectKeyFromObject(rlpA)
+			Eventually(testRLPIsAccepted(rlpAKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Proceed with the update:
+			// new RLP B -> Route A (already taken)
+
+			// create rlpB
+			rlpB := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.ObjectMeta.Name = rlpBName
+				policy.Spec.TargetRef.Kind = "HTTPRoute"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeAName)
+			})
+			err = k8sClient.Create(context.Background(), rlpB)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check RLP status is not available
+			rlpBKey := client.ObjectKeyFromObject(rlpB)
+			Eventually(testRLPIsNotAccepted(rlpBKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check HTTPRoute A direct back reference to RLP A
+			routeAKey := client.ObjectKey{Name: routeAName, Namespace: testNamespace}
+			Eventually(
+				testHTTPRouteHasDirectBackReference(
+					routeAKey, rlpA.DirectReferenceAnnotationName(),
+					client.ObjectKeyFromObject(rlpA).String(),
+				),
+				time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Proceed with the update:
+			// new Route B
+			// RLP A -> Route B
+			// RLP A was the older owner of route A, and wiil be the new owner of route B
+
+			// create httproute B
+			httpRouteB := testBuildBasicHttpRoute(routeBName, gwName, testNamespace, []string{"*.b.example.com"})
+			err = k8sClient.Create(context.Background(), httpRouteB)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRouteB)), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// RLP A -> Route B
+			rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
+			err = k8sClient.Get(context.Background(), client.ObjectKeyFromObject(rlpA), rlpUpdated)
+			Expect(err).ToNot(HaveOccurred())
+			rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeBName)
+			err = k8sClient.Update(context.Background(), rlpUpdated)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Check HTTPRoute A direct back reference to RLP B
+			Eventually(
+				testHTTPRouteHasDirectBackReference(
+					routeAKey, rlpB.DirectReferenceAnnotationName(),
+					client.ObjectKeyFromObject(rlpB).String(),
+				),
+				time.Minute, 5*time.Second).Should(BeTrue())
+
+			Eventually(testRLPIsAccepted(rlpBKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			routeBKey := client.ObjectKey{Name: routeBName, Namespace: testNamespace}
+			// Check HTTPRoute B direct back reference to RLP A
+			Eventually(
+				testHTTPRouteHasDirectBackReference(
+					routeBKey, rlpA.DirectReferenceAnnotationName(),
+					client.ObjectKeyFromObject(rlpA).String(),
+				),
+				time.Minute, 5*time.Second).Should(BeTrue())
+
+			Eventually(testRLPIsAccepted(rlpAKey), time.Minute, 5*time.Second).Should(BeTrue())
+		})
+	})
 })
 
 var _ = Describe("RateLimitPolicy CEL Validations", func() {

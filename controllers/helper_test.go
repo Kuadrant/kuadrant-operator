@@ -391,6 +391,99 @@ func testRLPIsAccepted(rlpKey client.ObjectKey) func() bool {
 	}
 }
 
+func testRLPIsNotAccepted(rlpKey client.ObjectKey) func() bool {
+	return func() bool {
+		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+		if err != nil {
+			logf.Log.V(1).Info("ratelimitpolicy not read", "rlp", rlpKey, "error", err)
+			return false
+		}
+		if meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
+			logf.Log.V(1).Info("ratelimitpolicy still accepted", "rlp", rlpKey)
+			return false
+		}
+
+		return true
+	}
+}
+
+func testHTTPRouteWithoutDirectBackReference(routeKey client.ObjectKey, annotationName string) func() bool {
+	return testNetworkResourceWithoutDirectBackReference(routeKey, &gatewayapiv1.HTTPRoute{}, annotationName)
+}
+
+func testGatewayWithoutDirectBackReference(gwKey client.ObjectKey, annotationName string) func() bool {
+	return testNetworkResourceWithoutDirectBackReference(gwKey, &gatewayapiv1.Gateway{}, annotationName)
+}
+
+func testNetworkResourceWithoutDirectBackReference(objKey client.ObjectKey, obj client.Object, annotationName string) func() bool {
+	return func() bool {
+		err := k8sClient.Get(context.Background(), objKey, obj)
+		if err != nil {
+			logf.Log.V(1).Info("object not read", "object", objKey,
+				"kind", obj.GetObjectKind().GroupVersionKind(), "error", err)
+			return false
+		}
+
+		_, ok := obj.GetAnnotations()[annotationName]
+		if ok {
+			logf.Log.V(1).Info("object sill has the direct ref annotation",
+				"object", objKey, "kind", obj.GetObjectKind().GroupVersionKind())
+			return false
+		}
+
+		return true
+	}
+}
+
+func testHTTPRouteHasDirectBackReference(routeKey client.ObjectKey, annotationName, annotationVal string) func() bool {
+	return testNetworkResourceHasDirectBackReference(routeKey, &gatewayapiv1.HTTPRoute{}, annotationName, annotationVal)
+}
+
+func testGatewayHasDirectBackReference(gwKey client.ObjectKey, annotationName, annotationVal string) func() bool {
+	return testNetworkResourceHasDirectBackReference(gwKey, &gatewayapiv1.Gateway{}, annotationName, annotationVal)
+}
+
+func testNetworkResourceHasDirectBackReference(objKey client.ObjectKey, obj client.Object, annotationName, annotationVal string) func() bool {
+	return func() bool {
+		err := k8sClient.Get(context.Background(), objKey, obj)
+		if err != nil {
+			logf.Log.V(1).Info("object not read", "object", objKey,
+				"kind", obj.GetObjectKind().GroupVersionKind(), "error", err)
+			return false
+		}
+
+		val, ok := obj.GetAnnotations()[annotationName]
+		if !ok {
+			logf.Log.V(1).Info("object does not have the direct ref annotation",
+				"object", objKey, "kind", obj.GetObjectKind().GroupVersionKind())
+			return false
+		}
+
+		if val != annotationVal {
+			logf.Log.V(1).Info("object direct ref annotation value does not match",
+				"object", objKey, "kind", obj.GetObjectKind().GroupVersionKind(),
+				"val", val)
+			return false
+		}
+
+		return true
+	}
+}
+
+func testObjectDoesNotExist(obj client.Object) func() bool {
+	return func() bool {
+		err := testClient().Get(context.Background(), client.ObjectKeyFromObject(obj), obj)
+		if err != nil && apierrors.IsNotFound(err) {
+			return true
+		}
+
+		logf.Log.V(1).Info("object not deleted", "object", client.ObjectKeyFromObject(obj),
+			"kind", obj.GetObjectKind().GroupVersionKind())
+		return false
+	}
+}
+
 // DNS
 
 func testBuildManagedZone(name, ns, domainName string) *kuadrantdnsv1alpha1.ManagedZone {

@@ -21,10 +21,10 @@ set +e
 if command -v podman &> /dev/null; then
   SUBNET=`podman network inspect -f '{{range .Subnets}}{{if eq (len .Subnet.IP) 4}}{{.Subnet}}{{end}}{{end}}' $networkName`
   if [[ -z "$SUBNET" ]]; then
-    echo "Failed to obtain subnet using podman. Trying docker instead..."
+    echo "Failed to obtain subnet using podman. Trying docker instead..." >&2
   fi
 else
-  echo "podman not found. Trying docker..."
+  echo "podman not found. Trying docker..." >&2
 fi
 set -e
 

@@ -57,6 +57,7 @@ type DNSPolicyReconciler struct {
 	dnsHelper           dnsHelper
 }
 
+//+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=dnspolicies,verbs=get;list;watch;update;patch;delete
 //+kubebuilder:rbac:groups=kuadrant.io,resources=dnspolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=dnspolicies/finalizers,verbs=update

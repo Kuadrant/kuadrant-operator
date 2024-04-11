@@ -22,7 +22,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -190,6 +189,10 @@ func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr
 	return true
 }
 
+func (s *RateLimitPolicyStatus) GetConditions() []metav1.Condition {
+	return s.Conditions
+}
+
 var _ kuadrant.Policy = &RateLimitPolicy{}
 var _ kuadrant.Referrer = &RateLimitPolicy{}
 
@@ -221,18 +224,6 @@ func (r *RateLimitPolicy) Validate() error {
 	return nil
 }
 
-func (r *RateLimitPolicy) TargetKey() client.ObjectKey {
-	tmpNS := r.Namespace
-	if r.Spec.TargetRef.Namespace != nil {
-		tmpNS = string(*r.Spec.TargetRef.Namespace)
-	}
-
-	return client.ObjectKey{
-		Name:      string(r.Spec.TargetRef.Name),
-		Namespace: tmpNS,
-	}
-}
-
 //+kubebuilder:object:root=true
 
 // RateLimitPolicyList contains a list of RateLimitPolicy
@@ -250,6 +241,10 @@ func (l *RateLimitPolicyList) GetItems() []kuadrant.Policy {
 
 func (r *RateLimitPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 	return r.Spec.TargetRef
+}
+
+func (r *RateLimitPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
+	return &r.Status
 }
 
 func (r *RateLimitPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
@@ -275,6 +270,10 @@ func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 
 func (r *RateLimitPolicy) Kind() string {
 	return r.TypeMeta.Kind
+}
+
+func (r *RateLimitPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
+	return kuadrantgatewayapi.InheritedPolicy
 }
 
 func (r *RateLimitPolicy) BackReferenceAnnotationName() string {

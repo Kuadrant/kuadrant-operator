@@ -617,6 +617,19 @@ var _ = Describe("RateLimitPolicy controller", func() {
 	})
 
 	Context("RLP accepted condition reasons", func() {
+		assertAcceptedConditionTrue := func(rlp *kuadrantv1beta2.RateLimitPolicy) func() bool {
+			return func() bool {
+				rlpKey := client.ObjectKeyFromObject(rlp)
+				existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+				err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+				if err != nil {
+					return false
+				}
+
+				return meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+			}
+		}
+
 		assertAcceptedConditionFalse := func(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, reason, message string) func(g Gomega) {
 			return func(g Gomega) {
 				rlpKey := client.ObjectKeyFromObject(rlp)
@@ -648,6 +661,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			rlp := policyFactory()
 			Expect(k8sClient.Create(ctx, rlp)).To(Succeed())
 			Eventually(testRLPIsAccepted(client.ObjectKeyFromObject(rlp))).WithContext(ctx).Should(BeTrue())
+
+			Eventually(assertAcceptedConditionTrue(rlp), time.Minute, 5*time.Second).Should(BeTrue())
 
 			rlp2 := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Name = "conflicting-rlp"

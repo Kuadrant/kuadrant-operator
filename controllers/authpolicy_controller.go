@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
@@ -160,11 +161,11 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 	}
 
 	if err := r.reconcileIstioAuthorizationPolicies(ctx, ap, targetNetworkObject, gatewayDiffObj); err != nil {
-		return err
+		return fmt.Errorf("reconcile AuthorizationPolicy error %w", err)
 	}
 
 	if err := r.reconcileAuthConfigs(ctx, ap, targetNetworkObject); err != nil {
-		return err
+		return fmt.Errorf("reconcile AuthConfig error %w", err)
 	}
 
 	// if the AuthPolicy(ap) targets a Gateway then all policies attached to that Gateway need to be checked.
@@ -184,8 +185,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 				return err
 			}
 
-			refNetworkObject := &gatewayapiv1.HTTPRoute{}
-			err = r.Client().Get(ctx, ref.TargetKey(), refNetworkObject)
+			refNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), ref.GetTargetRef(), ref.Namespace)
 			if err != nil {
 				return err
 			}
@@ -198,11 +198,15 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 
 	// set direct back ref - i.e. claim the target network object as taken asap
 	if err := r.reconcileNetworkResourceDirectBackReference(ctx, ap, targetNetworkObject); err != nil {
-		return err
+		return fmt.Errorf("reconcile TargetBackReference error %w", err)
 	}
 
 	// set annotation of policies affecting the gateway - should be the last step, only when all the reconciliation steps succeed
-	return r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj)
+	if err := r.TargetRefReconciler.ReconcileGatewayPolicyReferences(ctx, ap, gatewayDiffObj); err != nil {
+		return fmt.Errorf("ReconcileGatewayPolicyReferences error %w", err)
+	}
+
+	return nil
 }
 
 func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {

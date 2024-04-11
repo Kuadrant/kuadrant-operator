@@ -10,11 +10,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -173,30 +171,4 @@ func (r *KuadrantReconciler) checkAuthorinoAvailable(ctx context.Context, kObj *
 	}
 
 	return nil, nil
-}
-
-func BuildPolicyAffectedCondition(conditionType string, policyObject runtime.Object, targetRef metav1.Object, reason gatewayapiv1alpha2.PolicyConditionReason, err error) metav1.Condition {
-	condition := metav1.Condition{
-		Type:               conditionType,
-		Status:             metav1.ConditionTrue,
-		Reason:             string(reason),
-		ObservedGeneration: targetRef.GetGeneration(),
-	}
-
-	objectMeta, metaErr := meta.Accessor(policyObject)
-	if metaErr != nil {
-		condition.Status = metav1.ConditionFalse
-		condition.Message = fmt.Sprintf("failed to get metadata about policy object %s", policyObject.GetObjectKind().GroupVersionKind().String())
-		condition.Reason = PolicyReasonUnknown
-		return condition
-	}
-	if err != nil {
-		condition.Status = metav1.ConditionFalse
-		condition.Message = fmt.Sprintf("policy failed. Object unaffected by policy %s in namespace %s with name %s with error %s", policyObject.GetObjectKind().GroupVersionKind().String(), objectMeta.GetNamespace(), objectMeta.GetName(), err)
-		return condition
-	}
-
-	condition.Message = fmt.Sprintf("policy success. Object affected by policy %s in namespace %s with name %s ", policyObject.GetObjectKind().GroupVersionKind().String(), objectMeta.GetNamespace(), objectMeta.GetName())
-
-	return condition
 }

@@ -168,14 +168,6 @@ var _ = Describe("TLSPolicy controller", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.TLSPolicyDirectReferenceAnnotationName, policyBackRefValue))
 				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.TLSPolicyBackReferenceAnnotationName, policiesBackRefValue))
-				//Check status
-				g.Expect(gw.Status.Conditions).To(
-					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":   Equal(TLSPolicyAffected),
-						"Status": Equal(metav1.ConditionTrue),
-						"Reason": Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
-					})),
-				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
 	})

@@ -240,8 +240,8 @@ func CreateOrUpdateK8SObject(obj runtime.Object, k8sClient client.Client) error 
 	return k8sClient.Update(context.Background(), k8sObjCopy)
 }
 
-func testBuildBasicGateway(gwName, ns string) *gatewayapiv1.Gateway {
-	return &gatewayapiv1.Gateway{
+func testBuildBasicGateway(gwName, ns string, mutateFns ...func(*gatewayapiv1.Gateway)) *gatewayapiv1.Gateway {
+	gateway := &gatewayapiv1.Gateway{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Gateway",
 			APIVersion: gatewayapiv1.GroupVersion.String(),
@@ -263,6 +263,10 @@ func testBuildBasicGateway(gwName, ns string) *gatewayapiv1.Gateway {
 			},
 		},
 	}
+	for _, mutateFn := range mutateFns {
+		mutateFn(gateway)
+	}
+	return gateway
 }
 
 func testBuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string) *gatewayapiv1.HTTPRoute {

@@ -35,9 +35,16 @@ type TargetRefReconciler struct {
 }
 
 // FetchAcceptedGatewayHTTPRoutes returns the list of HTTPRoutes that have been accepted as children of a gateway.
-func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context, gwKey client.ObjectKey) (routes []gatewayapiv1.HTTPRoute) {
+func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context, gateway *gatewayapiv1.Gateway) (routes []gatewayapiv1.HTTPRoute) {
+	gwKey := client.ObjectKeyFromObject(gateway)
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("FetchAcceptedGatewayHTTPRoutes").WithValues("gateway", gwKey)
+
+	gatewayClass := &gatewayapiv1.GatewayClass{}
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: string(gateway.Spec.GatewayClassName)}, gatewayClass); err != nil {
+		logger.V(1).Info("failed to get controller name", "err", err)
+		return
+	}
 
 	routeList := &gatewayapiv1.HTTPRouteList{}
 	err := r.Client.List(ctx, routeList)
@@ -50,10 +57,11 @@ func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context
 		route := routeList.Items[idx]
 		routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, func(p gatewayapiv1.RouteParentStatus) bool {
 			return *p.ParentRef.Kind == ("Gateway") &&
+				p.ControllerName == gatewayClass.Spec.ControllerName &&
 				((p.ParentRef.Namespace == nil && route.GetNamespace() == gwKey.Namespace) || string(*p.ParentRef.Namespace) == gwKey.Namespace) &&
 				string(p.ParentRef.Name) == gwKey.Name
 		})
-		if found && meta.IsStatusConditionTrue(routeParentStatus.Conditions, "Accepted") {
+		if found && meta.IsStatusConditionTrue(routeParentStatus.Conditions, string(gatewayapiv1.RouteConditionAccepted)) {
 			logger.V(1).Info("found route attached to gateway", "httproute", client.ObjectKeyFromObject(&route))
 			routes = append(routes, route)
 			continue
@@ -62,7 +70,7 @@ func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context
 		logger.V(1).Info("skipping route, not attached to gateway",
 			"httproute", client.ObjectKeyFromObject(&route),
 			"isChildRoute", found,
-			"isAccepted", routeParentStatus != nil && meta.IsStatusConditionTrue(routeParentStatus.Conditions, "Accepted"))
+			"isAccepted", routeParentStatus != nil && meta.IsStatusConditionTrue(routeParentStatus.Conditions, string(gatewayapiv1.RouteConditionAccepted)))
 	}
 
 	return

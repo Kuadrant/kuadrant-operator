@@ -57,6 +57,10 @@ var _ = Describe("AuthPolicy controller", func() {
 
 	policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
 		policy := &api.AuthPolicy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "AuthPolicy",
+				APIVersion: api.GroupVersion.String(),
+			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "toystore",
 				Namespace: testNamespace,
@@ -1122,6 +1126,8 @@ var _ = Describe("AuthPolicy controller", func() {
 			err = k8sClient.Create(context.Background(), policy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(isAuthPolicyAccepted(policy), time.Minute, 5*time.Second).Should(BeTrue())
 
 			policy2 := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "conflicting-ap"

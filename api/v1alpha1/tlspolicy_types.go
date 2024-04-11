@@ -25,7 +25,9 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 const (
@@ -116,6 +118,10 @@ type TLSPolicyStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
+func (s *TLSPolicyStatus) GetConditions() []metav1.Condition {
+	return s.Conditions
+}
+
 var _ kuadrant.Policy = &TLSPolicy{}
 var _ kuadrant.Referrer = &TLSPolicy{}
 
@@ -138,6 +144,10 @@ type TLSPolicy struct {
 
 func (p *TLSPolicy) Kind() string { return p.TypeMeta.Kind }
 
+func (p *TLSPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
+	return kuadrantgatewayapi.DirectPolicy
+}
+
 func (p *TLSPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
 	return gatewayapiv1.Namespace(p.Namespace)
 }
@@ -148,6 +158,10 @@ func (p *TLSPolicy) GetRulesHostnames() []string {
 
 func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 	return p.Spec.TargetRef
+}
+
+func (p *TLSPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
+	return &p.Status
 }
 
 func (p *TLSPolicy) BackReferenceAnnotationName() string {
@@ -183,6 +197,12 @@ type TLSPolicyList struct {
 	Items           []TLSPolicy `json:"items"`
 }
 
+func (l *TLSPolicyList) GetItems() []kuadrant.Policy {
+	return utils.Map(l.Items, func(item TLSPolicy) kuadrant.Policy {
+		return &item
+	})
+}
+
 func init() {
 	SchemeBuilder.Register(&TLSPolicy{}, &TLSPolicyList{})
 }
@@ -191,6 +211,10 @@ func init() {
 
 func NewTLSPolicy(policyName, ns string) *TLSPolicy {
 	return &TLSPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "TLSPolicy",
+			APIVersion: GroupVersion.String(),
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      policyName,
 			Namespace: ns,

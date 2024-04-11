@@ -3,9 +3,12 @@
 package kuadrant
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 )
 
 var _ Referrer = &PolicyKindStub{}
@@ -38,6 +41,10 @@ func (p *FakePolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 	return p.targetRef
 }
 
+func (p *FakePolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
+	return &FakePolicyStatus{}
+}
+
 func (p *FakePolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
 	return gatewayapiv1.Namespace(p.GetNamespace())
 }
@@ -48,4 +55,14 @@ func (p *FakePolicy) GetRulesHostnames() []string {
 
 func (p *FakePolicy) Kind() string {
 	return "FakePolicy"
+}
+
+func (_ *FakePolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
+	return kuadrantgatewayapi.DirectPolicy
+}
+
+type FakePolicyStatus struct{}
+
+func (s *FakePolicyStatus) GetConditions() []metav1.Condition {
+	return nil
 }

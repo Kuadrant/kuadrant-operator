@@ -26,7 +26,7 @@ func NewPolicyToParentGatewaysEventMapper(o ...MapperOption) *PolicyToParentGate
 }
 
 func (k *PolicyToParentGatewaysEventMapper) Map(ctx context.Context, obj client.Object) []reconcile.Request {
-	logger := k.opts.Logger.WithValues("object", client.ObjectKeyFromObject(obj))
+	logger := k.opts.Logger.WithValues("object", client.ObjectKeyFromObject(obj), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
 
 	policy, ok := obj.(kuadrantgatewayapi.Policy)
 	if !ok {

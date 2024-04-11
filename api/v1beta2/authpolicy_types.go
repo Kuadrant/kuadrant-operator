@@ -7,10 +7,10 @@ import (
 	"github.com/google/go-cmp/cmp"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -242,6 +242,10 @@ func (s *AuthPolicyStatus) Equals(other *AuthPolicyStatus, logger logr.Logger) b
 	return true
 }
 
+func (s *AuthPolicyStatus) GetConditions() []metav1.Condition {
+	return s.Conditions
+}
+
 var _ kuadrant.Policy = &AuthPolicy{}
 var _ kuadrant.Referrer = &AuthPolicy{}
 
@@ -267,18 +271,6 @@ func (ap *AuthPolicy) IsAtomicOverride() bool {
 	return ap.Spec.Overrides != nil
 }
 
-func (ap *AuthPolicy) TargetKey() client.ObjectKey {
-	ns := ap.Namespace
-	if ap.Spec.TargetRef.Namespace != nil {
-		ns = string(*ap.Spec.TargetRef.Namespace)
-	}
-
-	return client.ObjectKey{
-		Name:      string(ap.Spec.TargetRef.Name),
-		Namespace: ns,
-	}
-}
-
 func (ap *AuthPolicy) Validate() error {
 	if ap.Spec.TargetRef.Namespace != nil && string(*ap.Spec.TargetRef.Namespace) != ap.Namespace {
 		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *ap.Spec.TargetRef.Namespace)
@@ -289,6 +281,10 @@ func (ap *AuthPolicy) Validate() error {
 
 func (ap *AuthPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 	return ap.Spec.TargetRef
+}
+
+func (ap *AuthPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
+	return &ap.Status
 }
 
 func (ap *AuthPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
@@ -340,6 +336,10 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 
 func (ap *AuthPolicy) Kind() string {
 	return ap.TypeMeta.Kind
+}
+
+func (ap *AuthPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
+	return kuadrantgatewayapi.InheritedPolicy
 }
 
 func (ap *AuthPolicy) BackReferenceAnnotationName() string {

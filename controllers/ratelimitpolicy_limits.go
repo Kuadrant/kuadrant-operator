@@ -2,29 +2,32 @@ package controllers
 
 import (
 	"context"
+	"slices"
+	"sort"
 
 	"github.com/go-logr/logr"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
+func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy) error {
 	rlpRefs, err := r.TargetRefReconciler.GetAllGatewayPolicyRefs(ctx, rlp)
 	if err != nil {
 		return err
 	}
-	return r.reconcileLimitador(ctx, rlp, append(rlpRefs, client.ObjectKeyFromObject(rlp)), targetNetworkObject)
+	return r.reconcileLimitador(ctx, rlp, append(rlpRefs, client.ObjectKeyFromObject(rlp)))
 }
 
-func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
+func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy) error {
 	rlpRefs, err := r.TargetRefReconciler.GetAllGatewayPolicyRefs(ctx, rlp)
 	if err != nil {
 		return err
@@ -34,14 +37,14 @@ func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadr
 		return rlpRef.Name != rlp.Name || rlpRef.Namespace != rlp.Namespace
 	})
 
-	return r.reconcileLimitador(ctx, rlp, rlpRefsWithoutRLP, targetNetworkObject)
+	return r.reconcileLimitador(ctx, rlp, rlpRefsWithoutRLP)
 }
 
-func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, rlpRefs []client.ObjectKey, targetNetworkObject client.Object) error {
+func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, rlpRefs []client.ObjectKey) error {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("reconcileLimitador").WithValues("rlp refs", utils.Map(rlpRefs, func(ref client.ObjectKey) string { return ref.String() }))
 
-	rateLimitIndex, err := r.buildRateLimitIndex(ctx, rlpRefs, targetNetworkObject)
+	rateLimitIndex, err := r.buildRateLimitIndex(ctx, rlpRefs)
 	if err != nil {
 		return err
 	}
@@ -89,9 +92,14 @@ func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp 
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) buildRateLimitIndex(ctx context.Context, rlpRefs []client.ObjectKey, targetNetworkObject client.Object) (*rlptools.RateLimitIndex, error) {
+func (r *RateLimitPolicyReconciler) buildRateLimitIndex(ctx context.Context, rlpRefs []client.ObjectKey) (*rlptools.RateLimitIndex, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("buildRateLimitIndex").WithValues("ratelimitpolicies", rlpRefs)
+
+	t, err := r.generateTopology(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	rateLimitIndex := rlptools.NewRateLimitIndex()
 
@@ -107,9 +115,7 @@ func (r *RateLimitPolicyReconciler) buildRateLimitIndex(ctx context.Context, rlp
 			return nil, err
 		}
 
-		if err := r.applyOverrides(ctx, rlp, targetNetworkObject); err != nil {
-			return nil, err
-		}
+		r.applyOverrides(ctx, rlp, t)
 
 		rateLimitIndex.Set(rlpKey, rlptools.LimitadorRateLimitsFromRLP(rlp))
 	}
@@ -118,27 +124,82 @@ func (r *RateLimitPolicyReconciler) buildRateLimitIndex(ctx context.Context, rlp
 }
 
 // applyOverrides checks for any overrides set for the RateLimitPolicy.
-// It iterates through the RateLimitPolicyList to find overrides for the provided target HTTPRoute.
-// If an override is found, it updates the limits in the RateLimitPolicySpec in accordingly.
-func (r *RateLimitPolicyReconciler) applyOverrides(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
-	if route, ok := targetNetworkObject.(*gatewayapiv1.HTTPRoute); ok {
-		rlpList := &kuadrantv1beta2.RateLimitPolicyList{}
-		if err := r.Client().List(ctx, rlpList); err != nil {
-			return err
-		}
+// It iterates through the slice of policies to find overrides for the provided target HTTPRoute.
+// If an override is found, it updates the limits in the RateLimitPolicySpec accordingly.
+func (r *RateLimitPolicyReconciler) applyOverrides(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, t *kuadrantgatewayapi.Topology) {
+	logger, _ := logr.FromContext(ctx)
+	logger = logger.WithName("applyOverrides")
 
-		for _, p := range rlpList.Items {
-			clientKeys := gatewayapi.GetRouteAcceptedGatewayParentKeys(route)
-			for _, clientKey := range clientKeys {
-				if gatewayapi.IsTargetRefGateway(p.GetTargetRef()) &&
-					clientKey.Name == string(p.Spec.TargetRef.Name) && clientKey.Namespace == p.Namespace {
-					if p.Spec.Overrides != nil {
-						rlp.Spec.CommonSpec().Limits = p.Spec.Overrides.Limits
-					}
-				}
-			}
+	topologyIndexes := kuadrantgatewayapi.NewTopologyIndexes(t)
+
+	var policies []kuadrantgatewayapi.Policy
+	// For each gw, get all the policies if the current rlp is within the topology for this gateway
+	for _, gw := range t.Gateways() {
+		policyList := topologyIndexes.PoliciesFromGateway(gw.Gateway)
+		policyKeys := utils.Map(policyList, func(p kuadrantgatewayapi.Policy) client.ObjectKey {
+			return client.ObjectKeyFromObject(p)
+		})
+
+		// this policy is potentially affected by other policies from this gateway
+		if slices.Contains(policyKeys, client.ObjectKeyFromObject(rlp)) {
+			policies = append(policies, policyList...)
 		}
 	}
 
-	return nil
+	filteredPolicies := utils.Filter(policies, func(policy kuadrantgatewayapi.Policy) bool {
+		// HTTPRoute RLPs should only care about overrides from gateways
+		if kuadrantgatewayapi.IsTargetRefHTTPRoute(rlp.GetTargetRef()) {
+			return kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef())
+		}
+		// Gateway RLPs are not affected by other Gateway RLPs
+		return false
+	})
+
+	// Sort by TargetRefKind and creation timestamp
+	// Gateways RLPs are listed first in the order of oldest policy
+	sort.Sort(kuadrantgatewayapi.PolicyByTargetRefKindAndCreationTimeStamp(filteredPolicies))
+
+	// Iterate in order of precedence until finding a block of overrides
+	for _, policy := range filteredPolicies {
+		p := policy.(*kuadrantv1beta2.RateLimitPolicy)
+		if p.Spec.Overrides != nil {
+			rlp.Spec.CommonSpec().Limits = p.Spec.Overrides.Limits
+			logger.V(1).Info("applying overrides from parent policy", "parentPolicy", client.ObjectKeyFromObject(p))
+			break
+		}
+	}
+}
+
+func (r *RateLimitPolicyReconciler) generateTopology(ctx context.Context) (*kuadrantgatewayapi.Topology, error) {
+	logger, _ := logr.FromContext(ctx)
+
+	gwList := &gatewayapiv1.GatewayList{}
+	err := r.Client().List(ctx, gwList)
+	logger.V(1).Info("topology: list gateways", "#Gateways", len(gwList.Items), "err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	routeList := &gatewayapiv1.HTTPRouteList{}
+	err = r.Client().List(ctx, routeList)
+	logger.V(1).Info("topology: list httproutes", "#HTTPRoutes", len(routeList.Items), "err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	rlpList := &kuadrantv1beta2.RateLimitPolicyList{}
+	err = r.Client().List(ctx, rlpList)
+	logger.V(1).Info("topology: list rate limit policies", "#RLPS", len(rlpList.Items), "err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	policies := utils.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })
+
+	return kuadrantgatewayapi.NewTopology(
+		kuadrantgatewayapi.WithGateways(utils.Map(gwList.Items, ptr.To[gatewayapiv1.Gateway])),
+		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
+		kuadrantgatewayapi.WithPolicies(policies),
+		kuadrantgatewayapi.WithLogger(logger),
+	)
 }

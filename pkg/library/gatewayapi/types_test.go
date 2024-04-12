@@ -10,6 +10,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -105,12 +106,77 @@ func TestPolicyByCreationTimestamp(t *testing.T) {
 	}
 }
 
-func createTestPolicy(name string, creationTime time.Time) *TestPolicy {
-	return &TestPolicy{
+func TestPolicyByTargetRef(t *testing.T) {
+	testCases := []struct {
+		name           string
+		policies       []Policy
+		sortedPolicies []Policy
+	}{
+		{
+			name:           "nil input",
+			policies:       nil,
+			sortedPolicies: nil,
+		},
+		{
+			name:           "empty slices",
+			policies:       make([]Policy, 0),
+			sortedPolicies: make([]Policy, 0),
+		},
+		{
+			name: "by kind, and creation date",
+			policies: []Policy{
+				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
+				createTestPolicy("bbb", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("HTTPRoute")),
+				createTestPolicy("aaa", time.Date(2010, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
+			},
+			sortedPolicies: []Policy{
+				createTestPolicy("aaa", time.Date(2010, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
+				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
+				createTestPolicy("bbb", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("HTTPRoute")),
+			},
+		},
+		{
+			name: "by kind, and then name when creation date equal",
+			policies: []Policy{
+				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
+				createTestPolicy("bbb", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("HTTPRoute")),
+				createTestPolicy("aaa", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
+			},
+			sortedPolicies: []Policy{
+				createTestPolicy("aaa", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
+				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
+				createTestPolicy("bbb", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("HTTPRoute")),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			sort.Sort(PolicyByTargetRefKindAndCreationTimeStamp(tc.policies))
+			if !reflect.DeepEqual(tc.policies, tc.sortedPolicies) {
+				subT.Errorf("expected=%v; got=%v", tc.sortedPolicies, tc.policies)
+			}
+		})
+	}
+}
+
+func createTestPolicy(name string, creationTime time.Time, mutateFn ...func(p *TestPolicy)) *TestPolicy {
+	p := &TestPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:         "testnamespace",
 			Name:              name,
-			CreationTimestamp: metav1.Time{creationTime},
+			CreationTimestamp: metav1.Time{Time: creationTime},
 		},
+	}
+	for _, fn := range mutateFn {
+		fn(p)
+	}
+
+	return p
+}
+
+func withTargetRefKind(targetRefKind string) func(p *TestPolicy) {
+	return func(p *TestPolicy) {
+		p.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{Kind: gatewayapiv1.Kind(targetRefKind)}
 	}
 }

@@ -14,12 +14,11 @@ YQ="${2:-yq}"
 ## Parse kind network subnet
 ## Take only IPv4 subnets, exclude IPv6
 SUBNET=""
-
 # Try podman version of cmd first. docker alias may be used for podman, so network
 # command will be different
 set +e
-if command -v podman &> /dev/null; then
-  SUBNET=`podman network inspect -f '{{range .Subnets}}{{if eq (len .Subnet.IP) 4}}{{.Subnet}}{{end}}{{end}}' $networkName`
+if command -v podman &>/dev/null; then
+  SUBNET=$(podman network inspect -f '{{range .Subnets}}{{if eq (len .Subnet.IP) 4}}{{.Subnet}}{{end}}{{end}}' $networkName)
   if [[ -z "$SUBNET" ]]; then
     echo "Failed to obtain subnet using podman. Trying docker instead..." >&2
   fi
@@ -30,13 +29,12 @@ set -e
 
 # Fallback to docker version of cmd
 if [[ -z "$SUBNET" ]]; then
-  SUBNET=`docker network inspect $networkName -f '{{ (index .IPAM.Config 0).Subnet }}'`
+  SUBNET=$(docker network inspect $networkName -f '{{ (index .IPAM.Config 0).Subnet }}')
 fi
-
 # Neither worked, error out
 if [[ -z "$SUBNET" ]]; then
-   echo "Error: parsing IPv4 network address for '$networkName' docker network"
-   exit 1
+  echo "Error: parsing IPv4 network address for '$networkName' docker network"
+  exit 1
 fi
 
 # shellcheck disable=SC2206

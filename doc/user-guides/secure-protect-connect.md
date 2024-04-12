@@ -102,7 +102,7 @@ spec:
     name: kuadrant-operator-glbc-ca
 EOF
 
-kubectl wait tlspolicy api-gateway-tls -n kuadrant-system --for=condition=ready
+kubectl wait tlspolicy api-gateway-tls -n kuadrant-system --for=condition=accepted
 ```
 
 Now, if you look at the status of the gateway, you will see the error is gone, and the status of the policy will report the listener as now secured with a TLS certificate and the gateway as affected by the TLS policy.
@@ -181,7 +181,7 @@ spec:
         unit: second
 EOF
 
-kubectl wait ratelimitpolicy infra-ratelimit -n kuadrant-system --for=condition=available
+kubectl wait ratelimitpolicy infra-ratelimit -n kuadrant-system --for=condition=accepted
 ```
 
 > **Note:** It may take a couple of minutes for the RateLimitPolicy to be applied depending on your cluster.
@@ -256,7 +256,7 @@ spec:
     kind: Gateway
 EOF
 
-kubectl wait dnspolicy simple-dnspolicy -n kuadrant-system --for=condition=ready
+kubectl wait dnspolicy simple-dnspolicy -n kuadrant-system --for=condition=enforced
 ```
 
 If you want to see the DNSRecord created by the this policy, execute the following command:

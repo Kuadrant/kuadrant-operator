@@ -81,7 +81,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 	BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
 	AfterEach(func(ctx SpecContext) {
 		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
-	}, NodeTimeout(time.Minute))
+	}, NodeTimeout(3*time.Minute))
 
 	Context("RLP targeting HTTPRoute", func() {
 		It("Creates all the resources for a basic HTTPRoute and RateLimitPolicy", func() {
@@ -329,12 +329,14 @@ var _ = Describe("RateLimitPolicy controller", func() {
 	})
 
 	Context("RLP Overrides", func() {
-		It("Gateway atomic override - gateway overrides exist and then route policy created", func(ctx SpecContext) {
+		BeforeEach(func(ctx SpecContext) {
 			// create httproute
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
 			Expect(k8sClient.Create(ctx, httpRoute)).To(Succeed())
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+		}, NodeTimeout(time.Minute))
 
+		It("Gateway atomic override - gateway overrides exist and then route policy created", func(ctx SpecContext) {
 			// create GW RLP
 			gwRLP := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -405,11 +407,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		}, SpecTimeout(time.Minute))
 
 		It("Gateway atomic override - route policy exits and then gateway policy created", func(ctx SpecContext) {
-			// create httproute
-			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
-			Expect(k8sClient.Create(ctx, httpRoute)).To(Succeed())
-			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
-
 			// Create HTTPRoute RLP
 			routeRLP := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Name = "httproute-rlp"
@@ -480,11 +477,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		}, SpecTimeout(time.Minute))
 
 		It("Gateway atomic override - gateway defaults turned into overrides later on", func(ctx SpecContext) {
-			// create httproute
-			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
-			Expect(k8sClient.Create(ctx, httpRoute)).To(Succeed())
-			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
-
 			// Create HTTPRoute RLP
 			routeRLP := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Name = "httproute-rlp"
@@ -558,6 +550,82 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				}))
 			})
 		}, SpecTimeout(time.Minute))
+
+		It("Gateway atomic override - gateway overrides turned into defaults later on", func(ctx SpecContext) {
+			// Create HTTPRoute RLP
+			routeRLP := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Name = "httproute-rlp"
+				policy.Spec.CommonSpec().Limits = map[string]kuadrantv1beta2.Limit{
+					"l1": {
+						Rates: []kuadrantv1beta2.Rate{
+							{
+								Limit: 10, Duration: 5, Unit: "second",
+							},
+						},
+					},
+				}
+			})
+			Expect(k8sClient.Create(ctx, routeRLP)).To(Succeed())
+			rlpKey := client.ObjectKey{Name: routeRLP.Name, Namespace: testNamespace}
+			Eventually(testRLPIsAccepted(rlpKey)).WithContext(ctx).Should(BeTrue())
+
+			// create GW RLP
+			gwRLP := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.Defaults = nil
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gwName)
+				policy.Spec.Overrides = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: "minute",
+								},
+							},
+						},
+					},
+				}
+			})
+			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())
+			rlpKey = client.ObjectKey{Name: gwRLP.Name, Namespace: testNamespace}
+			Eventually(testRLPIsAccepted(rlpKey)).WithContext(ctx).Should(BeTrue())
+
+			// check limits - overridden - should contain GW RLP values
+			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+			existingLimitador := &limitadorv1alpha1.Limitador{}
+			Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
+			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+				MaxValue:   1,
+				Seconds:    180,
+				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+				Conditions: []string{`limit.l1__2804bad6 == "1"`},
+				Variables:  []string{},
+				Name:       rlptools.LimitsNameFromRLP(routeRLP),
+			}))
+
+			updatedGRLP := &kuadrantv1beta2.RateLimitPolicy{}
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: gwRLP.Name, Namespace: testNamespace}, updatedGRLP)).To(Succeed())
+			Eventually(func(g Gomega) {
+				updatedGRLP.Spec.Defaults = updatedGRLP.Spec.Overrides.DeepCopy()
+				updatedGRLP.Spec.Overrides = nil
+				g.Expect(k8sClient.Update(ctx, updatedGRLP)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				// check limits - should contain HTTPRoute RLP values
+				limitadorKey = client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+				existingLimitador = &limitadorv1alpha1.Limitador{}
+				g.Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
+				g.Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+					MaxValue:   10,
+					Seconds:    5,
+					Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+					Conditions: []string{`limit.l1__2804bad6 == "1"`},
+					Variables:  []string{},
+					Name:       rlptools.LimitsNameFromRLP(routeRLP),
+				}))
+			})
+		}, SpecTimeout(2*time.Minute))
 	})
 
 	Context("RLP accepted condition reasons", func() {
@@ -1146,10 +1214,10 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).ToNot(BeNil())
-			Expect(strings.Contains(err.Error(), "Implicit and explicit defaults are mutually exclusive")).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("Implicit and explicit defaults are mutually exclusive"))
 		})
 
-		It("Valid - explicit default and override defined", func(ctx SpecContext) {
+		It("Invalid - explicit default and override defined", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Spec.Defaults = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
 					Limits: map[string]kuadrantv1beta2.Limit{
@@ -1166,10 +1234,12 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 					},
 				}
 			})
-			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).ToNot(BeNil())
+			Expect(err.Error()).To(ContainSubstring("Overrides and explicit defaults are mutually exclusive"))
 		})
 
-		It("Invalid - implicit default and explicit override are mutually exclusive", func(ctx SpecContext) {
+		It("Invalid - implicit default and override defined", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Spec.Limits = map[string]kuadrantv1beta2.Limit{
 					"implicit": {
@@ -1178,7 +1248,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 				}
 				policy.Spec.Overrides = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
 					Limits: map[string]kuadrantv1beta2.Limit{
-						"explicit": {
+						"overrides": {
 							Rates: []kuadrantv1beta2.Rate{{Limit: 1, Duration: 10, Unit: "second"}},
 						},
 					},
@@ -1186,7 +1256,36 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			})
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).ToNot(BeNil())
-			Expect(strings.Contains(err.Error(), "Overrides and implicit defaults are mutually exclusive. Use defaults block instead to set defaults explicitly")).To(BeTrue())
+			Expect(err.Error()).To(ContainSubstring("Overrides and implicit defaults are mutually exclusive"))
+		})
+
+		It("Invalid - policy override targeting resource other than Gateway", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.Overrides = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"implicit": {
+							Rates: []kuadrantv1beta2.Rate{{Limit: 1, Duration: 10, Unit: "second"}},
+						},
+					},
+				}
+			})
+			err := k8sClient.Create(ctx, policy)
+			Expect(err).ToNot(BeNil())
+			Expect(err.Error()).To(ContainSubstring("Overrides are only allowed for policies targeting a Gateway resource"))
+		})
+
+		It("Valid - policy override targeting Gateway", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.Overrides = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"override": {
+							Rates: []kuadrantv1beta2.Rate{{Limit: 1, Duration: 10, Unit: "second"}},
+						},
+					},
+				}
+			})
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 		})
 	})
 

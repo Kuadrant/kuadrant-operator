@@ -93,7 +93,7 @@ func CreateNamespaceWithContext(ctx context.Context, namespace *string) {
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
 		ObjectMeta: metav1.ObjectMeta{GenerateName: "test-namespace-"},
 	}
-	Expect(testClient().Create(context.Background(), nsObject)).To(Succeed())
+	Expect(testClient().Create(ctx, nsObject)).To(Succeed())
 
 	*namespace = nsObject.Name
 }

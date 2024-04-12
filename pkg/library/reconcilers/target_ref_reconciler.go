@@ -92,7 +92,7 @@ func (r *TargetRefReconciler) TargetedGatewayKeys(_ context.Context, targetNetwo
 	}
 }
 
-// ReconcileTargetBackReference adds policy key in annotations of the target object
+// ReconcileTargetBackReference reconciles policy key in annotations of the target object
 func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, p kuadrant.Policy, targetNetworkObject client.Object, annotationName string) error {
 	logger, _ := logr.FromContext(ctx)
 
@@ -100,14 +100,63 @@ func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, 
 	targetNetworkObjectKey := client.ObjectKeyFromObject(targetNetworkObject)
 	targetNetworkObjectKind := targetNetworkObject.GetObjectKind().GroupVersionKind()
 
-	// Reconcile the back reference:
+	// Step 1 Build list of network objects in the same namespace as the policy
+	// Step 2 Remove the direct back reference annotation to the current policy from any network object not being currently referenced
+	// Step 3 Check direct back ref annotation from the current target network object
+	//   Step 3.1 if it does not exit -> create it
+	//   Step 3.2 if it already exits and the reference is the current policy -> nothing to do
+	//   Step 3.3 if it already exits and the reference is not the current policy -> return err
+
+	// Step 1
+	gwList := &gatewayapiv1.GatewayList{}
+	err := r.Client.List(ctx, gwList, client.InNamespace(p.GetNamespace()))
+	logger.V(1).Info("ReconcileTargetBackReference: list gateways", "#Gateways", len(gwList.Items), "err", err)
+	if err != nil {
+		return err
+	}
+
+	routeList := &gatewayapiv1.HTTPRouteList{}
+	err = r.Client.List(ctx, routeList, client.InNamespace(p.GetNamespace()))
+	logger.V(1).Info("ReconcileTargetBackReference: list httproutes", "#HTTPRoutes", len(routeList.Items), "err", err)
+	if err != nil {
+		return err
+	}
+
+	networkObjectList := utils.Map(gwList.Items, func(g gatewayapiv1.Gateway) client.Object { return &g })
+	networkObjectList = append(networkObjectList, utils.Map(routeList.Items, func(g gatewayapiv1.HTTPRoute) client.Object { return &g })...)
+	// remove currently targeted network resource from the list
+	networkObjectList = utils.Filter(networkObjectList, func(obj client.Object) bool {
+		return targetNetworkObjectKey != client.ObjectKeyFromObject(obj)
+	})
+
+	// Step 2
+	for _, networkObject := range networkObjectList {
+		annotations := networkObject.GetAnnotations()
+		if val, ok := annotations[annotationName]; ok && val == policyKey.String() {
+			delete(annotations, annotationName)
+			networkObject.SetAnnotations(annotations)
+			err := r.Client.Update(ctx, networkObject)
+			logger.V(1).Info("ReconcileTargetBackReference: update network resource",
+				"kind", networkObject.GetObjectKind().GroupVersionKind(),
+				"name", client.ObjectKeyFromObject(networkObject), "err", err)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Step 3
 	objAnnotations := utils.ReadAnnotationsFromObject(targetNetworkObject)
 
 	if val, ok := objAnnotations[annotationName]; ok {
 		if val != policyKey.String() {
+			// Step  3.3
 			return kuadrant.NewErrConflict(p.Kind(), val, fmt.Errorf("the %s target %s is already referenced by policy %s", targetNetworkObjectKind, targetNetworkObjectKey, val))
 		}
+		// Step  3.2
+		// NO OP
 	} else {
+		// Step  3.1
 		objAnnotations[annotationName] = policyKey.String()
 		targetNetworkObject.SetAnnotations(objAnnotations)
 		err := r.Client.Update(ctx, targetNetworkObject)

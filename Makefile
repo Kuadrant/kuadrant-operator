@@ -310,8 +310,6 @@ test-integration: clean-cov generate fmt vet ginkgo ## Run Integration tests.
 		--output-dir $(PROJECT_PATH)/coverage/integration \
 		--coverprofile cover.out \
 		-tags integration \
-		--fail-fast \
-		-v \
 		$(INTEGRATION_TEST_SUITE_PATHS)
 
 ifdef TEST_NAME

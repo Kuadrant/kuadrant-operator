@@ -137,7 +137,7 @@ type RateLimitPolicySpec struct {
 	Defaults *RateLimitPolicyCommonSpec `json:"defaults,omitempty"`
 
 	// Overrides define override values for this policy and for policies inheriting this policy.
-	// Defaults are mutually exclusive with implicit defaults defined by RateLimitPolicyCommonSpec.
+	// Overrides are mutually exclusive with implicit defaults and explicit Defaults defined by RateLimitPolicyCommonSpec.
 	// +optional
 	Overrides *RateLimitPolicyCommonSpec `json:"overrides,omitempty"`
 

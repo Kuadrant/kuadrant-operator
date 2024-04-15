@@ -1474,6 +1474,18 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(isAuthPolicyEnforced(gatewayPolicy), 30*time.Second, 5*time.Second).Should(BeFalse())
 			Eventually(isAuthPolicyEnforced(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
+
+		It("Blocks creation of AuthPolicies with overrides targeting HTTPRoutes", func() {
+			routePolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Defaults = nil
+				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
+			})
+			err := k8sClient.Create(context.Background(), routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("Overrides are not allowed for policies targeting a HTTPRoute resource"))
+		})
 	})
 })
 

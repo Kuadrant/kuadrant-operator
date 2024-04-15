@@ -13076,6 +13076,9 @@ spec:
                 || has(self.when) || has(self.rules)))'
             - message: Explicit overrides and explicit defaults are mutually exclusive
               rule: '!(has(self.overrides) && has(self.defaults))'
+            - message: Overrides are not allowed for policies targeting a HTTPRoute
+                resource
+              rule: '!(has(self.overrides) && self.targetRef.kind == ''HTTPRoute'')'
           status:
             properties:
               conditions:

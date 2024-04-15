@@ -1,0 +1,655 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": 35,
+  "iteration": 1712940444554,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "grafana"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 150,
+      "options": {
+        "content": "The panels below are grouped by APIs, realized by a [Gateway API HTTPRoute](https://gateway-api.sigs.k8s.io/concepts/api-overview/#httproute). Each panel provides a comprehensive overview of request and error metrics associated with each API. Additionally, these panels include a heatmap that visualizes requests per second, offering real-time insights into the traffic patterns and operational status of your services.\n\n\n*Important: Each HTTPRoute must include a \"service\" label with a value corresponding to the name of the service being routed to, for example, \"service=myapp\". This labeling is essential for the accurate aggregation and display of metrics per service.*\n",
+        "mode": "markdown"
+      },
+      "pluginVersion": "8.5.5",
+      "title": "Business Overview of APIs",
+      "type": "text"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "id": 6,
+      "panels": [],
+      "repeat": "route_name",
+      "title": "\"$route_name\" API",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P1809F7CD0C75ACF3"
+      },
+      "description": "Aggregated rate of requests per API (HTTPRoute). The API name can be cross referenced with the API list to see additional details.\n\nNote: HTTPRoutes require a label `deployment` with the name of the corresponding Deployment so that istio request metrics can be paired with HTTPRoute metrics.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "hidden",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{destination_service_namespace=~\"${api_namespace}\"}[$__rate_interval])) by (destination_workload) * on(destination_workload) group_right label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",namespace=~\"${api_namespace}\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "legendFormat": "API: {{name}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Traffic summary (req/sec)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P1809F7CD0C75ACF3"
+      },
+      "description": "req/s Heatmap",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "fillOpacity": 70,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "id": 22,
+      "options": {
+        "alignValue": "center",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "mergeValues": false,
+        "rowHeight": 0.9,
+        "showValue": "never",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum(rate(istio_requests_total{destination_service_namespace=~\"${api_namespace}\"}[$__rate_interval])) by (destination_workload) * on(destination_workload) group_right label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",namespace=~\"${api_namespace}\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "format": "time_series",
+          "instant": false,
+          "legendFormat": "most recent",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{destination_service_namespace=~\"${api_namespace}\"}[$__rate_interval] offset $__range)) by (destination_workload) * on(destination_workload) group_right label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",namespace=~\"${api_namespace}\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "format": "time_series",
+          "hide": false,
+          "legendFormat": "previous",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Historical request comparison (req/sec)",
+      "type": "state-timeline"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "P1809F7CD0C75ACF3"
+      },
+      "description": "Aggregated rate of requests per endpoint/path.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P1809F7CD0C75ACF3"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{destination_service_namespace=~\"${api_namespace}\"}[$__rate_interval])) by (destination_workload, request_url_path) * on(destination_workload) group_left label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",namespace=~\"${api_namespace}\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "legendFormat": "{{request_url_path}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Breakdown by path (req/sec)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "id": 155,
+      "options": {
+        "footer": {
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "8.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "increase(istio_requests_total{destination_service_namespace=~\"$api_namespace\"}[$__range]) * on(destination_workload) group_left label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",namespace=~\"$api_namespace\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "increase(istio_requests_total{destination_service_namespace=~\"$api_namespace\"}[$__range] offset $__range) * on(destination_workload) group_left label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",namespace=~\"$api_namespace\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "increase(istio_requests_total{destination_service_namespace=~\"$api_namespace\"}[$__range]) * on(destination_workload) group_left label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",namespace=~\"$api_namespace\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\") - increase(istio_requests_total{destination_service_namespace=~\"$api_namespace\"}[$__range] offset $__range) * on(destination_workload) group_left label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",namespace=~\"$api_namespace\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "range": false,
+          "refId": "C"
+        }
+      ],
+      "title": "Total requests for selected range",
+      "transformations": [
+        {
+          "id": "seriesToColumns",
+          "options": {
+            "byField": "request_url_path"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "connection_security_policy 1": true,
+              "connection_security_policy 2": true,
+              "connection_security_policy 3": true,
+              "destination_app 1": true,
+              "destination_app 2": true,
+              "destination_app 3": true,
+              "destination_canonical_revision 1": true,
+              "destination_canonical_revision 2": true,
+              "destination_canonical_revision 3": true,
+              "destination_canonical_service 1": true,
+              "destination_canonical_service 2": true,
+              "destination_canonical_service 3": true,
+              "destination_cluster 1": true,
+              "destination_cluster 2": true,
+              "destination_cluster 3": true,
+              "destination_port 1": true,
+              "destination_port 2": true,
+              "destination_port 3": true,
+              "destination_principal 1": true,
+              "destination_principal 2": true,
+              "destination_principal 3": true,
+              "destination_service 1": true,
+              "destination_service 2": true,
+              "destination_service 3": true,
+              "destination_service_name 1": true,
+              "destination_service_name 2": true,
+              "destination_service_name 3": true,
+              "destination_service_namespace 1": true,
+              "destination_service_namespace 2": true,
+              "destination_service_namespace 3": true,
+              "destination_version 1": true,
+              "destination_version 2": true,
+              "destination_version 3": true,
+              "destination_workload 1": true,
+              "destination_workload 2": true,
+              "destination_workload 3": true,
+              "destination_workload_namespace 1": true,
+              "destination_workload_namespace 2": true,
+              "destination_workload_namespace 3": true,
+              "instance 1": true,
+              "instance 2": true,
+              "instance 3": true,
+              "istio_io_gateway_name 1": true,
+              "istio_io_gateway_name 2": true,
+              "istio_io_gateway_name 3": true,
+              "job 1": true,
+              "job 2": true,
+              "job 3": true,
+              "namespace 1": true,
+              "namespace 2": true,
+              "namespace 3": true,
+              "pod 1": true,
+              "pod 2": true,
+              "pod 3": true,
+              "pod_template_hash 1": true,
+              "pod_template_hash 2": true,
+              "pod_template_hash 3": true,
+              "reporter 1": true,
+              "reporter 2": true,
+              "reporter 3": true,
+              "request_host 1": true,
+              "request_host 2": true,
+              "request_host 3": true,
+              "request_protocol 1": true,
+              "request_protocol 2": true,
+              "request_protocol 3": true,
+              "response_code 1": true,
+              "response_code 2": true,
+              "response_code 3": true,
+              "response_flags 1": true,
+              "response_flags 2": true,
+              "response_flags 3": true,
+              "service_istio_io_canonical_name 1": true,
+              "service_istio_io_canonical_name 2": true,
+              "service_istio_io_canonical_name 3": true,
+              "service_istio_io_canonical_revision 1": true,
+              "service_istio_io_canonical_revision 2": true,
+              "service_istio_io_canonical_revision 3": true,
+              "sidecar_istio_io_inject 1": true,
+              "sidecar_istio_io_inject 2": true,
+              "sidecar_istio_io_inject 3": true,
+              "source_canonical_revision 1": true,
+              "source_canonical_revision 2": true,
+              "source_canonical_revision 3": true,
+              "source_canonical_service 1": true,
+              "source_canonical_service 2": true,
+              "source_canonical_service 3": true,
+              "source_cluster 1": true,
+              "source_cluster 2": true,
+              "source_cluster 3": true,
+              "source_principal 1": true,
+              "source_principal 2": true,
+              "source_principal 3": true,
+              "source_workload 1": true,
+              "source_workload 2": true,
+              "source_workload 3": true,
+              "source_workload_namespace 1": true,
+              "source_workload_namespace 2": true,
+              "source_workload_namespace 3": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value #A": "Most recent",
+              "Value #B": "Previous",
+              "Value #C": "Increase/Decrease",
+              "request_url_path": "Request path"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "prometheus",
+          "value": "prometheus"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "queryValue": "",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(kube_namespace_created, namespace)",
+        "description": "Namespace of HTTPRoute resources",
+        "hide": 0,
+        "includeAll": true,
+        "label": "API/HTTPRoute Namespace",
+        "multi": true,
+        "name": "api_namespace",
+        "options": [],
+        "query": {
+          "query": "label_values(kube_namespace_created, namespace)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "definition": "label_values(gatewayapi_httproute_labels, name)",
+        "description": "Name of the HTTPRoute resource",
+        "hide": 0,
+        "includeAll": true,
+        "label": "API/Route Name",
+        "multi": true,
+        "name": "route_name",
+        "options": [],
+        "query": {
+          "query": "label_values(gatewayapi_httproute_labels, name)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Business User Dashboard",
+  "uid": "jA3LDk-Iz",
+  "version": 18,
+  "weekStart": ""
+}

@@ -244,28 +244,20 @@ func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.GatewayTar
 		}
 		endpoints = append(endpoints, clusterEndpoints...)
 
-		//Create lbName CNAME (lb-a1b2.shop.example.com -> default.lb-a1b2.shop.example.com)
-		endpoint = createOrUpdateEndpoint(lbName, []string{geoLbName}, kuadrantdnsv1alpha1.CNAMERecordType, string(geoCode), DefaultCnameTTL, currentEndpoints)
-
-		//Deal with the default geo endpoint first
-		if geoCode.IsDefaultCode() {
-			defaultEndpoint = endpoint
-			// continue here as we will add the `defaultEndpoint` later
-			continue
-		} else if (geoCode == mcgTarget.GetDefaultGeo()) || defaultEndpoint == nil {
-			// Ensure that a `defaultEndpoint` is always set, but the expected default takes precedence
+		//Deal with the default geo endpoint
+		if geoCode == mcgTarget.GetDefaultGeo() {
+			// Ensure that `defaultEndpoint` is set only if geo of the current cluster is desired default geo
 			defaultEndpoint = createOrUpdateEndpoint(lbName, []string{geoLbName}, kuadrantdnsv1alpha1.CNAMERecordType, "default", DefaultCnameTTL, currentEndpoints)
+			defaultEndpoint.SetProviderSpecificProperty(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(v1alpha1.WildcardGeo))
+			endpoints = append(endpoints, defaultEndpoint)
 		}
-
-		endpoint.SetProviderSpecificProperty(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(geoCode))
-
-		endpoints = append(endpoints, endpoint)
+		//Create lbName CNAME (lb-a1b2.shop.example.com -> default.lb-a1b2.shop.example.com)
+		ep := createOrUpdateEndpoint(lbName, []string{geoLbName}, kuadrantdnsv1alpha1.CNAMERecordType, string(geoCode), DefaultCnameTTL, currentEndpoints)
+		ep.SetProviderSpecificProperty(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(geoCode))
+		endpoints = append(endpoints, ep)
 	}
 
 	if len(endpoints) > 0 {
-		// Add the `defaultEndpoint`, this should always be set by this point if `endpoints` isn't empty
-		defaultEndpoint.SetProviderSpecificProperty(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(v1alpha1.WildcardGeo))
-		endpoints = append(endpoints, defaultEndpoint)
 		//Create gwListenerHost CNAME (shop.example.com -> lb-a1b2.shop.example.com)
 		endpoint = createOrUpdateEndpoint(hostname, []string{lbName}, kuadrantdnsv1alpha1.CNAMERecordType, "", DefaultCnameTTL, currentEndpoints)
 		endpoints = append(endpoints, endpoint)

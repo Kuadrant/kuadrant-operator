@@ -21,7 +21,7 @@ on:
         type: string
       dnsOperatorVersion:
         description: DNS Operator bundle version
-        default: latest
+        default: distributed-dns
         type: string
       wasmShimVersion:
         description: WASM Shim version

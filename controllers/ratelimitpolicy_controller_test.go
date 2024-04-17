@@ -12,6 +12,8 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -21,6 +23,7 @@ import (
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
@@ -685,6 +688,67 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 
 			Eventually(assertAcceptedConditionFalse(ctx, policy, string(gatewayapiv1alpha2.PolicyReasonInvalid), fmt.Sprintf("RateLimitPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", testNamespace)), 30*time.Second, 5*time.Second).Should(BeTrue())
+		}, SpecTimeout(time.Minute))
+	})
+
+	Context("RLP Enforced Reasons", func() {
+		assertAcceptedCondTrueAndEnforcedCond := func(policy *kuadrantv1beta2.RateLimitPolicy, conditionStatus metav1.ConditionStatus, reason, message string) func(g Gomega) {
+			return func(g Gomega) {
+				existingPolicy := &kuadrantv1beta2.RateLimitPolicy{}
+				g.Expect(k8sClient.Get(context.Background(), client.ObjectKeyFromObject(policy), existingPolicy)).To(Succeed())
+				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				g.Expect(acceptedCond).ToNot(BeNil())
+
+				acceptedCondMatch := acceptedCond.Status == metav1.ConditionTrue && acceptedCond.Reason == string(gatewayapiv1alpha2.PolicyReasonAccepted)
+
+				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(kuadrant.PolicyReasonEnforced))
+				g.Expect(enforcedCond).ToNot(BeNil())
+				enforcedCondMatch := enforcedCond.Status == conditionStatus && enforcedCond.Reason == reason && enforcedCond.Message == message
+
+				g.Expect(acceptedCondMatch && enforcedCondMatch).To(BeTrue())
+			}
+		}
+
+		BeforeEach(func(ctx SpecContext) {
+			route := testBuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
+			Expect(k8sClient.Create(ctx, route)).To(Succeed())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
+		}, NodeTimeout(time.Minute))
+
+		It("Enforced Reason", func(ctx SpecContext) {
+			policy := policyFactory()
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+
+			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionTrue, string(kuadrant.PolicyReasonEnforced),
+				"RateLimitPolicy has been successfully enforced")).WithContext(ctx).Should(Succeed())
+
+			// Remove limitador deployment to simulate enforcement error
+			// RLP should transition to enforcement false in this case
+			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "limitador-limitador", Namespace: testNamespace}})).To(Succeed())
+			Eventually(func() bool {
+				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}, &appsv1.Deployment{}))
+			}).WithContext(ctx).Should(BeTrue())
+
+			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionFalse, string(kuadrant.PolicyReasonUnknown),
+				"RateLimitPolicy has encountered some issues: limitador is not ready")).WithContext(ctx).Should(Succeed())
+		}, SpecTimeout(time.Minute))
+
+		It("Unknown Reason", func(ctx SpecContext) {
+			// Remove limitador deployment to simulate enforcement error
+			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "limitador-limitador", Namespace: testNamespace}})).To(Succeed())
+			Eventually(func() bool {
+				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}, &appsv1.Deployment{}))
+			}).WithContext(ctx).Should(BeTrue())
+
+			// Enforced false as limitador is not ready
+			policy := policyFactory()
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionFalse, string(kuadrant.PolicyReasonUnknown),
+				"RateLimitPolicy has encountered some issues: limitador is not ready")).WithContext(ctx).Should(Succeed())
+
+			// Enforced true once limitador is ready
+			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionTrue, string(kuadrant.PolicyReasonEnforced),
+				"RateLimitPolicy has been successfully enforced")).WithContext(ctx).Should(Succeed())
 		}, SpecTimeout(time.Minute))
 	})
 

@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 
+	"k8s.io/utils/ptr"
+
 	"github.com/go-logr/logr"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -188,7 +190,8 @@ func routeGatewayHasAuthOverrides(ctx context.Context, route *gatewayapiv1.HTTPR
 	for idx := range route.Spec.ParentRefs {
 		parentRef := route.Spec.ParentRefs[idx]
 		gw := &gatewayapiv1.Gateway{}
-		err := c.Get(ctx, client.ObjectKey{Name: string(parentRef.Name), Namespace: string(*parentRef.Namespace)}, gw)
+		namespace := ptr.Deref(parentRef.Namespace, gatewayapiv1.Namespace(route.GetNamespace()))
+		err := c.Get(ctx, client.ObjectKey{Name: string(parentRef.Name), Namespace: string(namespace)}, gw)
 		if err != nil {
 			return false, err
 		}
@@ -197,15 +200,13 @@ func routeGatewayHasAuthOverrides(ctx context.Context, route *gatewayapiv1.HTTPR
 		if !ok {
 			continue
 		}
-		anno := strings.Split(annotation, "/")
-		ap := &api.AuthPolicy{}
-		err = c.Get(ctx, client.ObjectKey{Name: anno[1], Namespace: anno[0]}, ap)
+		otherAP := &api.AuthPolicy{}
+		err = c.Get(ctx, utils.NamespacedNameToObjectKey(annotation, gw.Namespace), otherAP)
 		if err != nil {
 			return false, err
 		}
 
-		override := ap.IsAtomicOverride()
-		if override {
+		if otherAP.IsAtomicOverride() {
 			return true, nil
 		}
 	}

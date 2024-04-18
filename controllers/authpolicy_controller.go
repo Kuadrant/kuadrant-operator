@@ -171,18 +171,9 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 	// this is due to not knowing if the Gateway AuthPolicy was updated to include or remove the overrides section.
 	switch obj := targetNetworkObject.(type) {
 	case *gatewayapiv1.Gateway:
-		gw := kuadrant.GatewayWrapper{Gateway: obj}
-		annotation, ok := gw.GetAnnotations()[ap.BackReferenceAnnotationName()]
-		if !ok {
-			break
-		}
-		policyKeys := &[]client.ObjectKey{}
+		gw := kuadrant.GatewayWrapper{Gateway: obj, Referrer: ap}
 		apKey := client.ObjectKeyFromObject(ap)
-		err = json.Unmarshal([]byte(annotation), policyKeys)
-		if err != nil {
-			return err
-		}
-		for _, policyKey := range *policyKeys {
+		for _, policyKey := range gw.PolicyRefs() {
 			if policyKey == apKey {
 				continue
 			}

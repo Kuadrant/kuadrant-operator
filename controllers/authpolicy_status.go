@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -159,12 +158,8 @@ func (r *AuthPolicyReconciler) handleGatewayPolicyOverride(logger logr.Logger, p
 	filteredRef := utils.Filter(refs, func(key client.ObjectKey) bool {
 		return key != client.ObjectKeyFromObject(policy)
 	})
-	jsonData, err := json.Marshal(filteredRef)
-	if err != nil {
-		logger.Error(err, "Failed to marshal filtered references")
-		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err), false)
-	}
-	return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), string(jsonData)), false)
+
+	return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), filteredRef), false)
 }
 
 // handleHTTPRoutePolicyOverride handles the case where the HTTPRoute Policy is overridden by filtering policy references

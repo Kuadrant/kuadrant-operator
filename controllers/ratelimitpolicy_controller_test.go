@@ -309,25 +309,28 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				gwRLP.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(gwRLP).String()))
 
 			// check limits
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
-			existingLimitador := &limitadorv1alpha1.Limitador{}
-			Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
-			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
-				MaxValue:   10,
-				Seconds:    5,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-				Conditions: []string{`limit.l1__2804bad6 == "1"`},
-				Variables:  []string{},
-				Name:       rlptools.LimitsNameFromRLP(routeRLP),
-			}))
+			Eventually(func(g Gomega) {
+				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+				existingLimitador := &limitadorv1alpha1.Limitador{}
+				g.Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
+				g.Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+					MaxValue:   10,
+					Seconds:    5,
+					Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+					Conditions: []string{`limit.l1__2804bad6 == "1"`},
+					Variables:  []string{},
+					Name:       rlptools.LimitsNameFromRLP(routeRLP),
+				}))
+			}).WithContext(ctx).Should(Succeed())
 
 			// Gateway should contain HTTPRoute RLP in backreference
-			Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
-			serialized, err := json.Marshal(rlpKey)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKey(routeRLP.BackReferenceAnnotationName()))
-			Expect(existingGateway.GetAnnotations()[routeRLP.BackReferenceAnnotationName()]).To(ContainSubstring(string(serialized)))
-
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
+				serialized, err := json.Marshal(rlpKey)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingGateway.GetAnnotations()).To(HaveKey(routeRLP.BackReferenceAnnotationName()))
+				g.Expect(existingGateway.GetAnnotations()[routeRLP.BackReferenceAnnotationName()]).To(ContainSubstring(string(serialized)))
+			}).WithContext(ctx).Should(Succeed())
 		}, SpecTimeout(time.Minute))
 	})
 
@@ -401,12 +404,13 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			// Gateway should contain HTTPRoute RLP in backreference
-			Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
-			serialized, err := json.Marshal(rlpKey)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKey(routeRLP.BackReferenceAnnotationName()))
-			Expect(existingGateway.GetAnnotations()[routeRLP.BackReferenceAnnotationName()]).To(ContainSubstring(string(serialized)))
-
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
+				serialized, err := json.Marshal(rlpKey)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingGateway.GetAnnotations()).To(HaveKey(routeRLP.BackReferenceAnnotationName()))
+				g.Expect(existingGateway.GetAnnotations()[routeRLP.BackReferenceAnnotationName()]).To(ContainSubstring(string(serialized)))
+			}).WithContext(ctx).Should(Succeed())
 		}, SpecTimeout(time.Minute))
 
 		It("Gateway atomic override - route policy exits and then gateway policy created", func(ctx SpecContext) {
@@ -451,9 +455,11 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
 			existingGateway := &gatewayapiv1.Gateway{}
-			Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				gwRLP.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(gwRLP).String()))
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
+				g.Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
+					gwRLP.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(gwRLP).String()))
+			}).WithContext(ctx).Should(Succeed())
 
 			Eventually(func(g Gomega) {
 				// check limits - should contain override values
@@ -471,12 +477,13 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			})
 
 			// Gateway should contain HTTPRoute RLP in backreference
-			Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
-			serialized, err := json.Marshal(rlpKey)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKey(routeRLP.BackReferenceAnnotationName()))
-			Expect(existingGateway.GetAnnotations()[routeRLP.BackReferenceAnnotationName()]).To(ContainSubstring(string(serialized)))
-
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
+				serialized, err := json.Marshal(rlpKey)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingGateway.GetAnnotations()).To(HaveKey(routeRLP.BackReferenceAnnotationName()))
+				g.Expect(existingGateway.GetAnnotations()[routeRLP.BackReferenceAnnotationName()]).To(ContainSubstring(string(serialized)))
+			}).WithContext(ctx).Should(Succeed())
 		}, SpecTimeout(time.Minute))
 
 		It("Gateway atomic override - gateway defaults turned into overrides later on", func(ctx SpecContext) {
@@ -594,17 +601,19 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(testRLPIsAccepted(rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// check limits - overridden - should contain GW RLP values
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
-			existingLimitador := &limitadorv1alpha1.Limitador{}
-			Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
-			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
-				MaxValue:   1,
-				Seconds:    180,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-				Conditions: []string{`limit.l1__2804bad6 == "1"`},
-				Variables:  []string{},
-				Name:       rlptools.LimitsNameFromRLP(routeRLP),
-			}))
+			Eventually(func(g Gomega) {
+				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+				existingLimitador := &limitadorv1alpha1.Limitador{}
+				g.Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
+				g.Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+					MaxValue:   1,
+					Seconds:    180,
+					Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+					Conditions: []string{`limit.l1__2804bad6 == "1"`},
+					Variables:  []string{},
+					Name:       rlptools.LimitsNameFromRLP(routeRLP),
+				}))
+			}).WithContext(ctx).Should(Succeed())
 
 			updatedGRLP := &kuadrantv1beta2.RateLimitPolicy{}
 			Expect(k8sClient.Get(ctx, client.ObjectKey{Name: gwRLP.Name, Namespace: testNamespace}, updatedGRLP)).To(Succeed())
@@ -616,8 +625,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			Eventually(func(g Gomega) {
 				// check limits - should contain HTTPRoute RLP values
-				limitadorKey = client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
-				existingLimitador = &limitadorv1alpha1.Limitador{}
+				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+				existingLimitador := &limitadorv1alpha1.Limitador{}
 				g.Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
 				g.Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
 					MaxValue:   10,
@@ -627,7 +636,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Variables:  []string{},
 					Name:       rlptools.LimitsNameFromRLP(routeRLP),
 				}))
-			})
+			}).WithContext(ctx).Should(Succeed())
 		}, SpecTimeout(2*time.Minute))
 	})
 

@@ -37,6 +37,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -395,20 +396,11 @@ func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {
 }
 
 func testRLPIsAccepted(rlpKey client.ObjectKey) func() bool {
-	return func() bool {
-		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
-		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
-		if err != nil {
-			logf.Log.V(1).Info("ratelimitpolicy not read", "rlp", rlpKey, "error", err)
-			return false
-		}
-		if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
-			logf.Log.V(1).Info("ratelimitpolicy not available", "rlp", rlpKey)
-			return false
-		}
+	return testRLPIsConditionTrue(rlpKey, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+}
 
-		return true
-	}
+func testRLPIsEnforced(rlpKey client.ObjectKey) func() bool {
+	return testRLPIsConditionTrue(rlpKey, string(kuadrant.PolicyConditionEnforced))
 }
 
 func testRLPIsNotAccepted(rlpKey client.ObjectKey) func() bool {
@@ -421,6 +413,23 @@ func testRLPIsNotAccepted(rlpKey client.ObjectKey) func() bool {
 		}
 		if meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
 			logf.Log.V(1).Info("ratelimitpolicy still accepted", "rlp", rlpKey)
+			return false
+		}
+
+		return true
+	}
+}
+
+func testRLPIsConditionTrue(rlpKey client.ObjectKey, condition string) func() bool {
+	return func() bool {
+		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+		if err != nil {
+			logf.Log.V(1).Info("ratelimitpolicy not read", "rlp", rlpKey, "error", err)
+			return false
+		}
+		if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, condition) {
+			logf.Log.V(1).Info("ratelimitpolicy not available", "rlp", rlpKey)
 			return false
 		}
 

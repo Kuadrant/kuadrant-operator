@@ -1243,7 +1243,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(isAuthPolicyAccepted(gwPolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
 			Eventually(
 				assertAcceptedCondTrueAndEnforcedCond(gwPolicy, metav1.ConditionFalse, string(kuadrant.PolicyReasonOverridden),
-					fmt.Sprintf("AuthPolicy is overridden by [{\"Namespace\":\"%s\",\"Name\":\"%s\"}]", testNamespace, routePolicy.Name)),
+					fmt.Sprintf("AuthPolicy is overridden by [%s/%s]", testNamespace, routePolicy.Name)),
 				30*time.Second, 5*time.Second).Should(BeTrue())
 
 			// check istio authorizationpolicy

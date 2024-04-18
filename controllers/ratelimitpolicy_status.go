@@ -90,7 +90,7 @@ func (r *RateLimitPolicyReconciler) enforcedCondition(ctx context.Context, polic
 	}
 
 	if r.OverriddenPolicyMap.IsPolicyOverridden(policy) {
-		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), "overridden"), false)
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), r.OverriddenPolicyMap.PolicyOverriddenBy(policy)), false)
 	}
 
 	logger.V(1).Info("RateLimitPolicy is enforced")

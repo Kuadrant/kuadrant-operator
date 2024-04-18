@@ -10,6 +10,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -23,24 +24,24 @@ const (
 
 func NewOverriddenPolicyMap() *OverriddenPolicyMap {
 	return &OverriddenPolicyMap{
-		policies: make(map[types.UID]bool),
+		policies: make(map[types.UID][]client.ObjectKey),
 	}
 }
 
 type OverriddenPolicyMap struct {
-	policies map[types.UID]bool
+	policies map[types.UID][]client.ObjectKey
 	mu       sync.RWMutex
 }
 
 // SetOverriddenPolicy sets the provided Policy as overridden in the tracking map.
-func (o *OverriddenPolicyMap) SetOverriddenPolicy(p Policy) {
+func (o *OverriddenPolicyMap) SetOverriddenPolicy(p Policy, affectedBy []client.ObjectKey) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
 	if o.policies == nil {
-		o.policies = make(map[types.UID]bool)
+		o.policies = make(map[types.UID][]client.ObjectKey)
 	}
-	o.policies[p.GetUID()] = true
+	o.policies[p.GetUID()] = affectedBy
 }
 
 // RemoveOverriddenPolicy removes the provided Policy from the tracking map of overridden policies.
@@ -53,6 +54,11 @@ func (o *OverriddenPolicyMap) RemoveOverriddenPolicy(p Policy) {
 
 // IsPolicyOverridden checks if the provided Policy is overridden based on the tracking map maintained.
 func (o *OverriddenPolicyMap) IsPolicyOverridden(p Policy) bool {
+	return o.policies[p.GetUID()] != nil
+}
+
+// PolicyOverriddenBy returns the clients keys that a policy is overridden by
+func (o *OverriddenPolicyMap) PolicyOverriddenBy(p Policy) []client.ObjectKey {
 	return o.policies[p.GetUID()]
 }
 

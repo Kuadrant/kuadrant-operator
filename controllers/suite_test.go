@@ -160,6 +160,7 @@ var _ = BeforeSuite(func() {
 	err = (&RateLimitPolicyReconciler{
 		BaseReconciler:      rateLimitPolicyBaseReconciler,
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
+		OverriddenPolicyMap: kuadrant.NewOverriddenPolicyMap(),
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())

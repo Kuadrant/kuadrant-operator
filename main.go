@@ -154,6 +154,7 @@ func main() {
 	if err = (&controllers.RateLimitPolicyReconciler{
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      rateLimitPolicyBaseReconciler,
+		OverriddenPolicyMap: kuadrant.NewOverriddenPolicyMap(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicy")
 		os.Exit(1)

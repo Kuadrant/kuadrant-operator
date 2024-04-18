@@ -89,7 +89,9 @@ func (r *RateLimitPolicyReconciler) enforcedCondition(ctx context.Context, polic
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), errors.New("limitador is not ready")), false)
 	}
 
-	// TODO: Overridden
+	if r.OverriddenPolicyMap.IsPolicyOverridden(policy) {
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), "overridden"), false)
+	}
 
 	logger.V(1).Info("RateLimitPolicy is enforced")
 	return kuadrant.EnforcedCondition(policy, nil, true)

@@ -42,6 +42,8 @@ const rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
 type RateLimitPolicyReconciler struct {
 	*reconcilers.BaseReconciler
 	TargetRefReconciler reconcilers.TargetRefReconciler
+	// OverriddenPolicyMap tracks the overridden policies to report their status.
+	OverriddenPolicyMap *kuadrant.OverriddenPolicyMap
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -224,13 +226,10 @@ func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx
 func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httpRouteEventMapper")))
 	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
-	limitadorToRLPsEventMapper := mappers.NewLimitadorToRateLimitPoliciesEventMapper(
-		mappers.WithLogger(r.Logger().WithName("limitadorToRLPsEventMapper")),
-		mappers.WithClient(r.Client()))
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta2.RateLimitPolicy{}).
-		Watches(&limitadorv1alpha1.Limitador{}, handler.EnqueueRequestsFromMapFunc(limitadorToRLPsEventMapper.Map)).
+		Watches(&limitadorv1alpha1.Limitador{}, limitadorStatusEventHandler{Client: r.Client(), Logger: r.Logger().WithName("limitadorStatusToRLPsEventHandler")}).
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {

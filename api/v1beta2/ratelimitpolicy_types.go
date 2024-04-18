@@ -294,6 +294,10 @@ func (r *RateLimitPolicySpec) CommonSpec() *RateLimitPolicyCommonSpec {
 		return r.Defaults
 	}
 
+	if r.Overrides != nil {
+		return r.Overrides
+	}
+
 	return &r.RateLimitPolicyCommonSpec
 }
 

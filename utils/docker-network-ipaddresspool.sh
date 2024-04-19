@@ -29,7 +29,7 @@ set -e
 
 # Fallback to docker version of cmd
 if [[ -z "$SUBNET" ]]; then
-  SUBNET=$(docker network inspect $networkName -f '{{ (index .IPAM.Config 0).Subnet }}')
+  SUBNET=$(docker network inspect $networkName | ${YQ} e '.[] | select(.IPAM.Config[] | has("Gateway")) | .IPAM.Config[] | select(has("Gateway")) | .Subnet' -)
 fi
 # Neither worked, error out
 if [[ -z "$SUBNET" ]]; then

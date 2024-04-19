@@ -24,19 +24,19 @@ type AuthSchemeSpec struct {
 	// Authentication configs.
 	// At least one config MUST evaluate to a valid identity object for the auth request to be successful.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=14
+	// +kubebuilder:validation:MaxProperties=10
 	Authentication map[string]AuthenticationSpec `json:"authentication,omitempty"`
 
 	// Metadata sources.
 	// Authorino fetches auth metadata as JSON from sources specified in this config.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=14
+	// +kubebuilder:validation:MaxProperties=10
 	Metadata map[string]MetadataSpec `json:"metadata,omitempty"`
 
 	// Authorization policies.
 	// All policies MUST evaluate to "allowed = true" for the auth request be successful.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=14
+	// +kubebuilder:validation:MaxProperties=10
 	Authorization map[string]AuthorizationSpec `json:"authorization,omitempty"`
 
 	// Response items.
@@ -47,7 +47,7 @@ type AuthSchemeSpec struct {
 	// Callback functions.
 	// Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=14
+	// +kubebuilder:validation:MaxProperties=10
 	Callbacks map[string]CallbackSpec `json:"callbacks,omitempty"`
 }
 
@@ -104,13 +104,13 @@ type ResponseSpec struct {
 type WrappedSuccessResponseSpec struct {
 	// Custom success response items wrapped as HTTP headers.
 	// For integration of Authorino via proxy, the proxy must use these settings to inject data in the request.
-	// +kubebuilder:validation:MaxProperties=14
+	// +kubebuilder:validation:MaxProperties=10
 	Headers map[string]HeaderSuccessResponseSpec `json:"headers,omitempty"`
 
 	// Custom success response items wrapped as HTTP headers.
 	// For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata.
 	// See https://www.envoyproxy.io/docs/envoy/latest/configuration/advanced/well_known_dynamic_metadata
-	// +kubebuilder:validation:MaxProperties=14
+	// +kubebuilder:validation:MaxProperties=10
 	DynamicMetadata map[string]SuccessResponseSpec `json:"dynamicMetadata,omitempty"`
 }
 
@@ -144,8 +144,19 @@ type CallbackSpec struct {
 // +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.defaults) || !has(self.defaults.rules) || !has(self.defaults.rules.response) || !has(self.defaults.rules.response.success) || !has(self.defaults.rules.response.success.headers) || !self.defaults.rules.response.success.headers.exists(x, has(self.defaults.rules.response.success.headers[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
 // +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.defaults) || !has(self.defaults.rules) || !has(self.defaults.rules.response) || !has(self.defaults.rules.response.success) || !has(self.defaults.rules.response.success.dynamicMetadata) || !self.defaults.rules.response.success.dynamicMetadata.exists(x, has(self.defaults.rules.response.success.dynamicMetadata[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
 // +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.defaults) || !has(self.defaults.rules) || !has(self.defaults.rules.callbacks) || !self.defaults.rules.callbacks.exists(x, has(self.defaults.rules.callbacks[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// RouteSelectors - explicit overrides validation
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.overrides) || !has(self.overrides.routeSelectors)",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.overrides) || !has(self.overrides.rules) || !has(self.overrides.rules.authentication) || !self.overrides.rules.authentication.exists(x, has(self.overrides.rules.authentication[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.overrides) || !has(self.overrides.rules) || !has(self.overrides.rules.metadata) || !self.overrides.rules.metadata.exists(x, has(self.overrides.rules.metadata[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.overrides) || !has(self.overrides.rules) || !has(self.overrides.rules.authorization) || !self.overrides.rules.authorization.exists(x, has(self.overrides.rules.authorization[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.overrides) || !has(self.overrides.rules) || !has(self.overrides.rules.response) || !has(self.overrides.rules.response.success) || !has(self.overrides.rules.response.success.headers) || !self.overrides.rules.response.success.headers.exists(x, has(self.overrides.rules.response.success.headers[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.overrides) || !has(self.overrides.rules) || !has(self.overrides.rules.response) || !has(self.overrides.rules.response.success) || !has(self.overrides.rules.response.success.dynamicMetadata) || !self.overrides.rules.response.success.dynamicMetadata.exists(x, has(self.overrides.rules.response.success.dynamicMetadata[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
+// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.overrides) || !has(self.overrides.rules) || !has(self.overrides.rules.callbacks) || !self.overrides.rules.callbacks.exists(x, has(self.overrides.rules.callbacks[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
 // Mutual Exclusivity Validation
 // +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && (has(self.routeSelectors) || has(self.patterns) || has(self.when) || has(self.rules)))",message="Implicit and explicit defaults are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && (has(self.routeSelectors) || has(self.patterns) || has(self.when) || has(self.rules)))",message="Implicit defaults and explicit overrides are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && has(self.defaults))",message="Explicit overrides and explicit defaults are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && self.targetRef.kind == 'HTTPRoute')",message="Overrides are not allowed for policies targeting a HTTPRoute resource"
 type AuthPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
@@ -156,6 +167,11 @@ type AuthPolicySpec struct {
 	// Defaults are mutually exclusive with implicit defaults defined by AuthPolicyCommonSpec.
 	// +optional
 	Defaults *AuthPolicyCommonSpec `json:"defaults,omitempty"`
+
+	// Overrides define explicit override values for this policy.
+	// Overrides are mutually exclusive with explicit and implicit defaults defined by AuthPolicyCommonSpec.
+	// +optional
+	Overrides *AuthPolicyCommonSpec `json:"overrides,omitempty"`
 
 	// AuthPolicyCommonSpec defines implicit default values for this policy and for policies inheriting this policy.
 	// AuthPolicyCommonSpec is mutually exclusive with explicit defaults defined by Defaults.
@@ -247,6 +263,10 @@ type AuthPolicy struct {
 	Status AuthPolicyStatus `json:"status,omitempty"`
 }
 
+func (ap *AuthPolicy) IsAtomicOverride() bool {
+	return ap.Spec.Overrides != nil
+}
+
 func (ap *AuthPolicy) TargetKey() client.ObjectKey {
 	ns := ap.Namespace
 	if ap.Spec.TargetRef.Namespace != nil {
@@ -333,6 +353,10 @@ func (ap *AuthPolicy) DirectReferenceAnnotationName() string {
 func (ap *AuthPolicySpec) CommonSpec() *AuthPolicyCommonSpec {
 	if ap.Defaults != nil {
 		return ap.Defaults
+	}
+
+	if ap.Overrides != nil {
+		return ap.Overrides
 	}
 
 	return &ap.AuthPolicyCommonSpec

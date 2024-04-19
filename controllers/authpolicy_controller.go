@@ -167,6 +167,35 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 		return err
 	}
 
+	// if the AuthPolicy(ap) targets a Gateway then all policies attached to that Gateway need to be checked.
+	// this is due to not knowing if the Gateway AuthPolicy was updated to include or remove the overrides section.
+	switch obj := targetNetworkObject.(type) {
+	case *gatewayapiv1.Gateway:
+		gw := kuadrant.GatewayWrapper{Gateway: obj, Referrer: ap}
+		apKey := client.ObjectKeyFromObject(ap)
+		for _, policyKey := range gw.PolicyRefs() {
+			if policyKey == apKey {
+				continue
+			}
+
+			ref := &api.AuthPolicy{}
+			err = r.Client().Get(ctx, policyKey, ref)
+			if err != nil {
+				return err
+			}
+
+			refNetworkObject := &gatewayapiv1.HTTPRoute{}
+			err = r.Client().Get(ctx, ref.TargetKey(), refNetworkObject)
+			if err != nil {
+				return err
+			}
+
+			if err = r.reconcileAuthConfigs(ctx, ref, refNetworkObject); err != nil {
+				return err
+			}
+		}
+	}
+
 	// set direct back ref - i.e. claim the target network object as taken asap
 	if err := r.reconcileNetworkResourceDirectBackReference(ctx, ap, targetNetworkObject); err != nil {
 		return err

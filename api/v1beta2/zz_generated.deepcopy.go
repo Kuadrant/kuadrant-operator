@@ -145,6 +145,11 @@ func (in *AuthPolicySpec) DeepCopyInto(out *AuthPolicySpec) {
 		*out = new(AuthPolicyCommonSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.Overrides != nil {
+		in, out := &in.Overrides, &out.Overrides
+		*out = new(AuthPolicyCommonSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	in.AuthPolicyCommonSpec.DeepCopyInto(&out.AuthPolicyCommonSpec)
 }
 

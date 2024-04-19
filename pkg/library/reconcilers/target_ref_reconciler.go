@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -40,12 +41,6 @@ func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("FetchAcceptedGatewayHTTPRoutes").WithValues("gateway", gwKey)
 
-	gatewayClass := &gatewayapiv1.GatewayClass{}
-	if err := r.Client.Get(ctx, client.ObjectKey{Name: string(gateway.Spec.GatewayClassName)}, gatewayClass); err != nil {
-		logger.V(1).Info("failed to get controller name", "err", err)
-		return
-	}
-
 	routeList := &gatewayapiv1.HTTPRouteList{}
 	err := r.Client.List(ctx, routeList)
 	if err != nil {
@@ -55,22 +50,12 @@ func (r *TargetRefReconciler) FetchAcceptedGatewayHTTPRoutes(ctx context.Context
 
 	for idx := range routeList.Items {
 		route := routeList.Items[idx]
-		routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, func(p gatewayapiv1.RouteParentStatus) bool {
-			return *p.ParentRef.Kind == ("Gateway") &&
-				p.ControllerName == gatewayClass.Spec.ControllerName &&
-				((p.ParentRef.Namespace == nil && route.GetNamespace() == gwKey.Namespace) || string(*p.ParentRef.Namespace) == gwKey.Namespace) &&
-				string(p.ParentRef.Name) == gwKey.Name
-		})
-		if found && meta.IsStatusConditionTrue(routeParentStatus.Conditions, string(gatewayapiv1.RouteConditionAccepted)) {
+		if utils.Index(kuadrantgatewayapi.GetRouteAcceptedGatewayParentKeys(&route), func(parentGatewayKey client.ObjectKey) bool { return parentGatewayKey == gwKey }) >= 0 {
 			logger.V(1).Info("found route attached to gateway", "httproute", client.ObjectKeyFromObject(&route))
 			routes = append(routes, route)
 			continue
 		}
-
-		logger.V(1).Info("skipping route, not attached to gateway",
-			"httproute", client.ObjectKeyFromObject(&route),
-			"isChildRoute", found,
-			"isAccepted", routeParentStatus != nil && meta.IsStatusConditionTrue(routeParentStatus.Conditions, string(gatewayapiv1.RouteConditionAccepted)))
+		logger.V(1).Info("skipping route, not attached to gateway", "httproute", client.ObjectKeyFromObject(&route))
 	}
 
 	return

@@ -133,14 +133,6 @@ rules:
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
-  - gatewayclasses
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - gateway.networking.k8s.io
-  resources:
   - gateways
   verbs:
   - create

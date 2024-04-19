@@ -89,11 +89,11 @@ func (r *RateLimitPolicyReconciler) enforcedCondition(ctx context.Context, polic
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), errors.New("limitador is not ready")), false)
 	}
 
-	if r.OverriddenPolicyMap.IsPolicyOverridden(policy) {
-		if len(r.OverriddenPolicyMap.PolicyOverriddenBy(policy)) == 0 {
+	if r.AffectedPolicyMap.IsPolicyAffected(policy) {
+		if !r.AffectedPolicyMap.IsPolicyOverridden(policy) {
 			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), errors.New("no free routes to enforce policy")), false) // Maybe this should be a standard condition rather than an unknown condition
 		}
-		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), r.OverriddenPolicyMap.PolicyOverriddenBy(policy)), false)
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), r.AffectedPolicyMap.PolicyAffectedBy(policy)), false)
 	}
 
 	logger.V(1).Info("RateLimitPolicy is enforced")

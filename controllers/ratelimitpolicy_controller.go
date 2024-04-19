@@ -42,8 +42,8 @@ const rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
 type RateLimitPolicyReconciler struct {
 	*reconcilers.BaseReconciler
 	TargetRefReconciler reconcilers.TargetRefReconciler
-	// OverriddenPolicyMap tracks the overridden policies to report their status.
-	OverriddenPolicyMap *kuadrant.OverriddenPolicyMap
+	// AffectedPolicyMap tracks the affected policies to report their status.
+	AffectedPolicyMap *kuadrant.AffectedPolicyMap
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete

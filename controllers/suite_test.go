@@ -147,7 +147,7 @@ var _ = BeforeSuite(func() {
 	err = (&AuthPolicyReconciler{
 		BaseReconciler:      authPolicyBaseReconciler,
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-		OverriddenPolicyMap: kuadrant.NewOverriddenPolicyMap(),
+		AffectedPolicyMap:   kuadrant.NewAffectedPolicyMap(),
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -160,7 +160,7 @@ var _ = BeforeSuite(func() {
 	err = (&RateLimitPolicyReconciler{
 		BaseReconciler:      rateLimitPolicyBaseReconciler,
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-		OverriddenPolicyMap: kuadrant.NewOverriddenPolicyMap(),
+		AffectedPolicyMap:   kuadrant.NewAffectedPolicyMap(),
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())

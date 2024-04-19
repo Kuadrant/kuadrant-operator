@@ -154,7 +154,7 @@ func main() {
 	if err = (&controllers.RateLimitPolicyReconciler{
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      rateLimitPolicyBaseReconciler,
-		OverriddenPolicyMap: kuadrant.NewOverriddenPolicyMap(),
+		AffectedPolicyMap:   kuadrant.NewAffectedPolicyMap(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicy")
 		os.Exit(1)
@@ -169,7 +169,7 @@ func main() {
 	if err = (&controllers.AuthPolicyReconciler{
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      authPolicyBaseReconciler,
-		OverriddenPolicyMap: kuadrant.NewOverriddenPolicyMap(),
+		AffectedPolicyMap:   kuadrant.NewAffectedPolicyMap(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicy")
 		os.Exit(1)

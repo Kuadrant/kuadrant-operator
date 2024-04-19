@@ -134,68 +134,30 @@ func (r *RateLimitPolicyReconciler) buildRateLimitIndex(ctx context.Context, rlp
 	return rateLimitIndex, nil
 }
 
-// applyOverrides checks for any overrides set for the RateLimitPolicy.
-// It iterates through the slice of policies to find overrides for the provided target HTTPRoute.
-// If an override is found, it updates the limits in the RateLimitPolicySpec accordingly.
 func (r *RateLimitPolicyReconciler) applyOverrides(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, t *kuadrantgatewayapi.Topology) error {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("applyOverrides")
 
-	affectedPolicies, numUnTargetedRoutes := r.getAffectedPolicies(rlp, t)
+	// Retrieve affected policies and the number of untargeted routes
+	affectedPolicies, numUnTargetedRoutes := r.getAffectedPoliciesInfo(rlp, t)
+
+	// Filter out current policy from affected policies
 	affectedPolicies = utils.Filter(affectedPolicies, func(policy kuadrantgatewayapi.Policy) bool {
-		// Filter out current policy from affected policies
 		return policy.GetUID() != rlp.GetUID()
 	})
-	affectedPoliciesKeys := utils.Map(affectedPolicies, func(p kuadrantgatewayapi.Policy) client.ObjectKey {
-		return client.ObjectKeyFromObject(p)
-	})
 
-	filteredPolicies := utils.Filter(affectedPolicies, func(policy kuadrantgatewayapi.Policy) bool {
-		if policy.GetUID() == rlp.GetUID() {
-			return false
-		}
-
-		// HTTPRoute RLPs should only care about overrides from gateways
-		if kuadrantgatewayapi.IsTargetRefHTTPRoute(rlp.GetTargetRef()) {
-			return kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef())
-		}
-		// Gateway RLPs are not affected by other Gateway RLPs
-		return false
-	})
-
-	// Is a GW policy
+	// Apply overrides based on the type of policy (Gateway or Route)
 	if kuadrantgatewayapi.IsTargetRefGateway(rlp.GetTargetRef()) {
-		// Specifies defaults and has free routes => not enforced
-		if rlp.Spec.Overrides == nil && numUnTargetedRoutes == 0 {
-			r.OverriddenPolicyMap.SetOverriddenPolicy(rlp, affectedPoliciesKeys)
-			logger.V(1).Info("policy has no free routes to enforce policy")
-		} else {
-			r.OverriddenPolicyMap.RemoveOverriddenPolicy(rlp)
-		}
+		r.applyGatewayOverrides(logger, rlp, numUnTargetedRoutes, affectedPolicies)
 	} else {
-		// Is a Route policy
-		// Sort by TargetRefKind and creation timestamp
-		// Gateways RLPs are listed first in the order of oldest policy
-		sort.Sort(kuadrantgatewayapi.PolicyByTargetRefKindAndCreationTimeStamp(filteredPolicies))
-
-		// Iterate in order of precedence until finding a block of overrides
-		for _, policy := range filteredPolicies {
-			p := policy.(*kuadrantv1beta2.RateLimitPolicy)
-			if p.Spec.Overrides != nil {
-				rlp.Spec.CommonSpec().Limits = p.Spec.Overrides.Limits
-				logger.V(1).Info("applying overrides from parent policy", "parentPolicy", client.ObjectKeyFromObject(p))
-				// Overridden by another policy
-				r.OverriddenPolicyMap.SetOverriddenPolicy(rlp, []client.ObjectKey{client.ObjectKeyFromObject(p)})
-				break
-			}
-			r.OverriddenPolicyMap.RemoveOverriddenPolicy(rlp)
-		}
+		r.applyRouteOverrides(logger, rlp, affectedPolicies)
 	}
 
-	// Reconcile status for all policies that are affected by this RLP
+	// Reconcile status for affected policies
 	for _, policy := range affectedPolicies {
 		if policy.GetUID() != rlp.GetUID() {
 			p := policy.(*kuadrantv1beta2.RateLimitPolicy)
+			// Override is set -> affected policy is overridden by rlp
 			if kuadrantgatewayapi.IsTargetRefGateway(rlp.GetTargetRef()) && rlp.Spec.Overrides != nil {
 				r.OverriddenPolicyMap.SetOverriddenPolicy(p, []client.ObjectKey{client.ObjectKeyFromObject(rlp)})
 			}
@@ -209,27 +171,60 @@ func (r *RateLimitPolicyReconciler) applyOverrides(ctx context.Context, rlp *kua
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) getAffectedPolicies(rlp *kuadrantv1beta2.RateLimitPolicy, t *kuadrantgatewayapi.Topology) ([]kuadrantgatewayapi.Policy, int) {
+func (r *RateLimitPolicyReconciler) getAffectedPoliciesInfo(rlp *kuadrantv1beta2.RateLimitPolicy, t *kuadrantgatewayapi.Topology) ([]kuadrantgatewayapi.Policy, int) {
 	topologyIndexes := kuadrantgatewayapi.NewTopologyIndexes(t)
-
 	var affectedPolicies []kuadrantgatewayapi.Policy
 	var numUnTargetedRoutes int
-	// For each gw, get all the policies if the current rlp is within the topology for this gateway
+
 	for _, gw := range t.Gateways() {
 		policyList := topologyIndexes.PoliciesFromGateway(gw.Gateway)
-		policyKeys := utils.Map(policyList, func(p kuadrantgatewayapi.Policy) client.ObjectKey {
+		numUnTargetedRoutes += len(topologyIndexes.GetUntargetedRoutes(gw.Gateway))
+
+		if slices.Contains(utils.Map(policyList, func(p kuadrantgatewayapi.Policy) client.ObjectKey {
 			return client.ObjectKeyFromObject(p)
-		})
-
-		numUnTargetedRoutes = numUnTargetedRoutes + len(topologyIndexes.GetUntargetedRoutes(gw.Gateway))
-
-		// this policy is potentially affected by other policies from this gateway
-		if slices.Contains(policyKeys, client.ObjectKeyFromObject(rlp)) {
+		}), client.ObjectKeyFromObject(rlp)) {
 			affectedPolicies = append(affectedPolicies, policyList...)
 		}
 	}
 
 	return affectedPolicies, numUnTargetedRoutes
+}
+
+// applyGatewayOverrides a Gateway RLP can be "overridden" is sense where every underlying route has their own policy
+// and the Gateway RLP does not specify an overrides section
+func (r *RateLimitPolicyReconciler) applyGatewayOverrides(logger logr.Logger, rlp *kuadrantv1beta2.RateLimitPolicy, numUnTargetedRoutes int, affectedPolicies []kuadrantgatewayapi.Policy) {
+	if rlp.Spec.Overrides == nil && numUnTargetedRoutes == 0 {
+		r.OverriddenPolicyMap.SetOverriddenPolicy(rlp, utils.Map(affectedPolicies, func(p kuadrantgatewayapi.Policy) client.ObjectKey {
+			return client.ObjectKeyFromObject(p)
+		}))
+		logger.V(1).Info("policy has no free routes to enforce default policy")
+	} else if rlp.Spec.Overrides != nil && len(affectedPolicies) == 0 && numUnTargetedRoutes == 0 {
+		r.OverriddenPolicyMap.SetOverriddenPolicy(rlp, []client.ObjectKey{})
+		logger.V(1).Info("policy has no free routes to enforce override policy")
+	} else {
+		r.OverriddenPolicyMap.RemoveOverriddenPolicy(rlp)
+	}
+}
+
+func (r *RateLimitPolicyReconciler) applyRouteOverrides(logger logr.Logger, rlp *kuadrantv1beta2.RateLimitPolicy, affectedPolicies []kuadrantgatewayapi.Policy) {
+	filteredPolicies := utils.Filter(affectedPolicies, func(policy kuadrantgatewayapi.Policy) bool {
+		if policy.GetUID() == rlp.GetUID() {
+			return false
+		}
+		return kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef())
+	})
+
+	sort.Sort(kuadrantgatewayapi.PolicyByTargetRefKindAndCreationTimeStamp(filteredPolicies))
+
+	for _, policy := range filteredPolicies {
+		p := policy.(*kuadrantv1beta2.RateLimitPolicy)
+		if p.Spec.Overrides != nil {
+			rlp.Spec.CommonSpec().Limits = p.Spec.Overrides.Limits
+			logger.V(1).Info("applying overrides from parent policy", "parentPolicy", client.ObjectKeyFromObject(p))
+			r.OverriddenPolicyMap.SetOverriddenPolicy(rlp, []client.ObjectKey{client.ObjectKeyFromObject(p)})
+		}
+		r.OverriddenPolicyMap.RemoveOverriddenPolicy(rlp)
+	}
 }
 
 func (r *RateLimitPolicyReconciler) generateTopology(ctx context.Context) (*kuadrantgatewayapi.Topology, error) {

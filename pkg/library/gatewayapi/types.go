@@ -36,6 +36,11 @@ func (a PolicyByTargetRefKindAndCreationTimeStamp) Less(i, j int) bool {
 
 	// Compare kind first
 	if targetRef1.Kind != targetRef2.Kind {
+		if targetRef1.Kind == "Gateway" {
+			return true
+		} else if targetRef2.Kind == "HTTPRoute" {
+			return false
+		}
 		return targetRef1.Kind < targetRef2.Kind
 	}
 

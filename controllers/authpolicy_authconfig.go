@@ -74,7 +74,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 		if ok {
 			logger.V(1).Info("targeted gateway has authpolicy with atomic overrides, skipping authorino authconfig for the HTTPRoute authpolicy")
 			utils.TagObjectToDelete(authConfig)
-			r.OverriddenPolicyMap.SetOverriddenPolicy(ap)
+			r.OverriddenPolicyMap.SetOverriddenPolicy(ap, []client.ObjectKey{})
 			return authConfig, nil
 		}
 		route = obj

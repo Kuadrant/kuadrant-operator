@@ -6,20 +6,19 @@ import (
 	"fmt"
 	"slices"
 
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"k8s.io/utils/ptr"
-
 	"github.com/go-logr/logr"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -140,9 +139,9 @@ func (r *AuthPolicyReconciler) isAuthConfigReady(ctx context.Context, policy *ap
 func (r *AuthPolicyReconciler) handlePolicyOverride(logger logr.Logger, policy *api.AuthPolicy, targetNetworkObject client.Object, t *kuadrantgatewayapi.Topology) *metav1.Condition {
 	switch targetNetworkObject.(type) {
 	case *gatewayapiv1.Gateway:
-		return r.handleGatewayPolicyOverride(logger, policy, targetNetworkObject)
+		return r.handleGatewayPolicyOverride(policy, targetNetworkObject)
 	case *gatewayapiv1.HTTPRoute:
-		return r.handleHTTPRoutePolicyOverride(logger, policy, targetNetworkObject, t)
+		return r.handleHTTPRoutePolicyOverride(policy, targetNetworkObject, t)
 	default:
 		logger.Error(errors.New("this point should never be reached"), "failed to match target network object", targetNetworkObject)
 		return nil
@@ -151,7 +150,7 @@ func (r *AuthPolicyReconciler) handlePolicyOverride(logger logr.Logger, policy *
 
 // handleGatewayPolicyOverride handles the case where the Gateway Policy is overridden by filtering policy references
 // and creating a corresponding error condition.
-func (r *AuthPolicyReconciler) handleGatewayPolicyOverride(logger logr.Logger, policy *api.AuthPolicy, targetNetworkObject client.Object) *metav1.Condition {
+func (r *AuthPolicyReconciler) handleGatewayPolicyOverride(policy *api.AuthPolicy, targetNetworkObject client.Object) *metav1.Condition {
 	obj := targetNetworkObject.(*gatewayapiv1.Gateway)
 	gatewayWrapper := kuadrant.GatewayWrapper{Gateway: obj, Referrer: policy}
 	refs := gatewayWrapper.PolicyRefs()
@@ -164,16 +163,12 @@ func (r *AuthPolicyReconciler) handleGatewayPolicyOverride(logger logr.Logger, p
 
 // handleHTTPRoutePolicyOverride handles the case where the HTTPRoute Policy is overridden by filtering policy references
 // and creating a corresponding error condition.
-func (r *AuthPolicyReconciler) handleHTTPRoutePolicyOverride(logger logr.Logger, policy *api.AuthPolicy, targetNetworkObject client.Object, t *kuadrantgatewayapi.Topology) *metav1.Condition {
+func (r *AuthPolicyReconciler) handleHTTPRoutePolicyOverride(policy *api.AuthPolicy, targetNetworkObject client.Object, t *kuadrantgatewayapi.Topology) *metav1.Condition {
 	obj := targetNetworkObject.(*gatewayapiv1.HTTPRoute)
-	httpRouteWrapper := kuadrant.HTTPRouteWrapper{HTTPRoute: obj, Referrer: policy}
+	httpRouteWrapper := kuadrant.HTTPRouteWrapper{HTTPRoute: obj, Policy: policy}
 	refs := httpRouteWrapper.PolicyRefs(t)
-	jsonData, err := json.Marshal(refs)
-	if err != nil {
-		logger.Error(err, "Failed to marshal filtered references")
-		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err), false)
-	}
-	return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), string(jsonData)), false)
+
+	return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), refs), false)
 }
 
 func (r *AuthPolicyReconciler) generateTopology(ctx context.Context) (*kuadrantgatewayapi.Topology, error) {

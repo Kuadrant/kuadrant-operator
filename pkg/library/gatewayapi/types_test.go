@@ -128,11 +128,13 @@ func TestPolicyByTargetRef(t *testing.T) {
 				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
 				createTestPolicy("bbb", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("HTTPRoute")),
 				createTestPolicy("aaa", time.Date(2010, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
+				createTestPolicy("ddd", time.Date(2005, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Service")),
 			},
 			sortedPolicies: []Policy{
 				createTestPolicy("aaa", time.Date(2010, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
 				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
 				createTestPolicy("bbb", time.Date(2000, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("HTTPRoute")),
+				createTestPolicy("ddd", time.Date(2005, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Service")),
 			},
 		},
 		{
@@ -141,11 +143,13 @@ func TestPolicyByTargetRef(t *testing.T) {
 				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
 				createTestPolicy("bbb", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("HTTPRoute")),
 				createTestPolicy("aaa", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
+				createTestPolicy("ddd", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Service")),
 			},
 			sortedPolicies: []Policy{
 				createTestPolicy("aaa", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
 				createTestPolicy("ccc", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Gateway")),
 				createTestPolicy("bbb", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("HTTPRoute")),
+				createTestPolicy("ddd", time.Date(2020, time.November, 10, 23, 0, 0, 0, time.UTC), withTargetRefKind("Service")),
 			},
 		},
 	}

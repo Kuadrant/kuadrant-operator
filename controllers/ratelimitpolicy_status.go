@@ -90,6 +90,9 @@ func (r *RateLimitPolicyReconciler) enforcedCondition(ctx context.Context, polic
 	}
 
 	if r.OverriddenPolicyMap.IsPolicyOverridden(policy) {
+		if len(r.OverriddenPolicyMap.PolicyOverriddenBy(policy)) == 0 {
+			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), errors.New("no free routes to enforce policy")), false) // Maybe this should be a standard condition rather than an unknown condition
+		}
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), r.OverriddenPolicyMap.PolicyOverriddenBy(policy)), false)
 	}
 

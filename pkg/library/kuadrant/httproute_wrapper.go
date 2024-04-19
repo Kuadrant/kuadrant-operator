@@ -1,27 +1,33 @@
 package kuadrant
 
 import (
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 type HTTPRouteWrapper struct {
 	*gatewayapiv1.HTTPRoute
-	Referrer
+	kuadrantgatewayapi.Policy
 }
 
-func (r HTTPRouteWrapper) PolicyRefs(t *kuadrantgatewayapi.Topology) []string {
+func (r HTTPRouteWrapper) PolicyRefs(t *kuadrantgatewayapi.Topology) []client.ObjectKey {
 	if r.HTTPRoute == nil {
-		return make([]string, 0)
+		return make([]client.ObjectKey, 0)
 	}
-	refs := make([]string, 0)
+	refs := make([]client.ObjectKey, 0)
 	for _, gw := range t.Gateways() {
-		authPolicyRefs, ok := gw.GetAnnotations()[common.AuthPolicyBackRefAnnotation]
-		if !ok {
-			continue
-		}
-		refs = append(refs, authPolicyRefs)
+		affectedPolicies := utils.Filter(gw.AttachedPolicies(), func(policy kuadrantgatewayapi.Policy) bool {
+			return kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef()) && r.Policy.GetUID() != policy.GetUID()
+		})
+
+		policyKeys := utils.Map(affectedPolicies, func(policy kuadrantgatewayapi.Policy) client.ObjectKey {
+			return client.ObjectKeyFromObject(policy)
+		})
+
+		refs = append(refs, policyKeys...)
 	}
 	return refs
 }

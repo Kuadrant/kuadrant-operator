@@ -26,8 +26,8 @@
   "fiscalYearStartMonth": 0,
   "gnetId": 7630,
   "graphTooltip": 1,
-  "id": 33,
-  "iteration": 1712855114774,
+  "id": 2,
+  "iteration": 1713209903588,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -38,18 +38,46 @@
       },
       "description": "",
       "gridPos": {
-        "h": 5,
-        "w": 24,
+        "h": 7,
+        "w": 6,
         "x": 0,
+        "y": 0
+      },
+      "id": 155,
+      "options": {
+        "maxItems": 10,
+        "query": "",
+        "showHeadings": false,
+        "showRecentlyViewed": false,
+        "showSearch": true,
+        "showStarred": false,
+        "tags": [
+          "kuadrant"
+        ]
+      },
+      "pluginVersion": "8.5.5",
+      "title": "Kuadrant Dashboards",
+      "type": "dashlist"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "grafana"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 18,
+        "x": 6,
         "y": 0
       },
       "id": 153,
       "options": {
-        "content": "The row of panels below is repeated for each HTTPRoute resource in your cluster.\nThey provide real-time & historical insights into the performance and health of each API.\nMetrics displayed include request rates, success/error breakdown, and latency percentiles, giving a snapshot of API efficiency and reliability.\nUse this dashboard to monitor traffic patterns, identify potential issues, and ensure optimal performance of your services.\n\n*Important: HTTPRoutes must include a \"service\" label with a value that matches the name of the service being routed to. eg. \"service=myapp\"*",
+        "content": "#### Overview of API/HTTPRoute Metrics\n\nThe row of panels below is repeated for each HTTPRoute resource in your cluster.\nThey provide real-time & historical insights into the performance and health of each API.\nMetrics displayed include request rates, success/error breakdown, and latency percentiles, giving a snapshot of API efficiency and reliability.\nUse this dashboard to monitor traffic patterns, identify potential issues, and ensure optimal performance of your services.\n\n*Important: HTTPRoutes must include a \"service\" and \"deployment\" label with a value that matches the name of the service & deployment being routed to. eg. \"service=myapp, deployment=myapp\"*",
         "mode": "markdown"
       },
       "pluginVersion": "8.5.5",
-      "title": "Overview of API/HTTPRoute Metrics",
+      "title": "App Developer Dashboard",
       "type": "text"
     },
     {
@@ -58,7 +86,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 7
       },
       "id": 141,
       "panels": [],
@@ -99,7 +127,7 @@
         "h": 2,
         "w": 24,
         "x": 0,
-        "y": 6
+        "y": 8
       },
       "id": 97,
       "options": {
@@ -233,11 +261,11 @@
               "Value #C": "",
               "customresource_kind 2": "",
               "deployment": "API Workload (Deployment)",
-              "exported_namespace 1": "Namespace",
+              "exported_namespace 1": "API Namespace",
               "exported_namespace 2": "",
               "hostname": "Hostname",
               "name": "API Name (HTTPRoute)",
-              "namespace 1": "API Namespace",
+              "namespace 1": "Namespace",
               "owner": "Owner",
               "parent_name": "Gateway name",
               "parent_namespace": "Gateway namespace",
@@ -366,7 +394,7 @@
         "h": 6,
         "w": 9,
         "x": 0,
-        "y": 8
+        "y": 10
       },
       "id": 99,
       "options": {
@@ -387,7 +415,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "legendFormat": "total",
           "range": true,
           "refId": "A"
@@ -398,7 +426,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "legendFormat": "error (4xx,5xx)",
           "range": true,
@@ -410,7 +438,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"2.*|3.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"2.*|3.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "legendFormat": "success (2xx,3xx)",
           "range": true,
@@ -451,7 +479,7 @@
         "h": 2,
         "w": 2,
         "x": 9,
-        "y": 8
+        "y": 10
       },
       "id": 137,
       "options": {
@@ -477,10 +505,10 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(istio_requests_total{destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "instant": true,
-          "legendFormat": "P50 {{destination_service_name}}",
+          "legendFormat": "__auto",
           "range": false,
           "refId": "C"
         }
@@ -519,7 +547,7 @@
         "h": 2,
         "w": 2,
         "x": 11,
-        "y": 8
+        "y": 10
       },
       "id": 149,
       "options": {
@@ -548,7 +576,7 @@
           "expr": "sum(increase(istio_requests_total{destination_service_name=~\"$api\"}[$__range])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{service=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "instant": true,
-          "legendFormat": "P50 {{destination_service_name}}",
+          "legendFormat": "__auto",
           "range": false,
           "refId": "C"
         }
@@ -663,7 +691,7 @@
         "h": 6,
         "w": 9,
         "x": 13,
-        "y": 8
+        "y": 10
       },
       "id": 129,
       "options": {
@@ -684,7 +712,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "histogram_quantile(0.95, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "legendFormat": "P95",
           "range": true,
@@ -696,7 +724,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.90, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "histogram_quantile(0.90, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "legendFormat": "P90",
           "range": true,
           "refId": "A"
@@ -707,7 +735,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "legendFormat": "P99",
           "range": true,
@@ -747,7 +775,7 @@
         "h": 2,
         "w": 2,
         "x": 22,
-        "y": 8
+        "y": 10
       },
       "id": 139,
       "options": {
@@ -773,7 +801,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "instant": true,
           "legendFormat": "P99 {{destination_service_name}}",
@@ -815,7 +843,7 @@
         "h": 2,
         "w": 2,
         "x": 9,
-        "y": 10
+        "y": 12
       },
       "id": 147,
       "options": {
@@ -841,10 +869,10 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(istio_requests_total{response_code=~\"2.*|3.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"2.*|3.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "instant": true,
-          "legendFormat": "P50 {{destination_service_name}}",
+          "legendFormat": "__auto",
           "range": false,
           "refId": "C"
         }
@@ -883,7 +911,7 @@
         "h": 2,
         "w": 2,
         "x": 11,
-        "y": 10
+        "y": 12
       },
       "id": 150,
       "options": {
@@ -912,7 +940,7 @@
           "expr": "sum(increase(istio_requests_total{response_code=~\"2.*|3.*\",destination_service_name=~\"$api\"}[$__range])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{service=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "instant": true,
-          "legendFormat": "P50 {{destination_service_name}}",
+          "legendFormat": "__auto",
           "range": false,
           "refId": "C"
         }
@@ -950,7 +978,7 @@
         "h": 2,
         "w": 2,
         "x": 22,
-        "y": 10
+        "y": 12
       },
       "id": 146,
       "options": {
@@ -976,10 +1004,10 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "histogram_quantile(0.50, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "histogram_quantile(0.95, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "instant": true,
-          "legendFormat": "P50 {{destination_service_name}}",
+          "legendFormat": "__auto",
           "range": false,
           "refId": "C"
         }
@@ -1018,7 +1046,7 @@
         "h": 2,
         "w": 2,
         "x": 9,
-        "y": 12
+        "y": 14
       },
       "id": 148,
       "options": {
@@ -1044,10 +1072,10 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "instant": true,
-          "legendFormat": "P50 {{destination_service_name}}",
+          "legendFormat": "__auto",
           "range": false,
           "refId": "C"
         }
@@ -1086,7 +1114,7 @@
         "h": 2,
         "w": 2,
         "x": 11,
-        "y": 12
+        "y": 14
       },
       "id": 151,
       "options": {
@@ -1115,7 +1143,7 @@
           "expr": "sum(increase(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\"}[$__range])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{service=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "instant": true,
-          "legendFormat": "P50 {{destination_service_name}}",
+          "legendFormat": "__auto",
           "range": false,
           "refId": "C"
         }
@@ -1153,7 +1181,7 @@
         "h": 2,
         "w": 2,
         "x": 22,
-        "y": 12
+        "y": 14
       },
       "id": 138,
       "options": {
@@ -1179,7 +1207,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "histogram_quantile(0.90, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[1m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "histogram_quantile(0.90, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "instant": true,
           "legendFormat": "P90 {{destination_service_name}}",
           "range": false,
@@ -1190,10 +1218,12 @@
       "type": "stat"
     }
   ],
-  "refresh": "",
+  "refresh": "30s",
   "schemaVersion": 36,
   "style": "dark",
-  "tags": [],
+  "tags": [
+    "kuadrant"
+  ],
   "templating": {
     "list": [
       {
@@ -1255,6 +1285,7 @@
   },
   "timepicker": {
     "refresh_intervals": [
+      "30s",
       "5m",
       "15m",
       "30m",
@@ -1275,8 +1306,8 @@
     ]
   },
   "timezone": "",
-  "title": "Stitch: App Developer Dashboard",
+  "title": "App Developer Dashboard",
   "uid": "J_sdY4-Ik",
-  "version": 8,
+  "version": 1,
   "weekStart": ""
 }

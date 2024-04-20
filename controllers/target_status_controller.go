@@ -327,19 +327,19 @@ func (r *TargetStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		Watches(
 			&kuadrantv1beta2.AuthPolicy{},
-			handler.EnqueueRequestsFromMapFunc(policyToParentGatewaysEventMapper.Map),
+			PolicyStatusEventHandlerFromMapFunc(policyToParentGatewaysEventMapper.Map),
 		).
 		Watches(
 			&kuadrantv1alpha1.DNSPolicy{},
-			handler.EnqueueRequestsFromMapFunc(policyToParentGatewaysEventMapper.Map),
+			PolicyStatusEventHandlerFromMapFunc(policyToParentGatewaysEventMapper.Map),
 		).
 		Watches(
 			&kuadrantv1beta2.RateLimitPolicy{},
-			handler.EnqueueRequestsFromMapFunc(policyToParentGatewaysEventMapper.Map),
+			PolicyStatusEventHandlerFromMapFunc(policyToParentGatewaysEventMapper.Map),
 		).
 		Watches(
 			&kuadrantv1alpha1.TLSPolicy{},
-			handler.EnqueueRequestsFromMapFunc(policyToParentGatewaysEventMapper.Map),
+			PolicyStatusEventHandlerFromMapFunc(policyToParentGatewaysEventMapper.Map),
 		).
 		Complete(r)
 }

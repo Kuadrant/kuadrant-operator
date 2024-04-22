@@ -1137,25 +1137,17 @@ var _ = Describe("AuthPolicy controller", func() {
 		It("Invalid reason", func() {
 			var otherNamespace string
 			CreateNamespace(&otherNamespace)
-			// create a gateway in another namespace
-			otherGateway := testBuildBasicGateway("gateway-other", otherNamespace)
-			otherGateway.Spec.Listeners[0].Hostname = &[]gatewayapiv1.Hostname{"*.other.example.com"}[0]
-			kuadrant.AnnotateObject(otherGateway, testNamespace)
-			Expect(k8sClient.Create(context.Background(), otherGateway)).To(Succeed())
+			defer DeleteNamespaceCallback(&otherNamespace)
 
 			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Namespace = otherNamespace // create the policy in a different namespace than the target
 				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(otherGateway.Name)
-				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(otherNamespace))
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(testGatewayName)
+				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(testNamespace))
 			})
 			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
 
-			Eventually(func() bool {
-				return testGatewayIsReady(otherGateway)() && assertAcceptedCondFalseAndEnforcedCondNil(policy, string(gatewayapiv1alpha2.PolicyReasonInvalid), fmt.Sprintf("AuthPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", otherNamespace))()
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-
-			Expect(k8sClient.Delete(context.Background(), otherGateway)).To(Succeed())
-			DeleteNamespaceCallback(&otherNamespace)()
+			Eventually(assertAcceptedCondFalseAndEnforcedCondNil(policy, string(gatewayapiv1alpha2.PolicyReasonInvalid), fmt.Sprintf("AuthPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", testNamespace)), 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
 	})
 

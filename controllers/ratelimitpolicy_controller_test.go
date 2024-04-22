@@ -378,20 +378,20 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				time.Minute, 5*time.Second).Should(BeTrue())
 		})
 
-		It("Validation reason", func() {
-			const targetRefName, targetRefNamespace = "istio-ingressgateway", "istio-system"
+		It("Invalid reason", func() {
+			var otherNamespace string
+			CreateNamespace(&otherNamespace)
+			defer DeleteNamespaceCallback(&otherNamespace)
 
-			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Namespace = otherNamespace // create the policy in a different namespace than the target
 				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = targetRefName
-				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(targetRefNamespace))
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gateway.Name)
+				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(testNamespace))
 			})
-			err := k8sClient.Create(context.Background(), rlp)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
 
-			Eventually(assertAcceptedConditionFalse(rlp, string(gatewayapiv1alpha2.PolicyReasonInvalid),
-				fmt.Sprintf("RateLimitPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", targetRefNamespace)),
-				time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(assertAcceptedConditionFalse(policy, string(gatewayapiv1alpha2.PolicyReasonInvalid), fmt.Sprintf("RateLimitPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", testNamespace)), 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
 	})
 

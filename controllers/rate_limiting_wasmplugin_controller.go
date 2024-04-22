@@ -170,11 +170,11 @@ func (r *RateLimitingWASMPluginReconciler) wasmPluginConfig(ctx context.Context,
 	logger.V(1).Info("wasmPluginConfig", "#RLPS", len(rateLimitPolicies))
 
 	// Sort RLPs for consistent comparison with existing objects
-	sort.Sort(kuadrantgatewayapi.PolicyByCreationTimestamp(rateLimitPolicies))
+	sort.Sort(kuadrantgatewayapi.PolicyByTargetRefKindAndCreationTimeStamp(rateLimitPolicies))
 
 	for _, policy := range rateLimitPolicies {
 		rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)
-		wasmRLP, err := r.wasmRateLimitPolicy(ctx, t, rlp, gw)
+		wasmRLP, err := r.wasmRateLimitPolicy(ctx, t, rlp, gw, rateLimitPolicies)
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +232,9 @@ func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx contex
 	return kuadrantgatewayapi.NewTopologyIndexes(t), nil
 }
 
-func (r *RateLimitingWASMPluginReconciler) wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*wasm.RateLimitPolicy, error) {
+func (r *RateLimitingWASMPluginReconciler) wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway, affectedPolices []kuadrantgatewayapi.Policy) (*wasm.RateLimitPolicy, error) {
+	logger, _ := logr.FromContext(ctx)
+
 	route, err := r.routeFromRLP(ctx, t, rlp, gw)
 	if err != nil {
 		return nil, err
@@ -264,6 +266,22 @@ func (r *RateLimitingWASMPluginReconciler) wasmRateLimitPolicy(ctx context.Conte
 	//
 	routeWithEffectiveHostnames := route.DeepCopy()
 	routeWithEffectiveHostnames.Spec.Hostnames = hostnames
+
+	// Policy limits may be overridden by a gateway policy for route policies
+	if kuadrantgatewayapi.IsTargetRefHTTPRoute(rlp.GetTargetRef()) {
+		filteredPolicies := utils.Filter(affectedPolices, func(p kuadrantgatewayapi.Policy) bool {
+			return kuadrantgatewayapi.IsTargetRefGateway(p.GetTargetRef()) && p.GetUID() != rlp.GetUID()
+		})
+
+		for _, policy := range filteredPolicies {
+			p := policy.(*kuadrantv1beta2.RateLimitPolicy)
+			if p.Spec.Overrides != nil {
+				rlp.Spec.CommonSpec().Limits = p.Spec.Overrides.Limits
+				logger.V(1).Info("applying overrides from parent policy", "parentPolicy", client.ObjectKeyFromObject(p))
+				break
+			}
+		}
+	}
 
 	rules := rlptools.WasmRules(rlp, routeWithEffectiveHostnames)
 	if len(rules) == 0 {

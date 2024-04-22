@@ -1133,22 +1133,29 @@ var _ = Describe("AuthPolicy controller", func() {
 				fmt.Sprintf("AuthPolicy is conflicted by %[1]v/toystore: the gateway.networking.k8s.io/v1, Kind=HTTPRoute target %[1]v/toystore-route is already referenced by policy %[1]v/toystore", testNamespace),
 			), 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
+
 		It("Invalid reason", func() {
-			const targetRefName, targetRefNamespace = "istio-ingressgateway", "istio-system"
+			var otherNamespace string
+			CreateNamespace(&otherNamespace)
+			// create a gateway in another namespace
+			otherGateway := testBuildBasicGateway("gateway-other", otherNamespace)
+			otherGateway.Spec.Listeners[0].Hostname = &[]gatewayapiv1.Hostname{"*.other.example.com"}[0]
+			kuadrant.AnnotateObject(otherGateway, testNamespace)
+			Expect(k8sClient.Create(context.Background(), otherGateway)).To(Succeed())
 
 			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = targetRefName
-				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(targetRefNamespace))
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(otherGateway.Name)
+				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(otherNamespace))
 			})
+			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
 
-			err := k8sClient.Create(context.Background(), policy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
+			Eventually(func() bool {
+				return testGatewayIsReady(otherGateway)() && assertAcceptedCondFalseAndEnforcedCondNil(policy, string(gatewayapiv1alpha2.PolicyReasonInvalid), fmt.Sprintf("AuthPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", otherNamespace))()
+			}, 30*time.Second, 5*time.Second).Should(BeTrue())
 
-			Eventually(assertAcceptedCondFalseAndEnforcedCondNil(policy, string(gatewayapiv1alpha2.PolicyReasonInvalid),
-				fmt.Sprintf("AuthPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", targetRefNamespace),
-			), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Expect(k8sClient.Delete(context.Background(), otherGateway)).To(Succeed())
+			DeleteNamespaceCallback(&otherNamespace)()
 		})
 	})
 

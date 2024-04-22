@@ -21,6 +21,7 @@ import (
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
@@ -378,20 +379,28 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				time.Minute, 5*time.Second).Should(BeTrue())
 		})
 
-		It("Validation reason", func() {
-			const targetRefName, targetRefNamespace = "istio-ingressgateway", "istio-system"
+		It("Invalid reason", func() {
+			var otherNamespace string
+			CreateNamespace(&otherNamespace)
+			// create a gateway in another namespace
+			otherGateway := testBuildBasicGateway("gateway-other", otherNamespace)
+			otherGateway.Spec.Listeners[0].Hostname = &[]gatewayapiv1.Hostname{"*.other.example.com"}[0]
+			kuadrant.AnnotateObject(otherGateway, testNamespace)
+			Expect(k8sClient.Create(context.Background(), otherGateway)).To(Succeed())
 
-			rlp := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = targetRefName
-				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(targetRefNamespace))
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(otherGateway.Name)
+				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(otherNamespace))
 			})
-			err := k8sClient.Create(context.Background(), rlp)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
 
-			Eventually(assertAcceptedConditionFalse(rlp, string(gatewayapiv1alpha2.PolicyReasonInvalid),
-				fmt.Sprintf("RateLimitPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", targetRefNamespace)),
-				time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(func() bool {
+				return testGatewayIsReady(otherGateway)() && assertAcceptedConditionFalse(policy, string(gatewayapiv1alpha2.PolicyReasonInvalid), fmt.Sprintf("RateLimitPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", otherNamespace))()
+			}, 30*time.Second, 5*time.Second).Should(BeTrue())
+
+			Expect(k8sClient.Delete(context.Background(), otherGateway)).To(Succeed())
+			DeleteNamespaceCallback(&otherNamespace)()
 		})
 	})
 

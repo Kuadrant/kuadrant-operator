@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
@@ -28,8 +29,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -319,6 +323,22 @@ func (r *TargetStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		mappers.WithClient(r.Client()),
 	)
 
+	policyStatusChangedPredicate := predicate.Funcs{
+		UpdateFunc: func(ev event.UpdateEvent) bool {
+			oldPolicy, ok := ev.ObjectOld.(kuadrantgatewayapi.Policy)
+			if !ok {
+				return false
+			}
+			newPolicy, ok := ev.ObjectNew.(kuadrantgatewayapi.Policy)
+			if !ok {
+				return false
+			}
+			oldStatus := oldPolicy.GetStatus()
+			newStatus := newPolicy.GetStatus()
+			return !reflect.DeepEqual(oldStatus, newStatus)
+		},
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&gatewayapiv1.Gateway{}).
 		Watches(
@@ -327,19 +347,23 @@ func (r *TargetStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		Watches(
 			&kuadrantv1beta2.AuthPolicy{},
-			PolicyStatusEventHandlerFromMapFunc(policyToParentGatewaysEventMapper.Map),
+			handler.EnqueueRequestsFromMapFunc(policyToParentGatewaysEventMapper.Map),
+			builder.WithPredicates(policyStatusChangedPredicate),
 		).
 		Watches(
 			&kuadrantv1alpha1.DNSPolicy{},
-			PolicyStatusEventHandlerFromMapFunc(policyToParentGatewaysEventMapper.Map),
+			handler.EnqueueRequestsFromMapFunc(policyToParentGatewaysEventMapper.Map),
+			builder.WithPredicates(policyStatusChangedPredicate),
 		).
 		Watches(
 			&kuadrantv1beta2.RateLimitPolicy{},
-			PolicyStatusEventHandlerFromMapFunc(policyToParentGatewaysEventMapper.Map),
+			handler.EnqueueRequestsFromMapFunc(policyToParentGatewaysEventMapper.Map),
+			builder.WithPredicates(policyStatusChangedPredicate),
 		).
 		Watches(
 			&kuadrantv1alpha1.TLSPolicy{},
-			PolicyStatusEventHandlerFromMapFunc(policyToParentGatewaysEventMapper.Map),
+			handler.EnqueueRequestsFromMapFunc(policyToParentGatewaysEventMapper.Map),
+			builder.WithPredicates(policyStatusChangedPredicate),
 		).
 		Complete(r)
 }

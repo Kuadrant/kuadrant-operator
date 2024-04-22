@@ -22,7 +22,6 @@ package v1alpha1
 
 import (
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	apiv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -225,7 +224,7 @@ func (in *HealthCheckSpec) DeepCopyInto(out *HealthCheckSpec) {
 	}
 	if in.Protocol != nil {
 		in, out := &in.Protocol, &out.Protocol
-		*out = new(apiv1alpha1.HealthProtocol)
+		*out = new(string)
 		**out = **in
 	}
 	if in.FailureThreshold != nil {
@@ -235,7 +234,7 @@ func (in *HealthCheckSpec) DeepCopyInto(out *HealthCheckSpec) {
 	}
 	if in.AdditionalHeadersRef != nil {
 		in, out := &in.AdditionalHeadersRef, &out.AdditionalHeadersRef
-		*out = new(apiv1alpha1.AdditionalHeadersRef)
+		*out = new(string)
 		**out = **in
 	}
 	if in.ExpectedResponses != nil {

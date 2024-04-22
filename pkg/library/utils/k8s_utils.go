@@ -17,11 +17,13 @@ limitations under the License.
 package utils
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,7 +31,11 @@ import (
 
 const (
 	DeleteTagAnnotation = "kuadrant.io/delete"
+	ClusterIDLength     = 6
+	clusterIDNamespace  = "kube-system"
 )
+
+var clusterUID string
 
 // ObjectInfo generates a string representation of the provided Kubernetes object, including its kind and name.
 // The generated string follows the format: "kind/name".
@@ -146,4 +152,19 @@ func GetLabel(obj metav1.Object, key string) string {
 		return ""
 	}
 	return obj.GetLabels()[key]
+}
+
+func GetClusterUID(ctx context.Context, c client.Client) (string, error) {
+	//Already calculated? return it
+	if clusterUID != "" {
+		return clusterUID, nil
+	}
+
+	ns := &corev1.Namespace{}
+	err := c.Get(ctx, client.ObjectKey{Name: clusterIDNamespace}, ns)
+	if err != nil {
+		return "", err
+	}
+	clusterUID = string(ns.UID)
+	return clusterUID, nil
 }

@@ -21,6 +21,7 @@ import (
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
@@ -108,7 +109,8 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
-			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeFalse())
+			Expect(testRLPEnforcedCondition(rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
 
 			// Check envoy filter
 			Eventually(func() bool {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -72,11 +73,11 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 			return nil, err
 		}
 
-		refs := routeAffectedPolicies(t, ap)
-		if len(refs) != 0 {
+		overrides := routeGatewayAuthOverrides(t, ap)
+		if len(overrides) != 0 {
 			logger.V(1).Info("targeted gateway has authpolicy with atomic overrides, skipping authorino authconfig for the HTTPRoute authpolicy")
 			utils.TagObjectToDelete(authConfig)
-			r.AffectedPolicyMap.SetAffectedPolicy(ap, refs)
+			r.AffectedPolicyMap.SetAffectedPolicy(ap, overrides)
 			return authConfig, nil
 		}
 		route = obj
@@ -194,26 +195,43 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	return mergeConditionsFromRouteSelectorsIntoConfigs(ap, route, authConfig)
 }
 
-func routeAffectedPolicies(t *kuadrantgatewayapi.Topology, ap *api.AuthPolicy) []client.ObjectKey {
-	refs := make([]client.ObjectKey, 0)
+// routeGatewayAuthOverrides returns the GW auth policies that has a
+func routeGatewayAuthOverrides(t *kuadrantgatewayapi.Topology, ap *api.AuthPolicy) []client.ObjectKey {
+	affectedPolicies := getAffectedPolicies(t, ap)
+
+	// Filter the policies where:
+	// 1. targets a gateway
+	// 2. is not the current AP that is being assessed
+	// 3. is an overriding policy
+	affectedPolicies = utils.Filter(affectedPolicies, func(policy kuadrantgatewayapi.Policy) bool {
+		p, ok := policy.(*api.AuthPolicy)
+		if !ok {
+			return false
+		}
+		return kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef()) &&
+			ap.GetUID() != policy.GetUID() && p.IsAtomicOverride()
+	})
+
+	return utils.Map(affectedPolicies, func(policy kuadrantgatewayapi.Policy) client.ObjectKey {
+		return client.ObjectKeyFromObject(policy)
+	})
+}
+
+func getAffectedPolicies(t *kuadrantgatewayapi.Topology, ap *api.AuthPolicy) []kuadrantgatewayapi.Policy {
+	topologyIndexes := kuadrantgatewayapi.NewTopologyIndexes(t)
+	var affectedPolicies []kuadrantgatewayapi.Policy
+
+	// If AP is listed within the policies from gateway, it potentially can be overridden by it
 	for _, gw := range t.Gateways() {
-		affectedPolicies := utils.Filter(gw.AttachedPolicies(), func(policy kuadrantgatewayapi.Policy) bool {
-			p, ok := policy.(*api.AuthPolicy)
-			if !ok {
-				return false
-			}
-			return kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef()) &&
-				ap.GetUID() != policy.GetUID() && p.IsAtomicOverride()
-		})
-
-		policyKeys := utils.Map(affectedPolicies, func(policy kuadrantgatewayapi.Policy) client.ObjectKey {
-			return client.ObjectKeyFromObject(policy)
-		})
-
-		refs = append(refs, policyKeys...)
+		policyList := topologyIndexes.PoliciesFromGateway(gw.Gateway)
+		if slices.Contains(utils.Map(policyList, func(p kuadrantgatewayapi.Policy) client.ObjectKey {
+			return client.ObjectKeyFromObject(p)
+		}), client.ObjectKeyFromObject(ap)) {
+			affectedPolicies = append(affectedPolicies, policyList...)
+		}
 	}
 
-	return refs
+	return affectedPolicies
 }
 
 // authConfigName returns the name of Authorino AuthConfig CR.

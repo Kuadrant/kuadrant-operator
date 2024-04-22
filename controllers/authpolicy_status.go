@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"slices"
 
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"k8s.io/utils/ptr"
+
 	"github.com/go-logr/logr"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -88,13 +91,18 @@ func (r *AuthPolicyReconciler) acceptedCondition(policy kuadrant.Policy, specErr
 func (r *AuthPolicyReconciler) enforcedCondition(ctx context.Context, policy *api.AuthPolicy, targetNetworkObject client.Object) *metav1.Condition {
 	logger, _ := logr.FromContext(ctx)
 
+	t, err := r.generateTopology(ctx)
+	if err != nil {
+		logger.V(1).Info("Failed to generate topology", "error", err)
+		return nil
+	}
 	// Check if the policy is overridden
 	// Note: This logic assumes synchronous processing, where computing the desired AuthConfig, marking the AuthPolicy
 	// as overridden, and calculating the Enforced condition happen sequentially.
 	// Introducing a goroutine in this flow could break this assumption and lead to unexpected behavior.
 	if r.OverriddenPolicyMap.IsPolicyOverridden(policy) {
 		logger.V(1).Info("Gateway Policy is overridden")
-		return r.handleGatewayPolicyOverride(logger, policy, targetNetworkObject)
+		return r.handlePolicyOverride(logger, policy, targetNetworkObject, t)
 	}
 
 	// Check if the AuthConfig is ready
@@ -130,6 +138,18 @@ func (r *AuthPolicyReconciler) isAuthConfigReady(ctx context.Context, policy *ap
 	return authConfig.Status.Ready(), nil
 }
 
+func (r *AuthPolicyReconciler) handlePolicyOverride(logger logr.Logger, policy *api.AuthPolicy, targetNetworkObject client.Object, t *kuadrantgatewayapi.Topology) *metav1.Condition {
+	switch targetNetworkObject.(type) {
+	case *gatewayapiv1.Gateway:
+		return r.handleGatewayPolicyOverride(logger, policy, targetNetworkObject)
+	case *gatewayapiv1.HTTPRoute:
+		return r.handleHTTPRoutePolicyOverride(logger, policy, targetNetworkObject, t)
+	default:
+		logger.Error(errors.New("this point should never be reached"), "failed to match target network object", targetNetworkObject)
+		return nil
+	}
+}
+
 // handleGatewayPolicyOverride handles the case where the Gateway Policy is overridden by filtering policy references
 // and creating a corresponding error condition.
 func (r *AuthPolicyReconciler) handleGatewayPolicyOverride(logger logr.Logger, policy *api.AuthPolicy, targetNetworkObject client.Object) *metav1.Condition {
@@ -145,4 +165,54 @@ func (r *AuthPolicyReconciler) handleGatewayPolicyOverride(logger logr.Logger, p
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err), false)
 	}
 	return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), string(jsonData)), false)
+}
+
+// handleHTTPRoutePolicyOverride handles the case where the HTTPRoute Policy is overridden by filtering policy references
+// and creating a corresponding error condition.
+func (r *AuthPolicyReconciler) handleHTTPRoutePolicyOverride(logger logr.Logger, policy *api.AuthPolicy, targetNetworkObject client.Object, t *kuadrantgatewayapi.Topology) *metav1.Condition {
+	obj := targetNetworkObject.(*gatewayapiv1.HTTPRoute)
+	httpRouteWrapper := kuadrant.HTTPRouteWrapper{HTTPRoute: obj, Referrer: policy}
+	refs := httpRouteWrapper.PolicyRefs(t)
+	jsonData, err := json.Marshal(refs)
+	if err != nil {
+		logger.Error(err, "Failed to marshal filtered references")
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err), false)
+	}
+	return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policy.Kind(), string(jsonData)), false)
+}
+
+func (r *AuthPolicyReconciler) generateTopology(ctx context.Context) (*kuadrantgatewayapi.Topology, error) {
+	logger, _ := logr.FromContext(ctx)
+
+	gwList := &gatewayapiv1.GatewayList{}
+	err := r.Client().List(ctx, gwList)
+	logger.V(1).Info("topology: list gateways", "#Gateways", len(gwList.Items), "err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	routeList := &gatewayapiv1.HTTPRouteList{}
+	err = r.Client().List(ctx, routeList)
+	logger.V(1).Info("topology: list httproutes", "#HTTPRoutes", len(routeList.Items), "err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	aplist := &api.AuthPolicyList{}
+	err = r.Client().List(ctx, aplist)
+	logger.V(1).Info("topology: list rate limit policies", "#RLPS", len(aplist.Items), "err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	policies := utils.Map(aplist.Items, func(p api.AuthPolicy) kuadrantgatewayapi.Policy {
+		return &p
+	})
+
+	return kuadrantgatewayapi.NewTopology(
+		kuadrantgatewayapi.WithGateways(utils.Map(gwList.Items, ptr.To[gatewayapiv1.Gateway])),
+		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
+		kuadrantgatewayapi.WithPolicies(policies),
+		kuadrantgatewayapi.WithLogger(logger),
+	)
 }

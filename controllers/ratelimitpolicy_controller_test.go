@@ -662,7 +662,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		It("Invalid reason", func(ctx SpecContext) {
 			var otherNamespace string
 			CreateNamespace(&otherNamespace)
-			defer DeleteNamespaceCallback(&otherNamespace)
+			defer DeleteNamespaceCallback(&otherNamespace)()
 
 			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Namespace = otherNamespace // create the policy in a different namespace than the target
@@ -672,7 +672,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 
-			Eventually(assertAcceptedConditionFalse(ctx, policy, string(gatewayapiv1alpha2.PolicyReasonInvalid), fmt.Sprintf("RateLimitPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", testNamespace)), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(assertAcceptedConditionFalse(ctx, policy, string(gatewayapiv1alpha2.PolicyReasonInvalid), fmt.Sprintf("RateLimitPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", testNamespace))).WithContext(ctx).Should(Succeed())
 		}, SpecTimeout(time.Minute))
 	})
 

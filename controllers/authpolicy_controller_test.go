@@ -1136,10 +1136,10 @@ var _ = Describe("AuthPolicy controller", func() {
 			), 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
 
-		It("Invalid reason", func() {
+		It("Invalid reason", func(ctx SpecContext) {
 			var otherNamespace string
 			CreateNamespace(&otherNamespace)
-			defer DeleteNamespaceCallback(&otherNamespace)
+			defer DeleteNamespaceCallback(&otherNamespace)()
 
 			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Namespace = otherNamespace // create the policy in a different namespace than the target
@@ -1147,10 +1147,10 @@ var _ = Describe("AuthPolicy controller", func() {
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(testGatewayName)
 				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(testNamespace))
 			})
-			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 
-			Eventually(assertAcceptedCondFalseAndEnforcedCondNil(policy, string(gatewayapiv1alpha2.PolicyReasonInvalid), fmt.Sprintf("AuthPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", testNamespace)), 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			Eventually(assertAcceptedCondFalseAndEnforcedCondNil(policy, string(gatewayapiv1alpha2.PolicyReasonInvalid), fmt.Sprintf("AuthPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", testNamespace))).WithContext(ctx).Should(BeTrue())
+		}, SpecTimeout(time.Minute))
 	})
 
 	Context("AuthPolicy enforced condition reasons", func() {

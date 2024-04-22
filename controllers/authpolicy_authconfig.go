@@ -195,7 +195,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 	return mergeConditionsFromRouteSelectorsIntoConfigs(ap, route, authConfig)
 }
 
-// routeGatewayAuthOverrides returns the GW auth policies that has a
+// routeGatewayAuthOverrides returns the GW auth policies that has an override field set
 func routeGatewayAuthOverrides(t *kuadrantgatewayapi.Topology, ap *api.AuthPolicy) []client.ObjectKey {
 	affectedPolicies := getAffectedPolicies(t, ap)
 

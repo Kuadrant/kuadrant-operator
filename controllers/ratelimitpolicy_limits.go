@@ -189,7 +189,7 @@ func (r *RateLimitPolicyReconciler) getAffectedPoliciesInfo(rlp *kuadrantv1beta2
 }
 
 // applyGatewayOverrides a Gateway RLP is not affected if there is untargetted routes or affects other policies
-// Otherwise, it
+// Otherwise, it has no free routes, and therefore "overridden" by the route policies
 func (r *RateLimitPolicyReconciler) applyGatewayOverrides(logger logr.Logger, rlp *kuadrantv1beta2.RateLimitPolicy, numUnTargetedRoutes int, affectedPolicies []kuadrantgatewayapi.Policy) {
 	if rlp.Spec.Overrides == nil && numUnTargetedRoutes == 0 {
 		r.AffectedPolicyMap.SetAffectedPolicy(rlp, utils.Map(affectedPolicies, func(p kuadrantgatewayapi.Policy) client.ObjectKey {

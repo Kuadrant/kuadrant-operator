@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -113,7 +114,7 @@ var _ PolicyError = ErrOverridden{}
 
 type ErrOverridden struct {
 	Kind               string
-	OverridingPolicies string
+	OverridingPolicies []client.ObjectKey
 }
 
 func (e ErrOverridden) Error() string {
@@ -124,7 +125,7 @@ func (e ErrOverridden) Reason() gatewayapiv1alpha2.PolicyConditionReason {
 	return PolicyReasonOverridden
 }
 
-func NewErrOverridden(kind, overridingPolicies string) ErrOverridden {
+func NewErrOverridden(kind string, overridingPolicies []client.ObjectKey) ErrOverridden {
 	return ErrOverridden{
 		Kind:               kind,
 		OverridingPolicies: overridingPolicies,

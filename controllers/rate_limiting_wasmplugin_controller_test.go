@@ -21,6 +21,7 @@ import (
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
@@ -93,6 +94,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
@@ -253,6 +255,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
@@ -396,6 +399,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
@@ -496,6 +500,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeFalse())
+			Expect(testRLPEnforcedCondition(rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
@@ -575,6 +581,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
@@ -637,6 +644,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpAKey := client.ObjectKey{Name: rlpAName, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlpAKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpAKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create httproute C
 			httpRouteC := testBuildBasicHttpRoute(routeCName, gwName, testNamespace, []string{"*.c.example.com"})
@@ -701,6 +709,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpBKey := client.ObjectKey{Name: rlpBName, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlpBKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpBKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check wasm plugin only has configuration ONLY from the RLP targeting the gateway
 			// it may take some reconciliation loops to get to that, so checking it with eventually
@@ -834,12 +843,15 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeFalse())
+			Expect(testRLPEnforcedCondition(rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
 
 			// create Route A -> Gw A
 			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
 			err = k8sClient.Create(context.Background(), httpRoute)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute)), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create Gateway B
 			gwB := testBuildBasicGateway(gwBName, testNamespace)
@@ -1039,6 +1051,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Initial state set.
 			// Check wasm plugin for gateway A has configuration from the route
@@ -1334,6 +1347,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Initial state set.
 			// Check wasm plugin has configuration from the route A
@@ -1567,6 +1581,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlp1Key := client.ObjectKey{Name: rlp1Name, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlp1Key), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlp1Key), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Initial state set.
 			// Check wasm plugin for gateway A has configuration from the route 1
@@ -1671,6 +1686,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlp2Key := client.ObjectKey{Name: rlp2Name, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlp2Key), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlp2Key), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check wasm plugin has configuration from the route A and RLP 2.
 			// RLP 1 should not add any config to the wasm plugin
@@ -1830,6 +1846,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlp1Key := client.ObjectKey{Name: rlp1Name, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlp1Key), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlp1Key), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create RLP 2 -> Route A
 			rlp2 := &kuadrantv1beta2.RateLimitPolicy{
@@ -1861,6 +1878,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlp2Key := client.ObjectKey{Name: rlp2Name, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlp2Key), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlp2Key), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Initial state set.
 			// Check wasm plugin for gateway A has configuration from the route A only affected by RLP 2
@@ -2127,6 +2145,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
@@ -2177,5 +2196,167 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 			}))
 		})
+	})
+
+	Context("Gateway defaults & overrides", func() {
+		var (
+			routeName    = "toystore-route"
+			gwRLPName    = "gw-rlp"
+			routeRLPName = "route-rlp"
+			gwName       = "toystore-gw"
+			gateway      *gatewayapiv1.Gateway
+		)
+
+		beforeEachCallback := func() {
+			gateway = testBuildBasicGateway(gwName, testNamespace)
+			err := k8sClient.Create(context.Background(), gateway)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(testGatewayIsReady(gateway), 30*time.Second, 5*time.Second).Should(BeTrue())
+		}
+
+		expectedWasmPluginConfig := func(rlpKey client.ObjectKey, rlp *kuadrantv1beta2.RateLimitPolicy, key, hostname string) *wasm.Plugin {
+			return &wasm.Plugin{
+				FailureMode: wasm.FailureModeDeny,
+				RateLimitPolicies: []wasm.RateLimitPolicy{
+					{
+						Name:   rlpKey.String(),
+						Domain: rlptools.LimitsNamespaceFromRLP(rlp),
+						Rules: []wasm.Rule{
+							{
+								Conditions: []wasm.Condition{
+									{
+										AllOf: []wasm.PatternExpression{
+											{
+												Selector: "request.url_path",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+												Value:    "/toy",
+											},
+											{
+												Selector: "request.method",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+												Value:    "GET",
+											},
+										},
+									},
+								},
+								Data: []wasm.DataItem{
+									{
+										Static: &wasm.StaticSpec{
+											Key:   key,
+											Value: "1",
+										},
+									},
+								},
+							},
+						},
+						Hostnames: []string{hostname},
+						Service:   common.KuadrantRateLimitClusterName,
+					},
+				},
+			}
+		}
+
+		BeforeEach(beforeEachCallback)
+
+		It("Limit key shifts correctly from Gateway RLP default -> Route RLP -> Gateway RLP overrides", func(ctx SpecContext) {
+			// create httproute
+			httpRoute := testBuildBasicHttpRoute(routeName, gwName, testNamespace, []string{"*.example.com"})
+			Expect(k8sClient.Create(ctx, httpRoute)).To(Succeed())
+			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
+
+			// create GW ratelimitpolicy with defaults
+			gwRLP := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: gwRLPName, Namespace: testNamespace},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1.GroupName,
+						Kind:  "Gateway",
+						Name:  gatewayapiv1.ObjectName(gwName),
+					},
+					Defaults: &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"gateway": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())
+
+			// Check RLP status is available
+			gwRLPKey := client.ObjectKeyFromObject(gwRLP)
+			Eventually(testRLPIsAccepted(gwRLPKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(gwRLPKey), time.Minute, 5*time.Second).Should(BeTrue())
+
+			// Check wasm plugin
+			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			Eventually(testWasmPluginIsAvailable(wasmPluginKey), time.Minute, 5*time.Second).Should(BeTrue())
+			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
+			// must exist
+			Expect(k8sClient.Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(gwRLPKey, gwRLP, "limit.gateway__4ea5ee68", "*")))
+
+			// Create Route RLP
+			routeRLP := &kuadrantv1beta2.RateLimitPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{Name: routeRLPName, Namespace: testNamespace},
+				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group: gatewayapiv1.GroupName,
+						Kind:  "HTTPRoute",
+						Name:  gatewayapiv1.ObjectName(routeName),
+					},
+					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta2.Limit{
+							"route": {
+								Rates: []kuadrantv1beta2.Rate{
+									{
+										Limit: 10, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, routeRLP)).To(Succeed())
+			routeRLPKey := client.ObjectKeyFromObject(routeRLP)
+			Eventually(testRLPIsAccepted(routeRLPKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(testRLPIsEnforced(routeRLPKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(testRLPIsEnforced(gwRLPKey)).WithContext(ctx).Should(BeFalse())
+			// Wasm plugin config should now use route RLP limit key
+			Expect(k8sClient.Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+			existingWASMConfig, err = rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, "limit.route__8a84e406", "*.example.com")))
+
+			// Update GW RLP to overrides
+			Eventually(func(g Gomega) {
+				Expect(k8sClient.Get(ctx, gwRLPKey, gwRLP)).To(Succeed())
+				gwRLP.Spec.Overrides = gwRLP.Spec.Defaults.DeepCopy()
+				gwRLP.Spec.Defaults = nil
+				Expect(k8sClient.Update(ctx, gwRLP)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+			Eventually(testRLPIsEnforced(gwRLPKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(testRLPIsEnforced(routeRLPKey)).WithContext(ctx).Should(BeFalse())
+			// Wasm plugin config should now use GW RLP limit key for route
+			Expect(k8sClient.Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+			existingWASMConfig, err = rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, "limit.gateway__4ea5ee68", "*.example.com")))
+
+		}, SpecTimeout(2*time.Minute))
 	})
 })

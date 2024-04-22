@@ -26,8 +26,8 @@ const authPolicyFinalizer = "authpolicy.kuadrant.io/finalizer"
 type AuthPolicyReconciler struct {
 	*reconcilers.BaseReconciler
 	TargetRefReconciler reconcilers.TargetRefReconciler
-	// OverriddenPolicyMap tracks the overridden policies to report their status.
-	OverriddenPolicyMap *kuadrant.OverriddenPolicyMap
+	// AffectedPolicyMap tracks the affected policies to report their status.
+	AffectedPolicyMap *kuadrant.AffectedPolicyMap
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -72,7 +72,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, ap, targetNetworkObject, kuadrant.NewErrTargetNotFound(ap.Kind(), ap.GetTargetRef(), delResErr))
+				return r.reconcileStatus(ctx, ap, kuadrant.NewErrTargetNotFound(ap.Kind(), ap.GetTargetRef(), delResErr))
 			}
 			return ctrl.Result{}, err
 		}
@@ -108,7 +108,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	specErr := r.reconcileResources(ctx, ap, targetNetworkObject)
 
 	// reconcile authpolicy status
-	statusResult, statusErr := r.reconcileStatus(ctx, ap, targetNetworkObject, specErr)
+	statusResult, statusErr := r.reconcileStatus(ctx, ap, specErr)
 
 	if specErr != nil {
 		return ctrl.Result{}, specErr

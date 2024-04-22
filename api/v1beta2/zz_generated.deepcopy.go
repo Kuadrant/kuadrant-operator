@@ -481,6 +481,11 @@ func (in *RateLimitPolicySpec) DeepCopyInto(out *RateLimitPolicySpec) {
 		*out = new(RateLimitPolicyCommonSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.Overrides != nil {
+		in, out := &in.Overrides, &out.Overrides
+		*out = new(RateLimitPolicyCommonSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	in.RateLimitPolicyCommonSpec.DeepCopyInto(&out.RateLimitPolicyCommonSpec)
 }
 

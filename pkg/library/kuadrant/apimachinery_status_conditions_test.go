@@ -12,6 +12,7 @@ import (
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
@@ -265,13 +266,13 @@ func TestEnforcedCondition(t *testing.T) {
 			name: "enforced false - overridden",
 			args: args{
 				policy: &FakePolicy{},
-				err:    NewErrOverridden(policy.Kind(), "ns1/policy1"),
+				err:    NewErrOverridden(policy.Kind(), []client.ObjectKey{{Namespace: "ns1", Name: "policy1"}, {Namespace: "ns2", Name: "policy2"}}),
 			},
 			want: &metav1.Condition{
 				Type:    string(PolicyConditionEnforced),
 				Status:  metav1.ConditionFalse,
 				Reason:  string(PolicyReasonOverridden),
-				Message: "FakePolicy is overridden by ns1/policy1",
+				Message: "FakePolicy is overridden by [ns1/policy1 ns2/policy2]",
 			},
 		},
 	}

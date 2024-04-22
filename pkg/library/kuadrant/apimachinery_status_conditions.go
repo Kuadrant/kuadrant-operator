@@ -10,6 +10,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -21,38 +22,49 @@ const (
 	PolicyReasonUnknown    gatewayapiv1alpha2.PolicyConditionReason = "Unknown"
 )
 
-func NewOverriddenPolicyMap() *OverriddenPolicyMap {
-	return &OverriddenPolicyMap{
-		policies: make(map[types.UID]bool),
+func NewAffectedPolicyMap() *AffectedPolicyMap {
+	return &AffectedPolicyMap{
+		policies: make(map[types.UID][]client.ObjectKey),
 	}
 }
 
-type OverriddenPolicyMap struct {
-	policies map[types.UID]bool
+type AffectedPolicyMap struct {
+	policies map[types.UID][]client.ObjectKey
 	mu       sync.RWMutex
 }
 
-// SetOverriddenPolicy sets the provided Policy as overridden in the tracking map.
-func (o *OverriddenPolicyMap) SetOverriddenPolicy(p Policy) {
+// SetAffectedPolicy sets the provided Policy as Affected in the tracking map.
+func (o *AffectedPolicyMap) SetAffectedPolicy(p Policy, affectedBy []client.ObjectKey) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
 	if o.policies == nil {
-		o.policies = make(map[types.UID]bool)
+		o.policies = make(map[types.UID][]client.ObjectKey)
 	}
-	o.policies[p.GetUID()] = true
+	o.policies[p.GetUID()] = affectedBy
 }
 
-// RemoveOverriddenPolicy removes the provided Policy from the tracking map of overridden policies.
-func (o *OverriddenPolicyMap) RemoveOverriddenPolicy(p Policy) {
+// RemoveAffectedPolicy removes the provided Policy from the tracking map of Affected policies.
+func (o *AffectedPolicyMap) RemoveAffectedPolicy(p Policy) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
 	delete(o.policies, p.GetUID())
 }
 
-// IsPolicyOverridden checks if the provided Policy is overridden based on the tracking map maintained.
-func (o *OverriddenPolicyMap) IsPolicyOverridden(p Policy) bool {
+// IsPolicyAffected checks if the provided Policy is affected based on the tracking map maintained.
+func (o *AffectedPolicyMap) IsPolicyAffected(p Policy) bool {
+	return o.policies[p.GetUID()] != nil
+}
+
+// IsPolicyOverridden checks if the provided Policy is affected based on the tracking map maintained.
+// It is overridden if there is policies affecting it
+func (o *AffectedPolicyMap) IsPolicyOverridden(p Policy) bool {
+	return o.IsPolicyAffected(p) && len(o.policies[p.GetUID()]) > 0
+}
+
+// PolicyAffectedBy returns the clients keys that a policy is Affected by
+func (o *AffectedPolicyMap) PolicyAffectedBy(p Policy) []client.ObjectKey {
 	return o.policies[p.GetUID()]
 }
 

@@ -19,7 +19,36 @@ func (a PolicyByCreationTimestamp) Less(i, j int) bool {
 	p1Time := ptr.To(a[i].GetCreationTimestamp())
 	p2Time := ptr.To(a[j].GetCreationTimestamp())
 	if !p1Time.Equal(p2Time) {
-		return ptr.To(a[i].GetCreationTimestamp()).Before(ptr.To(a[j].GetCreationTimestamp()))
+		return p1Time.Before(p2Time)
+	}
+
+	//  The policy appearing first in alphabetical order by "{namespace}/{name}".
+	return client.ObjectKeyFromObject(a[i]).String() < client.ObjectKeyFromObject(a[j]).String()
+}
+
+type PolicyByTargetRefKindAndCreationTimeStamp []Policy
+
+func (a PolicyByTargetRefKindAndCreationTimeStamp) Len() int      { return len(a) }
+func (a PolicyByTargetRefKindAndCreationTimeStamp) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a PolicyByTargetRefKindAndCreationTimeStamp) Less(i, j int) bool {
+	targetRef1 := a[i].GetTargetRef()
+	targetRef2 := a[j].GetTargetRef()
+
+	// Compare kind first
+	if targetRef1.Kind != targetRef2.Kind {
+		if targetRef1.Kind == "Gateway" {
+			return true
+		} else if targetRef2.Kind == "HTTPRoute" {
+			return false
+		}
+		return targetRef1.Kind < targetRef2.Kind
+	}
+
+	// Then compare timestamp
+	p1Time := ptr.To(a[i].GetCreationTimestamp())
+	p2Time := ptr.To(a[j].GetCreationTimestamp())
+	if !p1Time.Equal(p2Time) {
+		return p1Time.Before(p2Time)
 	}
 
 	//  The policy appearing first in alphabetical order by "{namespace}/{name}".

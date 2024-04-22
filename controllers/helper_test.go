@@ -37,6 +37,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -88,6 +89,16 @@ func ApplyKuadrantCRWithName(namespace, name string) {
 	}, time.Minute, 5*time.Second).Should(BeTrue())
 }
 
+func CreateNamespaceWithContext(ctx context.Context, namespace *string) {
+	nsObject := &v1.Namespace{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
+		ObjectMeta: metav1.ObjectMeta{GenerateName: "test-namespace-"},
+	}
+	Expect(testClient().Create(ctx, nsObject)).To(Succeed())
+
+	*namespace = nsObject.Name
+}
+
 func CreateNamespace(namespace *string) {
 	var generatedTestNamespace = "test-namespace-" + uuid.New().String()
 
@@ -106,6 +117,16 @@ func CreateNamespace(namespace *string) {
 	}, time.Minute, 5*time.Second).Should(BeTrue())
 
 	*namespace = existingNamespace.Name
+}
+
+func DeleteNamespaceCallbackWithContext(ctx context.Context, namespace *string) {
+	desiredTestNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: *namespace}}
+	Eventually(func(g Gomega) {
+		err := k8sClient.Delete(ctx, desiredTestNamespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
+		g.Expect(err).ToNot(BeNil())
+		g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+	}).WithContext(ctx).Should(Succeed())
+
 }
 
 func DeleteNamespaceCallback(namespace *string) func() {
@@ -375,20 +396,25 @@ func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {
 }
 
 func testRLPIsAccepted(rlpKey client.ObjectKey) func() bool {
-	return func() bool {
-		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
-		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
-		if err != nil {
-			logf.Log.V(1).Info("ratelimitpolicy not read", "rlp", rlpKey, "error", err)
-			return false
-		}
-		if !meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
-			logf.Log.V(1).Info("ratelimitpolicy not available", "rlp", rlpKey)
-			return false
-		}
+	return testRLPIsConditionTrue(rlpKey, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+}
 
-		return true
+func testRLPIsEnforced(rlpKey client.ObjectKey) func() bool {
+	return testRLPIsConditionTrue(rlpKey, string(kuadrant.PolicyConditionEnforced))
+}
+
+func testRLPEnforcedCondition(rlpKey client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) bool {
+	p := &kuadrantv1beta2.RateLimitPolicy{}
+	if err := k8sClient.Get(context.Background(), rlpKey, p); err != nil {
+		return false
 	}
+
+	cond := meta.FindStatusCondition(p.Status.Conditions, string(kuadrant.PolicyConditionEnforced))
+	if cond == nil {
+		return false
+	}
+
+	return cond.Reason == string(reason) && cond.Message == message
 }
 
 func testRLPIsNotAccepted(rlpKey client.ObjectKey) func() bool {
@@ -405,6 +431,14 @@ func testRLPIsNotAccepted(rlpKey client.ObjectKey) func() bool {
 		}
 
 		return true
+	}
+}
+
+func testRLPIsConditionTrue(rlpKey client.ObjectKey, condition string) func() bool {
+	return func() bool {
+		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+		return err == nil && meta.IsStatusConditionTrue(existingRLP.Status.Conditions, condition)
 	}
 }
 

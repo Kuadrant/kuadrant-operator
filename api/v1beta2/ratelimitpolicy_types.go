@@ -122,6 +122,9 @@ func (l Limit) CountersAsStringList() []string {
 // RateLimitPolicySpec defines the desired state of RateLimitPolicy
 // +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.limits) || !self.limits.exists(x, has(self.limits[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
 // +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && has(self.limits))",message="Implicit and explicit defaults are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && has(self.overrides))",message="Overrides and explicit defaults are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && has(self.limits))",message="Overrides and implicit defaults are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && self.targetRef.kind != 'Gateway')",message="Overrides are only allowed for policies targeting a Gateway resource"
 type RateLimitPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
@@ -132,6 +135,11 @@ type RateLimitPolicySpec struct {
 	// Defaults are mutually exclusive with implicit defaults defined by RateLimitPolicyCommonSpec.
 	// +optional
 	Defaults *RateLimitPolicyCommonSpec `json:"defaults,omitempty"`
+
+	// Overrides define override values for this policy and for policies inheriting this policy.
+	// Overrides are mutually exclusive with implicit defaults and explicit Defaults defined by RateLimitPolicyCommonSpec.
+	// +optional
+	Overrides *RateLimitPolicyCommonSpec `json:"overrides,omitempty"`
 
 	// RateLimitPolicyCommonSpec defines implicit default values for this policy and for policies inheriting this policy.
 	// RateLimitPolicyCommonSpec is mutually exclusive with explicit defaults defined by Defaults.
@@ -284,6 +292,10 @@ func (r *RateLimitPolicy) DirectReferenceAnnotationName() string {
 func (r *RateLimitPolicySpec) CommonSpec() *RateLimitPolicyCommonSpec {
 	if r.Defaults != nil {
 		return r.Defaults
+	}
+
+	if r.Overrides != nil {
+		return r.Overrides
 	}
 
 	return &r.RateLimitPolicyCommonSpec

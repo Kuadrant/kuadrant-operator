@@ -102,6 +102,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check HTTPRoute direct back reference
 			routeKey := client.ObjectKey{Name: routeName, Namespace: testNamespace}
@@ -184,6 +185,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
@@ -231,6 +233,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeFalse())
+			Expect(testRLPEnforcedCondition(rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
 
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
@@ -283,6 +287,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, gwRLP)).To(Succeed())
 			rlpKey := client.ObjectKey{Name: gwRLP.Name, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Create HTTPRoute RLP with new default limits
 			routeRLP := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
@@ -300,6 +305,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, routeRLP)).To(Succeed())
 			rlpKey = client.ObjectKey{Name: routeRLP.Name, Namespace: testNamespace}
 			Eventually(testRLPIsAccepted(rlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
@@ -764,6 +770,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check HTTPRoute A direct back reference
 			routeAKey := client.ObjectKey{Name: routeAName, Namespace: testNamespace}
@@ -792,6 +799,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Check RLP status is available
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check HTTPRoute A direct back reference is gone
 			Eventually(
@@ -842,6 +850,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeFalse())
+			Expect(testRLPEnforcedCondition(rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
 
 			// Check Gateway direct back reference
 			gwAKey := client.ObjectKey{Name: gwAName, Namespace: testNamespace}
@@ -870,6 +880,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Check RLP status is available
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeFalse())
+			Expect(testRLPEnforcedCondition(rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
 
 			// Check Gw A direct back reference is gone
 			Eventually(
@@ -931,6 +943,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			rlpAKey := client.ObjectKeyFromObject(rlpA)
 			Eventually(testRLPIsAccepted(rlpAKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpAKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// create rlpB
 			rlpB := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
@@ -944,6 +957,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check RLP status is available
 			rlpBKey := client.ObjectKeyFromObject(rlpB)
 			Eventually(testRLPIsAccepted(rlpBKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpBKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check HTTPRoute A direct back reference
 			routeAKey := client.ObjectKey{Name: routeAName, Namespace: testNamespace}
@@ -1020,6 +1034,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			rlpKey := client.ObjectKeyFromObject(rlp)
 			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Check HTTPRoute A direct back reference
 			routeKey := client.ObjectKey{Name: routeName, Namespace: testNamespace}
@@ -1082,6 +1097,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			rlpAKey := client.ObjectKeyFromObject(rlpA)
 			Eventually(testRLPIsAccepted(rlpAKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpAKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			// Proceed with the update:
 			// new RLP B -> Route A (already taken)
@@ -1098,6 +1114,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check RLP status is not available
 			rlpBKey := client.ObjectKeyFromObject(rlpB)
 			Eventually(testRLPIsNotAccepted(rlpBKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpBKey), time.Minute, 5*time.Second).Should(BeFalse())
 
 			// Check HTTPRoute A direct back reference to RLP A
 			routeAKey := client.ObjectKey{Name: routeAName, Namespace: testNamespace}
@@ -1136,6 +1153,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				time.Minute, 5*time.Second).Should(BeTrue())
 
 			Eventually(testRLPIsAccepted(rlpBKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpBKey), time.Minute, 5*time.Second).Should(BeTrue())
 
 			routeBKey := client.ObjectKey{Name: routeBName, Namespace: testNamespace}
 			// Check HTTPRoute B direct back reference to RLP A
@@ -1147,6 +1165,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				time.Minute, 5*time.Second).Should(BeTrue())
 
 			Eventually(testRLPIsAccepted(rlpAKey), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpAKey), time.Minute, 5*time.Second).Should(BeTrue())
 		})
 	})
 })

@@ -15,7 +15,7 @@ In this doc we will walk you through using Kuadrant to secure, protect and conne
 
 ### Setup a managed DNS zone
 
-This is a zone where kuadrant will manage records for listener hosts added to your gateway(s) and connect traffic to your endpoints. It is this zone plus the hostnames defined in the gateway listeners that allow Kuadrant to define a multi-cluster DNS configuration.
+This is the DNS zone where Kuadrant will manage records for listener hosts added to your gateway(s) and connect traffic to your endpoints. It is this zone plus the hostnames defined in the gateway listeners that allow Kuadrant to define a multi-cluster DNS configuration.
 
 Create the ManagedZone resource
 
@@ -50,7 +50,7 @@ k wait managedzone/managedzone --for=condition=ready=true -n ingress-gateway
 
 ### Add a TLS Issuer
 
-To secure our gateways we want to define a TLS issuer for TLS certificates.
+To secure our gateways we want to define a TLS issuer for TLS certificates. We will use letsencrypt, but you can use any supported by cert-manager.
 
 
 ```
@@ -84,7 +84,7 @@ EOF
 
 ### Setup a Gateway
 
-In order for Kuadrant to balance traffic using DNS across two clusers. We need to define a gateway with a shared host. We will define this is a HTTPS listener with a wildcard DNS entry based on your root domain.
+In order for Kuadrant to balance traffic using DNS across two or more clusters. We need to define a gateway with a shared host. We will define this as a HTTPS listener with a wildcard DNS entry based on your root domain. As mentioned, these resources need to be applied to both clusters.
 
 ```
 kubectl apply -f - <<EOF
@@ -112,9 +112,9 @@ spec:
 EOF
 ```        
 
-### Secure and Protect the Gateway with ratelimiting, Auth and TLS
+### Secure and Protect the Gateway with Rate Limiting, Auth and TLS
 
-While our gateway is deployed, it is not yet exposed via an address. This is because we have not yet setup the TLS cert. Before we do that lets set up an `AuthPolicy` that will default all endpoint to a `DENY ALL` 403 response and also setup a `ratelimitpolicy`. Finally we will then also apply a `TLSPolicy` to setup our certificates.
+While our gateway is deployed, it is not yet exposed via an address. This is because we have not yet setup the TLS cert and so the Gateway is not in a ready state. Before we do that lets set up an `AuthPolicy` so that when our gateway is exposed any endpoint will default to a `DENY ALL` 403 response. We will also setup a `ratelimitpolicy` and  `TLSPolicy` to setup our certificates.
 
 ```
 kubectl apply -f - <<EOF
@@ -197,7 +197,7 @@ Again we should see it has been accepted but not yet enforced. It is not enforce
 
 ### Setup our DNS
 
-Next we will apply a `DNSPolicy`. This policy will configure how traffic reaches the gateway. Again it will be accepted but not yet enforced as we have no HTTPRoutes defined at this point.
+Next we will apply a `DNSPolicy`. This policy will configure how traffic reaches the gateways deployed to our different clusters. Again it will be accepted but not yet enforced as we have no HTTPRoutes defined at this point.
 
 ```
 kubectl apply -f - <<EOF
@@ -232,7 +232,7 @@ So far we have setup an external gateway, secured it with TLS, Protected all end
 
 ### Setup HTTPRoute and backend
 
-This will setup a toy application in the default ns
+This will setup a toy application in the toystore ns
 
 ```sh
 kubectl create ns toystore

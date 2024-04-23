@@ -1,9 +1,9 @@
-# Secure, Protect and Connect services with Kuadrant on Multiple Clusters
+# Secure, Protect and Connect APIs with Kuadrant on Multiple Clusters
 
 
 ## Pre-requisites
 
-- Completed the Kuadrant Install Guide for at least two clusters [Install Guide](TODO)
+- Completed the Kuadrant Install Guide for at least two clusters [Install Guide](../install/install-openshift.md)
 - kubectl command line tool
 
 ## Overview
@@ -286,3 +286,4 @@ EOF
 - Add some verification steps
 - Add some dashboard directions
 - Add instructions for GEO
+- Add instructions for using non API Key auth provider

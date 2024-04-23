@@ -96,7 +96,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 		hosts = utils.HostnamesToStrings(gwHostnames)
 
 		rules := make([]gatewayapiv1.HTTPRouteRule, 0)
-		routes := r.TargetRefReconciler.FetchAcceptedGatewayHTTPRoutes(ctx, ap.TargetKey())
+		routes := r.TargetRefReconciler.FetchAcceptedGatewayHTTPRoutes(ctx, obj)
 		for idx := range routes {
 			route := routes[idx]
 			// skip routes that have an authpolicy of its own and Gateway authpolicy does not define atomic overrides

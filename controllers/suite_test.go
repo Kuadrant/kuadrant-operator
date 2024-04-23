@@ -239,6 +239,18 @@ var _ = BeforeSuite(func() {
 
 	Expect(err).NotTo(HaveOccurred())
 
+	targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("targetstatus"),
+		mgr.GetEventRecorderFor("PolicyTargetStatus"),
+	)
+
+	err = (&TargetStatusReconciler{
+		BaseReconciler: targetStatusBaseReconciler,
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		err = mgr.Start(ctrl.SetupSignalHandler())

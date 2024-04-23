@@ -14,6 +14,11 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
+var (
+	_ Policy       = &TestPolicy{}
+	_ PolicyStatus = &FakePolicyStatus{}
+)
+
 type TestPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -21,12 +26,16 @@ type TestPolicy struct {
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
 }
 
-var (
-	_ Policy = &TestPolicy{}
-)
+func (p *TestPolicy) PolicyClass() PolicyClass {
+	return DirectPolicy
+}
 
 func (p *TestPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 	return p.TargetRef
+}
+
+func (p *TestPolicy) GetStatus() PolicyStatus {
+	return &FakePolicyStatus{}
 }
 
 func (p *TestPolicy) DeepCopyObject() runtime.Object {
@@ -50,6 +59,12 @@ func (p *TestPolicy) DeepCopyInto(out *TestPolicy) {
 	out.TypeMeta = p.TypeMeta
 	p.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
 	p.TargetRef.DeepCopyInto(&out.TargetRef)
+}
+
+type FakePolicyStatus struct{}
+
+func (s *FakePolicyStatus) GetConditions() []metav1.Condition {
+	return nil
 }
 
 func TestPolicyByCreationTimestamp(t *testing.T) {

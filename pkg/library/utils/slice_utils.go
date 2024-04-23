@@ -48,11 +48,18 @@ func Intersection[T comparable](slice1, slice2 []T) []T {
 	return result
 }
 
-func Find[T any](slice []T, match func(T) bool) (*T, bool) {
-	for _, item := range slice {
+func Index[T any](slice []T, match func(T) bool) int {
+	for i, item := range slice {
 		if match(item) {
-			return &item, true
+			return i
 		}
+	}
+	return -1
+}
+
+func Find[T any](slice []T, match func(T) bool) (*T, bool) {
+	if i := Index(slice, match); i >= 0 {
+		return &slice[i], true
 	}
 	return nil, false
 }

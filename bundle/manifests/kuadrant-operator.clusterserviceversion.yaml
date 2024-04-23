@@ -106,7 +106,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2024-04-22T07:53:19Z"
+    createdAt: "2024-04-22T18:17:29Z"
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator
@@ -318,6 +318,14 @@ spec:
           - patch
           - update
           - watch
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - httproutes/status
+          verbs:
+          - get
+          - patch
+          - update
         - apiGroups:
           - install.istio.io
           resources:

@@ -47,34 +47,6 @@ func TestAuthPolicySpecGetRouteSelectors(t *testing.T) {
 	}
 }
 
-func TestAuthPolicyTargetKey(t *testing.T) {
-	policy := &AuthPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-policy",
-			Namespace: "my-namespace",
-		},
-		Spec: AuthPolicySpec{
-			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-				Group: gatewayapiv1.GroupName,
-				Kind:  "HTTPRoute",
-				Name:  "my-route",
-			},
-		},
-	}
-	// targetRef missing namespace
-	expected := "my-namespace/my-route"
-	if result := policy.TargetKey().String(); result != expected {
-		t.Errorf("Expected target key %s, got %s", expected, result)
-	}
-
-	// targetRef with namespace
-	policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace("route-namespace"))
-	expected = "route-namespace/my-route"
-	if result := policy.TargetKey().String(); result != expected {
-		t.Errorf("Expected target key %s, got %s", expected, result)
-	}
-}
-
 func TestAuthPolicyListGetItems(t *testing.T) {
 	list := &AuthPolicyList{}
 	if len(list.GetItems()) != 0 {

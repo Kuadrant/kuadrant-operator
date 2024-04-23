@@ -24,7 +24,9 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 type RoutingStrategy string
@@ -128,6 +130,10 @@ type DNSPolicyStatus struct {
 	HealthCheck *HealthCheckStatus `json:"healthCheck,omitempty"`
 }
 
+func (s *DNSPolicyStatus) GetConditions() []metav1.Condition {
+	return s.Conditions
+}
+
 var _ kuadrant.Policy = &DNSPolicy{}
 var _ kuadrant.Referrer = &DNSPolicy{}
 
@@ -160,7 +166,15 @@ func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 	return p.Spec.TargetRef
 }
 
+func (p *DNSPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
+	return &p.Status
+}
+
 func (p *DNSPolicy) Kind() string { return p.TypeMeta.Kind }
+
+func (p *DNSPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
+	return kuadrantgatewayapi.DirectPolicy
+}
 
 func (p *DNSPolicy) BackReferenceAnnotationName() string {
 	return DNSPolicyBackReferenceAnnotationName
@@ -207,6 +221,12 @@ type DNSPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []DNSPolicy `json:"items"`
+}
+
+func (l *DNSPolicyList) GetItems() []kuadrant.Policy {
+	return utils.Map(l.Items, func(item DNSPolicy) kuadrant.Policy {
+		return &item
+	})
 }
 
 // HealthCheckSpec configures health checks in the DNS provider.
@@ -267,6 +287,10 @@ func init() {
 
 func NewDNSPolicy(name, ns string) *DNSPolicy {
 	return &DNSPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "DNSPolicy",
+			APIVersion: GroupVersion.String(),
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,

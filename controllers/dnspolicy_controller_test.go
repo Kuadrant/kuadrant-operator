@@ -325,16 +325,6 @@ var _ = Describe("DNSPolicy controller", func() {
 							"Message": Equal("DNSPolicy has been successfully enforced"),
 						})),
 				)
-				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Status.Conditions).To(
-					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":               Equal(DNSPolicyAffected),
-						"Status":             Equal(metav1.ConditionTrue),
-						"Reason":             Equal(string(gatewayapiv1alpha2.PolicyReasonAccepted)),
-						"ObservedGeneration": Equal(gateway.Generation),
-					})),
-				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
 
 			// ensure there are no policies with not accepted condition
@@ -402,14 +392,6 @@ var _ = Describe("DNSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
 				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
-				g.Expect(gateway.Status.Conditions).To(
-					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":               Equal(DNSPolicyAffected),
-						"Status":             Equal(metav1.ConditionTrue),
-						"Reason":             Equal(string(gatewayapiv1alpha2.PolicyReasonAccepted)),
-						"ObservedGeneration": Equal(gateway.Generation),
-					})),
-				)
 
 				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -424,11 +406,6 @@ var _ = Describe("DNSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(gateway.Annotations).ToNot(HaveKey(v1alpha1.DNSPolicyDirectReferenceAnnotationName))
 				g.Expect(gateway.Annotations).ToNot(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
-				g.Expect(gateway.Status.Conditions).ToNot(
-					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type": Equal(string(DNSPolicyAffected)),
-					})),
-				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
 

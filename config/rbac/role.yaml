@@ -167,6 +167,14 @@ rules:
   - update
   - watch
 - apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - httproutes/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - install.istio.io
   resources:
   - istiooperators

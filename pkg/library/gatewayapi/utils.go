@@ -79,6 +79,8 @@ func GetGatewayWorkloadSelector(ctx context.Context, cli client.Client, gateway 
 	return utils.GetServiceWorkloadSelector(ctx, cli, serviceKey)
 }
 
+// IsHTTPRouteAccepted returns true if a given HTTPRoute has the Accepted status condition added by any of its
+// parentRefs; otherwise, it returns false
 func IsHTTPRouteAccepted(httpRoute *gatewayapiv1.HTTPRoute) bool {
 	acceptedParentRefs := GetRouteAcceptedParentRefs(httpRoute)
 
@@ -89,28 +91,7 @@ func IsHTTPRouteAccepted(httpRoute *gatewayapiv1.HTTPRoute) bool {
 	return len(acceptedParentRefs) == len(httpRoute.Spec.ParentRefs)
 }
 
-func IsParentGateway(ref gatewayapiv1.ParentReference) bool {
-	return (ref.Kind == nil || *ref.Kind == "Gateway") && (ref.Group == nil || *ref.Group == gatewayapiv1.GroupName)
-}
-
-func GetRouteAcceptedParentRefs(route *gatewayapiv1.HTTPRoute) []gatewayapiv1.ParentReference {
-	if route == nil {
-		return nil
-	}
-
-	return utils.Filter(route.Spec.ParentRefs, func(p gatewayapiv1.ParentReference) bool {
-		parentStatus, found := utils.Find(route.Status.RouteStatus.Parents, func(pStatus gatewayapiv1.RouteParentStatus) bool {
-			return reflect.DeepEqual(pStatus.ParentRef, p)
-		})
-
-		if !found {
-			return false
-		}
-
-		return meta.IsStatusConditionTrue(parentStatus.Conditions, "Accepted")
-	})
-}
-
+// GetRouteAcceptedGatewayParentKeys returns the object keys of all gateways that have accepted a given route
 func GetRouteAcceptedGatewayParentKeys(route *gatewayapiv1.HTTPRoute) []client.ObjectKey {
 	acceptedParentRefs := GetRouteAcceptedParentRefs(route)
 
@@ -122,6 +103,26 @@ func GetRouteAcceptedGatewayParentKeys(route *gatewayapiv1.HTTPRoute) []client.O
 			Namespace: string(ptr.Deref(p.Namespace, gatewayapiv1.Namespace(route.Namespace))),
 		}
 	})
+}
+
+// GetRouteAcceptedParentRefs returns the list of parentRefs for which a given route has the Accepted status condition
+func GetRouteAcceptedParentRefs(route *gatewayapiv1.HTTPRoute) []gatewayapiv1.ParentReference {
+	if route == nil {
+		return nil
+	}
+
+	return utils.Filter(route.Spec.ParentRefs, func(p gatewayapiv1.ParentReference) bool {
+		for _, parentStatus := range route.Status.RouteStatus.Parents {
+			if reflect.DeepEqual(parentStatus.ParentRef, p) && meta.IsStatusConditionTrue(parentStatus.Conditions, string(gatewayapiv1.RouteConditionAccepted)) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+func IsParentGateway(ref gatewayapiv1.ParentReference) bool {
+	return (ref.Kind == nil || *ref.Kind == "Gateway") && (ref.Group == nil || *ref.Group == gatewayapiv1.GroupName)
 }
 
 // FilterValidSubdomains returns every subdomain that is a subset of at least one of the (super) domains specified in the first argument.

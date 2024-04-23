@@ -18,6 +18,7 @@ import (
 
 const (
 	KuadrantNamespaceAnnotation = "kuadrant.io/namespace"
+	ControllerName              = "kuadrant.io/policy-controller"
 )
 
 type Policy interface {

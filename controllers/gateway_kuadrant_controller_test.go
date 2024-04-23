@@ -24,150 +24,149 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 		gwBName       = "gw-b"
 	)
 
-	beforeEachCallback := func() {
-		CreateNamespace(&testNamespace)
-
+	beforeEachCallback := func(ctx SpecContext) {
+		CreateNamespaceWithContext(ctx, &testNamespace)
 	}
 
 	BeforeEach(beforeEachCallback)
-	AfterEach(DeleteNamespaceCallback(&testNamespace))
+	AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, &testNamespace) })
 
 	Context("two gateways created after Kuadrant instance", func() {
-		It("gateways should have required annotation", func() {
+		It("gateways should have required annotation", func(ctx SpecContext) {
 			ApplyKuadrantCR(testNamespace)
 
 			gwA := testBuildBasicGateway(gwAName, testNamespace)
-			err := k8sClient.Create(context.Background(), gwA)
+			err := k8sClient.Create(ctx, gwA)
 			Expect(err).ToNot(HaveOccurred())
-			Eventually(testGatewayIsReady(gwA), 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testGatewayIsReady(gwA)).WithContext(ctx).Should(BeTrue())
 
 			gwB := testBuildBasicGateway(gwBName, testNamespace)
-			err = k8sClient.Create(context.Background(), gwB)
+			err = k8sClient.Create(ctx, gwB)
 			Expect(err).ToNot(HaveOccurred())
-			Eventually(testGatewayIsReady(gwB), 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testGatewayIsReady(gwB)).WithContext(ctx).Should(BeTrue())
 
 			// Check gwA is annotated with kuadrant annotation
-			Eventually(testIsGatewayKuadrantManaged(gwA, testNamespace), 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testIsGatewayKuadrantManaged(ctx, gwA, testNamespace)).WithContext(ctx).Should(BeTrue())
 
 			// Check gwB is annotated with kuadrant annotation
-			Eventually(testIsGatewayKuadrantManaged(gwB, testNamespace), 15*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			Eventually(testIsGatewayKuadrantManaged(ctx, gwB, testNamespace)).WithContext(ctx).Should(BeTrue())
+		}, SpecTimeout(2*time.Minute))
 	})
 
 	Context("two gateways created before Kuadrant instance", func() {
-		It("gateways should have required annotation", func() {
+		It("gateways should have required annotation", func(ctx SpecContext) {
 			gwA := testBuildBasicGateway(gwAName, testNamespace)
-			err := k8sClient.Create(context.Background(), gwA)
+			err := k8sClient.Create(ctx, gwA)
 			Expect(err).ToNot(HaveOccurred())
-			Eventually(testGatewayIsReady(gwA), 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testGatewayIsReady(gwA)).WithContext(ctx).Should(BeTrue())
 
 			gwB := testBuildBasicGateway(gwBName, testNamespace)
-			err = k8sClient.Create(context.Background(), gwB)
+			err = k8sClient.Create(ctx, gwB)
 			Expect(err).ToNot(HaveOccurred())
-			Eventually(testGatewayIsReady(gwB), 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testGatewayIsReady(gwB)).WithContext(ctx).Should(BeTrue())
 
 			ApplyKuadrantCR(testNamespace)
 
 			// Check gwA is annotated with kuadrant annotation
-			Eventually(testIsGatewayKuadrantManaged(gwA, testNamespace), 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testIsGatewayKuadrantManaged(ctx, gwA, testNamespace)).WithContext(ctx).Should(BeTrue())
 
 			// Check gwB is annotated with kuadrant annotation
-			Eventually(testIsGatewayKuadrantManaged(gwB, testNamespace), 15*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			Eventually(testIsGatewayKuadrantManaged(ctx, gwB, testNamespace)).WithContext(ctx).Should(BeTrue())
+		}, SpecTimeout(2*time.Minute))
 	})
 
 	Context("when Kuadrant instance is deleted", func() {
-		It("gateways should not have kuadrant annotation", func() {
+		It("gateways should not have kuadrant annotation", func(ctx SpecContext) {
 			kuadrantName := "sample"
 			ApplyKuadrantCRWithName(testNamespace, kuadrantName)
 
 			gwA := testBuildBasicGateway(gwAName, testNamespace)
-			err := k8sClient.Create(context.Background(), gwA)
+			err := k8sClient.Create(ctx, gwA)
 			Expect(err).ToNot(HaveOccurred())
-			Eventually(testGatewayIsReady(gwA), 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testGatewayIsReady(gwA)).WithContext(ctx).Should(BeTrue())
 
 			gwB := testBuildBasicGateway(gwBName, testNamespace)
-			err = k8sClient.Create(context.Background(), gwB)
+			err = k8sClient.Create(ctx, gwB)
 			Expect(err).ToNot(HaveOccurred())
-			Eventually(testGatewayIsReady(gwB), 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testGatewayIsReady(gwB)).WithContext(ctx).Should(BeTrue())
 
 			// Check gwA is annotated with kuadrant annotation
-			Eventually(testIsGatewayKuadrantManaged(gwA, testNamespace), 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testIsGatewayKuadrantManaged(ctx, gwA, testNamespace)).WithContext(ctx).Should(BeTrue())
 
 			// Check gwB is annotated with kuadrant annotation
-			Eventually(testIsGatewayKuadrantManaged(gwB, testNamespace), 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testIsGatewayKuadrantManaged(ctx, gwB, testNamespace)).WithContext(ctx).Should(BeTrue())
 
 			kObj := &kuadrantv1beta1.Kuadrant{ObjectMeta: metav1.ObjectMeta{Name: kuadrantName, Namespace: testNamespace}}
-			err = testClient().Delete(context.Background(), kObj)
+			err = testClient().Delete(ctx, kObj)
 
 			// Check gwA is not annotated with kuadrant annotation
 			Eventually(func() bool {
 				existingGateway := &gatewayapiv1.Gateway{}
-				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gwA), existingGateway)
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gwA), existingGateway)
 				if err != nil {
 					logf.Log.Info("[WARN] Getting gateway failed", "error", err)
 					return false
 				}
 				_, isSet := existingGateway.GetAnnotations()[kuadrant.KuadrantNamespaceAnnotation]
 				return !isSet
-			}, 15*time.Second, 5*time.Second).Should(BeTrue())
+			}).WithContext(ctx).Should(BeTrue())
 
 			// Check gwB is not annotated with kuadrant annotation
 			Eventually(func() bool {
 				existingGateway := &gatewayapiv1.Gateway{}
-				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gwB), existingGateway)
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gwB), existingGateway)
 				if err != nil {
 					logf.Log.Info("[WARN] Getting gateway failed", "error", err)
 					return false
 				}
 				_, isSet := existingGateway.GetAnnotations()[kuadrant.KuadrantNamespaceAnnotation]
 				return !isSet
-			}, 15*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			}).WithContext(ctx).Should(BeTrue())
+		}, SpecTimeout(2*time.Minute))
 	})
 
 	Context("Two kuadrant instances", func() {
 		var (
 			secondNamespace string
-			kuadrantAName   string = "kuadrant-a"
-			kuadrantBName   string = "kuadrant-b"
+			kuadrantAName   = "kuadrant-a"
+			kuadrantBName   = "kuadrant-b"
 		)
 
-		BeforeEach(func() {
+		BeforeEach(func(ctx SpecContext) {
 			ApplyKuadrantCRWithName(testNamespace, kuadrantAName)
 
-			CreateNamespace(&secondNamespace)
+			CreateNamespaceWithContext(ctx, &secondNamespace)
 			ApplyKuadrantCRWithName(secondNamespace, kuadrantBName)
 		})
 
-		AfterEach(DeleteNamespaceCallback(&secondNamespace))
+		AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, &secondNamespace) })
 
-		It("new gateway should not be annotated", func() {
+		It("new gateway should not be annotated", func(ctx SpecContext) {
 			gateway := testBuildBasicGateway("gw-a", testNamespace)
-			err := k8sClient.Create(context.Background(), gateway)
+			err := k8sClient.Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 
-			Eventually(testGatewayIsReady(gateway), 15*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
 
 			// Check gateway is not annotated with kuadrant annotation
 			Eventually(func() bool {
 				existingGateway := &gatewayapiv1.Gateway{}
-				err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), existingGateway)
 				if err != nil {
 					logf.Log.V(1).Info("[WARN] Getting gateway failed", "error", err)
 					return false
 				}
 				_, isSet := existingGateway.GetAnnotations()[kuadrant.KuadrantNamespaceAnnotation]
 				return !isSet
-			}, 15*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			}).WithContext(ctx).Should(BeTrue())
+		}, SpecTimeout(2*time.Minute))
 	})
 })
 
-func testIsGatewayKuadrantManaged(gw *gatewayapiv1.Gateway, ns string) func() bool {
+func testIsGatewayKuadrantManaged(ctx context.Context, gw *gatewayapiv1.Gateway, ns string) func() bool {
 	return func() bool {
 		existingGateway := &gatewayapiv1.Gateway{}
-		err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gw), existingGateway)
+		err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gw), existingGateway)
 		if err != nil {
 			logf.Log.Info("[WARN] Getting gateway failed", "error", err)
 			return false

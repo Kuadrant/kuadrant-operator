@@ -194,7 +194,7 @@ var _ = Describe("Target status reconciler", func() {
 				}
 			})
 			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(policyAcceptedAndTargetsAffected(policy, testHTTPRouteName), 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
 
 		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func() {
@@ -347,7 +347,7 @@ var _ = Describe("Target status reconciler", func() {
 				}
 			})
 			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Eventually(policyAcceptedAndTargetsAffected(policy, testHTTPRouteName), 30*time.Second, 5*time.Second).Should(BeTrue())
 		})
 
 		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func() {

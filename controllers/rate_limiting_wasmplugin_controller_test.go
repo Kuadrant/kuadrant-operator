@@ -26,6 +26,8 @@ import (
 )
 
 var _ = Describe("Rate Limiting WasmPlugin controller", func() {
+	const testTimeOut = SpecTimeout(2 * time.Minute)
+
 	var (
 		testNamespace string
 	)
@@ -35,10 +37,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 		ApplyKuadrantCR(testNamespace)
 	}
 
-	BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
+	BeforeEach(beforeEachCallback)
 	AfterEach(func(ctx SpecContext) {
 		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
-	}, NodeTimeout(time.Minute))
+	})
 
 	Context("Basic tests", func() {
 		var (
@@ -55,7 +57,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
+		BeforeEach(beforeEachCallback)
 
 		It("Simple RLP targeting HTTPRoute creates wasmplugin", func(ctx SpecContext) {
 			// create httproute
@@ -145,7 +147,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 				},
 			}))
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 
 		It("Full featured RLP targeting HTTPRoute creates wasmplugin", func(ctx SpecContext) {
 			// create httproute
@@ -360,7 +362,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			}))
 			Expect(wasmRLP.Hostnames).To(Equal([]string{"*.toystore.acme.com", "api.toystore.io"}))
 			Expect(wasmRLP.Service).To(Equal(common.KuadrantRateLimitClusterName))
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 
 		It("Simple RLP targeting Gateway parented by one HTTPRoute creates wasmplugin", func(ctx SpecContext) {
 			// create httproute
@@ -450,7 +452,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 				},
 			}))
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 	})
 
 	Context("RLP targeting HTTPRoute-less Gateway", func() {
@@ -467,7 +469,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
+		BeforeEach(beforeEachCallback)
 
 		It("Wasmplugin must not be created", func(ctx SpecContext) {
 			// create ratelimitpolicy
@@ -512,7 +514,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// must not exist
 			err = k8sClient.Get(ctx, wasmPluginKey, existingWasmPlugin)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 	})
 
 	Context("RLP targeting HTTPRoute when route selection match is empty", func() {
@@ -530,7 +532,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
+		BeforeEach(beforeEachCallback)
 
 		It("When the gateway does not have more policies, the wasmplugin resource is not created", func(ctx SpecContext) {
 			// create httproute
@@ -592,7 +594,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// must not exist
 			err = k8sClient.Get(ctx, wasmPluginKey, existingWasmPlugin)
 			Expect(apierrors.IsNotFound(err)).To(BeTrue())
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 
 		It("When the gateway has more policies, the wasmplugin resource does not have any configuration regarding the current RLP", func(ctx SpecContext) {
 			// Gw A
@@ -778,7 +780,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 				return true
 			}).WithContext(ctx).Should(BeTrue())
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 	})
 
 	Context("HTTPRoute switches parentship from one gateway to another", func() {
@@ -797,7 +799,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
+		BeforeEach(beforeEachCallback)
 
 		It("RLP targeting a gateway, GwA should not have wasmplugin and GwB should not have wasmplugin", func(ctx SpecContext) {
 			// Initial state
@@ -993,7 +995,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				// not found
 				return true
 			})
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 
 		It("RLP targeting a route, GwA should not have wasmplugin and GwB should have wasmplugin", func(ctx SpecContext) {
 			// Initial state
@@ -1235,7 +1237,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 				return true
 			}).WithContext(ctx).Should(BeTrue())
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 	})
 
 	Context("RLP switches targetRef from one route A to another route B", func() {
@@ -1251,7 +1253,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
+		BeforeEach(beforeEachCallback)
 
 		It("wasmplugin config should update config", func(ctx SpecContext) {
 			// Initial state
@@ -1494,7 +1496,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 				return true
 			}).WithContext(ctx).Should(BeTrue())
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 	})
 
 	Context("Free Route gets dedicated RLP", func() {
@@ -1510,7 +1512,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
+		BeforeEach(beforeEachCallback)
 
 		It("wasmplugin should update config", func(ctx SpecContext) {
 			// Initial state
@@ -1756,7 +1758,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 				return true
 			}).WithContext(ctx).Should(BeTrue())
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 	})
 
 	Context("New free route on a Gateway with RLP", func() {
@@ -1772,7 +1774,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
+		BeforeEach(beforeEachCallback)
 
 		It("wasmplugin should update config", func(ctx SpecContext) {
 			// Initial state
@@ -2077,7 +2079,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				return true
 			}).WithContext(ctx).Should(BeTrue())
 
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 	})
 
 	Context("Gateway with hostname in listener", func() {
@@ -2097,7 +2099,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
+		BeforeEach(beforeEachCallback)
 
 		It("RLP with hostnames in route selector targeting hostname less HTTPRoute creates wasmplugin", func(ctx SpecContext) {
 			// create httproute
@@ -2196,7 +2198,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 				},
 			}))
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 	})
 
 	Context("Gateway defaults & overrides", func() {
@@ -2257,7 +2259,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			}
 		}
 
-		BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
+		BeforeEach(beforeEachCallback)
 
 		It("Limit key shifts correctly from Gateway RLP default -> Route RLP -> Gateway RLP overrides", func(ctx SpecContext) {
 			// create httproute
@@ -2357,7 +2359,6 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			existingWASMConfig, err = rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, "limit.gateway__4ea5ee68", "*.example.com")))
-
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 	})
 })

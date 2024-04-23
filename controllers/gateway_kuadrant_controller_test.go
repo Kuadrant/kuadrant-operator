@@ -18,6 +18,7 @@ import (
 )
 
 var _ = Describe("Kuadrant Gateway controller", func() {
+	const testTimeOut = SpecTimeout(2 * time.Minute)
 	var (
 		testNamespace string
 		gwAName       = "gw-a"
@@ -50,7 +51,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 
 			// Check gwB is annotated with kuadrant annotation
 			Eventually(testIsGatewayKuadrantManaged(ctx, gwB, testNamespace)).WithContext(ctx).Should(BeTrue())
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 	})
 
 	Context("two gateways created before Kuadrant instance", func() {
@@ -72,7 +73,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 
 			// Check gwB is annotated with kuadrant annotation
 			Eventually(testIsGatewayKuadrantManaged(ctx, gwB, testNamespace)).WithContext(ctx).Should(BeTrue())
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 	})
 
 	Context("when Kuadrant instance is deleted", func() {
@@ -122,7 +123,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 				_, isSet := existingGateway.GetAnnotations()[kuadrant.KuadrantNamespaceAnnotation]
 				return !isSet
 			}).WithContext(ctx).Should(BeTrue())
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 	})
 
 	Context("Two kuadrant instances", func() {
@@ -159,7 +160,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 				_, isSet := existingGateway.GetAnnotations()[kuadrant.KuadrantNamespaceAnnotation]
 				return !isSet
 			}).WithContext(ctx).Should(BeTrue())
-		}, SpecTimeout(2*time.Minute))
+		}, testTimeOut)
 	})
 })
 

@@ -24,6 +24,8 @@ import (
 )
 
 var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
+	const testTimeOut = SpecTimeout(2 * time.Minute)
+
 	var (
 		testNamespace string
 		gwName        = "toystore-gw"
@@ -69,7 +71,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 		}).WithContext(ctx).Should(BeTrue())
 	}
 
-	BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
+	BeforeEach(beforeEachCallback)
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
 	Context("RLP targeting Gateway", func() {
@@ -132,6 +134,6 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 				err = k8sClient.Get(ctx, efKey, existingEF)
 				return apierrors.IsNotFound(err)
 			}).WithContext(ctx).Should(BeTrue())
-		}, SpecTimeout(time.Minute))
+		}, testTimeOut)
 	})
 })

@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -87,11 +86,8 @@ var _ = Describe("AuthPolicy controller", func() {
 
 	Context("Basic HTTPRoute", func() {
 		BeforeEach(func(ctx SpecContext) {
-			err := ApplyResources(filepath.Join("..", "examples", "toystore", "toystore.yaml"), k8sClient, testNamespace)
-			Expect(err).ToNot(HaveOccurred())
-
 			route := testBuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
-			err = k8sClient.Create(ctx, route)
+			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
 		})
@@ -695,11 +691,8 @@ var _ = Describe("AuthPolicy controller", func() {
 
 	Context("Complex HTTPRoute with multiple rules and hostnames", func() {
 		BeforeEach(func(ctx SpecContext) {
-			err := ApplyResources(filepath.Join("..", "examples", "toystore", "toystore.yaml"), k8sClient, testNamespace)
-			Expect(err).ToNot(HaveOccurred())
-
 			route := testBuildMultipleRulesHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com", "*.admin.toystore.com"})
-			err = k8sClient.Create(ctx, route)
+			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
 		})
@@ -1188,11 +1181,8 @@ var _ = Describe("AuthPolicy controller", func() {
 		}
 
 		BeforeEach(func(ctx SpecContext) {
-			err := ApplyResources(filepath.Join("..", "examples", "toystore", "toystore.yaml"), k8sClient, testNamespace)
-			Expect(err).ToNot(HaveOccurred())
-
 			route := testBuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
-			err = k8sClient.Create(ctx, route)
+			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
 		})
@@ -1284,11 +1274,8 @@ var _ = Describe("AuthPolicy controller", func() {
 
 	Context("AuthPolicies configured with overrides", func() {
 		BeforeEach(func(ctx SpecContext) {
-			err := ApplyResources(filepath.Join("..", "examples", "toystore", "toystore.yaml"), k8sClient, testNamespace)
-			Expect(err).ToNot(HaveOccurred())
-
 			route := testBuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
-			err = k8sClient.Create(ctx, route)
+			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
 		})

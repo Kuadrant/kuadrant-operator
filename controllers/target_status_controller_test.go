@@ -4,7 +4,6 @@ package controllers
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -54,8 +53,6 @@ var _ = Describe("Target status reconciler", func() {
 		ApplyKuadrantCR(testNamespace)
 
 		// create application
-		err = ApplyResources(filepath.Join("..", "examples", "toystore", "toystore.yaml"), k8sClient, testNamespace)
-		Expect(err).ToNot(HaveOccurred())
 		route := testBuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
 		err = k8sClient.Create(ctx, route)
 		Expect(err).ToNot(HaveOccurred())

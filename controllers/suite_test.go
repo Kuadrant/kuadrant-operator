@@ -60,6 +60,7 @@ import (
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var appNamespace string
 
 func testClient() client.Client { return k8sClient }
 
@@ -69,7 +70,7 @@ func TestAPIs(t *testing.T) {
 	RunSpecs(t, "Controller Suite")
 }
 
-var _ = BeforeSuite(func() {
+var _ = BeforeSuite(func(ctx SpecContext) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
@@ -251,6 +252,11 @@ var _ = BeforeSuite(func() {
 
 	Expect(err).NotTo(HaveOccurred())
 
+	CreateNamespaceWithContext(ctx, &appNamespace)
+
+	err = ApplyResources(filepath.Join("..", "examples", "toystore", "toystore.yaml"), k8sClient, appNamespace)
+	Expect(err).ToNot(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		err = mgr.Start(ctrl.SetupSignalHandler())
@@ -259,10 +265,11 @@ var _ = BeforeSuite(func() {
 
 })
 
-var _ = AfterSuite(func() {
+var _ = AfterSuite(func(ctx SpecContext) {
 	By("tearing down the test environment")
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
+	DeleteNamespaceCallbackWithContext(ctx, &appNamespace)
 })
 
 func TestMain(m *testing.M) {

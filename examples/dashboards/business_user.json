@@ -4,8 +4,8 @@
       {
         "builtIn": 1,
         "datasource": {
-          "type": "grafana",
-          "uid": "-- Grafana --"
+          "type": "datasource",
+          "uid": "grafana"
         },
         "enable": true,
         "hide": true,
@@ -24,8 +24,8 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 35,
-  "iteration": 1712940444554,
+  "id": 3,
+  "iteration": 1713210122715,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -36,18 +36,46 @@
       },
       "description": "",
       "gridPos": {
-        "h": 5,
-        "w": 24,
+        "h": 7,
+        "w": 6,
         "x": 0,
+        "y": 0
+      },
+      "id": 162,
+      "options": {
+        "maxItems": 10,
+        "query": "",
+        "showHeadings": false,
+        "showRecentlyViewed": false,
+        "showSearch": true,
+        "showStarred": false,
+        "tags": [
+          "kuadrant"
+        ]
+      },
+      "pluginVersion": "8.5.5",
+      "title": "Kuadrant Dashboards",
+      "type": "dashlist"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "grafana"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 18,
+        "x": 6,
         "y": 0
       },
       "id": 150,
       "options": {
-        "content": "The panels below are grouped by APIs, realized by a [Gateway API HTTPRoute](https://gateway-api.sigs.k8s.io/concepts/api-overview/#httproute). Each panel provides a comprehensive overview of request and error metrics associated with each API. Additionally, these panels include a heatmap that visualizes requests per second, offering real-time insights into the traffic patterns and operational status of your services.\n\n\n*Important: Each HTTPRoute must include a \"service\" label with a value corresponding to the name of the service being routed to, for example, \"service=myapp\". This labeling is essential for the accurate aggregation and display of metrics per service.*\n",
+        "content": "#### Business Overview of APIs\n\nThe panels below are grouped by APIs, realized by a [Gateway API HTTPRoute](https://gateway-api.sigs.k8s.io/concepts/api-overview/#httproute). Each panel provides a comprehensive overview of request and error metrics associated with each API. Additionally, these panels include a heatmap that visualizes requests per second, offering real-time insights into the traffic patterns and operational status of your services.\n\n*Important: HTTPRoutes must include a \"service\" and \"deployment\" label with a value that matches the name of the service & deployment being routed to. eg. \"service=myapp, deployment=myapp\"*\n",
         "mode": "markdown"
       },
       "pluginVersion": "8.5.5",
-      "title": "Business Overview of APIs",
+      "title": "Business User Dashboard",
       "type": "text"
     },
     {
@@ -56,7 +84,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 7
       },
       "id": 6,
       "panels": [],
@@ -67,7 +95,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "P1809F7CD0C75ACF3"
+        "uid": "${datasource}"
       },
       "description": "Aggregated rate of requests per API (HTTPRoute). The API name can be cross referenced with the API list to see additional details.\n\nNote: HTTPRoutes require a label `deployment` with the name of the corresponding Deployment so that istio request metrics can be paired with HTTPRoute metrics.",
       "fieldConfig": {
@@ -127,7 +155,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 6
+        "y": 8
       },
       "id": 4,
       "options": {
@@ -145,10 +173,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P1809F7CD0C75ACF3"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{destination_service_namespace=~\"${api_namespace}\"}[$__rate_interval])) by (destination_workload) * on(destination_workload) group_right label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",namespace=~\"${api_namespace}\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "legendFormat": "API: {{name}}",
           "range": true,
           "refId": "A"
@@ -160,7 +188,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "P1809F7CD0C75ACF3"
+        "uid": "${datasource}"
       },
       "description": "req/s Heatmap",
       "fieldConfig": {
@@ -190,7 +218,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 6
+        "y": 8
       },
       "id": 22,
       "options": {
@@ -211,11 +239,11 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P1809F7CD0C75ACF3"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(istio_requests_total{destination_service_namespace=~\"${api_namespace}\"}[$__rate_interval])) by (destination_workload) * on(destination_workload) group_right label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",namespace=~\"${api_namespace}\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "format": "time_series",
           "instant": false,
           "legendFormat": "most recent",
@@ -225,10 +253,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P1809F7CD0C75ACF3"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{destination_service_namespace=~\"${api_namespace}\"}[$__rate_interval] offset $__range)) by (destination_workload) * on(destination_workload) group_right label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",namespace=~\"${api_namespace}\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{}[5m] offset $__range)) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "format": "time_series",
           "hide": false,
           "legendFormat": "previous",
@@ -242,7 +270,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "P1809F7CD0C75ACF3"
+        "uid": "${datasource}"
       },
       "description": "Aggregated rate of requests per endpoint/path.",
       "fieldConfig": {
@@ -301,7 +329,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 13
+        "y": 15
       },
       "id": 7,
       "options": {
@@ -319,10 +347,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P1809F7CD0C75ACF3"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{destination_service_namespace=~\"${api_namespace}\"}[$__rate_interval])) by (destination_workload, request_url_path) * on(destination_workload) group_left label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",namespace=~\"${api_namespace}\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name, request_url_path) * on(destination_service_name) group_left label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "legendFormat": "{{request_url_path}}",
           "range": true,
           "refId": "A"
@@ -367,7 +395,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 13
+        "y": 15
       },
       "id": 155,
       "options": {
@@ -389,7 +417,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "increase(istio_requests_total{destination_service_namespace=~\"$api_namespace\"}[$__range]) * on(destination_workload) group_left label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",namespace=~\"$api_namespace\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum by(request_url_path) (increase(istio_requests_total{}[$__range]) * on(destination_service_name) group_left label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",exported_namespace=~\"$api_namespace\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\"))",
           "format": "table",
           "instant": true,
           "range": false,
@@ -402,7 +430,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "increase(istio_requests_total{destination_service_namespace=~\"$api_namespace\"}[$__range] offset $__range) * on(destination_workload) group_left label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",namespace=~\"$api_namespace\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum by(request_url_path) (increase(istio_requests_total{}[$__range] offset $__range) * on(destination_service_name) group_left label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",exported_namespace=~\"$api_namespace\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\"))",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -416,7 +444,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "increase(istio_requests_total{destination_service_namespace=~\"$api_namespace\"}[$__range]) * on(destination_workload) group_left label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",namespace=~\"$api_namespace\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\") - increase(istio_requests_total{destination_service_namespace=~\"$api_namespace\"}[$__range] offset $__range) * on(destination_workload) group_left label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",namespace=~\"$api_namespace\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum by(request_url_path) (increase(istio_requests_total{}[$__range]) * on(destination_service_name) group_left label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",exported_namespace=~\"$api_namespace\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")) - sum by(request_url_path) (increase(istio_requests_total{}[$__range] offset $__range) * on(destination_service_name) group_left label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",exported_namespace=~\"$api_namespace\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\"))",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -436,6 +464,7 @@
           "id": "organize",
           "options": {
             "excludeByName": {
+              "Time": true,
               "Time 1": true,
               "Time 2": true,
               "Time 3": true,
@@ -478,6 +507,9 @@
               "destination_workload_namespace 1": true,
               "destination_workload_namespace 2": true,
               "destination_workload_namespace 3": true,
+              "endpoint 1": true,
+              "endpoint 2": true,
+              "endpoint 3": true,
               "instance 1": true,
               "instance 2": true,
               "instance 3": true,
@@ -496,6 +528,15 @@
               "pod_template_hash 1": true,
               "pod_template_hash 2": true,
               "pod_template_hash 3": true,
+              "prometheus 1": true,
+              "prometheus 2": true,
+              "prometheus 3": true,
+              "receive 1": true,
+              "receive 2": true,
+              "receive 3": true,
+              "replica 1": true,
+              "replica 2": true,
+              "replica 3": true,
               "reporter 1": true,
               "reporter 2": true,
               "reporter 3": true,
@@ -511,6 +552,9 @@
               "response_flags 1": true,
               "response_flags 2": true,
               "response_flags 3": true,
+              "service 1": true,
+              "service 2": true,
+              "service 3": true,
               "service_istio_io_canonical_name 1": true,
               "service_istio_io_canonical_name 2": true,
               "service_istio_io_canonical_name 3": true,
@@ -537,7 +581,10 @@
               "source_workload 3": true,
               "source_workload_namespace 1": true,
               "source_workload_namespace 2": true,
-              "source_workload_namespace 3": true
+              "source_workload_namespace 3": true,
+              "tenant_id 1": true,
+              "tenant_id 2": true,
+              "tenant_id 3": true
             },
             "indexByName": {},
             "renameByName": {
@@ -552,10 +599,12 @@
       "type": "table"
     }
   ],
-  "refresh": "",
+  "refresh": "30s",
   "schemaVersion": 36,
   "style": "dark",
-  "tags": [],
+  "tags": [
+    "kuadrant"
+  ],
   "templating": {
     "list": [
       {
@@ -578,7 +627,7 @@
       },
       {
         "current": {
-          "selected": false,
+          "selected": true,
           "text": [
             "All"
           ],
@@ -590,7 +639,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(kube_namespace_created, namespace)",
+        "definition": "label_values(kube_namespace_created, exported_namespace)",
         "description": "Namespace of HTTPRoute resources",
         "hide": 0,
         "includeAll": true,
@@ -599,7 +648,7 @@
         "name": "api_namespace",
         "options": [],
         "query": {
-          "query": "label_values(kube_namespace_created, namespace)",
+          "query": "label_values(kube_namespace_created, exported_namespace)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
@@ -610,7 +659,7 @@
       },
       {
         "current": {
-          "selected": false,
+          "selected": true,
           "text": [
             "All"
           ],
@@ -646,10 +695,31 @@
     "from": "now-30m",
     "to": "now"
   },
-  "timepicker": {},
+  "timepicker": {
+    "refresh_intervals": [
+      "30s",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ],
+    "time_options": [
+      "5m",
+      "15m",
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "2d",
+      "7d",
+      "30d"
+    ]
+  },
   "timezone": "",
   "title": "Business User Dashboard",
   "uid": "jA3LDk-Iz",
-  "version": 18,
+  "version": 1,
   "weekStart": ""
 }

@@ -26,8 +26,8 @@
   "fiscalYearStartMonth": 0,
   "gnetId": 7630,
   "graphTooltip": 1,
-  "id": 34,
-  "iteration": 1712914530716,
+  "id": 7,
+  "iteration": 1713209154052,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -38,18 +38,46 @@
       },
       "description": "",
       "gridPos": {
-        "h": 5,
-        "w": 24,
+        "h": 7,
+        "w": 6,
         "x": 0,
+        "y": 0
+      },
+      "id": 152,
+      "options": {
+        "maxItems": 10,
+        "query": "",
+        "showHeadings": false,
+        "showRecentlyViewed": false,
+        "showSearch": true,
+        "showStarred": false,
+        "tags": [
+          "kuadrant"
+        ]
+      },
+      "pluginVersion": "8.5.5",
+      "title": "Kuadrant Dashboards",
+      "type": "dashlist"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "grafana"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 18,
+        "x": 6,
         "y": 0
       },
       "id": 150,
       "options": {
-        "content": "The panels below are grouped by Gateways and APIs.\n\nA Gateway is a [Gateway API defined gateway](https://gateway-api.sigs.k8s.io/concepts/api-overview/#gateway) resource. An API is realised by a [Gateway API HTTPRoute](https://gateway-api.sigs.k8s.io/concepts/api-overview/#httproute).\nAny policies [attached to the Gateways and APIs](https://gateway-api.sigs.k8s.io/geps/gep-713/) will be shown, as well as summary request and error metrics for APIs.\n\n*Important: HTTPRoutes must include a \"service\" and \"deployment\" label with a value that matches the name of the service & deployment being routed to. eg. \"service=myapp, deployment=myapp\"*",
+        "content": "#### Overview of Gateways, Policies and APIs\n\nThe panels below are grouped by Gateways and APIs. A Gateway is a [Gateway API defined gateway](https://gateway-api.sigs.k8s.io/concepts/api-overview/#gateway) resource. An API is realised by a [Gateway API HTTPRoute](https://gateway-api.sigs.k8s.io/concepts/api-overview/#httproute).\nAny policies [attached to the Gateways and APIs](https://gateway-api.sigs.k8s.io/geps/gep-713/) will be shown, as well as summary request and error metrics for APIs.\n\n*Important: HTTPRoutes must include a \"service\" and \"deployment\" label with a value that matches the name of the service & deployment being routed to. eg. \"service=myapp, deployment=myapp\"*",
         "mode": "markdown"
       },
       "pluginVersion": "8.5.5",
-      "title": "Overview of Gateways, Policies and APIs",
+      "title": "Platform Engineer Dashboard",
       "type": "text"
     },
     {
@@ -58,7 +86,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 7
       },
       "id": 128,
       "panels": [],
@@ -127,7 +155,7 @@
         "h": 9,
         "w": 11,
         "x": 0,
-        "y": 6
+        "y": 8
       },
       "id": 115,
       "options": {
@@ -151,7 +179,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_gateway_info{namespace=~\"${gateway_namespace}\"}",
+          "expr": "gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"}",
           "format": "table",
           "instant": true,
           "range": false,
@@ -164,7 +192,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_gateway_status{namespace=~\"${gateway_namespace}\",type=\"Programmed\"}",
+          "expr": "gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Programmed\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -178,7 +206,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_gateway_status{namespace=~\"${gateway_namespace}\",type=\"Accepted\"}",
+          "expr": "gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Accepted\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -228,12 +256,21 @@
               "name 1": false,
               "name 2": true,
               "name 3": true,
-              "namespace 1": false,
+              "namespace 1": true,
               "namespace 2": true,
               "namespace 3": true,
               "prometheus 1": true,
               "prometheus 2": true,
               "prometheus 3": true,
+              "receive 1": true,
+              "receive 2": true,
+              "receive 3": true,
+              "replica 1": true,
+              "replica 2": true,
+              "replica 3": true,
+              "tenant_id 1": true,
+              "tenant_id 2": true,
+              "tenant_id 3": true,
               "type 1": true,
               "type 2": true
             },
@@ -287,8 +324,7 @@
               "exported_namespace 1": "Namespace",
               "gatewayclass_name": "Gateway Class",
               "job 1": "",
-              "name 1": "Name",
-              "namespace 1": "Namespace"
+              "name 1": "Name"
             }
           }
         }
@@ -325,7 +361,7 @@
         "h": 3,
         "w": 2,
         "x": 11,
-        "y": 6
+        "y": 8
       },
       "id": 146,
       "options": {
@@ -351,7 +387,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "count(gatewayapi_gateway_info{namespace=~\"${gateway_namespace}\"})",
+          "expr": "count(gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"})",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -397,7 +433,7 @@
         "h": 9,
         "w": 11,
         "x": 13,
-        "y": 6
+        "y": 8
       },
       "id": 117,
       "options": {
@@ -421,7 +457,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_tlspolicy_target_info{namespace=~\"${gateway_namespace}\",target_kind=\"Gateway\"}",
+          "expr": "gatewayapi_tlspolicy_target_info{exported_namespace=~\"${gateway_namespace}\",target_kind=\"Gateway\"}",
           "format": "table",
           "instant": true,
           "range": false,
@@ -434,7 +470,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_ratelimitpolicy_target_info{namespace=~\"${gateway_namespace}\",target_kind=\"Gateway\"}",
+          "expr": "gatewayapi_ratelimitpolicy_target_info{exported_namespace=~\"${gateway_namespace}\",target_kind=\"Gateway\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -448,7 +484,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_authpolicy_target_info{namespace=~\"${gateway_namespace}\",target_kind=\"Gateway\"}",
+          "expr": "gatewayapi_authpolicy_target_info{exported_namespace=~\"${gateway_namespace}\",target_kind=\"Gateway\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -462,7 +498,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_dnspolicy_target_info{namespace=~\"${gateway_namespace}\",target_kind=\"Gateway\"}",
+          "expr": "gatewayapi_dnspolicy_target_info{exported_namespace=~\"${gateway_namespace}\",target_kind=\"Gateway\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -492,9 +528,12 @@
               "customresource_version": true,
               "instance": true,
               "job": true,
-              "namespace": false,
+              "namespace": true,
               "prometheus": true,
-              "target_group": true
+              "receive": true,
+              "replica": true,
+              "target_group": true,
+              "tenant_id": true
             },
             "indexByName": {
               "Time": 0,
@@ -559,7 +598,7 @@
         "h": 3,
         "w": 2,
         "x": 11,
-        "y": 9
+        "y": 11
       },
       "id": 147,
       "options": {
@@ -585,7 +624,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "group by(name, namespace) (gatewayapi_gateway_status{namespace=~\"${gateway_namespace}\",type=\"Accepted\"} > 0 and ignoring(type) gatewayapi_gateway_status{namespace=~\"${gateway_namespace}\",type=\"Programmed\"} > 0)",
+          "expr": "count(gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Accepted\"} > 0 and ignoring(type) gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Programmed\"} > 0)",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -624,7 +663,7 @@
         "h": 3,
         "w": 2,
         "x": 11,
-        "y": 12
+        "y": 14
       },
       "id": 148,
       "options": {
@@ -650,7 +689,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "count(gatewayapi_gateway_info unless (gatewayapi_gateway_info{namespace=~\"${gateway_namespace}\"} * on(name, namespace) group_left gatewayapi_gateway_status{namespace=~\"${gateway_namespace}\",type=\"Programmed\"})\nor ignoring(type)\ngatewayapi_gateway_info unless (gatewayapi_gateway_info{namespace=~\"${gateway_namespace}\"} * on(name, namespace) group_left gatewayapi_gateway_status{namespace=~\"${gateway_namespace}\",type=\"Accepted\"}))",
+          "expr": "count(gatewayapi_gateway_info unless (gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"} * on(name, namespace) group_left gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Programmed\"})\nor ignoring(type)\ngatewayapi_gateway_info unless (gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"} * on(name, namespace) group_left gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Accepted\"}))",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -665,7 +704,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 15
+        "y": 17
       },
       "id": 145,
       "panels": [],
@@ -709,7 +748,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 18
       },
       "id": 97,
       "options": {
@@ -731,7 +770,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_httproute_hostname_info{name=~\"${route_name}\",namespace=~\"${api_policy_namespace}\"}",
+          "expr": "gatewayapi_httproute_hostname_info{name=~\"${route_name}\",exported_namespace=~\"${api_policy_namespace}\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -745,7 +784,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_httproute_labels{name=~\"${route_name}\",namespace=~\"${api_policy_namespace}\"}",
+          "expr": "gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_policy_namespace}\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -826,7 +865,6 @@
               "hostname": "Hostname",
               "job 1": "",
               "name": "Name",
-              "namespace 1": "Namespace",
               "owner": "Owner"
             }
           }
@@ -884,7 +922,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 18
       },
       "id": 118,
       "options": {
@@ -908,7 +946,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_tlspolicy_target_info{namespace=~\"${api_policy_namespace}\",target_kind!=\"Gateway\",target_name=~\"${route_name}\"}",
+          "expr": "gatewayapi_tlspolicy_target_info{exported_namespace=~\"${api_policy_namespace}\",target_kind!=\"Gateway\",target_name=~\"${route_name}\"}",
           "format": "table",
           "instant": true,
           "range": false,
@@ -921,7 +959,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_ratelimitpolicy_target_info{namespace=~\"${api_policy_namespace}\",target_kind!=\"Gateway\",target_name=~\"${route_name}\"}",
+          "expr": "gatewayapi_ratelimitpolicy_target_info{exported_namespace=~\"${api_policy_namespace}\",target_kind!=\"Gateway\",target_name=~\"${route_name}\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -935,7 +973,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_authpolicy_target_info{namespace=~\"${api_policy_namespace}\",target_kind!=\"Gateway\",target_name=~\"${route_name}\"}",
+          "expr": "gatewayapi_authpolicy_target_info{exported_namespace=~\"${api_policy_namespace}\",target_kind!=\"Gateway\",target_name=~\"${route_name}\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -949,7 +987,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "gatewayapi_dnspolicy_target_info{namespace=~\"${api_policy_namespace}\",target_kind!=\"Gateway\",target_name=~\"${route_name}\"}",
+          "expr": "gatewayapi_dnspolicy_target_info{exported_namespace=~\"${api_policy_namespace}\",target_kind!=\"Gateway\",target_name=~\"${route_name}\"}",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -980,7 +1018,10 @@
               "job": true,
               "namespace": false,
               "prometheus": true,
-              "target_group": true
+              "receive": true,
+              "replica": true,
+              "target_group": true,
+              "tenant_id": true
             },
             "indexByName": {
               "Time": 0,
@@ -1079,7 +1120,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 22
+        "y": 24
       },
       "id": 120,
       "options": {
@@ -1100,7 +1141,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{destination_service_namespace=~\"${api_policy_namespace}\"}[5m])) by (destination_workload) * on(destination_workload) group_right label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",namespace=~\"${api_policy_namespace}\"}, \"destination_workload\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "legendFormat": "API: {{name}}",
           "range": true,
           "refId": "A"
@@ -1171,7 +1212,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 22
+        "y": 24
       },
       "id": 137,
       "options": {
@@ -1192,7 +1233,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(sort_desc(sum(irate(container_network_receive_bytes_total{namespace=~\"$api_policy_namespace\"}[1h:5m])\n* on (namespace,pod)\ngroup_left(workload,workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$api_policy_namespace\", workload=~\".+\"}) by (workload))) * on(workload) label_replace(gatewayapi_httproute_labels{namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")\n",
+          "expr": "(sum(irate(container_network_receive_bytes_total{exported_namespace=~\"$api_policy_namespace\"}[1h:5m])\n* on (namespace, exported_namespace,pod)\ngroup_left(workload,workload_type) namespace_workload_pod:kube_pod_owner:relabel{exported_namespace=~\"$api_policy_namespace\", workload=~\".+\"}) by (workload)) * on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"service\", \"(.+)\")))",
           "legendFormat": "API: {{workload}}",
           "range": true,
           "refId": "A"
@@ -1261,7 +1302,7 @@
         "h": 7,
         "w": 8,
         "x": 16,
-        "y": 22
+        "y": 24
       },
       "id": 139,
       "options": {
@@ -1282,7 +1323,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "legendFormat": "Total Errors: {{name}} ",
           "range": true,
           "refId": "A"
@@ -1293,7 +1334,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "legendFormat": "4xx: {{name}} ",
           "range": true,
@@ -1305,7 +1346,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "legendFormat": "5xx: {{name}} ",
           "range": true,
@@ -1317,7 +1358,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"404\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"404\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "legendFormat": "404: {{name}}",
           "range": true,
@@ -1329,7 +1370,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"401\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"401\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "legendFormat": "401: {{name}}",
           "range": true,
@@ -1341,7 +1382,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"429\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"429\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "legendFormat": "429: {{name}}",
           "range": true,
@@ -1353,7 +1394,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"500\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"500\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "legendFormat": "500: {{name}}",
           "range": true,
@@ -1365,7 +1406,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"501\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"501\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "legendFormat": "501: {{name}}",
           "range": true,
@@ -1377,7 +1418,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"503\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"deployment\", \"(.+)\")",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"503\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")",
           "hide": false,
           "legendFormat": "503: {{name}}",
           "range": true,
@@ -1433,8 +1474,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1531,7 +1571,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 29
+        "y": 31
       },
       "id": 141,
       "interval": "1m",
@@ -1552,10 +1592,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P1809F7CD0C75ACF3"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$api_policy_namespace\"}\n* on(namespace,pod)\n  group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$api_policy_namespace\", workload_type=\"deployment\"}\n) by (workload, workload_type)\n* on(workload) label_replace(gatewayapi_httproute_labels{namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")\n",
+          "expr": "sum(\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{exported_namespace=~\"$api_policy_namespace\"}\n* on(namespace, exported_namespace,pod)\n  group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{exported_namespace=~\"$api_policy_namespace\", workload_type=\"deployment\"}\n) by (workload, workload_type)\n* on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")))",
           "format": "time_series",
           "legendFormat": "API: {{workload}}",
           "range": true,
@@ -1611,8 +1651,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1709,7 +1748,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 29
+        "y": 31
       },
       "id": 143,
       "interval": "1m",
@@ -1730,10 +1769,10 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P1809F7CD0C75ACF3"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(\n    container_memory_working_set_bytes{job=\"kubelet\", metrics_path=\"/metrics/cadvisor\", namespace=~\"$api_policy_namespace\", container!=\"\", image!=\"\"}\n  * on(namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$api_policy_namespace\", workload_type=\"deployment\"}\n) by (workload, workload_type)\n* on(workload) label_replace(gatewayapi_httproute_labels{namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")\n",
+          "expr": "sum(\n    container_memory_working_set_bytes{metrics_path=\"/metrics/cadvisor\", exported_namespace=~\"$api_policy_namespace\", container!=\"\", image!=\"\"}\n  * on(namespace, exported_namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{exported_namespace=~\"$api_policy_namespace\", workload_type=\"deployment\"}\n) by (workload, workload_type)\n* on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")))",
           "format": "time_series",
           "legendFormat": "API: {{workload}}",
           "range": true,
@@ -1744,10 +1783,12 @@
       "type": "timeseries"
     }
   ],
-  "refresh": "5s",
+  "refresh": "30s",
   "schemaVersion": 36,
   "style": "dark",
-  "tags": [],
+  "tags": [
+    "kuadrant"
+  ],
   "templating": {
     "list": [
       {
@@ -1782,7 +1823,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(gatewayapi_gateway_info, namespace)",
+        "definition": "label_values(gatewayapi_gateway_info, exported_namespace)",
         "description": "",
         "hide": 0,
         "includeAll": true,
@@ -1791,7 +1832,7 @@
         "name": "gateway_namespace",
         "options": [],
         "query": {
-          "query": "label_values(gatewayapi_gateway_info, namespace)",
+          "query": "label_values(gatewayapi_gateway_info, exported_namespace)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
@@ -1814,7 +1855,7 @@
           "type": "prometheus",
           "uid": "${datasource}"
         },
-        "definition": "label_values(kube_namespace_created, namespace)",
+        "definition": "label_values(kube_namespace_created, exported_namespace)",
         "description": "Namespace of HTTPRoute & Policy resources",
         "hide": 0,
         "includeAll": true,
@@ -1823,7 +1864,7 @@
         "name": "api_policy_namespace",
         "options": [],
         "query": {
-          "query": "label_values(kube_namespace_created, namespace)",
+          "query": "label_values(kube_namespace_created, exported_namespace)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
@@ -1872,7 +1913,7 @@
   },
   "timepicker": {
     "refresh_intervals": [
-      "5s",
+      "30s",
       "5m",
       "15m",
       "30m",
@@ -1895,6 +1936,6 @@
   "timezone": "",
   "title": "Platform Engineer Dashboard",
   "uid": "djqDaDISk",
-  "version": 9,
+  "version": 1,
   "weekStart": ""
 }

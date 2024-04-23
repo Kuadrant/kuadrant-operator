@@ -120,29 +120,23 @@ func CreateNamespace(namespace *string) {
 }
 
 func DeleteNamespaceCallbackWithContext(ctx context.Context, namespace *string) {
-	desiredTestNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: *namespace}}
-	Eventually(func(g Gomega) {
-		err := k8sClient.Delete(ctx, desiredTestNamespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
-		g.Expect(err).ToNot(BeNil())
-		g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
-	}).WithContext(ctx).Should(Succeed())
-
+	obj := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: *namespace}}
+	Eventually(func() bool {
+		testClient().Delete(ctx, obj, client.PropagationPolicy(metav1.DeletePropagationForeground))
+		existingNamespace := &v1.Namespace{}
+		err := testClient().Get(ctx, types.NamespacedName{Name: *namespace}, existingNamespace)
+		return err != nil && apierrors.IsNotFound(err)
+	}).WithContext(ctx).Should(BeTrue())
 }
 
 func DeleteNamespaceCallback(namespace *string) func() {
+	obj := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: *namespace}}
 	return func() {
-		desiredTestNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: *namespace}}
-		err := testClient().Delete(context.Background(), desiredTestNamespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
-
-		Expect(err).ToNot(HaveOccurred())
-
-		existingNamespace := &v1.Namespace{}
 		Eventually(func() bool {
+			testClient().Delete(context.Background(), obj, client.PropagationPolicy(metav1.DeletePropagationForeground))
+			existingNamespace := &v1.Namespace{}
 			err := testClient().Get(context.Background(), types.NamespacedName{Name: *namespace}, existingNamespace)
-			if err != nil && apierrors.IsNotFound(err) {
-				return true
-			}
-			return false
+			return err != nil && apierrors.IsNotFound(err)
 		}, 3*time.Minute, 2*time.Second).Should(BeTrue())
 	}
 }

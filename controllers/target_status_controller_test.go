@@ -29,11 +29,12 @@ import (
 )
 
 var _ = Describe("Target status reconciler", func() {
+	const testTimeOut = SpecTimeout(2 * time.Minute)
 	var testNamespace string
 
-	BeforeEach(func() {
+	BeforeEach(func(ctx SpecContext) {
 		// create namespace
-		CreateNamespace(&testNamespace)
+		CreateNamespaceWithContext(ctx, &testNamespace)
 
 		// create gateway
 		gateway := testBuildBasicGateway(testGatewayName, testNamespace, func(gateway *gatewayapiv1.Gateway) {
@@ -44,10 +45,10 @@ var _ = Describe("Target status reconciler", func() {
 				Protocol: gatewayapiv1.HTTPProtocolType,
 			}}
 		})
-		err := k8sClient.Create(context.Background(), gateway)
+		err := k8sClient.Create(ctx, gateway)
 		Expect(err).ToNot(HaveOccurred())
 
-		Eventually(testGatewayIsReady(gateway), 15*time.Second, 5*time.Second).Should(BeTrue())
+		Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
 
 		// create kuadrant instance
 		ApplyKuadrantCR(testNamespace)
@@ -56,16 +57,18 @@ var _ = Describe("Target status reconciler", func() {
 		err = ApplyResources(filepath.Join("..", "examples", "toystore", "toystore.yaml"), k8sClient, testNamespace)
 		Expect(err).ToNot(HaveOccurred())
 		route := testBuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
-		err = k8sClient.Create(context.Background(), route)
+		err = k8sClient.Create(ctx, route)
 		Expect(err).ToNot(HaveOccurred())
-		Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route)), time.Minute, 5*time.Second).Should(BeTrue())
+		Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
 	})
 
-	AfterEach(DeleteNamespaceCallback(&testNamespace))
+	AfterEach(func(ctx SpecContext) {
+		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
+	})
 
-	gatewayAffected := func(gatewayName, conditionType string, policyKey client.ObjectKey) bool {
+	gatewayAffected := func(ctx context.Context, gatewayName, conditionType string, policyKey client.ObjectKey) bool {
 		gateway := &gatewayapiv1.Gateway{}
-		err := k8sClient.Get(context.Background(), client.ObjectKey{Name: gatewayName, Namespace: testNamespace}, gateway)
+		err := k8sClient.Get(ctx, client.ObjectKey{Name: gatewayName, Namespace: testNamespace}, gateway)
 		if err != nil {
 			return false
 		}
@@ -73,9 +76,9 @@ var _ = Describe("Target status reconciler", func() {
 		return condition != nil && condition.Status == metav1.ConditionTrue && strings.Contains(condition.Message, policyKey.String())
 	}
 
-	routeAffected := func(routeName, conditionType string, policyKey client.ObjectKey) bool {
+	routeAffected := func(ctx context.Context, routeName, conditionType string, policyKey client.ObjectKey) bool {
 		route := &gatewayapiv1.HTTPRoute{}
-		err := k8sClient.Get(context.Background(), client.ObjectKey{Name: routeName, Namespace: testNamespace}, route)
+		err := k8sClient.Get(ctx, client.ObjectKey{Name: routeName, Namespace: testNamespace}, route)
 		if err != nil {
 			return false
 		}
@@ -87,10 +90,10 @@ var _ = Describe("Target status reconciler", func() {
 		return condition.Status == metav1.ConditionTrue && strings.Contains(condition.Message, policyKey.String())
 	}
 
-	targetsAffected := func(policyKey client.ObjectKey, conditionType string, targetRef gatewayapiv1alpha2.PolicyTargetReference, routeNames ...string) bool {
+	targetsAffected := func(ctx context.Context, policyKey client.ObjectKey, conditionType string, targetRef gatewayapiv1alpha2.PolicyTargetReference, routeNames ...string) bool {
 		switch string(targetRef.Kind) {
 		case "Gateway":
-			if !gatewayAffected(string(targetRef.Name), conditionType, policyKey) {
+			if !gatewayAffected(ctx, string(targetRef.Name), conditionType, policyKey) {
 				return false
 			}
 		case "HTTPRoute":
@@ -98,7 +101,7 @@ var _ = Describe("Target status reconciler", func() {
 		}
 
 		for _, routeName := range routeNames {
-			if !routeAffected(routeName, conditionType, policyKey) {
+			if !routeAffected(ctx, routeName, conditionType, policyKey) {
 				return false
 			}
 		}
@@ -150,40 +153,40 @@ var _ = Describe("Target status reconciler", func() {
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if an AuthPolicy is accepted
 		// and the statuses of its target object and other optional route objects have been all updated as affected by the policy
-		policyAcceptedAndTargetsAffected := func(policy *v1beta2.AuthPolicy, routeNames ...string) func() bool {
+		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *v1beta2.AuthPolicy, routeNames ...string) func() bool {
 			return func() bool {
-				if !isAuthPolicyAccepted(policy)() {
+				if !isAuthPolicyAccepted(ctx, policy)() {
 					return false
 				}
-				return targetsAffected(client.ObjectKeyFromObject(policy), policyAffectedCondition, policy.Spec.TargetRef, routeNames...)
+				return targetsAffected(ctx, client.ObjectKeyFromObject(policy), policyAffectedCondition, policy.Spec.TargetRef, routeNames...)
 			}
 		}
 
-		It("adds PolicyAffected status condition to the targeted route", func() {
+		It("adds PolicyAffected status condition to the targeted route", func(ctx SpecContext) {
 			policy := policyFactory()
-			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy)).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 
-		It("removes PolicyAffected status condition from the targeted route when the policy is deleted", func() {
+		It("removes PolicyAffected status condition from the targeted route when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory()
-			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
-			Expect(k8sClient.Delete(context.Background(), policy)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, policy)).To(Succeed())
 
 			Eventually(func() bool { // route is not affected by the policy
 				route := &gatewayapiv1.HTTPRoute{}
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: testHTTPRouteName, Namespace: testNamespace}, route)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: testHTTPRouteName, Namespace: testNamespace}, route)
 				if err != nil {
 					return false
 				}
 				routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
 				return !found || meta.IsStatusConditionFalse(routeParentStatus.Conditions, policyAffectedCondition)
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 
-		It("adds PolicyAffected status condition to the targeted gateway and routes", func() {
+		It("adds PolicyAffected status condition to the targeted gateway and routes", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *v1beta2.AuthPolicy) {
 				policy.Name = "gateway-auth"
 				policy.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
@@ -193,11 +196,11 @@ var _ = Describe("Target status reconciler", func() {
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				}
 			})
-			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy, testHTTPRouteName), 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy, testHTTPRouteName)).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 
-		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func() {
+		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *v1beta2.AuthPolicy) {
 				policy.Name = "gateway-auth"
 				policy.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
@@ -207,36 +210,36 @@ var _ = Describe("Target status reconciler", func() {
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				}
 			})
-			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
-			Expect(k8sClient.Delete(context.Background(), policy)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, policy)).To(Succeed())
 
 			Eventually(func() bool { // gateway and route not affected by the policy
 				gateway := &gatewayapiv1.Gateway{}
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, gateway)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, gateway)
 				if err != nil || meta.IsStatusConditionTrue(gateway.Status.Conditions, policyAffectedCondition) {
 					return false
 				}
 
 				route := &gatewayapiv1.HTTPRoute{}
-				err = k8sClient.Get(context.Background(), client.ObjectKey{Name: testHTTPRouteName, Namespace: testNamespace}, route)
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: testHTTPRouteName, Namespace: testNamespace}, route)
 				if err != nil {
 					return false
 				}
 				routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
 				return !found || meta.IsStatusConditionFalse(routeParentStatus.Conditions, policyAffectedCondition)
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 
-		It("adds PolicyAffected status condition to the targeted gateway and non-targeted routes", func() {
+		It("adds PolicyAffected status condition to the targeted gateway and non-targeted routes", func(ctx SpecContext) {
 			routePolicy := policyFactory()
-			Expect(k8sClient.Create(context.Background(), routePolicy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Expect(k8sClient.Create(ctx, routePolicy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			otherRouteName := testHTTPRouteName + "-other"
 			otherRoute := testBuildBasicHttpRoute(otherRouteName, testGatewayName, testNamespace, []string{"other.toystore.com"})
-			Expect(k8sClient.Create(context.Background(), otherRoute)).To(Succeed())
+			Expect(k8sClient.Create(ctx, otherRoute)).To(Succeed())
 
 			gatewayPolicy := policyFactory(func(policy *v1beta2.AuthPolicy) {
 				policy.Name = "gateway-auth"
@@ -247,18 +250,18 @@ var _ = Describe("Target status reconciler", func() {
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				}
 			})
-			Expect(k8sClient.Create(context.Background(), gatewayPolicy)).To(Succeed())
+			Expect(k8sClient.Create(ctx, gatewayPolicy)).To(Succeed())
 
 			Eventually(func() bool {
 				return testRouteIsAccepted(client.ObjectKeyFromObject(otherRoute))() &&
-					policyAcceptedAndTargetsAffected(routePolicy)() &&
-					policyAcceptedAndTargetsAffected(gatewayPolicy, otherRouteName)()
-			}, time.Minute, 5*time.Second).Should(BeTrue())
+					policyAcceptedAndTargetsAffected(ctx, routePolicy)() &&
+					policyAcceptedAndTargetsAffected(ctx, gatewayPolicy, otherRouteName)()
+			}).WithContext(ctx).Should(BeTrue())
 
 			// remove route policy and check if the gateway policy has been rolled out to the status of the newly non-targeted route
-			Expect(k8sClient.Delete(context.Background(), routePolicy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(gatewayPolicy, otherRouteName, testHTTPRouteName), time.Minute, 5*time.Second).Should(BeTrue())
-		})
+			Expect(k8sClient.Delete(ctx, routePolicy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, gatewayPolicy, otherRouteName, testHTTPRouteName)).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 	})
 
 	Context("RateLimitPolicy", func() {
@@ -302,41 +305,41 @@ var _ = Describe("Target status reconciler", func() {
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if an RateLimitPolicy is accepted
 		// and the statuses of its target object and other optional route objects have been all updated as affected by the policy
-		policyAcceptedAndTargetsAffected := func(policy *v1beta2.RateLimitPolicy, routeNames ...string) func() bool {
+		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *v1beta2.RateLimitPolicy, routeNames ...string) func() bool {
 			return func() bool {
 				policyKey := client.ObjectKeyFromObject(policy)
 				if !testRLPIsAccepted(policyKey)() {
 					return false
 				}
-				return targetsAffected(policyKey, policyAffectedCondition, policy.Spec.TargetRef, routeNames...)
+				return targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef, routeNames...)
 			}
 		}
 
-		It("adds PolicyAffected status condition to the targeted route", func() {
+		It("adds PolicyAffected status condition to the targeted route", func(ctx SpecContext) {
 			policy := policyFactory()
-			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy)).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 
-		It("removes PolicyAffected status condition from the targeted route when the policy is deleted", func() {
+		It("removes PolicyAffected status condition from the targeted route when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory()
-			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
-			Expect(k8sClient.Delete(context.Background(), policy)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, policy)).To(Succeed())
 
 			Eventually(func() bool { // route is not affected by the policy
 				route := &gatewayapiv1.HTTPRoute{}
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: testHTTPRouteName, Namespace: testNamespace}, route)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: testHTTPRouteName, Namespace: testNamespace}, route)
 				if err != nil {
 					return false
 				}
 				routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
 				return !found || meta.IsStatusConditionFalse(routeParentStatus.Conditions, policyAffectedCondition)
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 
-		It("adds PolicyAffected status condition to the targeted gateway and routes", func() {
+		It("adds PolicyAffected status condition to the targeted gateway and routes", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *v1beta2.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
 				policy.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
@@ -346,11 +349,11 @@ var _ = Describe("Target status reconciler", func() {
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				}
 			})
-			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy, testHTTPRouteName), 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy, testHTTPRouteName)).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 
-		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func() {
+		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *v1beta2.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
 				policy.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
@@ -360,36 +363,36 @@ var _ = Describe("Target status reconciler", func() {
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				}
 			})
-			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
-			Expect(k8sClient.Delete(context.Background(), policy)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, policy)).To(Succeed())
 
 			Eventually(func() bool { // gateway and route not affected by the policy
 				gateway := &gatewayapiv1.Gateway{}
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, gateway)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, gateway)
 				if err != nil || meta.IsStatusConditionTrue(gateway.Status.Conditions, policyAffectedCondition) {
 					return false
 				}
 
 				route := &gatewayapiv1.HTTPRoute{}
-				err = k8sClient.Get(context.Background(), client.ObjectKey{Name: testHTTPRouteName, Namespace: testNamespace}, route)
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: testHTTPRouteName, Namespace: testNamespace}, route)
 				if err != nil {
 					return false
 				}
 				routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
 				return !found || meta.IsStatusConditionFalse(routeParentStatus.Conditions, policyAffectedCondition)
-			}, 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 
-		It("adds PolicyAffected status condition to the targeted gateway and non-targeted routes", func() {
+		It("adds PolicyAffected status condition to the targeted gateway and non-targeted routes", func(ctx SpecContext) {
 			routePolicy := policyFactory()
-			Expect(k8sClient.Create(context.Background(), routePolicy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(routePolicy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Expect(k8sClient.Create(ctx, routePolicy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			otherRouteName := testHTTPRouteName + "-other"
 			otherRoute := testBuildBasicHttpRoute(otherRouteName, testGatewayName, testNamespace, []string{"other.toystore.com"})
-			Expect(k8sClient.Create(context.Background(), otherRoute)).To(Succeed())
+			Expect(k8sClient.Create(ctx, otherRoute)).To(Succeed())
 
 			gatewayPolicy := policyFactory(func(policy *v1beta2.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
@@ -400,18 +403,18 @@ var _ = Describe("Target status reconciler", func() {
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				}
 			})
-			Expect(k8sClient.Create(context.Background(), gatewayPolicy)).To(Succeed())
+			Expect(k8sClient.Create(ctx, gatewayPolicy)).To(Succeed())
 
 			Eventually(func() bool {
 				return testRouteIsAccepted(client.ObjectKeyFromObject(otherRoute))() &&
-					policyAcceptedAndTargetsAffected(routePolicy)() &&
-					policyAcceptedAndTargetsAffected(gatewayPolicy, otherRouteName)()
-			}, time.Minute, 5*time.Second).Should(BeTrue())
+					policyAcceptedAndTargetsAffected(ctx, routePolicy)() &&
+					policyAcceptedAndTargetsAffected(ctx, gatewayPolicy, otherRouteName)()
+			}).WithContext(ctx).Should(BeTrue())
 
 			// remove route policy and check if the gateway policy has been rolled out to the status of the newly non-targeted route
-			Expect(k8sClient.Delete(context.Background(), routePolicy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(gatewayPolicy, otherRouteName, testHTTPRouteName), time.Minute, 5*time.Second).Should(BeTrue())
-		})
+			Expect(k8sClient.Delete(ctx, routePolicy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, gatewayPolicy, otherRouteName, testHTTPRouteName)).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 	})
 
 	Context("DNSPolicy", func() {
@@ -426,9 +429,9 @@ var _ = Describe("Target status reconciler", func() {
 			return policy
 		}
 
-		isDNSPolicyAccepted := func(policyKey client.ObjectKey) bool {
+		isDNSPolicyAccepted := func(ctx context.Context, policyKey client.ObjectKey) bool {
 			policy := &v1alpha1.DNSPolicy{}
-			err := k8sClient.Get(context.Background(), policyKey, policy)
+			err := k8sClient.Get(ctx, policyKey, policy)
 			if err != nil {
 				return false
 			}
@@ -437,51 +440,51 @@ var _ = Describe("Target status reconciler", func() {
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if a DNSPolicy is accepted
 		// and the statuses of its target object has been all updated as affected by the policy
-		policyAcceptedAndTargetsAffected := func(policy *v1alpha1.DNSPolicy) func() bool {
+		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *v1alpha1.DNSPolicy) func() bool {
 			return func() bool {
 				policyKey := client.ObjectKeyFromObject(policy)
-				if !isDNSPolicyAccepted(policyKey) {
+				if !isDNSPolicyAccepted(ctx, policyKey) {
 					return false
 				}
-				return targetsAffected(policyKey, policyAffectedCondition, policy.Spec.TargetRef)
+				return targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef)
 			}
 		}
 
 		var managedZone *kuadrantdnsv1alpha1.ManagedZone
 
-		BeforeEach(func() {
+		BeforeEach(func(ctx SpecContext) {
 			managedZone = testBuildManagedZone("mz-toystore-com", testNamespace, "toystore.com")
-			Expect(k8sClient.Create(context.Background(), managedZone)).To(Succeed())
+			Expect(k8sClient.Create(ctx, managedZone)).To(Succeed())
 		})
 
-		AfterEach(func() {
-			Expect(k8sClient.Delete(context.Background(), managedZone)).To(Succeed())
+		AfterEach(func(ctx SpecContext) {
+			Expect(k8sClient.Delete(ctx, managedZone)).To(Succeed())
 		})
 
-		It("adds PolicyAffected status condition to the targeted gateway", func() {
+		It("adds PolicyAffected status condition to the targeted gateway", func(ctx SpecContext) {
 			policy := policyFactory()
-			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy)).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 
-		It("removes PolicyAffected status condition from the targeted gateway when the policy is deleted", func() {
+		It("removes PolicyAffected status condition from the targeted gateway when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory()
 			policyKey := client.ObjectKeyFromObject(policy)
-			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
-			Expect(k8sClient.Delete(context.Background(), policy)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, policy)).To(Succeed())
 
 			Eventually(func() bool {
 				gateway := &gatewayapiv1.Gateway{}
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, gateway)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, gateway)
 				if err != nil {
 					return false
 				}
 				condition := meta.FindStatusCondition(gateway.Status.Conditions, testGatewayName)
 				return condition == nil || !strings.Contains(condition.Message, policyKey.String()) || condition.Status == metav1.ConditionFalse
 			})
-		})
+		}, testTimeOut)
 	})
 
 	Context("TLSPolicy", func() {
@@ -499,9 +502,9 @@ var _ = Describe("Target status reconciler", func() {
 			return policy
 		}
 
-		isTLSPolicyAccepted := func(policyKey client.ObjectKey) bool {
+		isTLSPolicyAccepted := func(ctx context.Context, policyKey client.ObjectKey) bool {
 			policy := &v1alpha1.TLSPolicy{}
-			err := k8sClient.Get(context.Background(), policyKey, policy)
+			err := k8sClient.Get(ctx, policyKey, policy)
 			if err != nil {
 				return false
 			}
@@ -510,51 +513,51 @@ var _ = Describe("Target status reconciler", func() {
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if a TLSPolicy is accepted
 		// and the statuses of its target object has been all updated as affected by the policy
-		policyAcceptedAndTargetsAffected := func(policy *v1alpha1.TLSPolicy) func() bool {
+		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *v1alpha1.TLSPolicy) func() bool {
 			return func() bool {
 				policyKey := client.ObjectKeyFromObject(policy)
-				if !isTLSPolicyAccepted(policyKey) {
+				if !isTLSPolicyAccepted(ctx, policyKey) {
 					return false
 				}
-				return targetsAffected(policyKey, policyAffectedCondition, policy.Spec.TargetRef)
+				return targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef)
 			}
 		}
 
-		BeforeEach(func() {
+		BeforeEach(func(ctx SpecContext) {
 			issuer, issuerRef = testBuildSelfSignedIssuer("testissuer", testNamespace)
-			Expect(k8sClient.Create(context.Background(), issuer)).To(BeNil())
+			Expect(k8sClient.Create(ctx, issuer)).To(BeNil())
 		})
 
-		AfterEach(func() {
+		AfterEach(func(ctx SpecContext) {
 			if issuer != nil {
-				err := k8sClient.Delete(context.Background(), issuer)
+				err := k8sClient.Delete(ctx, issuer)
 				Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 			}
 		})
 
-		It("adds PolicyAffected status condition to the targeted gateway", func() {
+		It("adds PolicyAffected status condition to the targeted gateway", func(ctx SpecContext) {
 			policy := policyFactory()
-			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy)).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 
-		It("removes PolicyAffected status condition from the targeted gateway when the policy is deleted", func() {
+		It("removes PolicyAffected status condition from the targeted gateway when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory()
 			policyKey := client.ObjectKeyFromObject(policy)
-			Expect(k8sClient.Create(context.Background(), policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(policy), 30*time.Second, 5*time.Second).Should(BeTrue())
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
-			Expect(k8sClient.Delete(context.Background(), policy)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, policy)).To(Succeed())
 
 			Eventually(func() bool {
 				gateway := &gatewayapiv1.Gateway{}
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, gateway)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, gateway)
 				if err != nil {
 					return false
 				}
 				condition := meta.FindStatusCondition(gateway.Status.Conditions, testGatewayName)
 				return condition == nil || !strings.Contains(condition.Message, policyKey.String()) || condition.Status == metav1.ConditionFalse
 			})
-		})
+		}, testTimeOut)
 	})
 })

@@ -3,7 +3,6 @@
 package controllers
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -32,15 +31,15 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 		efName        = fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", gwName)
 	)
 
-	beforeEachCallback := func() {
+	beforeEachCallback := func(ctx SpecContext) {
 		CreateNamespace(&testNamespace)
 		gateway := testBuildBasicGateway(gwName, testNamespace)
-		err := k8sClient.Create(context.Background(), gateway)
+		err := k8sClient.Create(ctx, gateway)
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(func() bool {
 			existingGateway := &gatewayapiv1.Gateway{}
-			err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), existingGateway)
 			if err != nil {
 				logf.Log.V(1).Info("[WARN] Creating gateway failed", "error", err)
 				return false
@@ -52,14 +51,14 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 			}
 
 			return true
-		}, 15*time.Second, 5*time.Second).Should(BeTrue())
+		}).WithContext(ctx).Should(BeTrue())
 
 		ApplyKuadrantCR(testNamespace)
 
 		// Check Limitador Status is Ready
 		Eventually(func() bool {
 			limitador := &limitadorv1alpha1.Limitador{}
-			err := k8sClient.Get(context.Background(), client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, limitador)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, limitador)
 			if err != nil {
 				return false
 			}
@@ -67,14 +66,14 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 				return false
 			}
 			return true
-		}, time.Minute, 5*time.Second).Should(BeTrue())
+		}).WithContext(ctx).Should(BeTrue())
 	}
 
-	BeforeEach(beforeEachCallback)
+	BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
 	AfterEach(DeleteNamespaceCallback(&testNamespace))
 
 	Context("RLP targeting Gateway", func() {
-		It("EnvoyFilter created when RLP exists and deleted with RLP is deleted", func() {
+		It("EnvoyFilter created when RLP exists and deleted with RLP is deleted", func(ctx SpecContext) {
 			// create ratelimitpolicy
 			rlp := &kuadrantv1beta2.RateLimitPolicy{
 				TypeMeta: metav1.TypeMeta{
@@ -104,35 +103,35 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 					},
 				},
 			}
-			err := k8sClient.Create(context.Background(), rlp)
+			err := k8sClient.Create(ctx, rlp)
 			Expect(err).ToNot(HaveOccurred())
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
-			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeFalse())
+			Eventually(testRLPIsAccepted(rlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(testRLPIsEnforced(rlpKey)).WithContext(ctx).Should(BeFalse())
 			Expect(testRLPEnforcedCondition(rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
 
 			// Check envoy filter
 			Eventually(func() bool {
 				existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
 				efKey := client.ObjectKey{Name: efName, Namespace: testNamespace}
-				err = k8sClient.Get(context.Background(), efKey, existingEF)
+				err = k8sClient.Get(ctx, efKey, existingEF)
 				if err != nil {
 					return false
 				}
 				return true
-			}, 15*time.Second, 5*time.Second).Should(BeTrue())
+			}).WithContext(ctx).Should(BeTrue())
 
-			err = k8sClient.Delete(context.Background(), rlp)
+			err = k8sClient.Delete(ctx, rlp)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Check envoy filter is gone
 			Eventually(func() bool {
 				existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
 				efKey := client.ObjectKey{Name: efName, Namespace: testNamespace}
-				err = k8sClient.Get(context.Background(), efKey, existingEF)
+				err = k8sClient.Get(ctx, efKey, existingEF)
 				return apierrors.IsNotFound(err)
-			}, 15*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			}).WithContext(ctx).Should(BeTrue())
+		}, SpecTimeout(time.Minute))
 	})
 })

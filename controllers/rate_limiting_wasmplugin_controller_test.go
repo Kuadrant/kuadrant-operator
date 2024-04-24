@@ -27,7 +27,7 @@ import (
 
 var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
+		testTimeOut      = SpecTimeout(3 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 	var (

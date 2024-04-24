@@ -99,16 +99,19 @@ spec:
 
                           Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-geo.html
                         type: string
+                    required:
+                    - defaultGeo
                     type: object
                   weighted:
                     properties:
                       custom:
+                        description: custom list of custom weight selectors.
                         items:
                           properties:
                             selector:
-                              description: 'Label selector used by MGC to match resource
-                                storing custom weight attribute values e.g. kuadrant.io/lb-attribute-custom-weight:
-                                AWS'
+                              description: 'Label selector to match resource storing
+                                custom weight attribute values e.g. kuadrant.io/lb-attribute-custom-weight:
+                                AWS.'
                               properties:
                                 matchExpressions:
                                   description: matchExpressions is a list of label
@@ -152,10 +155,13 @@ spec:
                               type: object
                               x-kubernetes-map-type: atomic
                             weight:
+                              description: The weight value to apply when the selector
+                                matches.
                               minimum: 0
                               type: integer
                           required:
                           - selector
+                          - weight
                           type: object
                         type: array
                       defaultWeight:
@@ -170,6 +176,8 @@ spec:
                           Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy-weighted.html
                         minimum: 0
                         type: integer
+                    required:
+                    - defaultWeight
                     type: object
                 type: object
               routingStrategy:
@@ -182,12 +190,7 @@ spec:
                 - message: RoutingStrategy is immutable
                   rule: self == oldSelf
               targetRef:
-                description: |-
-                  PolicyTargetReference identifies an API object to apply a direct or
-                  inherited policy to. This should be used as part of Policy resources
-                  that can target Gateway API resources. For more information on how this
-                  policy attachment model works, and a sample Policy resource, refer to
-                  the policy attachment documentation for Gateway API.
+                description: TargetRef identifies an API object to apply policy to.
                 properties:
                   group:
                     description: Group is the group of the target resource.
@@ -220,6 +223,11 @@ spec:
                 - kind
                 - name
                 type: object
+                x-kubernetes-validations:
+                - message: Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'
+                  rule: self.group == 'gateway.networking.k8s.io'
+                - message: Invalid targetRef.kind. The only supported values are 'Gateway'
+                  rule: self.kind == 'Gateway'
             required:
             - routingStrategy
             - targetRef

@@ -171,12 +171,7 @@ spec:
                 format: int32
                 type: integer
               targetRef:
-                description: |-
-                  PolicyTargetReference identifies an API object to apply a direct or
-                  inherited policy to. This should be used as part of Policy resources
-                  that can target Gateway API resources. For more information on how this
-                  policy attachment model works, and a sample Policy resource, refer to
-                  the policy attachment documentation for Gateway API.
+                description: TargetRef identifies an API object to apply policy to.
                 properties:
                   group:
                     description: Group is the group of the target resource.
@@ -209,6 +204,11 @@ spec:
                 - kind
                 - name
                 type: object
+                x-kubernetes-validations:
+                - message: Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'
+                  rule: self.group == 'gateway.networking.k8s.io'
+                - message: Invalid targetRef.kind. The only supported values are 'Gateway'
+                  rule: self.kind == 'Gateway'
               usages:
                 description: |-
                   Usages is the set of x509 usages that are requested for the certificate.

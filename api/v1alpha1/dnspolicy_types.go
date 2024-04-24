@@ -45,17 +45,17 @@ const (
 
 // DNSPolicySpec defines the desired state of DNSPolicy
 type DNSPolicySpec struct {
-	// +kubebuilder:validation:Required
-	// +required
+	// TargetRef identifies an API object to apply policy to.
+	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
+	// +kubebuilder:validation:XValidation:rule="self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'Gateway'"
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
 
 	// +optional
 	HealthCheck *HealthCheckSpec `json:"healthCheck,omitempty"`
 
 	// +optional
-	LoadBalancing *LoadBalancingSpec `json:"loadBalancing"`
+	LoadBalancing *LoadBalancingSpec `json:"loadBalancing,omitempty"`
 
-	// +required
 	// +kubebuilder:validation:Enum=simple;loadbalanced
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="RoutingStrategy is immutable"
 	// +kubebuilder:default=loadbalanced
@@ -65,6 +65,7 @@ type DNSPolicySpec struct {
 type LoadBalancingSpec struct {
 	// +optional
 	Weighted *LoadBalancingWeighted `json:"weighted,omitempty"`
+
 	// +optional
 	Geo *LoadBalancingGeo `json:"geo,omitempty"`
 }
@@ -73,11 +74,11 @@ type LoadBalancingSpec struct {
 type Weight int
 
 type CustomWeight struct {
-	// Label selector used by MGC to match resource storing custom weight attribute values e.g. kuadrant.io/lb-attribute-custom-weight: AWS
-	// +required
+	// Label selector to match resource storing custom weight attribute values e.g. kuadrant.io/lb-attribute-custom-weight: AWS.
 	Selector *metav1.LabelSelector `json:"selector"`
-	// +required
-	Weight Weight `json:"weight,omitempty"`
+
+	// The weight value to apply when the selector matches.
+	Weight Weight `json:"weight"`
 }
 
 type LoadBalancingWeighted struct {
@@ -87,7 +88,9 @@ type LoadBalancingWeighted struct {
 	//
 	// Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy-weighted.html
 	// +kubebuilder:default=120
-	DefaultWeight Weight `json:"defaultWeight,omitempty"`
+	DefaultWeight Weight `json:"defaultWeight"`
+
+	// custom list of custom weight selectors.
 	// +optional
 	Custom []*CustomWeight `json:"custom,omitempty"`
 }
@@ -108,8 +111,7 @@ type LoadBalancingGeo struct {
 	// The values accepted are determined by the target dns provider, please refer to the appropriate docs below.
 	//
 	// Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-geo.html
-	// +required
-	DefaultGeo string `json:"defaultGeo,omitempty"`
+	DefaultGeo string `json:"defaultGeo"`
 }
 
 // DNSPolicyStatus defines the observed state of DNSPolicy
@@ -127,6 +129,7 @@ type DNSPolicyStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
+	// +optional
 	HealthCheck *HealthCheckStatus `json:"healthCheck,omitempty"`
 }
 
@@ -268,15 +271,6 @@ func (s *HealthCheckSpec) Default() {
 
 type HealthCheckStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-}
-
-type DNSRecordRef struct {
-	// +kubebuilder:validation:Required
-	// +required
-	Name string `json:"name"`
-	// +kubebuilder:validation:Required
-	// +required
-	Namespace string `json:"namespace"`
 }
 
 func init() {

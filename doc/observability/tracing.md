@@ -13,7 +13,7 @@ This guide outlines the steps to enable tracing in Istio and Kuadrant components
 
 ### Istio Tracing Configuration
 
-Enable tracing in Istio by using the [Telemetry API](https://istio.io/v1.11/docs/tasks/observability/distributed-tracing/configurability/telemetry-api/).
+Enable tracing in Istio by using the [Telemetry API](https://istio.io/v1.20/docs/tasks/observability/distributed-tracing/telemetry-api/).
 Depending on your method for installing Istio, you will need to configure a tracing `extensionProvider` in your MeshConfig, Istio or IstioOperator resource as well.
 Here is an example Telemetry and Istio config to sample 100% of requests, if using the Istio Sail Operator.
 

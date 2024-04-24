@@ -13,7 +13,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -693,6 +692,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 	})
 
 	Context("RLP Enforced Reasons", func() {
+		const limitadorDeploymentName = "limitador-limitador"
+
 		assertAcceptedCondTrueAndEnforcedCond := func(ctx context.Context, policy *kuadrantv1beta2.RateLimitPolicy, conditionStatus metav1.ConditionStatus, reason, message string) func(g Gomega) {
 			return func(g Gomega) {
 				existingPolicy := &kuadrantv1beta2.RateLimitPolicy{}
@@ -725,21 +726,14 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Remove limitador deployment to simulate enforcement error
 			// RLP should transition to enforcement false in this case
-			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "limitador-limitador", Namespace: testNamespace}})).To(Succeed())
-			Eventually(func() bool {
-				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}, &appsv1.Deployment{}))
-			}).WithContext(ctx).Should(BeTrue())
-
+			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: testNamespace}})).To(Succeed())
 			Eventually(assertAcceptedCondTrueAndEnforcedCond(ctx, policy, metav1.ConditionFalse, string(kuadrant.PolicyReasonUnknown),
 				"RateLimitPolicy has encountered some issues: limitador is not ready")).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
 		It("Unknown Reason", func(ctx SpecContext) {
 			// Remove limitador deployment to simulate enforcement error
-			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "limitador-limitador", Namespace: testNamespace}})).To(Succeed())
-			Eventually(func() bool {
-				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}, &appsv1.Deployment{}))
-			}).WithContext(ctx).Should(BeTrue())
+			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: testNamespace}})).To(Succeed())
 
 			// Enforced false as limitador is not ready
 			policy := policyFactory()

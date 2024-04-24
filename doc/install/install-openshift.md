@@ -98,6 +98,15 @@ kubectl wait istio/default -n istio-system --for="condition=Ready=true"
 
 ## TODO Thanos and Configure Observability
 
+OpenShift supports a user facing monitoring stack. This can be cofigured and setup via their documentation
+https://docs.openshift.com/dedicated/observability/monitoring/configuring-the-monitoring-stack.html 
+
+
+
+Kuadrant provides a set of sample dashboards that use the known metrics exported by kuadrant and gateway components to provide insight into the different areas of your APIs and Gateways. 
+
+TODO (link to monitoring dashboard doc)
+
 
 ### Install Kuadrant
 

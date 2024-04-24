@@ -3,27 +3,70 @@
 
 ## Pre-requisites
 
+This document expects that you have successfully installed Kuadrant [Install Guide](../install/install-openshift.md) onto two different clusters and have configured a shared, accessible redis store. 
+
 - Completed the Kuadrant Install Guide for at least two clusters [Install Guide](../install/install-openshift.md)
 - kubectl command line tool
+- (optional) have user workload monitoring configured to remote write to a central storage system such as Thanos https://docs.openshift.com/dedicated/observability/monitoring/configuring-the-monitoring-stack.html#configuring_remote_write_storage_configuring-the-monitoring-stack 
 
 ## Overview
 
-This doc expects that you have successfully installed kuadrant onto two different clusters and have configured a shared, accessible redis store. 
-In this doc we will walk you through using Kuadrant to secure, protect and connect an API that is distributed across multiple clusters. We will go through setting up DNS based load balancing, Global Rate Limiting, Auth and TLS for a HTTP based API.
+In this doc we will walk you through using Kuadrant to secure, protect and connect an API via a set of Gateways distributed across multiple clusters. 
 
-**Note:** It is important to note that unless explicitly stated, it is expected that these commands are executed against both clusters. For more complex setups a management tool such as ArgoCD can be very useful for distributing the configuration.
+We will take the approach of assuming certain personas and how they can each work with Kuadrant to achieve their goals.
 
-### Setup a managed DNS zone
+**Platform Engineer**
 
-This is the DNS zone where Kuadrant will manage records for listener hosts added to your gateway(s) and connect traffic to your endpoints. It is this zone plus the hostnames defined in the gateway listeners that allow Kuadrant to define a multi-cluster DNS configuration.
+We will walk through deploying a gateway that is secure and protected and ready to be used by a development team to deploy an API. We will then walk through how you can deploy this gateway to clusters in different geographic regions and leveraging Kuadrant bring the right traffic to that gateway while still having it protected and secured via rate limiting and auth.
 
-Create the ManagedZone resource
+As an optional extra we will highlight how, with the user workload monitoring observability stack deployed, these gateways can then be observed and monitored. 
+
+**Developer**
+
+We will walk through how you can use the kuadrant OAS extensions and CLI to generate a `HTTPRoute` for your API and add both Auth and Rate Limiting to your API.
+
+## Platform Engineer
+
+The following steps should be done in each individual cluster unless specifically excluded. Kuadrant provides multi-cluster ingress connectivity using DNS to bring traffic to your Gateways using a strategy defined in a `DNSPolicy` (more later). It uses a shared store (redis) to store counters to enforce global rate limiting defined by a `RateLimitPolicy`. `AuthPolicy` can be configured to leverage external auth providers to ensure different cluster exposing the same API are authenticating and authorizing in the same way. Finally we have designed some dashboards for visualising your gateways and observing traffic hitting those gateways. 
+
+### Env Vars
+
+For convenience in this guide we use some env vars throughout this document
 
 ```
 export zid=change-this-to-your-zone-id
 export rootDomain=example.com
+export gatewayNS=ingress-gateway
+export AWS_ACCESS_KEY_ID=xxxx
+export AWS_SECRET_ACCESS_KEY=xxxx
+
 ```
-apply the zone resource to each cluster or if you are adding an additional cluster add it to the new cluster:
+
+### Tooling
+
+While this document uses kubectl, working with multiple clusters is complex and so we would recommend looking into something like ArgoCD to manage the deployment of resources etc to multiple clusters.
+
+### Setup a managed DNS zone
+
+The managed dns zone declares a zone and credentials to access that zone that can be used by Kuadrant to setup DNS configuration.
+
+**Create the ManagedZone resource**
+
+Ensure your kubectl is targeting the correct cluster. Apply the `ManagedZone` resource below to each cluster or if you are adding an additional cluster add it to the new cluster:
+
+```
+kubectl create ns ${gatewayNS}
+```
+
+Setup AWS credential for route53 access
+
+```
+kubectl -n ${gatewayNS} create secret generic aws-credentials \
+  --type=kuadrant.io/aws \
+  --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+  --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+```  
+
 
 ```
 kubectl apply -f - <<EOF
@@ -31,11 +74,11 @@ apiVersion: kuadrant.io/v1alpha1
 kind: ManagedZone
 metadata:
   name: managedzone
-  namespace: ingress-gateway
+  namespace: ${gatewayNS}
 spec:
   id: ${zid}
   domainName: ${rootDomain}
-  description: "kuadrant managed zone"
+  description: "Kuadrant managed zone"
   dnsProviderSecretRef:
     name: aws-credentials
 EOF
@@ -44,13 +87,13 @@ EOF
 Wait for the zone to be ready
 
 ```
-k wait managedzone/managedzone --for=condition=ready=true -n ingress-gateway
+kubectl wait managedzone/managedzone --for=condition=ready=true -n ingress-gateway
 ```
 
 
 ### Add a TLS Issuer
 
-To secure our gateways we want to define a TLS issuer for TLS certificates. We will use letsencrypt, but you can use any supported by cert-manager.
+To secure communication to the gateways we want to define a TLS issuer for TLS certificates. We will use letsencrypt, but you can use any supported by cert-manager.
 
 
 ```
@@ -80,11 +123,14 @@ spec:
               key: AWS_SECRET_ACCESS_KEY
               name: aws-credentials
 EOF
+
+
+kubectl wait clusterissuer/lets-encrypt --for=condition=ready=true
 ```
 
 ### Setup a Gateway
 
-In order for Kuadrant to balance traffic using DNS across two or more clusters. We need to define a gateway with a shared host. We will define this as a HTTPS listener with a wildcard DNS entry based on your root domain. As mentioned, these resources need to be applied to both clusters.
+In order for Kuadrant to balance traffic using DNS across two or more clusters. We need to define a gateway with a shared host. We will define this with a HTTPS listener with a wildcard hostname based on the root domain. As mentioned, these resources need to be applied to both clusters.
 
 ```
 kubectl apply -f - <<EOF
@@ -92,7 +138,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: external
-  namespace: ingress-gateway
+  namespace: ${gatewayNS}
 spec:
     gatewayClassName: istio
     listeners:
@@ -112,9 +158,33 @@ spec:
 EOF
 ```        
 
-### Secure and Protect the Gateway with Rate Limiting, Auth and TLS
+### Secure and Protect the Gateway with Rate Limiting, Auth and TLS policies.
 
-While our gateway is deployed, it is not yet exposed via an address. This is because we have not yet setup the TLS cert and so the Gateway is not in a ready state. Before we do that lets set up an `AuthPolicy` so that when our gateway is exposed any endpoint will default to a `DENY ALL` 403 response. We will also setup a `ratelimitpolicy` and  `TLSPolicy` to setup our certificates.
+While our gateway is now deployed it has no exposed endpoints. So Before we do that lets set up a `TLSPolicy` that leverages our CertificateIssuer to setup our listener certificates. Also lets define an `AuthPolicy` that will setup a default 403 response for any unprotected endpoints and a `RateLimitPolicy` that will setup a default (artificially) low global limit to further protect any endpoints exposed by this gateway.
+
+
+TLSPolicy
+
+```
+kubectl apply -f - <<EOF
+apiVersion: kuadrant.io/v1alpha1
+kind: TLSPolicy
+metadata:
+  name: external
+  namespace: ${gatewayNS}
+spec:
+  targetRef:
+    name: external
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: lets-encrypt
+EOF
+```
+
+AuthPolicy
 
 ```
 kubectl apply -f - <<EOF
@@ -122,7 +192,7 @@ apiVersion: kuadrant.io/v1beta2
 kind: AuthPolicy
 metadata:
   name: external
-  namespace: ingress-gateway
+  namespace: ${gatewayNS}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
@@ -144,14 +214,14 @@ kubectl apply -f  - <<EOF
 apiVersion: kuadrant.io/v1beta2
 kind: RateLimitPolicy
 metadata:
-  name: low-limit
-  namespace: ingress-gateway
+  name: external
+  namespace: ${gatewayNS}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
     name: external
-  overrides:
+  defaults:
     limits:
       "low-limit":
         rates:
@@ -161,43 +231,21 @@ spec:
 EOF
 ```
 
-TLSPolicy
-
-```
-kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1alpha1
-kind: TLSPolicy
-metadata:
-  name: external
-  namespace: ingress-gateway
-spec:
-  targetRef:
-    name: external
-    group: gateway.networking.k8s.io
-    kind: Gateway
-  issuerRef:
-    group: cert-manager.io
-    kind: ClusterIssuer
-    name: lets-encrypt
-EOF
-```
-
 
 Lets check our policies have been accepted. 
 
 ```
-kubectl get tlspolicy external -n ingress-gateway -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
+kubectl get tlspolicy external -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
 
-kubectl get authpolicy external -n ingress-gateway -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
+kubectl get authpolicy external -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
 
-kubectl get ratelimitpolicy low-limit -n ingress-gateway -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
+kubectl get ratelimitpolicy low-limit -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
 
 ```
-Again we should see it has been accepted but not yet enforced. It is not enforced as we have not added any HTTPRoutes to the gateway yet.
 
 ### Setup our DNS
 
-Next we will apply a `DNSPolicy`. This policy will configure how traffic reaches the gateways deployed to our different clusters. Again it will be accepted but not yet enforced as we have no HTTPRoutes defined at this point.
+Next we will apply a `DNSPolicy`. This policy will configure how traffic reaches the gateways deployed to our different clusters. In this case it will setup a loadbalanced strategy, which will mean it will provide a form of RoundRobin response to DNS clients.
 
 ```
 kubectl apply -f - <<EOF
@@ -205,7 +253,7 @@ apiVersion: kuadrant.io/v1alpha1
 kind: DNSPolicy
 metadata:
   name: loadbalanced
-  namespace: ingress-gateway
+  namespace: ${gatewayNS}
 spec:
   routingStrategy: loadbalanced
   targetRef:
@@ -216,30 +264,35 @@ EOF
 ```    
 Note: the DNSPolicy will leverage the ManagedZone we defined earlier based on the listener hosts defined in the gateway.
 
-check our status conditions
+Lets check our DNSPolicy has been accepted.
 ```
-k get dnspolicy loadbalanced -n ingress-gateway -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
+kubectl get dnspolicy loadbalanced -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
 ```
-
-You should see it has been accepted but not yet enforced.
 
 
 #TODO add section about viewing Gateway dashboards
 
-## RECAP
+## Platform Engineer review
 
-So far we have setup an external gateway, secured it with TLS, Protected all endpoints with a default `DENY ALL` AuthPolicy added a restrictive RateLimitPolicy and set up ManagedZone and a DNSPolicy to ensure traffic is brought to the gateway for the listener hosts defined once we apply a HTTPRoute. Now that our policies are in place lets add a backend and HTTPRoute
+So far we have setup an external gateway, secured it with TLS, Protected all endpoints with a default `DENY ALL` AuthPolicy added a restrictive default RateLimitPolicy and set up ManagedZone and a DNSPolicy to ensure traffic is brought to the gateway for the listener hosts defined. Our gateway is now ready to start accepting traffic.
+
+To cause DNS to populate and the DNSPolicy to be enforced, we first need to add an actual HTTPRoute based endpoint.
+
+## Developer
+
+
+TODO define OAS
+
 
 ### Setup HTTPRoute and backend
 
-This will setup a toy application in the toystore ns
+This will setup a toy application in the same ns as the gateway but you can deploy it to any namespace.
 
 ```sh
-kubectl create ns toystore
-kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/examples/toystore/toystore.yaml -n toystore
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml -n ${gatewayNS}
 ```
 
-### Setup HTTPRoute level RateLimits and Auth
+Open Up the application to traffic via a `HTTPRoute`
 
 ```
 kubectl apply -f - <<EOF
@@ -247,11 +300,11 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: api
-  namespace: toystore
+  namespace: ${gatewayNS}
 spec:
   parentRefs:
   - name: external
-    namespace: ingress-gateway
+    namespace: ${gatewayNS}
   hostnames:
   - "toys.${rootDomain}"
   rules:
@@ -259,7 +312,38 @@ spec:
     - name: toystore
       port: 80
 EOF
-```      
+```
+
+
+Ok lets check our gateway policies are enforced
+
+//TODO describe where to view dashboards
+
+```
+kubectl get dnspolicy loadbalanced -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
+kubectl get authpolicy external -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
+kubectl get ratelimitpolicy external -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
+
+```
+
+note TLS policy is currently missing an enforced condition. https://github.com/Kuadrant/kuadrant-operator/issues/572. However looking at the gateway status we can see it is affected by 
+
+```
+kubectl get gateway -n ${gatewayNS} external -n demo -o=jsonpath='{.status.conditions[*].message}'
+```
+
+### Test connectivity and deny all auth 
+
+We are using curl to hit our endpoint. As we are using letsencrypt staging in this example we pass the `-k` flag.
+
+```
+curl -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute api -n demo -o=jsonpath='{.spec.hostnames[0]}')
+
+```
+
+### Setup HTTPRoute level RateLimits and Auth
+
+      
 
 ```
 kubectl apply -f  - <<EOF

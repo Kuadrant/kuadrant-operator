@@ -24,8 +24,10 @@ import (
 )
 
 var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
-	const testTimeOut = SpecTimeout(2 * time.Minute)
-
+	const (
+		testTimeOut      = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+	)
 	var (
 		testNamespace string
 		gwName        = "toystore-gw"
@@ -34,7 +36,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 	)
 
 	beforeEachCallback := func(ctx SpecContext) {
-		CreateNamespace(&testNamespace)
+		CreateNamespaceWithContext(ctx, &testNamespace)
 		gateway := testBuildBasicGateway(gwName, testNamespace)
 		err := k8sClient.Create(ctx, gateway)
 		Expect(err).ToNot(HaveOccurred())
@@ -72,7 +74,9 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 	}
 
 	BeforeEach(beforeEachCallback)
-	AfterEach(DeleteNamespaceCallback(&testNamespace))
+	AfterEach(func(ctx SpecContext) {
+		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
+	}, afterEachTimeOut)
 
 	Context("RLP targeting Gateway", func() {
 		It("EnvoyFilter created when RLP exists and deleted with RLP is deleted", func(ctx SpecContext) {

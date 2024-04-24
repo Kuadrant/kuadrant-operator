@@ -26,8 +26,10 @@ import (
 )
 
 var _ = Describe("Rate Limiting WasmPlugin controller", func() {
-	const testTimeOut = SpecTimeout(2 * time.Minute)
-
+	const (
+		testTimeOut      = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+	)
 	var (
 		testNamespace string
 	)
@@ -40,7 +42,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 	BeforeEach(beforeEachCallback)
 	AfterEach(func(ctx SpecContext) {
 		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
-	})
+	}, afterEachTimeOut)
 
 	Context("Basic tests", func() {
 		var (

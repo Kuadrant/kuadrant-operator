@@ -18,7 +18,10 @@ import (
 )
 
 var _ = Describe("Kuadrant Gateway controller", func() {
-	const testTimeOut = SpecTimeout(2 * time.Minute)
+	const (
+		testTimeOut      = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+	)
 	var (
 		testNamespace string
 		gwAName       = "gw-a"
@@ -30,7 +33,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 	}
 
 	BeforeEach(beforeEachCallback)
-	AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, &testNamespace) })
+	AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, &testNamespace) }, afterEachTimeOut)
 
 	Context("two gateways created after Kuadrant instance", func() {
 		It("gateways should have required annotation", func(ctx SpecContext) {
@@ -140,7 +143,7 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 			ApplyKuadrantCRWithName(secondNamespace, kuadrantBName)
 		})
 
-		AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, &secondNamespace) })
+		AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, &secondNamespace) }, afterEachTimeOut)
 
 		It("new gateway should not be annotated", func(ctx SpecContext) {
 			gateway := testBuildBasicGateway("gw-a", testNamespace)

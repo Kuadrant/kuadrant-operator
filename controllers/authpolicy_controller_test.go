@@ -36,8 +36,10 @@ const (
 )
 
 var _ = Describe("AuthPolicy controller", func() {
-	const testTimeOut = SpecTimeout(2 * time.Minute)
-
+	const (
+		testTimeOut      = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+	)
 	var testNamespace string
 
 	BeforeEach(func(ctx SpecContext) {
@@ -54,7 +56,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 	AfterEach(func(ctx SpecContext) {
 		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
-	})
+	}, afterEachTimeOut)
 
 	policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
 		policy := &api.AuthPolicy{
@@ -1495,13 +1497,17 @@ var _ = Describe("AuthPolicy controller", func() {
 })
 
 var _ = Describe("AuthPolicy CEL Validations", func() {
+	const (
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+	)
+
 	var testNamespace string
 
 	BeforeEach(func(ctx SpecContext) {
 		CreateNamespaceWithContext(ctx, &testNamespace)
 	})
 
-	AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, &testNamespace) })
+	AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, &testNamespace) }, afterEachTimeOut)
 
 	policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
 		policy := &api.AuthPolicy{

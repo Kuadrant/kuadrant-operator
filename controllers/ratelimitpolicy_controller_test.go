@@ -27,7 +27,10 @@ import (
 )
 
 var _ = Describe("RateLimitPolicy controller", func() {
-	const testTimeOut = SpecTimeout(2 * time.Minute)
+	const (
+		testTimeOut      = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+	)
 	var (
 		testNamespace string
 		routeName     = "toystore-route"
@@ -84,7 +87,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 	BeforeEach(beforeEachCallback)
 	AfterEach(func(ctx SpecContext) {
 		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
-	})
+	}, afterEachTimeOut)
 
 	Context("RLP targeting HTTPRoute", func() {
 		It("Creates all the resources for a basic HTTPRoute and RateLimitPolicy", func(ctx SpecContext) {
@@ -1167,14 +1170,20 @@ var _ = Describe("RateLimitPolicy controller", func() {
 })
 
 var _ = Describe("RateLimitPolicy CEL Validations", func() {
-	const testTimeOut = SpecTimeout(2 * time.Minute)
+	const (
+		testTimeOut      = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+	)
+
 	var testNamespace string
 
-	BeforeEach(func() {
-		CreateNamespace(&testNamespace)
+	BeforeEach(func(ctx SpecContext) {
+		CreateNamespaceWithContext(ctx, &testNamespace)
 	})
 
-	AfterEach(DeleteNamespaceCallback(&testNamespace))
+	AfterEach(func(ctx SpecContext) {
+		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
+	}, afterEachTimeOut)
 
 	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
 		policy := &kuadrantv1beta2.RateLimitPolicy{

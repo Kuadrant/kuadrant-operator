@@ -13,7 +13,6 @@ import (
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-	"github.com/google/uuid"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -100,23 +99,7 @@ func CreateNamespaceWithContext(ctx context.Context, namespace *string) {
 }
 
 func CreateNamespace(namespace *string) {
-	var generatedTestNamespace = "test-namespace-" + uuid.New().String()
-
-	nsObject := &v1.Namespace{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
-		ObjectMeta: metav1.ObjectMeta{Name: generatedTestNamespace},
-	}
-
-	err := testClient().Create(context.Background(), nsObject)
-	Expect(err).ToNot(HaveOccurred())
-
-	existingNamespace := &v1.Namespace{}
-	Eventually(func() bool {
-		err := testClient().Get(context.Background(), types.NamespacedName{Name: generatedTestNamespace}, existingNamespace)
-		return err == nil
-	}, time.Minute, 5*time.Second).Should(BeTrue())
-
-	*namespace = existingNamespace.Name
+	CreateNamespaceWithContext(context.Background(), namespace)
 }
 
 func DeleteNamespaceCallbackWithContext(ctx context.Context, namespace *string) {

@@ -28,7 +28,10 @@ import (
 )
 
 var _ = Describe("Target status reconciler", func() {
-	const testTimeOut = SpecTimeout(2 * time.Minute)
+	const (
+		testTimeOut      = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+	)
 	var testNamespace string
 
 	BeforeEach(func(ctx SpecContext) {
@@ -61,7 +64,7 @@ var _ = Describe("Target status reconciler", func() {
 
 	AfterEach(func(ctx SpecContext) {
 		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
-	})
+	}, afterEachTimeOut)
 
 	gatewayAffected := func(ctx context.Context, gatewayName, conditionType string, policyKey client.ObjectKey) bool {
 		gateway := &gatewayapiv1.Gateway{}
@@ -456,7 +459,7 @@ var _ = Describe("Target status reconciler", func() {
 
 		AfterEach(func(ctx SpecContext) {
 			Expect(k8sClient.Delete(ctx, managedZone)).To(Succeed())
-		})
+		}, afterEachTimeOut)
 
 		It("adds PolicyAffected status condition to the targeted gateway", func(ctx SpecContext) {
 			policy := policyFactory()
@@ -530,7 +533,7 @@ var _ = Describe("Target status reconciler", func() {
 				err := k8sClient.Delete(ctx, issuer)
 				Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 			}
-		})
+		}, afterEachTimeOut)
 
 		It("adds PolicyAffected status condition to the targeted gateway", func(ctx SpecContext) {
 			policy := policyFactory()

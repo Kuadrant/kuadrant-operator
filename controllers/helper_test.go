@@ -425,7 +425,16 @@ func testRLPIsConditionTrue(rlpKey client.ObjectKey, condition string) func() bo
 	return func() bool {
 		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
 		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
-		return err == nil && meta.IsStatusConditionTrue(existingRLP.Status.Conditions, condition)
+		if err != nil {
+			logf.Log.V(1).Error(err, "ratelimitpolicy not read", "rlp", rlpKey)
+			return false
+		}
+		if meta.IsStatusConditionFalse(existingRLP.Status.Conditions, condition) {
+			logf.Log.V(1).Info("ratelimitpolicy condition not true", "rlp", rlpKey, "condition", condition)
+			return false
+		}
+
+		return true
 	}
 }
 

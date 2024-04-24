@@ -26,7 +26,7 @@ metadata:
 spec:
   tracing:
   - providers:
-    - name: jaeger-tempo
+    - name: tempo-otlp
     randomSamplingPercentage: 100
 ---
 apiVersion: operator.istio.io/v1alpha1
@@ -41,7 +41,7 @@ spec:
         tracing: {}
       enableTracing: true
       extensionProviders:
-      - name: jaeger-tempo
+      - name: tempo-otlp
         opentelemetry:
           port: 4317
           service: tempo.tempo.svc.cluster.local
@@ -54,36 +54,22 @@ Here is an example configuration to enable and send traces to a central collecto
 Ensure the collector is the same one that Istio is sending traces so that they can be correlated later.
 
 ```yaml
-apiVersion: kuadrant.io/v1beta2
-kind: AuthPolicy
+apiVersion: operator.authorino.kuadrant.io/v1beta1
+kind: Authorino
 metadata:
-  name: authpolicy
-  namespace: default
+  name: authorino
 spec:
-  rules:
-    authentication: {}
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: mygateway
   tracing:
     endpoint: rpc://tempo.tempo.svc.cluster.local:4317
     insecure: true
 ---
-apiVersion: kuadrant.io/v1beta2
-kind: RateLimitPolicy
+apiVersion: limitador.kuadrant.io/v1alpha1
+kind: Limitador
 metadata:
-  name: limitpolicy
-  namespace: default
+  name: limitador
 spec:
-  limits: {}
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: mygateway
   tracing:
     endpoint: rpc://tempo.tempo.svc.cluster.local:4317
-    insecure: true
 ```
 
 Once the changes are applied, the authorino and limitador components will be redeployed tracing enabled.
@@ -111,6 +97,17 @@ Here is an example trace in the Grafana UI showing the total request time from t
 <img src="./grafana_trace.png" alt="Trace in Grafana UI" width="800"/>
 
 In limitador, it is possible to enable request logging with trace IDs to get more information on requests.
+This requires the log level to be increased to at least debug, so the verbosity must be set to 3 or higher in the Limitador CR. For example:
+
+```yaml
+apiVersion: limitador.kuadrant.io/v1alpha1
+kind: Limitador
+metadata:
+  name: limitador
+spec:
+  verbosity: 3
+```
+
 A log entry will look something like this, with the `traceparent` field holding the trace ID:
 
 ```

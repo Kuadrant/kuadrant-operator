@@ -183,7 +183,7 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 
 	Context("loadbalanced routing strategy", func() {
 
-		Context("geo+weighted with default weights", func() {
+		Context("geo+weighted with matching default geo", func() {
 
 			BeforeEach(func() {
 				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
@@ -537,7 +537,7 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 
 		})
 
-		Context("geo+weighted with foreign geo", func() {
+		Context("geo+weighted with no matching default geo", func() {
 
 			BeforeEach(func() {
 				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).

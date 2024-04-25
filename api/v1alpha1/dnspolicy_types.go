@@ -44,6 +44,7 @@ const (
 )
 
 // DNSPolicySpec defines the desired state of DNSPolicy
+// +kubebuilder:validation:XValidation:rule="!(self.routingStrategy == 'loadbalanced' && !has(self.loadBalancing))",message="spec.loadBalancing is a required field when spec.routingStrategy == 'loadbalanced'"
 type DNSPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
@@ -63,11 +64,9 @@ type DNSPolicySpec struct {
 }
 
 type LoadBalancingSpec struct {
-	// +optional
-	Weighted *LoadBalancingWeighted `json:"weighted,omitempty"`
+	Weighted LoadBalancingWeighted `json:"weighted"`
 
-	// +optional
-	Geo *LoadBalancingGeo `json:"geo,omitempty"`
+	Geo LoadBalancingGeo `json:"geo"`
 }
 
 // +kubebuilder:validation:Minimum=0
@@ -87,7 +86,6 @@ type LoadBalancingWeighted struct {
 	// The maximum value accepted is determined by the target dns provider, please refer to the appropriate docs below.
 	//
 	// Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy-weighted.html
-	// +kubebuilder:default=120
 	DefaultWeight Weight `json:"defaultWeight"`
 
 	// custom list of custom weight selectors.
@@ -111,6 +109,8 @@ type LoadBalancingGeo struct {
 	// The values accepted are determined by the target dns provider, please refer to the appropriate docs below.
 	//
 	// Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-geo.html
+	// Google: https://cloud.google.com/compute/docs/regions-zones
+	// +kubebuilder:validation:MinLength=2
 	DefaultGeo string `json:"defaultGeo"`
 }
 
@@ -344,11 +344,11 @@ func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port *int, protocol stri
 
 func (p *DNSPolicy) WithLoadBalancingFor(defaultWeight Weight, custom []*CustomWeight, defaultGeo string) *DNSPolicy {
 	return p.WithLoadBalancing(LoadBalancingSpec{
-		Weighted: &LoadBalancingWeighted{
+		Weighted: LoadBalancingWeighted{
 			DefaultWeight: defaultWeight,
 			Custom:        custom,
 		},
-		Geo: &LoadBalancingGeo{
+		Geo: LoadBalancingGeo{
 			DefaultGeo: defaultGeo,
 		},
 	})

@@ -66,6 +66,41 @@ var _ = Describe("DNSPolicy controller", func() {
 		DeleteNamespaceCallback(&testNamespace)()
 	})
 
+	It("should validate routing strategy field correctly", func() {
+		gateway = NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+			WithHTTPListener(TestListenerNameOne, TestHostTwo).Gateway
+
+		// simple should succeed
+		dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			WithTargetGateway("test-gateway").
+			WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
+		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+
+		// should not allow changing routing strategy
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+			g.Expect(err).NotTo(HaveOccurred())
+			dnsPolicy.Spec.RoutingStrategy = v1alpha1.LoadBalancedRoutingStrategy
+			err = k8sClient.Update(ctx, dnsPolicy)
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err).To(MatchError(ContainSubstring("RoutingStrategy is immutable")))
+		}, TestTimeoutMedium, time.Second).Should(Succeed())
+		Expect(k8sClient.Delete(ctx, dnsPolicy)).ToNot(HaveOccurred())
+
+		// loadbalanced missing loadbalancing field
+		dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			WithTargetGateway("test-gateway").
+			WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy)
+		Expect(k8sClient.Create(ctx, dnsPolicy)).To(MatchError(ContainSubstring("spec.loadBalancing is a required field when spec.routingStrategy == 'loadbalanced'")))
+
+		// loadbalanced should succeed
+		dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			WithTargetGateway("test-gateway").
+			WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
+			WithLoadBalancingFor(100, nil, "foo")
+		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+	})
+
 	Context("invalid target", func() {
 
 		BeforeEach(func() {
@@ -108,17 +143,6 @@ var _ = Describe("DNSPolicy controller", func() {
 						"Message": Equal("DNSPolicy has been accepted"),
 					})),
 				)
-			}, TestTimeoutMedium, time.Second).Should(Succeed())
-		})
-
-		It("should not allow changing routing strategy", func() {
-			Eventually(func(g Gomega) {
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
-				g.Expect(err).NotTo(HaveOccurred())
-				dnsPolicy.Spec.RoutingStrategy = v1alpha1.LoadBalancedRoutingStrategy
-				err = k8sClient.Update(ctx, dnsPolicy)
-				g.Expect(err).To(HaveOccurred())
-				g.Expect(err).To(MatchError(ContainSubstring("RoutingStrategy is immutable")))
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
 

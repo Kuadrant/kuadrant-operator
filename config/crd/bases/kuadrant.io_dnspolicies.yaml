@@ -98,6 +98,8 @@ spec:
 
 
                           Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-geo.html
+                          Google: https://cloud.google.com/compute/docs/regions-zones
+                        minLength: 2
                         type: string
                     required:
                     - defaultGeo
@@ -165,7 +167,6 @@ spec:
                           type: object
                         type: array
                       defaultWeight:
-                        default: 120
                         description: |-
                           defaultWeight is the record weight to use when no other can be determined for a dns target cluster.
 
@@ -179,6 +180,9 @@ spec:
                     required:
                     - defaultWeight
                     type: object
+                required:
+                - geo
+                - weighted
                 type: object
               routingStrategy:
                 default: loadbalanced
@@ -232,6 +236,10 @@ spec:
             - routingStrategy
             - targetRef
             type: object
+            x-kubernetes-validations:
+            - message: spec.loadBalancing is a required field when spec.routingStrategy
+                == 'loadbalanced'
+              rule: '!(self.routingStrategy == ''loadbalanced'' && !has(self.loadBalancing))'
           status:
             description: DNSPolicyStatus defines the observed state of DNSPolicy
             properties:

@@ -208,7 +208,6 @@ func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.GatewayTar
 	}
 
 	var endpoint *externaldns.Endpoint
-	var defaultEndpoint *externaldns.Endpoint
 	endpoints := make([]*externaldns.Endpoint, 0)
 	lbName := strings.ToLower(fmt.Sprintf("klb.%s", cnameHost))
 
@@ -244,17 +243,17 @@ func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.GatewayTar
 		}
 		endpoints = append(endpoints, clusterEndpoints...)
 
-		//Deal with the default geo endpoint
+		//Create lbName CNAME (lb-a1b2.shop.example.com -> <geoCode>.lb-a1b2.shop.example.com)
+		endpoint = createOrUpdateEndpoint(lbName, []string{geoLbName}, kuadrantdnsv1alpha1.CNAMERecordType, string(geoCode), DefaultCnameTTL, currentEndpoints)
+		endpoint.SetProviderSpecificProperty(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(geoCode))
+		endpoints = append(endpoints, endpoint)
+
+		//Add a default geo (*) endpoint if the current geoCode is equal to the defaultGeo set in the policy spec
 		if geoCode == mcgTarget.GetDefaultGeo() {
-			// Ensure that `defaultEndpoint` is set only if geo of the current cluster is desired default geo
-			defaultEndpoint = createOrUpdateEndpoint(lbName, []string{geoLbName}, kuadrantdnsv1alpha1.CNAMERecordType, "default", DefaultCnameTTL, currentEndpoints)
-			defaultEndpoint.SetProviderSpecificProperty(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(v1alpha1.WildcardGeo))
-			endpoints = append(endpoints, defaultEndpoint)
+			endpoint = createOrUpdateEndpoint(lbName, []string{geoLbName}, kuadrantdnsv1alpha1.CNAMERecordType, "default", DefaultCnameTTL, currentEndpoints)
+			endpoint.SetProviderSpecificProperty(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(v1alpha1.WildcardGeo))
+			endpoints = append(endpoints, endpoint)
 		}
-		//Create lbName CNAME (lb-a1b2.shop.example.com -> default.lb-a1b2.shop.example.com)
-		ep := createOrUpdateEndpoint(lbName, []string{geoLbName}, kuadrantdnsv1alpha1.CNAMERecordType, string(geoCode), DefaultCnameTTL, currentEndpoints)
-		ep.SetProviderSpecificProperty(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(geoCode))
-		endpoints = append(endpoints, ep)
 	}
 
 	if len(endpoints) > 0 {

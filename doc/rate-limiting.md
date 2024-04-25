@@ -1,6 +1,6 @@
 # Kuadrant Rate Limiting
 
-A Kuadrant RateLimitPolicy custom resource, often abbreviated "RLP":
+A Kuadrant RateLimitPolicy custom resource, often abbreviated "RateLimitPolicy":
 
 1. Targets Gateway API networking resources such as [HTTPRoutes](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRoute) and [Gateways](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.Gateway), using these resources to obtain additional context, i.e., which traffic workload (HTTP attributes, hostnames, user attributes, etc) to rate limit.
 2. Supports targeting subsets (sections) of a network resource to apply the limits to.
@@ -33,6 +33,8 @@ Each limit definition includes:
 * (Optional) A set of route selectors, to further qualify the specific routing rules when to activate the limit (`spec.limits.<limit-name>.routeSelectors[]`)
 * (Optional) A set of additional dynamic conditions to activate the limit (`spec.limits.<limit-name>.when[]`)
 
+The limit definitions (`limits`) can be declared at the top-level level of the spec (with the semantics of _defaults_) or alternatively within explicit `defaults` or `overrides` blocks.
+
 <table>
   <tbody>
     <tr>
@@ -49,54 +51,67 @@ kind: RateLimitPolicy
 metadata:
   name: my-rate-limit-policy
 spec:
-  # reference to an existing networking resource to attach the policy to
-  # it can be a Gateway API HTTPRoute or Gateway resource
-  # it can only refer to objects in the same namespace as the RateLimitPolicy
+  # Reference to an existing networking resource to attach the policy to. REQUIRED.
+  # It can be a Gateway API HTTPRoute or Gateway resource.
+  # It can only refer to objects in the same namespace as the RateLimitPolicy.
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute / Gateway
     name: myroute / mygateway
 
-  # the limits definitions to apply to the network traffic routed through the targeted resource
+  # The limits definitions to apply to the network traffic routed through the targeted resource.
+  # Equivalent to if otherwise declared within `defaults`.
   limits:
     "my_limit":
-      # the rate limits associated with this limit definition
-      # e.g., to specify a 50rps rate limit, add `{ limit: 50, duration: 1, unit: secod }`
+      # The rate limits associated with this limit definition. REQUIRED.
+      # E.g., to specify a 50rps rate limit, add `{ limit: 50, duration: 1, unit: secod }`
       rates: […]
 
-      # (optional) counter qualifiers
-      # each dynamic value in the data plane starts a separate counter, combined with each rate limit
-      # e.g., to define a separate rate limit for each user name detected by the auth layer, add `metadata.filter_metadata.envoy\.filters\.http\.ext_authz.username`
-      # check out Kuadrant RFC 0002 (https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md) to learn more about the Well-known Attributes that can be used in this field
+      # Counter qualifiers.
+      # Each dynamic value in the data plane starts a separate counter, combined with each rate limit.
+      # E.g., to define a separate rate limit for each user name detected by the auth layer, add `metadata.filter_metadata.envoy\.filters\.http\.ext_authz.username`.
+      # Check out Kuadrant RFC 0002 (https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md) to learn more about the Well-known Attributes that can be used in this field.
       counters: […]
 
-      # (optional) further qualification of the scpecific HTTPRouteRules within the targeted HTTPRoute that should trigger the limit
-      # each element contains a HTTPRouteMatch object that will be used to select HTTPRouteRules that include at least one identical HTTPRouteMatch
-      # the HTTPRouteMatch part does not have to be fully identical, but the what's stated in the selector must be identically stated in the HTTPRouteRule
-      # do not use it on RateLimitPolicies that target a Gateway
+      # Further qualification of the scpecific HTTPRouteRules within the targeted HTTPRoute that should trigger the limit.
+      # Each element contains a HTTPRouteMatch object that will be used to select HTTPRouteRules that include at least one identical HTTPRouteMatch.
+      # The HTTPRouteMatch part does not have to be fully identical, but the what's stated in the selector must be identically stated in the HTTPRouteRule.
+      # Do not use it on RateLimitPolicies that target a Gateway.
       routeSelectors: […]
 
-      # (optional) additional dynamic conditions to trigger the limit.
-      # use it for filtering attributes not supported by HTTPRouteRule or with RateLimitPolicies that target a Gateway
-      # check out Kuadrant RFC 0002 (https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md) to learn more about the Well-known Attributes that can be used in this field
+      # Additional dynamic conditions to trigger the limit.
+      # Use it for filtering attributes not supported by HTTPRouteRule or with RateLimitPolicies that target a Gateway.
+      # Check out Kuadrant RFC 0002 (https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md) to learn more about the Well-known Attributes that can be used in this field.
       when: […]
+
+    # Explicit defaults. Used in policies that target a Gateway object to express default rules to be enforced on
+    # routes that lack a more specific policy attached to.
+    # Mutually exclusive with `overrides` and with declaring `limits` at the top-level of the spec.
+    defaults:
+      limits: {…}
+
+    # Overrides. Used in policies that target a Gateway object to be enforced on all routes linked to the gateway,
+    # thus also overriding any more specific policy occasionally attached to any of those routes.
+    # Mutually exclusive with `defaults` and with declaring `limits` at the top-level of the spec.
+    overrides:
+      limits: {…}
 ```
 
 ## Using the RateLimitPolicy
 
 ### Targeting a HTTPRoute networking resource
 
-When a RLP targets a HTTPRoute, the policy is enforced to all traffic routed according to the rules and hostnames specified in the HTTPRoute, across all Gateways referenced in the `spec.parentRefs` field of the HTTPRoute.
+When a RateLimitPolicy targets a HTTPRoute, the policy is enforced to all traffic routed according to the rules and hostnames specified in the HTTPRoute, across all Gateways referenced in the `spec.parentRefs` field of the HTTPRoute.
 
 The targeted HTTPRoute's rules and/or hostnames to which the policy must be enforced can be filtered to specific subsets, by specifying the [`routeSelectors`](reference/route-selectors.md#the-routeselectors-field) field of the limit definition.
 
-Target a HTTPRoute by setting the `spec.targetRef` field of the RLP as follows:
+Target a HTTPRoute by setting the `spec.targetRef` field of the RateLimitPolicy as follows:
 
 ```yaml
 apiVersion: kuadrant.io/v1beta2
 kind: RateLimitPolicy
 metadata:
-  name: <RLP name>
+  name: <RateLimitPolicy name>
 spec:
   targetRef:
     group: gateway.networking.k8s.io
@@ -113,61 +128,73 @@ When multiple HTTPRoutes state the same hostname, these HTTPRoutes are usually a
 
 #### Hostnames and wildcards
 
-If a RLP targets a route defined for `*.com` and another RLP targets another route for `api.com`, the Kuadrant control plane will not merge these two RLPs. Rather, it will mimic the behavior of gateway implementation by which the "most specific hostname wins", thus enforcing only the corresponding applicable policies and limit definitions.
+If a RateLimitPolicy targets a route defined for `*.com` and another RateLimitPolicy targets another route for `api.com`, the Kuadrant control plane will not merge these two RateLimitPolicies. Unless one of the policies declare an _overrides_ set of limites, the control plane will configure to mimic the behavior of gateway implementation by which the "most specific hostname wins", thus enforcing only the corresponding applicable policies and limit definitions.
 
-E.g., a request coming for `api.com` will be rate limited according to the rules from the RLP that targets the route for `api.com`; while a request for `other.com` will be rate limited with the rules from the RLP targeting the route for `*.com`.
+E.g., by default, a request coming for `api.com` will be rate limited according to the rules from the RateLimitPolicy that targets the route for `api.com`; while a request for `other.com` will be rate limited with the rules from the RateLimitPolicy targeting the route for `*.com`.
 
-Example with 3 RLPs and 3 HTTPRoutes:
-- RLP A → HTTPRoute A (`a.toystore.com`)
-- RLP B → HTTPRoute B (`b.toystore.com`)
-- RLP W → HTTPRoute W (`*.toystore.com`)
-
-Expected behavior:
-- Request to `a.toystore.com` → RLP A will be enforced
-- Request to `b.toystore.com` → RLP B will be enforced
-- Request to `other.toystore.com` → RLP W will be enforced
+See more examples in [Overlapping Gateway and HTTPRoute RateLimitPolicies](#overlapping-gateway-and-httproute-ratelimitpolicies).
 
 ### Targeting a Gateway networking resource
 
-When a RLP targets a Gateway, the policy will be enforced to all HTTP traffic hitting the gateway, unless a more specific RLP targeting a matching HTTPRoute exists.
+A RateLimitPolicy that targets a Gateway can declared a block of _defaults_ (`spec.defaults`) or a block of _overrides_ (`spec.overrides`). As a standard, gateway policies that do not specify neither defaults nor overrides, act as defaults.
 
-Any new HTTPRoute referrencing the gateway as parent will be automatically covered by the RLP that targets the Gateway, as well as changes in the existing HTTPRoutes.
+When declaring _defaults_, a RateLimitPolicy targets a Gateway will be enforced to all HTTP traffic hitting the gateway, unless a more specific RateLimitPolicy targeting a matching HTTPRoute exists. Any new HTTPRoute referrencing the gateway as parent will be automatically covered by the default RateLimitPolicy, as well as changes in the existing HTTPRoutes.
 
-This effectively provides cluster operators with the ability to set _defaults_ to protect the infrastructure against unplanned and malicious network traffic attempt, such as by setting preemptive limits for hostnames and hostname wildcards.
+_Defaults_ provide cluster operators with the ability to protect the infrastructure against unplanned and malicious network traffic attempt, such as by setting safe default limits on hostnames and hostname wildcards.
 
-Target a Gateway HTTPRoute by setting the `spec.targetRef` field of the RLP as follows:
+Inversely, a gateway policy that specify _overrides_ declares a set of rules to be enforced on _all routes attached to the gateway_, thus atomically replacing any more specific policy occasionally attached to any of those routes.
+
+Target a Gateway HTTPRoute by setting the `spec.targetRef` field of the RateLimitPolicy as follows:
 
 ```yaml
 apiVersion: kuadrant.io/v1beta2
 kind: RateLimitPolicy
 metadata:
-  name: <RLP name>
+  name: <RateLimitPolicy name>
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
     name: <Gateway Name>
-  limits: {…}
+  defaults: # alternatively: `overrides`
+    limits: {…}
 ```
 
 ![rate limit policy targeting a Gateway resource](https://i.imgur.com/UkivAqA.png)
 
-#### Overlapping Gateway and HTTPRoute RLPs
+#### Overlapping Gateway and HTTPRoute RateLimitPolicies
 
-Gateway-targeted RLPs will serve as a default to protect all traffic routed through the gateway until a more specific HTTPRoute-targeted RLP exists, in which case the HTTPRoute RLP prevails.
+Two possible semantics are to be considered here – gateway policy _defaults_ vs gateway policy _overrides_.
 
-Example with 4 RLPs, 3 HTTPRoutes and 1 Gateway (plus 2 HTTPRoute and 2 Gateways without RLPs attached):
-- RLP A → HTTPRoute A (`a.toystore.com`) → Gateway G (`*.com`)
-- RLP B → HTTPRoute B (`b.toystore.com`) → Gateway G (`*.com`)
-- RLP W → HTTPRoute W (`*.toystore.com`) → Gateway G (`*.com`)
-- RLP G → Gateway G (`*.com`)
+Gateway RateLimitPolicies that declare _defaults_ (or alternatively neither defaults nor overrides) protect all traffic routed through the gateway except where a more specific HTTPRoute RateLimitPolicy exists, in which case the HTTPRoute RateLimitPolicy prevails.
+
+Example with 4 RateLimitPolicies, 3 HTTPRoutes and 1 Gateway _default_ (plus 2 HTTPRoute and 2 Gateways without RateLimitPolicies attached):
+- RateLimitPolicy A → HTTPRoute A (`a.toystore.com`) → Gateway G (`*.com`)
+- RateLimitPolicy B → HTTPRoute B (`b.toystore.com`) → Gateway G (`*.com`)
+- RateLimitPolicy W → HTTPRoute W (`*.toystore.com`) → Gateway G (`*.com`)
+- RateLimitPolicy G (defaults) → Gateway G (`*.com`)
 
 Expected behavior:
-- Request to `a.toystore.com` → RLP A will be enforced
-- Request to `b.toystore.com` → RLP B will be enforced
-- Request to `other.toystore.com` → RLP W will be enforced
-- Request to `other.com` (suppose a route exists) → RLP G will be enforced
-- Request to `yet-another.net` (suppose a route and gateway exist) → No RLP will be enforced
+- Request to `a.toystore.com` → RateLimitPolicy A will be enforced
+- Request to `b.toystore.com` → RateLimitPolicy B will be enforced
+- Request to `other.toystore.com` → RateLimitPolicy W will be enforced
+- Request to `other.com` (suppose a route exists) → RateLimitPolicy G will be enforced
+- Request to `yet-another.net` (suppose a route and gateway exist) → No RateLimitPolicy will be enforced
+
+Gateway RateLimitPolicies that declare _overrides_ protect all traffic routed through the gateway, regardless of existence of any more specific HTTPRoute RateLimitPolicy.
+
+Example with 4 RateLimitPolicies, 3 HTTPRoutes and 1 Gateway _override_ (plus 2 HTTPRoute and 2 Gateways without RateLimitPolicies attached):
+- RateLimitPolicy A → HTTPRoute A (`a.toystore.com`) → Gateway G (`*.com`)
+- RateLimitPolicy B → HTTPRoute B (`b.toystore.com`) → Gateway G (`*.com`)
+- RateLimitPolicy W → HTTPRoute W (`*.toystore.com`) → Gateway G (`*.com`)
+- RateLimitPolicy G (overrides) → Gateway G (`*.com`)
+
+Expected behavior:
+- Request to `a.toystore.com` → RateLimitPolicy G will be enforced
+- Request to `b.toystore.com` → RateLimitPolicy G will be enforced
+- Request to `other.toystore.com` → RateLimitPolicy G will be enforced
+- Request to `other.com` (suppose a route exists) → RateLimitPolicy G will be enforced
+- Request to `yet-another.net` (suppose a route and gateway exist) → No RateLimitPolicy will be enforced
 
 ### Limit definition
 
@@ -236,7 +263,7 @@ Check out [Route selectors](reference/route-selectors.md) for a full description
 
 `when` conditions can be used to scope a limit (i.e. to filter the traffic to which a limit definition applies) without any coupling to the underlying network topology, i.e. without making direct references to HTTPRouteRules via [`routeSelectors`](reference/route-selectors.md#the-routeselectors-field).
 
-Use `when` conditions to conditionally activate limits based on attributes that cannot be expressed in the HTTPRoutes' `spec.hostnames` and `spec.rules.matches` fields, or in general in RLPs that target a Gateway.
+Use `when` conditions to conditionally activate limits based on attributes that cannot be expressed in the HTTPRoutes' `spec.hostnames` and `spec.rules.matches` fields, or in general in RateLimitPolicies that target a Gateway.
 
 The selectors within the `when` conditions of a RateLimitPolicy are a subset of Kuadrant's Well-known Attributes ([RFC 0002](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md)). Check out the reference for the full list of supported selectors.
 
@@ -250,9 +277,9 @@ Check out the following user guides for examples of rate limiting services with 
 
 ### Known limitations
 
-* One HTTPRoute can only be targeted by one RLP.
-* One Gateway can only be targeted by one RLP.
-* RLPs can only target HTTPRoutes/Gateways defined within the same namespace of the RLP.
+* One HTTPRoute can only be targeted by one RateLimitPolicy.
+* One Gateway can only be targeted by one RateLimitPolicy.
+* RateLimitPolicies can only target HTTPRoutes/Gateways defined within the same namespace of the RateLimitPolicy.
 
 ## Implementation details
 
@@ -281,7 +308,7 @@ As a consequence of this design:
 - The rate limiting service can rely on the indexation to look up for groups of limit definitions and counters.
 - Components remain compliant with industry protocols and flexible for different integration options.
 
-A Kuadrant wasm-shim configuration for a composition of RateLimitPolicy custom resources looks like the following and it is generated automatically by the Kuadrant control plane:
+A Kuadrant wasm-shim configuration for 2 RateLimitPolicy custom resources (a Gateway default RateLimitPolicy and a HTTPRoute RateLimitPolicy) looks like the following and it is generated automatically by the Kuadrant control plane:
 
 ```yaml
 apiVersion: extensions.istio.io/v1alpha1
@@ -300,7 +327,7 @@ spec:
       - '*.website'
       - '*.io'
       name: istio-system/gw-rlp
-      rules: # match rules from the gateway and according to conditions specified in the rlp
+      rules: # match rules from the gateway and according to conditions specified in the policy
       - conditions:
         - allOf:
           - operator: startswith
@@ -330,7 +357,7 @@ spec:
       - '*.toystore.website'
       - '*.toystore.io'
       name: default/app-rlp
-      rules: # matches rules from a httproute and additional specified in the rlp
+      rules: # matches rules from a httproute and additional specified in the policy
       - conditions:
         - allOf:
           - operator: startswith

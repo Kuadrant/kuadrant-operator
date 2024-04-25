@@ -159,9 +159,9 @@ WASM_SHIM_VERSION ?= latest
 shim_version_is_semantic := $(call is_semantic_version,$(WASM_SHIM_VERSION))
 
 ifeq (true,$(shim_version_is_semantic))
-RELATED_IMAGE_WASMSHIM ?= oci://quay.io/kuadrant/wasm-shim:v$(WASM_SHIM_VERSION)
+RELATED_IMAGE_WASMSHIM ?= quay.io/kuadrant/wasm-server:v$(WASM_SHIM_VERSION)
 else
-RELATED_IMAGE_WASMSHIM ?= oci://quay.io/kuadrant/wasm-shim:$(WASM_SHIM_VERSION)
+RELATED_IMAGE_WASMSHIM ?= quay.io/kuadrant/wasm-server:$(WASM_SHIM_VERSION)
 endif
 
 all: build

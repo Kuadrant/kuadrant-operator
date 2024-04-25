@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
+	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "quay.io/kuadrant/wasm-server:latest")
 )
 
 // WasmRules computes WASM rules from the policy and the targeted route.

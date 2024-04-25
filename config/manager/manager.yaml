@@ -29,7 +29,7 @@ spec:
             - /manager
           env:
             - name: RELATED_IMAGE_WASMSHIM
-              value: "oci://quay.io/kuadrant/wasm-shim:latest"
+              value: quay.io/kuadrant/wasm-server:latest
           image: controller:latest
           name: manager
           securityContext:

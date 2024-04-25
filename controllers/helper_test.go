@@ -88,8 +88,8 @@ func ApplyKuadrantCRWithName(namespace, name string) {
 	}, time.Minute, 5*time.Second).Should(BeTrue())
 }
 
-func DeleteKuadrantCR(ctx context.Context) {
-	k := &kuadrantv1beta1.Kuadrant{ObjectMeta: metav1.ObjectMeta{Name: "kuadrant-sample", Namespace: appNamespace}}
+func DeleteKuadrantCR(ctx context.Context, namespace string) {
+	k := &kuadrantv1beta1.Kuadrant{ObjectMeta: metav1.ObjectMeta{Name: "kuadrant-sample", Namespace: namespace}}
 	Eventually(func(g Gomega) {
 		err := k8sClient.Delete(ctx, k)
 		g.Expect(err).To(HaveOccurred())

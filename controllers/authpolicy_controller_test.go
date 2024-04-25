@@ -33,12 +33,22 @@ const (
 	testHTTPRouteName = "toystore-route"
 )
 
-var _ = Describe("AuthPolicy controller", func() {
+var _ = Describe("AuthPolicy controller", Ordered, func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 	var testNamespace string
+	var kuadrantInstallationNS string
+
+	BeforeAll(func(ctx SpecContext) {
+		CreateNamespaceWithContext(ctx, &kuadrantInstallationNS)
+		ApplyKuadrantCR(kuadrantInstallationNS)
+	})
+
+	AfterAll(func(ctx SpecContext) {
+		DeleteNamespaceCallbackWithContext(ctx, &kuadrantInstallationNS)
+	})
 
 	BeforeEach(func(ctx SpecContext) {
 		CreateNamespaceWithContext(ctx, &testNamespace)
@@ -1198,8 +1208,8 @@ var _ = Describe("AuthPolicy controller", func() {
 
 		It("Unknown reason", func(ctx SpecContext) {
 			// Remove kuadrant to simulate AuthPolicy enforcement error
-			defer ApplyKuadrantCR(appNamespace)
-			DeleteKuadrantCR(ctx)
+			defer ApplyKuadrantCR(kuadrantInstallationNS)
+			DeleteKuadrantCR(ctx, kuadrantInstallationNS)
 
 			policy := policyFactory()
 

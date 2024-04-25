@@ -24,7 +24,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
-var _ = Describe("DNSPolicy Multi Cluster", Ordered, func() {
+var _ = Describe("DNSPolicy Multi Cluster", func() {
 
 	var gatewayClass *gatewayapiv1.GatewayClass
 	var managedZone *kuadrantdnsv1alpha1.ManagedZone
@@ -33,14 +33,6 @@ var _ = Describe("DNSPolicy Multi Cluster", Ordered, func() {
 	var dnsPolicy *v1alpha1.DNSPolicy
 	var ownerID, recordName, wildcardRecordName, clusterTwoIDHash, clusterOneIDHash, gwHash string
 	var ctx context.Context
-
-	BeforeAll(func(ctx SpecContext) {
-		DeleteKuadrantCR(ctx)
-	})
-
-	AfterAll(func(ctx SpecContext) {
-		ApplyKuadrantCR(appNamespace)
-	})
 
 	BeforeEach(func() {
 		ctx = context.Background()

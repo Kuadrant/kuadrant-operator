@@ -23,17 +23,27 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
-var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
+var _ = Describe("Limitador Cluster EnvoyFilter controller", Ordered, func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 	var (
-		testNamespace string
-		gwName        = "toystore-gw"
-		rlpName       = "toystore-rlp"
-		efName        = fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", gwName)
+		testNamespace          string
+		kuadrantInstallationNS string
+		gwName                 = "toystore-gw"
+		rlpName                = "toystore-rlp"
+		efName                 = fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", gwName)
 	)
+
+	BeforeAll(func(ctx SpecContext) {
+		CreateNamespaceWithContext(ctx, &kuadrantInstallationNS)
+		ApplyKuadrantCR(kuadrantInstallationNS)
+	})
+
+	AfterAll(func(ctx SpecContext) {
+		DeleteNamespaceCallbackWithContext(ctx, &kuadrantInstallationNS)
+	})
 
 	beforeEachCallback := func(ctx SpecContext) {
 		CreateNamespaceWithContext(ctx, &testNamespace)
@@ -60,7 +70,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 		// Check Limitador Status is Ready
 		Eventually(func() bool {
 			limitador := &limitadorv1alpha1.Limitador{}
-			err := k8sClient.Get(ctx, client.ObjectKey{Name: common.LimitadorName, Namespace: appNamespace}, limitador)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}, limitador)
 			if err != nil {
 				return false
 			}

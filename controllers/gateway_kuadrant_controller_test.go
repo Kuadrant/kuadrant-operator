@@ -32,14 +32,6 @@ var _ = Describe("Kuadrant Gateway controller", Ordered, func() {
 		CreateNamespaceWithContext(ctx, &testNamespace)
 	}
 
-	BeforeAll(func(ctx SpecContext) {
-		DeleteKuadrantCR(ctx)
-	})
-
-	AfterAll(func(ctx SpecContext) {
-		ApplyKuadrantCR(appNamespace)
-	})
-
 	BeforeEach(beforeEachCallback)
 	AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, &testNamespace) }, afterEachTimeOut)
 

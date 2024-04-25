@@ -96,16 +96,17 @@ kubectl wait istio/default -n istio-system --for="condition=Ready=true"
 ```
 
 
-## TODO Thanos and Configure Observability
+### (Recommended) Thanos and Observability Stack
+
+Kuadrant provides a set of sample dashboards that use the known metrics exported by kuadrant and gateway components to provide insight into the different areas of your APIs and Gateways. While this is not essential it is recommended that you set up an observability stack. Below are links to the OpenShift docs on this and also a link to help with the setup of Thanos for metrics storage. 
 
 OpenShift supports a user facing monitoring stack. This can be cofigured and setup via their documentation
 https://docs.openshift.com/dedicated/observability/monitoring/configuring-the-monitoring-stack.html 
 
+- If you have user workload monitoring enabled. We Recommend configuring  remote write to a central storage system such as Thanos: 
+- [Remote Write Config](https://docs.openshift.com/dedicated/observability/monitoring/configuring-the-monitoring-stack.html#configuring_remote_write_storage_configuring-the-monitoring-stack)
 
-
-Kuadrant provides a set of sample dashboards that use the known metrics exported by kuadrant and gateway components to provide insight into the different areas of your APIs and Gateways. 
-
-TODO (link to monitoring dashboard doc)
+- [Kube Thanos](https://github.com/thanos-io/kube-thanos)
 
 
 ### Install Kuadrant

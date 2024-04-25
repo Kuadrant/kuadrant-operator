@@ -7,7 +7,7 @@ This document expects that you have successfully installed Kuadrant [Install Gui
 
 - Completed the Kuadrant Install Guide for at least two clusters [Install Guide](../install/install-openshift.md)
 - kubectl command line tool
-- (optional) have user workload monitoring configured to remote write to a central storage system such as Thanos https://docs.openshift.com/dedicated/observability/monitoring/configuring-the-monitoring-stack.html#configuring_remote_write_storage_configuring-the-monitoring-stack 
+- (optional) have user workload monitoring configured to remote write to a central storage system such as Thanos (also covered in the installation guide).
 
 ## Overview
 
@@ -17,7 +17,7 @@ We will take the approach of assuming certain personas and how they can each wor
 
 **Platform Engineer**
 
-We will walk through deploying a gateway that is secure and protected and ready to be used by a development team to deploy an API. We will then walk through how you can have this gateway in clusters in different geographic regions and leverage Kuadrant to bring the right traffic to your geo located gateways while still having it protected and secured via global rate limiting and auth.
+We will walk through deploying a gateway that is secure and protected and ready to be used by a development team to deploy an API. We will then walk through how you can have this gateway in clusters in different geographic regions and leverage Kuadrant to bring the right traffic to your geo located gateways to reduce latency and distribute load while still having it protected and secured via global rate limiting and auth.
 
 As an optional extra we will highlight how, with the user workload monitoring observability stack deployed, these gateways can then be observed and monitored. 
 

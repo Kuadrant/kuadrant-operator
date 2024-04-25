@@ -37,7 +37,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		CreateNamespaceWithContext(ctx, &testNamespace)
+		testNamespace = CreateNamespaceWithContext(ctx)
 
 		gatewayClass = testBuildGatewayClass("foo", "default", "kuadrant.io/bar")
 		Expect(k8sClient.Create(ctx, gatewayClass)).To(Succeed())
@@ -63,7 +63,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			err := k8sClient.Delete(ctx, gatewayClass)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		}
-		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
+		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
 	})
 
 	It("should validate routing strategy field correctly", func() {

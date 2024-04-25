@@ -41,7 +41,7 @@ var _ = Describe("TLSPolicy controller", Ordered, func() {
 	})
 
 	BeforeEach(func() {
-		CreateNamespaceWithContext(ctx, &testNamespace)
+		testNamespace = CreateNamespaceWithContext(ctx)
 		issuer, issuerRef = testBuildSelfSignedIssuer("testissuer", testNamespace)
 		Expect(k8sClient.Create(ctx, issuer)).To(BeNil())
 	})
@@ -63,7 +63,7 @@ var _ = Describe("TLSPolicy controller", Ordered, func() {
 			err := k8sClient.Delete(ctx, gatewayClass)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		}
-		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
+		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
 	})
 
 	AfterAll(func() {

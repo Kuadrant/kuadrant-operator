@@ -29,11 +29,11 @@ var _ = Describe("Kuadrant Gateway controller", Ordered, func() {
 	)
 
 	beforeEachCallback := func(ctx SpecContext) {
-		CreateNamespaceWithContext(ctx, &testNamespace)
+		testNamespace = CreateNamespaceWithContext(ctx)
 	}
 
 	BeforeEach(beforeEachCallback)
-	AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, &testNamespace) }, afterEachTimeOut)
+	AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, testNamespace) }, afterEachTimeOut)
 
 	Context("two gateways created after Kuadrant instance", func() {
 		It("gateways should have required annotation", func(ctx SpecContext) {
@@ -139,11 +139,11 @@ var _ = Describe("Kuadrant Gateway controller", Ordered, func() {
 		BeforeEach(func(ctx SpecContext) {
 			ApplyKuadrantCRWithName(testNamespace, kuadrantAName)
 
-			CreateNamespaceWithContext(ctx, &secondNamespace)
+			secondNamespace = CreateNamespaceWithContext(ctx)
 			ApplyKuadrantCRWithName(secondNamespace, kuadrantBName)
 		})
 
-		AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, &secondNamespace) }, afterEachTimeOut)
+		AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, secondNamespace) }, afterEachTimeOut)
 
 		It("new gateway should not be annotated", func(ctx SpecContext) {
 			gateway := testBuildBasicGateway("gw-a", testNamespace)

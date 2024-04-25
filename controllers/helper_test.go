@@ -97,22 +97,22 @@ func DeleteKuadrantCR(ctx context.Context, namespace string) {
 	}).WithContext(ctx).Should(Succeed())
 }
 
-func CreateNamespaceWithContext(ctx context.Context, namespace *string) {
+func CreateNamespaceWithContext(ctx context.Context) string {
 	nsObject := &v1.Namespace{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
 		ObjectMeta: metav1.ObjectMeta{GenerateName: "test-namespace-"},
 	}
 	Expect(testClient().Create(ctx, nsObject)).To(Succeed())
 
-	*namespace = nsObject.Name
+	return nsObject.Name
 }
 
-func CreateNamespace(namespace *string) {
-	CreateNamespaceWithContext(context.Background(), namespace)
+func CreateNamespace() string {
+	return CreateNamespaceWithContext(context.Background())
 }
 
-func DeleteNamespaceCallbackWithContext(ctx context.Context, namespace *string) {
-	desiredTestNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: *namespace}}
+func DeleteNamespaceCallbackWithContext(ctx context.Context, namespace string) {
+	desiredTestNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 	Eventually(func(g Gomega) {
 		err := k8sClient.Delete(ctx, desiredTestNamespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
 		g.Expect(err).ToNot(BeNil())
@@ -121,16 +121,16 @@ func DeleteNamespaceCallbackWithContext(ctx context.Context, namespace *string) 
 
 }
 
-func DeleteNamespaceCallback(namespace *string) func() {
+func DeleteNamespaceCallback(namespace string) func() {
 	return func() {
-		desiredTestNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: *namespace}}
+		desiredTestNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 		err := testClient().Delete(context.Background(), desiredTestNamespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
 
 		Expect(err).ToNot(HaveOccurred())
 
 		existingNamespace := &v1.Namespace{}
 		Eventually(func() bool {
-			err := testClient().Get(context.Background(), types.NamespacedName{Name: *namespace}, existingNamespace)
+			err := testClient().Get(context.Background(), types.NamespacedName{Name: namespace}, existingNamespace)
 			if err != nil && apierrors.IsNotFound(err) {
 				return true
 			}

@@ -38,17 +38,17 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 	)
 
 	BeforeAll(func(ctx SpecContext) {
-		CreateNamespaceWithContext(ctx, &kuadrantInstallationNS)
+		kuadrantInstallationNS = CreateNamespaceWithContext(ctx)
 		ApplyKuadrantCR(kuadrantInstallationNS)
 	})
 
 	AfterAll(func(ctx SpecContext) {
-		DeleteNamespaceCallbackWithContext(ctx, &kuadrantInstallationNS)
+		DeleteNamespaceCallbackWithContext(ctx, kuadrantInstallationNS)
 	})
 
 	BeforeEach(func(ctx SpecContext) {
 		// create namespace
-		CreateNamespaceWithContext(ctx, &testNamespace)
+		testNamespace = CreateNamespaceWithContext(ctx)
 
 		// create gateway
 		gateway := testBuildBasicGateway(testGatewayName, testNamespace, func(gateway *gatewayapiv1.Gateway) {
@@ -72,7 +72,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 	})
 
 	AfterEach(func(ctx SpecContext) {
-		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
+		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
 	}, afterEachTimeOut)
 
 	gatewayAffected := func(ctx context.Context, gatewayName, conditionType string, policyKey client.ObjectKey) bool {

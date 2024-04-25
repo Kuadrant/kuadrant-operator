@@ -37,16 +37,16 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Ordered, func() {
 	)
 
 	BeforeAll(func(ctx SpecContext) {
-		CreateNamespaceWithContext(ctx, &kuadrantInstallationNS)
+		kuadrantInstallationNS = CreateNamespaceWithContext(ctx)
 		ApplyKuadrantCR(kuadrantInstallationNS)
 	})
 
 	AfterAll(func(ctx SpecContext) {
-		DeleteNamespaceCallbackWithContext(ctx, &kuadrantInstallationNS)
+		DeleteNamespaceCallbackWithContext(ctx, kuadrantInstallationNS)
 	})
 
 	beforeEachCallback := func(ctx SpecContext) {
-		CreateNamespaceWithContext(ctx, &testNamespace)
+		testNamespace = CreateNamespaceWithContext(ctx)
 		gateway := testBuildBasicGateway(gwName, testNamespace)
 		err := k8sClient.Create(ctx, gateway)
 		Expect(err).ToNot(HaveOccurred())
@@ -83,7 +83,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Ordered, func() {
 
 	BeforeEach(beforeEachCallback)
 	AfterEach(func(ctx SpecContext) {
-		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
+		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
 	}, afterEachTimeOut)
 
 	Context("RLP targeting Gateway", func() {

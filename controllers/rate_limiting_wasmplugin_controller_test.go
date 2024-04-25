@@ -36,21 +36,21 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 	)
 
 	beforeEachCallback := func(ctx SpecContext) {
-		CreateNamespaceWithContext(ctx, &testNamespace)
+		testNamespace = CreateNamespaceWithContext(ctx)
 	}
 
 	BeforeAll(func(ctx SpecContext) {
-		CreateNamespaceWithContext(ctx, &kuadrantInstallationNS)
+		kuadrantInstallationNS = CreateNamespaceWithContext(ctx)
 		ApplyKuadrantCR(kuadrantInstallationNS)
 	})
 
 	AfterAll(func(ctx SpecContext) {
-		DeleteNamespaceCallbackWithContext(ctx, &kuadrantInstallationNS)
+		DeleteNamespaceCallbackWithContext(ctx, kuadrantInstallationNS)
 	})
 
 	BeforeEach(beforeEachCallback)
 	AfterEach(func(ctx SpecContext) {
-		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
+		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
 	}, afterEachTimeOut)
 
 	Context("Basic tests", func() {

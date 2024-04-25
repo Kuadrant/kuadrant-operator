@@ -42,16 +42,16 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 	var kuadrantInstallationNS string
 
 	BeforeAll(func(ctx SpecContext) {
-		CreateNamespaceWithContext(ctx, &kuadrantInstallationNS)
+		kuadrantInstallationNS = CreateNamespaceWithContext(ctx)
 		ApplyKuadrantCR(kuadrantInstallationNS)
 	})
 
 	AfterAll(func(ctx SpecContext) {
-		DeleteNamespaceCallbackWithContext(ctx, &kuadrantInstallationNS)
+		DeleteNamespaceCallbackWithContext(ctx, kuadrantInstallationNS)
 	})
 
 	BeforeEach(func(ctx SpecContext) {
-		CreateNamespaceWithContext(ctx, &testNamespace)
+		testNamespace = CreateNamespaceWithContext(ctx)
 
 		gateway := testBuildBasicGateway(testGatewayName, testNamespace)
 		err := k8sClient.Create(ctx, gateway)
@@ -61,7 +61,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 	})
 
 	AfterEach(func(ctx SpecContext) {
-		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
+		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
 	}, afterEachTimeOut)
 
 	policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
@@ -1147,9 +1147,8 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 		}, testTimeOut)
 
 		It("Invalid reason", func(ctx SpecContext) {
-			var otherNamespace string
-			CreateNamespace(&otherNamespace)
-			defer DeleteNamespaceCallback(&otherNamespace)()
+			otherNamespace := CreateNamespace()
+			defer DeleteNamespaceCallback(otherNamespace)()
 
 			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Namespace = otherNamespace // create the policy in a different namespace than the target
@@ -1506,10 +1505,10 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 	var testNamespace string
 
 	BeforeEach(func(ctx SpecContext) {
-		CreateNamespaceWithContext(ctx, &testNamespace)
+		testNamespace = CreateNamespaceWithContext(ctx)
 	})
 
-	AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, &testNamespace) }, afterEachTimeOut)
+	AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, testNamespace) }, afterEachTimeOut)
 
 	policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
 		policy := &api.AuthPolicy{

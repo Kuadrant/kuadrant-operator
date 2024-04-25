@@ -77,7 +77,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 	}
 
 	beforeEachCallback := func(ctx SpecContext) {
-		CreateNamespaceWithContext(ctx, &testNamespace)
+		testNamespace = CreateNamespaceWithContext(ctx)
 		gateway = testBuildBasicGateway(gwName, testNamespace)
 
 		Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
@@ -85,17 +85,17 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 	}
 
 	BeforeAll(func(ctx SpecContext) {
-		CreateNamespaceWithContext(ctx, &kuadrantInstallationNS)
+		kuadrantInstallationNS = CreateNamespaceWithContext(ctx)
 		ApplyKuadrantCR(kuadrantInstallationNS)
 	})
 
 	AfterAll(func(ctx SpecContext) {
-		DeleteNamespaceCallbackWithContext(ctx, &kuadrantInstallationNS)
+		DeleteNamespaceCallbackWithContext(ctx, kuadrantInstallationNS)
 	})
 
 	BeforeEach(beforeEachCallback)
 	AfterEach(func(ctx SpecContext) {
-		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
+		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
 	}, afterEachTimeOut)
 
 	Context("RLP targeting HTTPRoute", func() {
@@ -700,9 +700,8 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 		}, testTimeOut)
 
 		It("Invalid reason", func(ctx SpecContext) {
-			var otherNamespace string
-			CreateNamespace(&otherNamespace)
-			defer DeleteNamespaceCallback(&otherNamespace)()
+			otherNamespace := CreateNamespace()
+			defer DeleteNamespaceCallback(otherNamespace)()
 
 			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Namespace = otherNamespace // create the policy in a different namespace than the target
@@ -1202,11 +1201,11 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 	var testNamespace string
 
 	BeforeEach(func(ctx SpecContext) {
-		CreateNamespaceWithContext(ctx, &testNamespace)
+		testNamespace = CreateNamespaceWithContext(ctx)
 	})
 
 	AfterEach(func(ctx SpecContext) {
-		DeleteNamespaceCallbackWithContext(ctx, &testNamespace)
+		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
 	}, afterEachTimeOut)
 
 	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {

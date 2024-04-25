@@ -17,7 +17,7 @@ We will take the approach of assuming certain personas and how they can each wor
 
 **Platform Engineer**
 
-We will walk through deploying a gateway that is secure and protected and ready to be used by a development team to deploy an API. We will then walk through how you can deploy this gateway to clusters in different geographic regions and leveraging Kuadrant bring the right traffic to that gateway while still having it protected and secured via rate limiting and auth.
+We will walk through deploying a gateway that is secure and protected and ready to be used by a development team to deploy an API. We will then walk through how you can have this gateway in clusters in different geographic regions and leverage Kuadrant to bring the right traffic to your geo located gateways while still having it protected and secured via global rate limiting and auth.
 
 As an optional extra we will highlight how, with the user workload monitoring observability stack deployed, these gateways can then be observed and monitored. 
 
@@ -245,7 +245,7 @@ kubectl get ratelimitpolicy low-limit -n ${gatewayNS} -o=jsonpath='{.status.cond
 
 ### Setup our DNS
 
-Next we will apply a `DNSPolicy`. This policy will configure how traffic reaches the gateways deployed to our different clusters. In this case it will setup a loadbalanced strategy, which will mean it will provide a form of RoundRobin response to DNS clients.
+Next we will apply a `DNSPolicy`. This policy will configure how traffic reaches the gateways deployed to our different clusters. In this case it will setup a loadbalanced strategy, which will mean it will provide a form of RoundRobin response to DNS clients. We also define default GEO, this doesn't have an immediate impact but rather is there so that when/if we enable geo routing on our gateways, the default is defined for any users outside of the specified gateway GEOs ensuring all users regardless of their geo will be able to reach our gateway (more later).
 
 ```
 kubectl apply -f - <<EOF
@@ -256,6 +256,8 @@ metadata:
   namespace: ${gatewayNS}
 spec:
   routingStrategy: loadbalanced
+    geo:
+      defaultGeo: US
   targetRef:
     name: external
     group: gateway.networking.k8s.io

@@ -1448,7 +1448,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 			// check policy status
 			Eventually(isAuthPolicyAccepted(routePolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(routePolicy)).WithContext(ctx).Should(BeFalse())
+			Eventually(isAuthPolicyEnforced(routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"

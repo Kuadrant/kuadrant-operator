@@ -44,7 +44,7 @@ For convenience in this guide we use some env vars throughout this document
 ```
 export zid=change-this-to-your-zone-id
 export rootDomain=example.com
-export gatewayNS=ingress-gateway
+export gatewayNS=api-gateway
 export AWS_ACCESS_KEY_ID=xxxx
 export AWS_SECRET_ACCESS_KEY=xxxx
 
@@ -317,8 +317,7 @@ Lets check our DNSPolicy has been accepted.
 kubectl get dnspolicy loadbalanced -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
 ```
 
-
-#TODO add section about viewing Gateway dashboards
+If you have setup the observability pieces (See installation) and remote write to a Thanos instance, then you should be able to access the Grafana instance and see your deployed gateway and policies in the `platform` engineer dashboard.
 
 ## Platform Engineer review
 
@@ -373,6 +372,31 @@ We are using curl to hit our endpoint. As we are using letsencrypt staging in th
 
 ```
 curl -k -w "%{http_code}" https://$(kubectl get httproute api -n demo -o=jsonpath='{.spec.hostnames[0]}')
+```
+
+We should see a `403` response. With our gateway and policies in place we can now allow other teams to use the gateway:
+
+```
+kubectl patch gateway external -n ${gatewayNS} --type='json' -p='[{"op": "replace", "path": "/spec/listeners/0/allowedRoutes/namespaces/from", "value":"All"}]'
+```
+
+### Extending this Gateway to multiple clusters and configuring GEO based routing
+
+In order to have this gateway distributed across multiple clusters, we would follow the above instructions for each cluster as noted at the start. By default that would set up a `RoundRobin` DNS strategy to bring traffic to the different clusters. Enabling our gateways to serve clients based on their GEO is relatively straight forward based on our current configuration.
+
+Assuming you have deployed a gateway instance to multiple clusters and configured it based on this document. The next step is to inform the DNS controller about what Geographic region the gateways it can see are in.
+
+So for example if we have a cluster in North America and a Cluster in the EU we can bring traffic to those gateways based on location simply by applying the following label:
+
+In our North American cluster:
+```
+kubectl label --overwrite gateway external kuadrant.io/lb-attribute-geo-code=US -n $[gatewayNS}
+```
+
+In our European Cluster
+
+```
+kubectl label --overwrite gateway external kuadrant.io/lb-attribute-geo-code=EU -n $[gatewayNS}
 ```
 
 ## Developer
@@ -463,8 +487,10 @@ spec:
 EOF
 ```
 
+
+
+
 # TODO 
-- Add some verification steps
-- Add some dashboard directions
-- Add instructions for GEO
+- Add developer flow with OAS
+- Define developer focused policies
 - Add instructions for using non API Key auth provider

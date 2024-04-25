@@ -35,8 +35,20 @@ const (
 	testHTTPRouteName = "toystore-route"
 )
 
-var _ = Describe("AuthPolicy controller", func() {
-	var testNamespace string
+var _ = Describe("AuthPolicy controller", Ordered, func() {
+	var (
+		testNamespace          string
+		kuadrantInstallationNS string
+	)
+
+	BeforeAll(func(ctx SpecContext) {
+		CreateNamespaceWithContext(ctx, &kuadrantInstallationNS)
+		ApplyKuadrantCR(kuadrantInstallationNS)
+	})
+
+	AfterAll(func(ctx SpecContext) {
+		DeleteNamespaceCallbackWithContext(ctx, &kuadrantInstallationNS)
+	})
 
 	BeforeEach(func(ctx SpecContext) {
 		CreateNamespaceWithContext(ctx, &testNamespace)
@@ -46,8 +58,6 @@ var _ = Describe("AuthPolicy controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(testGatewayIsReady(gateway), 15*time.Second, 5*time.Second).Should(BeTrue())
-
-		ApplyKuadrantCR(testNamespace)
 	}, NodeTimeout(3*time.Minute))
 
 	AfterEach(func(ctx SpecContext) {
@@ -1196,11 +1206,12 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Unknown reason", func() {
+			defer ApplyKuadrantCR(kuadrantInstallationNS)
 			// Remove kuadrant to simulate AuthPolicy enforcement error
-			err := k8sClient.Delete(context.Background(), &kuadrantv1beta1.Kuadrant{ObjectMeta: metav1.ObjectMeta{Name: "kuadrant-sample", Namespace: testNamespace}})
+			err := k8sClient.Delete(context.Background(), &kuadrantv1beta1.Kuadrant{ObjectMeta: metav1.ObjectMeta{Name: "kuadrant-sample", Namespace: kuadrantInstallationNS}})
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "authorino", Namespace: testNamespace}, &authorinoopapi.Authorino{})
+				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: "authorino", Namespace: kuadrantInstallationNS}, &authorinoopapi.Authorino{})
 				return apierrors.IsNotFound(err)
 			}, 30*time.Second, 5*time.Second).Should(BeTrue())
 

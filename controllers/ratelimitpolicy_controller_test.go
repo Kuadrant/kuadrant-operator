@@ -27,13 +27,14 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
-var _ = Describe("RateLimitPolicy controller", func() {
+var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 	var (
-		testNamespace string
-		routeName     = "toystore-route"
-		gwName        = "toystore-gw"
-		rlpName       = "toystore-rlp"
-		gateway       *gatewayapiv1.Gateway
+		testNamespace          string
+		kuadrantInstallationNS string
+		routeName              = "toystore-route"
+		gwName                 = "toystore-gw"
+		rlpName                = "toystore-rlp"
+		gateway                *gatewayapiv1.Gateway
 	)
 
 	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
@@ -78,8 +79,16 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 		Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 		Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
-		ApplyKuadrantCR(testNamespace)
 	}
+
+	BeforeAll(func(ctx SpecContext) {
+		CreateNamespaceWithContext(ctx, &kuadrantInstallationNS)
+		ApplyKuadrantCR(kuadrantInstallationNS)
+	})
+
+	AfterAll(func(ctx SpecContext) {
+		DeleteNamespaceCallbackWithContext(ctx, &kuadrantInstallationNS)
+	})
 
 	BeforeEach(beforeEachCallback, NodeTimeout(time.Minute))
 	AfterEach(func(ctx SpecContext) {
@@ -114,7 +123,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
 
 			// check limits
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
 			existingLimitador := &limitadorv1alpha1.Limitador{}
 			err = k8sClient.Get(context.Background(), limitadorKey, existingLimitador)
 			// must exist
@@ -197,7 +206,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
 
 			// check limits
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
 			existingLimitador := &limitadorv1alpha1.Limitador{}
 			err = k8sClient.Get(context.Background(), limitadorKey, existingLimitador)
 			// must exist
@@ -246,7 +255,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
 
 			// check limits
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
 			existingLimitador := &limitadorv1alpha1.Limitador{}
 			err = k8sClient.Get(context.Background(), limitadorKey, existingLimitador)
 			// must exist
@@ -316,7 +325,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// check limits
 			Eventually(func(g Gomega) {
-				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				g.Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
 				g.Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
@@ -375,7 +384,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		limitadorContainsLimit := func(ctx context.Context, limit limitadorv1alpha1.RateLimit) func(g Gomega) {
 			return func(g Gomega) {
 				// check limits - should contain HTTPRoute RLP values
-				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				g.Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
 				g.Expect(existingLimitador.Spec.Limits).To(ContainElements(limit))
@@ -724,9 +733,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Remove limitador deployment to simulate enforcement error
 			// RLP should transition to enforcement false in this case
-			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "limitador-limitador", Namespace: testNamespace}})).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "limitador-limitador", Namespace: kuadrantInstallationNS}})).To(Succeed())
 			Eventually(func() bool {
-				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}, &appsv1.Deployment{}))
+				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKey{Name: "limitador-limitador", Namespace: kuadrantInstallationNS}, &appsv1.Deployment{}))
 			}).WithContext(ctx).Should(BeTrue())
 
 			Eventually(assertAcceptedCondTrueAndEnforcedCond(policy, metav1.ConditionFalse, string(kuadrant.PolicyReasonUnknown),
@@ -735,9 +744,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 		It("Unknown Reason", func(ctx SpecContext) {
 			// Remove limitador deployment to simulate enforcement error
-			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "limitador-limitador", Namespace: testNamespace}})).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "limitador-limitador", Namespace: kuadrantInstallationNS}})).To(Succeed())
 			Eventually(func() bool {
-				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKey{Name: "limitador-limitador", Namespace: testNamespace}, &appsv1.Deployment{}))
+				return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKey{Name: "limitador-limitador", Namespace: kuadrantInstallationNS}, &appsv1.Deployment{}))
 			}).WithContext(ctx).Should(BeTrue())
 
 			// Enforced false as limitador is not ready

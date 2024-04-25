@@ -26,14 +26,23 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
-var _ = Describe("Rate Limiting WasmPlugin controller", func() {
+var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 	var (
-		testNamespace string
+		testNamespace          string
+		kuadrantInstallationNS string
 	)
+
+	BeforeAll(func(ctx SpecContext) {
+		CreateNamespaceWithContext(ctx, &kuadrantInstallationNS)
+		ApplyKuadrantCR(kuadrantInstallationNS)
+	})
+
+	AfterAll(func(ctx SpecContext) {
+		DeleteNamespaceCallbackWithContext(ctx, &kuadrantInstallationNS)
+	})
 
 	beforeEachCallback := func() {
 		CreateNamespace(&testNamespace)
-		ApplyKuadrantCR(testNamespace)
 	}
 
 	BeforeEach(beforeEachCallback)

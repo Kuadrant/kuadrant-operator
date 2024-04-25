@@ -27,8 +27,20 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-var _ = Describe("Target status reconciler", func() {
-	var testNamespace string
+var _ = Describe("Target status reconciler", Ordered, func() {
+	var (
+		testNamespace          string
+		kuadrantInstallationNS string
+	)
+
+	BeforeAll(func(ctx SpecContext) {
+		CreateNamespaceWithContext(ctx, &kuadrantInstallationNS)
+		ApplyKuadrantCR(kuadrantInstallationNS)
+	})
+
+	AfterAll(func(ctx SpecContext) {
+		DeleteNamespaceCallbackWithContext(ctx, &kuadrantInstallationNS)
+	})
 
 	BeforeEach(func() {
 		// create namespace
@@ -47,9 +59,6 @@ var _ = Describe("Target status reconciler", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(testGatewayIsReady(gateway), 15*time.Second, 5*time.Second).Should(BeTrue())
-
-		// create kuadrant instance
-		ApplyKuadrantCR(testNamespace)
 
 		// create application
 		route := testBuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})

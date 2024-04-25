@@ -12,19 +12,20 @@ This document expects that you have successfully installed Kuadrant [Install Gui
 ## Overview
 
 In this doc we will walk you through using Kuadrant to secure, protect and connect an API via a set of Gateways distributed across multiple clusters. 
-
 We will take the approach of assuming certain personas and how they can each work with Kuadrant to achieve their goals.
 
 ### what Kuadrant can do for you in a multi-cluster environment
 
+Kuadrant's capabilities can be leveraged in single or multiple clusters. Below is a list of features that are designed to work across multiple clusters as well as in a single cluster environment.
+
 **Multi-Cluster Ingress:** Kuadrant provides multi-cluster ingress connectivity using DNS to bring traffic to your Gateways using a strategy defined in a `DNSPolicy` (more later). 
 **Global RateLimiting:** Kuadrant can enable global rate limiting usecases when it is configured to use a shared store (redis) for counters based on limits defined by a `RateLimitPolicy`.
 **Global Auth:*** Kuadrant's `AuthPolicy` can be configured to leverage external auth providers to ensure different cluster exposing the same API are authenticating and authorizing in the same way. 
-**Integration with federated metrics stores:** Kuadrant has example dashboards and metrics that can be used for visualising your gateways and observing traffic hitting those gateways across multiple clusters. 
+**Integration with federated metrics stores:** Kuadrant has example dashboards and metrics that can be used for visualizing your gateways and observing traffic hitting those gateways across multiple clusters. 
 
 **Platform Engineer**
 
-We will walk through deploying a gateway that is secure and protected and ready to be used by a development team to deploy an API. We will then walk through how you can have this gateway in clusters in different geographic regions and leverage Kuadrant to bring the right traffic to your geo located gateways to reduce latency and distribute load while still having it protected and secured via global rate limiting and auth.
+We will walk through deploying a gateway that provides secure communications and is protected and ready to be used by development teams to deploy an API. We will then walk through how you can have this gateway in clusters in different geographic regions and leverage Kuadrant to bring the specific traffic to your geo located gateways to reduce latency and distribute load while still having it protected and secured via global rate limiting and auth.
 
 As an optional extra we will highlight how, with the user workload monitoring observability stack deployed, these gateways can then be observed and monitored. 
 

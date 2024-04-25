@@ -52,9 +52,6 @@ var _ = Describe("Target status reconciler", func() {
 
 		Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
 
-		// create kuadrant instance
-		ApplyKuadrantCR(testNamespace)
-
 		// create application
 		route := testBuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
 		err = k8sClient.Create(ctx, route)

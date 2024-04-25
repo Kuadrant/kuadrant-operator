@@ -36,7 +36,6 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 	beforeEachCallback := func(ctx SpecContext) {
 		CreateNamespaceWithContext(ctx, &testNamespace)
-		ApplyKuadrantCR(testNamespace)
 	}
 
 	BeforeEach(beforeEachCallback)
@@ -2342,10 +2341,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(testRLPIsEnforced(ctx, routeRLPKey)).WithContext(ctx).Should(BeTrue())
 			Eventually(testRLPIsEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeFalse())
 			// Wasm plugin config should now use route RLP limit key
-			Expect(k8sClient.Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-			existingWASMConfig, err = rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, "limit.route__8a84e406", "*.example.com")))
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err = rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, "limit.route__8a84e406", "*.example.com")))
+			}).WithContext(ctx).Should(Succeed())
 
 			// Update GW RLP to overrides
 			Eventually(func(g Gomega) {
@@ -2357,10 +2358,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(testRLPIsEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
 			Eventually(testRLPIsEnforced(ctx, routeRLPKey)).WithContext(ctx).Should(BeFalse())
 			// Wasm plugin config should now use GW RLP limit key for route
-			Expect(k8sClient.Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-			existingWASMConfig, err = rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, "limit.gateway__4ea5ee68", "*.example.com")))
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
+				existingWASMConfig, err = rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, "limit.gateway__4ea5ee68", "*.example.com")))
+			}).WithContext(ctx).Should(Succeed())
+
 		}, testTimeOut)
 	})
 })

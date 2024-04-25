@@ -81,7 +81,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 		Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 		Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
-		ApplyKuadrantCR(testNamespace)
 	}
 
 	BeforeEach(beforeEachCallback)
@@ -119,7 +118,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			// check limits
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: appNamespace}
 			existingLimitador := &limitadorv1alpha1.Limitador{}
 			err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
 			// must exist
@@ -206,7 +205,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			// check limits
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: appNamespace}
 			existingLimitador := &limitadorv1alpha1.Limitador{}
 			err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
 			// must exist
@@ -257,7 +256,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
 
 			// check limits
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: appNamespace}
 			existingLimitador := &limitadorv1alpha1.Limitador{}
 			err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
 			// must exist
@@ -330,7 +329,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// check limits
 			Eventually(func(g Gomega) {
-				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: appNamespace}
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				g.Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
 				g.Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
@@ -389,7 +388,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		limitadorContainsLimit := func(ctx context.Context, limit limitadorv1alpha1.RateLimit) func(g Gomega) {
 			return func(g Gomega) {
 				// check limits - should contain HTTPRoute RLP values
-				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
+				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: appNamespace}
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				g.Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
 				g.Expect(existingLimitador.Spec.Limits).To(ContainElements(limit))
@@ -742,14 +741,15 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// Remove limitador deployment to simulate enforcement error
 			// RLP should transition to enforcement false in this case
-			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: testNamespace}})).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: appNamespace}})).To(Succeed())
+
 			Eventually(assertAcceptedCondTrueAndEnforcedCond(ctx, policy, metav1.ConditionFalse, string(kuadrant.PolicyReasonUnknown),
 				"RateLimitPolicy has encountered some issues: limitador is not ready")).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
 		It("Unknown Reason", func(ctx SpecContext) {
 			// Remove limitador deployment to simulate enforcement error
-			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: testNamespace}})).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: limitadorDeploymentName, Namespace: appNamespace}})).To(Succeed())
 
 			// Enforced false as limitador is not ready
 			policy := policyFactory()

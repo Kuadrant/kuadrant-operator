@@ -17,7 +17,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
-var _ = Describe("Kuadrant Gateway controller", func() {
+var _ = Describe("Kuadrant Gateway controller", Ordered, func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
@@ -31,6 +31,14 @@ var _ = Describe("Kuadrant Gateway controller", func() {
 	beforeEachCallback := func(ctx SpecContext) {
 		CreateNamespaceWithContext(ctx, &testNamespace)
 	}
+
+	BeforeAll(func(ctx SpecContext) {
+		DeleteKuadrantCR(ctx)
+	})
+
+	AfterAll(func(ctx SpecContext) {
+		ApplyKuadrantCR(appNamespace)
+	})
 
 	BeforeEach(beforeEachCallback)
 	AfterEach(func(ctx SpecContext) { DeleteNamespaceCallbackWithContext(ctx, &testNamespace) }, afterEachTimeOut)

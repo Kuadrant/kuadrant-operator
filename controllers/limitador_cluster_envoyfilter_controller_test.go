@@ -57,12 +57,10 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 			return true
 		}).WithContext(ctx).Should(BeTrue())
 
-		ApplyKuadrantCR(testNamespace)
-
 		// Check Limitador Status is Ready
 		Eventually(func() bool {
 			limitador := &limitadorv1alpha1.Limitador{}
-			err := k8sClient.Get(ctx, client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, limitador)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: common.LimitadorName, Namespace: appNamespace}, limitador)
 			if err != nil {
 				return false
 			}

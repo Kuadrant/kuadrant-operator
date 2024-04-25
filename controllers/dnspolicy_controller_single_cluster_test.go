@@ -23,7 +23,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-var _ = Describe("DNSPolicy Single Cluster", func() {
+var _ = Describe("DNSPolicy Single Cluster", Ordered, func() {
 
 	var gatewayClass *gatewayapiv1.GatewayClass
 	var managedZone *kuadrantdnsv1alpha1.ManagedZone
@@ -32,6 +32,14 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 	var dnsPolicy *v1alpha1.DNSPolicy
 	var ownerID, clusterHash, gwHash, recordName, wildcardRecordName string
 	var ctx context.Context
+
+	BeforeAll(func(ctx SpecContext) {
+		DeleteKuadrantCR(ctx)
+	})
+
+	AfterAll(func(ctx SpecContext) {
+		ApplyKuadrantCR(appNamespace)
+	})
 
 	BeforeEach(func() {
 		ctx = context.Background()
@@ -294,5 +302,4 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		})
 
 	})
-
 })

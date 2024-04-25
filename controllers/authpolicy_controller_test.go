@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -25,7 +24,6 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
@@ -50,8 +48,6 @@ var _ = Describe("AuthPolicy controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
-
-		ApplyKuadrantCR(testNamespace)
 	})
 
 	AfterEach(func(ctx SpecContext) {
@@ -1202,16 +1198,12 @@ var _ = Describe("AuthPolicy controller", func() {
 
 		It("Unknown reason", func(ctx SpecContext) {
 			// Remove kuadrant to simulate AuthPolicy enforcement error
-			err := k8sClient.Delete(ctx, &kuadrantv1beta1.Kuadrant{ObjectMeta: metav1.ObjectMeta{Name: "kuadrant-sample", Namespace: testNamespace}})
-			Expect(err).ToNot(HaveOccurred())
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: "authorino", Namespace: testNamespace}, &authorinoopapi.Authorino{})
-				return apierrors.IsNotFound(err)
-			}).WithContext(ctx).Should(BeTrue())
+			defer ApplyKuadrantCR(appNamespace)
+			DeleteKuadrantCR(ctx)
 
 			policy := policyFactory()
 
-			err = k8sClient.Create(ctx, policy)
+			err := k8sClient.Create(ctx, policy)
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 

@@ -88,6 +88,15 @@ func ApplyKuadrantCRWithName(namespace, name string) {
 	}, time.Minute, 5*time.Second).Should(BeTrue())
 }
 
+func DeleteKuadrantCR(ctx context.Context) {
+	k := &kuadrantv1beta1.Kuadrant{ObjectMeta: metav1.ObjectMeta{Name: "kuadrant-sample", Namespace: appNamespace}}
+	Eventually(func(g Gomega) {
+		err := k8sClient.Delete(ctx, k)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+	}).WithContext(ctx).Should(Succeed())
+}
+
 func CreateNamespaceWithContext(ctx context.Context, namespace *string) {
 	nsObject := &v1.Namespace{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},

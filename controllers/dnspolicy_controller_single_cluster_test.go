@@ -172,7 +172,8 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		BeforeEach(func() {
 			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithTargetGateway(TestGatewayName).
-				WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy)
+				WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
+				WithLoadBalancingFor(120, nil, "IE")
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 		})
 
@@ -206,7 +207,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 									"RecordTTL":     Equal(externaldns.TTL(60)),
 								})),
 								PointTo(MatchFields(IgnoreExtras, Fields{
-									"DNSName":          Equal("default." + "klb.test.example.com"),
+									"DNSName":          Equal("ie.klb.test.example.com"),
 									"Targets":          ConsistOf(clusterHash + "-" + gwHash + "." + "klb.test.example.com"),
 									"RecordType":       Equal("CNAME"),
 									"SetIdentifier":    Equal(clusterHash + "-" + gwHash + "." + "klb.test.example.com"),
@@ -215,7 +216,15 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 								})),
 								PointTo(MatchFields(IgnoreExtras, Fields{
 									"DNSName":          Equal("klb.test.example.com"),
-									"Targets":          ConsistOf("default." + "klb.test.example.com"),
+									"Targets":          ConsistOf("ie.klb.test.example.com"),
+									"RecordType":       Equal("CNAME"),
+									"SetIdentifier":    Equal("IE"),
+									"RecordTTL":        Equal(externaldns.TTL(300)),
+									"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
+								})),
+								PointTo(MatchFields(IgnoreExtras, Fields{
+									"DNSName":          Equal("klb.test.example.com"),
+									"Targets":          ConsistOf("ie.klb.test.example.com"),
 									"RecordType":       Equal("CNAME"),
 									"SetIdentifier":    Equal("default"),
 									"RecordTTL":        Equal(externaldns.TTL(300)),
@@ -247,7 +256,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 									"RecordTTL":     Equal(externaldns.TTL(60)),
 								})),
 								PointTo(MatchFields(IgnoreExtras, Fields{
-									"DNSName":          Equal("default." + "klb.example.com"),
+									"DNSName":          Equal("ie.klb.example.com"),
 									"Targets":          ConsistOf(clusterHash + "-" + gwHash + "." + "klb.example.com"),
 									"RecordType":       Equal("CNAME"),
 									"SetIdentifier":    Equal(clusterHash + "-" + gwHash + "." + "klb.example.com"),
@@ -256,11 +265,19 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 								})),
 								PointTo(MatchFields(IgnoreExtras, Fields{
 									"DNSName":          Equal("klb.example.com"),
-									"Targets":          ConsistOf("default." + "klb.example.com"),
+									"Targets":          ConsistOf("ie.klb.example.com"),
 									"RecordType":       Equal("CNAME"),
 									"SetIdentifier":    Equal("default"),
 									"RecordTTL":        Equal(externaldns.TTL(300)),
 									"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
+								})),
+								PointTo(MatchFields(IgnoreExtras, Fields{
+									"DNSName":          Equal("klb.example.com"),
+									"Targets":          ConsistOf("ie.klb.example.com"),
+									"RecordType":       Equal("CNAME"),
+									"SetIdentifier":    Equal("IE"),
+									"RecordTTL":        Equal(externaldns.TTL(300)),
+									"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
 								})),
 								PointTo(MatchFields(IgnoreExtras, Fields{
 									"DNSName":       Equal(TestHostWildcard),

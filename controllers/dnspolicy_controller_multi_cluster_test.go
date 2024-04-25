@@ -183,156 +183,13 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 
 	Context("loadbalanced routing strategy", func() {
 
-		Context("weighted", func() {
+		Context("geo+weighted with default weights", func() {
 
 			BeforeEach(func() {
 				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 					WithTargetGateway(TestGatewayName).
 					WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
-					WithLoadBalancingWeightedFor(120, nil)
-				Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
-			})
-
-			It("should create dns records", func() {
-				Eventually(func(g Gomega, ctx context.Context) {
-					recordList := &kuadrantdnsv1alpha1.DNSRecordList{}
-					err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(recordList.Items).To(HaveLen(2))
-
-					dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
-					err = k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, dnsRecord)
-					g.Expect(err).NotTo(HaveOccurred())
-
-					wildcardDnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
-					err = k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, wildcardDnsRecord)
-					g.Expect(err).NotTo(HaveOccurred())
-
-					g.Expect(*dnsRecord).To(
-						MatchFields(IgnoreExtras, Fields{
-							"ObjectMeta": HaveField("Name", recordName),
-							"Spec": MatchFields(IgnoreExtras, Fields{
-								"OwnerID":        Equal(&ownerID),
-								"ManagedZoneRef": HaveField("Name", "mz-example-com"),
-								"Endpoints": ConsistOf(
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":       Equal(clusterTwoIDHash + "-" + gwHash + ".klb.test.example.com"),
-										"Targets":       ConsistOf(TestIPAddressTwo),
-										"RecordType":    Equal("A"),
-										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(externaldns.TTL(60)),
-									})),
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":          Equal("default.klb.test.example.com"),
-										"Targets":          ConsistOf(clusterTwoIDHash + "-" + gwHash + ".klb.test.example.com"),
-										"RecordType":       Equal("CNAME"),
-										"SetIdentifier":    Equal(clusterTwoIDHash + "-" + gwHash + ".klb.test.example.com"),
-										"RecordTTL":        Equal(externaldns.TTL(60)),
-										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
-									})),
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":          Equal("default.klb.test.example.com"),
-										"Targets":          ConsistOf(clusterOneIDHash + "-" + gwHash + ".klb.test.example.com"),
-										"RecordType":       Equal("CNAME"),
-										"SetIdentifier":    Equal(clusterOneIDHash + "-" + gwHash + ".klb.test.example.com"),
-										"RecordTTL":        Equal(externaldns.TTL(60)),
-										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
-									})),
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":       Equal(clusterOneIDHash + "-" + gwHash + ".klb.test.example.com"),
-										"Targets":       ConsistOf(TestIPAddressOne),
-										"RecordType":    Equal("A"),
-										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(externaldns.TTL(60)),
-									})),
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":          Equal("klb.test.example.com"),
-										"Targets":          ConsistOf("default.klb.test.example.com"),
-										"RecordType":       Equal("CNAME"),
-										"SetIdentifier":    Equal("default"),
-										"RecordTTL":        Equal(externaldns.TTL(300)),
-										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
-									})),
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":       Equal(TestHostOne),
-										"Targets":       ConsistOf("klb.test.example.com"),
-										"RecordType":    Equal("CNAME"),
-										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(externaldns.TTL(300)),
-									})),
-								),
-							}),
-						}),
-					)
-					g.Expect(*wildcardDnsRecord).To(
-						MatchFields(IgnoreExtras, Fields{
-							"ObjectMeta": HaveField("Name", wildcardRecordName),
-							"Spec": MatchFields(IgnoreExtras, Fields{
-								"OwnerID":        Equal(&ownerID),
-								"ManagedZoneRef": HaveField("Name", "mz-example-com"),
-								"Endpoints": ConsistOf(
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":       Equal(clusterTwoIDHash + "-" + gwHash + ".klb.example.com"),
-										"Targets":       ConsistOf(TestIPAddressTwo),
-										"RecordType":    Equal("A"),
-										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(externaldns.TTL(60)),
-									})),
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":          Equal("default.klb.example.com"),
-										"Targets":          ConsistOf(clusterTwoIDHash + "-" + gwHash + ".klb.example.com"),
-										"RecordType":       Equal("CNAME"),
-										"SetIdentifier":    Equal(clusterTwoIDHash + "-" + gwHash + ".klb.example.com"),
-										"RecordTTL":        Equal(externaldns.TTL(60)),
-										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
-									})),
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":          Equal("default.klb.example.com"),
-										"Targets":          ConsistOf(clusterOneIDHash + "-" + gwHash + ".klb.example.com"),
-										"RecordType":       Equal("CNAME"),
-										"SetIdentifier":    Equal(clusterOneIDHash + "-" + gwHash + ".klb.example.com"),
-										"RecordTTL":        Equal(externaldns.TTL(60)),
-										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
-									})),
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":       Equal(clusterOneIDHash + "-" + gwHash + ".klb.example.com"),
-										"Targets":       ConsistOf(TestIPAddressOne),
-										"RecordType":    Equal("A"),
-										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(externaldns.TTL(60)),
-									})),
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":          Equal("klb.example.com"),
-										"Targets":          ConsistOf("default.klb.example.com"),
-										"RecordType":       Equal("CNAME"),
-										"SetIdentifier":    Equal("default"),
-										"RecordTTL":        Equal(externaldns.TTL(300)),
-										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
-									})),
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":       Equal(TestHostWildcard),
-										"Targets":       ConsistOf("klb.example.com"),
-										"RecordType":    Equal("CNAME"),
-										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(externaldns.TTL(300)),
-									})),
-								),
-							}),
-						}),
-					)
-				}, TestTimeoutMedium, TestRetryIntervalMedium, ctx).Should(Succeed())
-			})
-
-		})
-
-		Context("geo+weighted", func() {
-
-			BeforeEach(func() {
-				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
-					WithTargetGateway(TestGatewayName).
-					WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
-					WithLoadBalancingGeoFor("IE").
-					WithLoadBalancingWeightedFor(120, nil)
+					WithLoadBalancingFor(120, nil, "IE")
 				Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 			})
 
@@ -491,7 +348,7 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 					WithTargetGateway(TestGatewayName).
 					WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
-					WithLoadBalancingWeightedFor(120, []*v1alpha1.CustomWeight{
+					WithLoadBalancingFor(120, []*v1alpha1.CustomWeight{
 						{
 							Selector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
@@ -508,8 +365,7 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 							},
 							Weight: 160,
 						},
-					}).
-					WithLoadBalancingGeoFor("IE")
+					}, "IE")
 				Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 
 				Eventually(func() error {
@@ -679,6 +535,174 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 				}, TestTimeoutMedium, TestRetryIntervalMedium, ctx).Should(Succeed())
 			})
 
+		})
+
+		Context("geo+weighted with foreign geo", func() {
+
+			BeforeEach(func() {
+				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+					WithTargetGateway(TestGatewayName).
+					WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
+					WithLoadBalancingFor(120, nil, "cat")
+				Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+
+				Eventually(func() error {
+					gateway.Labels = map[string]string{}
+					gateway.Labels["clusters.kuadrant.io/"+TestClusterNameOne+"_lb-attribute-geo-code"] = "IE"
+					gateway.Labels["clusters.kuadrant.io/"+TestClusterNameTwo+"_lb-attribute-geo-code"] = "ES"
+					return k8sClient.Update(ctx, gateway)
+				}, TestTimeoutMedium, TestRetryIntervalMedium).ShouldNot(HaveOccurred())
+
+				Expect(gateway.Labels).To(HaveKeyWithValue("clusters.kuadrant.io/test-placed-control_lb-attribute-geo-code", "IE"))
+				Expect(gateway.Labels).To(HaveKeyWithValue("clusters.kuadrant.io/test-placed-workload-1_lb-attribute-geo-code", "ES"))
+			})
+
+			It("should create dns records", func() {
+				Eventually(func(g Gomega, ctx context.Context) {
+					recordList := &kuadrantdnsv1alpha1.DNSRecordList{}
+					err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(recordList.Items).To(HaveLen(2))
+
+					dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
+					err = k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, dnsRecord)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					wildcardDnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
+					err = k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, wildcardDnsRecord)
+					g.Expect(err).NotTo(HaveOccurred())
+
+					g.Expect(*dnsRecord).To(
+						MatchFields(IgnoreExtras, Fields{
+							"ObjectMeta": HaveField("Name", recordName),
+							"Spec": MatchFields(IgnoreExtras, Fields{
+								"OwnerID":        Equal(&ownerID),
+								"ManagedZoneRef": HaveField("Name", "mz-example-com"),
+								"Endpoints": ConsistOf(
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":       Equal(clusterOneIDHash + "-" + gwHash + ".klb.test.example.com"),
+										"Targets":       ConsistOf(TestIPAddressOne),
+										"RecordType":    Equal("A"),
+										"SetIdentifier": Equal(""),
+										"RecordTTL":     Equal(externaldns.TTL(60)),
+									})),
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":          Equal("ie.klb.test.example.com"),
+										"Targets":          ConsistOf(clusterOneIDHash + "-" + gwHash + ".klb.test.example.com"),
+										"RecordType":       Equal("CNAME"),
+										"SetIdentifier":    Equal(clusterOneIDHash + "-" + gwHash + ".klb.test.example.com"),
+										"RecordTTL":        Equal(externaldns.TTL(60)),
+										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
+									})),
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":          Equal("es.klb.test.example.com"),
+										"Targets":          ConsistOf(clusterTwoIDHash + "-" + gwHash + ".klb.test.example.com"),
+										"RecordType":       Equal("CNAME"),
+										"SetIdentifier":    Equal(clusterTwoIDHash + "-" + gwHash + ".klb.test.example.com"),
+										"RecordTTL":        Equal(externaldns.TTL(60)),
+										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
+									})),
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":       Equal(clusterTwoIDHash + "-" + gwHash + ".klb.test.example.com"),
+										"Targets":       ConsistOf(TestIPAddressTwo),
+										"RecordType":    Equal("A"),
+										"SetIdentifier": Equal(""),
+										"RecordTTL":     Equal(externaldns.TTL(60)),
+									})),
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":       Equal(TestHostOne),
+										"Targets":       ConsistOf("klb.test.example.com"),
+										"RecordType":    Equal("CNAME"),
+										"SetIdentifier": Equal(""),
+										"RecordTTL":     Equal(externaldns.TTL(300)),
+									})),
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":          Equal("klb.test.example.com"),
+										"Targets":          ConsistOf("es.klb.test.example.com"),
+										"RecordType":       Equal("CNAME"),
+										"SetIdentifier":    Equal("ES"),
+										"RecordTTL":        Equal(externaldns.TTL(300)),
+										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "ES"}}),
+									})),
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":          Equal("klb.test.example.com"),
+										"Targets":          ConsistOf("ie.klb.test.example.com"),
+										"RecordType":       Equal("CNAME"),
+										"SetIdentifier":    Equal("IE"),
+										"RecordTTL":        Equal(externaldns.TTL(300)),
+										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
+									})),
+								),
+							}),
+						}),
+					)
+
+					g.Expect(*wildcardDnsRecord).To(
+						MatchFields(IgnoreExtras, Fields{
+							"ObjectMeta": HaveField("Name", wildcardRecordName),
+							"Spec": MatchFields(IgnoreExtras, Fields{
+								"OwnerID":        Equal(&ownerID),
+								"ManagedZoneRef": HaveField("Name", "mz-example-com"),
+								"Endpoints": ConsistOf(
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":       Equal(clusterOneIDHash + "-" + gwHash + ".klb.example.com"),
+										"Targets":       ConsistOf(TestIPAddressOne),
+										"RecordType":    Equal("A"),
+										"SetIdentifier": Equal(""),
+										"RecordTTL":     Equal(externaldns.TTL(60)),
+									})),
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":          Equal("ie.klb.example.com"),
+										"Targets":          ConsistOf(clusterOneIDHash + "-" + gwHash + ".klb.example.com"),
+										"RecordType":       Equal("CNAME"),
+										"SetIdentifier":    Equal(clusterOneIDHash + "-" + gwHash + ".klb.example.com"),
+										"RecordTTL":        Equal(externaldns.TTL(60)),
+										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
+									})),
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":          Equal("es.klb.example.com"),
+										"Targets":          ConsistOf(clusterTwoIDHash + "-" + gwHash + ".klb.example.com"),
+										"RecordType":       Equal("CNAME"),
+										"SetIdentifier":    Equal(clusterTwoIDHash + "-" + gwHash + ".klb.example.com"),
+										"RecordTTL":        Equal(externaldns.TTL(60)),
+										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "weight", Value: "120"}}),
+									})),
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":       Equal(clusterTwoIDHash + "-" + gwHash + ".klb.example.com"),
+										"Targets":       ConsistOf(TestIPAddressTwo),
+										"RecordType":    Equal("A"),
+										"SetIdentifier": Equal(""),
+										"RecordTTL":     Equal(externaldns.TTL(60)),
+									})),
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":       Equal(TestHostWildcard),
+										"Targets":       ConsistOf("klb.example.com"),
+										"RecordType":    Equal("CNAME"),
+										"SetIdentifier": Equal(""),
+										"RecordTTL":     Equal(externaldns.TTL(300)),
+									})),
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":          Equal("klb.example.com"),
+										"Targets":          ConsistOf("es.klb.example.com"),
+										"RecordType":       Equal("CNAME"),
+										"SetIdentifier":    Equal("ES"),
+										"RecordTTL":        Equal(externaldns.TTL(300)),
+										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "ES"}}),
+									})),
+									PointTo(MatchFields(IgnoreExtras, Fields{
+										"DNSName":          Equal("klb.example.com"),
+										"Targets":          ConsistOf("ie.klb.example.com"),
+										"RecordType":       Equal("CNAME"),
+										"SetIdentifier":    Equal("IE"),
+										"RecordTTL":        Equal(externaldns.TTL(300)),
+										"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "IE"}}),
+									})),
+								),
+							}),
+						}),
+					)
+				}, TestTimeoutMedium, TestRetryIntervalMedium, ctx).Should(Succeed())
+			})
 		})
 
 	})

@@ -348,31 +348,14 @@ func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port *int, protocol stri
 
 //LoadBalancing
 
-func (p *DNSPolicy) WithLoadBalancingWeighted(lbWeighted LoadBalancingWeighted) *DNSPolicy {
-	if p.Spec.LoadBalancing == nil {
-		p.WithLoadBalancing(LoadBalancingSpec{})
-	}
-	p.Spec.LoadBalancing.Weighted = &lbWeighted
-	return p
-}
-
-func (p *DNSPolicy) WithLoadBalancingGeo(lbGeo LoadBalancingGeo) *DNSPolicy {
-	if p.Spec.LoadBalancing == nil {
-		p.Spec.LoadBalancing = &LoadBalancingSpec{}
-	}
-	p.Spec.LoadBalancing.Geo = &lbGeo
-	return p
-}
-
-func (p *DNSPolicy) WithLoadBalancingWeightedFor(defaultWeight Weight, custom []*CustomWeight) *DNSPolicy {
-	return p.WithLoadBalancingWeighted(LoadBalancingWeighted{
-		DefaultWeight: defaultWeight,
-		Custom:        custom,
-	})
-}
-
-func (p *DNSPolicy) WithLoadBalancingGeoFor(defaultGeo string) *DNSPolicy {
-	return p.WithLoadBalancingGeo(LoadBalancingGeo{
-		DefaultGeo: defaultGeo,
+func (p *DNSPolicy) WithLoadBalancingFor(defaultWeight Weight, custom []*CustomWeight, defaultGeo string) *DNSPolicy {
+	return p.WithLoadBalancing(LoadBalancingSpec{
+		Weighted: &LoadBalancingWeighted{
+			DefaultWeight: defaultWeight,
+			Custom:        custom,
+		},
+		Geo: &LoadBalancingGeo{
+			DefaultGeo: defaultGeo,
+		},
 	})
 }

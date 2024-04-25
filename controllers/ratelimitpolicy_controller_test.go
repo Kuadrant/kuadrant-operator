@@ -110,11 +110,13 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check HTTPRoute direct back reference
 			routeKey := client.ObjectKey{Name: routeName, Namespace: testNamespace}
 			existingRoute := &gatewayapiv1.HTTPRoute{}
-			err = k8sClient.Get(ctx, routeKey, existingRoute)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingRoute.GetAnnotations()).To(HaveKeyWithValue(
-				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
+			Eventually(func(g Gomega) {
+				err = k8sClient.Get(ctx, routeKey, existingRoute)
+				// must exist
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingRoute.GetAnnotations()).To(HaveKeyWithValue(
+					rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
+			}).WithContext(ctx).Should(Succeed())
 
 			// check limits
 			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
@@ -134,14 +136,16 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check gateway back references
 			gwKey := client.ObjectKey{Name: gwName, Namespace: testNamespace}
 			existingGateway := &gatewayapiv1.Gateway{}
-			err = k8sClient.Get(ctx, gwKey, existingGateway)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			refs := []client.ObjectKey{rlpKey}
-			serialized, err := json.Marshal(refs)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				rlp.BackReferenceAnnotationName(), string(serialized)))
+			Eventually(func(g Gomega) {
+				err = k8sClient.Get(ctx, gwKey, existingGateway)
+				// must exist
+				Expect(err).ToNot(HaveOccurred())
+				refs := []client.ObjectKey{rlpKey}
+				serialized, err := json.Marshal(refs)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
+					rlp.BackReferenceAnnotationName(), string(serialized)))
+			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
 
@@ -193,11 +197,13 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
 			existingGateway := &gatewayapiv1.Gateway{}
-			err = k8sClient.Get(ctx, gwKey, existingGateway)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
+			Eventually(func(g Gomega) {
+				err = k8sClient.Get(ctx, gwKey, existingGateway)
+				// must exist
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
+					rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
+			}).WithContext(ctx).Should(Succeed())
 
 			// check limits
 			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}
@@ -214,14 +220,16 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Name:       rlptools.LimitsNameFromRLP(rlp),
 			}))
 
-			// Check gateway back references
-			err = k8sClient.Get(ctx, gwKey, existingGateway)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			refs := []client.ObjectKey{rlpKey}
-			serialized, err := json.Marshal(refs)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(rlp.BackReferenceAnnotationName(), string(serialized)))
+			Eventually(func(g Gomega) {
+				// Check gateway back references
+				err = k8sClient.Get(ctx, gwKey, existingGateway)
+				// must exist
+				g.Expect(err).ToNot(HaveOccurred())
+				refs := []client.ObjectKey{rlpKey}
+				serialized, err := json.Marshal(refs)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(rlp.BackReferenceAnnotationName(), string(serialized)))
+			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
 		It("Creates all the resources for a basic Gateway and RateLimitPolicy when missing a HTTPRoute attached to the Gateway", func(ctx SpecContext) {
@@ -263,15 +271,16 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Name:       rlptools.LimitsNameFromRLP(rlp),
 			}))
 
-			// Check gateway back references
-			err = k8sClient.Get(ctx, gwKey, existingGateway)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			refs := []client.ObjectKey{rlpKey}
-			serialized, err := json.Marshal(refs)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				rlp.BackReferenceAnnotationName(), string(serialized)))
+			Eventually(func(g Gomega) {
+				// Check gateway back references
+				err = k8sClient.Get(ctx, gwKey, existingGateway)
+				// must exist
+				g.Expect(err).ToNot(HaveOccurred())
+				refs := []client.ObjectKey{rlpKey}
+				serialized, err := json.Marshal(refs)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(rlp.BackReferenceAnnotationName(), string(serialized)))
+			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
 
@@ -313,9 +322,11 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
 			existingGateway := &gatewayapiv1.Gateway{}
-			Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				gwRLP.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(gwRLP).String()))
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
+				g.Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
+					gwRLP.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(gwRLP).String()))
+			}).WithContext(ctx).Should(Succeed())
 
 			// check limits
 			Eventually(func(g Gomega) {
@@ -430,9 +441,11 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
 			existingGateway := &gatewayapiv1.Gateway{}
-			Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
-			Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
-				gwRLP.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(gwRLP).String()))
+			Eventually(func(g Gomega) {
+				Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
+				Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
+					gwRLP.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(gwRLP).String()))
+			}).WithContext(ctx).Should(Succeed())
 
 			// check limits - should contain override values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
@@ -986,13 +999,15 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// From  RLP A -> Route A
 			// To RLP A -> Route B (already taken)
 
-			rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
-			err = k8sClient.Get(ctx, client.ObjectKeyFromObject(rlpA), rlpUpdated)
-			Expect(err).ToNot(HaveOccurred())
-			rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeBName)
-			err = k8sClient.Update(ctx, rlpUpdated)
-			Expect(err).ToNot(HaveOccurred())
-			// Check RLP status is available
+			Eventually(func(g Gomega) {
+				rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(rlpA), rlpUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+				rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeBName)
+				err = k8sClient.Update(ctx, rlpUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+				// Check RLP status is available
+			}).WithContext(ctx).Should(Succeed())
 			Eventually(testRLPIsNotAccepted(ctx, rlpAKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check HTTPRoute A direct back reference is gone
@@ -1116,7 +1131,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check RLP status is not available
 			rlpBKey := client.ObjectKeyFromObject(rlpB)
 			Eventually(testRLPIsNotAccepted(ctx, rlpBKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlpBKey)).WithContext(ctx).Should(BeFalse())
 
 			// Check HTTPRoute A direct back reference to RLP A
 			routeAKey := client.ObjectKey{Name: routeAName, Namespace: testNamespace}

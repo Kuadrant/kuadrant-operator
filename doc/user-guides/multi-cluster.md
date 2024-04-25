@@ -284,7 +284,7 @@ Lets check the programmed state of our gateway listener again.
 kubectl get gateway external -n ${gatewayNS} -o=jsonpath='{.status.listeners[0].conditions[?(@.type=="Programmed")].message}'
 ```
 
-Should have no errors anymore.
+Should have no errors anymore. Note it can take a minute or two for the letsencrypt cert to be issued.
 
 ### Setup our DNS
 
@@ -390,14 +390,18 @@ So for example if we have a cluster in North America and a Cluster in the EU we 
 
 In our North American cluster:
 ```
-kubectl label --overwrite gateway external kuadrant.io/lb-attribute-geo-code=US -n $[gatewayNS}
+kubectl label --overwrite gateway external kuadrant.io/lb-attribute-geo-code=US -n ${gatewayNS}
 ```
 
 In our European Cluster
 
 ```
-kubectl label --overwrite gateway external kuadrant.io/lb-attribute-geo-code=EU -n $[gatewayNS}
+kubectl label --overwrite gateway external kuadrant.io/lb-attribute-geo-code=EU -n ${gatewayNS}
+
 ```
+
+
+After some time you can check the geo distribution using the HTTPRoute host `kubectl get httproute api -n demo -o=jsonpath='{.spec.hostnames[0]}'` via site such as https://dnsmap.io/
 
 ## Developer
 

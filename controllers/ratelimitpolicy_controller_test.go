@@ -451,8 +451,8 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 			gwKey := client.ObjectKeyFromObject(gateway)
 			existingGateway := &gatewayapiv1.Gateway{}
 			Eventually(func(g Gomega) {
-				Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
-				Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
+				g.Expect(k8sClient.Get(ctx, gwKey, existingGateway)).To(Succeed())
+				g.Expect(existingGateway.GetAnnotations()).To(HaveKeyWithValue(
 					gwRLP.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(gwRLP).String()))
 			}).WithContext(ctx).Should(Succeed())
 

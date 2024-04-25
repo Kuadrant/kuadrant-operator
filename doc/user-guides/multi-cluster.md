@@ -15,6 +15,13 @@ In this doc we will walk you through using Kuadrant to secure, protect and conne
 
 We will take the approach of assuming certain personas and how they can each work with Kuadrant to achieve their goals.
 
+### what Kuadrant can do for you in a multi-cluster environment
+
+**Multi-Cluster Ingress:** Kuadrant provides multi-cluster ingress connectivity using DNS to bring traffic to your Gateways using a strategy defined in a `DNSPolicy` (more later). 
+**Global RateLimiting:** Kuadrant can enable global rate limiting usecases when it is configured to use a shared store (redis) for counters based on limits defined by a `RateLimitPolicy`.
+**Global Auth:*** Kuadrant's `AuthPolicy` can be configured to leverage external auth providers to ensure different cluster exposing the same API are authenticating and authorizing in the same way. 
+**Integration with federated metrics stores:** Kuadrant has example dashboards and metrics that can be used for visualising your gateways and observing traffic hitting those gateways across multiple clusters. 
+
 **Platform Engineer**
 
 We will walk through deploying a gateway that is secure and protected and ready to be used by a development team to deploy an API. We will then walk through how you can have this gateway in clusters in different geographic regions and leverage Kuadrant to bring the right traffic to your geo located gateways to reduce latency and distribute load while still having it protected and secured via global rate limiting and auth.
@@ -27,7 +34,7 @@ We will walk through how you can use the kuadrant OAS extensions and CLI to gene
 
 ## Platform Engineer
 
-The following steps should be done in each individual cluster unless specifically excluded. Kuadrant provides multi-cluster ingress connectivity using DNS to bring traffic to your Gateways using a strategy defined in a `DNSPolicy` (more later). It uses a shared store (redis) to store counters to enforce global rate limiting defined by a `RateLimitPolicy`. `AuthPolicy` can be configured to leverage external auth providers to ensure different cluster exposing the same API are authenticating and authorizing in the same way. Finally we have designed some dashboards for visualising your gateways and observing traffic hitting those gateways. 
+The following steps should be done in each cluster individually unless specifically excluded. 
 
 ### Env Vars
 

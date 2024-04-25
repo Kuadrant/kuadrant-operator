@@ -953,12 +953,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Proceed with the update:
 			// From Route A -> Gw A
 			// To Route A -> Gw B
-			httpRouteUpdated := &gatewayapiv1.HTTPRoute{}
-			err = k8sClient.Get(ctx, client.ObjectKeyFromObject(httpRoute), httpRouteUpdated)
-			Expect(err).ToNot(HaveOccurred())
-			httpRouteUpdated.Spec.CommonRouteSpec.ParentRefs[0].Name = gatewayapiv1.ObjectName(gwBName)
-			err = k8sClient.Update(ctx, httpRouteUpdated)
-			Expect(err).ToNot(HaveOccurred())
+			Eventually(func(g Gomega) {
+				httpRouteUpdated := &gatewayapiv1.HTTPRoute{}
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(httpRoute), httpRouteUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+				httpRouteUpdated.Spec.CommonRouteSpec.ParentRefs[0].Name = gatewayapiv1.ObjectName(gwBName)
+				err = k8sClient.Update(ctx, httpRouteUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+			}).Should(Succeed())
 
 			// Check wasm plugin for gateway A no longer exists
 			// it may take some reconciliation loops to get to that, so checking it with eventually
@@ -1147,12 +1149,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Proceed with the update:
 			// From Route A -> Gw A
 			// To Route A -> Gw B
-			httpRouteUpdated := &gatewayapiv1.HTTPRoute{}
-			err = k8sClient.Get(ctx, client.ObjectKeyFromObject(httpRoute), httpRouteUpdated)
-			Expect(err).ToNot(HaveOccurred())
-			httpRouteUpdated.Spec.CommonRouteSpec.ParentRefs[0].Name = gatewayapiv1.ObjectName(gwBName)
-			err = k8sClient.Update(ctx, httpRouteUpdated)
-			Expect(err).ToNot(HaveOccurred())
+			Eventually(func(g Gomega) {
+				httpRouteUpdated := &gatewayapiv1.HTTPRoute{}
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(httpRoute), httpRouteUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+				httpRouteUpdated.Spec.CommonRouteSpec.ParentRefs[0].Name = gatewayapiv1.ObjectName(gwBName)
+				err = k8sClient.Update(ctx, httpRouteUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
 
 			// Check wasm plugin for gateway A no longer exists
 			// it may take some reconciliation loops to get to that, so checking it with eventually
@@ -1424,12 +1428,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Proceed with the update:
 			// From RLP R -> Route A
 			// To RLP R -> Route B
-			rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
-			err = k8sClient.Get(ctx, client.ObjectKeyFromObject(rlpR), rlpUpdated)
-			Expect(err).ToNot(HaveOccurred())
-			rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeBName)
-			err = k8sClient.Update(ctx, rlpUpdated)
-			Expect(err).ToNot(HaveOccurred())
+			Eventually(func(g Gomega) {
+				rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(rlpR), rlpUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+				rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeBName)
+				err = k8sClient.Update(ctx, rlpUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
 
 			// Check wasm plugin has configuration from the route B
 			// it may take some reconciliation loops to get to that, so checking it with eventually

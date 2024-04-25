@@ -94,7 +94,7 @@ You can also search for recent traces, filtering by the service you want to focu
 
 Here is an example trace in the Grafana UI showing the total request time from the gateway (Istio), the time to check the curent rate limit count (and update it) in limitador and the time to check auth in Authorino:
 
-<img src="./grafana_trace.png" alt="Trace in Grafana UI" width="800"/>
+![Trace in Grafana UI](grafana_trace.png)
 
 In limitador, it is possible to enable request logging with trace IDs to get more information on requests.
 This requires the log level to be increased to at least debug, so the verbosity must be set to 3 or higher in the Limitador CR. For example:
@@ -116,7 +116,7 @@ A log entry will look something like this, with the `traceparent` field holding 
 
 If you centrally aggregate logs using something like promtail and loki, you can jump between trace information and the relevant logs for that service:
 
-<img src="./grafana_tracing_loki.png" alt="Trace and logs in Grafana UI" width="800"/>
+![Trace and logs in Grafana UI](grafana_tracing_loki.png)
 
 Using a combination of tracing and logs, you can visualise and troubleshoot reuqest timing issues and drill down to specific services.
 This method becomes even more powerful when combined with [metrics](https://docs.kuadrant.io/kuadrant-operator/doc/observability/metrics/) and [dashboards](https://docs.kuadrant.io/kuadrant-operator/doc/observability/dashboards/) to get a more complete picture of your users traffic.

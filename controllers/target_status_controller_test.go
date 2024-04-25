@@ -308,7 +308,7 @@ var _ = Describe("Target status reconciler", func() {
 		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *v1beta2.RateLimitPolicy, routeNames ...string) func() bool {
 			return func() bool {
 				policyKey := client.ObjectKeyFromObject(policy)
-				if !testRLPIsAccepted(policyKey)() {
+				if !testRLPIsAccepted(ctx, policyKey)() {
 					return false
 				}
 				return targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef, routeNames...)

@@ -382,17 +382,17 @@ func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {
 	}
 }
 
-func testRLPIsAccepted(rlpKey client.ObjectKey) func() bool {
-	return testRLPIsConditionTrue(rlpKey, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+func testRLPIsAccepted(ctx context.Context, rlpKey client.ObjectKey) func() bool {
+	return testRLPIsConditionTrue(ctx, rlpKey, string(gatewayapiv1alpha2.PolicyConditionAccepted))
 }
 
-func testRLPIsEnforced(rlpKey client.ObjectKey) func() bool {
-	return testRLPIsConditionTrue(rlpKey, string(kuadrant.PolicyConditionEnforced))
+func testRLPIsEnforced(ctx context.Context, rlpKey client.ObjectKey) func() bool {
+	return testRLPIsConditionTrue(ctx, rlpKey, string(kuadrant.PolicyConditionEnforced))
 }
 
-func testRLPEnforcedCondition(rlpKey client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) bool {
+func testRLPEnforcedCondition(ctx context.Context, rlpKey client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) bool {
 	p := &kuadrantv1beta2.RateLimitPolicy{}
-	if err := k8sClient.Get(context.Background(), rlpKey, p); err != nil {
+	if err := k8sClient.Get(ctx, rlpKey, p); err != nil {
 		return false
 	}
 
@@ -404,10 +404,10 @@ func testRLPEnforcedCondition(rlpKey client.ObjectKey, reason gatewayapiv1alpha2
 	return cond.Reason == string(reason) && cond.Message == message
 }
 
-func testRLPIsNotAccepted(rlpKey client.ObjectKey) func() bool {
+func testRLPIsNotAccepted(ctx context.Context, rlpKey client.ObjectKey) func() bool {
 	return func() bool {
 		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
-		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+		err := k8sClient.Get(ctx, rlpKey, existingRLP)
 		if err != nil {
 			logf.Log.V(1).Info("ratelimitpolicy not read", "rlp", rlpKey, "error", err)
 			return false
@@ -421,16 +421,16 @@ func testRLPIsNotAccepted(rlpKey client.ObjectKey) func() bool {
 	}
 }
 
-func testRLPIsConditionTrue(rlpKey client.ObjectKey, condition string) func() bool {
+func testRLPIsConditionTrue(ctx context.Context, rlpKey client.ObjectKey, condition string) func() bool {
 	return func() bool {
 		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
-		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+		err := k8sClient.Get(ctx, rlpKey, existingRLP)
 		if err != nil {
 			logf.Log.V(1).Error(err, "ratelimitpolicy not read", "rlp", rlpKey)
 			return false
 		}
 		if meta.IsStatusConditionFalse(existingRLP.Status.Conditions, condition) {
-			logf.Log.V(1).Info("ratelimitpolicy condition not true", "rlp", rlpKey, "condition", condition)
+			logf.Log.V(1).Info("ratelimitpolicy condition not true", "rlp", rlpKey, "condition", condition, "conditions", existingRLP.Status.Conditions)
 			return false
 		}
 

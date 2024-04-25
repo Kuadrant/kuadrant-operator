@@ -113,9 +113,9 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(rlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(rlpKey)).WithContext(ctx).Should(BeFalse())
-			Expect(testRLPEnforcedCondition(rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
+			Eventually(testRLPIsAccepted(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(testRLPIsEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeFalse())
+			Expect(testRLPEnforcedCondition(ctx, rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
 
 			// Check envoy filter
 			Eventually(func() bool {

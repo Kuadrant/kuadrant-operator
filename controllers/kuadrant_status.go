@@ -6,8 +6,10 @@ import (
 	"slices"
 
 	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -15,9 +17,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 const (
@@ -118,6 +122,17 @@ func (r *KuadrantReconciler) readyCondition(ctx context.Context, kObj *kuadrantv
 		return cond, nil
 	}
 
+	reason, err = r.checkWasmServerAvailable(ctx, kObj)
+	if err != nil {
+		return nil, err
+	}
+	if reason != nil {
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "WasmServerNotReady"
+		cond.Message = *reason
+		return cond, nil
+	}
+
 	return cond, nil
 }
 
@@ -168,6 +183,35 @@ func (r *KuadrantReconciler) checkAuthorinoAvailable(ctx context.Context, kObj *
 
 	if readyCondition.Status != corev1.ConditionTrue {
 		return &readyCondition.Message, nil
+	}
+
+	return nil, nil
+}
+
+func (r *KuadrantReconciler) checkWasmServerAvailable(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (*string, error) {
+	desiredDeployment := wasmServerDeployment(kObj)
+	dKey := client.ObjectKeyFromObject(desiredDeployment)
+	deployment := &appsv1.Deployment{}
+	err := r.Client().Get(ctx, dKey, deployment)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return nil, err
+	}
+
+	if err != nil && apierrors.IsNotFound(err) {
+		tmp := err.Error()
+		return &tmp, nil
+	}
+
+	availableCondition := utils.FindDeploymentStatusCondition(
+		deployment.Status.Conditions, string(appsv1.DeploymentAvailable),
+	)
+	if availableCondition == nil {
+		tmp := "Available condition not found"
+		return &tmp, nil
+	}
+
+	if availableCondition.Status != corev1.ConditionTrue {
+		return &availableCondition.Message, nil
 	}
 
 	return nil, nil

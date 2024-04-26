@@ -20,23 +20,32 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sort"
 
 	"github.com/go-logr/logr"
 	istioextensionsv1alpha1 "istio.io/api/extensions/v1alpha1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -83,7 +92,29 @@ func (r *RateLimitingWASMPluginReconciler) Reconcile(eventCtx context.Context, r
 		logger.V(1).Info(string(jsonData))
 	}
 
-	desired, err := r.desiredRateLimitingWASMPlugin(ctx, gw)
+	kObj, err := kuadranttools.KuadrantFromGateway(ctx, r.Client(), gw)
+	if err != nil {
+		logger.Info("failed to read kuadrant instance")
+		return ctrl.Result{}, err
+	}
+
+	if kObj == nil {
+		logger.Info("kuadrant instance not found, maybe not the gateway is not assigned to kuadrant")
+		return ctrl.Result{}, nil
+	}
+
+	sha256, err := r.getWasmSHA256(ctx, kObj)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if sha256 == nil {
+		logger.Info("wasm server not ready")
+		return ctrl.Result{}, nil
+	}
+
+	logger.Info("wasm server", "sha256", sha256)
+
+	desired, err := r.desiredRateLimitingWASMPlugin(ctx, gw, *sha256, kObj)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -97,10 +128,48 @@ func (r *RateLimitingWASMPluginReconciler) Reconcile(eventCtx context.Context, r
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitingWASMPluginReconciler) desiredRateLimitingWASMPlugin(ctx context.Context, gw *gatewayapiv1.Gateway) (*istioclientgoextensionv1alpha1.WasmPlugin, error) {
+func (r *RateLimitingWASMPluginReconciler) getWasmSHA256(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (*string, error) {
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	configMapKey := client.ObjectKey{Name: WasmServerDeploymentName(kObj), Namespace: kObj.Namespace}
+	configMap := &v1.ConfigMap{}
+	if err := r.Client().Get(ctx, configMapKey, configMap); err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.V(1).Info("getWasmSHA256: no configmap found", "configmapKey", configMapKey)
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	sha256, ok := configMap.Data["rate-limit-wasm-sha256"]
+	if !ok {
+		logger.V(1).Info("getWasmSHA256: configmaps does not have expected rate-limit-wasm-sha256 key",
+			"configmap key", configMapKey)
+		return nil, nil
+	}
+
+	return &sha256, nil
+}
+
+func (r *RateLimitingWASMPluginReconciler) desiredRateLimitingWASMPlugin(
+	ctx context.Context,
+	gw *gatewayapiv1.Gateway,
+	sha256 string,
+	kObj *kuadrantv1beta1.Kuadrant,
+) (*istioclientgoextensionv1alpha1.WasmPlugin, error) {
 	baseLogger, err := logr.FromContext(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	wasmServerURL := url.URL{
+		Scheme: "http",
+		// Warning: .cluster.local may not be true in all clusters
+		Host: fmt.Sprintf("%s.%s.svc.cluster.local", WasmServerServiceName(kObj), kObj.Namespace),
+		Path: "/plugin.wasm",
 	}
 
 	wasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{
@@ -113,8 +182,13 @@ func (r *RateLimitingWASMPluginReconciler) desiredRateLimitingWASMPlugin(ctx con
 			Namespace: gw.Namespace,
 		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{
-			Selector:     kuadrantistioutils.WorkloadSelectorFromGateway(ctx, r.Client(), gw),
-			Url:          rlptools.WASMFilterImageURL,
+			Selector: kuadrantistioutils.WorkloadSelectorFromGateway(ctx, r.Client(), gw),
+			Url:      wasmServerURL.String(),
+			// The SHA256 will be used to notify Istio that the Wasm module has been changed
+			// and it needs to be reloaded.
+			// The URL does not have any versioning info
+			// so it does not change when the Wasm module changes.
+			Sha256:       sha256,
 			PluginConfig: nil,
 			// Insert plugin before Istio stats filters and after Istio authorization filters.
 			Phase: istioextensionsv1alpha1.PluginPhase_STATS,
@@ -364,6 +438,50 @@ func addHTTPRouteByGatewayIndexer(mgr ctrl.Manager, baseLogger logr.Logger) erro
 	return nil
 }
 
+func wasmSha256ConfigMaptoGateways(baselogger logr.Logger, cl client.Client) handler.MapFunc {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
+		logger := baselogger.WithValues("configmap", client.ObjectKeyFromObject(obj))
+
+		configMap, ok := obj.(*v1.ConfigMap)
+		if !ok {
+			logger.Info("cannot map configmap event to gateways", "error", fmt.Sprintf("%T is not a *v1.ConfigMap", obj))
+			return []reconcile.Request{}
+		}
+
+		// TODO "kuadrant.io/namespace" annotation make label to match by label
+		// or use field indexer -> give me all gateways assigned to kuadrant in namespace NS
+
+		allGwList := &gatewayapiv1.GatewayList{}
+		err := cl.List(ctx, allGwList)
+		if err != nil {
+			return nil
+		}
+
+		gwSameNamespace := utils.Filter(allGwList.Items, func(gw gatewayapiv1.Gateway) bool {
+			key := client.ObjectKeyFromObject(&gw)
+			// only those gateways managed by the kuadrant instance in the same NS as the configmap
+			if !kuadrant.IsKuadrantManaged(&gw) {
+				logger.V(1).Info("gateway discarded", "reason", "not managed by kuadrant",
+					"key", key.String())
+				return false
+			}
+			if configMap.Namespace != gw.GetAnnotations()[kuadrant.KuadrantNamespaceAnnotation] {
+				logger.V(1).Info("gateway discarded", "reason", "not the same kuadrant namespace",
+					"key", key.String())
+				return false
+			}
+
+			return true
+		})
+
+		return utils.Map(gwSameNamespace, func(gw gatewayapiv1.Gateway) reconcile.Request {
+			key := client.ObjectKeyFromObject(&gw)
+			logger.V(1).Info("new gateway event", "key", key.String())
+			return reconcile.Request{NamespacedName: key}
+		})
+	}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *RateLimitingWASMPluginReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Add custom indexer
@@ -380,6 +498,14 @@ func (r *RateLimitingWASMPluginReconciler) SetupWithManager(mgr ctrl.Manager) er
 		mappers.WithLogger(r.Logger().WithName("ratelimitpolicyToParentGatewaysEventMapper")),
 		mappers.WithClient(r.Client()),
 	)
+
+	// Predicate to watch configmap with the SHA256 of the Wasm module
+	wasmSHA256ConfigMapLabelPredicate, err := predicate.LabelSelectorPredicate(
+		metav1.LabelSelector{MatchLabels: WasmServerLabels()},
+	)
+	if err != nil {
+		return nil
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).
 		// Rate limiting WASMPlugin controller only cares about
@@ -398,6 +524,15 @@ func (r *RateLimitingWASMPluginReconciler) SetupWithManager(mgr ctrl.Manager) er
 		Watches(
 			&kuadrantv1beta2.RateLimitPolicy{},
 			handler.EnqueueRequestsFromMapFunc(rlpToParentGatewaysEventMapper.Map),
+		).
+		// Watch the configmap with the SHA256 of the wasm module for updates
+		Watches(
+			&corev1.ConfigMap{},
+			handler.EnqueueRequestsFromMapFunc(wasmSha256ConfigMaptoGateways(
+				r.Logger().WithName("wasmSha256ConfigMaptoGateways"),
+				r.Client(),
+			)),
+			builder.WithPredicates(wasmSHA256ConfigMapLabelPredicate),
 		).
 		Complete(r)
 }

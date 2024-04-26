@@ -63,7 +63,6 @@ type KuadrantReconciler struct {
 
 //+kubebuilder:rbac:groups=core,resources=serviceaccounts;configmaps;services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=coordination.k8s.io,resources=configmaps;leases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=leases,verbs=get;list;watch;create;update;patch;delete
 
@@ -374,7 +373,11 @@ func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1
 		return err
 	}
 
-	return r.reconcileAuthorino(ctx, kObj)
+	if err := r.reconcileAuthorino(ctx, kObj); err != nil {
+		return err
+	}
+
+	return r.reconcileWasmServer(ctx, kObj)
 }
 
 func controlPlaneProviderName() string {
@@ -499,6 +502,8 @@ func (r *KuadrantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta1.Kuadrant{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.ConfigMap{}).
+		Owns(&corev1.Service{}).
 		Owns(&limitadorv1alpha1.Limitador{}).
 		Owns(&authorinov1beta1.Authorino{}).
 		Complete(r)

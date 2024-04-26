@@ -122,10 +122,6 @@ spec:
 
 ![Rate limit policy targeting a HTTPRoute resource](https://i.imgur.com/ObfOp9u.png)
 
-#### Multiple HTTPRoutes with the same hostname
-
-When multiple HTTPRoutes state the same hostname, these HTTPRoutes are usually all admitted and merged together by the gateway implemetation in the same virtual host configuration of the gateway. Similarly, the Kuadrant control plane will also register all rate limit policies referencing the HTTPRoutes, activating the correct limits across policies according to the routing matching rules of the targeted HTTPRoutes.
-
 #### Hostnames and wildcards
 
 If a RateLimitPolicy targets a route defined for `*.com` and another RateLimitPolicy targets another route for `api.com`, the Kuadrant control plane will not merge these two RateLimitPolicies. Unless one of the policies declare an _overrides_ set of limites, the control plane will configure to mimic the behavior of gateway implementation by which the "most specific hostname wins", thus enforcing only the corresponding applicable policies and limit definitions.

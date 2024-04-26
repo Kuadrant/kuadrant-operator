@@ -224,14 +224,6 @@ spec:
 └───────────────────┘             └────────────────────┘
 ```
 
-#### Multiple HTTPRoutes with the same hostname
-
-Kuadrant currently does not support concurrent AuthPolicies targeting the exact same hostname.
-
-In case 2 or more AuthPolicies target resources that specify the same exact hostnames, the first AuthPolicy created claims the hostname; all the other AuthPolicies will not be enforced for the conflicting hostname and their status will be reported as not ready.
-
-This limitation only applies to identical hostnames. Different AuthPolicies can still be declared for different hostnames, as well as sets and strict subsets of hostnames.
-
 #### Hostnames and wildcards
 
 If an AuthPolicy targets a route defined for `*.com` and another AuthPolicy targets another route for `api.com`, the Kuadrant control plane will not merge these two AuthPolicies. Rather, it will mimic the behavior of gateway implementation by which the "most specific hostname wins", thus enforcing only the corresponding applicable policies and auth rules.

@@ -258,6 +258,10 @@ github.com/kuadrant/authorino-operator v0.9.0 h1:EV7zrYBNcd53HPQMivvTwe/+DIATTK7
 github.com/kuadrant/authorino-operator v0.9.0/go.mod h1:VkUqS4CHNiaHMrjSFQ5V71DN829kPnqT3FQxqlOntEI=
 github.com/kuadrant/dns-operator v0.0.0-20240405095001-9e88ad4a7303 h1:3PFrKndF/xDHXbCCVX4W7Y6ir5oNw+hxuyBmwRb2hKM=
 github.com/kuadrant/dns-operator v0.0.0-20240405095001-9e88ad4a7303/go.mod h1:xT10T4H3uCXkB+xpW0KP9yb/k3zNAA2OXW9WR9j38kA=
+github.com/kuadrant/dns-operator v0.0.0-20240426081919-e328d819392b h1:xQNP+EMa9/FniWCAfQEKNR1cPLANAEcWGNAcY1CIx0E=
+github.com/kuadrant/dns-operator v0.0.0-20240426081919-e328d819392b/go.mod h1:5UhTSjazSNW/eW+pn1ZIeuvuPDnRMwiFkYgAlCoC9zI=
+github.com/kuadrant/dns-operator v0.1.0 h1:MlSKdzNejuxDFhIjn6/OFcdYnLyMo95SRMlFs5WZZ+A=
+github.com/kuadrant/dns-operator v0.1.0/go.mod h1:qmqqpvIRFewuTWd4kox/udz32hW7TQsE7Wvd45Eea18=
 github.com/kuadrant/limitador-operator v0.7.0 h1:pLIpM6vUxAY/Jn6ny61IGpqS7Oti786duBzJ67DJOuA=
 github.com/kuadrant/limitador-operator v0.7.0/go.mod h1:tg+G+3eTzUUfvUmdbiqH3FnScEPSWZ3DmorD1ZAx1bo=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=

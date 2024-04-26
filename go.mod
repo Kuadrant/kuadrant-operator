@@ -10,7 +10,7 @@ require (
 	github.com/google/uuid v1.4.0
 	github.com/kuadrant/authorino v0.15.0
 	github.com/kuadrant/authorino-operator v0.9.0
-	github.com/kuadrant/dns-operator v0.0.0-20240405095001-9e88ad4a7303
+	github.com/kuadrant/dns-operator v0.0.0-20240426081919-e328d819392b // indirect
 	github.com/kuadrant/limitador-operator v0.7.0
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/onsi/ginkgo/v2 v2.13.2

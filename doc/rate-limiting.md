@@ -136,9 +136,9 @@ See more examples in [Overlapping Gateway and HTTPRoute RateLimitPolicies](#over
 
 ### Targeting a Gateway networking resource
 
-A RateLimitPolicy that targets a Gateway can declared a block of _defaults_ (`spec.defaults`) or a block of _overrides_ (`spec.overrides`). As a standard, gateway policies that do not specify neither defaults nor overrides, act as defaults.
+A RateLimitPolicy that targets a Gateway can declare a block of _defaults_ (`spec.defaults`) or a block of _overrides_ (`spec.overrides`). As a standard, gateway policies that do not specify neither defaults nor overrides, act as defaults.
 
-When declaring _defaults_, a RateLimitPolicy targets a Gateway will be enforced to all HTTP traffic hitting the gateway, unless a more specific RateLimitPolicy targeting a matching HTTPRoute exists. Any new HTTPRoute referrencing the gateway as parent will be automatically covered by the default RateLimitPolicy, as well as changes in the existing HTTPRoutes.
+When declaring _defaults_, a RateLimitPolicy which targets a Gateway will be enforced to all HTTP traffic hitting the gateway, unless a more specific RateLimitPolicy targeting a matching HTTPRoute exists. Any new HTTPRoute referrencing the gateway as parent will be automatically covered by the default RateLimitPolicy, as well as changes in the existing HTTPRoutes.
 
 _Defaults_ provide cluster operators with the ability to protect the infrastructure against unplanned and malicious network traffic attempt, such as by setting safe default limits on hostnames and hostname wildcards.
 

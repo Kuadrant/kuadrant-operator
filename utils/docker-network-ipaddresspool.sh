@@ -10,6 +10,9 @@ set -euo pipefail
 
 networkName=$1
 YQ="${2:-yq}"
+offset=${3:-0}
+cidr=28
+numIPs=16
 
 ## Parse kind network subnet
 ## Take only IPv4 subnets, exclude IPv6
@@ -37,11 +40,17 @@ if [[ -z "$SUBNET" ]]; then
   exit 1
 fi
 
+network=$(echo $SUBNET | cut -d/ -f1)
 # shellcheck disable=SC2206
-subnetParts=(${SUBNET//./ })
-cidr="${subnetParts[0]}.${subnetParts[1]}.0.252/30"
+octets=(${network//./ })
 
-cat <<EOF | ADDRESS=$cidr ${YQ} '(select(.kind == "IPAddressPool") | .spec.addresses[0]) = env(ADDRESS)'
+# Default values of numIPs:16 and cidr:28 allows up to 16 clusters (offset 0-15) each with 16 possible IPs
+# Note: Assumes the network will always give us a range allowing the use of all 256 ips, 0.0.0.[0-255]
+address="${octets[0]}.${octets[1]}.${octets[2]}.$((numIPs * offset))/${cidr}"
+
+echo "IPAddressPool address calculated to be '$address' for docker network subnet: '$SUBNET', numIps: '$numIPs' and offset: '$offset'" >&2
+
+cat <<EOF | ADDRESS=$address ${YQ} '(select(.kind == "IPAddressPool") | .spec.addresses[0]) = env(ADDRESS)'
 ---
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool

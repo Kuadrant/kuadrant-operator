@@ -403,91 +403,110 @@ After some time you can check the geo distribution using the HTTPRoute host `kub
 
 ## Developer
 
+For this part of the walkthrough, we will go through leveraging an Open API Spec (OAS) to define an API and also using the powerful kuadrant OAS extensions to define the routing, auth and rate limiting requirements. We will then use the `kuadrantctl` tool to generate an AuthPolicy that uses an OpenId provider and a RateLimitPolicy. 
+Durig the platform engineer section we defined some default policies for auth and rate limiting at our gateway, these new developer defined policies will target our APIs HTTPRoute and override the policies for requests to our API endpoints.
 
-TODO define OAS
+Our example Open Api Spec (OAS) leverages kuadrant based extensions. It is these extension that allow you to define routing, and service protection requirements. You can learn more about these extension [here](https://docs.kuadrant.io/kuadrantctl/doc/openapi-kuadrant-extensions/) 
+
+### Pre Reqs
+
+- Install kuadrantctl. You can find a compatible binary and download it from the [kuadrantctl releases page](https://github.com/kuadrant/kuadrantctl/releases )
+- Setup / have an available openid connect provider such as https://www.keycloak.org/
 
 
 ### Setup HTTPRoute and backend
 
-This will setup a toy application in the same ns as the gateway but you can deploy it to any namespace.
+Copy the following example to a local location:
+[sample OAS spec](../../examples/oas.yaml)
+
+setup some new env vars:
+
+```
+export openIDHost=some.keycloak.com
+export oasPath=/path/to/oas.yaml
+export apiNS=petstore
+```
+
+Deploy the sample application:
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml -n ${gatewayNS}
+kubectl create ns petstore
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/api-petstore/main/resources/app.yaml
 ```
 
-Open Up the application to traffic via a `HTTPRoute`
+### Use OAS to define our routing
 
-```bash
-kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: api
-  namespace: ${gatewayNS}
-spec:
-  parentRefs:
-  - name: ${gatewayName}
-    namespace: ${gatewayNS}
-  hostnames:
-  - "toys.${rootDomain}"
-  rules:
-  - backendRefs:
-    - name: toystore
-      port: 80
-EOF
+##TODO (is it worth doing openid connect here given the custom config needed)
+
+Ok next we are going to use our OAS to configure our HTTPRoute. Lets use the kuadrantctl to generate our `HTTPRoute`
+
+**Note the sample OAS has some placeholders for namespaces and domains.**
+
+Replace the placeholders:
+
+```
+sed -i -e "s/#gatewayNS/$gatewayNS/g" $oasPath
+sed -i -e "s/#rootDomain/$rootDomain/g" $oasPath
+sed -i -e "s/#openIDHost/$openIDHost/g" $oasPath
+
+kuadrantctl generate gatewayapi httproute --oas=$oasPath | jq -P
+```
+Happy with the output lets apply to the cluster
+
+```
+kuadrantctl generate gatewayapi httproute --oas=$oasPath | kubectl apply -f -
 ```
 
+Lets check out new route
 
-Ok lets check our gateway policies are enforced
+```
+kubectl get httproute -n $apiNS -o=yaml
 
-//TODO describe where to view dashboards
-
-```bash
-kubectl get dnspolicy loadbalanced -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
-kubectl get authpolicy ${gatewayName}-auth -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
-kubectl get ratelimitpolicy ${gatewayName}-rlp -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
 ```
 
-note TLS policy is currently missing an enforced condition. https://github.com/Kuadrant/kuadrant-operator/issues/572. However looking at the gateway status we can see it is affected by 
+We should see that this route is affected by the `AuthPolicy` and `RateLimitPolicy` on the gateway.
 
-```bash
-kubectl get gateway -n ${gatewayNS} ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.conditions[*].message}'
 ```
+- lastTransitionTime: "2024-04-26T13:37:43Z"
+        message: Object affected by AuthPolicy demo/external
+        observedGeneration: 2
+        reason: Accepted
+        status: "True"
+        type: kuadrant.io/AuthPolicyAffected
+- lastTransitionTime: "2024-04-26T14:07:28Z"
+        message: Object affected by RateLimitPolicy demo/external
+        observedGeneration: 1
+        reason: Accepted
+        status: "True"
+        type: kuadrant.io/RateLimitPolicyAffected        
+```        
+
 
 ### Test connectivity and deny all auth 
 
 We are using curl to hit our endpoint. As we are using letsencrypt staging in this example we pass the `-k` flag.
 
-```bash
-curl -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute api -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')
+```
+curl -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute petstore -n ${apiNS} -o=jsonpath='{.spec.hostnames[0]}')
 
 ```
+
+So we are getting a `403` because of the existing default auth policy.
 
 ### Setup HTTPRoute level RateLimits and Auth
 
-      
 
-```bash
-kubectl apply -f  - <<EOF
-apiVersion: kuadrant.io/v1beta2
-kind: RateLimitPolicy
-metadata:
-  name: high-limit-api
-  namespace: toystore
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: api
-  limits:
-    "high-limit":
-      rates:
-      - limit: 5
-        duration: 10
-        unit: second
-EOF
+Lets use our OAS and kuadrantctl to generate an AuthPolicy to replace the default on the Gateway.
+
 ```
+kuadrantctl generate kuadrant authpolicy --oas=$oasPath | jq -P
 
+```
+Happy with the output lets apply to the cluster
+
+```
+kuadrantctl generate kuadrant authpolicy --oas=$oasPath | kubectl apply -f -
+```
 
 
 # TODO

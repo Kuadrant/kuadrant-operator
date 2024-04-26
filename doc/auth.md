@@ -39,6 +39,8 @@ The auth scheme specify rules for:
 
 Each auth rule can declare specific `routeSelectors` and `when` conditions for the rule to apply.
 
+The auth scheme (`rules`), as well as conditions and named patterns can be declared at the top-level level of the spec (with the semantics of _defaults_) or alternatively within explicit `defaults` or `overrides` blocks.
+
 #### High-level example and field definition
 
 ```yaml
@@ -47,7 +49,7 @@ kind: AuthPolicy
 metadata:
   name: my-auth-policy
 spec:
-  # Reference to an existing networking resource to attach the policy to.
+  # Reference to an existing networking resource to attach the policy to. REQUIRED.
   # It can be a Gateway API HTTPRoute or Gateway resource.
   # It can only refer to objects in the same namespace as the AuthPolicy.
   targetRef:
@@ -71,9 +73,16 @@ spec:
   # Use it for filtering attributes not supported by HTTPRouteRule or with AuthPolicies that target a Gateway.
   # Check out https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md to learn more
   # about the Well-known Attributes that can be used in this field.
+  # Equivalent to if otherwise declared within `defaults`.
   when: […]
 
-  # The auth rules to apply to the network traffic routed through the targeted resource
+  # Sets of common patterns of selector-operator-value triples, to be referred by name in `when` conditions
+  # and pattern-matching rules. Often employed to avoid repetition in the policy.
+  # Equivalent to if otherwise declared within `defaults`.
+  patterns: {…}
+
+  # The auth rules to apply to the network traffic routed through the targeted resource.
+  # Equivalent to if otherwise declared within `defaults`.
   rules:
     # Authentication rules to enforce.
     # At least one config must evaluate to a valid identity object for the auth request to be successful.
@@ -141,6 +150,34 @@ spec:
     callbacks:
       "my-webhook":
         http: {…}
+
+    # Explicit defaults. Used in policies that target a Gateway object to express default rules to be enforced on
+    # routes that lack a more specific policy attached to.
+    # Mutually exclusive with `overrides` and with declaring the `rules`, `when` and `patterns` at the top-level of
+    # the spec.
+    defaults:
+      rules:
+        authentication: {…}
+        metadata: {…}
+        authorization: {…}
+        response: {…}
+        callbacks: {…}
+      when: […]
+      patterns: {…}
+
+    # Overrides. Used in policies that target a Gateway object to be enforced on all routes linked to the gateway,
+    # thus also overriding any more specific policy occasionally attached to any of those routes.
+    # Mutually exclusive with `defaults` and with declaring `rules`, `when` and `patterns` at the top-level of
+    # the spec.
+    overrides:
+      rules:
+        authentication: {…}
+        metadata: {…}
+        authorization: {…}
+        response: {…}
+        callbacks: {…}
+      when: […]
+      patterns: {…}
 ```
 
 Check out the [API reference](reference/authpolicy.md) for a full specification of the AuthPolicy CRD.
@@ -213,11 +250,13 @@ Expected behavior:
 
 ### Targeting a Gateway networking resource
 
-When an AuthPolicy targets a Gateway, the policy will be enforced to all HTTP traffic hitting the gateway, unless a more specific AuthPolicy targeting a matching HTTPRoute exists.
+An AuthPolicy that targets a Gateway can declare a block of _defaults_ (`spec.defaults`) or a block of _overrides_ (`spec.overrides`). As a standard, gateway policies that do not specify neither defaults nor overrides, act as defaults.
 
-Any new HTTPRoute referrencing the gateway as parent will be automatically covered by the AuthPolicy that targets the Gateway, as well as changes in the existing HTTPRoutes.
+When declaring _defaults_, an AuthPolicy which targets a Gateway will be enforced to all HTTP traffic hitting the gateway, unless a more specific AuthPolicy targeting a matching HTTPRoute exists. Any new HTTPRoute referrencing the gateway as parent will be automatically covered by the default AuthPolicy, as well as changes in the existing HTTPRoutes.
 
-This effectively provides cluster operators with the ability to set _defaults_ to protect the infrastructure against unplanned and malicious network traffic attempt, such as by setting preemptive "deny-all" policies for hostnames and hostname wildcards.
+_Defaults_ provide cluster operators with the ability to protect the infrastructure against unplanned and malicious network traffic attempt, such as by setting preemptive "deny-all" policies on hostnames and hostname wildcards.
+
+Inversely, a gateway policy that specify _overrides_ declares a set of rules to be enforced on _all routes attached to the gateway_, thus atomically replacing any more specific policy occasionally attached to any of those routes.
 
 Target a Gateway HTTPRoute by setting the `spec.targetRef` field of the AuthPolicy as follows:
 
@@ -231,7 +270,8 @@ spec:
     group: gateway.networking.k8s.io
     kind: Gateway
     name: <Gateway Name>
-  rules: {…}
+  defaults: # alternatively: `overrides`
+    rules: {…}
 ```
 
 ```
@@ -255,18 +295,35 @@ spec:
 
 #### Overlapping Gateway and HTTPRoute AuthPolicies
 
-Gateway-targeted AuthPolicies will serve as a default to protect all traffic routed through the gateway until a more specific HTTPRoute-targeted AuthPolicy exists, in which case the HTTPRoute AuthPolicy prevails.
+Two possible semantics are to be considered here – gateway policy _defaults_ vs gateway policy _overrides_.
 
-Example with 4 AuthPolicies, 3 HTTPRoutes and 1 Gateway (plus 2 HTTPRoute and 2 Gateways without AuthPolicies attached):
+Gateway AuthPolicies that declare _defaults_ (or alternatively neither defaults nor overrides) protect all traffic routed through the gateway except where a more specific HTTPRoute AuthPolicy exists, in which case the HTTPRoute AuthPolicy prevails.
+
+Example with 4 AuthPolicies, 3 HTTPRoutes and 1 Gateway _default_ (plus 2 HTTPRoute and 2 Gateways without AuthPolicies attached):
 - AuthPolicy A → HTTPRoute A (`a.toystore.com`) → Gateway G (`*.com`)
 - AuthPolicy B → HTTPRoute B (`b.toystore.com`) → Gateway G (`*.com`)
 - AuthPolicy W → HTTPRoute W (`*.toystore.com`) → Gateway G (`*.com`)
-- AuthPolicy G → Gateway G (`*.com`)
+- AuthPolicy G (defaults) → Gateway G (`*.com`)
 
 Expected behavior:
 - Request to `a.toystore.com` → AuthPolicy A will be enforced
 - Request to `b.toystore.com` → AuthPolicy B will be enforced
 - Request to `other.toystore.com` → AuthPolicy W will be enforced
+- Request to `other.com` (suppose a route exists) → AuthPolicy G will be enforced
+- Request to `yet-another.net` (suppose a route and gateway exist) → No AuthPolicy will be enforced
+
+Gateway AuthPolicies that declare _overrides_ protect all traffic routed through the gateway, regardless of existence of any more specific HTTPRoute AuthPolicy.
+
+Example with 4 AuthPolicies, 3 HTTPRoutes and 1 Gateway _override_ (plus 2 HTTPRoute and 2 Gateways without AuthPolicies attached):
+- AuthPolicy A → HTTPRoute A (`a.toystore.com`) → Gateway G (`*.com`)
+- AuthPolicy B → HTTPRoute B (`b.toystore.com`) → Gateway G (`*.com`)
+- AuthPolicy W → HTTPRoute W (`*.toystore.com`) → Gateway G (`*.com`)
+- AuthPolicy G (overrides) → Gateway G (`*.com`)
+
+Expected behavior:
+- Request to `a.toystore.com` → AuthPolicy G will be enforced
+- Request to `b.toystore.com` → AuthPolicy G will be enforced
+- Request to `other.toystore.com` → AuthPolicy G will be enforced
 - Request to `other.com` (suppose a route exists) → AuthPolicy G will be enforced
 - Request to `yet-another.net` (suppose a route and gateway exist) → No AuthPolicy will be enforced
 

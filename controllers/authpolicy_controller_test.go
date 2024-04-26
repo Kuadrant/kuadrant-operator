@@ -114,8 +114,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, policy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
@@ -183,8 +182,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, policy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig hosts
 			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
@@ -206,8 +204,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, policy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
@@ -253,8 +250,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			// create second (policyless) httproute
 			otherRoute := testBuildBasicHttpRoute("policyless-route", testGatewayName, testNamespace, []string{"*.other"})
@@ -284,8 +280,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, gwPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, gwPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, gwPolicy)).WithContext(ctx).Should(BeTrue())
 
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, gwPolicy.Spec.TargetRef), Namespace: testNamespace}
@@ -426,8 +421,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, policy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
 			// delete policy
 			err = k8sClient.Delete(ctx, policy)
@@ -668,8 +662,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, policy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
 			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
@@ -692,8 +685,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
 			Expect(err).ToNot(HaveOccurred())
 
-			Eventually(isAuthPolicyAccepted(ctx, policy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
 
@@ -712,8 +704,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, policy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
@@ -808,8 +799,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, policy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
@@ -905,8 +895,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, policy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
@@ -1029,8 +1018,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, policy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
 			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
@@ -1228,8 +1216,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check route policy status
-			Eventually(isAuthPolicyAccepted(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			// attach policy to the gatewaay
 			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
@@ -1270,8 +1257,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			err = k8sClient.Create(ctx, route2)
 			Expect(err).ToNot(HaveOccurred())
 
-			Eventually(isAuthPolicyAccepted(ctx, gwPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, gwPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, gwPolicy)).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
 
@@ -1300,8 +1286,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
 
 			routePolicy := policyFactory()
 			err = k8sClient.Create(ctx, routePolicy)
@@ -1309,8 +1294,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeFalse())
+			Eventually(isAuthPolicyAcceptedAndNotEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 			Eventually(isAuthPolicyEnforcedCondition(ctx, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
@@ -1339,8 +1323,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
 			Eventually(isAuthPolicyEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeFalse())
 			Eventually(isAuthPolicyEnforcedCondition(ctx, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
@@ -1352,8 +1335,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
@@ -1371,8 +1353,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
 			Eventually(isAuthPolicyEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeFalse())
 			Eventually(isAuthPolicyEnforcedCondition(ctx, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
 
@@ -1406,8 +1387,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeFalse())
+			Eventually(isAuthPolicyAcceptedAndNotEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
 			Eventually(isAuthPolicyEnforcedCondition(ctx, client.ObjectKeyFromObject(gatewayPolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(routePolicy)))).WithContext(ctx).Should(BeTrue())
 			Eventually(isAuthPolicyEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 
@@ -1426,8 +1406,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			}).WithContext(ctx).Should(BeTrue())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
 			Eventually(isAuthPolicyEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeFalse())
 			Eventually(isAuthPolicyEnforcedCondition(ctx, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
@@ -1439,8 +1418,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Name = "gw-auth"
@@ -1458,8 +1436,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
 			Eventually(isAuthPolicyEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeFalse())
 			Eventually(isAuthPolicyEnforcedCondition(ctx, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
 
@@ -1477,8 +1454,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			}).WithContext(ctx).Should(BeTrue())
 
 			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(isAuthPolicyEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeFalse())
+			Eventually(isAuthPolicyAcceptedAndNotEnforced(ctx, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
 			Eventually(isAuthPolicyEnforcedCondition(ctx, client.ObjectKeyFromObject(gatewayPolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(routePolicy)))).WithContext(ctx).Should(BeTrue())
 			Eventually(isAuthPolicyEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
@@ -2045,6 +2021,18 @@ func testBasicAuthScheme() *api.AuthSchemeSpec {
 				},
 			},
 		},
+	}
+}
+
+func isAuthPolicyAcceptedAndEnforced(ctx context.Context, policy *api.AuthPolicy) func() bool {
+	return func() bool {
+		return isAuthPolicyAccepted(ctx, policy)() && isAuthPolicyEnforced(ctx, policy)()
+	}
+}
+
+func isAuthPolicyAcceptedAndNotEnforced(ctx context.Context, policy *api.AuthPolicy) func() bool {
+	return func() bool {
+		return isAuthPolicyAccepted(ctx, policy)() && !isAuthPolicyEnforced(ctx, policy)()
 	}
 }
 

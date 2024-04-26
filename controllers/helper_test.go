@@ -438,12 +438,8 @@ func testRLPIsConditionTrue(ctx context.Context, rlpKey client.ObjectKey, condit
 			logf.Log.V(1).Error(err, "ratelimitpolicy not read", "rlp", rlpKey)
 			return false
 		}
-		if meta.IsStatusConditionFalse(existingRLP.Status.Conditions, condition) {
-			logf.Log.V(1).Info("ratelimitpolicy condition not true", "rlp", rlpKey, "condition", condition, "conditions", existingRLP.Status.Conditions)
-			return false
-		}
 
-		return true
+		return meta.IsStatusConditionTrue(existingRLP.Status.Conditions, condition)
 	}
 }
 

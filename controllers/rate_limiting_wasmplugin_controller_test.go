@@ -3,6 +3,7 @@
 package controllers
 
 import (
+	"context"
 	"reflect"
 	"time"
 
@@ -34,6 +35,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 		testNamespace          string
 		kuadrantInstallationNS string
 	)
+
+	assertPolicyIsAcceptedAndEnforced := func(ctx context.Context, key client.ObjectKey) func() bool {
+		return func() bool {
+			return testRLPIsAccepted(ctx, key)() && testRLPIsEnforced(ctx, key)()
+		}
+	}
+
+	assertPolicyIsAcceptedAndNotEnforced := func(ctx context.Context, key client.ObjectKey) func() bool {
+		return func() bool {
+			return testRLPIsAccepted(ctx, key)() && !testRLPIsEnforced(ctx, key)()
+		}
+	}
 
 	beforeEachCallback := func(ctx SpecContext) {
 		testNamespace = CreateNamespaceWithContext(ctx)
@@ -107,8 +120,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
-			Eventually(testRLPIsAccepted(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
@@ -268,8 +280,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
-			Eventually(testRLPIsAccepted(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
@@ -412,8 +423,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
@@ -513,8 +523,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeFalse())
+			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 			Expect(testRLPEnforcedCondition(ctx, rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
 
 			// Check wasm plugin
@@ -594,8 +603,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
-			Eventually(testRLPIsAccepted(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
@@ -657,8 +665,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 
 			// Check RLP status is available
 			rlpAKey := client.ObjectKey{Name: rlpAName, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(ctx, rlpAKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlpAKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpAKey)).WithContext(ctx).Should(BeTrue())
 
 			// create httproute C
 			httpRouteC := testBuildBasicHttpRoute(routeCName, gwName, testNamespace, []string{"*.c.example.com"})
@@ -722,8 +729,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 
 			// Check RLP status is available
 			rlpBKey := client.ObjectKey{Name: rlpBName, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(ctx, rlpBKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlpBKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpBKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin only has configuration ONLY from the RLP targeting the gateway
 			// it may take some reconciliation loops to get to that, so checking it with eventually
@@ -856,8 +862,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeFalse())
+			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 			Expect(testRLPEnforcedCondition(ctx, rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
 
 			// create Route A -> Gw A
@@ -1066,8 +1071,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Initial state set.
 			// Check wasm plugin for gateway A has configuration from the route
@@ -1364,8 +1368,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Initial state set.
 			// Check wasm plugin has configuration from the route A
@@ -1600,8 +1603,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Check RLP status is available
 			rlp1Key := client.ObjectKey{Name: rlp1Name, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(ctx, rlp1Key)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlp1Key)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlp1Key)).WithContext(ctx).Should(BeTrue())
 
 			// Initial state set.
 			// Check wasm plugin for gateway A has configuration from the route 1
@@ -1705,8 +1707,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Check RLP status is available
 			rlp2Key := client.ObjectKey{Name: rlp2Name, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(ctx, rlp2Key)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlp2Key)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlp2Key)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin has configuration from the route A and RLP 2.
 			// RLP 1 should not add any config to the wasm plugin
@@ -1865,8 +1866,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Check RLP status is available
 			rlp1Key := client.ObjectKey{Name: rlp1Name, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(ctx, rlp1Key)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlp1Key)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlp1Key)).WithContext(ctx).Should(BeTrue())
 
 			// create RLP 2 -> Route A
 			rlp2 := &kuadrantv1beta2.RateLimitPolicy{
@@ -1897,8 +1897,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 			// Check RLP status is available
 			rlp2Key := client.ObjectKey{Name: rlp2Name, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(ctx, rlp2Key)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlp2Key)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlp2Key)).WithContext(ctx).Should(BeTrue())
 
 			// Initial state set.
 			// Check wasm plugin for gateway A has configuration from the route A only affected by RLP 2
@@ -2164,8 +2163,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 
 			// Check RLP status is available
 			rlpKey := client.ObjectKeyFromObject(rlp)
-			Eventually(testRLPIsAccepted(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
@@ -2313,8 +2311,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 
 			// Check RLP status is available
 			gwRLPKey := client.ObjectKeyFromObject(gwRLP)
-			Eventually(testRLPIsAccepted(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
 			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
@@ -2353,8 +2350,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			}
 			Expect(k8sClient.Create(ctx, routeRLP)).To(Succeed())
 			routeRLPKey := client.ObjectKeyFromObject(routeRLP)
-			Eventually(testRLPIsAccepted(ctx, routeRLPKey)).WithContext(ctx).Should(BeTrue())
-			Eventually(testRLPIsEnforced(ctx, routeRLPKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, routeRLPKey)).WithContext(ctx).Should(BeTrue())
 			Eventually(testRLPIsEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeFalse())
 			// Wasm plugin config should now use route RLP limit key
 			Eventually(func(g Gomega) {

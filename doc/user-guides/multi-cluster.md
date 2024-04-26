@@ -401,7 +401,9 @@ kubectl label --overwrite gateway ${gatewayName} kuadrant.io/lb-attribute-geo-co
 
 After some time you can check the geo distribution using the HTTPRoute host `kubectl get httproute api -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}'` via site such as https://dnsmap.io/
 
-## Developer
+## Developer (WIP)
+
+##TODO (cover API Key auth as well as OpenID complex and requires an openid setup)
 
 For this part of the walkthrough, we will go through leveraging an Open API Spec (OAS) to define an API and also using the powerful kuadrant OAS extensions to define the routing, auth and rate limiting requirements. We will then use the `kuadrantctl` tool to generate an AuthPolicy that uses an OpenId provider and a RateLimitPolicy. 
 Durig the platform engineer section we defined some default policies for auth and rate limiting at our gateway, these new developer defined policies will target our APIs HTTPRoute and override the policies for requests to our API endpoints.
@@ -411,7 +413,7 @@ Our example Open Api Spec (OAS) leverages kuadrant based extensions. It is these
 ### Pre Reqs
 
 - Install kuadrantctl. You can find a compatible binary and download it from the [kuadrantctl releases page](https://github.com/kuadrant/kuadrantctl/releases )
-- Setup / have an available openid connect provider such as https://www.keycloak.org/
+- Setup / have an available openid connect provider such as https://www.keycloak.org/ 
 
 
 ### Setup HTTPRoute and backend
@@ -436,7 +438,7 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/api-petstore/main/re
 
 ### Use OAS to define our routing
 
-##TODO (is it worth doing openid connect here given the custom config needed)
+##TODO (is it worth doing openid connect here given the custom config needed and expected realms etc??)
 
 Ok next we are going to use our OAS to configure our HTTPRoute. Lets use the kuadrantctl to generate our `HTTPRoute`
 
@@ -508,8 +510,19 @@ Happy with the output lets apply to the cluster
 kuadrantctl generate kuadrant authpolicy --oas=$oasPath | kubectl apply -f -
 ```
 
+Lets test our AuthPolicy.
+
+```
+export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencoded" \
+        -d 'grant_type=password' \
+        -d 'client_id=petstore' \
+        -d 'scope=openid' \
+        -d 'username=bob' \
+        -d 'password=p' "https://${openIDHost}/auth/realms/petstore/protocol/openid-connect/token" | jq -r '.access_token')
+```        
+
 
 # TODO
-- Add developer flow with OAS
+- Add  second developer flow with API keys as keycloak based OpenID quite involved
 - Define developer focused policies
 - Add instructions for using non API Key auth provider

@@ -1,0 +1,281 @@
+---
+openapi: 3.0.2
+info:
+  title: Stitch API Petstore
+  version: 1.0.18
+  description: |-
+    This is a sample Pet Store Server based on the OpenAPI 3.0 specification.  You can find out more about
+    Swagger at [http://swagger.io](http://swagger.io). In the third iteration of the pet store, we've switched to the design first approach!
+    You can now help us improve the API whether it's by making changes to the definition itself or to the code.
+    That way, with time, we can improve the API in general, and expose some of the new features in OAS3.
+
+    Some useful links:
+    - [The Kuadrant Pet Store repository](https://github.com/kuadrant/api-petstore)
+    - [The source API definition for the Kuadrant Pet Store](https://github.com/Kuadrant/api-petstore/blob/main/openapi.yaml)
+  termsOfService: http://swagger.io/terms/
+  contact:
+    email: apiteam@swagger.io
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  x-kuadrant:
+    route:
+      name: petstore
+      namespace: petstore
+      labels:
+        deployment: petstore
+        owner: jbloggs
+      hostnames:
+      - petstore.#rootDomain
+      parentRefs:
+      - name: external
+        namespace: #gatewayNS
+        kind: Gateway
+servers:
+- url: /api/v3
+paths:
+  /user/login:
+    get:
+      tags:
+      - user
+      parameters:
+      - name: username
+        description: The user name for login
+        schema:
+          type: string
+        in: query
+        required: false
+      - name: password
+        description: The password for login in clear text
+        schema:
+          type: string
+        in: query
+        required: false
+      responses:
+        "200":
+          headers:
+            X-Rate-Limit:
+              schema:
+                format: int32
+                type: integer
+              description: calls per hour allowed by the user
+            X-Expires-After:
+              schema:
+                format: date-time
+                type: string
+              description: date in UTC when token expires
+          content:
+            application/json:
+              schema:
+                type: string
+          description: successful operation
+        "400":
+          description: Invalid username/password supplied
+      operationId: loginUser
+      summary: Logs user into the system
+      description: ""
+    x-kuadrant:
+      backendRefs:
+      - name: petstore
+        namespace: petstore
+        port: 8080
+      rate_limit:
+        rates:
+        - limit: 2
+          duration: 10
+          unit: second
+  /dog:
+    get:
+      operationId: "getDog"
+      security:
+        - securedDog: []
+      responses:
+        405:
+          description: "invalid input"
+components:
+  schemas:
+    Order:
+      type: object
+      properties:
+        id:
+          format: int64
+          type: integer
+          example: 10
+        petId:
+          format: int64
+          type: integer
+          example: 198772
+        quantity:
+          format: int32
+          type: integer
+          example: 7
+        shipDate:
+          format: date-time
+          type: string
+        status:
+          description: Order Status
+          enum:
+          - placed
+          - approved
+          - delivered
+          type: string
+          example: approved
+        complete:
+          type: boolean
+      x-swagger-router-model: io.swagger.petstore.model.Order
+    Customer:
+      type: object
+      properties:
+        id:
+          format: int64
+          type: integer
+          example: 100000
+        username:
+          type: string
+          example: fehguy
+        address:
+          type: array
+          items:
+            $ref: '#/components/schemas/Address'
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+          example: 437 Lytton
+        city:
+          type: string
+          example: Palo Alto
+        state:
+          type: string
+          example: CA
+        zip:
+          type: string
+          example: "94301"
+    Category:
+      type: object
+      properties:
+        id:
+          format: int64
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Dogs
+      x-swagger-router-model: io.swagger.petstore.model.Category
+    User:
+      type: object
+      properties:
+        id:
+          format: int64
+          type: integer
+          example: 10
+        username:
+          type: string
+          example: theUser
+        firstName:
+          type: string
+          example: John
+        lastName:
+          type: string
+          example: James
+        email:
+          type: string
+          example: john@email.com
+        password:
+          type: string
+          example: "12345"
+        phone:
+          type: string
+          example: "12345"
+        userStatus:
+          format: int32
+          description: User Status
+          type: integer
+          example: 1
+      x-swagger-router-model: io.swagger.petstore.model.User
+    Tag:
+      type: object
+      properties:
+        id:
+          format: int64
+          type: integer
+        name:
+          type: string
+      x-swagger-router-model: io.swagger.petstore.model.Tag
+    Pet:
+      required:
+      - name
+      - photoUrls
+      type: object
+      properties:
+        id:
+          format: int64
+          type: integer
+          example: 10
+        name:
+          type: string
+          example: doggie
+        category:
+          $ref: '#/components/schemas/Category'
+        photoUrls:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        status:
+          description: pet status in the store
+          enum:
+          - available
+          - pending
+          - sold
+          type: string
+      x-swagger-router-model: io.swagger.petstore.model.Pet
+    ApiResponse:
+      type: object
+      properties:
+        code:
+          format: int32
+          type: integer
+        type:
+          type: string
+        message:
+          type: string
+  requestBodies:
+    Pet:
+      description: Pet object that needs to be added to the store
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Pet'
+    UserArray:
+      description: List of user object
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/User'
+  securitySchemes:
+    securedDog:
+      type: openIdConnect
+      openIdConnectUrl: https://#openIDHost/.well-known/openid-configuration
+tags:
+- name: pet
+  description: Everything about your Pets
+  externalDocs:
+    description: Find out more
+    url: http://swagger.io
+- name: store
+  description: Access to Petstore orders
+  externalDocs:
+    description: Find out more about our store
+    url: http://swagger.io
+- name: user
+  description: Operations about user
+externalDocs:
+  description: Find out more about Swagger
+  url: http://swagger.io

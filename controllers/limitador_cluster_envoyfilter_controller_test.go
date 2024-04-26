@@ -3,7 +3,6 @@
 package controllers
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -24,23 +23,37 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
-var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
+var _ = Describe("Limitador Cluster EnvoyFilter controller", Ordered, func() {
+	const (
+		testTimeOut      = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+	)
 	var (
-		testNamespace string
-		gwName        = "toystore-gw"
-		rlpName       = "toystore-rlp"
-		efName        = fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", gwName)
+		testNamespace          string
+		kuadrantInstallationNS string
+		gwName                 = "toystore-gw"
+		rlpName                = "toystore-rlp"
+		efName                 = fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", gwName)
 	)
 
-	beforeEachCallback := func() {
-		CreateNamespace(&testNamespace)
+	BeforeAll(func(ctx SpecContext) {
+		kuadrantInstallationNS = CreateNamespaceWithContext(ctx)
+		ApplyKuadrantCR(kuadrantInstallationNS)
+	})
+
+	AfterAll(func(ctx SpecContext) {
+		DeleteNamespaceCallbackWithContext(ctx, kuadrantInstallationNS)
+	})
+
+	beforeEachCallback := func(ctx SpecContext) {
+		testNamespace = CreateNamespaceWithContext(ctx)
 		gateway := testBuildBasicGateway(gwName, testNamespace)
-		err := k8sClient.Create(context.Background(), gateway)
+		err := k8sClient.Create(ctx, gateway)
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(func() bool {
 			existingGateway := &gatewayapiv1.Gateway{}
-			err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(gateway), existingGateway)
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), existingGateway)
 			if err != nil {
 				logf.Log.V(1).Info("[WARN] Creating gateway failed", "error", err)
 				return false
@@ -52,14 +65,12 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 			}
 
 			return true
-		}, 15*time.Second, 5*time.Second).Should(BeTrue())
-
-		ApplyKuadrantCR(testNamespace)
+		}).WithContext(ctx).Should(BeTrue())
 
 		// Check Limitador Status is Ready
 		Eventually(func() bool {
 			limitador := &limitadorv1alpha1.Limitador{}
-			err := k8sClient.Get(context.Background(), client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, limitador)
+			err := k8sClient.Get(ctx, client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}, limitador)
 			if err != nil {
 				return false
 			}
@@ -67,14 +78,16 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 				return false
 			}
 			return true
-		}, time.Minute, 5*time.Second).Should(BeTrue())
+		}).WithContext(ctx).Should(BeTrue())
 	}
 
 	BeforeEach(beforeEachCallback)
-	AfterEach(DeleteNamespaceCallback(&testNamespace))
+	AfterEach(func(ctx SpecContext) {
+		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
+	}, afterEachTimeOut)
 
 	Context("RLP targeting Gateway", func() {
-		It("EnvoyFilter created when RLP exists and deleted with RLP is deleted", func() {
+		It("EnvoyFilter created when RLP exists and deleted with RLP is deleted", func(ctx SpecContext) {
 			// create ratelimitpolicy
 			rlp := &kuadrantv1beta2.RateLimitPolicy{
 				TypeMeta: metav1.TypeMeta{
@@ -104,35 +117,35 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 					},
 				},
 			}
-			err := k8sClient.Create(context.Background(), rlp)
+			err := k8sClient.Create(ctx, rlp)
 			Expect(err).ToNot(HaveOccurred())
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
-			Eventually(testRLPIsAccepted(rlpKey), time.Minute, 5*time.Second).Should(BeTrue())
-			Eventually(testRLPIsEnforced(rlpKey), time.Minute, 5*time.Second).Should(BeFalse())
-			Expect(testRLPEnforcedCondition(rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
+			Eventually(testRLPIsAccepted(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(testRLPIsEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeFalse())
+			Expect(testRLPEnforcedCondition(ctx, rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
 
 			// Check envoy filter
 			Eventually(func() bool {
 				existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
 				efKey := client.ObjectKey{Name: efName, Namespace: testNamespace}
-				err = k8sClient.Get(context.Background(), efKey, existingEF)
+				err = k8sClient.Get(ctx, efKey, existingEF)
 				if err != nil {
 					return false
 				}
 				return true
-			}, 15*time.Second, 5*time.Second).Should(BeTrue())
+			}).WithContext(ctx).Should(BeTrue())
 
-			err = k8sClient.Delete(context.Background(), rlp)
+			err = k8sClient.Delete(ctx, rlp)
 			Expect(err).ToNot(HaveOccurred())
 
 			// Check envoy filter is gone
 			Eventually(func() bool {
 				existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
 				efKey := client.ObjectKey{Name: efName, Namespace: testNamespace}
-				err = k8sClient.Get(context.Background(), efKey, existingEF)
+				err = k8sClient.Get(ctx, efKey, existingEF)
 				return apierrors.IsNotFound(err)
-			}, 15*time.Second, 5*time.Second).Should(BeTrue())
-		})
+			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 	})
 })

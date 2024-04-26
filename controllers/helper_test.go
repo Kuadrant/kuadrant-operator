@@ -13,7 +13,6 @@ import (
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-	"github.com/google/uuid"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -89,38 +88,31 @@ func ApplyKuadrantCRWithName(namespace, name string) {
 	}, time.Minute, 5*time.Second).Should(BeTrue())
 }
 
-func CreateNamespaceWithContext(ctx context.Context, namespace *string) {
+func DeleteKuadrantCR(ctx context.Context, namespace string) {
+	k := &kuadrantv1beta1.Kuadrant{ObjectMeta: metav1.ObjectMeta{Name: "kuadrant-sample", Namespace: namespace}}
+	Eventually(func(g Gomega) {
+		err := k8sClient.Delete(ctx, k)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+	}).WithContext(ctx).Should(Succeed())
+}
+
+func CreateNamespaceWithContext(ctx context.Context) string {
 	nsObject := &v1.Namespace{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
 		ObjectMeta: metav1.ObjectMeta{GenerateName: "test-namespace-"},
 	}
 	Expect(testClient().Create(ctx, nsObject)).To(Succeed())
 
-	*namespace = nsObject.Name
+	return nsObject.Name
 }
 
-func CreateNamespace(namespace *string) {
-	var generatedTestNamespace = "test-namespace-" + uuid.New().String()
-
-	nsObject := &v1.Namespace{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
-		ObjectMeta: metav1.ObjectMeta{Name: generatedTestNamespace},
-	}
-
-	err := testClient().Create(context.Background(), nsObject)
-	Expect(err).ToNot(HaveOccurred())
-
-	existingNamespace := &v1.Namespace{}
-	Eventually(func() bool {
-		err := testClient().Get(context.Background(), types.NamespacedName{Name: generatedTestNamespace}, existingNamespace)
-		return err == nil
-	}, time.Minute, 5*time.Second).Should(BeTrue())
-
-	*namespace = existingNamespace.Name
+func CreateNamespace() string {
+	return CreateNamespaceWithContext(context.Background())
 }
 
-func DeleteNamespaceCallbackWithContext(ctx context.Context, namespace *string) {
-	desiredTestNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: *namespace}}
+func DeleteNamespaceCallbackWithContext(ctx context.Context, namespace string) {
+	desiredTestNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 	Eventually(func(g Gomega) {
 		err := k8sClient.Delete(ctx, desiredTestNamespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
 		g.Expect(err).ToNot(BeNil())
@@ -129,16 +121,16 @@ func DeleteNamespaceCallbackWithContext(ctx context.Context, namespace *string) 
 
 }
 
-func DeleteNamespaceCallback(namespace *string) func() {
+func DeleteNamespaceCallback(namespace string) func() {
 	return func() {
-		desiredTestNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: *namespace}}
+		desiredTestNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 		err := testClient().Delete(context.Background(), desiredTestNamespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
 
 		Expect(err).ToNot(HaveOccurred())
 
 		existingNamespace := &v1.Namespace{}
 		Eventually(func() bool {
-			err := testClient().Get(context.Background(), types.NamespacedName{Name: *namespace}, existingNamespace)
+			err := testClient().Get(context.Background(), types.NamespacedName{Name: namespace}, existingNamespace)
 			if err != nil && apierrors.IsNotFound(err) {
 				return true
 			}
@@ -399,17 +391,17 @@ func testWasmPluginIsAvailable(key client.ObjectKey) func() bool {
 	}
 }
 
-func testRLPIsAccepted(rlpKey client.ObjectKey) func() bool {
-	return testRLPIsConditionTrue(rlpKey, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+func testRLPIsAccepted(ctx context.Context, rlpKey client.ObjectKey) func() bool {
+	return testRLPIsConditionTrue(ctx, rlpKey, string(gatewayapiv1alpha2.PolicyConditionAccepted))
 }
 
-func testRLPIsEnforced(rlpKey client.ObjectKey) func() bool {
-	return testRLPIsConditionTrue(rlpKey, string(kuadrant.PolicyConditionEnforced))
+func testRLPIsEnforced(ctx context.Context, rlpKey client.ObjectKey) func() bool {
+	return testRLPIsConditionTrue(ctx, rlpKey, string(kuadrant.PolicyConditionEnforced))
 }
 
-func testRLPEnforcedCondition(rlpKey client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) bool {
+func testRLPEnforcedCondition(ctx context.Context, rlpKey client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) bool {
 	p := &kuadrantv1beta2.RateLimitPolicy{}
-	if err := k8sClient.Get(context.Background(), rlpKey, p); err != nil {
+	if err := k8sClient.Get(ctx, rlpKey, p); err != nil {
 		return false
 	}
 
@@ -421,10 +413,10 @@ func testRLPEnforcedCondition(rlpKey client.ObjectKey, reason gatewayapiv1alpha2
 	return cond.Reason == string(reason) && cond.Message == message
 }
 
-func testRLPIsNotAccepted(rlpKey client.ObjectKey) func() bool {
+func testRLPIsNotAccepted(ctx context.Context, rlpKey client.ObjectKey) func() bool {
 	return func() bool {
 		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
-		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+		err := k8sClient.Get(ctx, rlpKey, existingRLP)
 		if err != nil {
 			logf.Log.V(1).Info("ratelimitpolicy not read", "rlp", rlpKey, "error", err)
 			return false
@@ -438,11 +430,16 @@ func testRLPIsNotAccepted(rlpKey client.ObjectKey) func() bool {
 	}
 }
 
-func testRLPIsConditionTrue(rlpKey client.ObjectKey, condition string) func() bool {
+func testRLPIsConditionTrue(ctx context.Context, rlpKey client.ObjectKey, condition string) func() bool {
 	return func() bool {
 		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
-		err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
-		return err == nil && meta.IsStatusConditionTrue(existingRLP.Status.Conditions, condition)
+		err := k8sClient.Get(ctx, rlpKey, existingRLP)
+		if err != nil {
+			logf.Log.V(1).Error(err, "ratelimitpolicy not read", "rlp", rlpKey)
+			return false
+		}
+
+		return meta.IsStatusConditionTrue(existingRLP.Status.Conditions, condition)
 	}
 }
 

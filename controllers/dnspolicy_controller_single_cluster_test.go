@@ -35,7 +35,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		CreateNamespace(&testNamespace)
+		testNamespace = CreateNamespaceWithContext(ctx)
 
 		var err error
 		clusterUID, err := utils.GetClusterUID(ctx, k8sClient)
@@ -109,7 +109,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 			err := k8sClient.Delete(ctx, gatewayClass)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		}
-		DeleteNamespaceCallback(&testNamespace)()
+		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
 	})
 
 	Context("simple routing strategy", func() {
@@ -294,5 +294,4 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		})
 
 	})
-
 })

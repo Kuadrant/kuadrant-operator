@@ -365,7 +365,7 @@ Kuadrant currently does not support multiple AuthPolicies simultaneously targeti
 
 Moreover, having **multiple resources that declare identical hostnames** may lead to unexpected behavior and therefore **should be avoided**.
 
-This limitation is rooted at the underlying components configured by Kuadrant for the implementation of its polcies and the lack of information in the data plane regarding the exact route that honored by the API gateway in cases of conflicting hostnames.
+This limitation is rooted at the underlying components configured by Kuadrant for the implementation of its policies and the lack of information in the data plane regarding the exact route that is honored by the API gateway at each specific request, in cases of conflicting hostnames.
 
 To exemplify one way this limitation can impact deployments, consider the following topology:
 
@@ -397,7 +397,7 @@ To exemplify one way this limitation can impact deployments, consider the follow
     └────────────┘               └────────────┘
 ```
 
-In the example above, with the `policy-1` resource created before `policy-2`, `policy-1` will be enforced on all requests to `app.io/foo` while `policy-2` will be rejected. I.e. `app.io/bar` will not be secured. In fact, the status conditions of `policy-2` shall recflect `Enforced=false` with message _"AuthPolicy has encountered some issues: AuthScheme is not ready yet"_.
+In the example above, with the `policy-1` resource created before `policy-2`, `policy-1` will be enforced on all requests to `app.io/foo` while `policy-2` will be rejected. I.e. `app.io/bar` will not be secured. In fact, the status conditions of `policy-2` shall reflect `Enforced=false` with message _"AuthPolicy has encountered some issues: AuthScheme is not ready yet"_.
 
 Notice the enforcement of `policy-1` and no enforcement of `policy-2` is the opposite behavior as the [analogous problem with the Kuadrant RateLimitPolicy](rate-limiting.md#limitation-multiple-network-resources-with-identical-hostnames).
 

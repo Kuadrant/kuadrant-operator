@@ -122,10 +122,6 @@ spec:
 
 ![Rate limit policy targeting a HTTPRoute resource](https://i.imgur.com/ObfOp9u.png)
 
-#### Multiple HTTPRoutes with the same hostname
-
-When multiple HTTPRoutes state the same hostname, these HTTPRoutes are usually all admitted and merged together by the gateway implemetation in the same virtual host configuration of the gateway. Similarly, the Kuadrant control plane will also register all rate limit policies referencing the HTTPRoutes, activating the correct limits across policies according to the routing matching rules of the targeted HTTPRoutes.
-
 #### Hostnames and wildcards
 
 If a RateLimitPolicy targets a route defined for `*.com` and another RateLimitPolicy targets another route for `api.com`, the Kuadrant control plane will not merge these two RateLimitPolicies. Unless one of the policies declare an _overrides_ set of limites, the control plane will configure to mimic the behavior of gateway implementation by which the "most specific hostname wins", thus enforcing only the corresponding applicable policies and limit definitions.
@@ -280,6 +276,87 @@ Check out the following user guides for examples of rate limiting services with 
 * One HTTPRoute can only be targeted by one RateLimitPolicy.
 * One Gateway can only be targeted by one RateLimitPolicy.
 * RateLimitPolicies can only target HTTPRoutes/Gateways defined within the same namespace of the RateLimitPolicy.
+* 2+ RateLimitPolicies cannot target network resources that define/inherit the same exact hostname.
+
+#### Limitation: Multiple network resources with identical hostnames
+
+Kuadrant currently does not support multiple RateLimitPolicies simultaneously targeting network resources that declare identical hostnames. This includes multiple HTTPRoutes that specify the same hostnames in the `spec.hostnames` field, as well as HTTPRoutes that specify a hostname that is identical to a hostname specified in a listener of one of the route's parent gateways or HTTPRoutes that don't specify any hostname at all thus inheriting the hostnames from the parent gateways. In any of these cases, **a maximum of one RateLimitPolicy targeting any of those resources that specify identical hostnames is allowed**.
+
+Moreover, having **multiple resources that declare identical hostnames** may lead to unexpected behavior and therefore **should be avoided**.
+
+This limitation is rooted at the underlying components configured by Kuadrant for the implementation of its policies and the lack of information in the data plane regarding the exact route that honored by the API gateway in cases of conflicting hostnames.
+
+To exemplify one way this limitation can impact deployments, consider the following topology:
+
+```
+                 ┌──────────────┐
+                 │   Gateway    │
+                 ├──────────────┤
+          ┌─────►│ listeners:   │◄──────┐
+          │      │ - host: *.io │       │
+          │      └──────────────┘       │
+          │                             │
+          │                             │
+┌─────────┴─────────┐        ┌──────────┴────────┐
+│     HTTPRoute     │        │     HTTPRoute     │
+│     (route-a)     │        │     (route-b)     │
+├───────────────────┤        ├───────────────────┤
+│ hostnames:        │        │ hostnames:        │
+│ - app.io          │        │ - app.io          │
+│ rules:            │        │ rules:            │
+│ - matches:        │        │ - matches:        │
+│   - path:         │        │   - path:         │
+│       value: /foo │        │       value: /bar │
+└───────────────────┘        └───────────────────┘
+          ▲                            ▲
+          │                            │
+ ┌────────┴────────┐           ┌───────┴─────────┐
+ │ RateLimitPolicy │           │ RateLimitPolicy │
+ │   (policy-1)    │           │   (policy-2)    │
+ └─────────────────┘           └─────────────────┘
+```
+
+In the example above, with the `policy-1` resource created before `policy-2`, `policy-2` will be enforced on all requests to `app.io/bar` while `policy-1` will **not** be enforced at all. I.e. `app.io/foo` will not be rate-limited. Nevertheless, both policies will report status condition as `Enforced`.
+
+Notice the enforcement of `policy-2` and no enforcement of `policy-1` is the opposite behavior as the [analogous problem with the Kuadrant AuthPolicy](auth.md#limitation-multiple-network-resources-with-identical-hostnames).
+
+A different way the limitation applies is when two or more routes of a gateway declare the exact same hostname and a gateway policy is defined with expectation to set default rules for the cases not covered by more specific policies. E.g.:
+
+```
+                                    ┌─────────────────┐
+                         ┌──────────┤ RateLimitPolicy │
+                         │          │    (policy-2)   │
+                         ▼          └─────────────────┘
+                 ┌──────────────┐
+                 │   Gateway    │
+                 ├──────────────┤
+          ┌─────►│ listeners:   │◄──────┐
+          │      │ - host: *.io │       │
+          │      └──────────────┘       │
+          │                             │
+          │                             │
+┌─────────┴─────────┐        ┌──────────┴────────┐
+│     HTTPRoute     │        │     HTTPRoute     │
+│     (route-a)     │        │     (route-b)     │
+├───────────────────┤        ├───────────────────┤
+│ hostnames:        │        │ hostnames:        │
+│ - app.io          │        │ - app.io          │
+│ rules:            │        │ rules:            │
+│ - matches:        │        │ - matches:        │
+│   - path:         │        │   - path:         │
+│       value: /foo │        │       value: /bar │
+└───────────────────┘        └───────────────────┘
+          ▲
+          │
+ ┌────────┴────────┐
+ │ RateLimitPolicy │
+ │   (policy-1)    │
+ └─────────────────┘
+```
+
+Once again, both policies will report status condition as `Enforced`. However, in this case, only `policy-1` will be enforced on requests to `app.io/foo`, while `policy-2` will **not** be enforced at all. I.e. `app.io/bar` will not be not rate-limited. This is same behavior as the [analogous problem with the Kuadrant AuthPolicy](auth.md#limitation-multiple-network-resources-with-identical-hostnames).
+
+To avoid these problems, use different hostnames in each route.
 
 ## Implementation details
 

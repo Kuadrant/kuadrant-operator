@@ -224,14 +224,6 @@ spec:
 └───────────────────┘             └────────────────────┘
 ```
 
-#### Multiple HTTPRoutes with the same hostname
-
-Kuadrant currently does not support concurrent AuthPolicies targeting the exact same hostname.
-
-In case 2 or more AuthPolicies target resources that specify the same exact hostnames, the first AuthPolicy created claims the hostname; all the other AuthPolicies will not be enforced for the conflicting hostname and their status will be reported as not ready.
-
-This limitation only applies to identical hostnames. Different AuthPolicies can still be declared for different hostnames, as well as sets and strict subsets of hostnames.
-
 #### Hostnames and wildcards
 
 If an AuthPolicy targets a route defined for `*.com` and another AuthPolicy targets another route for `api.com`, the Kuadrant control plane will not merge these two AuthPolicies. Rather, it will mimic the behavior of gateway implementation by which the "most specific hostname wins", thus enforcing only the corresponding applicable policies and auth rules.
@@ -357,7 +349,87 @@ Check out the following user guides for examples of protecting services with Kua
 * One HTTPRoute can only be targeted by one AuthPolicy.
 * One Gateway can only be targeted by one AuthPolicy.
 * AuthPolicies can only target HTTPRoutes/Gateways defined within the same namespace of the AuthPolicy.
-* 2+ AuthPolicies cannot target network resources that define/inherit the same exact hotname.
+* 2+ AuthPolicies cannot target network resources that define/inherit the same exact hostname.
+
+#### Limitation: Multiple network resources with identical hostnames
+
+Kuadrant currently does not support multiple AuthPolicies simultaneously targeting network resources that declare identical hostnames. This includes multiple HTTPRoutes that specify the same hostnames in the `spec.hostnames` field, as well as HTTPRoutes that specify a hostname that is identical to a hostname specified in a listener of one of the route's parent gateways or HTTPRoutes that don't specify any hostname at all thus inheriting the hostnames from the parent gateways. In any of these cases, **a maximum of one AuthPolicy targeting any of those resources that specify identical hostnames is allowed**.
+
+Moreover, having **multiple resources that declare identical hostnames** may lead to unexpected behavior and therefore **should be avoided**.
+
+This limitation is rooted at the underlying components configured by Kuadrant for the implementation of its policies and the lack of information in the data plane regarding the exact route that is honored by the API gateway at each specific request, in cases of conflicting hostnames.
+
+To exemplify one way this limitation can impact deployments, consider the following topology:
+
+```
+                 ┌──────────────┐
+                 │   Gateway    │
+                 ├──────────────┤
+          ┌─────►│ listeners:   │◄──────┐
+          │      │ - host: *.io │       │
+          │      └──────────────┘       │
+          │                             │
+          │                             │
+┌─────────┴─────────┐        ┌──────────┴────────┐
+│     HTTPRoute     │        │     HTTPRoute     │
+│     (route-a)     │        │     (route-b)     │
+├───────────────────┤        ├───────────────────┤
+│ hostnames:        │        │ hostnames:        │
+│ - app.io          │        │ - app.io          │
+│ rules:            │        │ rules:            │
+│ - matches:        │        │ - matches:        │
+│   - path:         │        │   - path:         │
+│       value: /foo │        │       value: /bar │
+└───────────────────┘        └───────────────────┘
+          ▲                            ▲
+          │                            │
+    ┌─────┴──────┐               ┌─────┴──────┐
+    │ AuthPolicy │               │ AuthPolicy │
+    │ (policy-1) │               │ (policy-2) │
+    └────────────┘               └────────────┘
+```
+
+In the example above, with the `policy-1` resource created before `policy-2`, `policy-1` will be enforced on all requests to `app.io/foo` while `policy-2` will be rejected. I.e. `app.io/bar` will not be secured. In fact, the status conditions of `policy-2` shall reflect `Enforced=false` with message _"AuthPolicy has encountered some issues: AuthScheme is not ready yet"_.
+
+Notice the enforcement of `policy-1` and no enforcement of `policy-2` is the opposite behavior as the [analogous problem with the Kuadrant RateLimitPolicy](rate-limiting.md#limitation-multiple-network-resources-with-identical-hostnames).
+
+A slightly different way the limitation applies is when two or more routes of a gateway declare the exact same hostname and a gateway policy is defined with expectation to set default rules for the cases not covered by more specific policies. E.g.:
+
+```
+                                    ┌────────────┐
+                         ┌──────────┤ AuthPolicy │
+                         │          │ (policy-2) │
+                         ▼          └────────────┘
+                 ┌──────────────┐
+                 │   Gateway    │
+                 ├──────────────┤
+          ┌─────►│ listeners:   │◄──────┐
+          │      │ - host: *.io │       │
+          │      └──────────────┘       │
+          │                             │
+          │                             │
+┌─────────┴─────────┐        ┌──────────┴────────┐
+│     HTTPRoute     │        │     HTTPRoute     │
+│     (route-a)     │        │     (route-b)     │
+├───────────────────┤        ├───────────────────┤
+│ hostnames:        │        │ hostnames:        │
+│ - app.io          │        │ - app.io          │
+│ rules:            │        │ rules:            │
+│ - matches:        │        │ - matches:        │
+│   - path:         │        │   - path:         │
+│       value: /foo │        │       value: /bar │
+└───────────────────┘        └───────────────────┘
+          ▲
+          │
+    ┌─────┴──────┐
+    │ AuthPolicy │
+    │ (policy-1) │
+    └────────────┘
+```
+
+Once again, requests to `app.io/foo` will be protected under AuthPolicy `policy-1`, while requests to `app.io/bar` will **not** be protected under any policy at all, unlike expected gateway policy `policy-2` enforced as default. Both policies will report status condition as `Enforced` nonetheless.
+
+To avoid these problems, use different hostnames in each route.
 
 ## Implementation details
 

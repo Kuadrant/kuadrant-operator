@@ -14,14 +14,14 @@ This document expects that you have successfully installed Kuadrant [Install Gui
 In this doc we will walk you through using Kuadrant to secure, protect and connect an API via a set of Gateways distributed across multiple clusters. 
 We will take the approach of assuming certain personas and how they can each work with Kuadrant to achieve their goals.
 
-### what Kuadrant can do for you in a multi-cluster environment
+### What Kuadrant can do for you in a multi-cluster environment
 
 Kuadrant's capabilities can be leveraged in single or multiple clusters. Below is a list of features that are designed to work across multiple clusters as well as in a single cluster environment.
 
-**Multi-Cluster Ingress:** Kuadrant provides multi-cluster ingress connectivity using DNS to bring traffic to your Gateways using a strategy defined in a `DNSPolicy` (more later). 
-**Global RateLimiting:** Kuadrant can enable global rate limiting usecases when it is configured to use a shared store (redis) for counters based on limits defined by a `RateLimitPolicy`.
-**Global Auth:*** Kuadrant's `AuthPolicy` can be configured to leverage external auth providers to ensure different cluster exposing the same API are authenticating and authorizing in the same way. 
-**Integration with federated metrics stores:** Kuadrant has example dashboards and metrics that can be used for visualizing your gateways and observing traffic hitting those gateways across multiple clusters. 
+- **Multi-Cluster Ingress:** Kuadrant provides multi-cluster ingress connectivity using DNS to bring traffic to your Gateways using a strategy defined in a `DNSPolicy` (more later). 
+- **Global Rate Limiting:** Kuadrant can enable global rate limiting usecases when it is configured to use a shared store (redis) for counters based on limits defined by a `RateLimitPolicy`.
+- **Global Auth:*** Kuadrant's `AuthPolicy` can be configured to leverage external auth providers to ensure different cluster exposing the same API are authenticating and authorizing in the same way. 
+- **Integration with federated metrics stores:** Kuadrant has example dashboards and metrics that can be used for visualizing your gateways and observing traffic hitting those gateways across multiple clusters. 
 
 **Platform Engineer**
 
@@ -37,17 +37,19 @@ We will walk through how you can use the kuadrant OAS extensions and CLI to gene
 
 The following steps should be done in each cluster individually unless specifically excluded. 
 
-### Env Vars
+### Environment Variables
 
 For convenience in this guide we use some env vars throughout this document
 
-```
+```bash
 export zid=change-this-to-your-zone-id
 export rootDomain=example.com
 export gatewayNS=api-gateway
+export gatewayName=external
 export AWS_ACCESS_KEY_ID=xxxx
 export AWS_SECRET_ACCESS_KEY=xxxx
-
+export clusterIssuerName=lets-encrypt
+export EMAIL=foo@example.com
 ```
 
 ### Tooling
@@ -62,13 +64,13 @@ The managed dns zone declares a zone and credentials to access that zone that ca
 
 Ensure your kubectl is targeting the correct cluster. Apply the `ManagedZone` resource below to each cluster or if you are adding an additional cluster add it to the new cluster:
 
-```
+```bash
 kubectl create ns ${gatewayNS}
 ```
 
 Setup AWS credential for route53 access
 
-```
+```bash
 kubectl -n ${gatewayNS} create secret generic aws-credentials \
   --type=kuadrant.io/aws \
   --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
@@ -76,7 +78,7 @@ kubectl -n ${gatewayNS} create secret generic aws-credentials \
 ```  
 
 
-```
+```bash
 kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1alpha1
 kind: ManagedZone
@@ -94,7 +96,7 @@ EOF
 
 Wait for the zone to be ready
 
-```
+```bash
 kubectl wait managedzone/managedzone --for=condition=ready=true -n ${gatewayNS}
 ```
 
@@ -103,16 +105,12 @@ kubectl wait managedzone/managedzone --for=condition=ready=true -n ${gatewayNS}
 
 To secure communication to the gateways we want to define a TLS issuer for TLS certificates. We will use letsencrypt, but you can use any supported by cert-manager.
 
-
-```
-export EMAIL=myemail@email.com
-```
-```
+```bash
 kubectl apply -f - <<EOF
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
-  name: lets-encrypt
+  name: ${clusterIssuerName}
 spec:
   acme:
     email: ${EMAIL} 
@@ -140,12 +138,12 @@ kubectl wait clusterissuer/lets-encrypt --for=condition=ready=true
 
 In order for Kuadrant to balance traffic using DNS across two or more clusters. We need to define a gateway with a shared host. We will define this with a HTTPS listener with a wildcard hostname based on the root domain. As mentioned, these resources need to be applied to both clusters. Note for now we have set the gateway to only accept HTTPRoutes from the same namespace. This will allow us to restrict who can use the gateway until it is ready for general use.
 
-```
+```bash
 kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: external
+  name: ${gatewayName}
   namespace: ${gatewayNS}
 spec:
     gatewayClassName: istio
@@ -161,24 +159,24 @@ spec:
         certificateRefs:
         - group: ""
           kind: Secret
-          name: api-external-tls
+          name: api-${gatewayName}-tls
         mode: Terminate
 EOF
 ```
 
 Let check the status of our gateway
 
-```
-kubectl get gateway external -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
-kubectl get gateway external -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Programmed")].message}'
+```bash
+kubectl get gateway ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
+kubectl get gateway ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Programmed")].message}'
 ```
 
 So our gateway should be accepted and programmed (IE valid and assigned an external address).
 
 However if we check our listener status we will it is not yet "programmed" or ready to accept traffic due to bad TLS configuration.
 
-```
-kubectl get gateway external -n ${gatewayNS} -o=jsonpath='{.status.listeners[0].conditions[?(@.type=="Programmed")].message}'
+```bash
+kubectl get gateway ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.listeners[0].conditions[?(@.type=="Programmed")].message}'
 ```
 
 Kuadrant can help with this via TLSPolicy.
@@ -190,18 +188,18 @@ While our gateway is now deployed it has no exposed endpoints and our listener i
 
 AuthPolicy
 
-```
+```bash
 kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta2
 kind: AuthPolicy
 metadata:
-  name: external
+  name: ${gatewayName}-auth
   namespace: ${gatewayNS}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: external
+    name: ${gatewayName}
   defaults:
     rules:
       authorization:
@@ -213,22 +211,22 @@ EOF
 
 Lets check our policy was accepted by the controller
 
-```
-kubectl get authpolicy external -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
+```bash
+kubectl get authpolicy ${gatewayName}-auth -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
 ```
 
 TLSPolicy
 
-```
+```bash
 kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1alpha1
 kind: TLSPolicy
 metadata:
-  name: external
+  name: ${gatewayName}-tls
   namespace: ${gatewayNS}
 spec:
   targetRef:
-    name: external
+    name: ${gatewayName}
     group: gateway.networking.k8s.io
     kind: Gateway
   issuerRef:
@@ -240,25 +238,25 @@ EOF
 
 Lets check our policy was accepted by the controller
 
-```
-kubectl get tlspolicy external -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
+```bash
+kubectl get tlspolicy ${gatewayName}-tls -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
 ```
 
 
 RateLimitPolicy
 
-```
+```bash
 kubectl apply -f  - <<EOF
 apiVersion: kuadrant.io/v1beta2
 kind: RateLimitPolicy
 metadata:
-  name: external
+  name: ${gatewayName}-rlp
   namespace: ${gatewayNS}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: external
+    name: ${gatewayName}
   defaults:
     limits:
       "low-limit":
@@ -272,16 +270,14 @@ EOF
 
 Lets check our rate limits have been accepted. Note we have set it artificially low for demo purposes.
 
-```
-
-kubectl get ratelimitpolicy external -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
-
+```bash
+kubectl get ratelimitpolicy ${gatewayName}-rlp -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
 ```
 
 Lets check the programmed state of our gateway listener again.
 
-```
-kubectl get gateway external -n ${gatewayNS} -o=jsonpath='{.status.listeners[0].conditions[?(@.type=="Programmed")].message}'
+```bash
+kubectl get gateway ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.listeners[0].conditions[?(@.type=="Programmed")].message}'
 ```
 
 Should have no errors anymore. Note it can take a minute or two for the letsencrypt cert to be issued.
@@ -290,12 +286,12 @@ Should have no errors anymore. Note it can take a minute or two for the letsencr
 
 So with our gateway deployed, secured and protected, next we will apply a `DNSPolicy` to bring traffic to our gateway for the assigned listener hosts. This policy will configure how traffic reaches the gateways deployed to our different clusters. In this case it will setup a loadbalanced strategy, which will mean it will provide a form of RoundRobin response to DNS clients. We also define default GEO, this doesn't have an immediate impact but rather is a "catchall" to put records under and so that when/if we enable geo routing on our gateways (covered later), the default is defined for any users outside of the specified gateway GEOs ensuring all users regardless of their geo will be able to reach our gateway (more later). We also define a default weight. All records will receive this weight meaning they will be returned in a RoundRobin manner.
 
-```
+```bash
 kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1alpha1
 kind: DNSPolicy
 metadata:
-  name: loadbalanced
+  name: ${gatewayName}-dnspolicy
   namespace: ${gatewayNS}
 spec:
   routingStrategy: loadbalanced
@@ -305,16 +301,17 @@ spec:
     weighted:
       defaultWeight: 120 
   targetRef:
-    name: external
+    name: ${gatewayName}
     group: gateway.networking.k8s.io
     kind: Gateway
 EOF
 ```    
 Note: the DNSPolicy will leverage the ManagedZone we defined earlier based on the listener hosts defined in the gateway.
 
-Lets check our DNSPolicy has been accepted.
-```
-kubectl get dnspolicy loadbalanced -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
+Lets check our DNSPolicy has been accepted:
+
+```bash
+kubectl get dnspolicy ${gatewayName}-dnspolicy -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
 ```
 
 If you have setup the observability pieces (See installation) and remote write to a Thanos instance, then you should be able to access the Grafana instance and see your deployed gateway and policies in the `platform` engineer dashboard.
@@ -327,13 +324,13 @@ Once we create a HTTPRoute for our listeners, it will cause the DNSPolicy, Auth 
 
 We can test this by deploying a simple application and connecting it to our gateway.
 
-```sh
+```bash
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml -n ${gatewayNS}
 ```
 
-add a HTTPRoute
+add an `HTTPRoute`:
 
-```
+```bash
 kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -342,7 +339,7 @@ metadata:
   namespace: ${gatewayNS}
 spec:
   parentRefs:
-  - name: external
+  - name: ${gatewayName}
     namespace: ${gatewayNS}
   hostnames:
   - "toys.${rootDomain}"
@@ -353,31 +350,32 @@ spec:
 EOF
 ```
 
-Ok lets check our gateway policies are enforced
+Let's check our gateway policies are enforced:
 
-```
+```bash
 kubectl get dnspolicy loadbalanced -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
-kubectl get authpolicy external -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
-kubectl get ratelimitpolicy external -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
+kubectl get authpolicy ${gatewayName}-auth -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
+kubectl get ratelimitpolicy ${gatewayName}-rlp -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
 ```
+
 note TLS policy is currently missing an enforced condition. https://github.com/Kuadrant/kuadrant-operator/issues/572. However looking at the gateway status we can see it is affected by 
 
-```
-kubectl get gateway -n ${gatewayNS} external -n demo -o=jsonpath='{.status.conditions[*].message}'
+```bash
+kubectl get gateway -n ${gatewayNS} ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.conditions[*].message}'
 ```
 
 ### Test connectivity and deny all auth 
 
 We are using curl to hit our endpoint. As we are using letsencrypt staging in this example we pass the `-k` flag.
 
-```
-curl -k -w "%{http_code}" https://$(kubectl get httproute api -n demo -o=jsonpath='{.spec.hostnames[0]}')
+```bash
+curl -k -w "%{http_code}" https://$(kubectl get httproute api -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')
 ```
 
 We should see a `403` response. With our gateway and policies in place we can now allow other teams to use the gateway:
 
-```
-kubectl patch gateway external -n ${gatewayNS} --type='json' -p='[{"op": "replace", "path": "/spec/listeners/0/allowedRoutes/namespaces/from", "value":"All"}]'
+```bash
+kubectl patch gateway ${gatewayName} -n ${gatewayNS} --type='json' -p='[{"op": "replace", "path": "/spec/listeners/0/allowedRoutes/namespaces/from", "value":"All"}]'
 ```
 
 ### Extending this Gateway to multiple clusters and configuring GEO based routing
@@ -389,19 +387,19 @@ Assuming you have deployed a gateway instance to multiple clusters and configure
 So for example if we have a cluster in North America and a Cluster in the EU we can bring traffic to those gateways based on location simply by applying the following label:
 
 In our North American cluster:
-```
-kubectl label --overwrite gateway external kuadrant.io/lb-attribute-geo-code=US -n ${gatewayNS}
+
+```bash
+kubectl label --overwrite gateway ${gatewayName} kuadrant.io/lb-attribute-geo-code=US -n ${gatewayNS}
 ```
 
 In our European Cluster
 
+```bash
+kubectl label --overwrite gateway ${gatewayName} kuadrant.io/lb-attribute-geo-code=EU -n ${gatewayNS}
 ```
-kubectl label --overwrite gateway external kuadrant.io/lb-attribute-geo-code=EU -n ${gatewayNS}
-
-```
 
 
-After some time you can check the geo distribution using the HTTPRoute host `kubectl get httproute api -n demo -o=jsonpath='{.spec.hostnames[0]}'` via site such as https://dnsmap.io/
+After some time you can check the geo distribution using the HTTPRoute host `kubectl get httproute api -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}'` via site such as https://dnsmap.io/
 
 ## Developer
 
@@ -419,7 +417,7 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/ma
 
 Open Up the application to traffic via a `HTTPRoute`
 
-```
+```bash
 kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -428,7 +426,7 @@ metadata:
   namespace: ${gatewayNS}
 spec:
   parentRefs:
-  - name: external
+  - name: ${gatewayName}
     namespace: ${gatewayNS}
   hostnames:
   - "toys.${rootDomain}"
@@ -444,25 +442,24 @@ Ok lets check our gateway policies are enforced
 
 //TODO describe where to view dashboards
 
-```
+```bash
 kubectl get dnspolicy loadbalanced -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
-kubectl get authpolicy external -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
-kubectl get ratelimitpolicy external -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
-
+kubectl get authpolicy ${gatewayName}-auth -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
+kubectl get ratelimitpolicy ${gatewayName}-rlp -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
 ```
 
 note TLS policy is currently missing an enforced condition. https://github.com/Kuadrant/kuadrant-operator/issues/572. However looking at the gateway status we can see it is affected by 
 
-```
-kubectl get gateway -n ${gatewayNS} external -n demo -o=jsonpath='{.status.conditions[*].message}'
+```bash
+kubectl get gateway -n ${gatewayNS} ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.conditions[*].message}'
 ```
 
 ### Test connectivity and deny all auth 
 
 We are using curl to hit our endpoint. As we are using letsencrypt staging in this example we pass the `-k` flag.
 
-```
-curl -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute api -n demo -o=jsonpath='{.spec.hostnames[0]}')
+```bash
+curl -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute api -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')
 
 ```
 
@@ -470,7 +467,7 @@ curl -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute api -n demo
 
       
 
-```
+```bash
 kubectl apply -f  - <<EOF
 apiVersion: kuadrant.io/v1beta2
 kind: RateLimitPolicy
@@ -493,8 +490,7 @@ EOF
 
 
 
-
-# TODO 
+# TODO
 - Add developer flow with OAS
 - Define developer focused policies
 - Add instructions for using non API Key auth provider

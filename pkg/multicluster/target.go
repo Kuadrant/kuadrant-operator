@@ -47,14 +47,14 @@ func (t *GatewayTarget) GroupTargetsByGeo() map[v1alpha1.GeoCode][]ClusterGatewa
 }
 
 func (t *GatewayTarget) GetDefaultGeo() v1alpha1.GeoCode {
-	if t.LoadBalancing != nil && t.LoadBalancing.Geo != nil {
+	if t.LoadBalancing != nil {
 		return v1alpha1.GeoCode(t.LoadBalancing.Geo.DefaultGeo)
 	}
 	return v1alpha1.DefaultGeo
 }
 
 func (t *GatewayTarget) GetDefaultWeight() int {
-	if t.LoadBalancing != nil && t.LoadBalancing.Weighted != nil {
+	if t.LoadBalancing != nil {
 		return int(t.LoadBalancing.Weighted.DefaultWeight)
 	}
 	return int(v1alpha1.DefaultWeight)
@@ -64,7 +64,7 @@ func (t *GatewayTarget) setClusterGatewayTargets(clusterGateways []ClusterGatewa
 	cgTargets := []ClusterGatewayTarget{}
 	for _, cg := range clusterGateways {
 		var customWeights []*v1alpha1.CustomWeight
-		if t.LoadBalancing != nil && t.LoadBalancing.Weighted != nil {
+		if t.LoadBalancing != nil {
 			customWeights = t.LoadBalancing.Weighted.Custom
 		}
 		cgt, err := NewClusterGatewayTarget(cg, t.GetDefaultGeo(), t.GetDefaultWeight(), customWeights)

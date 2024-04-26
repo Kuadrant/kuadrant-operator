@@ -37,8 +37,9 @@ const (
 
 // TLSPolicySpec defines the desired state of TLSPolicy
 type TLSPolicySpec struct {
-	// +kubebuilder:validation:Required
-	// +required
+	// TargetRef identifies an API object to apply policy to.
+	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
+	// +kubebuilder:validation:XValidation:rule="self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'Gateway'"
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
 
 	CertificateSpec `json:",inline"`

@@ -24,24 +24,23 @@ import (
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 )
 
-var _ = Describe("TLSPolicy controller", Ordered, func() {
+var _ = Describe("TLSPolicy controller", func() {
 
-	var testNamespace string
 	var gatewayClass *gatewayapiv1.GatewayClass
+	var testNamespace string
 	var issuer *certmanv1.Issuer
 	var issuerRef *certmanmetav1.ObjectReference
 	var gateway *gatewayapiv1.Gateway
 	var tlsPolicy *v1alpha1.TLSPolicy
 	var ctx context.Context
 
-	BeforeAll(func() {
-		ctx = context.Background()
-		gatewayClass = testBuildGatewayClass("foo", "default", "kuadrant.io/bar")
-		Expect(k8sClient.Create(ctx, gatewayClass)).To(Succeed())
-	})
-
 	BeforeEach(func() {
+		ctx = context.Background()
 		testNamespace = CreateNamespaceWithContext(ctx)
+
+		gatewayClass = testBuildGatewayClass("gwc-"+testNamespace, "default", "kuadrant.io/bar")
+		Expect(k8sClient.Create(ctx, gatewayClass)).To(Succeed())
+
 		issuer, issuerRef = testBuildSelfSignedIssuer("testissuer", testNamespace)
 		Expect(k8sClient.Create(ctx, issuer)).To(BeNil())
 	})
@@ -64,11 +63,6 @@ var _ = Describe("TLSPolicy controller", Ordered, func() {
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		}
 		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
-	})
-
-	AfterAll(func() {
-		err := k8sClient.Delete(ctx, gatewayClass)
-		Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 	})
 
 	Context("invalid target", func() {

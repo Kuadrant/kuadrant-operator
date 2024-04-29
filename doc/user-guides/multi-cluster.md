@@ -131,7 +131,7 @@ spec:
 EOF
 
 
-kubectl wait clusterissuer/lets-encrypt --for=condition=ready=true
+kubectl wait clusterissuer/${clusterIssuerName} --for=condition=ready=true
 ```
 
 ### Setup a Gateway
@@ -232,7 +232,7 @@ spec:
   issuerRef:
     group: cert-manager.io
     kind: ClusterIssuer
-    name: lets-encrypt
+    name: ${clusterIssuerName}
 EOF
 ```
 
@@ -353,7 +353,7 @@ EOF
 Let's check our gateway policies are enforced:
 
 ```bash
-kubectl get dnspolicy loadbalanced -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
+kubectl get dnspolicy ${gatewayName}-dnspolicy -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
 kubectl get authpolicy ${gatewayName}-auth -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
 kubectl get ratelimitpolicy ${gatewayName}-rlp -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
 ```

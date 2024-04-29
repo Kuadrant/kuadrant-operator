@@ -50,6 +50,9 @@ address="${octets[0]}.${octets[1]}.${octets[2]}.$((numIPs * offset))/${cidr}"
 
 echo "IPAddressPool address calculated to be '$address' for docker network subnet: '$SUBNET', numIps: '$numIPs' and offset: '$offset'" >&2
 
+# TODO: Figure out a container compatible way of running yq so that the metallb
+#       resources yaml gets passed in correctly as a docker run arg.
+#       This fails like the 2nd arg is missing if using yq from docker run.
 cat <<EOF | ADDRESS=$address ${YQ} '(select(.kind == "IPAddressPool") | .spec.addresses[0]) = env(ADDRESS)'
 ---
 apiVersion: metallb.io/v1beta1

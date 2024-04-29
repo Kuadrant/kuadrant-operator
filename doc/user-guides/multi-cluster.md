@@ -403,18 +403,11 @@ After some time you can check the geo distribution using the HTTPRoute host `kub
 
 ## Developer (WIP)
 
-##TODO (cover API Key auth as well as OpenID complex and requires an openid setup)
+For this part of the walkthrough, we will go through leveraging an Open API Spec (OAS) to define an API and also using the powerful kuadrant OAS extensions to define the routing, auth and rate limiting requirements. We will then use the `kuadrantctl` tool to generate an AuthPolicy, a HTTPRoute and  a RateLimitPolicy. While we use the `kuadrantctl` tool here, it is worth noting that it is not essential. AuthPolicy, RateLimitPolicy and HTTPRoutes can be created independently.
 
-For this part of the walkthrough, we will go through leveraging an Open API Spec (OAS) to define an API and also using the powerful kuadrant OAS extensions to define the routing, auth and rate limiting requirements. We will then use the `kuadrantctl` tool to generate an AuthPolicy that uses an OpenId provider and a RateLimitPolicy. 
-Durig the platform engineer section we defined some default policies for auth and rate limiting at our gateway, these new developer defined policies will target our APIs HTTPRoute and override the policies for requests to our API endpoints.
-
-Our example Open Api Spec (OAS) leverages kuadrant based extensions. It is these extension that allow you to define routing, and service protection requirements. You can learn more about these extension [here](https://docs.kuadrant.io/kuadrantctl/doc/openapi-kuadrant-extensions/) 
-
-### Pre Reqs
+### Pre Req
 
 - Install kuadrantctl. You can find a compatible binary and download it from the [kuadrantctl releases page](https://github.com/kuadrant/kuadrantctl/releases )
-- Setup / have an available openid connect provider such as https://www.keycloak.org/ 
-
 
 ### Setup HTTPRoute and backend
 
@@ -426,19 +419,20 @@ setup some new env vars:
 ```
 export openIDHost=some.keycloak.com
 export oasPath=/path/to/oas.yaml
-export apiNS=petstore
+
+## below may already be present from the gateway setup
+
+export rootDomain=example.com
+export gatewayNS=api-gateway
 ```
 
 Deploy the sample application:
 
 ```sh
-kubectl create ns petstore
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/api-petstore/main/resources/app.yaml
 ```
 
 ### Use OAS to define our routing
-
-##TODO (is it worth doing openid connect here given the custom config needed and expected realms etc??)
 
 Ok next we are going to use our OAS to configure our HTTPRoute. Lets use the kuadrantctl to generate our `HTTPRoute`
 
@@ -451,7 +445,7 @@ sed -i -e "s/#gatewayNS/$gatewayNS/g" $oasPath
 sed -i -e "s/#rootDomain/$rootDomain/g" $oasPath
 sed -i -e "s/#openIDHost/$openIDHost/g" $oasPath
 
-kuadrantctl generate gatewayapi httproute --oas=$oasPath | jq -P
+kuadrantctl generate gatewayapi httproute --oas=$oasPath | yq -P
 ```
 Happy with the output lets apply to the cluster
 
@@ -462,7 +456,7 @@ kuadrantctl generate gatewayapi httproute --oas=$oasPath | kubectl apply -f -
 Lets check out new route
 
 ```
-kubectl get httproute -n $apiNS -o=yaml
+kubectl get httproute -n petstore -o=yaml
 
 ```
 
@@ -489,11 +483,30 @@ We should see that this route is affected by the `AuthPolicy` and `RateLimitPoli
 We are using curl to hit our endpoint. As we are using letsencrypt staging in this example we pass the `-k` flag.
 
 ```
-curl -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute petstore -n ${apiNS} -o=jsonpath='{.spec.hostnames[0]}')
+curl -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute petstore -n petstore -o=jsonpath='{.spec.hostnames[0]}')/api/v3/dog
 
 ```
 
-So we are getting a `403` because of the existing default auth policy.
+So we are getting a `403` because of the existing default auth policy. Below are two of the many options available with AuthPolicy.
+
+### API key auth flow
+
+### OpenID Connect auth flow
+
+
+For this part of the walkthrough, we will use the `kuadrantctl` tool to generate an AuthPolicy that uses an OpenId provider and a RateLimitPolicy that uses some of the jwt values to enforce per user rate limiting. 
+Durig the platform engineer section we defined some default policies for auth and rate limiting at our gateway, these new developer defined policies will target our APIs HTTPRoute and override the policies for requests to our API endpoints.
+
+Our example Open Api Spec (OAS) leverages kuadrant based extensions. It is these extension that allow you to define routing, and service protection requirements. You can learn more about these extension [here](https://docs.kuadrant.io/kuadrantctl/doc/openapi-kuadrant-extensions/) 
+
+
+### Pre Reqs
+
+
+- Setup / have an available openid connect provider such as https://www.keycloak.org/ 
+
+
+
 
 ### Setup HTTPRoute level RateLimits and Auth
 
@@ -520,6 +533,9 @@ export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencode
         -d 'username=bob' \
         -d 'password=p' "https://${openIDHost}/auth/realms/petstore/protocol/openid-connect/token" | jq -r '.access_token')
 ```        
+
+
+### API key flow
 
 
 # TODO

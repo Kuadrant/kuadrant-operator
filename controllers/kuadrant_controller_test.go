@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/kuadrant/limitador-operator/api/v1alpha1"
+	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/utils/ptr"

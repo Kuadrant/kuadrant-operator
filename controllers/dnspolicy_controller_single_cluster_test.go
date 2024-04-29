@@ -41,7 +41,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		clusterUID, err := utils.GetClusterUID(ctx, k8sClient)
 		Expect(err).To(BeNil())
 
-		gatewayClass = testBuildGatewayClass("foo", "default", "kuadrant.io/bar")
+		gatewayClass = testBuildGatewayClass("gwc-"+testNamespace, "default", "kuadrant.io/bar")
 		Expect(k8sClient.Create(ctx, gatewayClass)).To(Succeed())
 
 		managedZone = testBuildManagedZone("mz-example-com", testNamespace, "example.com")

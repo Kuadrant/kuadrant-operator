@@ -403,7 +403,7 @@ After some time you can check the geo distribution using the HTTPRoute host `kub
 
 ## Developer (WIP)
 
-For this part of the walkthrough, we will go through leveraging an Open API Spec (OAS) to define an API and also using the powerful kuadrant OAS extensions to define the routing, auth and rate limiting requirements. We will then use the `kuadrantctl` tool to generate an AuthPolicy, a HTTPRoute and  a RateLimitPolicy. While we use the `kuadrantctl` tool here, it is worth noting that it is not essential. AuthPolicy, RateLimitPolicy and HTTPRoutes can be created independently.
+For this part of the walkthrough, we will go through leveraging an Open API Spec (OAS) to define an API and also using the powerful kuadrant OAS extensions to define the routing and the auth and rate limiting requirements. We will then use the `kuadrantctl` tool to generate an AuthPolicy, a HTTPRoute and  a RateLimitPolicy to enforce what is in our OAS. While we use the `kuadrantctl` tool here, it is worth noting that it is not essential. AuthPolicy, RateLimitPolicy and HTTPRoutes can be created independently.
 
 ### Pre Req
 
@@ -412,7 +412,7 @@ For this part of the walkthrough, we will go through leveraging an Open API Spec
 
 ### Setup HTTPRoute and backend
 
-Copy the following example to a local location:
+Copy the following examples to a local location:
 [sample OAS API Key spec](../../examples/oas-apikey.yaml)
 [sample OAS OIDC spec](../../examples/oas-oidc.yaml)
 
@@ -489,7 +489,9 @@ curl -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute toystore -n
 
 ```
 
-So we are getting a `403` because of the existing default auth policy applied at the Gateway. Below are two of the many options available with AuthPolicy. Lets override the default policy now with our own.
+So we are getting a `403` because of the existing default auth policy applied at the Gateway as the AuthPolicy defines this as a default lets override for our HTTPRoute.
+
+Choose one of the following options:
 
 ### API key auth flow
 
@@ -597,6 +599,4 @@ export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencode
 
 
 # TODO
-- Add  second developer flow with API keys as keycloak based OpenID quite involved
-- Define developer focused policies
-- Add instructions for using non API Key auth provider
+ - Finalise OIDC section

@@ -37,7 +37,7 @@ dockerBinCmd() {
     network=" --network ${KIND_CLUSTER_DOCKER_NETWORK}"
   fi
 
-  echo "$CONTAINER_RUNTIME_BIN run --rm -u $UID -v ${TMP_DIR}:${TMP_DIR}${network} -e KUBECONFIG=${TMP_DIR}/kubeconfig --entrypoint=$1 $TOOLS_IMAGE"
+  echo "$CONTAINER_RUNTIME_BIN run -i --rm -u $UID -v ${TMP_DIR}:${TMP_DIR}${network} -e KUBECONFIG=${TMP_DIR}/kubeconfig --entrypoint=$1 $TOOLS_IMAGE"
 }
 
 RED='\033[0;31m'
@@ -73,8 +73,7 @@ export KUSTOMIZE_BIN=$(dockerBinCmd "kustomize")
 export SUBNET_OFFSET=0
 export HUB=1
 
-# See yq usage in docker-network-ipaddresspool.sh for why this no longer uses docker run
-YQ_BIN=$(which yq)
+YQ_BIN=$(dockerBinCmd "yq")
 
 KUADRANT_REPO="github.com/${KUADRANT_ORG}/kuadrant-operator.git"
 KUADRANT_REPO_RAW="https://raw.githubusercontent.com/${KUADRANT_ORG}/kuadrant-operator/${KUADRANT_REF}"

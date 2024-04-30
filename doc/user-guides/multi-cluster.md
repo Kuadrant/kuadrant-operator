@@ -1,18 +1,18 @@
-# Secure, Protect and Connect APIs with Kuadrant on Multiple Clusters
-
-
-## Pre-requisites
-
-This document expects that you have successfully installed Kuadrant [Install Guide](../install/install-openshift.md) onto two different clusters and have configured a shared, accessible redis store. 
-
-- Completed the Kuadrant Install Guide for at least two clusters [Install Guide](../install/install-openshift.md)
-- kubectl command line tool
-- (optional) have user workload monitoring configured to remote write to a central storage system such as Thanos (also covered in the installation guide).
+# Secure, Protect and Connect APIs with Kuadrant
 
 ## Overview
 
-In this doc we will walk you through using Kuadrant to secure, protect and connect an API via a set of Gateways distributed across multiple clusters. 
+In this doc we will walk you through using Kuadrant to secure, protect and connect an API exposed by a Gateway API Gateway. 
+You can use this walk through for a gateway on a single or a gateway distributed across multiple clusters that has a shared listener hostname. 
 We will take the approach of assuming certain personas and how they can each work with Kuadrant to achieve their goals.
+
+## Pre-requisites
+
+This document expects that you have successfully installed Kuadrant [Install Guide](../install/install-openshift.md)  onto at least one cluster. If looking to try multi-custer then follow the install guide on at least two different clusters and have a shared, accessible redis store. 
+
+- Completed the Kuadrant Install Guide for one or more clusters [Install Guide](../install/install-openshift.md)
+- kubectl command line tool
+- (optional) have user workload monitoring configured to remote write to a central storage system such as Thanos (also covered in the installation guide).
 
 ### What Kuadrant can do for you in a multi-cluster environment
 
@@ -31,7 +31,7 @@ As an optional extra we will highlight how, with the user workload monitoring ob
 
 **Developer**
 
-We will walk through how you can use the kuadrant OAS extensions and CLI to generate a `HTTPRoute` for your API and add both Auth and Rate Limiting to your API.
+We will walk through how you can use the kuadrant OAS extensions and CLI to generate a `HTTPRoute` for your API and add specific Auth and Rate Limiting requirements to your API.
 
 ## Platform Engineer
 
@@ -63,7 +63,7 @@ The managed dns zone declares a zone and credentials to access that zone that ca
 
 **Create the ManagedZone resource**
 
-Ensure your kubectl is targeting the correct cluster. Apply the `ManagedZone` resource below to each cluster or if you are adding an additional cluster add it to the new cluster:
+Apply the `ManagedZone` resource below to each cluster or if you are adding an additional cluster add it to the new cluster:
 
 ```bash
 kubectl create ns ${gatewayNS}
@@ -81,11 +81,21 @@ kubectl -n ${gatewayNS} create secret generic aws-credentials \
 
 ```bash
 kubectl apply -f - <<EOF
-dem
+apiVersion: kuadrant.io/v1alpha1
+kind: ManagedZone
+metadata:
+  name: managedzone
+  namespace: ${gatewayNS}
+spec:
+  id: ${zid}
+  domainName: ${rootDomain}
+  description: "Kuadrant managed zone"
+  dnsProviderSecretRef:
+    name: aws-credentials
 EOF
 ```
 
-Wait for the zone to be ready
+Wait for the zone to be ready in your cluster(s)
 
 ```bash
 kubectl wait managedzone/managedzone --for=condition=ready=true -n ${gatewayNS}
@@ -95,6 +105,8 @@ kubectl wait managedzone/managedzone --for=condition=ready=true -n ${gatewayNS}
 ### Add a TLS Issuer
 
 To secure communication to the gateways we want to define a TLS issuer for TLS certificates. We will use letsencrypt, but you can use any supported by cert-manager.
+Below is an example that uses letsncrypt staging: This should also be applied to all clusters.
+
 
 ```bash
 kubectl apply -f - <<EOF
@@ -127,7 +139,7 @@ kubectl wait clusterissuer/${clusterIssuerName} --for=condition=ready=true
 
 ### Setup a Gateway
 
-In order for Kuadrant to balance traffic using DNS across two or more clusters. We need to define a gateway with a shared host. We will define this with a HTTPS listener with a wildcard hostname based on the root domain. As mentioned, these resources need to be applied to both clusters. Note for now we have set the gateway to only accept HTTPRoutes from the same namespace. This will allow us to restrict who can use the gateway until it is ready for general use.
+In order for Kuadrant to balance traffic using DNS across two or more clusters. We need to define a gateway with a shared host. We will define this with a HTTPS listener with a wildcard hostname based on the root domain. As mentioned, these resources need to be applied to all clusters. Note for now we have set the gateway to only accept HTTPRoutes from the same namespace. This will allow us to restrict who can use the gateway until it is ready for general use.
 
 ```bash
 kubectl apply -f - <<EOF
@@ -275,7 +287,7 @@ Should have no errors anymore. Note it can take a minute or two for the letsencr
 
 ### Setup our DNS
 
-So with our gateway deployed, secured and protected, next we will apply a `DNSPolicy` to bring traffic to our gateway for the assigned listener hosts. This policy will configure how traffic reaches the gateways deployed to our different clusters. In this case it will setup a loadbalanced strategy, which will mean it will provide a form of RoundRobin response to DNS clients. We also define default GEO, this doesn't have an immediate impact but rather is a "catchall" to put records under and so that when/if we enable geo routing on our gateways (covered later), the default is defined for any users outside of the specified gateway GEOs ensuring all users regardless of their geo will be able to reach our gateway (more later). We also define a default weight. All records will receive this weight meaning they will be returned in a RoundRobin manner.
+So with our gateway deployed, secured and protected, next we will apply a `DNSPolicy` to bring traffic to our gateway for the assigned listener hosts. This policy will configure how traffic reaches the gateways deployed to our cluster(s). In this case it will setup a loadbalanced strategy, which will mean it will provide a form of RoundRobin response to DNS clients. We also define default GEO, this doesn't have an immediate impact but rather is a "catchall" to put records under and so that when/if we enable geo routing on our gateways (covered later), the default is defined for any users outside of the specified gateway GEOs ensuring all users regardless of their geo will be able to reach our gateway (more later). We also define a default weight. All records will receive this weight meaning they will be returned in a RoundRobin manner.
 
 ```bash
 kubectl apply -f - <<EOF

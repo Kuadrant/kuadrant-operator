@@ -148,6 +148,8 @@ kind: Gateway
 metadata:
   name: ${gatewayName}
   namespace: ${gatewayNS}
+  labels:
+    kuadrant.io/gateway: true
 spec:
     gatewayClassName: istio
     listeners:
@@ -544,14 +546,14 @@ curl -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute toystore -n
 and we should get a 403 for a post request as it does have an auth requirements.
 
 ```
-curl -XPOST -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -XPOST -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
 401
 ```
 
 Finally if we add our api key header we should get a 200
 
 ```
-curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
 200
 ```
 
@@ -603,6 +605,20 @@ Happy with the output lets apply to the cluster
 kuadrantctl generate kuadrant authpolicy --oas=$oasPath | kubectl apply -f -
 ```
 
+We should see in the status of the AuthPolicy that it has been accepted and enforced.
+
+```
+kubectl get authpolicy -n toystore toystore -o=jsonpath='{.status.conditions}'
+
+```
+
+On our `HTTPRoute` we should also see it now affected by this AuthPolicy in the toystore namespace.
+
+```
+ kubectl get httproute toystore -n toystore -o=jsonpath='{.status.parents[0].conditions[?(@.type=="kuadrant.io/AuthPolicyAffected")].message}'
+```
+
+
 Lets test our AuthPolicy.
 
 ```
@@ -615,12 +631,69 @@ export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencode
 ```        
 
 ```
-curl -k --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" https://toystore.$rootDomain/v1/toys
-
+curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
 ```
+
+We should see a 200 response code.
 
 ### Setup Ratelimiting
 
+Finally lets generate our RateLimitPolicy to add our ratelimits based on our OAS file. 
 
-# TODO
- - Finalise OIDC section
+```
+kuadrantctl generate kuadrant ratelimitpolicy --oas=$oasPath | yq -P
+```
+
+You should see we have an artificial limit of 1 request per 5 seconds for the `GET` and 1 request per 10 seconds for the `POST` endpoint
+
+Lets apply this to the cluster:
+
+```
+kuadrantctl generate kuadrant ratelimitpolicy --oas=$oasPath | kubectl apply -f -
+```
+
+Again we should see the rate limit policy accepted and enforced:
+
+```
+kubectl get ratelimitpolicy -n toystore toystore -o=jsonpath='{.status.conditions}'
+```
+On our HTTPRoute we should now see it is affected by the ratelimit policy in ths same namespace:
+
+```
+kubectl get httproute toystore -n toystore -o=jsonpath='{.status.parents[0].conditions[?(@.type=="kuadrant.io/RateLimitPolicyAffected")].message}'
+```
+
+Lets test our ratelimiting:
+
+
+API Key Auth:
+
+```
+for i in {1..3}
+do
+curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+done 
+
+```
+
+OpenID Connect Auth:
+
+
+```
+export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencoded" \
+        -d 'grant_type=password' \
+        -d 'client_id=toystore' \
+        -d 'scope=openid' \
+        -d 'username=bob' \
+        -d 'password=p' "https://${openIDHost}/auth/realms/toystore/protocol/openid-connect/token" | jq -r '.access_token')
+```      
+
+```
+for i in {1..3}
+do
+curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+sleep 2
+done
+```
+
+TODO update ratelimit example not to use remote address and use username

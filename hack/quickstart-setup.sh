@@ -393,7 +393,7 @@ if cluster_exists "${KUADRANT_CLUSTER_NAME}"; then
         if [ ${#existing_clusters[@]} -eq 0 ]; then
             next_cluster_number=1
         else
-            last_cluster_name=${existing_clusters[-1]}
+            last_cluster_name=${existing_clusters[${#existing_clusters[@]} - 1]}
             last_number=${last_cluster_name##*-}
             next_cluster_number=$((last_number + 1))
         fi

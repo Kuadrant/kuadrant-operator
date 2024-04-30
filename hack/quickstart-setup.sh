@@ -386,7 +386,7 @@ info "Checking for existing Kubernetes clusters..."
 if cluster_exists "${KUADRANT_CLUSTER_NAME}"; then
     echo "A cluster named '${KUADRANT_CLUSTER_NAME}' already exists."
     echo "This will be treated as a 'hub' cluster, with any new clusters being workers."
-    read -p "Proceed with multi-cluster setup? (y/N): " proceed </dev/tty
+    read -r -p "Proceed with multi-cluster setup? (y/N): " proceed </dev/tty
     if [[ $proceed =~ ^[Yy] ]]; then
         # Find the highest numbered cluster and calculate the next number
         existing_clusters=($(${KIND_BIN} get clusters -q | grep "^${KUADRANT_CLUSTER_NAME}-[0-9]*$" | sort -t '-' -k 2 -n))
@@ -401,7 +401,7 @@ if cluster_exists "${KUADRANT_CLUSTER_NAME}"; then
         SUBNET_OFFSET=${next_cluster_number}
         HUB=0
         echo "Next cluster number will be ${KUADRANT_CLUSTER_NAME}."
-        read -p "Is it okay to create the cluster '${KUADRANT_CLUSTER_NAME}'? (y/N): " confirm </dev/tty
+        read -r -p "Is it okay to create the cluster '${KUADRANT_CLUSTER_NAME}'? (y/N): " confirm </dev/tty
         if [[ $confirm =~ ^[Yy] ]]; then
             info "Proceeding to create the new cluster."
         else

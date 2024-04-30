@@ -3,8 +3,13 @@
 package controllers
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"testing"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -146,6 +151,62 @@ func TestPropagateRecordConditions(t *testing.T) {
 		t.Run(tt.Name, func(t *testing.T) {
 			propagateRecordConditions(tt.Records, tt.PolicyStatus)
 			tt.Validate(t, tt.PolicyStatus)
+		})
+	}
+}
+
+func TestDNSPolicyReconciler_calculateStatus(t *testing.T) {
+	type args struct {
+		ctx       context.Context
+		dnsPolicy *v1alpha1.DNSPolicy
+		specErr   error
+	}
+	tests := []struct {
+		name string
+		args args
+		want *v1alpha1.DNSPolicyStatus
+	}{
+		{
+			name: "Enforced status block removed if policy not Accepted. (Regression test)", // https://github.com/Kuadrant/kuadrant-operator/issues/588
+			args: args{
+				dnsPolicy: &v1alpha1.DNSPolicy{
+					Status: v1alpha1.DNSPolicyStatus{
+						Conditions: []metav1.Condition{
+							{
+								Message: "not accepted",
+								Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+								Status:  metav1.ConditionFalse,
+								Reason:  string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
+							},
+							{
+								Message: "AuthPolicy has been successfully enforced",
+								Type:    string(kuadrant.PolicyConditionEnforced),
+								Status:  metav1.ConditionTrue,
+								Reason:  string(kuadrant.PolicyConditionEnforced),
+							},
+						},
+					},
+				},
+				specErr: kuadrant.NewErrInvalid("placeholder", errors.New("placeholder")),
+			},
+			want: &v1alpha1.DNSPolicyStatus{
+				Conditions: []metav1.Condition{
+					{
+						Message: "placeholder target is invalid: placeholder",
+						Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
+						Status:  metav1.ConditionFalse,
+						Reason:  string(gatewayapiv1alpha2.PolicyReasonInvalid),
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &DNSPolicyReconciler{}
+			if got := r.calculateStatus(tt.args.ctx, tt.args.dnsPolicy, tt.args.specErr); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("calculateStatus() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

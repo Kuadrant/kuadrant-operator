@@ -77,6 +77,7 @@ func (r *DNSPolicyReconciler) calculateStatus(ctx context.Context, dnsPolicy *v1
 
 	// Do not set enforced condition if Accepted condition is false
 	if meta.IsStatusConditionFalse(newStatus.Conditions, string(v1alpha2.PolicyConditionAccepted)) {
+		meta.RemoveStatusCondition(&newStatus.Conditions, string(kuadrant.PolicyConditionEnforced))
 		return newStatus
 	}
 

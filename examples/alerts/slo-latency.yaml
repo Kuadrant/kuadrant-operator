@@ -1,0 +1,182 @@
+groups:
+- name: sloth-slo-sli-recordings-kuadrant-kuadrant-requests-latency
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |
+      (sum(rate(istio_request_duration_milliseconds_bucket{le="250", job="ingress-metrics-proxy", response_code="200" }[5m]) )by (request_host))
+      /
+      (sum(rate(istio_request_duration_milliseconds_count{job="ingress-metrics-proxy",response_code="200"}[5m]))by (request_host))
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+      sloth_window: 5m
+  - record: slo:sli_error:ratio_rate30m
+    expr: |
+      (sum(rate(istio_request_duration_milliseconds_bucket{le="250", job="ingress-metrics-proxy", response_code="200" }[30m]) )by (request_host))
+      /
+      (sum(rate(istio_request_duration_milliseconds_count{job="ingress-metrics-proxy",response_code="200"}[30m]))by (request_host))
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+      sloth_window: 30m
+  - record: slo:sli_error:ratio_rate1h
+    expr: |
+      (sum(rate(istio_request_duration_milliseconds_bucket{le="250", job="ingress-metrics-proxy", response_code="200" }[1h]) )by (request_host))
+      /
+      (sum(rate(istio_request_duration_milliseconds_count{job="ingress-metrics-proxy",response_code="200"}[1h]))by (request_host))
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+      sloth_window: 1h
+  - record: slo:sli_error:ratio_rate2h
+    expr: |
+      (sum(rate(istio_request_duration_milliseconds_bucket{le="250", job="ingress-metrics-proxy", response_code="200" }[2h]) )by (request_host))
+      /
+      (sum(rate(istio_request_duration_milliseconds_count{job="ingress-metrics-proxy",response_code="200"}[2h]))by (request_host))
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+      sloth_window: 2h
+  - record: slo:sli_error:ratio_rate6h
+    expr: |
+      (sum(rate(istio_request_duration_milliseconds_bucket{le="250", job="ingress-metrics-proxy", response_code="200" }[6h]) )by (request_host))
+      /
+      (sum(rate(istio_request_duration_milliseconds_count{job="ingress-metrics-proxy",response_code="200"}[6h]))by (request_host))
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+      sloth_window: 6h
+  - record: slo:sli_error:ratio_rate1d
+    expr: |
+      (sum(rate(istio_request_duration_milliseconds_bucket{le="250", job="ingress-metrics-proxy", response_code="200" }[1d]) )by (request_host))
+      /
+      (sum(rate(istio_request_duration_milliseconds_count{job="ingress-metrics-proxy",response_code="200"}[1d]))by (request_host))
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+      sloth_window: 1d
+  - record: slo:sli_error:ratio_rate3d
+    expr: |
+      (sum(rate(istio_request_duration_milliseconds_bucket{le="250", job="ingress-metrics-proxy", response_code="200" }[3d]) )by (request_host))
+      /
+      (sum(rate(istio_request_duration_milliseconds_count{job="ingress-metrics-proxy",response_code="200"}[3d]))by (request_host))
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+      sloth_window: 3d
+  - record: slo:sli_error:ratio_rate30d
+    expr: |
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"}[30d])
+      / ignoring (sloth_window)
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"}[30d])
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+      sloth_window: 30d
+- name: sloth-slo-meta-recordings-kuadrant-kuadrant-requests-latency
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.9995)
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+  - record: slo:error_budget:ratio
+    expr: vector(1-0.9995)
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+  - record: slo:current_burn_rate:ratio
+    expr: |
+      slo:sli_error:ratio_rate5m{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"}
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+  - record: slo:period_burn_rate:ratio
+    expr: |
+      slo:sli_error:ratio_rate30d{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"}
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="kuadrant-kuadrant-requests-latency",
+      sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"}
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+  - record: sloth_slo_info
+    expr: vector(1)
+    labels:
+      sloth_id: kuadrant-kuadrant-requests-latency
+      sloth_mode: cli-gen-prom
+      sloth_objective: "99.95"
+      sloth_service: kuadrant
+      sloth_slo: kuadrant-requests-latency
+      sloth_spec: prometheus/v1
+      sloth_version: v0.11.0
+- name: sloth-slo-alerts-kuadrant-kuadrant-requests-latency
+  rules:
+  - alert: KuadrantlatencyHighErrorRate
+    expr: |
+      (
+          max(slo:sli_error:ratio_rate5m{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"} > (14.4 * 0.0004999999999999716)) without (sloth_window)
+          and
+          max(slo:sli_error:ratio_rate1h{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"} > (14.4 * 0.0004999999999999716)) without (sloth_window)
+      )
+      or
+      (
+          max(slo:sli_error:ratio_rate30m{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"} > (6 * 0.0004999999999999716)) without (sloth_window)
+          and
+          max(slo:sli_error:ratio_rate6h{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"} > (6 * 0.0004999999999999716)) without (sloth_window)
+      )
+    labels:
+      category: latency
+      severity: critical
+      sloth_severity: page
+    annotations:
+      summary: High latency on HTTPRoute requests responses
+      title: (page) {{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget
+        burn rate is too fast.
+  - alert: KuadrantlatencyHighErrorRate
+    expr: |
+      (
+          max(slo:sli_error:ratio_rate2h{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"} > (3 * 0.0004999999999999716)) without (sloth_window)
+          and
+          max(slo:sli_error:ratio_rate1d{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"} > (3 * 0.0004999999999999716)) without (sloth_window)
+      )
+      or
+      (
+          max(slo:sli_error:ratio_rate6h{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"} > (1 * 0.0004999999999999716)) without (sloth_window)
+          and
+          max(slo:sli_error:ratio_rate3d{sloth_id="kuadrant-kuadrant-requests-latency", sloth_service="kuadrant", sloth_slo="kuadrant-requests-latency"} > (1 * 0.0004999999999999716)) without (sloth_window)
+      )
+    labels:
+      category: latency
+      severity: warning
+      sloth_severity: ticket
+    annotations:
+      summary: High latency on HTTPRoute requests responses 
+      title: (ticket) {{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget
+        burn rate is too fast.

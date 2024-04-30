@@ -1,0 +1,41 @@
+rule_files:
+  - slo-latency.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: istio_request_duration_milliseconds_bucket{le="250",job="ingress-metrics-proxy",response_code="200"}
+        values: "0+0x30 31+10x30"
+      - series: istio_request_duration_milliseconds_count{job="ingress-metrics-proxy",response_code="200"}
+        values: "0+1x30 31+90x30"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: KuadrantlatencyHighErrorRate
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: KuadrantlatencyHighErrorRate
+        exp_alerts:
+            - exp_labels:
+                  alertname: KuadrantlatencyHighErrorRate
+                  category: latency
+                  severity: critical
+                  sloth_id: kuadrant-kuadrant-requests-latency
+                  sloth_service: kuadrant
+                  sloth_severity: page
+                  sloth_slo: kuadrant-requests-latency
+              exp_annotations:
+                  summary: High latency on HTTPRoute requests responses 
+                  title: (page) kuadrant kuadrant-requests-latency SLO error budget burn rate is too fast.
+            - exp_labels:
+                  alertname: KuadrantlatencyHighErrorRate
+                  category: latency
+                  severity: warning
+                  sloth_id: kuadrant-kuadrant-requests-latency
+                  sloth_service: kuadrant
+                  sloth_severity: ticket
+                  sloth_slo: kuadrant-requests-latency
+              exp_annotations:
+                  summary: High latency on HTTPRoute requests responses 
+                  title: (ticket) kuadrant kuadrant-requests-latency SLO error budget burn rate is too fast.         

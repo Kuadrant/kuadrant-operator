@@ -44,4 +44,4 @@ components:
   securitySchemes:
     oidc:
       type: openIdConnect
-      openIdConnectUrl: https://#openIDHost
+      openIdConnectUrl: https://#openIDHost/auth/realms/toystore

@@ -19,7 +19,7 @@ export REDIS_URL=redis://user:xxxxxx@some-redis.com:10340
 
 ## Installing the dependencies
 
-Kuadrant integrates with Istio as a Gateway API provider. Before trying Kuadrant, we need to setup an Istio based Gateway API provider. For this we will use the `Sail` operator. 
+Kuadrant integrates with Istio as a Gateway API provider. Before you can try Kuadrant, we need to setup an Istio based Gateway API provider. For this we will use the `Sail` operator. 
 
 - Install v1 of Gateway API
 
@@ -40,8 +40,6 @@ kubectl  apply -f - <<EOF
 kind: OperatorGroup
 apiVersion: operators.coreos.com/v1
 metadata:
-  annotations:
-    argocd.argoproj.io/sync-wave: "0"
   name: sail
   namespace: istio-system
 spec: 
@@ -76,8 +74,6 @@ kubectl apply -f - <<EOF
 apiVersion: operator.istio.io/v1alpha1
 kind: Istio
 metadata:
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"
   name: default
 spec:
   version: v1.21.0
@@ -190,8 +186,6 @@ kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta1
 kind: Kuadrant
 metadata:
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"
   name: kuadrant
   namespace: kuadrant-system
 spec:
@@ -211,4 +205,4 @@ kubectl wait kuadrant/kuadrant --for="condition=Ready=true" -n kuadrant-system -
 
 Kuadrant is now ready to use. 
 
-#TODO add link to follow on guide
+[Secure, Protect and Connect on single or multiple clusters](../user-guides/secure-protect-connect-single-multi-cluster.md)

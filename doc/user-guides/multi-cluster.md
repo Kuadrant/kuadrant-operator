@@ -48,6 +48,7 @@ export gatewayNS=api-gateway
 export gatewayName=external
 export AWS_ACCESS_KEY_ID=xxxx
 export AWS_SECRET_ACCESS_KEY=xxxx
+export AWS_REGION=us-east-1
 export clusterIssuerName=lets-encrypt
 export EMAIL=foo@example.com
 ```
@@ -111,7 +112,7 @@ spec:
       - dns01:
           route53:
             hostedZoneID: ${zid}
-            region: us-east-1
+            region: ${AWS_REGION}
             accessKeyIDSecretRef:
               key: AWS_ACCESS_KEY_ID
               name: aws-credentials

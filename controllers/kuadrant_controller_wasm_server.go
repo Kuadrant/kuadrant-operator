@@ -26,7 +26,6 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -94,12 +93,6 @@ func (r *KuadrantReconciler) reconcileWamsServerConfigMap(ctx context.Context, k
 	}
 
 	if deployment.Generation != deployment.Status.ObservedGeneration {
-		logger.Info("wasm-server deployment updating and ready yet. waiting",
-			"key", client.ObjectKeyFromObject(desiredDeployment))
-		return nil
-	}
-
-	if deployment.Generation != deployment.Status.ObservedGeneration {
 		logger.Info("wasm-server deployment updating and generation not ready yet. waiting",
 			"key", client.ObjectKeyFromObject(desiredDeployment))
 		return nil
@@ -115,7 +108,7 @@ func (r *KuadrantReconciler) reconcileWamsServerConfigMap(ctx context.Context, k
 	}
 
 	if availableCondition.Status != corev1.ConditionTrue {
-		logger.Info("wasm-server deployment not available, yet. waiting",
+		logger.Info("wasm-server deployment not available yet. waiting",
 			"key", client.ObjectKeyFromObject(desiredDeployment),
 			"message", availableCondition.Message,
 		)
@@ -168,9 +161,11 @@ func (r *KuadrantReconciler) reconcileWamsServerConfigMap(ctx context.Context, k
 		return err
 	}
 	wasmSha256 := strings.TrimSuffix(buf.String(), "\n")
-	logger.V(1).Info("wasm-server: got rate limit wasm sha256", "sha256", wasmSha256)
 
-	configMap := &v1.ConfigMap{
+	logger.V(1).Info("wasm-server: got rate limit wasm sha256", "sha256", wasmSha256,
+		"image", WASMServerImageURL)
+
+	configMap := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      WasmServerConfigMapName(kObj),
@@ -188,7 +183,7 @@ func (r *KuadrantReconciler) reconcileWamsServerConfigMap(ctx context.Context, k
 		return err
 	}
 
-	configMapMutator := reconcilers.ConfigMapMutator(func(desired, existing *v1.ConfigMap) bool {
+	configMapMutator := reconcilers.ConfigMapMutator(func(desired, existing *corev1.ConfigMap) bool {
 		return reconcilers.ConfigMapReconcileField(desired, existing, "rate-limit-wasm-sha256")
 	})
 
@@ -207,24 +202,24 @@ func (r *KuadrantReconciler) reconcileWamsServerService(ctx context.Context, kOb
 		return err
 	}
 
-	service := &v1.Service{
+	service := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      WasmServerServiceName(kObj),
 			Namespace: kObj.Namespace,
 			Labels:    WasmServerLabels(),
 		},
-		Spec: v1.ServiceSpec{
-			Ports: []v1.ServicePort{
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
 				{
 					Name:       "http",
-					Protocol:   v1.ProtocolTCP,
+					Protocol:   corev1.ProtocolTCP,
 					Port:       80,
 					TargetPort: intstr.FromString("http"),
 				},
 			},
 			Selector: WasmServerLabels(),
-			Type:     v1.ServiceTypeClusterIP,
+			Type:     corev1.ServiceTypeClusterIP,
 		},
 	}
 
@@ -257,36 +252,36 @@ func wasmServerDeployment(kObj *kuadrantv1beta1.Kuadrant) *appsv1.Deployment {
 			Selector: &metav1.LabelSelector{
 				MatchLabels: WasmServerLabels(),
 			},
-			Template: v1.PodTemplateSpec{
+			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: WasmServerLabels(),
 				},
-				Spec: v1.PodSpec{
-					InitContainers: []v1.Container{
+				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{
 						{
 							Name:            "compute-rate-limit-wasm-sha256",
 							Image:           WASMServerImageURL,
 							Command:         []string{"cat", "/data/plugin.wasm.sha256"},
-							ImagePullPolicy: v1.PullIfNotPresent,
+							ImagePullPolicy: corev1.PullIfNotPresent,
 						},
 					},
-					Containers: []v1.Container{
+					Containers: []corev1.Container{
 						{
 							Name:  "wasm-server",
 							Image: WASMServerImageURL,
-							Ports: []v1.ContainerPort{
+							Ports: []corev1.ContainerPort{
 								{
 									Name:          "http",
 									ContainerPort: 80,
-									Protocol:      v1.ProtocolTCP,
+									Protocol:      corev1.ProtocolTCP,
 								},
 							},
-							LivenessProbe: &v1.Probe{
-								ProbeHandler: v1.ProbeHandler{
-									HTTPGet: &v1.HTTPGetAction{
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
 										Path:   "/health",
 										Port:   intstr.FromInt(80),
-										Scheme: v1.URISchemeHTTP,
+										Scheme: corev1.URISchemeHTTP,
 									},
 								},
 								InitialDelaySeconds: 5,
@@ -295,12 +290,12 @@ func wasmServerDeployment(kObj *kuadrantv1beta1.Kuadrant) *appsv1.Deployment {
 								SuccessThreshold:    1,
 								FailureThreshold:    3,
 							},
-							ReadinessProbe: &v1.Probe{
-								ProbeHandler: v1.ProbeHandler{
-									HTTPGet: &v1.HTTPGetAction{
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
 										Path:   "/health",
 										Port:   intstr.FromInt(80),
-										Scheme: v1.URISchemeHTTP,
+										Scheme: corev1.URISchemeHTTP,
 									},
 								},
 								InitialDelaySeconds: 5,
@@ -309,7 +304,7 @@ func wasmServerDeployment(kObj *kuadrantv1beta1.Kuadrant) *appsv1.Deployment {
 								SuccessThreshold:    1,
 								FailureThreshold:    3,
 							},
-							ImagePullPolicy: v1.PullIfNotPresent,
+							ImagePullPolicy: corev1.PullIfNotPresent,
 						},
 					},
 				},

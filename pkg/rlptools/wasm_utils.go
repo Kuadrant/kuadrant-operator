@@ -283,6 +283,16 @@ func WASMPluginMutator(existingObj, desiredObj client.Object) (bool, error) {
 		return false, err
 	}
 
+	if desired.Spec.Sha256 != existing.Spec.Sha256 {
+		update = true
+		existing.Spec.Sha256 = desired.Spec.Sha256
+	}
+
+	if desired.Spec.Url != existing.Spec.Url {
+		update = true
+		existing.Spec.Url = desired.Spec.Url
+	}
+
 	// TODO(eastizle): reflect.DeepEqual does not work well with lists without order
 	if !reflect.DeepEqual(desiredWASMPlugin, existingWASMPlugin) {
 		update = true

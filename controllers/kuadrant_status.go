@@ -9,7 +9,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -193,11 +192,11 @@ func (r *KuadrantReconciler) checkWasmServerAvailable(ctx context.Context, kObj 
 	dKey := client.ObjectKeyFromObject(desiredDeployment)
 	deployment := &appsv1.Deployment{}
 	err := r.Client().Get(ctx, dKey, deployment)
-	if err != nil && !apierrors.IsNotFound(err) {
+	if err != nil && !errors.IsNotFound(err) {
 		return nil, err
 	}
 
-	if err != nil && apierrors.IsNotFound(err) {
+	if err != nil && errors.IsNotFound(err) {
 		tmp := err.Error()
 		return &tmp, nil
 	}

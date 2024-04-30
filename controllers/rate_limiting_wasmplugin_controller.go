@@ -27,7 +27,6 @@ import (
 	istioextensionsv1alpha1 "istio.io/api/extensions/v1alpha1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -112,7 +111,7 @@ func (r *RateLimitingWASMPluginReconciler) Reconcile(eventCtx context.Context, r
 		return ctrl.Result{}, nil
 	}
 
-	logger.Info("wasm server", "sha256", sha256)
+	logger.Info("wasm server", "sha256", *sha256, "image", WASMServerImageURL)
 
 	desired, err := r.desiredRateLimitingWASMPlugin(ctx, gw, *sha256, kObj)
 	if err != nil {
@@ -135,7 +134,7 @@ func (r *RateLimitingWASMPluginReconciler) getWasmSHA256(ctx context.Context, kO
 	}
 
 	configMapKey := client.ObjectKey{Name: WasmServerDeploymentName(kObj), Namespace: kObj.Namespace}
-	configMap := &v1.ConfigMap{}
+	configMap := &corev1.ConfigMap{}
 	if err := r.Client().Get(ctx, configMapKey, configMap); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.V(1).Info("getWasmSHA256: no configmap found", "configmapKey", configMapKey)
@@ -442,7 +441,7 @@ func wasmSha256ConfigMaptoGateways(baselogger logr.Logger, cl client.Client) han
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		logger := baselogger.WithValues("configmap", client.ObjectKeyFromObject(obj))
 
-		configMap, ok := obj.(*v1.ConfigMap)
+		configMap, ok := obj.(*corev1.ConfigMap)
 		if !ok {
 			logger.Info("cannot map configmap event to gateways", "error", fmt.Sprintf("%T is not a *v1.ConfigMap", obj))
 			return []reconcile.Request{}

@@ -1,3 +1,5 @@
+//go:build unit
+
 package controllers
 
 import (
@@ -28,8 +30,8 @@ func TestTLSPolicyReconciler_enforcedCondition(t *testing.T) {
 		ns              = "default"
 		tlsPolicyName   = "kuadrant-tls-policy"
 		issuerName      = "kuadrant-issuer"
-		gwName          = "kuadrant-gateway"
 		certificateName = "kuadrant-certifcate"
+		gwName          = "kuadrant-gateway"
 	)
 
 	scheme := runtime.NewScheme()

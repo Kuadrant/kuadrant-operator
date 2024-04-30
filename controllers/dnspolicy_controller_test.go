@@ -344,9 +344,9 @@ var _ = Describe("DNSPolicy controller", func() {
 						}),
 						MatchFields(IgnoreExtras, Fields{
 							"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
-							"Status":  Equal(metav1.ConditionTrue),
+							"Status":  Equal(metav1.ConditionFalse),
 							"Reason":  Equal(string(kuadrant.PolicyReasonEnforced)),
-							"Message": Equal("DNSPolicy has been successfully enforced"),
+							"Message": Equal("DNSPolicy has been partially enforced"),
 						})),
 				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())

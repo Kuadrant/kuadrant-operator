@@ -107,12 +107,14 @@ func AcceptedCondition(p Policy, err error) *metav1.Condition {
 func EnforcedCondition(policy Policy, err PolicyError, allSubresourcesReady bool) *metav1.Condition {
 	// Enforced
 	message := fmt.Sprintf("%s has been successfully enforced", policy.Kind())
+	status := metav1.ConditionTrue
 	if !allSubresourcesReady {
 		message = fmt.Sprintf("%s has been partially enforced", policy.Kind())
+		status = metav1.ConditionFalse
 	}
 	cond := &metav1.Condition{
 		Type:    string(PolicyConditionEnforced),
-		Status:  metav1.ConditionTrue,
+		Status:  status,
 		Reason:  string(PolicyReasonEnforced),
 		Message: message,
 	}

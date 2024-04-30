@@ -2,7 +2,7 @@ apiVersion: kuadrant.io/v1alpha1
 kind: ManagedZone
 metadata:
   name: ${KUADRANT_ZONE_ROOT_DOMAIN}
-  namespace: gateway
+  namespace: ${DNSPOLICY_NAMESPACE}
 spec:
   id: ${KUADRANT_AWS_DNS_PUBLIC_ZONE_ID}
   domainName: ${KUADRANT_ZONE_ROOT_DOMAIN}
@@ -14,7 +14,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: aws-credentials
-  namespace: gateway
+  namespace: ${DNSPOLICY_NAMESPACE}
 type: "kuadrant.io/aws"
 stringData:
   AWS_ACCESS_KEY_ID: ${KUADRANT_AWS_ACCESS_KEY_ID}

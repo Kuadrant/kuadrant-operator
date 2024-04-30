@@ -80,17 +80,7 @@ kubectl -n ${gatewayNS} create secret generic aws-credentials \
 
 ```bash
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1alpha1
-kind: ManagedZone
-metadata:
-  name: managedzone
-  namespace: ${gatewayNS}
-spec:
-  id: ${zid}
-  domainName: ${rootDomain}
-  description: "Kuadrant managed zone"
-  dnsProviderSecretRef:
-    name: aws-credentials
+dem
 EOF
 ```
 
@@ -401,40 +391,46 @@ kubectl label --overwrite gateway ${gatewayName} kuadrant.io/lb-attribute-geo-co
 
 After some time you can check the geo distribution using the HTTPRoute host `kubectl get httproute api -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}'` via site such as https://dnsmap.io/
 
-## Developer (WIP)
+## Developer
 
-For this part of the walkthrough, we will go through leveraging an Open API Spec (OAS) to define an API and also using the powerful kuadrant OAS extensions to define the routing and the auth and rate limiting requirements. We will then use the `kuadrantctl` tool to generate an AuthPolicy, a HTTPRoute and  a RateLimitPolicy to enforce what is in our OAS. While we use the `kuadrantctl` tool here, it is worth noting that it is not essential. AuthPolicy, RateLimitPolicy and HTTPRoutes can be created independently.
+For this part of the walkthrough, we will go through leveraging an Open API Spec (OAS) to define an API. We will also use the powerful kuadrant OAS extensions to define the routing, the auth and the rate limiting requirements. We will then use the `kuadrantctl` tool to generate an AuthPolicy, a HTTPRoute and  a RateLimitPolicy to apply to our cluster and enforce what is in our OAS. 
+
+Note: While we use the `kuadrantctl` tool here, it is worth noting that it is not essential. AuthPolicy, RateLimitPolicy and HTTPRoutes can also be created independently.
 
 ### Pre Req
 
 - Install kuadrantctl. You can find a compatible binary and download it from the [kuadrantctl releases page](https://github.com/kuadrant/kuadrantctl/releases )
-- Ability to distribute resources to the 2 or more clusters as per platform engineer.
+- Ability to distribute resources to multiple clusters as per platform engineer.
 
 ### Setup HTTPRoute and backend
 
-Copy the following examples to a local location:
-[sample OAS API Key spec](../../examples/oas-apikey.yaml)
-[sample OAS OIDC spec](../../examples/oas-oidc.yaml)
+Copy at least one of the following example OAS to a local location:
+
+[sample OAS ratelimiting and API Key spec](../../examples/oas-apikey.yaml)
+
+[sample OAS ratelimiting and OIDC spec](../../examples/oas-oidc.yaml)
 
 setup some new env vars:
 
 ```
-export oasPath=/path/to/oas.yaml
+export oasPath=/path/to/local/oas.yaml
 
-## below may already be present from the gateway setup
+## below may already be present from the gateway setup but will be needed here also:
 
 export rootDomain=example.com
 export gatewayNS=api-gateway
 ```
 
-Deploy the sample application:
+Deploy the sample toystore application:
 
 ```sh
 kubectl create ns toystore
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/examples/toystore/toystore.yaml -n toystore
 ```
 
-### Use OAS to define our routing
+### Use OAS to define our HTTPRoute rules
+
+Note: for a more in-depth look at the OAS extension take a look at [](https://docs.kuadrant.io/kuadrantctl/)
 
 Ok next we are going to use our OAS to configure our HTTPRoute. Lets use the kuadrantctl to generate our `HTTPRoute`
 
@@ -449,20 +445,20 @@ sed -i -e "s/#rootDomain/$rootDomain/g" $oasPath
 
 kuadrantctl generate gatewayapi httproute --oas=$oasPath | yq -P
 ```
-Happy with the output lets apply to the cluster
+Happy with the output lets apply it to the cluster
 
 ```
 kuadrantctl generate gatewayapi httproute --oas=$oasPath | kubectl apply -f -
 ```
 
-Lets check out new route
+Lets check out new route:
 
 ```
 kubectl get httproute -n toystore -o=yaml
 
 ```
 
-We should see that this route is affected by the `AuthPolicy` and `RateLimitPolicy` on the gateway.
+We should see that this route is affected by the `AuthPolicy` and `RateLimitPolicy` defined as defaults on the gateway.
 
 ```
 - lastTransitionTime: "2024-04-26T13:37:43Z"
@@ -549,32 +545,43 @@ curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  https://$(
 ### OpenID Connect auth flow
 
 
-For this part of the walkthrough, we will use the `kuadrantctl` tool to generate an AuthPolicy that uses an OpenId provider and a RateLimitPolicy that uses some of the jwt values to enforce per user rate limiting. 
-During the platform engineer section we defined some default policies for auth and rate limiting at our gateway, these new developer defined policies will target our APIs HTTPRoute and override the policies for requests to our API endpoints.
+For this part of the walk through, we will use the `kuadrantctl` tool to generate an AuthPolicy that uses an OpenId provider and a RateLimitPolicy that uses some of the jwt values to enforce per user rate limiting. It is important to note that as OpenID requires an external provider, what is shown below should be taken as an example and adapted to your own needs/provider.
 
-Our example Open Api Spec (OAS) leverages kuadrant based extensions. It is these extension that allow you to define routing, and service protection requirements. You can learn more about these extension [here](https://docs.kuadrant.io/kuadrantctl/doc/openapi-kuadrant-extensions/) 
+During the platform engineer section we defined some default policies for auth and rate limiting at our gateway, these new developer defined policies will target our HTTPRoute and override the policies for requests to our API endpoints just as we did for the API Key example.
+
+Our example Open Api Spec (OAS) leverages Kuadrant based extensions. It is these extension that allow you to define routing, and service protection requirements. You can learn more about these extension [here](https://docs.kuadrant.io/kuadrantctl/doc/openapi-kuadrant-extensions/) 
 
 
 ### Pre Reqs
 
 
-- Setup / have an available openid connect provider such as https://www.keycloak.org/ 
+- Setup / have an available openID connect provider such as https://www.keycloak.org/ 
+- Have a realm, client and users set up. For this example we assume a realm in a keycloak instance called `petstore`
+- Copy the oas from [sample OAS ratelimiting and OIDC spec](../../examples/oas-oidc.yaml) to a local location
+
+
+### Setup OpenID AuthPolicy
+
 
 ```
 export openIDHost=some.keycloak.com
-sed -i -e "s/#openIDHost/$openIDHost/g" $oasPath
 ```
 
+**Note the sample OAS has some placeholders for namespaces and domains.**
 
+Replace the placeholders:
 
-
-### Setup HTTPRoute level RateLimits and Auth
+```
+sed -i -e "s/#openIDHost/$openIDHost/g" $oasPath
+sed -i -e "s/#gatewayNS/$gatewayNS/g" $oasPath
+sed -i -e "s/#rootDomain/$rootDomain/g" $oasPath
+```
 
 
 Lets use our OAS and kuadrantctl to generate an AuthPolicy to replace the default on the Gateway.
 
 ```
-kuadrantctl generate kuadrant authpolicy --oas=$oasPath | jq -P
+kuadrantctl generate kuadrant authpolicy --oas=$oasPath | yq -P
 
 ```
 Happy with the output lets apply to the cluster
@@ -594,8 +601,12 @@ export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencode
         -d 'password=p' "https://${openIDHost}/auth/realms/toystore/protocol/openid-connect/token" | jq -r '.access_token')
 ```        
 
+```
+curl -k --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" https://toystore.$rootDomain
 
-### API key flow
+```
+
+### Setup Ratelimiting
 
 
 # TODO

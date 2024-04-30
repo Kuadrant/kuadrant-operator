@@ -101,10 +101,10 @@ kubectl wait istio/default -n istio-system --for="condition=Ready=true"
 Kuadrant provides a set of sample dashboards that use the known metrics exported by kuadrant and gateway components to provide insight into the different areas of your APIs and Gateways. While this is not essential it is recommended that you set up an observability stack. Below are links to the OpenShift docs on this and also a link to help with the setup of Thanos for metrics storage.
 
 OpenShift supports a user facing monitoring stack. This can be cofigured and setup via their documentation
-https://docs.openshift.com/dedicated/observability/monitoring/configuring-the-monitoring-stack.html 
+https://docs.openshift.com/container-platform/4.14/observability/monitoring/configuring-the-monitoring-stack.html
 
 - If you have user workload monitoring enabled. We Recommend configuring  remote write to a central storage system such as Thanos: 
-- [Remote Write Config](https://docs.openshift.com/dedicated/observability/monitoring/configuring-the-monitoring-stack.html#configuring_remote_write_storage_configuring-the-monitoring-stack)
+- [Remote Write Config](https://docs.openshift.com/container-platform/4.14/observability/monitoring/configuring-the-monitoring-stack.html#configuring_remote_write_storage_configuring-the-monitoring-stack)
 
 - [Kube Thanos](https://github.com/thanos-io/kube-thanos)
 
@@ -150,38 +150,12 @@ kubectl -n ingress-gateway create secret generic aws-credentials \
   --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
 ```  
 
-To install the Kuadrant operator:
-
-**Optional**:
-Setup the catalog. Note this step is only needed if you want to use the latest cutting edge.
-```
-
-
-
-kubectl apply -f - <<EOF
-apiVersion: operators.coreos.com/v1alpha1
-kind: CatalogSource
-metadata:
-  name: kuadrant-operator-catalog
-  namespace: kuadrant-system
-spec:
-  sourceType: grpc
-  image: quay.io/kuadrant/kuadrant-operator-catalog:latest
-  displayName: Kuadrant Operators
-  publisher: grpc
-  updateStrategy:
-    registryPoll:
-      interval: 45m
-EOF
-```      
-Install the Kuadrant Operator
+To install the Kuadrant operator:      
 ```
 kubectl apply -f - <<EOF
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
-  annotations:
-    argocd.argoproj.io/sync-wave: "0"
   name: kuadrant-operator
   namespace: kuadrant-system
 spec:
@@ -223,7 +197,7 @@ metadata:
 spec:
   limitador:
     storage:
-      redis:
+      redis-cached:
         configSecretRef:
           name: redis-config 
 EOF          

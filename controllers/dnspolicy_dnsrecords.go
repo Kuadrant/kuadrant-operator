@@ -119,12 +119,12 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *multicluster.GatewayWrap
 	var healthCheckSpec *kuadrantdnsv1alpha1.HealthCheckSpec
 
 	if dnsPolicy.Spec.HealthCheck != nil {
-		healthProtocol = dnsPolicy.Spec.HealthCheck.Protocol
+		healthProtocol = &dnsPolicy.Spec.HealthCheck.Protocol
 		healthCheckSpec = &kuadrantdnsv1alpha1.HealthCheckSpec{
 			Endpoint:         dnsPolicy.Spec.HealthCheck.Endpoint,
-			Port:             dnsPolicy.Spec.HealthCheck.Port,
+			Port:             &dnsPolicy.Spec.HealthCheck.Port,
 			Protocol:         (*kuadrantdnsv1alpha1.HealthProtocol)(healthProtocol),
-			FailureThreshold: dnsPolicy.Spec.HealthCheck.FailureThreshold,
+			FailureThreshold: &dnsPolicy.Spec.HealthCheck.FailureThreshold,
 		}
 	}
 	dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{

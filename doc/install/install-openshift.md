@@ -162,8 +162,8 @@ spec:
   channel: preview
   installPlanApproval: Automatic
   name: kuadrant-operator
-  source: kuadrant-operator-catalog
-  sourceNamespace: kuadrant-system
+  source: community-operators
+  sourceNamespace: openshift-operators
 ---
 kind: OperatorGroup
 apiVersion: operators.coreos.com/v1

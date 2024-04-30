@@ -37,7 +37,7 @@ dockerBinCmd() {
     network=" --network ${KIND_CLUSTER_DOCKER_NETWORK}"
   fi
 
-  echo "$CONTAINER_RUNTIME_BIN run -i --rm -u $UID -v ${TMP_DIR}:${TMP_DIR}${network} -e KUBECONFIG=${TMP_DIR}/kubeconfig --entrypoint=$1 $TOOLS_IMAGE"
+  echo "$CONTAINER_RUNTIME_BIN run -i --rm -u $UID -v ${TMP_DIR}:${TMP_DIR}${network} -e ADDRESS -e KUBECONFIG=${TMP_DIR}/kubeconfig --entrypoint=$1 $TOOLS_IMAGE"
 }
 
 RED='\033[0;31m'

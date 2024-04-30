@@ -27,19 +27,6 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ku
 	return r.reconcileLimitador(ctx, rlp, append(rlpRefs, client.ObjectKeyFromObject(rlp)))
 }
 
-func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy) error {
-	rlpRefs, err := r.TargetRefReconciler.GetAllGatewayPolicyRefs(ctx, rlp)
-	if err != nil {
-		return err
-	}
-
-	rlpRefsWithoutRLP := utils.Filter(rlpRefs, func(rlpRef client.ObjectKey) bool {
-		return rlpRef.Name != rlp.Name || rlpRef.Namespace != rlp.Namespace
-	})
-
-	return r.reconcileLimitador(ctx, rlp, rlpRefsWithoutRLP)
-}
-
 func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, rlpRefs []client.ObjectKey) error {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("reconcileLimitador").WithValues("rlp refs", utils.Map(rlpRefs, func(ref client.ObjectKey) string { return ref.String() }))
@@ -128,6 +115,12 @@ func (r *RateLimitPolicyReconciler) buildRateLimitIndex(ctx context.Context, rlp
 			return nil, err
 		}
 
+		// Want applyOverrides to be called which performs logic for setting the affected status for affected policies
+		// but also want to skip setting this limit if it's marked for deletion
+		if rlp.DeletionTimestamp != nil {
+			continue
+		}
+
 		rateLimitIndex.Set(rlpKey, rlptools.LimitadorRateLimitsFromRLP(rlp))
 	}
 
@@ -141,9 +134,9 @@ func (r *RateLimitPolicyReconciler) applyOverrides(ctx context.Context, rlp *kua
 	// Retrieve affected policies and the number of untargeted routes
 	affectedPolicies, numUnTargetedRoutes := r.getAffectedPoliciesInfo(rlp, t)
 
-	// Filter out current policy from affected policies
+	// Filter out current policy and those that are marked for deletion from affected policies
 	affectedPolicies = utils.Filter(affectedPolicies, func(policy kuadrantgatewayapi.Policy) bool {
-		return policy.GetUID() != rlp.GetUID()
+		return policy.GetUID() != rlp.GetUID() && policy.GetDeletionTimestamp() == nil
 	})
 
 	// Apply overrides based on the type of policy (Gateway or Route)
@@ -156,8 +149,11 @@ func (r *RateLimitPolicyReconciler) applyOverrides(ctx context.Context, rlp *kua
 	// Reconcile status for affected policies
 	for _, policy := range affectedPolicies {
 		p := policy.(*kuadrantv1beta2.RateLimitPolicy)
-		// Override is set -> affected policy is Affected by rlp
-		if kuadrantgatewayapi.IsTargetRefGateway(rlp.GetTargetRef()) && rlp.Spec.Overrides != nil {
+		if rlp.DeletionTimestamp != nil {
+			// RLP is marked for deletion -> can't affect any other policies
+			r.AffectedPolicyMap.RemoveAffectedPolicy(p)
+		} else if kuadrantgatewayapi.IsTargetRefGateway(rlp.GetTargetRef()) && rlp.Spec.Overrides != nil {
+			// Override is set -> affected policy is Affected by rlp
 			r.AffectedPolicyMap.SetAffectedPolicy(p, []client.ObjectKey{client.ObjectKeyFromObject(rlp)})
 		}
 		_, err := r.reconcileStatus(ctx, p, nil)

@@ -201,7 +201,7 @@ func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *ku
 		return err
 	}
 
-	if err := r.deleteLimits(ctx, rlp); err != nil && !apierrors.IsNotFound(err) {
+	if err := r.reconcileLimits(ctx, rlp); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 

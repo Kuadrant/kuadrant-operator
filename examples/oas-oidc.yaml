@@ -6,7 +6,7 @@ info:
   x-kuadrant:
     route:
       name: "toystore"
-      namespace: $gatewayNS
+      namespace: $devNS
       hostnames:
         - toystore.$rootDomain
       parentRefs:

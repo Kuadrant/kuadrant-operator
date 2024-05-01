@@ -344,14 +344,14 @@ kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: api
+  name: toystore
   namespace: ${gatewayNS}
 spec:
   parentRefs:
   - name: ${gatewayName}
     namespace: ${gatewayNS}
   hostnames:
-  - "toys.${rootDomain}"
+  - "toystore.${rootDomain}"
   rules:
   - backendRefs:
     - name: toystore
@@ -378,7 +378,7 @@ kubectl get gateway -n ${gatewayNS} ${gatewayName} -n ${gatewayNS} -o=jsonpath='
 We are using `curl` to hit our endpoint. As we are using LetsEncrypt staging in this example, we pass the `-k` flag:
 
 ```bash
-curl -k -w "%{http_code}" https://$(kubectl get httproute api -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')
+curl -k -w "%{http_code}" https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')
 ```
 
 We should see a `403` response. With our gateway and policies in place, we can now allow other teams to use the gateway:
@@ -410,7 +410,7 @@ kubectl label --overwrite gateway ${gatewayName} kuadrant.io/lb-attribute-geo-co
 After allowing some time for distribution, you can verify the geographic distribution of your traffic using the `HTTPRoute` host with the following command:
 
 ```bash
-kubectl get httproute api -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}'
+kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}'
 ```
 
 To check this, visit a site such as https://dnsmap.io/.
@@ -489,7 +489,7 @@ We should see that this route is affected by the `AuthPolicy` and `RateLimitPoli
 
 ### Test connectivity and deny-all auth 
 
-We'll use  `curl` to hit an endpoint in the toystore app. As we are using LetsEncrypt staging in this example, we pass the `-k` flag:
+We'll use `curl` to hit an endpoint in the toystore app. As we are using LetsEncrypt staging in this example, we pass the `-k` flag:
 
 ```bash
 curl -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys

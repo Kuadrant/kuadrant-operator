@@ -10,7 +10,7 @@ info:
       hostnames:
         - toystore.$rootDomain
       parentRefs:
-        - name: external
+        - name: $gatewayName
           namespace: $gatewayNS
 servers:
   - url: https://toystore.$rootDomain/v1

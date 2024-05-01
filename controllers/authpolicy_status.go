@@ -71,6 +71,7 @@ func (r *AuthPolicyReconciler) calculateStatus(ctx context.Context, ap *api.Auth
 
 	// Do not set enforced condition if Accepted condition is false
 	if meta.IsStatusConditionFalse(newStatus.Conditions, string(gatewayapiv1alpha2.PolicyReasonAccepted)) {
+		meta.RemoveStatusCondition(&newStatus.Conditions, string(kuadrant.PolicyConditionEnforced))
 		return newStatus
 	}
 

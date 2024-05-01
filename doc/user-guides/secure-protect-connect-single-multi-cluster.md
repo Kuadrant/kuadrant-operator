@@ -2,7 +2,7 @@
 
 ## Overview
 
-In this guide, we will walk you through using Kuadrant to secure, protect and connect an API exposed by a Gateway API Gateway. You can use this walkthrough for a Gateway on a single or a Gateway distributed across multiple clusters that have a shared listener hostname. We will take the approach of assuming certain personas and how they can each utilise Kuadrant to achieve their goals.
+This guide walks you through using Kuadrant to secure, protect, and connect an API exposed by a Gateway using Kubernetes Gateway API. You can use this walkthrough for a Gateway on a single cluster or a Gateway distributed across multiple clusters with a shared listener hostname. This guide shows how specific user personas can each use Kuadrant to achieve their goals.
 
 ## Pre-requisites
 

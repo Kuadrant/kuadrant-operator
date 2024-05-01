@@ -179,7 +179,7 @@ func TestDNSPolicyReconciler_calculateStatus(t *testing.T) {
 								Reason:  string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
 							},
 							{
-								Message: "AuthPolicy has been successfully enforced",
+								Message: "DNSPolicy has been successfully enforced",
 								Type:    string(kuadrant.PolicyConditionEnforced),
 								Status:  metav1.ConditionTrue,
 								Reason:  string(kuadrant.PolicyConditionEnforced),
@@ -187,12 +187,12 @@ func TestDNSPolicyReconciler_calculateStatus(t *testing.T) {
 						},
 					},
 				},
-				specErr: kuadrant.NewErrInvalid("placeholder", errors.New("placeholder")),
+				specErr: kuadrant.NewErrInvalid("DNSPolicy", errors.New("policy Error")),
 			},
 			want: &v1alpha1.DNSPolicyStatus{
 				Conditions: []metav1.Condition{
 					{
-						Message: "placeholder target is invalid: placeholder",
+						Message: "DNSPolicy target is invalid: policy Error",
 						Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
 						Status:  metav1.ConditionFalse,
 						Reason:  string(gatewayapiv1alpha2.PolicyReasonInvalid),

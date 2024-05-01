@@ -37,7 +37,7 @@ func TestRateLimitPolicyReconciler_calculateStatus(t *testing.T) {
 								Reason:  string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
 							},
 							{
-								Message: "AuthPolicy has been successfully enforced",
+								Message: "RateLimitPolicy has been successfully enforced",
 								Type:    string(kuadrant.PolicyConditionEnforced),
 								Status:  metav1.ConditionTrue,
 								Reason:  string(kuadrant.PolicyConditionEnforced),
@@ -45,12 +45,12 @@ func TestRateLimitPolicyReconciler_calculateStatus(t *testing.T) {
 						},
 					},
 				},
-				specErr: kuadrant.NewErrInvalid("placeholder", errors.New("placeholder")),
+				specErr: kuadrant.NewErrInvalid("RateLimitPolicy", errors.New("policy Error")),
 			},
 			want: &kuadrantv1beta2.RateLimitPolicyStatus{
 				Conditions: []metav1.Condition{
 					{
-						Message: "placeholder target is invalid: placeholder",
+						Message: "RateLimitPolicy target is invalid: policy Error",
 						Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
 						Status:  metav1.ConditionFalse,
 						Reason:  string(gatewayapiv1alpha2.PolicyReasonInvalid),

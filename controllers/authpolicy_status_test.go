@@ -47,12 +47,12 @@ func TestAuthPolicyReconciler_calculateStatus(t *testing.T) {
 						},
 					},
 				},
-				specErr: kuadrant.NewErrInvalid("placeholder", errors.New("placeholder")),
+				specErr: kuadrant.NewErrInvalid("AuthPolicy", errors.New("policy Error")),
 			},
 			want: &api.AuthPolicyStatus{
 				Conditions: []metav1.Condition{
 					{
-						Message: "placeholder target is invalid: placeholder",
+						Message: "AuthPolicy target is invalid: policy Error",
 						Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
 						Status:  metav1.ConditionFalse,
 						Reason:  string(gatewayapiv1alpha2.PolicyReasonInvalid),

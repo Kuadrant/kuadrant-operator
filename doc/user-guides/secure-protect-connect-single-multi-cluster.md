@@ -475,7 +475,7 @@ cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute --oas - | ku
 Check our new route:
 
 ```bash
-kubectl get httproute toystore -n ${$devNS} -o=yaml
+kubectl get httproute toystore -n ${devNS} -o=yaml
 ```
 
 We should see that this route is affected by the `AuthPolicy` and `RateLimitPolicy` defined as defaults on the gateway in the gateway namespace.

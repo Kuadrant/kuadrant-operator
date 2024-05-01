@@ -187,8 +187,8 @@ func (in *DNSPolicyStatus) DeepCopyInto(out *DNSPolicyStatus) {
 		*out = new(HealthCheckStatus)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.ProbeConditions != nil {
-		in, out := &in.ProbeConditions, &out.ProbeConditions
+	if in.RecordConditions != nil {
+		in, out := &in.RecordConditions, &out.RecordConditions
 		*out = make(map[string][]v1.Condition, len(*in))
 		for key, val := range *in {
 			var outVal []v1.Condition

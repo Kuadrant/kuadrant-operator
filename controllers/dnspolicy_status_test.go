@@ -94,7 +94,7 @@ func TestPropagateRecordConditions(t *testing.T) {
 			},
 			PolicyStatus: &v1alpha1.DNSPolicyStatus{},
 			Validate: func(t *testing.T, policyStatus *v1alpha1.DNSPolicyStatus) {
-				if conditions, ok := policyStatus.ProbeConditions[rootHost]; ok {
+				if conditions, ok := policyStatus.RecordConditions[rootHost]; ok {
 					t.Fatalf("expected no probe conditions for root host, found %v", len(conditions))
 				}
 			},
@@ -127,7 +127,7 @@ func TestPropagateRecordConditions(t *testing.T) {
 			},
 			PolicyStatus: &v1alpha1.DNSPolicyStatus{},
 			Validate: func(t *testing.T, policyStatus *v1alpha1.DNSPolicyStatus) {
-				if conditions, ok := policyStatus.ProbeConditions[rootHost]; !ok {
+				if conditions, ok := policyStatus.RecordConditions[rootHost]; !ok {
 					t.Fatalf("expected probe conditions for root host, found none")
 				} else {
 					if len(conditions) != 2 {

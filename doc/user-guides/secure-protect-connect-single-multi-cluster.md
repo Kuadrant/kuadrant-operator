@@ -628,6 +628,12 @@ Lastly let us generate our `RateLimitPolicy` to add our rate-limits, based on ou
 
 https://docs.kuadrant.io/kuadrant-operator/doc/user-guides/authenticated-rl-with-jwt-and-k8s-authnz/
 
+We will continue to use this sample OAS document, which includes both authentication and a rate limit:
+
+```bash
+export oasPath=examples/oas-oidc.yaml
+```
+
 ```bash
 cat $oasPath | envsubst | kuadrantctl generate kuadrant ratelimitpolicy --oas -
 ```
@@ -660,10 +666,9 @@ API Key Auth:
 for i in {1..3}
 do
 printf "request $i "
-curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  "https://$(k get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 printf "\n -- \n"
 done 
-
 ```
 
 and with OpenID Connect Auth:

@@ -437,7 +437,7 @@ Copy at least one of the following example OAS to a local location:
 Setup some new env vars:
 
 ```bash
-export oasPath=/path/to/local/oas.yaml
+export oasPath=examples/oas-apikey.yaml
 # Ensure you still have these environment variables setup from the start of this guide:
 export rootDomain=example.com
 export gatewayNS=api-gateway
@@ -493,7 +493,7 @@ We should see that this route is affected by the `AuthPolicy` and `RateLimitPoli
 We'll use `curl` to hit an endpoint in the toystore app. As we are using LetsEncrypt staging in this example, we pass the `-k` flag:
 
 ```bash
-curl -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 We are getting a `403` because of the existing default, deny-all `AuthPolicy` applied at the Gateway. Let's override this for our `HTTPRoute`.
@@ -535,13 +535,13 @@ cat $oasPath | envsubst | kuadrantctl generate kuadrant authpolicy --oas -  | ku
 We should get a `200` from the `GET`, as it has no auth requirement:
 
 ```bash
-curl -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 We should get a `401` for a `POST` request, as it does not have any auth requirements:
 
 ```bash
-curl -XPOST -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -XPOST -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 Finally, if we add our API key header, with a valid key, we should get a `200` response:
@@ -570,8 +570,8 @@ Our example Open API Specification (OAS) utilizes Kuadrant-based extensions. The
 
 ```bash
 export openIDHost=some.keycloak.com
+export oasPath=examples/oas-oidc.yaml
 ```
-
 
 > **Note:** the sample OAS has some placeholders for namespaces and domains - we will inject valid values into these placeholders based on our previous env vars
 
@@ -611,13 +611,13 @@ export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencode
 ```        
 
 ```bash
-curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null "https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 You should see a `401` response code. Make a request with a valid bearer token:
 
 ```bash
-curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" "https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 You should see a `200` response code.
@@ -629,7 +629,7 @@ Lastly let us generate our `RateLimitPolicy` to add our rate-limits, based on ou
 https://docs.kuadrant.io/kuadrant-operator/doc/user-guides/authenticated-rl-with-jwt-and-k8s-authnz/
 
 ```bash
-kuadrantctl generate kuadrant ratelimitpolicy --oas=$oasPath | yq -P
+cat $oasPath | envsubst | kuadrantctl generate kuadrant ratelimitpolicy --oas -
 ```
 
 You should see we have an artificial limit of 1 request per 5 seconds for the `GET` and 1 request per 10 seconds for the `POST` endpoint.
@@ -637,7 +637,7 @@ You should see we have an artificial limit of 1 request per 5 seconds for the `G
 Apply this to the cluster:
 
 ```bash
-kuadrantctl generate kuadrant ratelimitpolicy --oas=$oasPath | kubectl apply -f -
+cat $oasPath | envsubst | kuadrantctl generate kuadrant ratelimitpolicy --oas - | kubectl apply -f -
 ```
 
 Again, we should see the rate limit policy accepted and enforced:

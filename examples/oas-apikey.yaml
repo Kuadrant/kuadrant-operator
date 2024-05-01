@@ -8,12 +8,12 @@ info:
       name: "toystore"
       namespace: "toystore"
       hostnames:
-        - toystore.#rootDomain
+        - toystore.$rootDomain
       parentRefs:
         - name: external
-          namespace: #gatewayNS
+          namespace: $gatewayNS
 servers:
-  - url: https://toystore.#rootDomain/v1
+  - url: https://toystore.$rootDomain/v1
 paths:
   /toys:
     get:  # No sec requirements

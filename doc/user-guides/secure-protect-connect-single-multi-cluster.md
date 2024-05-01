@@ -534,7 +534,7 @@ kuadrantctl generate kuadrant authpolicy --oas=$oasPath  | kubectl apply -f -
 We should get a `200` from the `GET`, as it has no auth requirement:
 
 ```bash
-curl -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
 200
 ```
 
@@ -548,7 +548,7 @@ curl -XPOST -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httprout
 Finally, if we add our API key header, with a valid key, we should get a `200` response:
 
 ```bash
-curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}" https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
 200
 ```
 

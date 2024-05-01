@@ -44,6 +44,7 @@ export zid=change-this-to-your-zone-id
 export rootDomain=example.com
 export gatewayNS=api-gateway
 export gatewayName=external
+export devNS=toystore
 export AWS_ACCESS_KEY_ID=xxxx
 export AWS_SECRET_ACCESS_KEY=xxxx
 export AWS_REGION=us-east-1
@@ -421,6 +422,12 @@ In this section of the walkthrough, we will focus on using an Open API Specifica
 
 **Note:** While we use the `kuadrantctl` tool here, it is worth noting that it is not essential. `AuthPolicy`, `RateLimitPolicy` and `HTTPRoute`'s can also be created and applied via `oc` or `kubectl`.
 
+To begin, we'll deploy a new version of the `toystore` app to a developer namespace:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml -n ${devNS}
+```
+
 ### Pre Req
 
 - Install `kuadrantctl`. You can find a compatible binary and download it from the [kuadrantctl releases page](https://github.com/Kuadrant/kuadrantctl/releases/tag/v0.2.2)
@@ -468,7 +475,7 @@ cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute --oas - | ku
 Check our new route:
 
 ```bash
-kubectl get httproute -n ${gatewayNS} -o=yaml
+kubectl get httproute toystore -n ${$devNS} -o=yaml
 ```
 
 We should see that this route is affected by the `AuthPolicy` and `RateLimitPolicy` defined as defaults on the gateway in the gateway namespace.
@@ -493,7 +500,7 @@ We should see that this route is affected by the `AuthPolicy` and `RateLimitPoli
 We'll use `curl` to hit an endpoint in the toystore app. As we are using LetsEncrypt staging in this example, we pass the `-k` flag:
 
 ```bash
-curl -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
+curl -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n ${$devNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 We are getting a `403` because of the existing default, deny-all `AuthPolicy` applied at the Gateway. Let's override this for our `HTTPRoute`.
@@ -510,7 +517,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: toystore-api-key
-  namespace: ${gatewayNS}
+  namespace: ${$devNS}
   labels:
     authorino.kuadrant.io/managed-by: authorino
     kuadrant.io/apikeys-by: api_key
@@ -535,19 +542,19 @@ cat $oasPath | envsubst | kuadrantctl generate kuadrant authpolicy --oas -  | ku
 We should get a `200` from the `GET`, as it has no auth requirement:
 
 ```bash
-curl -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
+curl -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n ${$devNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 We should get a `401` for a `POST` request, as it does not have any auth requirements:
 
 ```bash
-curl -XPOST -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
+curl -XPOST -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n ${$devNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 Finally, if we add our API key header, with a valid key, we should get a `200` response:
 
 ```bash
-curl -XPOST -H 'api_key: secret' -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
+curl -XPOST -H 'api_key: secret' -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n ${$devNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 ### OpenID Connect auth flow (skip if your only interested in the API Key)
@@ -590,13 +597,13 @@ cat $oasPath | envsubst | kuadrantctl generate kuadrant authpolicy --oas - | kub
 We should see in the status of the `AuthPolicy` that it has been accepted and enforced:
 
 ```bash
-kubectl get authpolicy -n toystore toystore -o=jsonpath='{.status.conditions}'
+kubectl get authpolicy -n ${$devNS} toystore -o=jsonpath='{.status.conditions}'
 ```
 
 On our `HTTPRoute`, we should also see it now affected by this `AuthPolicy` in the toystore namespace:
 
 ```bash
-kubectl get httproute toystore -n toystore -o=jsonpath='{.status.parents[0].conditions[?(@.type=="kuadrant.io/AuthPolicyAffected")].message}'
+kubectl get httproute toystore -n ${$devNS} -o=jsonpath='{.status.parents[0].conditions[?(@.type=="kuadrant.io/AuthPolicyAffected")].message}'
 ```
 
 Let's now test our `AuthPolicy`:
@@ -611,13 +618,13 @@ export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencode
 ```        
 
 ```bash
-curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null "https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
+curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null "https://$(kubectl get httproute toystore -n ${$devNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 You should see a `401` response code. Make a request with a valid bearer token:
 
 ```bash
-curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" "https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
+curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" "https://$(kubectl get httproute toystore -n ${$devNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 You should see a `200` response code.
@@ -649,12 +656,12 @@ cat $oasPath | envsubst | kuadrantctl generate kuadrant ratelimitpolicy --oas - 
 Again, we should see the rate limit policy accepted and enforced:
 
 ```bash
-kubectl get ratelimitpolicy -n toystore toystore -o=jsonpath='{.status.conditions}'
+kubectl get ratelimitpolicy -n ${$devNS} toystore -o=jsonpath='{.status.conditions}'
 ```
 On our `HTTPoute` we should now see it is affected by the RateLimitPolicy in the same namespace:
 
 ```bash
-kubectl get httproute toystore -n toystore -o=jsonpath='{.status.parents[0].conditions[?(@.type=="kuadrant.io/RateLimitPolicyAffected")].message}'
+kubectl get httproute toystore -n ${$devNS} -o=jsonpath='{.status.parents[0].conditions[?(@.type=="kuadrant.io/RateLimitPolicyAffected")].message}'
 ```
 
 Let's now test our rate-limiting.
@@ -668,7 +675,7 @@ API Key Auth:
 for i in {1..3}
 do
 printf "request $i "
-curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  "https://$(k get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
+curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  "https://$(k get httproute toystore -n ${$devNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 printf "\n -- \n"
 done 
 ```
@@ -687,7 +694,7 @@ export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencode
 ```bash
 for i in {1..3}
 do
-curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" https://$(kubectl get httproute toystore -n ${$devNS}-o=jsonpath='{.spec.hostnames[0]}')/v1/toys
 done
 ```
 

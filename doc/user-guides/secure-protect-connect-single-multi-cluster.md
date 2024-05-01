@@ -548,7 +548,7 @@ curl -XPOST -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httprout
 Finally, if we add our API key header, with a valid key, we should get a `200` response:
 
 ```bash
-curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}" https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}" https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
 200
 ```
 

@@ -2,9 +2,9 @@
 
 Note these steps need to be taken on each cluster you want to use Kuadrant on.
 
-## Pre Requisites
+## Prerequisites
 
-- OpenShift 4.14.x with community operator catalog available
+- OpenShift Container Platform 4.14.x or later with community Operator catalog available
 - AWS account with Route 53 and zone 
 - Accessible Redis Instance
 

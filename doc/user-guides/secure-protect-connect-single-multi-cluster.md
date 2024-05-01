@@ -288,7 +288,7 @@ Let's check the programmed state of our gateway listener once more:
 kubectl get gateway ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.listeners[0].conditions[?(@.type=="Programmed")].message}'
 ```
 
-We should have no errors. **Note:** it can take a minute or two for the LetsEncypt ACME certificate to be issued
+We should have a `no errors` response. **Note:** it can take a minute or two for the LetsEncypt ACME certificate to be issued
 
 ### Setup our DNS
 
@@ -344,14 +344,14 @@ kubectl apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: toystore
+  name: test
   namespace: ${gatewayNS}
 spec:
   parentRefs:
   - name: ${gatewayName}
     namespace: ${gatewayNS}
   hostnames:
-  - "toystore.${rootDomain}"
+  - "test.${rootDomain}"
   rules:
   - backendRefs:
     - name: toystore
@@ -378,7 +378,7 @@ kubectl get gateway -n ${gatewayNS} ${gatewayName} -n ${gatewayNS} -o=jsonpath='
 We are using `curl` to hit our endpoint. As we are using LetsEncrypt staging in this example, we pass the `-k` flag:
 
 ```bash
-curl -k -w "%{http_code}" https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')
+curl -k -w "%{http_code}" https://$(kubectl get httproute test -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')
 ```
 
 We should see a `403` response. With our gateway and policies in place, we can now allow other teams to use the gateway:

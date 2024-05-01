@@ -97,7 +97,7 @@ Kuadrant provides a set of sample dashboards that use the known metrics exported
 
 OpenShift supports a user facing monitoring stack. This can be cofigured and setup this documentation:
 
-https://docs.openshift.com/container-platform/4.14/observability/monitoring/configuring-the-monitoring-stack.html
+https://docs.openshift.com/container-platform/latest/observability/monitoring/configuring-the-monitoring-stack.html
 
 If you have user workload monitoring enabled. We Recommend configuring  remote write to a central storage system such as Thanos: 
 - [Remote Write Config](https://docs.openshift.com/container-platform/latest/observability/monitoring/configuring-the-monitoring-stack.html#configuring_remote_write_storage_configuring-the-monitoring-stack)

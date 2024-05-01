@@ -18,7 +18,6 @@ package v1alpha1
 
 import (
 	"fmt"
-	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -205,19 +204,7 @@ func (p *DNSPolicy) Validate() error {
 		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *p.Spec.TargetRef.Namespace)
 	}
 
-	if p.Spec.HealthCheck != nil {
-		return p.Spec.HealthCheck.Validate()
-	}
-
 	return nil
-}
-
-// Default sets default values for the fields in the resource. Compatible with
-// the defaulting interface used by webhooks
-func (p *DNSPolicy) Default() {
-	if p.Spec.HealthCheck != nil {
-		p.Spec.HealthCheck.Default()
-	}
 }
 
 //+kubebuilder:object:root=true
@@ -239,37 +226,20 @@ func (l *DNSPolicyList) GetItems() []kuadrant.Policy {
 // By default, this health check will be applied to each unique DNS A Record for
 // the listeners assigned to the target gateway
 type HealthCheckSpec struct {
-	Endpoint                  string           `json:"endpoint,omitempty"`
-	Port                      *int             `json:"port,omitempty"`
-	Protocol                  *string          `json:"protocol,omitempty"`
-	FailureThreshold          *int             `json:"failureThreshold,omitempty"`
-	AdditionalHeadersRef      *string          `json:"additionalHeadersRef,omitempty"`
-	ExpectedResponses         []int            `json:"expectedResponses,omitempty"`
-	AllowInsecureCertificates bool             `json:"allowInsecureCertificates,omitempty"`
-	Interval                  *metav1.Duration `json:"interval,omitempty"`
-}
-
-func (s *HealthCheckSpec) Validate() error {
-	if s.Interval != nil {
-		if s.Interval.Duration < (time.Second * 5) {
-			return fmt.Errorf("invalid value for spec.healthCheckSpec.interval %v, it cannot be shorter than 5s", s.Interval.Duration)
-		}
-	}
-
-	return nil
-}
-
-func (s *HealthCheckSpec) Default() {
-	if s.Interval == nil {
-		s.Interval = &metav1.Duration{
-			Duration: time.Second * 30,
-		}
-	}
-
-	if s.Protocol == nil {
-		protocol := "HTTPS"
-		s.Protocol = &protocol
-	}
+	// Endpoint is the path to append to the host to reach the expected health check.
+	// For example "/" or "/healthz" are common
+	// +kubebuilder:example:=/
+	Endpoint string `json:"endpoint"`
+	// Port to connect to the host on
+	// +kubebuilder:validation:Minimum:=1
+	Port int `json:"port"`
+	// Protocol to use when connecting to the host, valid values are "HTTP" or "HTTPS"
+	// +kubebuilder:validation:Enum:=HTTP;HTTPS
+	Protocol string `json:"protocol"`
+	// FailureThreshold is a limit of consecutive failures that must occur for a host
+	// to be considered unhealthy
+	// +kubebuilder:validation:Minimum:=1
+	FailureThreshold int `json:"failureThreshold"`
 }
 
 type HealthCheckStatus struct {
@@ -330,16 +300,12 @@ func (p *DNSPolicy) WithTargetGateway(gwName string) *DNSPolicy {
 
 //HealthCheck
 
-func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port *int, protocol string, failureThreshold *int) *DNSPolicy {
+func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port int, protocol string, failureThreshold int) *DNSPolicy {
 	return p.WithHealthCheck(HealthCheckSpec{
-		Endpoint:                  endpoint,
-		Port:                      port,
-		Protocol:                  &protocol,
-		FailureThreshold:          failureThreshold,
-		AdditionalHeadersRef:      nil,
-		ExpectedResponses:         nil,
-		AllowInsecureCertificates: false,
-		Interval:                  nil,
+		Endpoint:         endpoint,
+		Port:             port,
+		Protocol:         protocol,
+		FailureThreshold: failureThreshold,
 	})
 }
 

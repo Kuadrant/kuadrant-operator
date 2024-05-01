@@ -131,8 +131,6 @@ func (r *DNSPolicyReconciler) reconcileResources(ctx context.Context, dnsPolicy 
 		return err
 	}
 
-	dnsPolicy.Default()
-
 	// reconcile based on gateway diffs
 	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), dnsPolicy, targetNetworkObject)
 	if err != nil {

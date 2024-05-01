@@ -66,24 +66,34 @@ spec:
                   By default, this health check will be applied to each unique DNS A Record for
                   the listeners assigned to the target gateway
                 properties:
-                  additionalHeadersRef:
-                    type: string
-                  allowInsecureCertificates:
-                    type: boolean
                   endpoint:
+                    description: |-
+                      Endpoint is the path to append to the host to reach the expected health check.
+                      For example "/" or "/healthz" are common
+                    example: /
                     type: string
-                  expectedResponses:
-                    items:
-                      type: integer
-                    type: array
                   failureThreshold:
+                    description: |-
+                      FailureThreshold is a limit of consecutive failures that must occur for a host
+                      to be considered unhealthy
+                    minimum: 1
                     type: integer
-                  interval:
-                    type: string
                   port:
+                    description: Port to connect to the host on
+                    minimum: 1
                     type: integer
                   protocol:
+                    description: Protocol to use when connecting to the host, valid
+                      values are "HTTP" or "HTTPS"
+                    enum:
+                    - HTTP
+                    - HTTPS
                     type: string
+                required:
+                - endpoint
+                - failureThreshold
+                - port
+                - protocol
                 type: object
               loadBalancing:
                 properties:

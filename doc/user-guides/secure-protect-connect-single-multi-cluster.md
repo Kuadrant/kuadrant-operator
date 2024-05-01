@@ -659,6 +659,8 @@ kubectl get httproute toystore -n toystore -o=jsonpath='{.status.parents[0].cond
 
 Let's now test our rate-limiting.
 
+Note you may need to wait a minute for the new rate limits to be applied. With the below requests you should see some number of 429 responses.
+
 
 API Key Auth:
 

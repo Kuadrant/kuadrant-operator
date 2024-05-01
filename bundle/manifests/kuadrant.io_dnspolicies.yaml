@@ -401,7 +401,7 @@ spec:
                   recorded in the status condition
                 format: int64
                 type: integer
-              probeConditions:
+              recordConditions:
                 additionalProperties:
                   items:
                     description: "Condition contains details for one aspect of the

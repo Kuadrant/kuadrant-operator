@@ -133,7 +133,7 @@ type DNSPolicyStatus struct {
 	HealthCheck *HealthCheckStatus `json:"healthCheck,omitempty"`
 
 	// +optional
-	ProbeConditions map[string][]metav1.Condition `json:"probeConditions,omitempty"`
+	RecordConditions map[string][]metav1.Condition `json:"recordConditions,omitempty"`
 }
 
 func (s *DNSPolicyStatus) GetConditions() []metav1.Condition {

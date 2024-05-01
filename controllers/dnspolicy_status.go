@@ -81,6 +81,8 @@ func (r *DNSPolicyReconciler) calculateStatus(ctx context.Context, dnsPolicy *v1
 	}
 
 	recordsList := &kuadrantdnsv1alpha1.DNSRecordList{}
+	controlledRecords := &kuadrantdnsv1alpha1.DNSRecordList{}
+
 	var enforcedCondition *metav1.Condition
 	if err := r.Client().List(ctx, recordsList); err != nil {
 		enforcedCondition = kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(dnsPolicy.Kind(), err), false)
@@ -90,7 +92,15 @@ func (r *DNSPolicyReconciler) calculateStatus(ctx context.Context, dnsPolicy *v1
 
 	meta.SetStatusCondition(&newStatus.Conditions, *enforcedCondition)
 
-	propagateRecordConditions(recordsList, newStatus)
+	for _, record := range recordsList.Items {
+		for _, reference := range record.GetOwnerReferences() {
+			if reference.Controller != nil && *reference.Controller && reference.Name == dnsPolicy.Name && reference.UID == dnsPolicy.UID {
+				controlledRecords.Items = append(controlledRecords.Items, record)
+			}
+		}
+	}
+
+	propagateRecordConditions(controlledRecords, newStatus)
 
 	return newStatus
 }
@@ -124,7 +134,7 @@ func (r *DNSPolicyReconciler) enforcedCondition(recordsList *kuadrantdnsv1alpha1
 
 func propagateRecordConditions(records *kuadrantdnsv1alpha1.DNSRecordList, policyStatus *v1alpha1.DNSPolicyStatus) {
 	//reset conditions
-	policyStatus.ProbeConditions = map[string][]metav1.Condition{}
+	policyStatus.RecordConditions = map[string][]metav1.Condition{}
 
 	for _, record := range records.Items {
 		var allConditions []metav1.Condition
@@ -151,8 +161,8 @@ func propagateRecordConditions(records *kuadrantdnsv1alpha1.DNSRecordList, polic
 				continue
 			}
 
-			policyStatus.ProbeConditions[*record.Spec.RootHost] = append(
-				policyStatus.ProbeConditions[*record.Spec.RootHost],
+			policyStatus.RecordConditions[*record.Spec.RootHost] = append(
+				policyStatus.RecordConditions[*record.Spec.RootHost],
 				condition)
 		}
 	}

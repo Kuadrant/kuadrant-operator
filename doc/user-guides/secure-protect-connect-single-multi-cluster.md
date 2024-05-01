@@ -427,7 +427,7 @@ Copy at least one of the following example OAS to a local location:
 
 setup some new env vars:
 
-```
+```bash
 export oasPath=/path/to/local/oas.yaml
 
 ## below may already be present from the gateway setup but will be needed here also:
@@ -453,22 +453,18 @@ Ok next we are going to use our OAS to configure our HTTPRoute. Lets use the kua
 
 Replace the placeholders:
 
-```
-sed -i -e "s/#gatewayNS/$gatewayNS/g" $oasPath
-sed -i -e "s/#rootDomain/$rootDomain/g" $oasPath
-
-
-kuadrantctl generate gatewayapi httproute --oas=$oasPath | yq -P
+```bash
+cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute -o json --oas -
 ```
 Happy with the output lets apply it to the cluster
 
-```
-kuadrantctl generate gatewayapi httproute --oas=$oasPath | kubectl apply -f -
+```bash
+cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute -o json --oas - | kubectl apply -f -
 ```
 
 Lets check out new route:
 
-```
+```bash
 kubectl get httproute -n toystore -o=yaml
 
 ```

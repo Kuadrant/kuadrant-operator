@@ -1208,57 +1208,74 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 				"AuthPolicy has encountered some issues: AuthScheme is not ready yet")).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
-		It("Overridden reason - Attaches policy to the Gateway while having other policies attached to all HTTPRoutes", func(ctx SpecContext) {
-			routePolicy := policyFactory()
+		Describe("Overridden reason - Route policy takes precedence over GW policy defaults", func() {
+			var (
+				routePolicy *api.AuthPolicy
+				gwPolicy    *api.AuthPolicy
+			)
 
-			err := k8sClient.Create(ctx, routePolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
+			BeforeEach(func(ctx SpecContext) {
+				// Common assertions
+				// GW policy defaults should be overridden with Route policy defaults
 
-			// check route policy status
-			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
+				routePolicy = policyFactory()
+				err := k8sClient.Create(ctx, routePolicy)
+				logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+				Expect(err).ToNot(HaveOccurred())
 
-			// attach policy to the gatewaay
-			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
-				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = testGatewayName
+				// check route policy status
+				Eventually(isAuthPolicyAcceptedAndEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
+
+				// attach policy to the gateway
+				gwPolicy = policyFactory(func(policy *api.AuthPolicy) {
+					policy.Name = "gw-auth"
+					policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+					policy.Spec.TargetRef.Kind = "Gateway"
+					policy.Spec.TargetRef.Name = testGatewayName
+				})
+
+				err = k8sClient.Create(ctx, gwPolicy)
+				logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gwPolicy).String(), "error", err)
+				Expect(err).ToNot(HaveOccurred())
+
+				// check policy status
+				Eventually(isAuthPolicyAccepted(ctx, gwPolicy)).WithContext(ctx).Should(BeTrue())
+				Eventually(
+					assertAcceptedCondTrueAndEnforcedCond(ctx, gwPolicy, metav1.ConditionFalse, string(kuadrant.PolicyReasonOverridden),
+						fmt.Sprintf("AuthPolicy is overridden by [%s/%s]", testNamespace, routePolicy.Name))).WithContext(ctx).Should(BeTrue())
+
+				// check istio authorizationpolicy
+				iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, gwPolicy.Spec.TargetRef), Namespace: testNamespace}
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, iapKey, &secv1beta1resources.AuthorizationPolicy{})
+					logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
+					return apierrors.IsNotFound(err)
+				}).WithContext(ctx).Should(BeTrue())
+
+				// check authorino authconfig
+				authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(gwPolicy)), Namespace: testNamespace}
+				Eventually(func() bool {
+					err := k8sClient.Get(ctx, authConfigKey, &authorinoapi.AuthConfig{})
+					return apierrors.IsNotFound(err)
+				}).WithContext(ctx).Should(BeTrue())
 			})
 
-			err = k8sClient.Create(ctx, gwPolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gwPolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
+			When("New route is attached to Gateway while all other routes have their own route policy", func() {
+				It("Gateway policy should become enforced", func(ctx SpecContext) {
+					route2 := testBuildBasicHttpRoute("route2", testGatewayName, testNamespace, []string{"*.carstore.com"})
+					Expect(k8sClient.Create(ctx, route2)).To(Succeed())
 
-			// check policy status
-			Eventually(isAuthPolicyAccepted(ctx, gwPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(
-				assertAcceptedCondTrueAndEnforcedCond(ctx, gwPolicy, metav1.ConditionFalse, string(kuadrant.PolicyReasonOverridden),
-					fmt.Sprintf("AuthPolicy is overridden by [%s/%s]", testNamespace, routePolicy.Name))).WithContext(ctx).Should(BeTrue())
+					Eventually(isAuthPolicyAcceptedAndEnforced(ctx, gwPolicy)).WithContext(ctx).Should(BeTrue())
+				}, testTimeOut)
+			})
 
-			// check istio authorizationpolicy
-			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(testGatewayName, gwPolicy.Spec.TargetRef), Namespace: testNamespace}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, iapKey, &secv1beta1resources.AuthorizationPolicy{})
-				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
-				return apierrors.IsNotFound(err)
-			}).WithContext(ctx).Should(BeTrue())
-
-			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(gwPolicy)), Namespace: testNamespace}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, authConfigKey, &authorinoapi.AuthConfig{})
-				return apierrors.IsNotFound(err)
-			}).WithContext(ctx).Should(BeTrue())
-
-			// GW Policy should go back to being enforced when a HTTPRoute with no AP attached becomes available
-			route2 := testBuildBasicHttpRoute("route2", testGatewayName, testNamespace, []string{"*.carstore.com"})
-
-			err = k8sClient.Create(ctx, route2)
-			Expect(err).ToNot(HaveOccurred())
-
-			Eventually(isAuthPolicyAcceptedAndEnforced(ctx, gwPolicy)).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
+			When("Route policy is deleted", func() {
+				It("Gateway policy should become enforced", func(ctx SpecContext) {
+					Expect(k8sClient.Delete(ctx, routePolicy)).To(Succeed())
+					Eventually(isAuthPolicyAcceptedAndEnforced(ctx, gwPolicy)).WithContext(ctx).Should(BeTrue())
+				}, testTimeOut)
+			})
+		})
 	})
 
 	Context("AuthPolicies configured with overrides", func() {
@@ -1296,6 +1313,10 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			// check policy status
 			Eventually(isAuthPolicyAcceptedAndNotEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 			Eventually(isAuthPolicyEnforcedCondition(ctx, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
+
+			// Delete GW Policy -> Route Policy should become enforced
+			Expect(k8sClient.Delete(ctx, gatewayPolicy)).Should(Succeed())
+			Eventually(isAuthPolicyEnforced(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
 		It("Route AuthPolicy exists and Gateway AuthPolicy with overrides is added.", func(ctx SpecContext) {

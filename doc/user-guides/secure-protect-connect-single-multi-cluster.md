@@ -517,7 +517,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: toystore-api-key
-  namespace: ${$devNS}
+  namespace: ${devNS}
   labels:
     authorino.kuadrant.io/managed-by: authorino
     kuadrant.io/apikeys-by: api_key

@@ -493,7 +493,7 @@ We should see that this route is affected by the `AuthPolicy` and `RateLimitPoli
 We'll use `curl` to hit an endpoint in the toystore app. As we are using LetsEncrypt staging in this example, we pass the `-k` flag:
 
 ```bash
-curl -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
+curl -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 We are getting a `403` because of the existing default, deny-all `AuthPolicy` applied at the Gateway. Let's override this for our `HTTPRoute`.

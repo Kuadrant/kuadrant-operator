@@ -563,7 +563,7 @@ Our example Open API Specification (OAS) utilizes Kuadrant-based extensions. The
 ### Pre Requisites
 
 - Setup / have an available OpenID Connect provider, such as https://www.keycloak.org/ 
-- Have a realm, client and users set up. For this example, we assume a realm in a Keycloak instance called `petstore`
+- Have a realm, client and users set up. For this example, we assume a realm in a Keycloak instance called `toystore`
 - Copy the OAS from [sample OAS rate-limiting and OIDC spec](../../examples/oas-oidc.yaml) to a local location
 
 ### Setup OpenID AuthPolicy
@@ -590,13 +590,13 @@ cat $oasPath | envsubst | kuadrantctl generate kuadrant authpolicy --oas - | kub
 We should see in the status of the `AuthPolicy` that it has been accepted and enforced:
 
 ```bash
-kubectl get authpolicy -n ${gatewayNS} toystore -o=jsonpath='{.status.conditions}'
+kubectl get authpolicy -n toystore toystore -o=jsonpath='{.status.conditions}'
 ```
 
 On our `HTTPRoute`, we should also see it now affected by this `AuthPolicy` in the toystore namespace:
 
 ```bash
-kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.status.parents[0].conditions[?(@.type=="kuadrant.io/AuthPolicyAffected")].message}'
+kubectl get httproute toystore -n toystore -o=jsonpath='{.status.parents[0].conditions[?(@.type=="kuadrant.io/AuthPolicyAffected")].message}'
 ```
 
 Let's now test our `AuthPolicy`:
@@ -611,13 +611,13 @@ export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencode
 ```        
 
 ```bash
-curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null "https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
+curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null "https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 You should see a `401` response code. Make a request with a valid bearer token:
 
 ```bash
-curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" "https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
+curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" "https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
 You should see a `200` response code.
@@ -643,12 +643,12 @@ cat $oasPath | envsubst | kuadrantctl generate kuadrant ratelimitpolicy --oas - 
 Again, we should see the rate limit policy accepted and enforced:
 
 ```bash
-kubectl get ratelimitpolicy -n ${gatewayNS} toystore -o=jsonpath='{.status.conditions}'
+kubectl get ratelimitpolicy -n toystore toystore -o=jsonpath='{.status.conditions}'
 ```
 On our `HTTPoute` we should now see it is affected by the RateLimitPolicy in the same namespace:
 
 ```bash
-kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.status.parents[0].conditions[?(@.type=="kuadrant.io/RateLimitPolicyAffected")].message}'
+kubectl get httproute toystore -n toystore -o=jsonpath='{.status.parents[0].conditions[?(@.type=="kuadrant.io/RateLimitPolicyAffected")].message}'
 ```
 
 Let's now test our rate-limiting.
@@ -660,7 +660,7 @@ API Key Auth:
 for i in {1..3}
 do
 printf "request $i "
-curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
 printf "\n -- \n"
 done 
 
@@ -680,7 +680,7 @@ export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencode
 ```bash
 for i in {1..3}
 do
-curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
 done
 ```
 

@@ -39,7 +39,7 @@ paths:
     x-kuadrant:
       backendRefs:
       - name: toystore
-        namespace: $gatewayNS
+        namespace: toystore
         port: 80 
       rate_limit:
         rates:

@@ -153,7 +153,7 @@ metadata:
   name: ${gatewayName}
   namespace: ${gatewayNS}
   labels:
-    kuadrant.io/gateway: true
+    kuadrant.io/gateway: "true"
 spec:
     gatewayClassName: istio
     listeners:
@@ -423,7 +423,7 @@ In this section of the walkthrough, we will focus on using an Open API Specifica
 
 ### Pre Req
 
-- Install `kuadrantctl`. You can find a compatible binary and download it from the [kuadrantctl releases page](https://github.com/kuadrant/kuadrantctl/releases )
+- Install `kuadrantctl`. You can find a compatible binary and download it from the [kuadrantctl releases page](https://github.com/Kuadrant/kuadrantctl/releases/tag/v0.2.1)
 - Ability to distribute resources generated via `kuadrantctl` to multiple clusters, as though you are a platform engineer.
 
 ### Setup HTTPRoute and backend
@@ -441,6 +441,13 @@ export oasPath=/path/to/local/oas.yaml
 # Ensure you still have these environment variables setup from the start of this guide:
 export rootDomain=example.com
 export gatewayNS=api-gateway
+```
+
+Deploy the sample toystore application, this simple app will represent the service we want to expose via an API:
+
+```sh
+kubectl create ns toystore
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/examples/toystore/toystore.yaml -n toystore
 ```
 
 ### Use OAS to define our HTTPRoute rules
@@ -470,7 +477,7 @@ Check our new route:
 kubectl get httproute -n ${gatewayNS} -o=yaml
 ```
 
-We should see that this route is affected by the `AuthPolicy` and `RateLimitPolicy` defined as defaults on the gateway.
+We should see that this route is affected by the `AuthPolicy` and `RateLimitPolicy` defined as defaults on the gateway in the gateway namespace.
 
 ```yaml
 - lastTransitionTime: "2024-04-26T13:37:43Z"
@@ -521,14 +528,14 @@ EOF
 
 Next, generate an `AuthPolicy` that uses secrets in our cluster as APIKeys:
 
-```bash
-kuadrantctl generate kuadrant authpolicy --oas=$oasPath
+```
+cat $oasPath | envsubst | kuadrantctl generate kuadrant authpolicy -o json --oas - | jq
 ```
 
 From this, we can see an `AuthPolicy` generated based on our OAS that will look for API keys in secrets labeled `api_key` and look for that key in the header `api_key`. Let's now apply this to the gateway:
 
-```bash
-kuadrantctl generate kuadrant authpolicy --oas=$oasPath  | kubectl apply -f -
+```
+cat $oasPath | envsubst | kuadrantctl generate kuadrant authpolicy -o json --oas -  | kubectl apply -f -
 ```
 
 We should get a `200` from the `GET`, as it has no auth requirement:
@@ -538,21 +545,21 @@ curl -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httproute toyst
 200
 ```
 
-We should get a `403` for a `POST` request, as it does not have any auth requirements:
+We should get a `401` for a `POST` request, as it does not have any auth requirements:
 
 ```bash
 curl -XPOST -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
-401
+
 ```
 
 Finally, if we add our API key header, with a valid key, we should get a `200` response:
 
 ```bash
 curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}" https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
-200
 ```
+200
 
-### OpenID Connect auth flow
+### OpenID Connect auth flow (skip if your only interested in the API Key)
 
 
 In this part of the walkthrough, we will use the `kuadrantctl` tool to create an `AuthPolicy` that integrates with an OpenID provider and a `RateLimitPolicy` that leverages JWT values for per-user rate limiting. It's important to note that OpenID requires an external provider; therefore, the following example should be adapted to suit your specific needs and provider.
@@ -588,6 +595,8 @@ If we're happy with the generated resource, let's apply it to the cluster:
 ```bash
 cat $oasPath | envsubst | kuadrantctl generate kuadrant authpolicy --oas - | kubectl apply -f -
 ```
+
+
 
 We should see in the status of the `AuthPolicy` that it has been accepted and enforced:
 

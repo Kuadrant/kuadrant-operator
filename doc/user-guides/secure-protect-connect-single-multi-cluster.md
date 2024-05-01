@@ -542,22 +542,19 @@ We should get a `200` from the `GET`, as it has no auth requirement:
 
 ```bash
 curl -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
-200
 ```
 
 We should get a `401` for a `POST` request, as it does not have any auth requirements:
 
 ```bash
 curl -XPOST -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
-
 ```
 
 Finally, if we add our API key header, with a valid key, we should get a `200` response:
 
 ```bash
-curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}" https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -XPOST -H 'api_key: secret' -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
-200
 
 ### OpenID Connect auth flow (skip if your only interested in the API Key)
 

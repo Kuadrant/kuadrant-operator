@@ -3,12 +3,12 @@
 - [DNSPolicy](#DNSPolicy)
 - [DNSPolicySpec](#dnspolicyspec)
     - [HealthCheckSpec](#healthcheckspec)
-      - [AdditionalHeadersRef](#additionalheadersref)
     - [LoadBalancingSpec](#loadbalancingspec)
       - [LoadBalancingWeighted](#loadbalancingweighted)
         - [CustomWeight](#customweight)
       - [LoadBalancingGeo](#loadbalancinggeo)
 - [DNSPolicyStatus](#dnspolicystatus)
+    - [HealthCheckStatus](#healthcheckstatus)
 
 ## DNSPolicy
 
@@ -19,45 +19,35 @@
 
 ## DNSPolicySpec
 
-| **Field**         | **Type**                                                                                                                                    |  **Required**  | **Description**                                                |
-|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------|:--------------:|----------------------------------------------------------------|
-| `targetRef`       | [Gateway API PolicyTargetReference](https://gateway-api.sigs.k8s.io/geps/gep-713/?h=policytargetreference#policy-targetref-api)    |      Yes       | Reference to a Kuberentes resource that the policy attaches to |
-| `healthCheck`     | [HealthCheckSpec](#healthcheckspec)                                                                                                         |       No       | HealthCheck spec                                               |
-| `loadBalancing`   | [LoadBalancingSpec](#loadbalancingspec)                                                                                                     |       No       | LoadBancking Spec                                              |
-| `routingStrategy` | String (immutable)                                                                                                                                     |      Yes       | **Immutable!** Routing Strategy to use, one of "simple" or "loadbalacned"     |
+| **Field**         | **Type**                                                                                                                          |      **Required**      | **Description**                                                           |
+|-------------------|-----------------------------------------------------------------------------------------------------------------------------------|:----------------------:|---------------------------------------------------------------------------|
+| `targetRef`       | [Gateway API PolicyTargetReference](https://gateway-api.sigs.k8s.io/geps/gep-713/?h=policytargetreference#policy-targetref-api)   |          Yes           | Reference to a Kubernetes resource that the policy attaches to            |
+| `healthCheck`     | [HealthCheckSpec](#healthcheckspec)                                                                                               |           No           | HealthCheck spec                                                          |
+| `loadBalancing`   | [LoadBalancingSpec](#loadbalancingspec)                                                                                           | Yes(loadbalanced only) | LoadBalancing Spec, required when routingStrategy is "loadbalanced"       |
+| `routingStrategy` | String (immutable)                                                                                                                |          Yes           | **Immutable!** Routing Strategy to use, one of "simple" or "loadbalanced" |
 
 ## HealthCheckSpec
 
-| **Field**                   | **Type**                                      | **Description**                                                                                                        |
-|-----------------------------|-----------------------------------------------|------------------------------------------------------------------------------------------------------------------------|
-| `endpoint`                  | String                                        | The endpoint to connect to (e.g. IP address or hostname of a clusters loadbalancer)                                    |
-| `port`                      | Number                                        | The port to use                                                                                                        |
-| `protocol`                  | String                                        | The protocol to use for this request (e.g. Https;Https)                                                                |
-| `failureThreshold`          | Number                                        | Failure Threshold                                                                                                      |
-| `additionalHeadersRef`      | [AdditionalHeadersRef](#additionalheadersref) | Secret ref which contains k/v: headers and their values that can be specified to ensure the health check is successful |
-| `expectedResponses`         | []Number                                      | HTTP response codes that should be considered healthy (defaults are 200 and 201)                                       |
-| `allowInsecureCertificates` | Boolean                                       | Allow using invalid (e.g. self-signed) certificates, default is false                                                  |
-| `interval`                  | [Kubernetes meta/v1.Duration](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Duration)                                          | How frequently this check would ideally be executed                                                                    |
-
-## AdditionalHeadersRef
-
-| **Field** | **Type**   | **Description**                                             |
-|-----------|------------|-------------------------------------------------------------|
-| `name`    | String     | Name of the secret containing additional header information |
+| **Field**          | **Type**   | **Required** | **Description**                                                                                           |
+|--------------------|------------|:------------:|-----------------------------------------------------------------------------------------------------------|
+| `endpoint`         | String     |     Yes      | Endpoint is the path to append to the host to reach the expected health check                             | 
+| `port`             | Number     |     Yes      | Port to connect to the host on                                                                            | 
+| `protocol`         | String     |     Yes      | Protocol to use when connecting to the host, valid values are "HTTP" or "HTTPS"                           | 
+| `failureThreshold` | Number     |     Yes      | FailureThreshold is a limit of consecutive failures that must occur for a host to be considered unhealthy | 
 
 ## LoadBalancingSpec
 
-| **Field**  | **Type**                                        | **Description**       |
-|------------|-------------------------------------------------|-----------------------|
-| `weighted` | [LoadBalancingWeighted](#loadbalancingweighted) | Weighted routing spec |
-| `geo`      | [LoadBalancingGeo](#loadbalancinggeo)           | Geo routing spec      |
+| **Field**  | **Type**                                        | **Required**  | **Description**         |
+|------------|-------------------------------------------------|:-------------:|-------------------------|
+| `weighted` | [LoadBalancingWeighted](#loadbalancingweighted) |      Yes      | Weighted routing spec   |
+| `geo`      | [LoadBalancingGeo](#loadbalancinggeo)           |      Yes      | Geo routing spec        |
 
 ## LoadBalancingWeighted
 
-| **Field**       | **Type**                         | **Description**                                                       |
-|-----------------|----------------------------------|-----------------------------------------------------------------------|
-| `defaultWeight` | Number                           | Default weight to apply to created records                            |
-| `custom`        | [][CustomWeight](#customweight)  | Custom weights to manipulate records weights based on label selectors |
+| **Field**       | **Type**                        | **Required** | **Description**                                                       |
+|-----------------|---------------------------------|:------------:|-----------------------------------------------------------------------|
+| `defaultWeight` | Number                          |     Yes      | Default weight to apply to created records                            |
+| `custom`        | [][CustomWeight](#customweight) |      No      | Custom weights to manipulate records weights based on label selectors |
 
 ## CustomWeight
 
@@ -68,20 +58,21 @@
 
 ## LoadBalancingGeo
 
-| **Field**    | **Type** | **Description**                 |
-|--------------|----------|---------------------------------|
-| `defaultGeo` | String   | Default geo to apply to records |
+| **Field**       | **Type**                        | **Required** | **Description**                 |
+|-----------------|---------------------------------|:------------:|---------------------------------|
+| `defaultGeo` | String                          |     Yes      | Default geo to apply to records |
 
 ## DNSPolicyStatus
 
-| **Field**            | **Type**                                                                                                  | **Description**                                                                                                                     |
-|----------------------|-----------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
-| `observedGeneration` | String                                                                                                    | Number of the last observed generation of the resource. Use it to check if the status info is up to date with latest resource spec. |
-| `conditions`         | [][Kubernetes meta/v1.Condition](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition)       | List of conditions that define that status of the resource.                                                                         |
-| `healthCheck`        | [HealthCheckStatus](#healthcheckstatus)                                                                   | HealthCheck status.                                                                                                                 |
+| **Field**            | **Type**                                                                                                    | **Description**                                                                                                                     |
+|----------------------|-------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `observedGeneration` | String                                                                                                      | Number of the last observed generation of the resource. Use it to check if the status info is up to date with latest resource spec. |
+| `conditions`         | [][Kubernetes meta/v1.Condition](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition)         | List of conditions that define that status of the resource.                                                                         |
+| `healthCheck`        | [HealthCheckStatus](#healthcheckstatus)                                                                     | HealthCheck status.                                                                                                                 |
+| `recordConditions`   | [String][][Kubernetes meta/v1.Condition](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition) | Status of individual DNSRecords owned by this policy.                                                                               |
 
 ## HealthCheckStatus
 
 | **Field**     | **Type**                          | **Description**                                                                                                                     |
 |---------------|-----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
-| `conditions`  | [][Kubernetes meta/v1.Condition](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition)  | List of conditions that define that status of the resource.<br/>                                                                         |
+| `conditions`  | [][Kubernetes meta/v1.Condition](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#Condition)  | List of conditions that define that status of the resource.                                                                         |

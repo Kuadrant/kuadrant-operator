@@ -6,7 +6,7 @@ info:
   x-kuadrant:
     route:
       name: "toystore"
-      namespace: "toystore"
+      namespace: $gatewayNS
       hostnames:
         - toystore.$rootDomain
       parentRefs:
@@ -31,7 +31,7 @@ paths:
     x-kuadrant:
       backendRefs:
       - name: toystore
-        namespace: toystore
+        namespace: $gatewayNS
         port: 80 
       rate_limit:
         rates:

@@ -443,38 +443,31 @@ export rootDomain=example.com
 export gatewayNS=api-gateway
 ```
 
-Deploy the sample toystore application:
-
-```sh
-kubectl create ns toystore
-kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/examples/toystore/toystore.yaml -n toystore
-```
-
 ### Use OAS to define our HTTPRoute rules
 
 We can generate Kuadrant and Gateway API resources directly from OAS documents, via an `x-kuadrant` extension.
 
 > **Note:** for a more in-depth look at the OAS extension take a look at our [kuadrantctl documentation](https://docs.kuadrant.io/kuadrantctl/).
 
-Next, we are going to use our OAS to configure our HTTPRoute. Let's use `kuadrantctl` to generate our `HTTPRoute`.
+Let's use `kuadrantctl` to generate our `HTTPRoute`.
 
 > **Note:** the sample OAS has some placeholders for namespaces and domains - we will inject valid values into these placeholders based on our previous env vars
 
-Replace the placeholders:
+Generate the resource from our OAS, (`envsubst` will replace the placeholders):
 
 ```bash
-cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute -o json --oas -
+cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute --oas -
 ```
 If we're happy with the generated resource, let's apply it to the cluster:
 
 ```bash
-cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute -o json --oas - | kubectl apply -f -
+cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute --oas - | kubectl apply -f -
 ```
 
-Check out new route:
+Check our new route:
 
 ```bash
-kubectl get httproute -n toystore -o=yaml
+kubectl get httproute -n ${gatewayNS} -o=yaml
 ```
 
 We should see that this route is affected by the `AuthPolicy` and `RateLimitPolicy` defined as defaults on the gateway.
@@ -499,7 +492,7 @@ We should see that this route is affected by the `AuthPolicy` and `RateLimitPoli
 We'll use  `curl` to hit an endpoint in the toystore app. As we are using LetsEncrypt staging in this example, we pass the `-k` flag:
 
 ```bash
-curl -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+curl -s -k -o /dev/null -w "%{http_code}"  https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
 ```
 
 We are getting a `403` because of the existing default, deny-all `AuthPolicy` applied at the Gateway. Let's override this for our `HTTPRoute`.

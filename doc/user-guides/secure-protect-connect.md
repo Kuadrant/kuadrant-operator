@@ -2,7 +2,7 @@
 
 ## Pre-requisites
 
-- Completed the [Single-cluster Quick Start](https://docs.kuadrant.io/getting-started-single-cluster/)
+- Completed the [Single-cluster Quick Start](https://docs.kuadrant.io/getting-started-single-cluster/) or [Multi-cluster Quick Start](https://docs.kuadrant.io/getting-started-multi-cluster/)
 
 ## Overview
 
@@ -33,7 +33,20 @@ Here are the steps we will go through:
 
 8) [Override the Gateway rate limits with an endpoint-specific policy](#-override-the-gateways-ratelimitpolicy)
 
-To help with this walk through, you should set a `KUADRANT_ZONE_ROOT_DOMAIN` environment variable to a domain you want to use. If you want to try DNSPolicy, this should also be a domain you have access to the DNS for in AWS Route53 or GCP. E.g.:
+
+You will need to set the `KUBECTL_CONTEXT` environment variable for the kubectl context of the cluster you are targeting.
+If you have followed the single cluster setup, it should be something like below.
+Adjust the name of the cluster accordingly if you have followed the multi cluster setup.
+
+```sh
+# Typical single cluster context
+export KUBECTL_CONTEXT=kind-kuadrant-local
+
+# Example context for additional 'multi cluster' clusters
+# export KUBECTL_CONTEXT=kind-kuadrant-local-1
+```
+
+To help with this walk through, you should also set a `KUADRANT_ZONE_ROOT_DOMAIN` environment variable to a domain you want to use. If you want to try DNSPolicy, this should also be a domain you have access to the DNS for in AWS Route53 or GCP. E.g.:
 
 ```sh
 export KUADRANT_ZONE_ROOT_DOMAIN=my.domain.iown
@@ -42,13 +55,13 @@ export KUADRANT_ZONE_ROOT_DOMAIN=my.domain.iown
 ### ❶ Deploy the example app we will serve via our gateway
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/examples/toystore/toystore.yaml
+kubectl --context $KUBECTL_CONTEXT apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/examples/toystore/toystore.yaml
 ```
 
 ### ❷ Define a new Istio-managed gateway
 
 ```sh
-kubectl --context kind-kuadrant-local apply -f - <<EOF
+kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -85,7 +98,7 @@ This is because currently there is not a TLS secret in place. Let's fix that by 
 > **Note:** For convenience, in the setup, we have created a self-signed CA as a cluster issuer in the Kubernetes cluster.
 
 ```sh
-kubectl --context kind-kuadrant-local apply -f - <<EOF
+kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
 apiVersion: kuadrant.io/v1alpha1
 kind: TLSPolicy
 metadata:
@@ -102,7 +115,7 @@ spec:
     name: kuadrant-operator-glbc-ca
 EOF
 
-kubectl wait tlspolicy api-gateway-tls -n kuadrant-system --for=condition=accepted
+kubectl --context $KUBECTL_CONTEXT wait tlspolicy api-gateway-tls -n kuadrant-system --for=condition=accepted
 ```
 
 Now, if you look at the status of the gateway, you will see the error is gone, and the status of the policy will report the listener as now secured with a TLS certificate and the gateway as affected by the TLS policy.
@@ -112,7 +125,7 @@ Our communication with our gateway is now secured via TLS. Note that any new lis
 Let's define a HTTPRoute and test our policy. We will re-use this later on with some of the other policies as well.
 
 ```sh
-kubectl --context kind-kuadrant-local apply -f - <<EOF
+kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
@@ -152,7 +165,7 @@ EOF
 With this HTTPRoute in place, the service we deployed is exposed via the gateway. We should be able to access our endpoint via HTTPS:
 
 ```sh
-export INGRESS_HOST=$(kubectl get gtw api-gateway -o jsonpath='{.status.addresses[0].value}' -n kuadrant-system)
+export INGRESS_HOST=$(kubectl --context $KUBECTL_CONTEXT get gtw api-gateway -o jsonpath='{.status.addresses[0].value}' -n kuadrant-system)
 
 curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST} "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars"
 ```
@@ -162,7 +175,7 @@ curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST} "https://
 We have a secure communication in place. However, there is nothing limiting users from overloading our infrastructure and service components that will sit behind this gateway. Let's add a rate limiting layer to protect our services and infrastructure.
 
 ```sh
-kubectl --context kind-kuadrant-local apply -f - <<EOF
+kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta2
 kind: RateLimitPolicy
 metadata:
@@ -181,7 +194,7 @@ spec:
         unit: second
 EOF
 
-kubectl wait ratelimitpolicy infra-ratelimit -n kuadrant-system --for=condition=accepted
+kubectl --context $KUBECTL_CONTEXT wait ratelimitpolicy infra-ratelimit -n kuadrant-system --for=condition=accepted
 ```
 
 > **Note:** It may take a couple of minutes for the RateLimitPolicy to be applied depending on your cluster.
@@ -199,7 +212,7 @@ We should see `409 Too Many Requests`s start returning after the 5th request.
 Communication is secured and we have some protection for our infrastructure, but we do not trust any client to access our endpoints. By default, we want to allow only authenticated access. To protect our gateway, we will add a _deny-all_ AuthPolicy. Later, we will override this with a more specific AuthPolicy for the API.
 
 ```sh
-kubectl --context kind-kuadrant-local apply -f - <<EOF
+kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta2
 kind: AuthPolicy
 metadata:
@@ -242,7 +255,7 @@ curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST}  "https:/
 Now, we have our gateway protected and communications secured. We are ready to configure DNS, so it is easy for clients to connect and access the APIs we intend to expose via this gateway. Note that during the setup of this walk through, we created a DNS Provider secret and a ManagedZone resource.
 
 ```sh
-kubectl --context kind-kuadrant-local apply -f - <<EOF
+kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
 apiVersion: kuadrant.io/v1alpha1
 kind: DNSPolicy
 metadata:
@@ -256,21 +269,23 @@ spec:
     kind: Gateway
 EOF
 
-kubectl wait dnspolicy simple-dnspolicy -n kuadrant-system --for=condition=enforced
+kubectl --context $KUBECTL_CONTEXT wait dnspolicy simple-dnspolicy -n kuadrant-system --for=condition=enforced
 ```
 
 If you want to see the DNSRecord created by the this policy, execute the following command:
 
 ```sh
-kubectl get dnsrecord.kuadrant.io api-gateway-api -n kuadrant-system -o=yaml
+kubectl--context $KUBECTL_CONTEXT get dnsrecord.kuadrant.io api-gateway-api -n kuadrant-system -o=yaml
 ```
 
 So now we have a wildcard DNS record to bring traffic to our gateway.
 
 Let's test it again. This time we expect a `403` still as the _deny-all_ policy is still in effect. Notice we no longer need to set the Host header directly.
 
+> **Note:** If you have followed through this guide on more than 1 cluster, the DNS record for the HTTPRoute hostname will have multiple IP addresses. This means that requests will be made in a round robin pattern across clusters as your DNS provider sends different responses to lookups. You may need to send multiple requests before one hits the cluster you are currently configuring.
+
 ```sh
-curl -k  "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" -i
+curl -k "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" -i
 ```
 
 ### ❼ Override the Gateway's deny-all AuthPolicy
@@ -280,7 +295,7 @@ Next, we are going to allow authenticated access to our Toystore API. To do this
 Let's define an API Key for users **bob** and **alice**.
 
 ```sh
-kubectl --context kind-kuadrant-local apply -f - <<EOF
+kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
@@ -312,7 +327,7 @@ EOF
 Now, we will override the AuthPolicy to start accepting the API keys:
 
 ```sh
-kubectl --context kind-kuadrant-local apply -f - <<EOF
+kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta2
 kind: AuthPolicy
 metadata:
@@ -348,7 +363,7 @@ EOF
 The gateway limits are a good set of limits for the general case, but as the developers of this API we know that we only want to allow a certain number of requests to specific users, and a general limit for all other users.
 
 ```sh
-kubectl --context kind-kuadrant-local apply -f - <<EOF
+kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta2
 kind: RateLimitPolicy
 metadata:
@@ -401,3 +416,13 @@ while :; do curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOS
 ```
 
 > **Note:** If you configured a DNS provider during the setup and defined the DNSPolicy as described in one of the previous chapters you can omit the `--resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST}` flag.
+
+> **Note:** If you have followed through this guide on more than 1 cluster, the DNS record for the HTTPRoute hostname will have multiple IP addresses. This means that requests will be made in a round robin pattern across clusters as your DNS provider sends different responses to lookups.
+
+```sh
+while :; do curl -k --write-out '%{http_code}\n' --silent --output /dev/null -H 'Authorization: APIKEY IAMALICE' "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" | grep -E --color "\b(429)\b|$"; sleep 1; done
+```
+
+```sh
+while :; do curl -k --write-out '%{http_code}\n' --silent --output /dev/null -H 'Authorization: APIKEY IAMBOB' "https://api.$KUADRANT_ZONE_ROOT_DOMAIN/cars" | grep -E --color "\b(429)\b|$"; sleep 1; done
+```

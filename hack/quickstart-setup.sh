@@ -37,7 +37,7 @@ dockerBinCmd() {
     network=" --network ${KIND_CLUSTER_DOCKER_NETWORK}"
   fi
 
-  echo "$CONTAINER_RUNTIME_BIN run --rm -u $UID -v ${TMP_DIR}:${TMP_DIR}${network} -e KUBECONFIG=${TMP_DIR}/kubeconfig --entrypoint=$1 $TOOLS_IMAGE"
+  echo "$CONTAINER_RUNTIME_BIN run -i --rm -u $UID -v ${TMP_DIR}:${TMP_DIR}${network} -e ADDRESS -e KUBECONFIG=${TMP_DIR}/kubeconfig --entrypoint=$1 $TOOLS_IMAGE"
 }
 
 RED='\033[0;31m'
@@ -70,6 +70,8 @@ export CONTAINER_RUNTIME_BIN=$(containerRuntime)
 export KIND_BIN=kind
 export HELM_BIN=helm
 export KUSTOMIZE_BIN=$(dockerBinCmd "kustomize")
+export SUBNET_OFFSET=0
+export HUB=1
 
 YQ_BIN=$(dockerBinCmd "yq")
 
@@ -119,23 +121,30 @@ check_dependencies() {
   success "All dependencies are installed."
 }
 
+cluster_exists() {
+    local cluster_name=$1
+    ${KIND_BIN} get clusters -q | grep -q "^${cluster_name}$"
+}
+
 # Generate MetalLB IpAddressPool for a given network
 generate_ip_address_pool() {
   local network_name="$1"
+  local yq="$2"
+  local subnet_offset="$3"
   local script_path="${SCRIPT_DIR}/../utils/docker-network-ipaddresspool.sh"
 
   # interactively or piped
   if [ -t 0 ]; then
     # interactively
     if [ -f "$script_path" ]; then
-      bash "$script_path" "$network_name"
+      bash "$script_path" "$network_name" "$yq" "$subnet_offset"
     else
       echo "Script file not found at $script_path" >&2
       return 1
     fi
   else
     # piped
-    curl -s "${KUADRANT_REPO_RAW}/utils/docker-network-ipaddresspool.sh" | bash -s -- "$network_name"
+    curl -s "${KUADRANT_REPO_RAW}/utils/docker-network-ipaddresspool.sh" | bash -s -- "$network_name" "$yq" "$subnet_offset"
   fi
 }
 
@@ -372,6 +381,41 @@ info "Starting the Kuadrant setup process... 🚀"
 info "Checking prerequisites and dependencies... 🛠️"
 check_dependencies
 
+info "Checking for existing Kubernetes clusters..."
+if cluster_exists "${KUADRANT_CLUSTER_NAME}"; then
+    echo "A cluster named '${KUADRANT_CLUSTER_NAME}' already exists."
+    echo "This will be treated as a 'hub' cluster, with any new clusters being workers."
+    read -r -p "Proceed with multi-cluster setup? (y/N): " proceed </dev/tty
+    if [[ $proceed =~ ^[Yy] ]]; then
+        # Find the highest numbered cluster and calculate the next number
+        existing_clusters=($(${KIND_BIN} get clusters -q | grep "^${KUADRANT_CLUSTER_NAME}-[0-9]*$" | sort -t '-' -k 2 -n))
+        if [ ${#existing_clusters[@]} -eq 0 ]; then
+            next_cluster_number=1
+        else
+            last_cluster_name=${existing_clusters[${#existing_clusters[@]} - 1]}
+            last_number=${last_cluster_name##*-}
+            next_cluster_number=$((last_number + 1))
+        fi
+        KUADRANT_CLUSTER_NAME="${KUADRANT_CLUSTER_NAME}-${next_cluster_number}"
+        SUBNET_OFFSET=${next_cluster_number}
+        HUB=0
+        echo "Next cluster number will be ${KUADRANT_CLUSTER_NAME}."
+        read -r -p "Is it okay to create the cluster '${KUADRANT_CLUSTER_NAME}'? (y/N): " confirm </dev/tty
+        if [[ $confirm =~ ^[Yy] ]]; then
+            info "Proceeding to create the new cluster."
+        else
+            echo "Multi-cluster setup aborted by user."
+            exit 0
+        fi
+    else
+        echo "Multi-cluster setup aborted by user."
+        exit 0
+    fi
+else
+    info "No existing cluster named '${KUADRANT_CLUSTER_NAME}' found. Proceeding with initial setup."
+fi
+
+
 echo "Do you want to set up a DNS provider for use with Kuadrant's DNSPolicy API? (y/n)"
 read -r SETUP_PROVIDER </dev/tty
 
@@ -387,11 +431,6 @@ case $SETUP_PROVIDER in
   exit 1
   ;;
 esac
-
-# Kind delete cluster
-info "Deleting existing Kubernetes cluster if present... 🗑️"
-${KIND_BIN} delete cluster --name ${KUADRANT_CLUSTER_NAME}
-success "Existing cluster (if present) deleted successfully."
 
 # Kind create cluster
 info "Creating a new Kubernetes cluster... 🌟"
@@ -444,7 +483,7 @@ info "Installing MetalLB... 🏗️"
 kubectl -n metallb-system wait --for=condition=Available deployments controller --timeout=300s
 kubectl -n metallb-system wait --for=condition=ready pod --selector=app=metallb --timeout=60s
 info "Generating IP address pool for MetalLB..."
-generate_ip_address_pool "kind" | kubectl apply -n metallb-system -f -
+generate_ip_address_pool "kind" "${YQ_BIN}" "${SUBNET_OFFSET}" | kubectl apply -n metallb-system -f -
 success "MetalLB installed and IP address pool generated successfully."
 
 # Install kuadrant

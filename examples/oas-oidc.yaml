@@ -28,7 +28,7 @@ paths:
               duration: 5
               unit: second
           counters:
-            - request.headers.x-forwarded-for                       
+            - request.headers.Authorization
     post:  # OIDC protected
       operationId: "postToy"
       security:
@@ -47,7 +47,7 @@ paths:
             duration: 10
             unit: second
         counters:
-          - request.headers.x-forwarded-for               
+          - request.headers.Authorization
 components:
   securitySchemes:
     oidc:

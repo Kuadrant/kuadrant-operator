@@ -631,14 +631,22 @@ export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencode
 ```        
 
 ```
+curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+```
+
+You should see a 401 response code.
+
+```
 curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
 ```
 
-We should see a 200 response code.
+You should see a 200 response code.
 
 ### Setup Ratelimiting
 
-Finally lets generate our RateLimitPolicy to add our ratelimits based on our OAS file. 
+Finally lets generate our RateLimitPolicy to add our ratelimits based on our OAS file. Our rate limiting is simplified for this walkthrough and is based on either the bearer token or the api key value. There are more advanced examples under our how-to guides on the docs site:
+
+https://docs.kuadrant.io/kuadrant-operator/doc/user-guides/authenticated-rl-with-jwt-and-k8s-authnz/
 
 ```
 kuadrantctl generate kuadrant ratelimitpolicy --oas=$oasPath | yq -P
@@ -671,7 +679,9 @@ API Key Auth:
 ```
 for i in {1..3}
 do
+printf "request $i "
 curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  https://$(k get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
+printf "\n -- \n"
 done 
 
 ```
@@ -692,8 +702,5 @@ export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencode
 for i in {1..3}
 do
 curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Authorization: Bearer $ACCESS_TOKEN" https://$(kubectl get httproute toystore -n toystore -o=jsonpath='{.spec.hostnames[0]}')/v1/toys
-sleep 2
 done
 ```
-
-TODO update ratelimit example not to use remote address and use username

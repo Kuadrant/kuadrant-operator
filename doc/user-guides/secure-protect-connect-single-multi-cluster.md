@@ -675,7 +675,7 @@ API Key Auth:
 for i in {1..3}
 do
 printf "request $i "
-curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  "https://$(k get httproute toystore -n ${$devNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
+curl -XPOST -H 'api_key:secret' -s -k -o /dev/null -w "%{http_code}"  "https://$(kubectl get httproute toystore -n ${$devNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 printf "\n -- \n"
 done 
 ```

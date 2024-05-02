@@ -161,7 +161,6 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	err = (&RateLimitPolicyReconciler{
 		BaseReconciler:      rateLimitPolicyBaseReconciler,
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-		AffectedPolicyMap:   kuadrant.NewAffectedPolicyMap(),
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())
@@ -248,6 +247,17 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 
 	err = (&TargetStatusReconciler{
 		BaseReconciler: targetStatusBaseReconciler,
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
+	policyStatusBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("status"),
+		mgr.GetEventRecorderFor("RateLimitPolicyStatus"),
+	)
+	err = (&RateLimitPolicyEnforcedStatusReconciler{
+		BaseReconciler: policyStatusBaseReconciler,
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())

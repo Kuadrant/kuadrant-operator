@@ -1,6 +1,6 @@
-# Install Kuadrant on an OpenShift Cluster
+# Install Kuadrant on an OpenShift cluster
 
-Note these steps need to be taken on each cluster you want to use Kuadrant on.
+NOTE: You must perform these steps on each cluster that you want to use Kuadrant on.
 
 ## Prerequisites
 

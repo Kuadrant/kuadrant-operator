@@ -19,28 +19,33 @@ import (
 var _ = Describe("Kuadrant controller", func() {
 	var (
 		testNamespace string
-		kuadrant      = "kuadrant-sample"
+	)
+	const (
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+		kuadrant         = "kuadrant-sample"
 	)
 	Context("Reconcile limitador resources", func() {
-		BeforeEach(func() {
-			CreateNamespace(&testNamespace)
+		BeforeEach(func(ctx SpecContext) {
+			testNamespace = CreateNamespaceWithContext(ctx)
 			ApplyKuadrantCR(testNamespace)
 		})
 
-		AfterEach(DeleteNamespaceCallback(&testNamespace))
-		It("Copy configuration from Kuadrant CR to Limitador CR", func() {
+		AfterEach(func(ctx SpecContext) {
+			DeleteNamespaceCallbackWithContext(ctx, testNamespace)
+		}, afterEachTimeOut)
+		It("Copy configuration from Kuadrant CR to Limitador CR", func(ctx SpecContext) {
 			kObj := &kuadrantv1beta1.Kuadrant{}
 			lObj := &v1alpha1.Limitador{}
 
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: kuadrant, Namespace: testNamespace}, kObj)
 				return err == nil
-			}, time.Minute, 5*time.Second).Should(BeTrue())
+			}).WithContext(ctx).Should(BeTrue())
 
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, lObj)
 				return err == nil
-			}, time.Minute, 5*time.Second).Should(BeTrue())
+			}).WithContext(ctx).Should(BeTrue())
 			var tmp *int
 			Expect(lObj.Spec.Replicas).Should(Equal(tmp))
 
@@ -57,17 +62,17 @@ var _ = Describe("Kuadrant controller", func() {
 					return false
 				}
 				return true
-			}, time.Minute, 5*time.Second).Should(BeTrue())
+			}).WithContext(ctx).Should(BeTrue())
 		})
 
-		It("Kuadrant CR configuration overrides Limitador CR configuration", func() {
+		It("Kuadrant CR configuration overrides Limitador CR configuration", func(ctx SpecContext) {
 			kObj := &kuadrantv1beta1.Kuadrant{}
 			lObj := &v1alpha1.Limitador{}
 
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, lObj)
 				return err == nil
-			}, time.Minute, 5*time.Second).Should(BeTrue())
+			}).WithContext(ctx).Should(BeTrue())
 			lObj.Spec.Replicas = ptr.To(1)
 			err := k8sClient.Update(context.Background(), lObj)
 			Expect(err).ToNot(HaveOccurred())
@@ -75,7 +80,7 @@ var _ = Describe("Kuadrant controller", func() {
 			Eventually(func() bool {
 				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: kuadrant, Namespace: testNamespace}, kObj)
 				return err == nil
-			}, time.Minute, 5*time.Second).Should(BeTrue())
+			}).WithContext(ctx).Should(BeTrue())
 
 			kObj.Spec.Limitador = &kuadrantv1beta1.LimitadorSpec{Replicas: ptr.To(2)}
 			err = k8sClient.Update(context.Background(), kObj)
@@ -90,7 +95,7 @@ var _ = Describe("Kuadrant controller", func() {
 					return false
 				}
 				return true
-			}, time.Minute, 5*time.Second).Should(BeTrue())
+			}).WithContext(ctx).Should(BeTrue())
 		})
 	})
 })

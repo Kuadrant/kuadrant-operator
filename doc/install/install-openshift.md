@@ -113,6 +113,12 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/ma
 kubectl apply -k https://github.com/Kuadrant/gateway-api-state-metrics?ref=main
 ```
 
+To enable request metrics in Istio, you will need to create a Telemetry resource:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/config/observability/openshift/telemetry.yaml
+```
+
 The [dashboards](https://docs.kuadrant.io/kuadrant-operator/doc/observability/examples) can be imported into Grafana, if you have it installed in your cluster.
 You'll find an example of how to install Grafana on Openshift [here](https://cloud.redhat.com/experts/o11y/ocp-grafana/). Once installed, you will need to add your Thanos instance as a data source to Grafana. Alternatively, if you are just using the user workload monitoring stack in your Openshift cluster (and not writing metrics to an external thanos instance), you can set up a data source to the [thanos-querier route in the Openshift cluster](https://docs.openshift.com/container-platform/4.15/observability/monitoring/accessing-third-party-monitoring-apis.html#accessing-metrics-from-outside-cluster_accessing-monitoring-apis-by-using-the-cli).
 

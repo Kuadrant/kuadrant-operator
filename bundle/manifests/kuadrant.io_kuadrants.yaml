@@ -844,6 +844,13 @@ spec:
                           evictions by specifying "100%".
                         x-kubernetes-int-or-string: true
                     type: object
+                  rateLimitHeaders:
+                    description: RateLimitHeadersType defines the valid options for
+                      the --rate-limit-headers arg
+                    enum:
+                    - NONE
+                    - DRAFT_VERSION_03
+                    type: string
                   replicas:
                     type: integer
                   resourceRequirements:
@@ -988,6 +995,10 @@ spec:
                                 description: 'Ratio to apply to the TTL from Redis
                                   on cached counters [default: 10]'
                                 type: integer
+                              response-timeout:
+                                description: 'ResponseTimeout defines the timeout
+                                  for Redis commands in milliseconds [default: 350]'
+                                type: integer
                               ttl:
                                 description: 'TTL for cached counters in milliseconds
                                   [default: 5000]'
@@ -995,6 +1006,25 @@ spec:
                             type: object
                         type: object
                     type: object
+                  telemetry:
+                    description: Telemetry defines the level of metrics Limitador
+                      will expose to the user
+                    enum:
+                    - basic
+                    - exhaustive
+                    type: string
+                  tracing:
+                    properties:
+                      endpoint:
+                        type: string
+                    required:
+                    - endpoint
+                    type: object
+                  verbosity:
+                    description: Sets the level of verbosity
+                    maximum: 4
+                    minimum: 1
+                    type: integer
                 type: object
             type: object
           status:

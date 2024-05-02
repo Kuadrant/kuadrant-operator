@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -89,6 +90,16 @@ func IsHTTPRouteAccepted(httpRoute *gatewayapiv1.HTTPRoute) bool {
 	}
 
 	return len(acceptedParentRefs) == len(httpRoute.Spec.ParentRefs)
+}
+
+func IsPolicyAccepted(policy Policy) bool {
+	condition := meta.FindStatusCondition(policy.GetStatus().GetConditions(), string(gatewayapiv1alpha2.PolicyConditionAccepted))
+	return condition != nil && condition.Status == metav1.ConditionTrue
+}
+
+func IsNotPolicyAccepted(policy Policy) bool {
+	condition := meta.FindStatusCondition(policy.GetStatus().GetConditions(), string(gatewayapiv1alpha2.PolicyConditionAccepted))
+	return condition == nil || condition.Status != metav1.ConditionTrue
 }
 
 // GetRouteAcceptedGatewayParentKeys returns the object keys of all gateways that have accepted a given route

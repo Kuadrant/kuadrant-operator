@@ -99,13 +99,22 @@ OpenShift supports a user facing monitoring stack. This can be cofigured and set
 
 https://docs.openshift.com/container-platform/latest/observability/monitoring/configuring-the-monitoring-stack.html
 
-If you have user workload monitoring enabled. We Recommend configuring  remote write to a central storage system such as Thanos: 
-- [Remote Write Config](https://docs.openshift.com/container-platform/latest/observability/monitoring/configuring-the-monitoring-stack.html#configuring_remote_write_storage_configuring-the-monitoring-stack)
+If you have user workload monitoring enabled. We Recommend configuring remote write to a central storage system such as Thanos:
 
+- [Remote Write Config](https://docs.openshift.com/container-platform/latest/observability/monitoring/configuring-the-monitoring-stack.html#configuring_remote_write_storage_configuring-the-monitoring-stack)
 - [Kube Thanos](https://github.com/thanos-io/kube-thanos)
 
-- [Kuadrant Examples](https://docs.kuadrant.io/kuadrant-operator/doc/observability/examples/)
+There are a set of [example dashboards and alerts](https://docs.kuadrant.io/kuadrant-operator/doc/observability/examples/) for observing Kuadrant functionality.
+These dashboards and alerts make use of low level cpu, metrics and network metrics available from the user monitoring stack in Openshift. They also make use of resource state metrics from Gateway API and Kuadrant resources.
+To scrape these additional metrics, you can install a kube-state-metrics instance, with a custom resource config:
 
+```bash
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/config/observability/openshift/kube-state-metrics.yaml
+kubectl apply -k https://github.com/Kuadrant/gateway-api-state-metrics?ref=main
+```
+
+The [dashboards](https://docs.kuadrant.io/kuadrant-operator/doc/observability/examples) can be imported into Grafana, if you have it installed in your cluster.
+You'll find an example of how to install Grafana on Openshift [here](https://cloud.redhat.com/experts/o11y/ocp-grafana/). Once installed, you will need to add your Thanos instance as a data source to Grafana. Alternatively, if you are just using the user workload monitoring stack in your Openshift cluster (and not writing metrics to an external thanos instance), you can set up a data source to the [thanos-querier route in the Openshift cluster](https://docs.openshift.com/container-platform/4.15/observability/monitoring/accessing-third-party-monitoring-apis.html#accessing-metrics-from-outside-cluster_accessing-monitoring-apis-by-using-the-cli).
 
 ### Install Kuadrant
 

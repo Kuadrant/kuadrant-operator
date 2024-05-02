@@ -8,7 +8,7 @@ NOTE: You must perform these steps on each cluster that you want to use Kuadrant
 - AWS account with Route 53 and zone 
 - Accessible Redis Instance
 
-## Setup Environment
+## Set up your environment
 
 ```bash
 export AWS_ACCESS_KEY_ID=xxxxxxx # Key ID from AWS with Route 53 access
@@ -16,9 +16,9 @@ export AWS_SECRET_ACCESS_KEY=xxxxxxx # Access Key from AWS with Route 53 access
 export REDIS_URL=redis://user:xxxxxx@some-redis.com:10340 # A Redis cluster URL
 ```
 
-## Installing the dependencies
+## Install the dependencies
 
-Kuadrant integrates with Istio as a Gateway API provider. Before you can try Kuadrant, we need to setup an Istio based Gateway API provider. For this we will use the `Sail` operator.
+Kuadrant integrates with Istio as a Gateway API provider. Before you can use Kuadrant, you must set up an Istio-based Gateway API provider. For this step, you will use the Sail Operator.
 
 ### Install v1 of Gateway API:
 
@@ -26,9 +26,9 @@ Kuadrant integrates with Istio as a Gateway API provider. Before you can try Kua
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
 ```
 
-### Install and Configure Istio via the Sail Operator
+### Install and configure Istio with the Sail Operator
 
-To install, run the following:
+To install Istio, run the following command:
 
 ```bash
 kubectl create ns istio-system
@@ -64,7 +64,7 @@ To check the status of the install, you can run:
 kubectl get installplan -n istio-system -o=jsonpath='{.items[0].status.phase}'
 ```
 
-Once ready it will be marked `complete` while installing it will be marked `installing`.
+When ready, the status will change from `installing` to `complete`.
 
 #### Configure Istio
 
@@ -91,9 +91,9 @@ kubectl wait istio/default -n istio-system --for="condition=Ready=true"
 ```
 
 
-### (Recommended) Thanos and Observability Stack
+### Best practices for metrics and observability
 
-Kuadrant provides a set of sample dashboards that use the known metrics exported by Kuadrant and Gateway components to provide insight into the different areas of your APIs and Gateways. While this is not essential, it is recommended that you set up an observability stack. Below are links to the OpenShift docs on this and also a link to help with the setup of Thanos for metrics storage.
+Kuadrant provides a set of sample dashboards that use known metrics exported by Kuadrant and Gateway components to provide insight into different areas of your APIs and Gateways. While not essential, it is best to set up an observability stack. This section provides links to OpenShift and Thanos documentation on configuring monitoring and metrics storage.
 
 OpenShift supports a user facing monitoring stack. This can be cofigured and setup this documentation:
 
@@ -124,7 +124,7 @@ You'll find an example of how to install Grafana on Openshift [here](https://clo
 
 ### Install Kuadrant
 
-To install Kuadrant, we will use the Kuadrant Operator. Prior to installing, we will set up some secrets that we will use later:
+To install Kuadrant, use the Kuadrant Operator. Before installing, you will set up some secrets that you will use later:
 
 ```bash
 kubectl create ns kuadrant-system
@@ -139,7 +139,7 @@ kubectl -n kuadrant-system create secret generic aws-credentials \
   --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
 ```
 
-Redis credentials for shared (multi-cluster) counters support for Kuadrant's Limitador component:
+Redis credentials for shared multicluster counters for Kuadrant's Limitador component:
 
 ```bash
 kubectl -n kuadrant-system create secret generic redis-config \
@@ -185,7 +185,7 @@ spec:
 EOF
 ```  
 
-Wait for Kuadrant operators to be installed:
+Wait for Kuadrant Operators to be installed:
 
 ```bash
 kubectl get installplan -n kuadrant-system -o=jsonpath='{.items[0].status.phase}'
@@ -219,4 +219,5 @@ kubectl wait kuadrant/kuadrant --for="condition=Ready=true" -n kuadrant-system -
 
 Kuadrant is now ready to use.
 
-Next up: [Secure, Protect and Connect on single or multiple clusters](../user-guides/secure-protect-connect-single-multi-cluster.md)
+## Next steps 
+- [Secure, protect, and connect APIs on single or multiple clusters](../user-guides/secure-protect-connect-single-multi-cluster.md)

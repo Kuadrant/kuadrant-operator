@@ -25,7 +25,7 @@ the Kubernetes repository. These low-level metrics typically have a set of
 [recording rules](https://prometheus.io/docs/practices/rules/#aggregation) that
 aggregate values by labels and time ranges.
 For example, `node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate` or `namespace_workload_pod:kube_pod_owner:relabel`.
-If you have deployed the [kube-prometheus](https://github.com/prometheus-operator/kube-) project, you should have the majority of 
+If you have deployed the [kube-prometheus](https://github.com/prometheus-operator/kube-prometheus) project, you should have the majority of 
 these metrics being scraped.
 
 ## Networking metrics

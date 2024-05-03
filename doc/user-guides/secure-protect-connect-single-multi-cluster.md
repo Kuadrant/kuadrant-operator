@@ -12,14 +12,14 @@ This guide expects that you have successfully installed Kuadrant on at least one
 - `kubectl` command line tool is installed.
 - (Optional) User workload monitoring is configured to remote write to a central storage system such as Thanos (also covered in the installation steps).
 
-### What Kuadrant can do for you in a multi-cluster environment
+### What Kuadrant can do for you in a multicluster environment
 
-Kuadrant's capabilities can be leveraged in single or multiple clusters. Below is a list of features that are designed to work across multiple clusters as well as in a single-cluster environment.
+You can leverage Kuadrant's capabilities in single or multiple clusters. The following features are designed to work across multiple clusters as well as in a single-cluster environment.
 
-- **Multi-Cluster Ingress:** Kuadrant provides multi-cluster ingress connectivity using DNS to bring traffic to your Gateways using a strategy defined in a `DNSPolicy` (more later). 
-- **Global Rate Limiting:** Kuadrant can enable global rate limiting use cases when it is configured to use a shared store (redis) for counters based on limits defined by a `RateLimitPolicy`.
-- **Global Auth:*** Kuadrant's `AuthPolicy` can be configured to leverage external auth providers to ensure different clusters exposing the same API are authenticating and authorizing in the same way. 
-- **Integration with federated metrics stores:** Kuadrant has example dashboards and metrics that can be used for visualizing your gateways and observing traffic hitting those gateways across multiple clusters. 
+- **Multicluster ingress:** Kuadrant provides multicluster ingress connectivity using DNS to bring traffic to your Gateways using a strategy defined in a `DNSPolicy`. 
+- **Global rate limiting:** Kuadrant can enable global rate limiting use cases when configured to use a shared  Redis store for counters based on limits defined by a `RateLimitPolicy`.
+- **Global auth:** You can configure Kuadrant's `AuthPolicy` to leverage external auth providers to ensure different clusters exposing the same API are authenticating and authorizing in the same way. 
+- **Integration with federated metrics stores:** Kuadrant has example dashboards and metrics for visualizing your Gateways and observing traffic hitting those Gateways across multiple clusters. 
 
 **Platform Engineer**
 

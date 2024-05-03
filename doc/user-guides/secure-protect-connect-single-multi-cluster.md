@@ -55,27 +55,16 @@ export EMAIL=foo@example.com
 ### Deployment management tooling
 
 While this document uses `kubectl`, working with multiple clusters is complex, and it is best to use a tool such as Argo CD to manage the deployment of resources to multiple clusters.
-### Setup a managed DNS zone
+### Set up a managed DNS zone
 
-The managed DNS zone declares a zone and credentials to access that zone that can be used by Kuadrant to set up DNS configuration.
+The managed DNS zone declares a zone and credentials to access that zone that Kuadrant can use to set up DNS configuration.
 
 **Create the ManagedZone resource**
 
-Apply the `ManagedZone` resource below to each cluster or, if you are adding an additional cluster, add it to the new cluster:
+Apply the following `ManagedZone` resource to each cluster or, if you are adding an additional cluster, add it to the new cluster:
 
 ```bash
 kubectl create ns ${gatewayNS}
-```
-
-Setup AWS credential for Route 53 access:
-
-```bash
-kubectl -n ${gatewayNS} create secret generic aws-credentials \
-  --type=kuadrant.io/aws \
-  --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-  --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-```  
-
 Then create a `ManagedZone`:
 
 ```bash

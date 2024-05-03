@@ -278,6 +278,8 @@ To check your rate limits have been accepted, enter the following command:
 
 ```bash
 kubectl get ratelimitpolicy ${gatewayName}-rlp -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
+```
+
 ```bash
 kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1alpha1

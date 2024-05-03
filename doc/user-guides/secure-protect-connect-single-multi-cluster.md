@@ -337,6 +337,12 @@ kubectl get authpolicy ${gatewayName}-auth -n ${gatewayNS} -o=jsonpath='{.status
 kubectl get ratelimitpolicy ${gatewayName}-rlp -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
 ```
 
+Check your listener is ready:
+
+```
+kubectl get gateway ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.listeners[0].conditions[?(@.type=="Programmed")].message}'
+```
+
 ### Test connectivity and deny all auth 
 
 You can use `curl` to hit your endpoint. You should see a `403` Because this example uses Let's Encrypt staging, you can pass the `-k` flag:

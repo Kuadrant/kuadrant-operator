@@ -440,7 +440,8 @@ Next, generate an `AuthPolicy` that uses secrets in our cluster as APIKeys:
 cat $oasPath | envsubst | kuadrantctl generate kuadrant authpolicy --oas -
 ```
 
-From this, we can see an `AuthPolicy` generated based on our OAS that will look for API keys in secrets labeled `api_key` and look for that key in the header `api_key`. Let's now apply this to the gateway:
+From this, you can see an `AuthPolicy` generated based on your OAS that will look for API keys in secrets labeled `api_key` and look for that key in the header `api_key`. You can now apply this to the Gateway:
+
 
 ```bash
 cat $oasPath | envsubst | kuadrantctl generate kuadrant authpolicy --oas -  | kubectl apply -f -

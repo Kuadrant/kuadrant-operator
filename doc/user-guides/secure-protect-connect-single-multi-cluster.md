@@ -421,7 +421,7 @@ Choose one of the following options:
 
 ### API key auth flow
 
-Set up an example API key in our cluster(s):
+Set up an example API key in your cluster(s):
 
 ```bash
 kubectl apply -f - <<EOF

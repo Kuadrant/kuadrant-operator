@@ -3,7 +3,6 @@ package istio
 import (
 	"fmt"
 
-	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
@@ -14,6 +13,8 @@ import (
 	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	"maistra.io/istio-operator/pkg/helm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 )
 
 // The structs below implement the interface defined in pkg/common/mesh_config.go `ConfigWrapper`

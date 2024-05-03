@@ -353,32 +353,16 @@ kubectl patch gateway ${gatewayName} -n ${gatewayNS} --type='json' -p='[{"op": "
 
 ### Extending this Gateway to multiple clusters and configuring geo-based routing
 
-To distribute this gateway across multiple clusters, repeat the setup process detailed previously for each cluster. By default, this will implement a round-robin DNS strategy to distribute traffic evenly across the different clusters. Setting up our gateways to serve clients based on their geographic location is straightforward with our current configuration.
+To distribute this Gateway across multiple clusters, repeat this setup process for each cluster. By default, this will implement a round-robin DNS strategy to distribute traffic evenly across the different clusters. Setting up your Gateways to serve clients based on their geographic location is straightforward with your current configuration.
 
-Assuming you have deployed gateway instances across multiple clusters as per this guide, the next step involves updating the DNS controller with the geographic regions of the visible gateways.
+Assuming you have deployed Gateway instances across multiple clusters as per this guide, the next step involves updating the DNS controller with the geographic regions of the visible Gateways.
 
-For instance, if you have one cluster in North America and another in the EU, you can direct traffic to these gateways based on their location by applying the appropriate labels:
+For instance, if you have one cluster in North America and another in the EU, you can direct traffic to these Gateways based on their location by applying the appropriate labels:
 
-For our North American cluster:
+For your North American cluster:
 
 ```bash
 kubectl label --overwrite gateway ${gatewayName} kuadrant.io/lb-attribute-geo-code=US -n ${gatewayNS}
-```
-
-And our European Cluster:
-
-```bash
-kubectl label --overwrite gateway ${gatewayName} kuadrant.io/lb-attribute-geo-code=EU -n ${gatewayNS}
-```
-
-After allowing some time for distribution, you can verify the geographic distribution of your traffic using the `HTTPRoute` host with the following command:
-
-```bash
-kubectl get httproute toystore -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}'
-```
-
-To check this, visit a site such as https://dnsmap.io/.
-
 ## Developer
 
 In this section of the walkthrough, we will focus on using an Open API Specification (OAS) to define an API. We will utilise Kuadrant's OAS extensions to specify the routing, authentication, and rate-limiting requirements. Next, we will employ the `kuadrantctl` tool to generate an `AuthPolicy`, an `HTTPRoute`, and a `RateLimitPolicy`, which we will then apply to our cluster to enforce the settings defined in our OAS.

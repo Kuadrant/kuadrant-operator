@@ -60,10 +60,22 @@ The managed DNS zone declares a zone and credentials to access that zone that Ku
 
 **Create the ManagedZone resource**
 
-Apply the following `ManagedZone` resource to each cluster or, if you are adding an additional cluster, add it to the new cluster:
+Apply the following `ManagedZone` resource and aws credentials to each cluster or, if you are adding an additional cluster, add it to the new cluster:
 
 ```bash
 kubectl create ns ${gatewayNS}
+```
+
+Ensure the zone credential is created:
+
+```
+kubectl -n ${gatewayNS} create secret generic aws-credentials \
+  --type=kuadrant.io/aws \
+  --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+  --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+
+```
+
 Then create a `ManagedZone`:
 
 ```bash

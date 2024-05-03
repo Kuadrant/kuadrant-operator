@@ -339,7 +339,7 @@ kubectl get ratelimitpolicy ${gatewayName}-rlp -n ${gatewayNS} -o=jsonpath='{.st
 
 ### Test connectivity and deny all auth 
 
-You can use `curl` to hit your endpoint. Because this example uses Let's Encrypt staging, you can pass the `-k` flag:
+You can use `curl` to hit your endpoint. You should see a `403` Because this example uses Let's Encrypt staging, you can pass the `-k` flag:
 
 ```bash
 curl -k -w "%{http_code}" https://$(kubectl get httproute test -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')

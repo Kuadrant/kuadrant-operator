@@ -338,17 +338,16 @@ For your North American cluster:
 
 ```bash
 kubectl label --overwrite gateway ${gatewayName} kuadrant.io/lb-attribute-geo-code=US -n ${gatewayNS}
-## Developer
+## Application developer workflow
 
-In this section of the walkthrough, we will focus on using an Open API Specification (OAS) to define an API. We will utilise Kuadrant's OAS extensions to specify the routing, authentication, and rate-limiting requirements. Next, we will employ the `kuadrantctl` tool to generate an `AuthPolicy`, an `HTTPRoute`, and a `RateLimitPolicy`, which we will then apply to our cluster to enforce the settings defined in our OAS.
+This section of the walkthrough focuses on using an OpenAPI Specification (OAS) to define an API. You will use Kuadrant OAS extensions to specify the routing, authentication, and rate-limiting requirements. Next, you will use the `kuadrantctl` tool to generate an `AuthPolicy`, an `HTTPRoute`, and a `RateLimitPolicy`, which you will then apply to your cluster to enforce the settings defined in your OAS.
 
-**Note:** While we use the `kuadrantctl` tool here, it is worth noting that it is not essential. `AuthPolicy`, `RateLimitPolicy` and `HTTPRoute`'s can also be created and applied via `oc` or `kubectl`.
+NOTE: While this section uses the `kuadrantctl` tool, this is not essential. You can also create and apply an `AuthPolicy`, `RateLimitPolicy`, and `HTTPRoute` by using the `oc` or `kubectl` commands.
 
-To begin, we'll deploy a new version of the `toystore` app to a developer namespace:
+To begin, you will deploy a new version of the `toystore` app to a developer namespace:
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml -n ${devNS}
-```
 
 ### Pre Req
 

@@ -549,18 +549,18 @@ Lastly, you can generate your `RateLimitPolicy` to add your rate limits, based o
 
 ```bash
 export oasPath=examples/oas-oidc.yaml
-Again, we should see the rate limit policy accepted and enforced:
+Again, you should see the rate limit policy accepted and enforced:
 
 ```bash
 kubectl get ratelimitpolicy -n ${devNS} toystore -o=jsonpath='{.status.conditions}'
 ```
-On our `HTTPoute` we should now see it is affected by the RateLimitPolicy in the same namespace:
+On your `HTTPoute` we should now see it is affected by the RateLimitPolicy in the same namespace:
 
 ```bash
 kubectl get httproute toystore -n ${devNS} -o=jsonpath='{.status.parents[0].conditions[?(@.type=="kuadrant.io/RateLimitPolicyAffected")].message}'
 ```
 
-Let's now test our rate-limiting.
+Let's now test your rate-limiting.
 
 Note you may need to wait a minute for the new rate limits to be applied. With the below requests you should see some number of 429 responses.
 
@@ -576,7 +576,7 @@ printf "\n -- \n"
 done 
 ```
 
-and with OpenID Connect Auth:
+And with OpenID Connect Auth:
 
 ```bash
 export ACCESS_TOKEN=$(curl -k -H "Content-Type: application/x-www-form-urlencoded" \

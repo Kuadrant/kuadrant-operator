@@ -469,14 +469,13 @@ Finally, if we add our API key header, with a valid key, we should get a `200` r
 curl -XPOST -H 'api_key: secret' -s -k -o /dev/null -w "%{http_code}" "https://$(kubectl get httproute toystore -n ${devNS} -o=jsonpath='{.spec.hostnames[0]}')/v1/toys"
 ```
 
-### OpenID Connect auth flow (skip if your only interested in the API Key)
+### OpenID Connect auth flow (skip if interested in API key only)
 
+This section of the walkthrough uses the `kuadrantctl` tool to create an `AuthPolicy` that integrates with an OpenID provider and a `RateLimitPolicy` that leverages JWT values for per-user rate limiting. It is important to note that OpenID requires an external provider. Therefore, you should adapt the following example to suit your specific needs and provider.
 
-In this part of the walkthrough, we will use the `kuadrantctl` tool to create an `AuthPolicy` that integrates with an OpenID provider and a `RateLimitPolicy` that leverages JWT values for per-user rate limiting. It's important to note that OpenID requires an external provider; therefore, the following example should be adapted to suit your specific needs and provider.
+The platform engineer workflow established some default policies for authentication and rate limiting at your Gateway. The new developer-defined policies, which you will create, are intended to target your HTTPRoute and will supersede the existing policies for requests to your API endpoints, similar to your previous API key example.
 
-During the platform engineer section, we established some default policies for authentication and rate limiting at our gateway. These new developer-defined policies, which we will now create, are intended to target our HTTPRoute and will supersede the existing policies for requests to our API endpoints, similar to our previous API Key example.
-
-Our example Open API Specification (OAS) utilizes Kuadrant-based extensions. These extensions enable you to define routing and service protection requirements. You can learn more about these extensions [here](https://docs.kuadrant.io/kuadrantctl/doc/openapi-kuadrant-extensions/).
+The example OAS uses Kuadrant-based extensions. These extensions enable you to define routing and service protection requirements. For more details, see [OpenAPI Kuadrant extensions](https://docs.kuadrant.io/kuadrantctl/doc/openapi-kuadrant-extensions/).
 
 
 ### Pre Requisites

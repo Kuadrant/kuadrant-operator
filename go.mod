@@ -11,7 +11,7 @@ require (
 	github.com/kuadrant/authorino v0.17.2
 	github.com/kuadrant/authorino-operator v0.11.1
 	github.com/kuadrant/dns-operator v0.0.0-20240627145308-8a571eaae927
-	github.com/kuadrant/limitador-operator v0.8.0
+	github.com/kuadrant/limitador-operator v0.9.0
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/onsi/ginkgo/v2 v2.13.2
 	github.com/onsi/gomega v1.30.0
@@ -28,7 +28,7 @@ require (
 	k8s.io/apimachinery v0.28.4
 	k8s.io/client-go v0.28.4
 	k8s.io/klog/v2 v2.110.1
-	k8s.io/utils v0.0.0-20231127182322-b307cd553661
+	k8s.io/utils v0.0.0-20240310230437-4693a0247e57
 	maistra.io/istio-operator v0.0.0-20231214211859-76e404c8df41
 	sigs.k8s.io/controller-runtime v0.16.3
 	sigs.k8s.io/external-dns v0.14.0

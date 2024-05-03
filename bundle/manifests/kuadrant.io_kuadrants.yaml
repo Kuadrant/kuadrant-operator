@@ -983,6 +983,10 @@ spec:
                             x-kubernetes-map-type: atomic
                           options:
                             properties:
+                              batch-size:
+                                description: 'BatchSize defines the size of entries
+                                  to flush in as single flush [default: 100]'
+                                type: integer
                               flush-period:
                                 description: 'FlushPeriod for counters in milliseconds
                                   [default: 1000]'
@@ -991,17 +995,9 @@ spec:
                                 description: 'MaxCached refers to the maximum amount
                                   of counters cached [default: 10000]'
                                 type: integer
-                              ratio:
-                                description: 'Ratio to apply to the TTL from Redis
-                                  on cached counters [default: 10]'
-                                type: integer
                               response-timeout:
                                 description: 'ResponseTimeout defines the timeout
                                   for Redis commands in milliseconds [default: 350]'
-                                type: integer
-                              ttl:
-                                description: 'TTL for cached counters in milliseconds
-                                  [default: 5000]'
                                 type: integer
                             type: object
                         type: object

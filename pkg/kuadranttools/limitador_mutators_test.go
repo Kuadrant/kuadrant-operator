@@ -13,6 +13,18 @@ import (
 )
 
 func TestLimitadorMutator(t *testing.T) {
+	limitadorMutator := LimitadorMutator(
+		LimitadorOwnerRefsMutator,
+		LimitadorAffinityMutator,
+		LimitadorReplicasMutator,
+		LimitadorStorageMutator,
+		LimitadorRateLimitHeadersMutator,
+		LimitadorTelemetryMutator,
+		LimitadorPodDisruptionBudgetMutator,
+		LimitadorResourceRequirementsMutator,
+		LimitadorVerbosityMutator,
+	)
+
 	type args struct {
 		existingObj client.Object
 		desiredObj  client.Object
@@ -35,7 +47,7 @@ func TestLimitadorMutator(t *testing.T) {
 				existingObj: &limitadorv1alpha1.Limitador{},
 			},
 			wantErr:       true,
-			errorContains: "desireObj",
+			errorContains: "desiredObj",
 		},
 		{
 			name: "No update required",
@@ -64,19 +76,19 @@ func TestLimitadorMutator(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := LimitadorMutator(tt.args.existingObj, tt.args.desiredObj)
+			got, err := limitadorMutator(tt.args.existingObj, tt.args.desiredObj)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("LimitadorMutator() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("limitadorMutator() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
 			if err != nil && tt.wantErr {
 				if !strings.Contains(err.Error(), tt.errorContains) {
-					t.Errorf("LimitadorMutator() error = %v, should contain %v", err, tt.errorContains)
+					t.Errorf("limitadorMutator() error = %v, should contain %v", err, tt.errorContains)
 				}
 			}
 			if got != tt.want {
-				t.Errorf("LimitadorMutator() got = %v, want %v", got, tt.want)
+				t.Errorf("limitadorMutator() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -77,8 +77,11 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 
 		gwHash = common.ToBase36HashLen(gateway.Name+"-"+gateway.Namespace, 6)
 
+		// refresh gateway
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
 		//Set single cluster gateway status
-		Eventually(func() error {
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
 			gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 				{
 					Type:  ptr.To(gatewayapiv1.IPAddressType),
@@ -109,7 +112,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 					Conditions:     []metav1.Condition{},
 				},
 			}
-			return k8sClient.Status().Update(ctx, gateway)
+			g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
 		}, TestTimeoutMedium, TestRetryIntervalMedium).Should(Succeed())
 
 		recordName = fmt.Sprintf("%s-%s", TestGatewayName, TestListenerNameOne)
@@ -171,41 +174,53 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 				err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(recordList.Items).To(HaveLen(2))
-				g.Expect(recordList.Items).To(
-					ContainElements(
-						MatchFields(IgnoreExtras, Fields{
-							"ObjectMeta": HaveField("Name", recordName),
-							"Spec": MatchFields(IgnoreExtras, Fields{
-								"OwnerID":        Equal(&ownerID),
-								"ManagedZoneRef": HaveField("Name", "mz-example-com"),
-								"Endpoints": ConsistOf(
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":       Equal(TestHostOne),
-										"Targets":       ContainElements(TestIPAddressOne, TestIPAddressTwo),
-										"RecordType":    Equal("A"),
-										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(externaldns.TTL(60)),
-									})),
-								),
-							}),
+
+				dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, dnsRecord)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				wildcardDnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, wildcardDnsRecord)
+				g.Expect(err).NotTo(HaveOccurred())
+
+				g.Expect(*dnsRecord).To(
+					MatchFields(IgnoreExtras, Fields{
+						"ObjectMeta": HaveField("Name", recordName),
+						"Spec": MatchFields(IgnoreExtras, Fields{
+							"OwnerID":        Equal(&ownerID),
+							"ManagedZoneRef": HaveField("Name", "mz-example-com"),
+							"Endpoints": ConsistOf(
+								PointTo(MatchFields(IgnoreExtras, Fields{
+									"DNSName":       Equal(TestHostOne),
+									"Targets":       ContainElements(TestIPAddressOne, TestIPAddressTwo),
+									"RecordType":    Equal("A"),
+									"SetIdentifier": Equal(""),
+									"RecordTTL":     Equal(externaldns.TTL(60)),
+								})),
+							),
 						}),
-						MatchFields(IgnoreExtras, Fields{
-							"ObjectMeta": HaveField("Name", wildcardRecordName),
-							"Spec": MatchFields(IgnoreExtras, Fields{
-								"OwnerID":        Equal(&ownerID),
-								"ManagedZoneRef": HaveField("Name", "mz-example-com"),
-								"Endpoints": ConsistOf(
-									PointTo(MatchFields(IgnoreExtras, Fields{
-										"DNSName":       Equal(TestHostWildcard),
-										"Targets":       ContainElements(TestIPAddressOne, TestIPAddressTwo),
-										"RecordType":    Equal("A"),
-										"SetIdentifier": Equal(""),
-										"RecordTTL":     Equal(externaldns.TTL(60)),
-									})),
-								),
-							}),
+					}),
+				)
+				g.Expect(testEndpointsTraversable(dnsRecord.Spec.Endpoints, TestHostOne, []string{TestIPAddressOne, TestIPAddressTwo})).To(BeTrue())
+				g.Expect(*wildcardDnsRecord).To(
+					MatchFields(IgnoreExtras, Fields{
+						"ObjectMeta": HaveField("Name", wildcardRecordName),
+						"Spec": MatchFields(IgnoreExtras, Fields{
+							"OwnerID":        Equal(&ownerID),
+							"ManagedZoneRef": HaveField("Name", "mz-example-com"),
+							"Endpoints": ConsistOf(
+								PointTo(MatchFields(IgnoreExtras, Fields{
+									"DNSName":       Equal(TestHostWildcard),
+									"Targets":       ContainElements(TestIPAddressOne, TestIPAddressTwo),
+									"RecordType":    Equal("A"),
+									"SetIdentifier": Equal(""),
+									"RecordTTL":     Equal(externaldns.TTL(60)),
+								})),
+							),
 						}),
-					))
+					}),
+				)
+				g.Expect(testEndpointsTraversable(wildcardDnsRecord.Spec.Endpoints, TestHostWildcard, []string{TestIPAddressOne, TestIPAddressTwo})).To(BeTrue())
 			}, TestTimeoutMedium, TestRetryIntervalMedium, ctx).Should(Succeed())
 		})
 
@@ -285,6 +300,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 						}),
 					}),
 				)
+				g.Expect(testEndpointsTraversable(dnsRecord.Spec.Endpoints, TestHostOne, []string{TestIPAddressOne, TestIPAddressTwo})).To(BeTrue())
 				g.Expect(*wildcardDnsRecord).To(
 					MatchFields(IgnoreExtras, Fields{
 						"ObjectMeta": HaveField("Name", wildcardRecordName),
@@ -334,6 +350,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 						}),
 					}),
 				)
+				g.Expect(testEndpointsTraversable(wildcardDnsRecord.Spec.Endpoints, TestHostWildcard, []string{TestIPAddressOne, TestIPAddressTwo})).To(BeTrue())
 			}, TestTimeoutMedium, TestRetryIntervalMedium, ctx).Should(Succeed())
 		})
 

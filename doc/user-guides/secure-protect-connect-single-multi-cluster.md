@@ -235,14 +235,10 @@ spec:
 EOF
 ```
 
-Let's check our policy was accepted by the controller:
+Check that your policy was accepted by the controller:
 
 ```bash
 kubectl get tlspolicy ${gatewayName}-tls -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
-```
-
-Lastly, we'll setup a default `RateLimitPolicy` for our Gateway, with arbitrarily low limits (2 requests in a 10 second window):
-
 ```bash
 kubectl apply -f  - <<EOF
 apiVersion: kuadrant.io/v1beta2

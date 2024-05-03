@@ -287,29 +287,12 @@ spec:
 EOF
 ```    
 
-**Note:** the `DNSPolicy` will leverage the `ManagedZone` we defined earlier based on the listener hosts defined in the gateway.
+NOTE:  The `DNSPolicy` will leverage the `ManagedZone` that you defined earlier based on the listener hosts defined in the Gateway.
 
-Let's check our `DNSPolicy` has been accepted:
+Check that your `DNSPolicy` has been accepted:
 
 ```bash
 kubectl get dnspolicy ${gatewayName}-dnspolicy -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
-```
-
-If you have set up the observability components (see the Installation guide), and remote write to a Thanos instance, then you should be able to access the Grafana instance and see your deployed gateway and policies in the `platform` engineer dashboard.
-
-## Platform Engineer review
-
-We have now established an external gateway, secured it with TLS, and protected all endpoints with a default `DENY ALL` AuthPolicy, alongside a restrictive default `RateLimitPolicy`. We have also configured a `ManagedZone` and a `DNSPolicy` to direct traffic to the gateway via the specified listener hosts. Our gateway is now ready to begin receiving traffic.
-
-By creating an `HTTPRoute` for our listeners, we will activate the `DNSPolicy`, `AuthPolicy`, and `RateLimitPolicy`, populating DNS records and configuring auth and rate limiting to safeguard requests to that endpoint.
-
-To verify the setup, we can deploy a simple application and connect it to our gateway:
-
-```bash
-kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml -n ${gatewayNS}
-```
-
-Add an `HTTPRoute` to expose this application:
 
 ```bash
 kubectl apply -f - <<EOF

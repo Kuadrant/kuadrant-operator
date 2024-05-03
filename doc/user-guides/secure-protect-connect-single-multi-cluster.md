@@ -126,11 +126,11 @@ Then wait for the `ClusterIssuer` to become ready:
 kubectl wait clusterissuer/${clusterIssuerName} --for=condition=ready=true
 ```
 
-### Setup a Gateway
+### Set up a Gateway
 
-For Kuadrant to balance traffic using DNS across two or more clusters, we need to define a Gateway with a shared host. We will define this with a HTTPS listener with a wildcard hostname based on the root domain. As mentioned earlier, these resources need to be applied to all clusters. 
+For Kuadrant to balance traffic using DNS across two or more clusters, you must define a Gateway with a shared host. You will define this by using an HTTPS listener with a wildcard hostname based on the root domain. As mentioned earlier, these resources must be applied to all clusters. 
 
-**Note:** for now we have set the Gateway to only accept `HTTPRoute`'s from the same namespace. This will allow us to restrict who can use the Gateway until it is ready for general use.
+NOTE: For now, the Gateway is set to accept an `HTTPRoute` from the same namespace only. This allows you to restrict who can use the Gateway until it is ready for general use.
 
 ```bash
 kubectl apply -f - <<EOF

@@ -16,3 +16,7 @@ verify-bundle: bundle ## Verify bundle update.
 .PHONY: verify-fmt
 verify-fmt: fmt ## Verify fmt update.
 	git diff --exit-code ./api ./controllers
+
+.PHONY: verify-generate
+verify-generate: generate ## Verify generate update.
+	git diff --exit-code ./api ./controllers

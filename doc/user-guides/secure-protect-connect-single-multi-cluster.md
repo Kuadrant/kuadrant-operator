@@ -162,7 +162,7 @@ spec:
 EOF
 ```
 
-Check the status of our gateway:
+Check the status of your Gateway:
 
 ```bash
 kubectl get gateway ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'

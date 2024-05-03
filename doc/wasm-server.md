@@ -28,7 +28,10 @@ The Wasm Server is implemented using [nginx](https://nginx.org) HTTP server.
 The compiled [Kuadrant's Wasm module](https://github.com/Kuadrant/wasm-shim) is being copied
 to a docker image containing the nginx server configured to serve it on the `/plugin.wasm` path.
 
-The following sequence diagram shows the workflow:
+
+#### Istio
+
+The following sequence diagram shows the workflow when Envoy is managed by [Istio](https://istio.io/)
 
 ```mermaid
 sequenceDiagram

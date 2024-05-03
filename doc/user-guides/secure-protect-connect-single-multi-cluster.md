@@ -52,10 +52,9 @@ export clusterIssuerName=lets-encrypt
 export EMAIL=foo@example.com
 ```
 
-### Tooling
+### Deployment management tooling
 
-While this document uses `kubectl`, working with multiple clusters is complex, so we would recommend looking into something like ArgoCD to manage the deployment of resource to multiple clusters.
-
+While this document uses `kubectl`, working with multiple clusters is complex, and it is best to use a tool such as Argo CD to manage the deployment of resources to multiple clusters.
 ### Setup a managed DNS zone
 
 The managed DNS zone declares a zone and credentials to access that zone that can be used by Kuadrant to set up DNS configuration.

@@ -426,7 +426,6 @@ func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadr
 		limitador.Spec.Storage = kObj.Spec.Limitador.Storage
 		limitador.Spec.RateLimitHeaders = kObj.Spec.Limitador.RateLimitHeaders
 		limitador.Spec.Telemetry = kObj.Spec.Limitador.Telemetry
-		limitador.Spec.Tracing = kObj.Spec.Limitador.Tracing
 		limitador.Spec.PodDisruptionBudget = kObj.Spec.Limitador.PodDisruptionBudget
 		limitador.Spec.ResourceRequirements = kObj.Spec.Limitador.ResourceRequirements
 		limitador.Spec.Verbosity = kObj.Spec.Limitador.Verbosity

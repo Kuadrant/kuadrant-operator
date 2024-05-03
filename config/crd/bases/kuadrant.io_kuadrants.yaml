@@ -1011,13 +1011,6 @@ spec:
                     - basic
                     - exhaustive
                     type: string
-                  tracing:
-                    properties:
-                      endpoint:
-                        type: string
-                    required:
-                    - endpoint
-                    type: object
                   verbosity:
                     description: Sets the level of verbosity
                     maximum: 4

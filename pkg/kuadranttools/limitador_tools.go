@@ -52,11 +52,6 @@ func LimitadorMutator(existingObj, desiredObj client.Object) (bool, error) {
 		existing.Spec.Telemetry = desired.Spec.Telemetry
 	}
 
-	if !reflect.DeepEqual(existing.Spec.Tracing, desired.Spec.Tracing) {
-		update = true
-		existing.Spec.Tracing = desired.Spec.Tracing
-	}
-
 	if !reflect.DeepEqual(existing.Spec.PodDisruptionBudget, desired.Spec.PodDisruptionBudget) {
 		update = true
 		existing.Spec.PodDisruptionBudget = desired.Spec.PodDisruptionBudget

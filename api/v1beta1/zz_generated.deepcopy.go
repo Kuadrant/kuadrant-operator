@@ -156,11 +156,6 @@ func (in *LimitadorSpec) DeepCopyInto(out *LimitadorSpec) {
 		*out = new(v1alpha1.Telemetry)
 		**out = **in
 	}
-	if in.Tracing != nil {
-		in, out := &in.Tracing, &out.Tracing
-		*out = new(v1alpha1.Tracing)
-		**out = **in
-	}
 	if in.PodDisruptionBudget != nil {
 		in, out := &in.PodDisruptionBudget, &out.PodDisruptionBudget
 		*out = new(v1alpha1.PodDisruptionBudgetType)

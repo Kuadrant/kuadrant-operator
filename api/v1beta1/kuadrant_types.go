@@ -53,9 +53,6 @@ type LimitadorSpec struct {
 	Telemetry *limitadorv1alpha1.Telemetry `json:"telemetry,omitempty"`
 
 	// +optional
-	Tracing *limitadorv1alpha1.Tracing `json:"tracing,omitempty"`
-
-	// +optional
 	PodDisruptionBudget *limitadorv1alpha1.PodDisruptionBudgetType `json:"pdb,omitempty"`
 
 	// +optional

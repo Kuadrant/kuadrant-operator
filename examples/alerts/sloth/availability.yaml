@@ -23,4 +23,4 @@ slos:
       ticket_alert:
         labels:
           severity: warning
-          
+  

@@ -8,7 +8,11 @@ slos:
     description: "Multi window multi burn rate SLO based on latency for HTTP request responses."
     sli:
       events:
-        error_query: sum(rate(istio_request_duration_milliseconds_bucket{le="250", job="ingress-metrics-proxy", response_code="200" }[{{.window}}]) )by (request_host) 
+        error_query:  (
+                      sum(rate(istio_request_duration_milliseconds_count{job="ingress-metrics-proxy",response_code="200"}[{{.window}}]))by (request_host) 
+                      - 
+                      sum(rate(istio_request_duration_milliseconds_bucket{le="250", job="ingress-metrics-proxy", response_code="200" }[{{.window}}]) )by (request_host)
+                      )
         total_query: sum(rate(istio_request_duration_milliseconds_count{job="ingress-metrics-proxy",response_code="200"}[{{.window}}]))by (request_host)
     alerting:
       name: KuadrantlatencyHighErrorRate
@@ -16,7 +20,7 @@ slos:
         category: "latency"
       annotations:
         # Overwrite default Sloth SLO alert summmary on ticket and page alerts.
-        summary: "High latency on HTTPRoute requests responses {{$labels.request_host}}"
+        summary: "High latency on HTTPRoute requests responses"
       page_alert:
         labels:
           severity: critical

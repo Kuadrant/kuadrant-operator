@@ -307,6 +307,7 @@ Check that your `DNSPolicy` has been accepted:
 
 ```bash
 kubectl get dnspolicy ${gatewayName}-dnspolicy -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
+```
 
 ```bash
 kubectl apply -f - <<EOF
@@ -334,12 +335,16 @@ Check your Gateway policies are enforced:
 kubectl get dnspolicy ${gatewayName}-dnspolicy -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
 kubectl get authpolicy ${gatewayName}-auth -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
 kubectl get ratelimitpolicy ${gatewayName}-rlp -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
+```
+
 ### Test connectivity and deny all auth 
 
 You can use `curl` to hit your endpoint. Because this example uses Let's Encrypt staging, you can pass the `-k` flag:
 
 ```bash
 curl -k -w "%{http_code}" https://$(kubectl get httproute test -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')
+```
+
 ### Extending this Gateway to multiple clusters and configuring geo-based routing
 
 To distribute this Gateway across multiple clusters, repeat this setup process for each cluster. By default, this will implement a round-robin DNS strategy to distribute traffic evenly across the different clusters. Setting up your Gateways to serve clients based on their geographic location is straightforward with your current configuration.
@@ -352,6 +357,8 @@ For your North American cluster:
 
 ```bash
 kubectl label --overwrite gateway ${gatewayName} kuadrant.io/lb-attribute-geo-code=US -n ${gatewayNS}
+```
+
 ## Application developer workflow
 
 This section of the walkthrough focuses on using an OpenAPI Specification (OAS) to define an API. You will use Kuadrant OAS extensions to specify the routing, authentication, and rate-limiting requirements. Next, you will use the `kuadrantctl` tool to generate an `AuthPolicy`, an `HTTPRoute`, and a `RateLimitPolicy`, which you will then apply to your cluster to enforce the settings defined in your OAS.
@@ -362,6 +369,7 @@ To begin, you will deploy a new version of the `toystore` app to a developer nam
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/Kuadrant-operator/main/examples/toystore/toystore.yaml -n ${devNS}
+```
 
 ### Prerequisites
 

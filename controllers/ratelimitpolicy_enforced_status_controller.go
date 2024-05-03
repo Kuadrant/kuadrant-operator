@@ -70,75 +70,28 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) Reconcile(eventCtx context.Con
 
 		// Policy has been accepted
 		// Ensure no error on underlying subresource (i.e. Limitador)
-		if cond := r.HasErrCondOnSubResource(ctx, logger, p); cond != nil {
-			if err := r.SetCondition(ctx, logger, p, &conditions, *cond); err != nil {
+		if cond := r.hasErrCondOnSubResource(ctx, logger, p); cond != nil {
+			if err := r.setCondition(ctx, logger, p, &conditions, *cond); err != nil {
 				return ctrl.Result{}, err
 			}
 			continue
 		}
 
-		if kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef()) {
+		if kuadrantgatewayapi.IsTargetRefGateway(p.GetTargetRef()) {
 			if p.Spec.Overrides != nil {
-				// Only have this policy and no free routes
-				if len(policies) == 1 && unTargetedRoutes == 0 {
-					if err := r.SetCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, kuadrant.NewErrUnknown(p.Kind(), errors.New("no free routes to enforce policy")), true)); err != nil {
-						return ctrl.Result{}, err
-					}
-					continue
-				}
-
-				// Has free routes or is overriding policies
-				// Set Enforced true condition for this GW policy
-				if err := r.SetCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, nil, true)); err != nil {
+				if err := r.setConditionForGWPolicyWithOverrides(ctx, logger, p, conditions, policies, unTargetedRoutes); err != nil {
 					return ctrl.Result{}, err
-				}
-
-				// Update the rest of the policies as overridden
-				affectedPolices := utils.Filter(policies, func(p kuadrantgatewayapi.Policy) bool {
-					return policy != p && p.GetDeletionTimestamp() == nil
-				})
-
-				for i := range affectedPolices {
-					af := affectedPolices[i]
-					afp := af.(*kuadrantv1beta2.RateLimitPolicy)
-					afConditions := afp.GetStatus().GetConditions()
-
-					if err := r.SetCondition(ctx, logger, afp, &afConditions, *kuadrant.EnforcedCondition(afp, kuadrant.NewErrOverridden(afp.Kind(), []client.ObjectKey{client.ObjectKeyFromObject(p)}), true)); err != nil {
-						return ctrl.Result{}, err
-					}
 				}
 				break
 			}
-			// GW Policy defaults is defined
-			// Only have this policy or no free routes -> nothing to enforce policy
-			if len(policies) == 1 && unTargetedRoutes == 0 {
-				if err := r.SetCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, kuadrant.NewErrUnknown(p.Kind(), errors.New("no free routes to enforce policy")), true)); err != nil {
-					return ctrl.Result{}, err
-				}
-				continue
-			} else if len(policies) > 1 && unTargetedRoutes == 0 {
-				// GW policy defaults are overridden by child policies
-				affectedPolices := utils.Filter(policies, func(p kuadrantgatewayapi.Policy) bool {
-					return policy != p && p.GetDeletionTimestamp() == nil
-				})
-
-				if err := r.SetCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, kuadrant.NewErrOverridden(p.Kind(), utils.Map(affectedPolices, func(p kuadrantgatewayapi.Policy) client.ObjectKey {
-					return client.ObjectKeyFromObject(p)
-				})), true)); err != nil {
-					return ctrl.Result{}, err
-				}
-				continue
-			} else {
-				// Is enforcing default policy on a free route
-				if err := r.SetCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, nil, true)); err != nil {
-					return ctrl.Result{}, err
-				}
-				continue
+			if err := r.setConditionForGWPolicyWithDefaults(ctx, logger, p, conditions, policies, unTargetedRoutes); err != nil {
+				return ctrl.Result{}, err
 			}
+			continue
 		}
 
-		// Is a Route Policy and has no GW Policy since it's sorted => is enforced
-		if err := r.SetCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, nil, true)); err != nil {
+		// Route Policy
+		if err := r.setCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, nil, true)); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -147,7 +100,67 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) Reconcile(eventCtx context.Con
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyEnforcedStatusReconciler) HasErrCondOnSubResource(ctx context.Context, logger logr.Logger, p *kuadrantv1beta2.RateLimitPolicy) *metav1.Condition {
+func (r *RateLimitPolicyEnforcedStatusReconciler) setConditionForGWPolicyWithOverrides(ctx context.Context, logger logr.Logger, p *kuadrantv1beta2.RateLimitPolicy, conditions []metav1.Condition, policies []kuadrantgatewayapi.Policy, unTargetedRoutes int) error {
+	// Only have this policy and no free routes
+	if len(policies) == 1 && unTargetedRoutes == 0 {
+		if err := r.setCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, kuadrant.NewErrUnknown(p.Kind(), errors.New("no free routes to enforce policy")), true)); err != nil {
+			return err
+		}
+	}
+
+	// Has free routes or is overriding policies
+	// Set Enforced true condition for this GW policy
+	if err := r.setCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, nil, true)); err != nil {
+		return err
+	}
+
+	// Update the rest of the policies as overridden
+	affectedPolices := utils.Filter(policies, func(ap kuadrantgatewayapi.Policy) bool {
+		return p != ap && ap.GetDeletionTimestamp() == nil
+	})
+
+	for i := range affectedPolices {
+		af := affectedPolices[i]
+		afp := af.(*kuadrantv1beta2.RateLimitPolicy)
+		afConditions := afp.GetStatus().GetConditions()
+
+		if err := r.setCondition(ctx, logger, afp, &afConditions, *kuadrant.EnforcedCondition(afp, kuadrant.NewErrOverridden(afp.Kind(), []client.ObjectKey{client.ObjectKeyFromObject(p)}), true)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *RateLimitPolicyEnforcedStatusReconciler) setConditionForGWPolicyWithDefaults(ctx context.Context, logger logr.Logger, p *kuadrantv1beta2.RateLimitPolicy, conditions []metav1.Condition, policies []kuadrantgatewayapi.Policy, unTargetedRoutes int) error {
+	// GW Policy defaults is defined
+	// Only have this policy or no free routes -> nothing to enforce policy
+	if len(policies) == 1 && unTargetedRoutes == 0 {
+		if err := r.setCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, kuadrant.NewErrUnknown(p.Kind(), errors.New("no free routes to enforce policy")), true)); err != nil {
+			return err
+		}
+	} else if len(policies) > 1 && unTargetedRoutes == 0 {
+		// GW policy defaults are overridden by child policies
+		affectedPolices := utils.Filter(policies, func(ap kuadrantgatewayapi.Policy) bool {
+			return p != ap && ap.GetDeletionTimestamp() == nil
+		})
+
+		if err := r.setCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, kuadrant.NewErrOverridden(p.Kind(), utils.Map(affectedPolices, func(ap kuadrantgatewayapi.Policy) client.ObjectKey {
+			return client.ObjectKeyFromObject(ap)
+		})), true)); err != nil {
+			return err
+		}
+	} else {
+		// Is enforcing default policy on a free route
+		if err := r.setCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, nil, true)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *RateLimitPolicyEnforcedStatusReconciler) hasErrCondOnSubResource(ctx context.Context, logger logr.Logger, p *kuadrantv1beta2.RateLimitPolicy) *metav1.Condition {
 	limitador, err := GetLimitador(ctx, r.Client(), p)
 	if err != nil {
 		logger.V(1).Error(err, "failed to get limitador")
@@ -162,7 +175,7 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) HasErrCondOnSubResource(ctx co
 	return nil
 }
 
-func (r *RateLimitPolicyEnforcedStatusReconciler) SetCondition(ctx context.Context, logger logr.Logger, p *kuadrantv1beta2.RateLimitPolicy, conditions *[]metav1.Condition, cond metav1.Condition) error {
+func (r *RateLimitPolicyEnforcedStatusReconciler) setCondition(ctx context.Context, logger logr.Logger, p *kuadrantv1beta2.RateLimitPolicy, conditions *[]metav1.Condition, cond metav1.Condition) error {
 	idx := utils.Index(*conditions, func(c metav1.Condition) bool {
 		return c.Type == cond.Type && c.Status == cond.Status && c.Reason == cond.Reason && c.Message == cond.Message
 	})

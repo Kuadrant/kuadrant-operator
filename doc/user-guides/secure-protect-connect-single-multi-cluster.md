@@ -4,13 +4,13 @@
 
 This guide walks you through using Kuadrant to secure, protect, and connect an API exposed by a Gateway using Kubernetes Gateway API. You can use this walkthrough for a Gateway on a single cluster or a Gateway distributed across multiple clusters with a shared listener hostname. This guide shows how specific user personas can each use Kuadrant to achieve their goals.
 
-## Pre-requisites
+## Prerequisites
 
-This document expects that you have successfully installed Kuadrant [Install Guide](../install/install-openshift.md) onto at least one cluster. If you are looking at multicluster scenarios, follow the install guide on at least two different clusters and have a shared, accessible Redis store.
-
-- Completed the Kuadrant Install Guide for one or more clusters [Install Guide](../install/install-openshift.md)
-- `kubectl` command line tool
-- (optional) have user workload monitoring configured to remote write to a central storage system such as Thanos (also covered in the installation guide).
+This guide expects that you have successfully installed Kuadrant on at least one cluster:
+- You have completed the steps in [Install Kuadrant on an OpenShift cluster](../install/install-openshift.md) for one or more clusters.
+- For multicluster scenarios, you have installed Kuadrant on at least two different clusters, and have a shared accessible Redis store.
+- `kubectl` command line tool is installed.
+- (Optional) User workload monitoring is configured to remote write to a central storage system such as Thanos (also covered in the installation steps).
 
 ### What Kuadrant can do for you in a multi-cluster environment
 

@@ -30,7 +30,7 @@ to operate the cluster (Istio's) ingress gateway to provide API management with 
 
 ### Kuadrant components
 
-| CRD                                                                  | Description                                                                                                                                                                                                                                                                               |
+| Component                                                            | Description                                                                                                                                                                                                                                                                               |
 |----------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Control Plane                                                        | The control plane takes the customer desired configuration (declaratively as kubernetes custom resources) as input and ensures all components are configured to obey customer's desired behavior.<br> This repository contains the source code of the kuadrant control plane              |
 | [Kuadrant Operator](https://github.com/Kuadrant/kuadrant-operator)   | A Kubernetes Operator to manage the lifecycle of the kuadrant deployment                                                                                                                                                                                                                  |
@@ -39,6 +39,7 @@ to operate the cluster (Istio's) ingress gateway to provide API management with 
 | [Authorino Operator](https://github.com/Kuadrant/authorino-operator) | A Kubernetes Operator to manage Authorino instances                                                                                                                                                                                                                                       |
 | [Limitador Operator](https://github.com/Kuadrant/limitador-operator) | A Kubernetes Operator to manage Limitador instances                                                                                                                                                                                                                                       |
 | [DNS Operator](https://github.com/Kuadrant/dns-operator)             | A Kubernetes Operator to manage DNS records in external providers                                                                                                                                                                                                                         |
+| [Wasm Server](doc/wasm-server.md)                                    | Static file server to serve Wasm binaries internally. Lifecycle managed by the Kuadrant Operator.                                                                                                                                                                                         |
 
 ### Provided APIs
 
@@ -69,7 +70,7 @@ Additionally, Kuadrant provides the following CRDs
   [Istio getting started guide](https://istio.io/latest/docs/setup/getting-started/).
 * Kubernetes Gateway API is installed in the cluster. Otherwise,
   [configure Istio to expose a service using the Kubernetes Gateway API](https://istio.io/latest/docs/tasks/traffic-management/ingress/gateway-api/).
-* cert-manager is installed in the cluster. Otherwise, refer to the 
+* cert-manager is installed in the cluster. Otherwise, refer to the
   [cert-manager installation guide](https://cert-manager.io/docs/installation/).
 
 ### Installing Kuadrant

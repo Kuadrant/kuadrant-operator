@@ -206,13 +206,10 @@ spec:
 EOF
 ```
 
-Let's check our policy was accepted by the controller:
+Check that your policy was accepted by the controller:
 
 ```bash
 kubectl get authpolicy ${gatewayName}-auth -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
-```
-
-Setup a `TLSPolicy` for our Gateway:
 
 ```bash
 kubectl apply -f - <<EOF

@@ -15,6 +15,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 func TestGetGatewayWorkloadSelector(t *testing.T) {
@@ -231,6 +234,89 @@ func TestIsHTTPRouteAccepted(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(subT *testing.T) {
 			res := IsHTTPRouteAccepted(tc.route)
+			if res != tc.expected {
+				subT.Errorf("result (%t) does not match expected (%t)", res, tc.expected)
+			}
+		})
+	}
+}
+
+type isPolicyAcceptedTestCase struct {
+	name     string
+	policy   Policy
+	expected bool
+}
+
+var isPolicyAcceptedTestCases = []isPolicyAcceptedTestCase{
+	{
+		name:     "no status",
+		policy:   &TestPolicy{},
+		expected: false,
+	},
+	{
+		name: "no policy accepted condition",
+		policy: &TestPolicy{
+			Status: FakePolicyStatus{
+				Conditions: []metav1.Condition{
+					{
+						Type:   "Other",
+						Status: metav1.ConditionTrue,
+					},
+				},
+			},
+		},
+		expected: false,
+	},
+	{
+		name: "truthy accepted condition",
+		policy: &TestPolicy{
+			Status: FakePolicyStatus{
+				Conditions: []metav1.Condition{
+					{
+						Type:   string(gatewayapiv1alpha2.PolicyConditionAccepted),
+						Status: metav1.ConditionTrue,
+					},
+				},
+			},
+		},
+		expected: true,
+	},
+	{
+		name: "falsey accepted condition",
+		policy: &TestPolicy{
+			Status: FakePolicyStatus{
+				Conditions: []metav1.Condition{
+					{
+						Type:   string(gatewayapiv1alpha2.PolicyConditionAccepted),
+						Status: metav1.ConditionFalse,
+					},
+				},
+			},
+		},
+		expected: false,
+	},
+}
+
+func TestIsPolicyAccepted(t *testing.T) {
+	testCases := isPolicyAcceptedTestCases
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			res := IsPolicyAccepted(tc.policy)
+			if res != tc.expected {
+				subT.Errorf("result (%t) does not match expected (%t)", res, tc.expected)
+			}
+		})
+	}
+}
+
+func TestIsNotPolicyAccepted(t *testing.T) {
+	testCases := utils.Map(isPolicyAcceptedTestCases, func(tc isPolicyAcceptedTestCase) isPolicyAcceptedTestCase {
+		tc.expected = !tc.expected
+		return tc
+	})
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			res := IsNotPolicyAccepted(tc.policy)
 			if res != tc.expected {
 				subT.Errorf("result (%t) does not match expected (%t)", res, tc.expected)
 			}

@@ -110,11 +110,11 @@ func (r *TargetStatusReconciler) reconcileResourcesForPolicyKind(parentCtx conte
 		return err
 	}
 	policies := topology.PoliciesFromGateway(gw)
-	gatewayPolicyExists := len(policies) > 0 && utils.Index(policies, func(p kuadrantgatewayapi.Policy) bool { return kuadrantgatewayapi.IsTargetRefGateway(p.GetTargetRef()) }) >= 0
 
 	var errs error
 
 	// if no policies of a kind affecting the gateway → remove condition from the gateway and routes
+	gatewayPolicyExists := len(policies) > 0 && utils.Index(policies, func(p kuadrantgatewayapi.Policy) bool { return kuadrantgatewayapi.IsTargetRefGateway(p.GetTargetRef()) }) >= 0
 	if !gatewayPolicyExists {
 		// remove the condition from the gateway
 		conditionType := policyAffectedConditionType(policyKind)
@@ -136,26 +136,28 @@ func (r *TargetStatusReconciler) reconcileResourcesForPolicyKind(parentCtx conte
 		}
 	}
 
-	var gatewayStatusUpdated bool
+	reconciledTargets := make(map[string]struct{})
 
-	// update the status of the gateway and its routes
-	for i := range policies {
-		policy := policies[i]
-		condition := buildPolicyAffectedCondition(policy)
+	reconcileFunc := func(policy kuadrantgatewayapi.Policy) error {
+		targetRefKey := targetRefKey(policy)
 
 		// update status of targeted route
 		if route := topology.GetPolicyHTTPRoute(policy); route != nil {
-			if err := r.addRouteCondition(ctx, route, condition, gatewayKey, kuadrant.ControllerName); err != nil {
+			if _, updated := reconciledTargets[targetRefKey]; updated { // do not update the same route twice
+				return nil
+			}
+			if err := r.addRouteCondition(ctx, route, buildPolicyAffectedCondition(policy), gatewayKey, kuadrant.ControllerName); err != nil {
 				errs = errors.Join(errs, err)
 			}
-			continue
+			reconciledTargets[targetRefKey] = struct{}{}
+			return nil
 		}
 
-		// update status of the gateway if not already updated before after observing another policy of same kind
-		// this assumes that the gateway is targeted by at most one policy of each kind
-		if gatewayStatusUpdated {
-			continue
+		// update status of targeted gateway and routes not targeted by any policy
+		if _, updated := reconciledTargets[targetRefKey]; updated { // do not update the same gateway twice
+			return nil
 		}
+		condition := buildPolicyAffectedCondition(policy)
 		if c := meta.FindStatusCondition(gw.Status.Conditions, condition.Type); c != nil && c.Status == condition.Status && c.Reason == condition.Reason && c.Message == condition.Message && c.ObservedGeneration == gw.GetGeneration() {
 			logger.V(1).Info("condition already up-to-date, skipping", "condition", condition.Type, "status", condition.Status)
 		} else {
@@ -173,7 +175,21 @@ func (r *TargetStatusReconciler) reconcileResourcesForPolicyKind(parentCtx conte
 				return err
 			}
 		}
-		gatewayStatusUpdated = true
+		reconciledTargets[targetRefKey] = struct{}{}
+
+		return nil
+	}
+
+	// update for policies with status condition Accepted: true
+	for i := range utils.Filter(policies, kuadrantgatewayapi.IsPolicyAccepted) {
+		policy := policies[i]
+		errs = errors.Join(errs, reconcileFunc(policy))
+	}
+
+	// update for policies with status condition Accepted: false
+	for i := range utils.Filter(policies, kuadrantgatewayapi.IsNotPolicyAccepted) {
+		policy := policies[i]
+		errs = errors.Join(errs, reconcileFunc(policy))
 	}
 
 	return errs
@@ -392,4 +408,9 @@ func buildPolicyAffectedCondition(policy kuadrantgatewayapi.Policy) metav1.Condi
 
 func policyAffectedConditionType(policyKind string) string {
 	return fmt.Sprintf(PolicyAffectedConditionPattern, policyKind)
+}
+
+func targetRefKey(policy kuadrantgatewayapi.Policy) string {
+	targetRef := policy.GetTargetRef()
+	return fmt.Sprintf("%s.%s/%s/%s", targetRef.Group, targetRef.Kind, ptr.Deref(targetRef.Namespace, gatewayapiv1.Namespace(policy.GetNamespace())), targetRef.Name)
 }

@@ -99,6 +99,20 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 		return condition.Status == metav1.ConditionTrue && strings.Contains(condition.Message, policyKey.String())
 	}
 
+	routeNotAffected := func(ctx context.Context, routeName, conditionType string, policyKey client.ObjectKey) bool {
+		route := &gatewayapiv1.HTTPRoute{}
+		err := k8sClient.Get(ctx, client.ObjectKey{Name: routeName, Namespace: testNamespace}, route)
+		if err != nil {
+			return false
+		}
+		routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
+		if !found {
+			return false
+		}
+		condition := meta.FindStatusCondition(routeParentStatus.Conditions, conditionType)
+		return condition.Status == metav1.ConditionFalse && strings.Contains(condition.Message, policyKey.String())
+	}
+
 	targetsAffected := func(ctx context.Context, policyKey client.ObjectKey, conditionType string, targetRef gatewayapiv1alpha2.PolicyTargetReference, routeNames ...string) bool {
 		switch string(targetRef.Kind) {
 		case "Gateway":
@@ -175,6 +189,44 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 			policy := policyFactory()
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 			Eventually(policyAcceptedAndTargetsAffected(ctx, policy)).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+
+		It("Adds truthy PolicyAffected status condition if there is at least one policy accepted", func(ctx SpecContext) {
+			routePolicy1 := policyFactory(func(p *v1beta2.AuthPolicy) {
+				p.Name = "route-auth-1"
+			})
+			Expect(k8sClient.Create(ctx, routePolicy1)).To(Succeed())
+
+			Eventually(policyAcceptedAndTargetsAffected(ctx, routePolicy1)).WithContext(ctx).Should(BeTrue())
+
+			routePolicy2 := policyFactory(func(p *v1beta2.AuthPolicy) { // another policy that targets the same route. this policy will not be accepted
+				p.Name = "route-auth-2"
+			})
+			Expect(k8sClient.Create(ctx, routePolicy2)).To(Succeed())
+
+			Eventually(func() bool {
+				return policyAcceptedAndTargetsAffected(ctx, routePolicy1)() &&
+					!isAuthPolicyAccepted(ctx, routePolicy2)() && !routeAffected(ctx, testHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy2))
+			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+
+		It("Adds falsey PolicyAffected status condition if no policy is accepted", func(ctx SpecContext) {
+			routePolicy1 := policyFactory(func(p *v1beta2.AuthPolicy) { // create a policy with an invalid route selector so the policy is not accepted
+				p.Name = "route-auth-1"
+				p.Spec.Defaults.RouteSelectors = []v1beta2.RouteSelector{{Hostnames: []gatewayapiv1.Hostname{"invalid.example.com"}}}
+			})
+			Expect(k8sClient.Create(ctx, routePolicy1)).To(Succeed())
+
+			routePolicy2 := policyFactory(func(p *v1beta2.AuthPolicy) { // create another policy with an invalid route selector so the policy is not accepted
+				p.Name = "route-auth-2"
+				p.Spec.Defaults.RouteSelectors = []v1beta2.RouteSelector{{Hostnames: []gatewayapiv1.Hostname{"invalid.example.com"}}}
+			})
+			Expect(k8sClient.Create(ctx, routePolicy2)).To(Succeed())
+
+			Eventually(func() bool {
+				return !isAuthPolicyAccepted(ctx, routePolicy1)() && routeNotAffected(ctx, testHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy1)) &&
+					!isAuthPolicyAccepted(ctx, routePolicy2)() && !routeAffected(ctx, testHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy2))
+			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
 		It("removes PolicyAffected status condition from the targeted route when the policy is deleted", func(ctx SpecContext) {

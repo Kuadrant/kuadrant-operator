@@ -24,6 +24,7 @@ type TestPolicy struct {
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
+	Status    FakePolicyStatus                         `json:"status"`
 }
 
 func (p *TestPolicy) PolicyClass() PolicyClass {
@@ -35,7 +36,7 @@ func (p *TestPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
 }
 
 func (p *TestPolicy) GetStatus() PolicyStatus {
-	return &FakePolicyStatus{}
+	return &p.Status
 }
 
 func (p *TestPolicy) DeepCopyObject() runtime.Object {
@@ -61,10 +62,12 @@ func (p *TestPolicy) DeepCopyInto(out *TestPolicy) {
 	p.TargetRef.DeepCopyInto(&out.TargetRef)
 }
 
-type FakePolicyStatus struct{}
+type FakePolicyStatus struct {
+	Conditions []metav1.Condition
+}
 
 func (s *FakePolicyStatus) GetConditions() []metav1.Condition {
-	return nil
+	return s.Conditions
 }
 
 func TestPolicyByCreationTimestamp(t *testing.T) {

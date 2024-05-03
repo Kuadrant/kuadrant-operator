@@ -223,6 +223,8 @@ Check that your policy was accepted by the controller:
 ```bash
 kubectl get authpolicy ${gatewayName}-auth -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
 
+```
+
 ```bash
 kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1alpha1

@@ -122,18 +122,23 @@ func (r *KuadrantReconciler) reconcileWamsServerConfigMap(ctx context.Context, k
 		return err
 	}
 
-	if len(podList.Items) == 0 {
-		logger.Info("wasm-server pods not found yet. waiting",
-			"key", client.ObjectKeyFromObject(desiredDeployment))
+	// on upgrades, there might be pods with different images, old and new ones
+	validPodList := utils.Filter(podList.Items, func(pod corev1.Pod) bool {
+		return pod.Spec.Containers[0].Image == WASMServerImageURL && utils.IsPodReady(&pod)
+	})
+
+	if len(validPodList) == 0 {
+		logger.Info("wasm-server pods not ready yet. waiting",
+			"deployment key", client.ObjectKeyFromObject(desiredDeployment))
 		return nil
 	}
 
-	pod := podList.Items[0]
+	// anyone is valid
+	pod := validPodList[0]
 
 	podLogOpts := corev1.PodLogOptions{Container: "compute-rate-limit-wasm-sha256"}
 
 	config, err := config.GetConfig()
-	//config, err := rest.InClusterConfig()
 	if err != nil {
 		logger.V(1).Info("wasm-server: error in getting config")
 		return err

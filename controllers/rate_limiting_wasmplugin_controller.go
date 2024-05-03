@@ -113,7 +113,7 @@ func (r *RateLimitingWASMPluginReconciler) desiredRateLimitingWASMPlugin(ctx con
 			Namespace: gw.Namespace,
 		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{
-			Selector:     kuadrantistioutils.WorkloadSelectorFromGateway(ctx, r.Client(), gw),
+			TargetRef:    kuadrantistioutils.PolicyTargetRefFromGateway(gw),
 			Url:          rlptools.WASMFilterImageURL,
 			PluginConfig: nil,
 			// Insert plugin before Istio stats filters and after Istio authorization filters.

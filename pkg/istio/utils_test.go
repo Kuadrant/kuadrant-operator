@@ -105,3 +105,17 @@ func TestWorkloadSelectorFromGatewayMissingHostnameAddress(t *testing.T) {
 		t.Error("should have built the istio workload selector from the gateway labels")
 	}
 }
+
+func TestPolicyTargetRefFromGateway(t *testing.T) {
+	gateway := &gatewayapiv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "my-ns",
+			Name:      "my-gw",
+		},
+	}
+
+	ref := PolicyTargetRefFromGateway(gateway)
+	if ref == nil || ref.Group != "gateway.networking.k8s.io" || ref.Kind != "Gateway" || ref.Name != "my-gw" {
+		t.Error("should have built the istio policy target reference from the gateway")
+	}
+}

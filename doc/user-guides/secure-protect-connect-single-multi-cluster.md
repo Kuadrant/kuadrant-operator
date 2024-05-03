@@ -179,12 +179,13 @@ kubectl get gateway ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.listene
 
 Kuadrant can help with this via TLSPolicy.
 
-### Secure and Protect the Gateway with TLS Rate Limiting and Auth policies.
+### Secure and protect the Gateway with TLS rate limiting and auth policies.
 
-While our Gateway is now deployed, it has no exposed endpoints and our listener is not programmed. Let's set up a `TLSPolicy` that leverages our CertificateIssuer to set up our listener certificates. We will also define an `AuthPolicy` that will setup a default `403` response for any unprotected endpoints, as well as a `RateLimitPolicy` that will setup a default (artificially) low global limit to further protect any endpoints exposed by this Gateway.
+While your Gateway is now deployed, it has no exposed endpoints and your listener is not programmed. Next, you can set up a `TLSPolicy` that leverages your CertificateIssuer to set up your listener certificates. 
 
+You will also define an `AuthPolicy` that will set up a default `403` response for any unprotected endpoints, as well as a `RateLimitPolicy` that will set up a default artificially low global limit to further protect any endpoints exposed by this Gateway.
 
-Setup a default, deny-all `AuthPolicy` for our Gateway:
+Set up a default, deny-all `AuthPolicy` for your Gateway as follows:
 
 ```bash
 kubectl apply -f - <<EOF

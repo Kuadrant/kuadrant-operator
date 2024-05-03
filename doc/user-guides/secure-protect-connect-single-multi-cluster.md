@@ -21,11 +21,11 @@ You can leverage Kuadrant's capabilities in single or multiple clusters. The fol
 - **Global auth:** You can configure Kuadrant's `AuthPolicy` to leverage external auth providers to ensure different clusters exposing the same API are authenticating and authorizing in the same way. 
 - **Integration with federated metrics stores:** Kuadrant has example dashboards and metrics for visualizing your Gateways and observing traffic hitting those Gateways across multiple clusters. 
 
-**Platform Engineer**
+**Platform engineer user**
 
-We will walk through deploying a gateway that provides secure communications and is protected and ready to be used by development teams to deploy an API. We will then walk through how you can have this gateway in clusters in different geographic regions and leverage Kuadrant to bring the specific traffic to your geo-located gateways to reduce latency and distribute load while still having it protected and secured via global rate limiting and auth.
+This guide walks you through deploying a Gateway that provides secure communication and is protected and ready for use by development teams to deploy an API. It then walks through using this Gateway in clusters in different geographic regions, leveraging Kuadrant to bring specific traffic to your geo-located Gateways to reduce latency and distribute load, while still being protected and secured with global rate limiting and auth.
 
-As an optional extra we will highlight how, with the user workload monitoring observability stack deployed, these gateways can then be observed and monitored. 
+As an optional extra this guide highlights how, with the user workload monitoring observability stack deployed, these Gateways can then be observed and monitored. 
 
 **Developer**
 

@@ -22,3 +22,11 @@ func WorkloadSelectorFromGateway(ctx context.Context, k8sClient client.Client, g
 		MatchLabels: gatewayWorkloadSelector,
 	}
 }
+
+func PolicyTargetRefFromGateway(gateway *gatewayapiv1.Gateway) *istiocommon.PolicyTargetReference {
+	return &istiocommon.PolicyTargetReference{
+		Group: gatewayapiv1.GroupName,
+		Kind:  "Gateway",
+		Name:  gateway.Name,
+	}
+}

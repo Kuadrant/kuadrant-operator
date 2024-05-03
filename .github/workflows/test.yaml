@@ -28,7 +28,7 @@ jobs:
           go-version: ${{ matrix.go-version }}
         id: go
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Run make test
         run: |
           make test-unit
@@ -68,7 +68,7 @@ jobs:
           go-version: 1.21.x
         id: go
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Create k8s Kind Cluster
         uses: helm/kind-action@v1.2.0
         with:
@@ -110,7 +110,7 @@ jobs:
           go-version: 1.21.x
         id: go
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Run make verify-manifests
         run: |
           make verify-manifests
@@ -125,7 +125,7 @@ jobs:
           go-version: 1.21.x
         id: go
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Run make verify-bundle
         run: |
           make verify-bundle
@@ -140,7 +140,7 @@ jobs:
           go-version: 1.21.x
         id: go
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Run make verify-fmt
         run: |
           make verify-fmt
@@ -162,7 +162,22 @@ jobs:
           go-version: ${{ matrix.go-version }}
         id: go
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Run make operator-sdk
         run: |
           make operator-sdk
+
+  verify-generate:
+    name: Verify generate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.21.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.21.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Verify generate command
+        run: |
+          make verify-generate

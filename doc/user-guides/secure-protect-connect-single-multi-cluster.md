@@ -1,4 +1,4 @@
-# Secure, Protect, and Connect APIs with Kuadrant
+# Secure, protect, and connect APIs with Kuadrant
 
 ## Overview
 

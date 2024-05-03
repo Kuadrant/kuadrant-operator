@@ -1,0 +1,21 @@
+apiVersion: kuadrant.io/v1alpha1
+kind: DNSPolicy
+metadata:
+  name: prod-web
+  namespace: ${DNSPOLICY_NAMESPACE}
+spec:
+  targetRef:
+    name: prod-web-istio
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  routingStrategy: loadbalanced
+  loadBalancing:
+    weighted:
+      defaultWeight: 120
+    geo:
+      defaultGeo: EU
+  healthCheck:
+    endpoint: /healthz
+    port: 1111111
+    protocol: HTTP
+    failureThreshold: 3

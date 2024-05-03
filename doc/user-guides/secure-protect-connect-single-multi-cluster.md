@@ -596,4 +596,4 @@ done
 
 ## Conclusion
 
-You've now completed our Secure, Protect, and Connect tutorial. To learn more about Kuadrant, visit: https://docs.kuadrant.io
+You've completed the secure, protect, and connect walkthrough. To learn more about Kuadrant, visit https://docs.kuadrant.io

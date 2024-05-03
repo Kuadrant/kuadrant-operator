@@ -484,7 +484,7 @@ The example OAS uses Kuadrant-based extensions. These extensions enable you to d
 - Have a realm, client and users set up. For this example, we assume a realm in a Keycloak instance called `toystore`
 - Copy the OAS from [sample OAS rate-limiting and OIDC spec](../../examples/oas-oidc.yaml) to a local location
 
-### Setup OpenID AuthPolicy
+### Set up an OpenID AuthPolicy
 
 ```bash
 export openIDHost=some.keycloak.com

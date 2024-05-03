@@ -478,12 +478,11 @@ The platform engineer workflow established some default policies for authenticat
 The example OAS uses Kuadrant-based extensions. These extensions enable you to define routing and service protection requirements. For more details, see [OpenAPI Kuadrant extensions](https://docs.kuadrant.io/kuadrantctl/doc/openapi-kuadrant-extensions/).
 
 
-### Pre Requisites
+### Prerequisites
 
-- Setup / have an available OpenID Connect provider, such as https://www.keycloak.org/ 
-- Have a realm, client and users set up. For this example, we assume a realm in a Keycloak instance called `toystore`
-- Copy the OAS from [sample OAS rate-limiting and OIDC spec](../../examples/oas-oidc.yaml) to a local location
-
+- You have installed and configured an OpenID Connect provider, such as https://www.keycloak.org/. 
+- You have a realm, client, and users set up. This example assumes a realm in a Keycloak instance called `toystore`
+- Copy the OAS from [sample OAS for rate-limiting and OIDC](../../examples/oas-oidc.yaml) to a local location.
 ### Set up an OpenID AuthPolicy
 
 ```bash

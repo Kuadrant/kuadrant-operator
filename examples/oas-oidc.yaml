@@ -1,0 +1,55 @@
+---
+openapi: "3.1.0"
+info:
+  title: "Pet Store API"
+  version: "1.0.0"
+  x-kuadrant:
+    route:
+      name: "toystore"
+      namespace: $devNS
+      hostnames:
+        - toystore.$rootDomain
+      parentRefs:
+        - name: $gatewayName
+          namespace: $gatewayNS
+servers:
+  - url: https://toystore.$rootDomain/v1
+paths:
+  /toys:
+    get:  # No sec requirements
+      operationId: "getToy"
+      responses:
+        405:
+          description: "invalid input"
+      x-kuadrant:  
+        rate_limit:
+          rates:
+            - limit: 1
+              duration: 5
+              unit: second
+          counters:
+            - request.headers.Authorization
+    post:  # OIDC protected
+      operationId: "postToy"
+      security:
+        - oidc: []
+      responses:
+        405:
+          description: "invalid input"
+    x-kuadrant:
+      backendRefs:
+      - name: toystore
+        namespace: $devNS
+        port: 80 
+      rate_limit:
+        rates:
+          - limit: 1
+            duration: 10
+            unit: second
+        counters:
+          - request.headers.Authorization
+components:
+  securitySchemes:
+    oidc:
+      type: openIdConnect
+      openIdConnectUrl: https://$openIDHost/auth/realms/toystore

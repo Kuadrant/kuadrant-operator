@@ -1,0 +1,290 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: v1
+automountServiceAccountToken: false
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: exporter
+    app.kubernetes.io/name: kube-state-metrics-kuadrant
+    app.kubernetes.io/part-of: kuadrant
+    app.kubernetes.io/version: 2.5.0
+  name: kube-state-metrics-kuadrant
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/component: exporter
+    app.kubernetes.io/name: kube-state-metrics-kuadrant
+    app.kubernetes.io/part-of: kuadrant
+    app.kubernetes.io/version: 2.5.0
+  name: kube-state-metrics-kuadrant
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  - nodes
+  - pods
+  - services
+  - resourcequotas
+  - replicationcontrollers
+  - limitranges
+  - persistentvolumeclaims
+  - persistentvolumes
+  - namespaces
+  - endpoints
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  - daemonsets
+  - deployments
+  - replicasets
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  - jobs
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - certificates.k8s.io
+  resources:
+  - certificatesigningrequests
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  - volumeattachments
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  - ingresses
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - "apiextensions.k8s.io"
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - "gateway.networking.k8s.io"
+  resources:
+  - gateways
+  - gatewayclasses
+  - httproutes
+  - grpcroutes
+  - tcproutes
+  - tlsroutes
+  - udproutes
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - "kuadrant.io"
+  resources:
+  - tlspolicies
+  - dnspolicies
+  - ratelimitpolicies
+  - authpolicies
+  verbs:
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: exporter
+    app.kubernetes.io/name: kube-state-metrics-kuadrant
+    app.kubernetes.io/part-of: kuadrant
+    app.kubernetes.io/version: 2.5.0
+  name: kube-state-metrics-kuadrant
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-state-metrics-kuadrant
+subjects:
+- kind: ServiceAccount
+  name: kube-state-metrics-kuadrant
+  namespace: monitoring
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: exporter
+    app.kubernetes.io/name: kube-state-metrics-kuadrant
+    app.kubernetes.io/part-of: kuadrant
+    app.kubernetes.io/version: 2.5.0
+  name: kube-state-metrics-kuadrant
+  namespace: monitoring
+spec:
+  clusterIP: None
+  ports:
+  - name: https-main
+    port: 8081
+    targetPort: https-main
+  - name: https-self
+    port: 8082
+    targetPort: https-self
+  selector:
+    app.kubernetes.io/component: exporter
+    app.kubernetes.io/name: kube-state-metrics-kuadrant
+    app.kubernetes.io/part-of: kuadrant
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: exporter
+    app.kubernetes.io/name: kube-state-metrics-kuadrant
+    app.kubernetes.io/part-of: kuadrant
+    app.kubernetes.io/version: 2.5.0
+  name: kube-state-metrics-kuadrant
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: exporter
+      app.kubernetes.io/name: kube-state-metrics-kuadrant
+      app.kubernetes.io/part-of: kuadrant
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: kube-state-metrics
+      labels:
+        app.kubernetes.io/component: exporter
+        app.kubernetes.io/name: kube-state-metrics-kuadrant
+        app.kubernetes.io/part-of: kuadrant
+        app.kubernetes.io/version: 2.5.0
+    spec:
+      volumes:
+      - name: custom-resource-state
+        configMap:
+          defaultMode: 420
+          name: custom-resource-state
+      automountServiceAccountToken: true
+      containers:
+      - volumeMounts:
+        - name: custom-resource-state
+          mountPath: /custom-resource-state
+        args:
+        - --port=8081
+        - --telemetry-port=8082
+        - --custom-resource-state-config-file
+        - /custom-resource-state/custom-resource-state.yaml
+        image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.9.2
+        name: kube-state-metrics
+        resources:
+          limits:
+            cpu: 100m
+            memory: 250Mi
+          requests:
+            cpu: 10m
+            memory: 190Mi
+        securityContext: {}
+        ports:
+        - containerPort: 8081
+          name: https-main
+        - containerPort: 8082
+          name: https-self
+      nodeSelector:
+        kubernetes.io/os: linux
+      serviceAccountName: kube-state-metrics-kuadrant
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app.kubernetes.io/component: exporter
+    app.kubernetes.io/name: kube-state-metrics-kuadrant
+    app.kubernetes.io/part-of: kuadrant
+    app.kubernetes.io/version: 2.5.0
+  name: kube-state-metrics-kuadrant
+  namespace: monitoring
+spec:
+  endpoints:
+  - honorLabels: true
+    interval: 30s
+    port: https-main
+    relabelings:
+    - action: labeldrop
+      regex: (pod|service|endpoint|namespace)
+    scheme: http
+    scrapeTimeout: 30s
+  - interval: 30s
+    port: https-self
+    scheme: http
+  jobLabel: app.kubernetes.io/name
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: exporter
+      app.kubernetes.io/name: kube-state-metrics-kuadrant
+      app.kubernetes.io/part-of: kuadrant

@@ -540,30 +540,15 @@ curl -k -XPOST --write-out '%{http_code}\n' --silent --output /dev/null -H "Auth
 
 You should see a `200` response code.
 
-### Setup rate-limiting
+### Set up rate limiting
 
-Lastly let us generate our `RateLimitPolicy` to add our rate-limits, based on our OAS file. Our rate limiting is simplified for this walkthrough and is based on either the bearer token or the API key value. There are more advanced examples under our how-to guides on the docs site:
+Lastly, you can generate your `RateLimitPolicy` to add your rate limits, based on your OAS file. Rate limiting is simplified for this walkthrough and is based on either the bearer token or the API key value. There are more advanced examples in the How-to guides on the Kuadrant documentation site, for example:
+[Authenticated rate limiting with JWTs and Kubernetes RBAC](https://docs.kuadrant.io/kuadrant-operator/doc/user-guides/authenticated-rl-with-jwt-and-k8s-authnz/)
 
-https://docs.kuadrant.io/kuadrant-operator/doc/user-guides/authenticated-rl-with-jwt-and-k8s-authnz/
-
-We will continue to use this sample OAS document, which includes both authentication and a rate limit:
+ You can continue to use this sample OAS document, which includes both authentication and a rate limit:
 
 ```bash
 export oasPath=examples/oas-oidc.yaml
-```
-
-```bash
-cat $oasPath | envsubst | kuadrantctl generate kuadrant ratelimitpolicy --oas -
-```
-
-You should see we have an artificial limit of 1 request per 5 seconds for the `GET` and 1 request per 10 seconds for the `POST` endpoint.
-
-Apply this to the cluster:
-
-```bash
-cat $oasPath | envsubst | kuadrantctl generate kuadrant ratelimitpolicy --oas - | kubectl apply -f -
-```
-
 Again, we should see the rate limit policy accepted and enforced:
 
 ```bash

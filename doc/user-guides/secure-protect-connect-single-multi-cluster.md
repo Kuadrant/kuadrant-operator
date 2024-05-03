@@ -27,9 +27,9 @@ This guide walks you through deploying a Gateway that provides secure communicat
 
 As an optional extra this guide highlights how, with the user workload monitoring observability stack deployed, these Gateways can then be observed and monitored. 
 
-**Developer**
+**Application developer user**
 
-We will walk through how you can use the kuadrant OAS extensions and CLI to generate an `HTTPRoute` for your API and add specific Auth and Rate Limiting requirements to your API.
+This guide walks through how you can use the Kuadrant OAS extensions and CLI to generate an `HTTPRoute` for your API and add specific auth and rate limiting requirements to your API.
 
 ## Platform Engineer
 

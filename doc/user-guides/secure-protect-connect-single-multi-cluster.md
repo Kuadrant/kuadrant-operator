@@ -373,27 +373,18 @@ export gatewayNS=api-gateway
 
 ### Use OAS to define our HTTPRoute rules
 
-We can generate Kuadrant and Gateway API resources directly from OAS documents, via an `x-kuadrant` extension.
+You can generate Kuadrant and Gateway API resources directly from OAS documents by using an `x-kuadrant` extension.
 
-> **Note:** for a more in-depth look at the OAS extension take a look at our [kuadrantctl documentation](https://docs.kuadrant.io/kuadrantctl/).
+NOTE: For a more in-depth look at the OAS extension, see the [kuadrantctl documentation](https://docs.kuadrant.io/kuadrantctl/).
 
-Let's use `kuadrantctl` to generate our `HTTPRoute`.
+Use `kuadrantctl` to generate your `HTTPRoute`.
 
-> **Note:** the sample OAS has some placeholders for namespaces and domains - we will inject valid values into these placeholders based on our previous env vars
+NOTE: The sample OAS has some placeholders for namespaces and domains. You will inject valid values into these placeholders based on your previous environment variables.
 
-Generate the resource from our OAS, (`envsubst` will replace the placeholders):
+Generate the resource from your OAS, (`envsubst` will replace the placeholders):
 
 ```bash
 cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute --oas -
-```
-
-If we're happy with the generated resource, let's apply it to the cluster:
-
-```bash
-cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute --oas - | kubectl apply -f -
-```
-
-Check our new route:
 
 ```bash
 kubectl get httproute toystore -n ${devNS} -o=yaml

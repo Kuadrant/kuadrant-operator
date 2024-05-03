@@ -331,20 +331,12 @@ spec:
 EOF
 ```
 
-Check our gateway policies are enforced:
+Check your Gateway policies are enforced:
 
 ```bash
 kubectl get dnspolicy ${gatewayName}-dnspolicy -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
 kubectl get authpolicy ${gatewayName}-auth -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
 kubectl get ratelimitpolicy ${gatewayName}-rlp -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Enforced")].message}'
-```
-
-**Note:** `TLSPolicy` is currently missing an enforced condition. https://github.com/Kuadrant/kuadrant-operator/issues/572. However, looking at the gateway status we can see it is affected:
-
-```bash
-kubectl get gateway -n ${gatewayNS} ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.conditions[*].message}'
-```
-
 ### Test connectivity and deny all auth 
 
 We are using `curl` to hit our endpoint. As we are using LetsEncrypt staging in this example, we pass the `-k` flag:

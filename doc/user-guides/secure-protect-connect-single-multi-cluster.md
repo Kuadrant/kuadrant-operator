@@ -88,12 +88,11 @@ Wait for the `ManagedZone` to be ready in your cluster(s):
 kubectl wait managedzone/managedzone --for=condition=ready=true -n ${gatewayNS}
 ```
 
-### Add a TLS Issuer
+### Add a TLS issuer
 
-To secure communication to the Gateways, we will to define a TLS issuer for TLS certificates. We will use LetsEncrypt here, but you can use any supported by `cert-manager`.
+To secure communication to the Gateways, you will define a TLS issuer for TLS certificates. This example uses Let's Encrypt, but you can use any issuer supported by `cert-manager`.
 
-Below is an example that uses LetsEncrypt staging: This should also be applied to all clusters.
-
+The following example uses Let's Encrypt staging, which should also be applied to all clusters.
 
 ```bash
 kubectl apply -f - <<EOF

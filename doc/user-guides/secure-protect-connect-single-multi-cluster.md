@@ -262,24 +262,10 @@ EOF
 ```
 
 
-To check our rate limits have been accepted, run:
+To check your rate limits have been accepted, enter the following command:
 
 ```bash
 kubectl get ratelimitpolicy ${gatewayName}-rlp -n ${gatewayNS} -o=jsonpath='{.status.conditions[?(@.type=="Accepted")].message}'
-```
-
-Let's check the programmed state of our gateway listener once more:
-
-```bash
-kubectl get gateway ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.listeners[0].conditions[?(@.type=="Programmed")].message}'
-```
-
-We should have a `no errors` response. **Note:** it can take a minute or two for the LetsEncypt ACME certificate to be issued
-
-### Setup our DNS
-
-Having secured and deployed our gateway, the next step involves applying a `DNSPolicy` to direct traffic toward our gateway via the assigned listener hosts. This policy orchestrates traffic flow to the gateways within our clusters. Specifically, it establishes a load-balanced strategy, using a round-robin method for responding to DNS clients. Additionally, we establish a default geo setting. This setting acts as a universal fallback, categorising records under a broad default, ready for future configurations. This setup ensures that should geo-routing be activated on our gateways (to be discussed later), a default will already be in place for any users outside the specified gateway geos, allowing access from any location. We also set a default weight for all records, ensuring uniform application to maintain round-robin distribution.
-
 ```bash
 kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1alpha1

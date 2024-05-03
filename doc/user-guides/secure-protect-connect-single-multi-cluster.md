@@ -31,14 +31,13 @@ As an optional extra this guide highlights how, with the user workload monitorin
 
 This guide walks through how you can use the Kuadrant OAS extensions and CLI to generate an `HTTPRoute` for your API and add specific auth and rate limiting requirements to your API.
 
-## Platform Engineer
+## Platform engineer workflow
 
-The following steps should be done in each cluster individually unless specifically excluded. 
+You must perform the following steps in each cluster individually unless specifically excluded. 
 
-### Environment Variables
+### Environment variables
 
-For convenience in this guide, we use some env vars throughout this document:
-
+For convenience, this guide uses the following environment variables:
 ```bash
 export zid=change-this-to-your-zone-id
 export rootDomain=example.com

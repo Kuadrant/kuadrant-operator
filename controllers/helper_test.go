@@ -15,6 +15,7 @@ import (
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -659,5 +660,15 @@ func createSelfSignedIssuerSpec() certmanv1.IssuerSpec {
 		IssuerConfig: certmanv1.IssuerConfig{
 			SelfSigned: &certmanv1.SelfSignedIssuer{},
 		},
+	}
+}
+
+func testDeploymentIsReady(ctx context.Context, key client.ObjectKey) func(g Gomega) {
+	return func(g Gomega) {
+		deployment := &appsv1.Deployment{}
+		g.Expect(k8sClient.Get(ctx, key, deployment)).To(Succeed())
+		availableCondition := utils.FindDeploymentStatusCondition(deployment.Status.Conditions, string(appsv1.DeploymentAvailable))
+		g.Expect(availableCondition).NotTo(BeNil())
+		g.Expect(availableCondition.Status).To(Equal(corev1.ConditionTrue))
 	}
 }

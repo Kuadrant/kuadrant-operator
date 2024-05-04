@@ -39,6 +39,11 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
+const (
+	WASMServerInitContainerName = "compute-rate-limit-wasm-sha256"
+	WASMServerConfigMapDataKey  = "rate-limit-wasm-sha256"
+)
+
 var (
 	WASMServerImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "quay.io/kuadrant/wasm-server:latest")
 )
@@ -136,7 +141,7 @@ func (r *KuadrantReconciler) reconcileWamsServerConfigMap(ctx context.Context, k
 	// anyone is valid
 	pod := validPodList[0]
 
-	podLogOpts := corev1.PodLogOptions{Container: "compute-rate-limit-wasm-sha256"}
+	podLogOpts := corev1.PodLogOptions{Container: WASMServerInitContainerName}
 
 	config, err := config.GetConfig()
 	if err != nil {
@@ -178,7 +183,7 @@ func (r *KuadrantReconciler) reconcileWamsServerConfigMap(ctx context.Context, k
 			Labels:    WasmServerLabels(),
 		},
 		Data: map[string]string{
-			"rate-limit-wasm-sha256": wasmSha256,
+			WASMServerConfigMapDataKey: wasmSha256,
 		},
 	}
 
@@ -189,7 +194,7 @@ func (r *KuadrantReconciler) reconcileWamsServerConfigMap(ctx context.Context, k
 	}
 
 	configMapMutator := reconcilers.ConfigMapMutator(func(desired, existing *corev1.ConfigMap) bool {
-		return reconcilers.ConfigMapReconcileField(desired, existing, "rate-limit-wasm-sha256")
+		return reconcilers.ConfigMapReconcileField(desired, existing, WASMServerConfigMapDataKey)
 	})
 
 	err = r.ReconcileResource(ctx, &corev1.ConfigMap{}, configMap, configMapMutator)
@@ -264,7 +269,7 @@ func wasmServerDeployment(kObj *kuadrantv1beta1.Kuadrant) *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					InitContainers: []corev1.Container{
 						{
-							Name:            "compute-rate-limit-wasm-sha256",
+							Name:            WASMServerInitContainerName,
 							Image:           WASMServerImageURL,
 							Command:         []string{"cat", "/data/plugin.wasm.sha256"},
 							ImagePullPolicy: corev1.PullIfNotPresent,

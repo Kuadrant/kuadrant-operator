@@ -143,10 +143,13 @@ func (r *RateLimitingWASMPluginReconciler) getWasmSHA256(ctx context.Context, kO
 		return nil, err
 	}
 
-	sha256, ok := configMap.Data["rate-limit-wasm-sha256"]
+	sha256, ok := configMap.Data[WASMServerConfigMapDataKey]
 	if !ok {
-		logger.V(1).Info("getWasmSHA256: configmaps does not have expected rate-limit-wasm-sha256 key",
-			"configmap key", configMapKey)
+		logger.V(1).Info(
+			"getWasmSHA256: configmaps does not have expected key",
+			"object key", configMapKey,
+			"data key", WASMServerConfigMapDataKey,
+		)
 		return nil, nil
 	}
 

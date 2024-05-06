@@ -130,6 +130,24 @@ To install Kuadrant, use the Kuadrant Operator. Before installing, you will set 
 kubectl create ns kuadrant-system
 ```
 
+Setup a catalogsource:
+
+```
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: kuadrant-operator-catalog
+  namespace: kuadrant-system
+spec:
+  sourceType: grpc
+  image: quay.io/kuadrant/kuadrant-operator-catalog:v0.7.0
+  displayName: Kuadrant Operators
+  publisher: grpc
+  updateStrategy:
+    registryPoll:
+      interval: 45m
+```      
+
 AWS Route 53 credentials for TLS verification:
 
 ```bash
@@ -172,8 +190,8 @@ spec:
   channel: preview
   installPlanApproval: Automatic
   name: kuadrant-operator
-  source: community-operators
-  sourceNamespace: openshift-operators
+  source: kuadrant-operator-catalog
+  sourceNamespace: kuadrant-system
 ---
 kind: OperatorGroup
 apiVersion: operators.coreos.com/v1
@@ -181,7 +199,7 @@ metadata:
   name: kuadrant
   namespace: kuadrant-system
 spec: 
-  upgradeStrategy: Default 
+  upgradeStrategy: Default
 EOF
 ```  
 

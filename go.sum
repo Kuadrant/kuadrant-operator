@@ -455,6 +455,8 @@ github.com/kuadrant/authorino v0.17.2 h1:UgWH4NY/n36IhoaU+ELUkoujaly1/9sx5mHY5vU
 github.com/kuadrant/authorino v0.17.2/go.mod h1:al71fN0FX6c9Orrhk9GR4CtjtC+CD/lUHJCs7drlRNM=
 github.com/kuadrant/authorino-operator v0.9.0 h1:EV7zrYBNcd53HPQMivvTwe/+DIATTK7O4znJzh4xON8=
 github.com/kuadrant/authorino-operator v0.9.0/go.mod h1:VkUqS4CHNiaHMrjSFQ5V71DN829kPnqT3FQxqlOntEI=
+github.com/kuadrant/authorino-operator v0.11.1 h1:jndTZhiHMU+2Dk0NU+KP2+MUSfvclrn+YtTCQDJj+1s=
+github.com/kuadrant/authorino-operator v0.11.1/go.mod h1:TeFFdX477vUTMushCojaHpvwPLga4DpErGI2oQbqFIs=
 github.com/kuadrant/dns-operator v0.0.0-20240405095001-9e88ad4a7303 h1:3PFrKndF/xDHXbCCVX4W7Y6ir5oNw+hxuyBmwRb2hKM=
 github.com/kuadrant/dns-operator v0.0.0-20240405095001-9e88ad4a7303/go.mod h1:xT10T4H3uCXkB+xpW0KP9yb/k3zNAA2OXW9WR9j38kA=
 github.com/kuadrant/dns-operator v0.0.0-20240426081919-e328d819392b h1:xQNP+EMa9/FniWCAfQEKNR1cPLANAEcWGNAcY1CIx0E=

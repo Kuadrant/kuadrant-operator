@@ -6,6 +6,11 @@ on:
 
   pull_request:
     branches: [ '*' ]
+    paths-ignore:
+      - '**.adoc'
+      - '**.md'
+      - 'examples/**'
+      - 'LICENSE'
 
   schedule:
     - cron: "15 1 * * *"

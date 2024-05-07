@@ -351,6 +351,15 @@ You can use `curl` to hit your endpoint. You should see a `403` Because this exa
 curl -k -w "%{http_code}" https://$(kubectl get httproute test -n ${gatewayNS} -o=jsonpath='{.spec.hostnames[0]}')
 ```
 
+
+### Opening up the Gateway for other namespaces:
+
+As you have now configured the Gateway, secured it with Kuadrant policies and tested it, you can now open it up for use by other teams in other namespaces:
+
+```bash
+kubectl patch gateway ${gatewayName} -n ${gatewayNS} --type='json' -p='[{"op": "replace", "path": "/spec/listeners/0/allowedRoutes/namespaces/from", "value":"All"}]'
+```
+
 ### Extending this Gateway to multiple clusters and configuring geo-based routing
 
 To distribute this Gateway across multiple clusters, repeat this setup process for each cluster. By default, this will implement a round-robin DNS strategy to distribute traffic evenly across the different clusters. Setting up your Gateways to serve clients based on their geographic location is straightforward with your current configuration.
@@ -409,10 +418,12 @@ Use `kuadrantctl` to generate your `HTTPRoute`.
 
 NOTE: The sample OAS has some placeholders for namespaces and domains. You will inject valid values into these placeholders based on your previous environment variables.
 
-Generate the resource from your OAS, (`envsubst` will replace the placeholders):
+Generate the resource from your OAS, (`envsubst` will replace the placeholders) and apply it:
 
 ```bash
-cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute --oas -
+cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute --oas - | kubectl apply -f -
+```
+
 
 ```bash
 kubectl get httproute toystore -n ${devNS} -o=yaml
@@ -577,6 +588,8 @@ Lastly, you can generate your `RateLimitPolicy` to add your rate limits, based o
 
 ```bash
 export oasPath=examples/oas-oidc.yaml
+```
+
 Again, you should see the rate limit policy accepted and enforced:
 
 ```bash

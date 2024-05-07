@@ -418,10 +418,12 @@ Use `kuadrantctl` to generate your `HTTPRoute`.
 
 NOTE: The sample OAS has some placeholders for namespaces and domains. You will inject valid values into these placeholders based on your previous environment variables.
 
-Generate the resource from your OAS, (`envsubst` will replace the placeholders):
+Generate the resource from your OAS, (`envsubst` will replace the placeholders) and apply it:
 
 ```bash
-cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute --oas -
+cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute --oas - | kubectl apply -f -
+```
+
 
 ```bash
 kubectl get httproute toystore -n ${devNS} -o=yaml
@@ -586,6 +588,8 @@ Lastly, you can generate your `RateLimitPolicy` to add your rate limits, based o
 
 ```bash
 export oasPath=examples/oas-oidc.yaml
+```
+
 Again, you should see the rate limit policy accepted and enforced:
 
 ```bash

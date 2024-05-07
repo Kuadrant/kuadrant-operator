@@ -3,7 +3,6 @@
 package controllers
 
 import (
-	"context"
 	"reflect"
 	"time"
 
@@ -38,23 +37,23 @@ var _ = Describe("Kuadrant controller", func() {
 			lObj := &v1alpha1.Limitador{}
 
 			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: kuadrant, Namespace: testNamespace}, kObj)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: kuadrant, Namespace: testNamespace}, kObj)
 				return err == nil
 			}).WithContext(ctx).Should(BeTrue())
 
 			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, lObj)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, lObj)
 				return err == nil
 			}).WithContext(ctx).Should(BeTrue())
 			var tmp *int
 			Expect(lObj.Spec.Replicas).Should(Equal(tmp))
 
 			kObj.Spec.Limitador = &kuadrantv1beta1.LimitadorSpec{Replicas: ptr.To(1)}
-			err := k8sClient.Update(context.Background(), kObj)
+			err := k8sClient.Update(ctx, kObj)
 			Expect(err).ToNot(HaveOccurred())
 
 			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, lObj)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, lObj)
 				if err != nil {
 					return false
 				}
@@ -70,24 +69,24 @@ var _ = Describe("Kuadrant controller", func() {
 			lObj := &v1alpha1.Limitador{}
 
 			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, lObj)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, lObj)
 				return err == nil
 			}).WithContext(ctx).Should(BeTrue())
 			lObj.Spec.Replicas = ptr.To(1)
-			err := k8sClient.Update(context.Background(), lObj)
+			err := k8sClient.Update(ctx, lObj)
 			Expect(err).ToNot(HaveOccurred())
 
 			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: kuadrant, Namespace: testNamespace}, kObj)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: kuadrant, Namespace: testNamespace}, kObj)
 				return err == nil
 			}).WithContext(ctx).Should(BeTrue())
 
 			kObj.Spec.Limitador = &kuadrantv1beta1.LimitadorSpec{Replicas: ptr.To(2)}
-			err = k8sClient.Update(context.Background(), kObj)
+			err = k8sClient.Update(ctx, kObj)
 			Expect(err).ToNot(HaveOccurred())
 
 			Eventually(func() bool {
-				err := k8sClient.Get(context.Background(), client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, lObj)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: common.LimitadorName, Namespace: testNamespace}, lObj)
 				if err != nil {
 					return false
 				}

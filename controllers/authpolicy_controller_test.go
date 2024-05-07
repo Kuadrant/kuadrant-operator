@@ -2044,18 +2044,20 @@ func isAuthPolicyEnforced(ctx context.Context, policy *api.AuthPolicy) func() bo
 	return isAuthPolicyConditionTrue(ctx, policy, string(kuadrant.PolicyConditionEnforced))
 }
 
-func isAuthPolicyEnforcedCondition(ctx context.Context, key client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) bool {
-	p := &api.AuthPolicy{}
-	if err := k8sClient.Get(ctx, key, p); err != nil {
-		return false
-	}
+func isAuthPolicyEnforcedCondition(ctx context.Context, key client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) func() bool {
+	return func() bool {
+		p := &api.AuthPolicy{}
+		if err := k8sClient.Get(ctx, key, p); err != nil {
+			return false
+		}
 
-	cond := meta.FindStatusCondition(p.Status.Conditions, string(kuadrant.PolicyConditionEnforced))
-	if cond == nil {
-		return false
-	}
+		cond := meta.FindStatusCondition(p.Status.Conditions, string(kuadrant.PolicyConditionEnforced))
+		if cond == nil {
+			return false
+		}
 
-	return cond.Reason == string(reason) && cond.Message == message
+		return cond.Reason == string(reason) && cond.Message == message
+	}
 }
 
 func isAuthPolicyConditionTrue(ctx context.Context, policy *api.AuthPolicy, condition string) func() bool {

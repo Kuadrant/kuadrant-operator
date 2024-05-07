@@ -132,7 +132,8 @@ kubectl create ns kuadrant-system
 
 Setup a catalogsource:
 
-```
+```bash
+kubectl apply -f - <<EOF
 apiVersion: operators.coreos.com/v1alpha1
 kind: CatalogSource
 metadata:
@@ -146,6 +147,7 @@ spec:
   updateStrategy:
     registryPoll:
       interval: 45m
+EOF      
 ```      
 
 AWS Route 53 credentials for TLS verification:

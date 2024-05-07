@@ -15,3 +15,28 @@ dependencies:
     value:
       packageName: cert-manager
       version: "1.14.2"
+  - type: olm.gvk
+    value:
+      group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      version: v1
+  - type: olm.gvk
+    value:
+      group: gateway.networking.k8s.io
+      kind: Gateway
+      version: v1
+  - type: olm.gvk
+    value:
+      group: extensions.istio.io
+      kind: WasmPlugin
+      version: v1alpha1
+  - type: olm.gvk
+    value:
+      group: networking.istio.io
+      kind: EnvoyFilter
+      version: v1alpha3
+  - type: olm.gvk
+    value:
+      group: security.istio.io
+      kind: AuthorizationPolicy
+      version: v1beta1

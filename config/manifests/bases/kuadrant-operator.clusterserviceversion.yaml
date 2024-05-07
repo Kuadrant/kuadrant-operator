@@ -97,7 +97,7 @@ spec:
     - email: didier@redhat.com
       name: Didier Di Cesare
   maturity: alpha
-  minKubeVersion: 1.8.0
+  minKubeVersion: 1.19.0
   provider:
     name: Red Hat
     url: https://github.com/Kuadrant/kuadrant-operator

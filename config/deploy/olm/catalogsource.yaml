@@ -6,4 +6,6 @@ spec:
   sourceType: grpc
   image: quay.io/kuadrant/kuadrant-operator-catalog:latest
   displayName: Kuadrant Operators
+  grpcPodConfig:
+    securityContextConfig: restricted
   publisher: grpc

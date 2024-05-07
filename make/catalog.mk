@@ -12,6 +12,8 @@ $(CATALOG_DOCKERFILE): $(OPM)
 	cd $(PROJECT_PATH)/catalog && $(OPM) generate dockerfile kuadrant-operator-catalog
 catalog-dockerfile: $(CATALOG_DOCKERFILE) ## Generate catalog dockerfile.
 
+CHANNELS ?= preview
+
 $(CATALOG_FILE): $(OPM) $(YQ)
 	@echo "************************************************************"
 	@echo Build kuadrant operator catalog
@@ -22,6 +24,7 @@ $(CATALOG_FILE): $(OPM) $(YQ)
 	@echo AUTHORINO_OPERATOR_BUNDLE_IMG  = $(AUTHORINO_OPERATOR_BUNDLE_IMG)
 	@echo DNS_OPERATOR_BUNDLE_IMG  		 = $(DNS_OPERATOR_BUNDLE_IMG)
 	@echo CHANNELS  					 = $(CHANNELS)
+	@echo CATALOG_FILE                   = $@
 	@echo "************************************************************"
 	@echo
 	@echo Please check this matches your expectations and override variables if needed.

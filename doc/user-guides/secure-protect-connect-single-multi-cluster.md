@@ -374,6 +374,12 @@ For your North American cluster:
 kubectl label --overwrite gateway ${gatewayName} kuadrant.io/lb-attribute-geo-code=US -n ${gatewayNS}
 ```
 
+For your EU cluster:
+
+```bash
+kubectl label --overwrite gateway ${gatewayName} kuadrant.io/lb-attribute-geo-code=EU -n ${gatewayNS}
+```
+
 ## Application developer workflow
 
 This section of the walkthrough focuses on using an OpenAPI Specification (OAS) to define an API. You will use Kuadrant OAS extensions to specify the routing, authentication, and rate-limiting requirements. Next, you will use the `kuadrantctl` tool to generate an `AuthPolicy`, an `HTTPRoute`, and a `RateLimitPolicy`, which you will then apply to your cluster to enforce the settings defined in your OAS.

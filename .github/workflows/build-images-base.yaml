@@ -85,31 +85,26 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v3
-      - name: Install qemu dependency
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static
-      - name: Build Image
-        id: build-image
-        uses: redhat-actions/buildah-build@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to container registry
+        uses: docker/login-action@v2
         with:
-          image: ${{ env.OPERATOR_NAME }}
-          tags: ${{ env.IMG_TAGS }}
-          platforms: linux/amd64,linux/arm64
-          dockerfiles: |
-            ./Dockerfile
-      - name: Push Image
-        if: ${{ !env.ACT }}
-        id: push-to-quay
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.build-image.outputs.image }}
-          tags: ${{ steps.build-image.outputs.tags }}
-          registry: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}
           username: ${{ secrets.IMG_REGISTRY_USERNAME }}
           password: ${{ secrets.IMG_REGISTRY_TOKEN }}
+          registry: ${{ env.IMG_REGISTRY_HOST }}
+      - name: Build and Push Image
+        id: build-image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ env.IMG_TAGS }}
       - name: Print Image URL
-        run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
+        run: echo "Image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ env.IMG_TAGS }}"
 
   build-bundle:
     needs: build
@@ -123,10 +118,6 @@ jobs:
         id: go
       - name: Check out code
         uses: actions/checkout@v3
-      - name: Install qemu dependency
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static
       - name: Run make bundle
         id: make-bundle
         run: |
@@ -138,27 +129,26 @@ jobs:
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
             REPLACES_VERSION=${{ inputs.replacesVersion }} \
             CHANNELS=${{ inputs.channels }}
-      - name: Build Image
-        id: build-image
-        uses: redhat-actions/buildah-build@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to container registry
+        uses: docker/login-action@v2
         with:
-          image: ${{ env.OPERATOR_NAME }}-bundle
-          tags: ${{ env.IMG_TAGS }}
-          platforms: linux/amd64,linux/arm64
-          dockerfiles: |
-            ./bundle.Dockerfile
-      - name: Push Image
-        if: ${{ !env.ACT }}
-        id: push-to-quay
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.build-image.outputs.image }}
-          tags: ${{ steps.build-image.outputs.tags }}
-          registry: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}
           username: ${{ secrets.IMG_REGISTRY_USERNAME }}
           password: ${{ secrets.IMG_REGISTRY_TOKEN }}
-      - name: Print Image URL
-        run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
+          registry: ${{ env.IMG_REGISTRY_HOST }}
+      - name: Build and Push Bundle Image
+        id: build-bundle-image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./bundle.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ env.IMG_TAGS }}
+      - name: Print Bundle Image URL
+        run: echo "Bundle image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ env.IMG_TAGS }}"
 
   build-catalog:
     name: Build Catalog
@@ -182,29 +172,23 @@ jobs:
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
             REPLACES_VERSION=${{ inputs.replacesVersion }} \
             CHANNELS=${{ inputs.channels }}
-      - name: Install qemu dependency
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static
-      - name: Build Image
-        id: build-image
-        uses: redhat-actions/buildah-build@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to container registry
+        uses: docker/login-action@v2
         with:
-          image: ${{ env.OPERATOR_NAME }}-catalog
-          tags: ${{ env.IMG_TAGS }}
-          platforms: linux/amd64,linux/arm64
-          context: ./catalog
-          dockerfiles: |
-            ./catalog/kuadrant-operator-catalog.Dockerfile
-      - name: Push Image
-        if: ${{ !env.ACT }}
-        id: push-to-quay
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.build-image.outputs.image }}
-          tags: ${{ steps.build-image.outputs.tags }}
-          registry: ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}
           username: ${{ secrets.IMG_REGISTRY_USERNAME }}
           password: ${{ secrets.IMG_REGISTRY_TOKEN }}
-      - name: Print Image URL
-        run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
+          registry: ${{ env.IMG_REGISTRY_HOST }}
+      - name: Build and Push Catalog Image
+        id: build-catalog-image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./catalog
+          file: ./catalog/kuadrant-operator-catalog.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog:${{ env.IMG_TAGS }}
+      - name: Print Catalog Image URL
+        run: echo "Catalog image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog:${{ env.IMG_TAGS }}"

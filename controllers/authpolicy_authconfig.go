@@ -203,9 +203,13 @@ func routeGatewayAuthOverrides(t *kuadrantgatewayapi.Topology, ap *api.AuthPolic
 	// 1. targets a gateway
 	// 2. is not the current AP that is being assessed
 	// 3. is an overriding policy
+	// 4. is not marked for deletion
 	affectedPolicies = utils.Filter(affectedPolicies, func(policy kuadrantgatewayapi.Policy) bool {
 		p, ok := policy.(*api.AuthPolicy)
 		if !ok {
+			return false
+		}
+		if p.DeletionTimestamp != nil {
 			return false
 		}
 		return kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef()) &&

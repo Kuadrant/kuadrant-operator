@@ -66,6 +66,7 @@ The Kuadrant operator creates a Limitador CR named `limitador` in the same names
 |-----------|----------|:------------:|-----------------------------------------------------------------------------------------------------|
 | endpoint  | String   |     Yes      | Full endpoint of the OpenTelemetry tracing collector service (e.g. http://jaegar:14268/api/traces). |
 | tags      | Map      |      No      | Key-value map of fixed tags to add to all OpenTelemetry traces emitted by Authorino.                |
+| insecure  | Bool     |      No      | Enable/disable insecure connection to the tracing endpoint. Disabled by default.                    |
 
 #### VolumesSpec
 

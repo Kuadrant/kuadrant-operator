@@ -49,7 +49,7 @@ on:
         description: Authorino Operator bundle version
         default: latest
         type: string
-      limitadorOperatorVersion:
+      limitadorperatorVersion:
         description: Limitador Operator bundle version
         default: latest
         type: string
@@ -208,3 +208,5 @@ jobs:
           password: ${{ secrets.IMG_REGISTRY_TOKEN }}
       - name: Print Image URL
         run: echo "Image pushed to ${{ steps.push-to-quay.outputs.registry-paths }}"
+
+  

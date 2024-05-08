@@ -1,0 +1,17 @@
+name: PR Conditional Build and Push Image to Quay.io Repo
+
+on:
+  pull_request_target:
+    types: [labeled, opened, synchronize, reopened]
+
+jobs:
+  workflow-build:
+    if: ${{ github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'forked_image_approved') }}
+    name: Calls build-images-base workflow
+    uses: ./.github/workflows/build-images-base.yaml
+    secrets: inherit
+    with:
+      kuadrantOperatorVersion: ${{ github.event.pull_request.user.login }}-${{ github.event.pull_request.number }}
+      kuadrantOperatorTag: ${{ github.event.pull_request.user.login }}-${{ github.event.pull_request.number }}
+
+  

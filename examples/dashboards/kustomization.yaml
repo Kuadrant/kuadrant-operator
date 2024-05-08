@@ -15,4 +15,3 @@ configMapGenerator:
   namespace: monitoring
   files:
   - ./platform_engineer.json
-  

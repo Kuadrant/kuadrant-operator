@@ -6,8 +6,11 @@ evaluation_interval: 1m
 tests:
   - interval: 1m
     input_series:
+    # Promtool uses expanding notation as its way of creating time series (https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/#series)
+    # 0+0x30 = 0, 0, 0, ...0 For a total of 31 times THEN 0+10x30 = 0, 10 ,20,  ... 300 For a total of 31 times
       - series: istio_requests_total{job="ingress-metrics-proxy",response_code="500"}
         values: "0+0x30 0+10x30"
+    # 0+1x30 = 0, 1, 2, ...30 For a total of 31 times THEN 31+100x30 = 31, 131 ,231, 331 ... 3031 For a total of 31 times
       - series: istio_requests_total{job="ingress-metrics-proxy"}
         values: "0+1x30 31+100x30"
     alert_rule_test:

@@ -201,4 +201,4 @@ spec:
         summary: High latency on HTTPRoute requests responses
         title: (ticket) {{$labels.sloth_service}} {{$labels.sloth_slo}} SLO error budget
           burn rate is too fast.
-       
+    

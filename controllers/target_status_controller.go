@@ -105,7 +105,7 @@ func (r *TargetStatusReconciler) reconcileResourcesForPolicyKind(parentCtx conte
 	policyKind := policy.GetObjectKind().GroupVersionKind().Kind
 	ctx := logr.NewContext(parentCtx, logger.WithValues("kind", policyKind))
 
-	topology, err := r.buildTopology(ctx, gw, policyKind, listPolicyKind)
+	topology, err := BuildTopology(ctx, r.Client(), gw, policyKind, listPolicyKind)
 	if err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func (r *TargetStatusReconciler) reconcileResourcesForPolicyKind(parentCtx conte
 	return errs
 }
 
-func (r *TargetStatusReconciler) buildTopology(ctx context.Context, gw *gatewayapiv1.Gateway, policyKind string, listPolicyKind client.ObjectList) (*kuadrantgatewayapi.TopologyIndexes, error) {
+func BuildTopology(ctx context.Context, ks8sClient client.Client, gw *gatewayapiv1.Gateway, policyKind string, listPolicyKind client.ObjectList) (*kuadrantgatewayapi.TopologyIndexes, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -203,13 +203,13 @@ func (r *TargetStatusReconciler) buildTopology(ctx context.Context, gw *gatewaya
 
 	routeList := &gatewayapiv1.HTTPRouteList{}
 	// Get all the routes having the gateway as parent
-	err = r.Client().List(ctx, routeList, client.MatchingFields{HTTPRouteGatewayParentField: client.ObjectKeyFromObject(gw).String()})
+	err = ks8sClient.List(ctx, routeList, client.MatchingFields{HTTPRouteGatewayParentField: client.ObjectKeyFromObject(gw).String()})
 	logger.V(1).Info("list routes by gateway", "#routes", len(routeList.Items), "err", err)
 	if err != nil {
 		return nil, err
 	}
 
-	policies, err := r.getPoliciesByKind(ctx, policyKind, listPolicyKind)
+	policies, err := GetPoliciesByKind(ctx, ks8sClient, policyKind, listPolicyKind)
 	if err != nil {
 		return nil, err
 	}
@@ -227,12 +227,12 @@ func (r *TargetStatusReconciler) buildTopology(ctx context.Context, gw *gatewaya
 	return kuadrantgatewayapi.NewTopologyIndexes(t), nil
 }
 
-func (r *TargetStatusReconciler) getPoliciesByKind(ctx context.Context, policyKind string, listKind client.ObjectList) ([]kuadrantgatewayapi.Policy, error) {
+func GetPoliciesByKind(ctx context.Context, ks8sClient client.Client, policyKind string, listKind client.ObjectList) ([]kuadrantgatewayapi.Policy, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithValues("kind", policyKind)
 
 	// Get all policies of the given kind
-	err := r.Client().List(ctx, listKind)
+	err := ks8sClient.List(ctx, listKind)
 	policyList, ok := listKind.(kuadrant.PolicyList)
 	if !ok {
 		return nil, fmt.Errorf("%T is not a kuadrant.PolicyList", listKind)

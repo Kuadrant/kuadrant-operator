@@ -154,7 +154,6 @@ func main() {
 	if err = (&controllers.RateLimitPolicyReconciler{
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      rateLimitPolicyBaseReconciler,
-		AffectedPolicyMap:   kuadrant.NewAffectedPolicyMap(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicy")
 		os.Exit(1)
@@ -251,6 +250,18 @@ func main() {
 		BaseReconciler: targetStatusBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TargetStatusReconciler")
+		os.Exit(1)
+	}
+
+	policyStatusBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("status"),
+		mgr.GetEventRecorderFor("RateLimitPolicyStatus"),
+	)
+	if err = (&controllers.RateLimitPolicyEnforcedStatusReconciler{
+		BaseReconciler: policyStatusBaseReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicyEnforcedStatusReconciler")
 		os.Exit(1)
 	}
 

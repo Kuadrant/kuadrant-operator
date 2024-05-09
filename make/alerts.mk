@@ -7,7 +7,8 @@ export UNIT_TEST_DIR ?= $(WORKDIR)/examples/alerts/tests
 export OS = $(shell uname | tr '[:upper:]' '[:lower:]')
 export ARCH = $(shell uname -m | tr '[:upper:]' '[:lower:]')
 export SLOTH = $(WORKDIR)/bin/sloth
-export ALERTS_SLOTH = /examples/alerts/sloth
+export ALERTS_SLOTH_INPUT_DIR = /examples/alerts/sloth
+export ALERTS_SLOTH_OUTPUT_DIR = /examples/alerts
 
 
 container-runtime-tool:
@@ -32,6 +33,4 @@ $(SLOTH):
 	cd $(WORKDIR)/bin && curl -L https://github.com/slok/sloth/releases/download/v0.11.0/sloth-$(OS)-$(ARCH) > sloth && chmod +x sloth
     
 sloth-generate: sloth # Generate alerts using Sloth templates
-	for FILE in $(wildcard $(WORKDIR)$(ALERTS_SLOTH)/* ) ; do \
-		$(SLOTH) generate -i $$FILE --default-slo-period=28d ; \
-	done 
+	$(SLOTH) generate -i $(WORKDIR)$(ALERTS_SLOTH_INPUT_DIR) -o $(WORKDIR)$(ALERTS_SLOTH_OUTPUT_DIR) --default-slo-period=28d

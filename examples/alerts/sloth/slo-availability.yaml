@@ -1,0 +1,31 @@
+apiVersion: sloth.slok.dev/v1
+kind: PrometheusServiceLevel
+metadata:
+  name: availability-slo
+  namespace: monitoring
+spec:
+  service: "kuadrant"
+  labels:
+    owner: "kuadrant-org"
+  slos:
+    - name: "requests-availability"
+      objective: 99.95
+      description: "Multi window multi burn rate SLO based on availability for HTTP request responses."
+      sli:
+        events:
+          errorQuery: sum(rate(istio_requests_total{job="ingress-metrics-proxy",response_code=~"5.*"}[{{.window}}])) by (request_host)
+          totalQuery: sum(rate(istio_requests_total{job="ingress-metrics-proxy"}[{{.window}}]) )by (request_host)
+      alerting:
+        name: KuadrantAvailabilityHighErrorRate
+        labels:
+          category: "availability"
+        annotations:
+          # Overwrite default Sloth SLO alert summmary on ticket and page alerts.
+          summary: "High error rate on HTTPRoute requests responses"
+        pageAlert:
+          labels:
+            severity: critical
+        ticketAlert:
+          labels:
+            severity: warning
+    

@@ -1,0 +1,34 @@
+apiVersion: sloth.slok.dev/v1
+kind: PrometheusServiceLevel
+metadata:
+  name: latency-slo
+  namespace: monitoring
+spec:
+  service: "kuadrant"
+  labels:
+    owner: "kuadrant-org"
+  slos:
+    - name: "requests-latency"
+      objective: 99.95
+      description: "Multi window multi burn rate SLO based on latency for HTTP request responses."
+      sli:
+        events:
+          errorQuery:  (
+                        sum(rate(istio_request_duration_milliseconds_count{job="ingress-metrics-proxy",response_code="200"}[{{.window}}]))by (request_host) 
+                        - 
+                        sum(rate(istio_request_duration_milliseconds_bucket{le="250", job="ingress-metrics-proxy", response_code="200" }[{{.window}}]) )by (request_host)
+                        )
+          totalQuery: sum(rate(istio_request_duration_milliseconds_count{job="ingress-metrics-proxy",response_code="200"}[{{.window}}]))by (request_host)
+      alerting:
+        name: KuadrantlatencyHighErrorRate
+        labels:
+          category: "latency"
+        annotations:
+          # Overwrite default Sloth SLO alert summmary on ticket and page alerts.
+          summary: "High latency on HTTPRoute requests responses"
+        pageAlert:
+          labels:
+            severity: critical
+        ticketAlert:
+          labels:
+            severity: warning

@@ -22,6 +22,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 var _ = Describe("TLSPolicy controller", func() {
@@ -85,6 +86,11 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Message": Equal("TLSPolicy target test-gateway was not found"),
 					})),
 				)
+				g.Expect(tlsPolicy.Status.Conditions).ToNot(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type": Equal(string(kuadrant.PolicyConditionEnforced)),
+					})),
+				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
 
@@ -98,6 +104,11 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Status":  Equal(metav1.ConditionFalse),
 						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonTargetNotFound)),
 						"Message": Equal("TLSPolicy target test-gateway was not found"),
+					})),
+				)
+				g.Expect(tlsPolicy.Status.Conditions).ToNot(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type": Equal(string(kuadrant.PolicyConditionEnforced)),
 					})),
 				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
@@ -116,6 +127,14 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Status":  Equal(metav1.ConditionTrue),
 						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
 						"Message": Equal("TLSPolicy has been accepted"),
+					})),
+				)
+				g.Expect(tlsPolicy.Status.Conditions).To(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
+						"Status":  Equal(metav1.ConditionTrue),
+						"Reason":  Equal(string(kuadrant.PolicyConditionEnforced)),
+						"Message": Equal("TLSPolicy has been successfully enforced"),
 					})),
 				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
@@ -144,6 +163,14 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Status":  Equal(metav1.ConditionTrue),
 						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
 						"Message": Equal("TLSPolicy has been accepted"),
+					})),
+				)
+				g.Expect(tlsPolicy.Status.Conditions).To(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
+						"Status":  Equal(metav1.ConditionTrue),
+						"Reason":  Equal(string(kuadrant.PolicyConditionEnforced)),
+						"Message": Equal("TLSPolicy has been successfully enforced"),
 					})),
 				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())
@@ -186,7 +213,7 @@ var _ = Describe("TLSPolicy controller", func() {
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		})
 
-		It("should have accepted condition with status true", func() {
+		It("should have accepted and enforced condition with status true", func() {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy), tlsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -196,6 +223,14 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Status":  Equal(metav1.ConditionTrue),
 						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
 						"Message": Equal("TLSPolicy has been accepted"),
+					})),
+				)
+				g.Expect(tlsPolicy.Status.Conditions).To(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
+						"Status":  Equal(metav1.ConditionTrue),
+						"Reason":  Equal(string(kuadrant.PolicyConditionEnforced)),
+						"Message": Equal("TLSPolicy has been successfully enforced"),
 					})),
 				)
 			}, TestTimeoutMedium, time.Second).Should(Succeed())

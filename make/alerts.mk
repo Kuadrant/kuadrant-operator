@@ -26,7 +26,7 @@ alerts-tests: container-runtime-tool # Test alerts using promtool
 	-v $(AVAILABILITY_SLO_RULES):/prometheus/slo-availability.yaml \
 	-v $(LATENCY_SLO_RULES):/prometheus/slo-latency.yaml \
 	-v $(UNIT_TEST_DIR):/prometheus/tests --entrypoint=/bin/sh \
-	$(IMAGE) -c 'tail -n +7 slo-latency.yaml > latency-rules.yaml  && tail -n +7 slo-availability.yaml > availability-rules.yaml && cd tests && promtool test rules *'
+	$(IMAGE) -c 'tail -n +16 slo-latency.yaml > latency-rules.yaml  && tail -n +16 slo-availability.yaml > availability-rules.yaml && cd tests && promtool test rules *'
 
 sloth: $(SLOTH) # Install Sloth
 $(SLOTH):

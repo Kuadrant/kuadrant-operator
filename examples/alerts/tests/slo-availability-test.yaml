@@ -43,6 +43,6 @@ tests:
                   sloth_slo: requests-availability
               exp_annotations:
                   summary: High error rate on HTTPRoute requests responses
-                  title: (ticket) kuadrant requests-availability SLO error budget burn rate is too fast.  
- 
-        
+                  title: (ticket) kuadrant requests-availability SLO error budget burn rate is too fast.
+
+  

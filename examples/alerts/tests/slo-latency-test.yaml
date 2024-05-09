@@ -43,5 +43,5 @@ tests:
                   sloth_slo: requests-latency
               exp_annotations:
                   summary: High latency on HTTPRoute requests responses 
-                  title: (ticket) kuadrant requests-latency SLO error budget burn rate is too fast.       
-    
+                  title: (ticket) kuadrant requests-latency SLO error budget burn rate is too fast.
+

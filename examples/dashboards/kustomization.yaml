@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Grafana dashboards as configmaps
+configMapGenerator:
+- name: grafana-appdeveloper
+  namespace: monitoring
+  files:
+  - ./app_developer.json
+- name: grafana-businessuser
+  namespace: monitoring
+  files:
+  - ./business_user.json
+- name: grafana-platformengineer
+  namespace: monitoring
+  files:
+  - ./platform_engineer.json
+
+generatorOptions:
+  disableNameSuffixHash: true

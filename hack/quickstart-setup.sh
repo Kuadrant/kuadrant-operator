@@ -83,6 +83,7 @@ KUADRANT_ISTIO_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/istio/sail?re
 KUADRANT_CERT_MANAGER_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/cert-manager?ref=${KUADRANT_REF}"
 KUADRANT_METALLB_KUSTOMIZATION="${KUADRANT_REPO}/config/metallb?ref=${KUADRANT_REF}"
 KUADARNT_OBSERVABILITY_KUSTOMIZATION="${KUADRANT_REPO}/config/observability?ref=${KUADRANT_REF}"
+KUADRANT_DASHBOARDS_KUSTOMIZATION="${KUADRANT_REPO}/examples/dashboards?ref=${KUADRANT_REF}"
 MGC_REPO="github.com/${KUADRANT_ORG}/multicluster-gateway-controller.git"
 MGC_ISTIO_KUSTOMIZATION="${MGC_REPO}/config/istio?ref=${MGC_REF}"
 
@@ -507,6 +508,7 @@ success "Kuadrant sample configuration deployed."
 info "Installing observability stack in ${KUADRANT_CLUSTER_NAME}..."
 kubectl kustomize ${KUADARNT_OBSERVABILITY_KUSTOMIZATION} | docker run --rm -i ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
 kubectl kustomize ${KUADARNT_OBSERVABILITY_KUSTOMIZATION} | docker run --rm -i ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -
+kubectl kustomize ${KUADRANT_DASHBOARDS_KUSTOMIZATION} | kubectl apply --server-side -f -
 success "observability stack installed successfully."
 
 info "✨🌟 Setup Complete! Your Kuadrant Quick Start environment has been successfully created. 🌟✨"

@@ -45,4 +45,3 @@ tests:
                   summary: High error rate on HTTPRoute requests responses
                   title: (ticket) kuadrant requests-availability SLO error budget burn rate is too fast.
 
-  

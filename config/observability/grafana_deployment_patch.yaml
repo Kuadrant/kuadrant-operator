@@ -48,6 +48,27 @@
      defaultMode: 420
      name: grafana-udproutes
 - op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: grafana-appdeveloper
+    configMap:
+      defaultMode: 420
+      name: grafana-appdeveloper
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: grafana-platformengineer
+    configMap:
+      defaultMode: 420
+      name: grafana-platformengineer
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: grafana-businessuser
+    configMap:
+      defaultMode: 420
+      name: grafana-businessuser
+- op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
     name: grafana-gatewayclasses
@@ -82,3 +103,18 @@
   value:
     name: grafana-udproutes
     mountPath: /grafana-dashboard-definitions/0/grafana-udproutes
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: grafana-appdeveloper
+    mountPath: /grafana-dashboard-definitions/0/grafana-appdeveloper
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: grafana-businessuser
+    mountPath: /grafana-dashboard-definitions/0/grafana-businessuser
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: grafana-platformengineer
+    mountPath: /grafana-dashboard-definitions/0/grafana-platformengineer

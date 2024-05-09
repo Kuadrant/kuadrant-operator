@@ -32,6 +32,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -57,11 +58,11 @@ const (
 	TestIPAddressTwo         = "172.0.0.2"
 )
 
-func ApplyKuadrantCR(namespace string) {
-	ApplyKuadrantCRWithName(namespace, "kuadrant-sample")
+func ApplyKuadrantCR(namespace string, mutateFns ...func(kCR *kuadrantv1beta1.Kuadrant)) {
+	ApplyKuadrantCRWithName(namespace, "kuadrant-sample", mutateFns...)
 }
 
-func ApplyKuadrantCRWithName(namespace, name string) {
+func ApplyKuadrantCRWithName(namespace, name string, mutateFns ...func(kCR *kuadrantv1beta1.Kuadrant)) {
 	kuadrantCR := &kuadrantv1beta1.Kuadrant{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Kuadrant",
@@ -72,6 +73,11 @@ func ApplyKuadrantCRWithName(namespace, name string) {
 			Namespace: namespace,
 		},
 	}
+
+	for _, mutateFn := range mutateFns {
+		mutateFn(kuadrantCR)
+	}
+
 	err := k8sClient.Create(context.Background(), kuadrantCR)
 	Expect(err).ToNot(HaveOccurred())
 
@@ -659,5 +665,13 @@ func createSelfSignedIssuerSpec() certmanv1.IssuerSpec {
 		IssuerConfig: certmanv1.IssuerConfig{
 			SelfSigned: &certmanv1.SelfSignedIssuer{},
 		},
+	}
+}
+
+func testLimitadorIsReady(ctx context.Context, lKey client.ObjectKey) func(g Gomega) {
+	return func(g Gomega) {
+		existing := &limitadorv1alpha1.Limitador{}
+		g.Expect(k8sClient.Get(ctx, lKey, existing)).To(Succeed())
+		g.Expect(meta.IsStatusConditionTrue(existing.Status.Conditions, limitadorv1alpha1.StatusConditionReady)).To(BeTrue())
 	}
 }

@@ -141,20 +141,35 @@ func (in *LimitadorSpec) DeepCopyInto(out *LimitadorSpec) {
 		*out = new(int)
 		**out = **in
 	}
-	if in.ResourceRequirements != nil {
-		in, out := &in.ResourceRequirements, &out.ResourceRequirements
-		*out = new(v1.ResourceRequirements)
+	if in.Storage != nil {
+		in, out := &in.Storage, &out.Storage
+		*out = new(v1alpha1.Storage)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.RateLimitHeaders != nil {
+		in, out := &in.RateLimitHeaders, &out.RateLimitHeaders
+		*out = new(v1alpha1.RateLimitHeadersType)
+		**out = **in
+	}
+	if in.Telemetry != nil {
+		in, out := &in.Telemetry, &out.Telemetry
+		*out = new(v1alpha1.Telemetry)
+		**out = **in
 	}
 	if in.PodDisruptionBudget != nil {
 		in, out := &in.PodDisruptionBudget, &out.PodDisruptionBudget
 		*out = new(v1alpha1.PodDisruptionBudgetType)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.Storage != nil {
-		in, out := &in.Storage, &out.Storage
-		*out = new(v1alpha1.Storage)
+	if in.ResourceRequirements != nil {
+		in, out := &in.ResourceRequirements, &out.ResourceRequirements
+		*out = new(v1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.Verbosity != nil {
+		in, out := &in.Verbosity, &out.Verbosity
+		*out = new(v1alpha1.VerbosityLevel)
+		**out = **in
 	}
 }
 

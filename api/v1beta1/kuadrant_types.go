@@ -44,13 +44,23 @@ type LimitadorSpec struct {
 	Replicas *int `json:"replicas,omitempty"`
 
 	// +optional
-	ResourceRequirements *corev1.ResourceRequirements `json:"resourceRequirements,omitempty"`
+	Storage *limitadorv1alpha1.Storage `json:"storage,omitempty"`
+
+	// +optional
+	RateLimitHeaders *limitadorv1alpha1.RateLimitHeadersType `json:"rateLimitHeaders,omitempty"`
+
+	// +optional
+	Telemetry *limitadorv1alpha1.Telemetry `json:"telemetry,omitempty"`
 
 	// +optional
 	PodDisruptionBudget *limitadorv1alpha1.PodDisruptionBudgetType `json:"pdb,omitempty"`
 
 	// +optional
-	Storage *limitadorv1alpha1.Storage `json:"storage,omitempty"`
+	ResourceRequirements *corev1.ResourceRequirements `json:"resourceRequirements,omitempty"`
+
+	// Sets the level of verbosity
+	// +optional
+	Verbosity *limitadorv1alpha1.VerbosityLevel `json:"verbosity,omitempty"`
 }
 
 // KuadrantStatus defines the observed state of Kuadrant

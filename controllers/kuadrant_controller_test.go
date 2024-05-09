@@ -6,13 +6,14 @@ import (
 	"reflect"
 	"time"
 
-	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
 var _ = Describe("Kuadrant controller", func() {

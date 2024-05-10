@@ -129,6 +129,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			err = k8sClient.Get(ctx, wasmPluginKey, existingWasmPlugin)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
+			// has the correct target ref
+			Expect(existingWasmPlugin.Spec.TargetRef.Group).To(Equal("gateway.networking.k8s.io"))
+			Expect(existingWasmPlugin.Spec.TargetRef.Kind).To(Equal("Gateway"))
+			Expect(existingWasmPlugin.Spec.TargetRef.Name).To(Equal(gateway.Name))
 			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Plugin{

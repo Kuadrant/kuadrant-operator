@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "dependencies": [
+    {
+      "source": {
+        "git": {
+          "remote": "https://github.com/thanos-io/kube-thanos",
+          "subdir": "jsonnet/kube-thanos"
+        }
+      },
+      "version": "4c734188ca0745a8cd9cb7824d25abe663e89627",
+      "sum": "mLrmkfibHnj5IP2r0zAmYIJelh3KbaaKXSoRUW/fASc="
+    }
+  ],
+  "legacyImports": false
+}

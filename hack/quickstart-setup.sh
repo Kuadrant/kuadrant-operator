@@ -82,6 +82,7 @@ KUADRANT_GATEWAY_API_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/gateway
 KUADRANT_ISTIO_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/istio/sail?ref=${KUADRANT_REF}"
 KUADRANT_CERT_MANAGER_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/cert-manager?ref=${KUADRANT_REF}"
 KUADRANT_METALLB_KUSTOMIZATION="${KUADRANT_REPO}/config/metallb?ref=${KUADRANT_REF}"
+KUADARNT_THANOS_KUSTOMIZATION="${KUADRANT_REPO}/config/thanos?ref=${KUADRANT_REF}"
 KUADARNT_OBSERVABILITY_KUSTOMIZATION="${KUADRANT_REPO}/config/observability?ref=${KUADRANT_REF}"
 KUADRANT_DASHBOARDS_KUSTOMIZATION="${KUADRANT_REPO}/examples/dashboards?ref=${KUADRANT_REF}"
 MGC_REPO="github.com/${KUADRANT_ORG}/multicluster-gateway-controller.git"
@@ -90,7 +91,8 @@ MGC_ISTIO_KUSTOMIZATION="${MGC_REPO}/config/istio?ref=${MGC_REF}"
 # Make temporary directory
 mkdir -p ${TMP_DIR}
 
-KUADRANT_CLUSTER_NAME=kuadrant-local
+KUADRANT_CLUSTER_NAME_BASE=kuadrant-local
+KUADRANT_CLUSTER_NAME="${KUADRANT_CLUSTER_NAME_BASE}"
 KUADRANT_NAMESPACE=kuadrant-system
 
 info() {
@@ -504,12 +506,25 @@ info "Deploying Kuadrant sample configuration..."
 kubectl -n ${KUADRANT_NAMESPACE} apply -f ${KUADRANT_REPO_RAW}/config/samples/kuadrant_v1beta1_kuadrant.yaml
 success "Kuadrant sample configuration deployed."
 
+# Install thanos on hub cluster
+if [ "$HUB" -eq 1 ]; then
+  info "Installing thanos in ${KUADRANT_CLUSTER_NAME}... (as hub cluster)"
+  kubectl apply -k ${KUADARNT_THANOS_KUSTOMIZATION}
+  success "thanos installed successfully."
+fi
+
 # Install observability stack
 info "Installing observability stack in ${KUADRANT_CLUSTER_NAME}..."
-kubectl kustomize ${KUADARNT_OBSERVABILITY_KUSTOMIZATION} | docker run --rm -i ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
-kubectl kustomize ${KUADARNT_OBSERVABILITY_KUSTOMIZATION} | docker run --rm -i ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -
+kubectl kustomize ${KUADARNT_OBSERVABILITY_KUSTOMIZATION} | $CONTAINER_RUNTIME_BIN run --rm -i ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
+kubectl kustomize ${KUADARNT_OBSERVABILITY_KUSTOMIZATION} | $CONTAINER_RUNTIME_BIN run --rm -i ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -
 kubectl kustomize ${KUADRANT_DASHBOARDS_KUSTOMIZATION} | kubectl apply --server-side -f -
 success "observability stack installed successfully."
+
+# Patch prometheus to remote write metrics to thanos in hub
+info "Patching prometheus remote write config in ${KUADRANT_CLUSTER_NAME}..."
+THANOS_RECEIVE_ROUTER_IP=$(kubectl --context="kind-$KUADRANT_CLUSTER_NAME_BASE" -n monitoring get svc thanos-receive-router-lb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+kubectl -n monitoring patch prometheus k8s --type='merge' -p '{"spec":{"remoteWrite":[{"url":"http://'"$THANOS_RECEIVE_ROUTER_IP"':19291/api/v1/receive"}]}}'
+success "prometheus remote write config patched successfully."
 
 info "✨🌟 Setup Complete! Your Kuadrant Quick Start environment has been successfully created. 🌟✨"
 

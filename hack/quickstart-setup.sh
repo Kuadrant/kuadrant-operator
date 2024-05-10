@@ -515,8 +515,8 @@ fi
 
 # Install observability stack
 info "Installing observability stack in ${KUADRANT_CLUSTER_NAME}..."
-kubectl kustomize ${KUADARNT_OBSERVABILITY_KUSTOMIZATION} | docker run --rm -i ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
-kubectl kustomize ${KUADARNT_OBSERVABILITY_KUSTOMIZATION} | docker run --rm -i ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -
+kubectl kustomize ${KUADARNT_OBSERVABILITY_KUSTOMIZATION} | $CONTAINER_RUNTIME_BIN run --rm -i ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
+kubectl kustomize ${KUADARNT_OBSERVABILITY_KUSTOMIZATION} | $CONTAINER_RUNTIME_BIN run --rm -i ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -
 kubectl kustomize ${KUADRANT_DASHBOARDS_KUSTOMIZATION} | kubectl apply --server-side -f -
 success "observability stack installed successfully."
 

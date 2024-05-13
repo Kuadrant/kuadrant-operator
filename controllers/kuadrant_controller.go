@@ -24,7 +24,6 @@ import (
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -498,7 +497,6 @@ func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadr
 func (r *KuadrantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta1.Kuadrant{}).
-		Owns(&appsv1.Deployment{}).
 		Owns(&limitadorv1alpha1.Limitador{}).
 		Owns(&authorinov1beta1.Authorino{}).
 		Complete(r)

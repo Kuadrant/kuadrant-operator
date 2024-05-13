@@ -1,14 +1,4 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_KUADRANT-THANOS-HUB",
-      "label": "Kuadrant-Thanos-Hub",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
   "__elements": [],
   "__requires": [
     {
@@ -151,7 +141,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_KUADRANT-THANOS-HUB}"
+        "uid": "${datasource}"
       },
       "description": "List of all Gateways, their class and status.",
       "fieldConfig": {
@@ -230,7 +220,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -243,7 +233,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -257,7 +247,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -389,7 +379,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_KUADRANT-THANOS-HUB}"
+        "uid": "${datasource}"
       },
       "description": "Total number of Gateway API gateways",
       "fieldConfig": {
@@ -438,7 +428,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -454,7 +444,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_KUADRANT-THANOS-HUB}"
+        "uid": "${datasource}"
       },
       "description": "List of all Policies targeting a Gateway",
       "fieldConfig": {
@@ -508,7 +498,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -521,7 +511,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -535,7 +525,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -549,7 +539,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -626,7 +616,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_KUADRANT-THANOS-HUB}"
+        "uid": "${datasource}"
       },
       "description": "Total Gateways with an [Accepted and Programmed](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io%2fv1.GatewayConditionType) state of True",
       "fieldConfig": {
@@ -675,7 +665,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -691,7 +681,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_KUADRANT-THANOS-HUB}"
+        "uid": "${datasource}"
       },
       "description": "Total Gateways with a False or missing [Accepted or Programmed](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io%2fv1.GatewayConditionType) state.",
       "fieldConfig": {
@@ -740,7 +730,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -769,7 +759,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_KUADRANT-THANOS-HUB}"
+        "uid": "${datasource}"
       },
       "description": "List of all APIs (HTTPRoutes) and their hostnames & corresponding Deployment names.",
       "fieldConfig": {
@@ -821,7 +811,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -835,7 +825,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -943,7 +933,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_KUADRANT-THANOS-HUB}"
+        "uid": "${datasource}"
       },
       "description": "List of all Policies targeting HTTPRoutes",
       "fieldConfig": {
@@ -997,7 +987,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1010,7 +1000,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1024,7 +1014,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1038,7 +1028,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1115,7 +1105,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_KUADRANT-THANOS-HUB}"
+        "uid": "${datasource}"
       },
       "description": "Aggregated rate of requests per API (HTTPRoute). The API name can be cross referenced with the API list to see additional details.\n\nNote: HTTPRoutes require a label `deployment` with the name of the corresponding Deployment so that istio request metrics can be paired with HTTPRoute metrics.",
       "fieldConfig": {
@@ -1193,7 +1183,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -1208,7 +1198,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_KUADRANT-THANOS-HUB}"
+        "uid": "${datasource}"
       },
       "description": "Aggregated rate of bytes per API (HTTPRoute). The API name can be cross referenced with the API list to see additional details.\n\nNote: HTTPRoutes require a label `deployment` with the name of the corresponding Deployment so that istio request metrics can be paired with HTTPRoute metrics.",
       "fieldConfig": {
@@ -1285,7 +1275,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "(sum(irate(container_network_receive_bytes_total{exported_namespace=~\"$api_policy_namespace\"}[1h:5m])\n* on (namespace, exported_namespace,pod)\ngroup_left(workload,workload_type) namespace_workload_pod:kube_pod_owner:relabel{exported_namespace=~\"$api_policy_namespace\", workload=~\".+\"}) by (workload)) * on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"service\", \"(.+)\")))",
@@ -1300,7 +1290,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_KUADRANT-THANOS-HUB}"
+        "uid": "${datasource}"
       },
       "description": "Rate of 4xx, 5xx and total HTTP response code errors by API/HTTPRoute",
       "fieldConfig": {
@@ -1375,7 +1365,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -1386,7 +1376,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{response_code=~\"4.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -1398,7 +1388,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{response_code=~\"5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -1410,7 +1400,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{response_code=~\"404\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -1422,7 +1412,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{response_code=~\"401\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -1434,7 +1424,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{response_code=~\"429\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -1446,7 +1436,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{response_code=~\"500\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -1458,7 +1448,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{response_code=~\"501\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -1470,7 +1460,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{response_code=~\"503\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -1648,7 +1638,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{exported_namespace=~\"$api_policy_namespace\"}\n* on(namespace, exported_namespace,pod)\n  group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{exported_namespace=~\"$api_policy_namespace\", workload_type=\"deployment\"}\n) by (workload, workload_type)\n* on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")))",
@@ -1826,7 +1816,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_KUADRANT-THANOS-HUB}"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
           "expr": "sum(\n    container_memory_working_set_bytes{metrics_path=\"/metrics/cadvisor\", exported_namespace=~\"$api_policy_namespace\", container!=\"\", image!=\"\"}\n  * on(namespace, exported_namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{exported_namespace=~\"$api_policy_namespace\", workload_type=\"deployment\"}\n) by (workload, workload_type)\n* on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")))",
@@ -1870,7 +1860,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_KUADRANT-THANOS-HUB}"
+          "uid": "${datasource}"
         },
         "definition": "label_values(gatewayapi_gateway_info, exported_namespace)",
         "description": "",
@@ -1894,7 +1884,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_KUADRANT-THANOS-HUB}"
+          "uid": "${datasource}"
         },
         "definition": "label_values(kube_namespace_created, exported_namespace)",
         "description": "Namespace of HTTPRoute & Policy resources",
@@ -1918,7 +1908,7 @@
         "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${DS_KUADRANT-THANOS-HUB}"
+          "uid": "${datasource}"
         },
         "definition": "label_values(gatewayapi_httproute_labels, name)",
         "description": "Name of the HTTPRoute resource",

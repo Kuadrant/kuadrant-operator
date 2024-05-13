@@ -1,4 +1,59 @@
 {
+  "__inputs": [
+    {
+      "name": "DS_KUADRANT-THANOS-HUB",
+      "label": "Kuadrant-Thanos-Hub",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__elements": [],
+  "__requires": [
+    {
+      "type": "panel",
+      "id": "dashlist",
+      "name": "Dashboard list",
+      "version": ""
+    },
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "8.5.5"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "text",
+      "name": "Text",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
   "annotations": {
     "list": [
       {
@@ -26,8 +81,8 @@
   "fiscalYearStartMonth": 0,
   "gnetId": 7630,
   "graphTooltip": 1,
-  "id": 2,
-  "iteration": 1713209903588,
+  "id": null,
+  "iteration": 1715589343999,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -97,7 +152,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_KUADRANT-THANOS-HUB}"
       },
       "description": "Hostname: \"Domain name for the API server.\" | API Namespace: \"Kubernetes namespace where the API is deployed.\" | Gateway name: \"Name of the Gateway API gateway the HTTPRoute is targeting\" | Gateway name: \"Name of the Gateway API gateway namespace\"\n",
       "fieldConfig": {
@@ -145,7 +200,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -160,7 +215,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -174,7 +229,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -292,7 +347,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_KUADRANT-THANOS-HUB}"
       },
       "description": "Requests per second, broken down by success (2xx,3xx) and error (4xx,5xx)",
       "fieldConfig": {
@@ -412,7 +467,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -423,7 +478,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -435,7 +490,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "expr": "sum(rate(istio_requests_total{response_code=~\"2.*|3.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -451,7 +506,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_KUADRANT-THANOS-HUB}"
       },
       "description": "Total requests per second",
       "fieldConfig": {
@@ -501,7 +556,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -519,7 +574,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_KUADRANT-THANOS-HUB}"
       },
       "description": "Total number of responses.",
       "fieldConfig": {
@@ -569,7 +624,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -587,7 +642,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_KUADRANT-THANOS-HUB}"
       },
       "description": "Time it takes to process a request",
       "fieldConfig": {
@@ -709,7 +764,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -721,7 +776,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.90, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -732,7 +787,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$api\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
@@ -748,7 +803,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_KUADRANT-THANOS-HUB}"
       },
       "description": "99% of API requests were completed inside this value, while the remaining 1% took longer.",
       "fieldConfig": {
@@ -797,7 +852,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -815,7 +870,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_KUADRANT-THANOS-HUB}"
       },
       "description": "Requests per second that resulted in a success (2xx, 3xx).",
       "fieldConfig": {
@@ -865,7 +920,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -883,7 +938,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_KUADRANT-THANOS-HUB}"
       },
       "description": "Total number of success response (2xx, 3xx).",
       "fieldConfig": {
@@ -933,7 +988,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -951,7 +1006,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_KUADRANT-THANOS-HUB}"
       },
       "description": "95% of API requests were completed inside this value, while the remaining 5% took longer.",
       "fieldConfig": {
@@ -1000,7 +1055,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1018,7 +1073,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_KUADRANT-THANOS-HUB}"
       },
       "description": "Requests per second that resulted in an error (4xx, 5xx).",
       "fieldConfig": {
@@ -1068,7 +1123,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1086,7 +1141,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_KUADRANT-THANOS-HUB}"
       },
       "description": "Total number of error response (4xx, 5xx).",
       "fieldConfig": {
@@ -1136,7 +1191,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1154,7 +1209,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "${datasource}"
+        "uid": "${DS_KUADRANT-THANOS-HUB}"
       },
       "description": "Shows that 90% of API requests were completed inside this value, while the remaining 10% took longer.",
       "fieldConfig": {
@@ -1203,7 +1258,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${DS_KUADRANT-THANOS-HUB}"
           },
           "editorMode": "code",
           "exemplar": false,
@@ -1229,8 +1284,8 @@
       {
         "current": {
           "selected": false,
-          "text": "prometheus",
-          "value": "prometheus"
+          "text": "Kuadrant-Thanos-Hub",
+          "value": "Kuadrant-Thanos-Hub"
         },
         "hide": 0,
         "includeAll": false,
@@ -1246,18 +1301,10 @@
         "type": "datasource"
       },
       {
-        "current": {
-          "selected": true,
-          "text": [
-            "All"
-          ],
-          "value": [
-            "$__all"
-          ]
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
-          "uid": "${datasource}"
+          "uid": "${DS_KUADRANT-THANOS-HUB}"
         },
         "definition": "label_values(gatewayapi_httproute_labels, name)",
         "description": "Name of the API",

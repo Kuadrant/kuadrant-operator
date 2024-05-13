@@ -28,6 +28,7 @@ While this document uses `kubectl` commands for simplicity, working with multipl
 ## Prerequisites
 
 This guide expects that you have successfully installed Kuadrant on at least one OpenShift cluster:
+
 - You have completed the steps in [Install Kuadrant on an OpenShift cluster](../install/install-openshift.md) for one or more clusters.
 - For multicluster scenarios, you have installed Kuadrant on at least two different OpenShift clusters, and have a shared accessible Redis store.
 - You have the `kubectl` command line installed.

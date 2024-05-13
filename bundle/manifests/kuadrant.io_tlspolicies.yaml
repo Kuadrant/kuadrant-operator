@@ -18,9 +18,14 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: TLSPolicy Status
-      jsonPath: .status.conditions[0].reason
-      name: Status
+    - description: TLSPolicy Accepted
+      jsonPath: .status.conditions[?(@.type=="Accepted")].status
+      name: Accepted
+      priority: 2
+      type: string
+    - description: TLSPolicy Enforced
+      jsonPath: .status.conditions[?(@.type=="Enforced")].status
+      name: Enforced
       priority: 2
       type: string
     - description: Type of the referenced Gateway API resource

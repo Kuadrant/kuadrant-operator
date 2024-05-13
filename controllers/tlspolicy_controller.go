@@ -80,7 +80,7 @@ func (r *TLSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, tlsPolicy, kuadrant.NewErrTargetNotFound(tlsPolicy.Kind(), tlsPolicy.GetTargetRef(), delResErr))
+				return r.reconcileStatus(ctx, tlsPolicy, targetReferenceObject, kuadrant.NewErrTargetNotFound(tlsPolicy.Kind(), tlsPolicy.GetTargetRef(), delResErr))
 			}
 			return ctrl.Result{}, err
 		}
@@ -109,7 +109,7 @@ func (r *TLSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	specErr := r.reconcileResources(ctx, tlsPolicy, targetReferenceObject)
 
-	statusResult, statusErr := r.reconcileStatus(ctx, tlsPolicy, specErr)
+	statusResult, statusErr := r.reconcileStatus(ctx, tlsPolicy, targetReferenceObject, specErr)
 
 	if specErr != nil {
 		return ctrl.Result{}, specErr

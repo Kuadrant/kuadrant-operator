@@ -147,7 +147,7 @@ metadata:
   namespace: kuadrant-system
 spec:
   sourceType: grpc
-  image: quay.io/kuadrant/kuadrant-operator-catalog:v0.7.0
+  image: quay.io/kuadrant/kuadrant-operator-catalog:v0.7.1
   displayName: Kuadrant Operators
   publisher: grpc
   updateStrategy:

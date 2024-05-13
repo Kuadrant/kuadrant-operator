@@ -1,8 +1,8 @@
-# Secure, Protect and Connect services with Kuadrant
+# Secure, protect, and connect services with Kuadrant on Kubernetes
 
-## Pre-requisites
+## Prerequisites
 
-- Completed the [Single-cluster Quick Start](https://docs.kuadrant.io/getting-started-single-cluster/) or [Multi-cluster Quick Start](https://docs.kuadrant.io/getting-started-multi-cluster/)
+- You have completed the [Single-cluster Quick Start](https://docs.kuadrant.io/getting-started-single-cluster/) or [Multi-cluster Quick Start](https://docs.kuadrant.io/getting-started-multi-cluster/).
 
 ## Overview
 

@@ -46,3 +46,79 @@ In the modal popup click **Export** and then **Save to file**.
 Alerting rules can be defined in [PrometheusRules](https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/user-guides/alerting.md#configuring-alertmanager-in-prometheus) resources.
 The can be viewed in the Prometheus UI Alerts tab.
 Some example alerting rules are available in the [/examples](/examples) folder.
+
+## Exporting a dashboard for use with Grafana Community Platform or other Grafana Instances
+
+Following the steps in [Editing dashboards](#editing-dashboards), we need to make two exports - one where the toggle "Export for sharing manually" is toggled, and one where it isn't. 
+
+- In order for Grafana Community Platform to accept the dashboard upon upload, it needs to know what is required (i.e. Grafana version, panels, Prometheus version) for the dashboard to function correctly. Without this information, an error is thrown saying the format of the dashboard JSON is too old.
+
+- However, for the Grafana instance to accept the dashboard upon import, the option for selecting the data source is required, as the generated data source for sharing externally may not be what the data source is for a user's Grafana instance. If the generated data source was used, the user may not have that data source configured, and Grafana will throw an error to that effect.
+
+Therefore, we will be making a "hybrid" dashboard that utilizes specifying what is required (i.e. Grafana version, panels, Prometheus version) but also giving the choice back to the user to decide which data source they would like to use. This results in a dashboard that is compatible with both Grafana instance dashboard imports, and is also compatible with a Grafana Community Platform dashboard upload.
+
+Once both of these JSON files are exported and saved correctly, ensuring their names are differentiable, we can now combine both JSONs to form our "universal" dashboard.
+
+1. Open both JSONs side to side for ease of editing.
+2. In the "Export for sharing manually" JSON, copy the "__requires" field and paste it in an outermost fashion into the default export JSON near the top. It should look like:
+
+```json
+{
+"__requires": [
+    {
+      "type": "panel",
+      "id": "dashlist",
+      "name": "Dashboard list",
+      "version": ""
+    },
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "8.5.5"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "text",
+      "name": "Text",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
+  "annotations": {
+        .
+        .
+        .
+  },
+  .
+  .
+  .
+  "weekStart": ""
+}
+```
+3. Save this file and use as needed. 
+
+Note that we have retained the default data source rather than having an abstract one, allowing the user to make the choice of which data source they wish to use. We have also allowed for the requirements to be specified for uploading the dashboard to the Grafana Community Platform.

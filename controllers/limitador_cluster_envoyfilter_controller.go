@@ -165,6 +165,15 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *LimitadorClusterEnvoyFilterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ok, err := kuadrantistioutils.IsIstioEnvoyFilterInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("Istio EnvoyFilter controller disabled. Istio was not found")
+		return nil
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		// Limitador cluster EnvoyFilter controller only cares about
 		// the annotation having references to RLP's

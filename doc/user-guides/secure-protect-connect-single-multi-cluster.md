@@ -438,7 +438,7 @@ NOTE: The sample OAS has some placeholders for namespaces and domains. You will 
 Generate the resource from your OAS as follows, (`envsubst` will replace the placeholders):
 
 ```bash
-cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute --oas -
+cat $oasPath | envsubst | kuadrantctl generate gatewayapi httproute --oas - | kubectl apply -f -
 ```
 
 ```bash

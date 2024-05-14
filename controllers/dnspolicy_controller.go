@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -187,7 +188,7 @@ func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return nil
 	}
 
-	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
+	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")), mappers.WithClient(mgr.GetClient()))
 
 	r.dnsHelper = dnsHelper{Client: r.Client()}
 	ctrlr := ctrl.NewControllerManagedBy(mgr).
@@ -196,7 +197,7 @@ func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&gatewayapiv1.Gateway{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return gatewayEventMapper.MapToPolicy(object, &v1alpha1.DNSPolicy{})
+				return gatewayEventMapper.MapToPolicy(object, schema.GroupVersionKind{Group: "kuadrant.io", Version: "v1alpha1", Kind: "DNSPolicy"})
 			}),
 		)
 	return ctrlr.Complete(r)

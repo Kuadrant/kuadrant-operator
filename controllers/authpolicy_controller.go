@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"github.com/go-logr/logr"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -271,7 +273,7 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httpRouteEventMapper")))
-	//gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
+	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")), mappers.WithClient(mgr.GetClient()))
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.AuthPolicy{}).
@@ -284,7 +286,7 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		Watches(&gatewayapiv1.Gateway{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return mappers.MapToPolicyAP(ctx, mgr.GetClient(), object, &api.AuthPolicy{})
+				return gatewayEventMapper.MapToPolicy(object, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "AuthPolicy"})
 			}),
 		).
 		Complete(r)

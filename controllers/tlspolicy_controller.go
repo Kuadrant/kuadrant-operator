@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -196,14 +197,14 @@ func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return nil
 	}
 
-	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
+	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")), mappers.WithClient(mgr.GetClient()))
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.TLSPolicy{}).
 		Watches(
 			&gatewayapiv1.Gateway{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return gatewayEventMapper.MapToPolicy(object, &v1alpha1.TLSPolicy{})
+				return gatewayEventMapper.MapToPolicy(object, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1alpha1", Kind: "TLSPolicy"})
 			}),
 		).
 		Complete(r)

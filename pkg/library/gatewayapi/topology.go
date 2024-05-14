@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	typeField      dag.Field     = dag.Field("type")
-	gatewayLabel   dag.NodeLabel = dag.NodeLabel("gateway")
-	httprouteLabel dag.NodeLabel = dag.NodeLabel("httproute")
+	typeField                   dag.Field     = dag.Field("type")
+	gatewayLabel                dag.NodeLabel = dag.NodeLabel("gateway")
+	httprouteLabel              dag.NodeLabel = dag.NodeLabel("httproute")
+	HTTPRouteGatewayParentField               = ".metadata.parentRefs.gateway"
 )
 
 type RouteNode struct {

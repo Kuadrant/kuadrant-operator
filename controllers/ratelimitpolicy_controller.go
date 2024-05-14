@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -236,7 +238,7 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httpRouteEventMapper")))
-	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
+	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")), mappers.WithClient(mgr.GetClient()))
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta2.RateLimitPolicy{}).
@@ -251,7 +253,7 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&gatewayapiv1.Gateway{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return gatewayEventMapper.MapToPolicy(object, &kuadrantv1beta2.RateLimitPolicy{})
+				return gatewayEventMapper.MapToPolicy(object, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "RateLimitPolicy"})
 			}),
 		).
 		Complete(r)

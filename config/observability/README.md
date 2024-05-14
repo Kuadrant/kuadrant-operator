@@ -57,68 +57,10 @@ Following the steps in [Editing dashboards](#editing-dashboards), we need to mak
 
 Therefore, we will be making a "hybrid" dashboard that utilizes specifying what is required (i.e. Grafana version, panels, Prometheus version) but also giving the choice back to the user to decide which data source they would like to use. This results in a dashboard that is compatible with both Grafana instance dashboard imports, and is also compatible with a Grafana Community Platform dashboard upload.
 
-Once both of these JSON files are exported and saved correctly, ensuring their names are differentiable, we can now combine both JSONs to form our "universal" dashboard.
+Once both of these JSON files are exported and saved correctly, ensuring their names are differentiable, we can now combine both JSONs to form our "universal" dashboard. We can use the script located at `config/observability/universal-dashboard.sh` to do this. Now, run the following:
 
-1. Open both JSONs side to side for ease of editing.
-2. In the "Export for sharing manually" JSON, copy the "__requires" field and paste it in an outermost fashion into the default export JSON near the top. It should look like:
-
-```json
-{
-"__requires": [
-    {
-      "type": "panel",
-      "id": "dashlist",
-      "name": "Dashboard list",
-      "version": ""
-    },
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "8.5.5"
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
-      "version": "1.0.0"
-    },
-    {
-      "type": "panel",
-      "id": "stat",
-      "name": "Stat",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "table",
-      "name": "Table",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "text",
-      "name": "Text",
-      "version": ""
-    },
-    {
-      "type": "panel",
-      "id": "timeseries",
-      "name": "Time series",
-      "version": ""
-    }
-  ],
-  "annotations": {
-        .
-        .
-        .
-  },
-  .
-  .
-  .
-  "weekStart": ""
-}
+```bash
+universal-dashboard.sh <"Export for sharing manually" JSON file> <"regular export" JSON file>
 ```
-3. Save this file and use as needed. 
 
-Note that we have retained the default data source rather than having an abstract one, allowing the user to make the choice of which data source they wish to use. We have also allowed for the requirements to be specified for uploading the dashboard to the Grafana Community Platform.
+This will add the necessary fields to our JSON file where we did NOT toggle "Export for sharing manually" upon export, and will delete the one where we did. Now, you have a universal dashboard file you can use to import into your Grafana instance, but also use for uploading to the Grafana Community Platform.

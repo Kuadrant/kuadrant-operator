@@ -186,3 +186,18 @@ jobs:
       - name: Verify generate command
         run: |
           make verify-generate
+
+  verify-go-mod:
+    name: Verify go.mod
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.21.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.21.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Verify generate command
+        run: |
+          make verify-go-mod

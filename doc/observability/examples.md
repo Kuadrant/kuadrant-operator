@@ -15,6 +15,8 @@ Datasources are configured as template variables, automatically integrating with
 
 ### Setting Up Alerts in Prometheus
 
-Integrate alerts into Prometheus using a `PrometheusRule` resource. Adjust alert thresholds to meet your specific operational needs.
+You can integrate the [example alerts](https://github.com/Kuadrant/kuadrant-operator/tree/main/examples) into Prometheus as `PrometheusRule` resources. Feel free to adjust alert thresholds to suit your specific operational needs.
+
+Additionally, [Service Level Objective (SLO)](https://sre.google/sre-book/service-level-objectives/) alerts generated with [Sloth](https://sloth.dev/) are included. A benefit of these alerts is the ability to integrate them with this [SLO dashboard](https://grafana.com/grafana/dashboards/14348-slo-detail/), which utilizes generated labels to comprehensively overview your SLOs.
 
 Further information on the metrics used for these alerts can be found on the [metrics](https://docs.kuadrant.io/kuadrant-operator/doc/observability/metrics/) page.

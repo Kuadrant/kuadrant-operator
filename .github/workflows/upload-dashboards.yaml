@@ -1,9 +1,7 @@
 name: Upload Dashboards
 
 on:
-  push:
-    branches: 
-      - main
+  pull_request:
     paths:
       - examples/dashboards/app_developer.json
       - examples/dashboards/business_user.json

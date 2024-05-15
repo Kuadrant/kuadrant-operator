@@ -1,40 +1,35 @@
 #!/bin/bash
 
-# Check if two arguments are provided
-if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <file1.json> <file2.json>"
+# Check if an argument is provided
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <public_file.json>"
     exit 1
 fi
 
-# Assign provided arguments to variables
+# Assign provided argument to a variable
 public_file="$1"
-original_file="$2"
 
-# Check if provided files exist
+# Check if the provided file exists
 if [ ! -f "$public_file" ]; then
     echo "$public_file does not exist."
     exit 1
 fi
 
-if [ ! -f "$original_file" ]; then
-    echo "$original_file does not exist."
-    exit 1
-fi
-
-# Load data from a-public.json
+# Load data from the public file
 public_data=$(<"$public_file")
 
-# Load data from a.json
-original_data=$(<"$original_file")
+# Extract __inputs.name field and assign to name variable
+name=$(echo "$public_data" | jq -r '.__inputs[0].name')
+# Encase name variable with ${} so jq can match it.
+name=$'${'$name'}'
 
-# Extract __requires field from a-public.json
-requires_field=$(echo "$public_data" | jq '.__requires')
+# Remove the __inputs and __elements fields using jq
+updated_data=$(echo "$public_data" | jq 'del(.__inputs, .__elements)')
 
-# Add __requires field to the outermost bracket of a.json
-updated_data=$(echo "$original_data" | jq --argjson requires "$requires_field" '. + { "__requires": $requires }')
+# Update the uid attribute content to ${datasource}
+updated_data=$(echo "$updated_data" | jq --arg old_value $name 'walk(if type == "string" and . == $old_value then "${datasource}" else . end)')
 
-# Write the updated data back to a.json
-echo "$updated_data" > "$original_file"
+# Write the updated data back to the public file
+echo "$updated_data" > $public_file
 
-# Remove the public file
-rm $public_file
+echo "File $public_file has been updated successfully."

@@ -21,6 +21,7 @@ var _ = Describe("Kuadrant controller", func() {
 		testNamespace string
 	)
 	const (
+		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 		kuadrant         = "kuadrant-sample"
 	)
@@ -63,7 +64,7 @@ var _ = Describe("Kuadrant controller", func() {
 				}
 				return true
 			}).WithContext(ctx).Should(BeTrue())
-		})
+		}, testTimeOut)
 
 		It("Kuadrant CR configuration overrides Limitador CR configuration", func(ctx SpecContext) {
 			kObj := &kuadrantv1beta1.Kuadrant{}
@@ -96,6 +97,6 @@ var _ = Describe("Kuadrant controller", func() {
 				}
 				return true
 			}).WithContext(ctx).Should(BeTrue())
-		})
+		}, testTimeOut)
 	})
 })

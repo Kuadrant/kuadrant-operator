@@ -9,12 +9,12 @@ on:
 
 jobs:
   upload-dashboards:
-    secrets: inherit
     name: Upload Dashboards
     runs-on: ubuntu-latest
     defaults:
       run:
         shell: bash
+    secrets: inherit
     steps:
       - name: Upload Dashboard
         run: |

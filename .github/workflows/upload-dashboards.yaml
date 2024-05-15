@@ -1,0 +1,41 @@
+name: Upload Dashboards
+
+on:
+  push:
+    branches: 
+      - main
+    paths:
+      - examples/dashboards/app_developer.json
+      - examples/dashboards/business_user.json
+      - examples/dashboards/platform_engineer.json
+
+jobs:
+  upload-dashboards:
+    name: Upload Dashboards
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 
+        run:
+          # Push new dashboard changes
+
+          # App Developer Dashboard
+          curl -X POST \
+          -F 'files=json=examples/dashboards/app_developer.json' \
+          -H 'Content-Type: multipart/form-data' \
+          -H 'Authorization: '
+          https://${{ secrets.GRAFANA_USERNAME }}:${{ secrets.GRAFANA_PASSWORD }}@grafana.com/api/dashboards/20970/revisions
+
+          # Business User Dashboard
+          curl -X POST \
+          -F 'files=json=examples/dashboards/business_user.json' \
+          -H 'Content-Type: multipart/form-data' \
+          https://${{ secrets.GRAFANA_USERNAME }}:${{ secrets.GRAFANA_PASSWORD }}@grafana.com/api/dashboards/20981/revisions
+
+          # Platform Engineer Dashboard
+          curl -X POST \
+          -F 'files=json=examples/dashboards/platform_engineer.json' \
+          -H 'Content-Type: multipart/form-data' \
+          https://${{ secrets.GRAFANA_USERNAME }}:${{ secrets.GRAFANA_PASSWORD }}@grafana.com/api/dashboards/20982/revisions

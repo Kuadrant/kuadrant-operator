@@ -49,18 +49,10 @@ Some example alerting rules are available in the [/examples](/examples) folder.
 
 ## Exporting a dashboard for use with Grafana Community Platform or other Grafana Instances
 
-Following the steps in [Editing dashboards](#editing-dashboards), we need to make two exports - one where the toggle "Export for sharing manually" is toggled, and one where it isn't. 
-
-- In order for Grafana Community Platform to accept the dashboard upon upload, it needs to know what is required (i.e. Grafana version, panels, Prometheus version) for the dashboard to function correctly. Without this information, an error is thrown saying the format of the dashboard JSON is too old.
-
-- However, for the Grafana instance to accept the dashboard upon import, the option for selecting the data source is required, as the generated data source for sharing externally may not be what the data source is for a user's Grafana instance. If the generated data source was used, the user may not have that data source configured, and Grafana will throw an error to that effect.
-
-Therefore, we will be making a "hybrid" dashboard that utilizes specifying what is required (i.e. Grafana version, panels, Prometheus version) but also giving the choice back to the user to decide which data source they would like to use. This results in a dashboard that is compatible with both Grafana instance dashboard imports, and is also compatible with a Grafana Community Platform dashboard upload.
-
-Once both of these JSON files are exported and saved correctly, ensuring their names are differentiable, we can now combine both JSONs to form our "universal" dashboard. We can use the script located at `config/observability/universal-dashboard.sh` to do this. Now, run the following:
+Following the steps in [Editing dashboards](#editing-dashboards), we need to make one export where the toggle "Export for sharing manually" is toggled. Once this is saved, run the following from `config/observability` . 
 
 ```bash
-universal-dashboard.sh <"Export for sharing manually" JSON file> <"regular export" JSON file>
+universal-dashboard.sh <"Export for sharing manually" JSON file> /path/to/<JSON file>
 ```
 
-This will add the necessary fields to our JSON file where we did NOT toggle "Export for sharing manually" upon export, and will delete the one where we did. Now, you have a universal dashboard file you can use to import into your Grafana instance, but also use for uploading to the Grafana Community Platform.
+Now, you have a universal dashboard file you can use to import into your Grafana instance, but also use for uploading to the Grafana Community Platform.

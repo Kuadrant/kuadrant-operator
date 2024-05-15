@@ -1,0 +1,35 @@
+name: Upload Dashboards
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - examples/dashboards/app_developer.json
+      - examples/dashboards/business_user.json
+      - examples/dashboards/platform_engineer.json
+
+jobs:
+  upload-dashboards:
+    name: Upload Dashboards
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v2
+      - name: Upload Dashboard
+        run: |
+          # Push new dashboard changes
+
+          # Init variable with base64 auth
+          auth=$(echo -n ${{ secrets.GRAFANA_USERNAME }}:${{ secrets.GRAFANA_PASSWORD }} | base64)
+
+          # App Developer Dashboard
+          curl -X POST -F "json=@./examples/dashboards/app_developer.json" -H 'Content-Type: multipart/form-data' -H "Authorization: Basic $auth" "https://www.grafana.com/api/dashboards/20970/revisions"
+
+          # Business User Dashboard
+          curl -X POST -F "json=@./examples/dashboards/business_user.json" -H 'Content-Type: multipart/form-data' -H "Authorization: Basic $auth" "https://www.grafana.com/api/dashboards/20981/revisions"
+
+          # Platform Engineer Dashboard
+          curl -X POST -F "json=@./examples/dashboards/platform_engineer.json" -H 'Content-Type: multipart/form-data' -H "Authorization: Basic $auth" "https://www.grafana.com/api/dashboards/20982/revisions"

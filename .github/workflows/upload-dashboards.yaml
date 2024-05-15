@@ -24,7 +24,7 @@ jobs:
           # Encode username:password to base64
 
           # Pass encoded auth to txt file 
-          echo "${{ secrets.GRAFANA_USERNAME }}:${{ secrets.GRAFANA_PASSWORD }}" | base64 > auth.txt
+          echo -n "${{ secrets.GRAFANA_USERNAME }}:${{ secrets.GRAFANA_PASSWORD }}" | base64 > auth.txt
 
           # Init variable with base64 auth
           auth=$(cat auth.txt)

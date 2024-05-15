@@ -15,7 +15,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - name: 
+      - name: Upload Dashboard
         run:
           # Push new dashboard changes
 

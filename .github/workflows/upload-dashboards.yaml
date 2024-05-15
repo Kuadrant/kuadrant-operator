@@ -14,7 +14,6 @@ jobs:
     defaults:
       run:
         shell: bash
-    secrets: inherit
     steps:
       - name: Upload Dashboard
         run: |

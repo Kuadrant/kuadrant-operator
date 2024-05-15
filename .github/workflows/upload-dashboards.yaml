@@ -21,7 +21,7 @@ jobs:
           # Push new dashboard changes
 
           # Init variable with base64 auth
-          auth=$(echo -n "${{ secrets.GRAFANA_USERNAME }}:${{ secrets.GRAFANA_PASSWORD }}" | base64)
+          auth=$(echo -n ${{ secrets.GRAFANA_USERNAME }}:${{ secrets.GRAFANA_PASSWORD }} | base64)
 
           # App Developer Dashboard
           curl -X POST -F "json=@./examples/dashboards/app_developer.json" -H 'Content-Type: multipart/form-data' -H "Authorization: Basic $auth" "https://www.grafana.com/api/dashboards/20970/revisions"

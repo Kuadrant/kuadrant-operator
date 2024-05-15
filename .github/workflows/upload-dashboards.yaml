@@ -18,6 +18,7 @@ jobs:
       - name: Upload Dashboard
         run: |
           # Push new dashboard changes
+          ls .
 
           # Encode username:password to base64
 

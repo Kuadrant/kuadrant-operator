@@ -16,7 +16,7 @@ jobs:
         shell: bash
     steps:
       - name: Upload Dashboard
-        run:
+        run: |
           # Push new dashboard changes
 
           # App Developer Dashboard

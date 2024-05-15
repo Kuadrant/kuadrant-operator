@@ -18,12 +18,20 @@ jobs:
       - name: Upload Dashboard
         run: |
           # Push new dashboard changes
-          echo ${{ secrets.GRAFANA_USERNAME }}
+
+          # Encode username:password to base64
+
+          # Pass encoded auth to txt file 
+          echo "${{ secrets.GRAFANA_USERNAME }}:${{ secrets.GRAFANA_PASSWORD }}" | base64 > auth.txt
+
+          # Init variable with base64 auth
+          auth=$(cat auth.txt)
+
           # App Developer Dashboard
-          curl -X POST -F 'files=json=examples/dashboards/app_developer.json' -H 'Content-Type: multipart/form-data' "https://`${{ secrets.GRAFANA_USERNAME }}`:`${{ secrets.GRAFANA_PASSWORD }}`@grafana.com/api/dashboards/20970/revisions"
+          curl -X POST -F 'files=json=examples/dashboards/app_developer.json' -H 'Content-Type: multipart/form-data' -H 'Authorization: Basic $auth' "https://www.grafana.com/api/dashboards/20970/revisions"
 
           # Business User Dashboard
-          curl -X POST -F 'files=json=examples/dashboards/business_user.json' -H 'Content-Type: multipart/form-data' "https://`${{ secrets.GRAFANA_USERNAME }}`:`${{ secrets.GRAFANA_PASSWORD }}`@grafana.com/api/dashboards/20981/revisions"
+          curl -X POST -F 'files=json=examples/dashboards/business_user.json' -H 'Content-Type: multipart/form-data' -H 'Authorization: Basic $auth' "https://www.grafana.com/api/dashboards/20981/revisions"
 
           # Platform Engineer Dashboard
-          curl -X POST -F 'files=json=examples/dashboards/platform_engineer.json' -H 'Content-Type: multipart/form-data' "https://`${{ secrets.GRAFANA_USERNAME }}`:`${{ secrets.GRAFANA_PASSWORD }}`@grafana.com/api/dashboards/20982/revisions"
+          curl -X POST -F 'files=json=examples/dashboards/platform_engineer.json' -H 'Content-Type: multipart/form-data' -H 'Authorization: Basic $auth' "https://www.grafana.com/api/dashboards/20982/revisions"

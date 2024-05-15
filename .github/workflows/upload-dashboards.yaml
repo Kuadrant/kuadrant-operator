@@ -9,6 +9,7 @@ on:
 
 jobs:
   upload-dashboards:
+    secrets: inherit
     name: Upload Dashboards
     runs-on: ubuntu-latest
     defaults:

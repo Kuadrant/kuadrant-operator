@@ -83,6 +83,8 @@ IMG ?= $(IMAGE_TAG_BASE):$(IMAGE_TAG)
 UNIT_DIRS := ./pkg/... ./api/... ./controllers/...
 INTEGRATION_TEST_SUITE_PATHS := ./controllers/...
 INTEGRATION_COVER_PKGS := ./pkg/...,./controllers/...,./api/...
+INTEGRATION_TEST_NUM_CORES ?= 4
+INTEGRATION_TEST_NUM_PROCESSES ?= 10
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -309,6 +311,13 @@ test-integration: clean-cov generate fmt vet ginkgo ## Run Integration tests.
 		--output-dir $(PROJECT_PATH)/coverage/integration \
 		--coverprofile cover.out \
 		-tags integration \
+		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
+		--procs=$(INTEGRATION_TEST_NUM_PROCESSES) \
+		--randomize-all \
+		--randomize-suites \
+		--fail-on-pending \
+		--keep-going \
+		--trace \
 		$(INTEGRATION_TEST_SUITE_PATHS)
 
 ifdef TEST_NAME

@@ -49,7 +49,13 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/controllers"
+	"github.com/kuadrant/kuadrant-operator/controllers/authpolicy"
+	"github.com/kuadrant/kuadrant-operator/controllers/dnspolicy"
+	kuadrant2 "github.com/kuadrant/kuadrant-operator/controllers/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/controllers/limitador"
+	"github.com/kuadrant/kuadrant-operator/controllers/ratelimit"
+	"github.com/kuadrant/kuadrant-operator/controllers/targetstatus"
+	"github.com/kuadrant/kuadrant-operator/controllers/tlspolicy"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
@@ -138,7 +144,7 @@ func main() {
 		mgr.GetEventRecorderFor("Kuadrant"),
 	)
 
-	if err = (&controllers.KuadrantReconciler{
+	if err = (&kuadrant2.Reconciler{
 		BaseReconciler: kuadrantBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Kuadrant")
@@ -151,7 +157,7 @@ func main() {
 		mgr.GetEventRecorderFor("RateLimitPolicy"),
 	)
 
-	if err = (&controllers.RateLimitPolicyReconciler{
+	if err = (&ratelimit.Reconciler{
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      rateLimitPolicyBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
@@ -165,7 +171,7 @@ func main() {
 		mgr.GetEventRecorderFor("AuthPolicy"),
 	)
 
-	if err = (&controllers.AuthPolicyReconciler{
+	if err = (&authpolicy.Reconciler{
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 		BaseReconciler:      authPolicyBaseReconciler,
 		AffectedPolicyMap:   kuadrant.NewAffectedPolicyMap(),
@@ -180,7 +186,7 @@ func main() {
 		mgr.GetEventRecorderFor("DNSPolicy"),
 	)
 
-	if err = (&controllers.DNSPolicyReconciler{
+	if err = (&dnspolicy.Reconciler{
 		BaseReconciler:      dnsPolicyBaseReconciler,
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr); err != nil {
@@ -194,7 +200,7 @@ func main() {
 		mgr.GetEventRecorderFor("TLSPolicy"),
 	)
 
-	if err = (&controllers.TLSPolicyReconciler{
+	if err = (&tlspolicy.Reconciler{
 		BaseReconciler:      tlsPolicyBaseReconciler,
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr); err != nil {
@@ -208,7 +214,7 @@ func main() {
 		mgr.GetEventRecorderFor("LimitadorClusterEnvoyFilter"),
 	)
 
-	if err = (&controllers.LimitadorClusterEnvoyFilterReconciler{
+	if err = (&limitador.ClusterEnvoyFilterReconciler{
 		BaseReconciler: limitadorClusterEnvoyFilterBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "EnvoyFilter")
@@ -221,7 +227,7 @@ func main() {
 		mgr.GetEventRecorderFor("GatewayKuadrant"),
 	)
 
-	if err = (&controllers.GatewayKuadrantReconciler{
+	if err = (&kuadrant2.GatewayKuadrantReconciler{
 		BaseReconciler: gatewayKuadrantBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GatewayKuadrant")
@@ -234,7 +240,7 @@ func main() {
 		mgr.GetEventRecorderFor("RateLimitingWASMPlugin"),
 	)
 
-	if err = (&controllers.RateLimitingWASMPluginReconciler{
+	if err = (&ratelimit.RateLimitingWASMPluginReconciler{
 		BaseReconciler: rateLimitingWASMPluginBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitingWASMPlugin")
@@ -246,7 +252,7 @@ func main() {
 		log.Log.WithName("targetstatus"),
 		mgr.GetEventRecorderFor("PolicyTargetStatus"),
 	)
-	if err = (&controllers.TargetStatusReconciler{
+	if err = (&targetstatus.Reconciler{
 		BaseReconciler: targetStatusBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TargetStatusReconciler")
@@ -258,7 +264,7 @@ func main() {
 		log.Log.WithName("ratelimitpolicy").WithName("status"),
 		mgr.GetEventRecorderFor("RateLimitPolicyStatus"),
 	)
-	if err = (&controllers.RateLimitPolicyEnforcedStatusReconciler{
+	if err = (&ratelimit.PolicyEnforcedStatusReconciler{
 		BaseReconciler: policyStatusBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicyEnforcedStatusReconciler")

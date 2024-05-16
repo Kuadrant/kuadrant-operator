@@ -7,3 +7,12 @@ deploy-observability: kustomize
 .PHONY: thanos-manifests
 thanos-manifests: ./hack/thanos/thanos_build.sh ./hack/thanos/thanos.jsonnet
 	./hack/thanos/thanos_build.sh
+
+DASHBOARD_FILES := $(wildcard examples/dashboards/*.json)
+
+.PHONY: dashboard-cleanup
+dashboard-cleanup:
+	@for file in $(DASHBOARD_FILES); do \
+		echo "Processing $$file"; \
+		./hack/universal-dashboard.sh $$file; \
+	done

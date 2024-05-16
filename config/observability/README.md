@@ -46,3 +46,13 @@ In the modal popup click **Export** and then **Save to file**.
 Alerting rules can be defined in [PrometheusRules](https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/user-guides/alerting.md#configuring-alertmanager-in-prometheus) resources.
 The can be viewed in the Prometheus UI Alerts tab.
 Some example alerting rules are available in the [/examples](/examples) folder.
+
+## Exporting a dashboard for use with Grafana Community Platform or other Grafana Instances
+
+Following the steps in [Editing dashboards](#editing-dashboards), we need to make one export where the toggle "Export for sharing manually" is toggled. Once this is saved, run the following from `config/observability` . 
+
+```bash
+universal-dashboard.sh <"Export for sharing manually" JSON file> /path/to/<JSON file>
+```
+
+Now, you have a universal dashboard file you can use to import into your Grafana instance, but also use for uploading to the Grafana Community Platform.

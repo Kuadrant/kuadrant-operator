@@ -1,0 +1,48 @@
+name: Upload Dashboards
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - examples/dashboards/app_developer.json
+      - examples/dashboards/business_user.json
+      - examples/dashboards/platform_engineer.json
+
+jobs:
+  upload-dashboards:
+    name: Upload Dashboards
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set changed files variable
+        id: changes
+        run: |
+          echo "changed_files=$(git diff --name-only HEAD^ HEAD)" >> $GITHUB_ENV
+      - name: Upload Dashboard
+        run: |
+          # Push new dashboard changes
+          
+          # Init variable with base64 auth
+          auth=$(echo -n ${{ secrets.GRAFANA_USERNAME }}:${{ secrets.GRAFANA_PASSWORD }} | base64)
+
+          # Check and upload each dashboard if it has changed
+          if [[ "$changed_files" == *"examples/dashboards/app_developer.json"* ]]; then
+            echo "Uploading App Developer Dashboard"
+            curl -X POST -F "json=@./examples/dashboards/app_developer.json" -H 'Content-Type: multipart/form-data' -H "Authorization: Basic $auth" "https://www.grafana.com/api/dashboards/20970/revisions"
+          fi
+
+          if [[ "$changed_files" == *"examples/dashboards/business_user.json"* ]]; then
+            echo "Uploading Business User Dashboard"
+            curl -X POST -F "json=@./examples/dashboards/business_user.json" -H 'Content-Type: multipart/form-data' -H "Authorization: Basic $auth" "https://www.grafana.com/api/dashboards/20981/revisions"
+          fi
+
+          if [[ "$changed_files" == *"examples/dashboards/platform_engineer.json"* ]]; then
+            echo "Uploading Platform Engineer Dashboard"
+            curl -X POST -F "json=@./examples/dashboards/platform_engineer.json" -H 'Content-Type: multipart/form-data' -H "Authorization: Basic $auth" "https://www.grafana.com/api/dashboards/20982/revisions"
+          fi
+        env:
+          changed_files: ${{ env.changed_files }}

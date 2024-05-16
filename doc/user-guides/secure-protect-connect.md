@@ -275,7 +275,7 @@ kubectl --context $KUBECTL_CONTEXT wait dnspolicy simple-dnspolicy -n kuadrant-s
 If you want to see the DNSRecord created by the this policy, execute the following command:
 
 ```sh
-kubectl--context $KUBECTL_CONTEXT get dnsrecord.kuadrant.io api-gateway-api -n kuadrant-system -o=yaml
+kubectl --context $KUBECTL_CONTEXT get dnsrecord.kuadrant.io api-gateway-api -n kuadrant-system -o=yaml
 ```
 
 So now we have a wildcard DNS record to bring traffic to our gateway.

@@ -3,21 +3,23 @@
 package mappers
 
 import (
+	"testing"
+
+	"gotest.tools/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/kubernetes/scheme"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"testing"
-
-	"gotest.tools/assert"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
@@ -60,7 +62,9 @@ func TestNewGatewayEventMapper(t *testing.T) {
 		},
 	}}
 	objs := []runtime.Object{routeList, authPolicyList}
-	cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(objs...).Build()
+	cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(objs...).WithIndex(&gatewayapiv1.HTTPRoute{}, kuadrantgatewayapi.HTTPRouteGatewayParentField, func(rawObj client.Object) []string {
+		return nil
+	}).Build()
 	em := NewGatewayEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 	t.Run("not gateway related event", func(subT *testing.T) {

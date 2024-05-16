@@ -104,20 +104,12 @@ func (m *gatewayEventMapper) MapToPolicy(obj client.Object, policyGVK schema.Gro
 		logger.V(1).Info(fmt.Sprintf("%T is not type gateway, unable to map policies to gateway", obj))
 		return []reconcile.Request{}
 	}
-	// TODO: get this block in. Current unit test is failing with this
 	routeList := &gatewayapiv1.HTTPRouteList{}
 	fields := client.MatchingFields{kuadrantgatewayapi.HTTPRouteGatewayParentField: client.ObjectKeyFromObject(gateway).String()}
 	if err := m.opts.Client.List(ctx, routeList, fields); err != nil {
 		logger.V(1).Error(err, "unable to list HTTPRoutes")
 		return []reconcile.Request{}
 	}
-
-	// TODO: remove this block. Add to not block unit test updates
-	//routeList := &gatewayapiv1.HTTPRouteList{}
-	//if err := m.opts.Client.List(ctx, routeList); err != nil {
-	//	logger.V(1).Error(err, "unable to list HTTPRoutes")
-	//	return []reconcile.Request{}
-	//}
 
 	policyList := &unstructured.UnstructuredList{}
 	policyList.SetAPIVersion(policyGVK.Version)

@@ -32,6 +32,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
@@ -144,6 +145,15 @@ func (r *GatewayKuadrantReconciler) removeKuadrantNamespaceAnnotation(ctx contex
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *GatewayKuadrantReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ok, err := kuadrantgatewayapi.IsGatewayAPIInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("GatewayKuadrant controller disabled. GatewayAPI was not found")
+		return nil
+	}
+
 	// maps any kuadrant event to gateway event
 	// on any kuadrant event, one reconciliation request for every gateway in the cluster is created
 	kuadrantToGatewayEventMapper := mappers.NewKuadrantToGatewayEventMapper(

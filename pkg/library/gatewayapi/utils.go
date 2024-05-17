@@ -8,6 +8,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -147,4 +148,20 @@ func FilterValidSubdomains(domains, subdomains []gatewayapiv1.Hostname) []gatewa
 		}
 	}
 	return arr
+}
+
+func IsGatewayAPIInstalled(restMapper meta.RESTMapper) (bool, error) {
+	_, err := restMapper.RESTMapping(
+		schema.GroupKind{Group: gatewayapiv1.GroupName, Kind: "HTTPRoute"},
+		gatewayapiv1.SchemeGroupVersion.Version,
+	)
+	if err == nil {
+		return true, nil
+	}
+
+	if meta.IsNoMatchError(err) {
+		return false, nil
+	}
+
+	return false, err
 }

@@ -40,6 +40,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
@@ -495,6 +496,15 @@ func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadr
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *KuadrantReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ok, err := kuadrantgatewayapi.IsGatewayAPIInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("Kuadrant controller disabled. GatewayAPI was not found")
+		return nil
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta1.Kuadrant{}).
 		Owns(&limitadorv1alpha1.Limitador{}).

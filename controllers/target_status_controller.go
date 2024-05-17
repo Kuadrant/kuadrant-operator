@@ -330,6 +330,15 @@ func findRouteParentStatusFunc(route *gatewayapiv1.HTTPRoute, gatewayKey client.
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *TargetStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ok, err := kuadrantgatewayapi.IsGatewayAPIInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("TargetStatus controller disabled. GatewayAPI was not found")
+		return nil
+	}
+
 	httpRouteToParentGatewaysEventMapper := mappers.NewHTTPRouteToParentGatewaysEventMapper(
 		mappers.WithLogger(r.Logger().WithName("httpRouteToParentGatewaysEventMapper")),
 	)

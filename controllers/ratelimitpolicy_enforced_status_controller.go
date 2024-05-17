@@ -195,6 +195,15 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) setCondition(ctx context.Conte
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RateLimitPolicyEnforcedStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ok, err := kuadrantgatewayapi.IsGatewayAPIInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("RateLimitPolicyEnforcedStatus controller disabled. GatewayAPI was not found")
+		return nil
+	}
+
 	httpRouteToParentGatewaysEventMapper := mappers.NewHTTPRouteToParentGatewaysEventMapper(
 		mappers.WithLogger(r.Logger().WithName("httpRouteToParentGatewaysEventMapper")),
 	)

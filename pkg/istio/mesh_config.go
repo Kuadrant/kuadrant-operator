@@ -21,29 +21,29 @@ const (
 	ExtAuthorizerName = "kuadrant-authorization"
 )
 
-type Authorizer interface {
+type authorizer interface {
 	GetExtensionProvider() *istiomeshv1alpha1.MeshConfig_ExtensionProvider
 }
 
-type ConfigWrapper interface {
+type configWrapper interface {
 	GetConfigObject() client.Object
 	GetMeshConfig() (*istiomeshv1alpha1.MeshConfig, error)
 	SetMeshConfig(*istiomeshv1alpha1.MeshConfig) error
 }
 
-type KuadrantAuthorizer struct {
+type kuadrantAuthorizer struct {
 	extensionProvider *istiomeshv1alpha1.MeshConfig_ExtensionProvider
 }
 
-// NewKuadrantAuthorizer Creates a new KuadrantAuthorizer
-func NewKuadrantAuthorizer(namespace string) *KuadrantAuthorizer {
-	return &KuadrantAuthorizer{
+// newKuadrantAuthorizer Creates a new kuadrantAuthorizer
+func newKuadrantAuthorizer(namespace string) *kuadrantAuthorizer {
+	return &kuadrantAuthorizer{
 		extensionProvider: createKuadrantAuthorizer(namespace),
 	}
 }
 
 // GetExtensionProvider Returns the Istio MeshConfig ExtensionProvider for Kuadrant
-func (k *KuadrantAuthorizer) GetExtensionProvider() *istiomeshv1alpha1.MeshConfig_ExtensionProvider {
+func (k *kuadrantAuthorizer) GetExtensionProvider() *istiomeshv1alpha1.MeshConfig_ExtensionProvider {
 	return k.extensionProvider
 }
 
@@ -62,7 +62,7 @@ func createKuadrantAuthorizer(namespace string) *istiomeshv1alpha1.MeshConfig_Ex
 }
 
 // HasKuadrantAuthorizer returns true if the IstioOperator has the Kuadrant ExtensionProvider
-func HasKuadrantAuthorizer(configWrapper ConfigWrapper, authorizer KuadrantAuthorizer) (bool, error) {
+func hasKuadrantAuthorizer(configWrapper configWrapper, authorizer kuadrantAuthorizer) (bool, error) {
 	config, err := configWrapper.GetMeshConfig()
 	if err != nil {
 		return false, err
@@ -71,7 +71,7 @@ func HasKuadrantAuthorizer(configWrapper ConfigWrapper, authorizer KuadrantAutho
 }
 
 // RegisterKuadrantAuthorizer adds the Kuadrant ExtensionProvider to the IstioOperator
-func RegisterKuadrantAuthorizer(configWrapper ConfigWrapper, authorizer Authorizer) error {
+func RegisterKuadrantAuthorizer(configWrapper configWrapper, authorizer authorizer) error {
 	config, err := configWrapper.GetMeshConfig()
 	if err != nil {
 		return err
@@ -86,7 +86,7 @@ func RegisterKuadrantAuthorizer(configWrapper ConfigWrapper, authorizer Authoriz
 }
 
 // UnregisterKuadrantAuthorizer removes the Kuadrant ExtensionProvider from the IstioOperator
-func UnregisterKuadrantAuthorizer(configWrapper ConfigWrapper, authorizer Authorizer) error {
+func UnregisterKuadrantAuthorizer(configWrapper configWrapper, authorizer authorizer) error {
 	config, err := configWrapper.GetMeshConfig()
 	if err != nil {
 		return err
@@ -194,18 +194,18 @@ func (w *ConfigMapWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshConfig) e
 	return nil
 }
 
-// OSSMControlPlaneWrapper wraps the OSSM ServiceMeshControlPlane
-type OSSMControlPlaneWrapper struct {
+// ossmControlPlaneWrapper wraps the OSSM ServiceMeshControlPlane
+type ossmControlPlaneWrapper struct {
 	config *maistrav2.ServiceMeshControlPlane
 }
 
-// NewOSSMControlPlaneWrapper creates a new OSSMControlPlaneWrapper
-func NewOSSMControlPlaneWrapper(config *maistrav2.ServiceMeshControlPlane) *OSSMControlPlaneWrapper {
-	return &OSSMControlPlaneWrapper{config: config}
+// newOSSMControlPlaneWrapper creates a new ossmControlPlaneWrapper
+func newOSSMControlPlaneWrapper(config *maistrav2.ServiceMeshControlPlane) *ossmControlPlaneWrapper {
+	return &ossmControlPlaneWrapper{config: config}
 }
 
 // GetConfigObject returns the OSSM ServiceMeshControlPlane
-func (w *OSSMControlPlaneWrapper) GetConfigObject() client.Object {
+func (w *ossmControlPlaneWrapper) GetConfigObject() client.Object {
 	return w.config
 }
 
@@ -259,7 +259,7 @@ func (w *SailWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshConfig) error 
 }
 
 // GetMeshConfig returns the MeshConfig from the OSSM ServiceMeshControlPlane
-func (w *OSSMControlPlaneWrapper) GetMeshConfig() (*istiomeshv1alpha1.MeshConfig, error) {
+func (w *ossmControlPlaneWrapper) GetMeshConfig() (*istiomeshv1alpha1.MeshConfig, error) {
 	if config, found, err := w.config.Spec.TechPreview.GetMap("meshConfig"); err != nil {
 		return nil, err
 	} else if found {
@@ -277,7 +277,7 @@ func (w *OSSMControlPlaneWrapper) GetMeshConfig() (*istiomeshv1alpha1.MeshConfig
 }
 
 // SetMeshConfig sets the MeshConfig in the OSSM ServiceMeshControlPlane
-func (w *OSSMControlPlaneWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshConfig) error {
+func (w *ossmControlPlaneWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshConfig) error {
 	meshConfigStruct, err := meshConfigToStruct(config)
 	if err != nil {
 		return err

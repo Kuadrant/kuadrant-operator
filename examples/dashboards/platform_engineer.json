@@ -1,5 +1,4 @@
 {
-  "__elements": [],
   "__requires": [
     {
       "type": "panel",
@@ -11,7 +10,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "8.5.5"
+      "version": "9.5.3"
     },
     {
       "type": "datasource",
@@ -72,7 +71,6 @@
   "gnetId": 7630,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1715594457566,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -100,7 +98,7 @@
           "kuadrant"
         ]
       },
-      "pluginVersion": "8.5.5",
+      "pluginVersion": "9.5.3",
       "title": "Kuadrant Dashboards",
       "type": "dashlist"
     },
@@ -118,10 +116,15 @@
       },
       "id": 150,
       "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
         "content": "#### Overview of Gateways, Policies and APIs\n\nThe panels below are grouped by Gateways and APIs. A Gateway is a [Gateway API defined gateway](https://gateway-api.sigs.k8s.io/concepts/api-overview/#gateway) resource. An API is realised by a [Gateway API HTTPRoute](https://gateway-api.sigs.k8s.io/concepts/api-overview/#httproute).\nAny policies [attached to the Gateways and APIs](https://gateway-api.sigs.k8s.io/geps/gep-713/) will be shown, as well as summary request and error metrics for APIs.\n\n*Important: HTTPRoutes must include a \"service\" and \"deployment\" label with a value that matches the name of the service & deployment being routed to. eg. \"service=myapp, deployment=myapp\"*",
         "mode": "markdown"
       },
-      "pluginVersion": "8.5.5",
+      "pluginVersion": "9.5.3",
       "title": "Platform Engineer Dashboard",
       "type": "text"
     },
@@ -151,7 +154,9 @@
           },
           "custom": {
             "align": "center",
-            "displayMode": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
             "inspect": false
           },
           "mappings": [],
@@ -204,7 +209,9 @@
       },
       "id": 115,
       "options": {
+        "cellHeight": "sm",
         "footer": {
+          "countRows": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -215,7 +222,7 @@
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "8.5.5",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -423,7 +430,7 @@
         },
         "textMode": "auto"
       },
-      "pluginVersion": "8.5.5",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -454,7 +461,9 @@
           },
           "custom": {
             "align": "center",
-            "displayMode": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
             "inspect": false
           },
           "mappings": [],
@@ -482,7 +491,9 @@
       },
       "id": 117,
       "options": {
+        "cellHeight": "sm",
         "footer": {
+          "countRows": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -493,7 +504,7 @@
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "8.5.5",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -660,7 +671,7 @@
         },
         "textMode": "auto"
       },
-      "pluginVersion": "8.5.5",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -725,7 +736,7 @@
         },
         "textMode": "auto"
       },
-      "pluginVersion": "8.5.5",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -769,7 +780,9 @@
           },
           "custom": {
             "align": "center",
-            "displayMode": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
             "inspect": false
           },
           "mappings": [],
@@ -797,7 +810,9 @@
       },
       "id": 97,
       "options": {
+        "cellHeight": "sm",
         "footer": {
+          "countRows": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -806,7 +821,7 @@
         },
         "showHeader": true
       },
-      "pluginVersion": "8.5.5",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -943,7 +958,9 @@
           },
           "custom": {
             "align": "center",
-            "displayMode": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
             "inspect": false
           },
           "mappings": [],
@@ -971,7 +988,9 @@
       },
       "id": 118,
       "options": {
+        "cellHeight": "sm",
         "footer": {
+          "countRows": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -982,7 +1001,7 @@
         "showHeader": true,
         "sortBy": []
       },
-      "pluginVersion": "8.5.5",
+      "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
@@ -1115,6 +1134,8 @@
             "mode": "fixed"
           },
           "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "axisSoftMin": 0,
@@ -1172,7 +1193,8 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
@@ -1208,6 +1230,8 @@
             "mode": "fixed"
           },
           "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "axisSoftMin": 0,
@@ -1264,7 +1288,8 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
@@ -1300,6 +1325,8 @@
             "mode": "continuous-YlRd"
           },
           "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "axisSoftMin": 0,
@@ -1354,7 +1381,8 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
@@ -1486,6 +1514,8 @@
             "mode": "fixed"
           },
           "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
@@ -1626,7 +1656,8 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
@@ -1664,6 +1695,8 @@
             "mode": "fixed"
           },
           "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
@@ -1804,7 +1837,8 @@
         "legend": {
           "calcs": [],
           "displayMode": "table",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
           "mode": "multi",
@@ -1831,7 +1865,7 @@
     }
   ],
   "refresh": "30s",
-  "schemaVersion": 36,
+  "schemaVersion": 38,
   "style": "dark",
   "tags": [
     "kuadrant"

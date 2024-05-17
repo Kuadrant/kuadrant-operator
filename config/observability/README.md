@@ -49,10 +49,10 @@ Some example alerting rules are available in the [/examples](/examples) folder.
 
 ## Exporting a dashboard for use with Grafana Community Platform or other Grafana Instances
 
-Following the steps in [Editing dashboards](#editing-dashboards), we need to make one export where the toggle "Export for sharing manually" is toggled. Once this is saved, run the following from `config/observability` . 
+Following the steps in [Editing dashboards](#editing-dashboards), export the dashboard json into `examples/dashboards/` with the toggle "Export for sharing manually" on. Once all dashboard json files sare saved/updated, run the following make target to sanitise it for use in both the Grafana Community Platform for sharing, and for use as a mounted configmap volume locally.
 
 ```bash
-universal-dashboard.sh <"Export for sharing manually" JSON file> /path/to/<JSON file>
+make dashboard-cleanup
 ```
 
 Now, you have a universal dashboard file you can use to import into your Grafana instance, but also use for uploading to the Grafana Community Platform.

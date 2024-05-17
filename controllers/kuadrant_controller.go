@@ -181,15 +181,15 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerIstio(ctx context.Conte
 		return isIstioInstalled, err
 	}
 
-	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
+	kuadrantAuthorizer := istio.NewKuadrantAuthorizer(kObj.Namespace)
 
 	for _, config := range configsToUpdate {
-		hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(config, *kuadrantAuthorizer)
+		hasKuadrantAuthorizer, err := istio.HasKuadrantAuthorizer(config, *kuadrantAuthorizer)
 		if err != nil {
 			return true, err
 		}
 		if hasKuadrantAuthorizer {
-			if err = common.UnregisterKuadrantAuthorizer(config, kuadrantAuthorizer); err != nil {
+			if err = istio.UnregisterKuadrantAuthorizer(config, kuadrantAuthorizer); err != nil {
 				return true, err
 			}
 
@@ -214,14 +214,14 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Contex
 	}
 
 	smcpWrapper := istio.NewOSSMControlPlaneWrapper(smcp)
-	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
+	kuadrantAuthorizer := istio.NewKuadrantAuthorizer(kObj.Namespace)
 
-	hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(smcpWrapper, *kuadrantAuthorizer)
+	hasKuadrantAuthorizer, err := istio.HasKuadrantAuthorizer(smcpWrapper, *kuadrantAuthorizer)
 	if err != nil {
 		return err
 	}
 	if hasKuadrantAuthorizer {
-		err = common.UnregisterKuadrantAuthorizer(smcpWrapper, kuadrantAuthorizer)
+		err = istio.UnregisterKuadrantAuthorizer(smcpWrapper, kuadrantAuthorizer)
 		if err != nil {
 			return err
 		}
@@ -259,14 +259,14 @@ func (r *KuadrantReconciler) registerExternalAuthorizerIstio(ctx context.Context
 		return isIstioInstalled, err
 	}
 
-	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
+	kuadrantAuthorizer := istio.NewKuadrantAuthorizer(kObj.Namespace)
 	for _, config := range configsToUpdate {
-		hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(config, *kuadrantAuthorizer)
+		hasKuadrantAuthorizer, err := istio.HasKuadrantAuthorizer(config, *kuadrantAuthorizer)
 		if err != nil {
 			return true, err
 		}
 		if !hasKuadrantAuthorizer {
-			err = common.RegisterKuadrantAuthorizer(config, kuadrantAuthorizer)
+			err = istio.RegisterKuadrantAuthorizer(config, kuadrantAuthorizer)
 			if err != nil {
 				return true, err
 			}
@@ -295,14 +295,14 @@ func (r *KuadrantReconciler) registerExternalAuthorizerOSSM(ctx context.Context,
 		return err
 	}
 	smcpWrapper := istio.NewOSSMControlPlaneWrapper(smcp)
-	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
+	kuadrantAuthorizer := istio.NewKuadrantAuthorizer(kObj.Namespace)
 
-	hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(smcpWrapper, *kuadrantAuthorizer)
+	hasKuadrantAuthorizer, err := istio.HasKuadrantAuthorizer(smcpWrapper, *kuadrantAuthorizer)
 	if err != nil {
 		return err
 	}
 	if !hasKuadrantAuthorizer {
-		err = common.RegisterKuadrantAuthorizer(smcpWrapper, kuadrantAuthorizer)
+		err = istio.RegisterKuadrantAuthorizer(smcpWrapper, kuadrantAuthorizer)
 		if err != nil {
 			return err
 		}
@@ -315,8 +315,8 @@ func (r *KuadrantReconciler) registerExternalAuthorizerOSSM(ctx context.Context,
 	return nil
 }
 
-func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context, logger logr.Logger) ([]common.ConfigWrapper, error) {
-	var configsToUpdate []common.ConfigWrapper
+func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context, logger logr.Logger) ([]istio.ConfigWrapper, error) {
+	var configsToUpdate []istio.ConfigWrapper
 
 	iop := &iopv1alpha1.IstioOperator{}
 	istKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}

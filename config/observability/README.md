@@ -49,7 +49,7 @@ Some example alerting rules are available in the [/examples](/examples) folder.
 
 ## Exporting a dashboard for use with Grafana Community Platform or other Grafana Instances
 
-Following the steps in [Editing dashboards](#editing-dashboards), export the dashboard json with the toggle "Export for sharing manually" on. Once all dashboard json files sare saved/updated, run the following make target to sanitise it for use in both the Grafana Community Platform for sharing, and for use as a mounted configmap volume locally.
+Following the steps in [Editing dashboards](#editing-dashboards), export the dashboard json into `examples/dashboards/` with the toggle "Export for sharing manually" on. Once all dashboard json files sare saved/updated, run the following make target to sanitise it for use in both the Grafana Community Platform for sharing, and for use as a mounted configmap volume locally.
 
 ```bash
 make dashboard-cleanup

@@ -245,7 +245,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "continuous-GrYlRd"
+            "mode": "continuous-blues"
           },
           "custom": {
             "fillOpacity": 70,

@@ -84,9 +84,9 @@ jobs:
       - name: Check cluster info
         run: |
           kubectl cluster-info dump
-      - name: Run make test-env-setup istio-type=${{ matrix.istio-type }}
+      - name: Run make test-istio-env-setup istio-type=${{ matrix.istio-type }}
         run: |
-          make test-env-setup ISTIO_INSTALL_SAIL=${{ matrix.istio-type == 'sail' && true || false }}
+          make test-istio-env-setup ISTIO_INSTALL_SAIL=${{ matrix.istio-type == 'sail' && true || false }}
       - name: Wait for deployments
         run: |
           kubectl -n ${{ env.KUADRANT_NAMESPACE }} wait --timeout=300s --for=condition=Available deployments --all

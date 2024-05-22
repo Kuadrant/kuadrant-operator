@@ -17,6 +17,8 @@ make
 
 ## Run locally
 
+TODO!!!
+
 You need an active session open to a kubernetes cluster.
 
 Optionally, run kind and deploy kuadrant deps
@@ -32,6 +34,7 @@ make run
 ```
 
 ## Deploy the operator in a deployment object
+TODO!!!
 
 ```sh
 make local-setup
@@ -216,34 +219,52 @@ make test-unit TEST_NAME=TestLimitIndexEquals/empty_indexes_are_equal
 
 ### Integration tests
 
-You need an active session open to a kubernetes cluster.
+Multiple integration tests are defined depending on the pre-existing APIs and GatewayAPI providers.
 
-Optionally, run kind and deploy kuadrant deps
+- [Bare kubernetes cluster](#bare-kubernetes-cluster)
+- [Kubernetes cluster with GatewayAPI installed](#kubernetes-cluster-with-gatewayapi-installed)
+- [Kubernetes cluster with GatewayAPI and Istio installed](#kubernetes-cluster-with-gatewayapi-and-istio-installed)
+
+#### Bare kubernetes cluster
+
+Setup environment
 
 ```sh
-make local-env-setup
+make local-k8s-env-setup
 ```
 
 Run integration tests
 
 ```sh
-make test-integration
+make test-k8s-env-integration
 ```
 
-### All tests
+#### Kubernetes cluster with GatewayAPI installed
 
-You need an active session open to a kubernetes cluster.
-
-Optionally, run kind and deploy kuadrant deps
+Setup environment
 
 ```sh
-make local-env-setup
+make local-gatewayapi-env-setup
 ```
 
-Run all tests
+Run integration tests
 
 ```sh
-make test
+make test-gatewayapi-env-integration
+```
+
+#### Kubernetes cluster with GatewayAPI and Istio installed
+
+Setup environment
+
+```sh
+make local-istio-env-setup
+```
+
+Run integration tests
+
+```sh
+make test-istio-env-integration
 ```
 
 ### Lint tests

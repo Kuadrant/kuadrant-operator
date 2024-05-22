@@ -89,7 +89,7 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 
 	iap := &istio.AuthorizationPolicy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      istioAuthorizationPolicyName(gateway.Name, ap.GetTargetRef()),
+			Name:      IstioAuthorizationPolicyName(gateway.Name, ap.GetTargetRef()),
 			Namespace: gateway.Namespace,
 			Labels:    istioAuthorizationPolicyLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(ap)),
 		},
@@ -169,8 +169,8 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 	return iap, nil
 }
 
-// istioAuthorizationPolicyName generates the name of an AuthorizationPolicy.
-func istioAuthorizationPolicyName(gwName string, targetRef gatewayapiv1alpha2.PolicyTargetReference) string {
+// IstioAuthorizationPolicyName generates the name of an AuthorizationPolicy.
+func IstioAuthorizationPolicyName(gwName string, targetRef gatewayapiv1alpha2.PolicyTargetReference) string {
 	switch targetRef.Kind {
 	case "Gateway":
 		return fmt.Sprintf("on-%s", gwName) // Without this, IAP will be named: on-<gw.Name>-using-<gw.Name>;

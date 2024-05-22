@@ -23,6 +23,7 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	istioextensionsv1alpha1 "istio.io/api/extensions/v1alpha1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -61,7 +62,7 @@ type RateLimitingWASMPluginReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *RateLimitingWASMPluginReconciler) Reconcile(eventCtx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := r.Logger().WithValues("Gateway", req.NamespacedName)
+	logger := r.Logger().WithValues("Gateway", req.NamespacedName, "request id", uuid.NewString())
 	logger.Info("Reconciling rate limiting WASMPlugin")
 	ctx := logr.NewContext(eventCtx, logger)
 
@@ -233,7 +234,10 @@ func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx contex
 }
 
 func (r *RateLimitingWASMPluginReconciler) wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway, affectedPolices []kuadrantgatewayapi.Policy) (*wasm.RateLimitPolicy, error) {
-	logger, _ := logr.FromContext(ctx)
+	// Skip the wasm config for this policy if the policy has been overridden by another policy
+	if r.overridden(ctx, rlp, affectedPolices) {
+		return nil, nil
+	}
 
 	route, err := r.routeFromRLP(ctx, t, rlp, gw)
 	if err != nil {
@@ -267,22 +271,6 @@ func (r *RateLimitingWASMPluginReconciler) wasmRateLimitPolicy(ctx context.Conte
 	routeWithEffectiveHostnames := route.DeepCopy()
 	routeWithEffectiveHostnames.Spec.Hostnames = hostnames
 
-	// Policy limits may be overridden by a gateway policy for route policies
-	if kuadrantgatewayapi.IsTargetRefHTTPRoute(rlp.GetTargetRef()) {
-		filteredPolicies := utils.Filter(affectedPolices, func(p kuadrantgatewayapi.Policy) bool {
-			return kuadrantgatewayapi.IsTargetRefGateway(p.GetTargetRef()) && p.GetUID() != rlp.GetUID()
-		})
-
-		for _, policy := range filteredPolicies {
-			p := policy.(*kuadrantv1beta2.RateLimitPolicy)
-			if p.Spec.Overrides != nil {
-				rlp.Spec.CommonSpec().Limits = p.Spec.Overrides.Limits
-				logger.V(1).Info("applying overrides from parent policy", "parentPolicy", client.ObjectKeyFromObject(p))
-				break
-			}
-		}
-	}
-
 	rules := rlptools.WasmRules(rlp, routeWithEffectiveHostnames)
 	if len(rules) == 0 {
 		// no need to add the policy if there are no rules; a rlp can return no rules if all its limits fail to match any route rule
@@ -298,6 +286,32 @@ func (r *RateLimitingWASMPluginReconciler) wasmRateLimitPolicy(ctx context.Conte
 	}, nil
 }
 
+func (r *RateLimitingWASMPluginReconciler) overridden(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, affectedPolices []kuadrantgatewayapi.Policy) bool {
+	// Only route policies can be overridden
+	if !kuadrantgatewayapi.IsTargetRefHTTPRoute(rlp.GetTargetRef()) {
+		return false
+	}
+
+	logger, _ := logr.FromContext(ctx)
+	logger = logger.WithName("overridden")
+
+	gatewayPolicies := utils.Filter(affectedPolices, func(policy kuadrantgatewayapi.Policy) bool {
+		return policy.GetDeletionTimestamp() == nil &&
+			kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef()) &&
+			policy.GetUID() != rlp.GetUID()
+	})
+
+	for _, policy := range gatewayPolicies {
+		p := policy.(*kuadrantv1beta2.RateLimitPolicy)
+		if p.Spec.Overrides != nil {
+			logger.V(1).Info("policy has been overridden, skipping corresponding wasm config", "RateLimitPolicy", client.ObjectKeyFromObject(rlp), "overridden by", client.ObjectKeyFromObject(p))
+			return true
+		}
+	}
+
+	return false
+}
+
 func (r *RateLimitingWASMPluginReconciler) routeFromRLP(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*gatewayapiv1.HTTPRoute, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
@@ -308,29 +322,33 @@ func (r *RateLimitingWASMPluginReconciler) routeFromRLP(ctx context.Context, t *
 
 	if route == nil {
 		// The policy is targeting a gateway
-		// This gateway policy will be enforced into all HTTPRoutes that do not have a policy attached to it
+		// If the policy is an override → enforce it for all HTTPRoutes that are children of the gateway
+		// Otherwise → enforce it for all HTTPRoutes that do not have a policy attached to it
 
-		// Build imaginary route with all the routes not having a RLP targeting it
-		untargetedRoutes := t.GetUntargetedRoutes(gw)
+		var routes []*gatewayapiv1.HTTPRoute
+		if rlp.Spec.Overrides != nil {
+			routes = t.GetRoutes(gw)
+		} else {
+			routes = t.GetUntargetedRoutes(gw)
+		}
 
-		if len(untargetedRoutes) == 0 {
+		if len(routes) == 0 {
 			// For policies targeting a gateway, when no httproutes is attached to the gateway, skip wasm config
 			// test wasm config when no http routes attached to the gateway
-			logger.V(1).Info("no untargeted httproutes attached to the targeted gateway, skipping wasm config for the gateway rlp", "ratelimitpolicy", client.ObjectKeyFromObject(rlp))
+			logger.V(1).Info("no remaining httproutes attached to the targeted gateway, skipping wasm config for the gateway rlp", "ratelimitpolicy", client.ObjectKeyFromObject(rlp))
 			return nil, nil
 		}
 
-		untargetedRules := make([]gatewayapiv1.HTTPRouteRule, 0)
-		for idx := range untargetedRoutes {
-			untargetedRules = append(untargetedRules, untargetedRoutes[idx].Spec.Rules...)
+		// Build an imaginary route that merges all routes rules from all routes
+		routeRules := make([]gatewayapiv1.HTTPRouteRule, 0)
+		for idx := range routes {
+			routeRules = append(routeRules, routes[idx].Spec.Rules...)
 		}
-
-		gwHostnamesTmp := kuadrantgatewayapi.TargetHostnames(gw)
-		gwHostnames := utils.Map(gwHostnamesTmp, func(str string) gatewayapiv1.Hostname { return gatewayapiv1.Hostname(str) })
+		gwHostnames := utils.Map(kuadrantgatewayapi.TargetHostnames(gw), func(str string) gatewayapiv1.Hostname { return gatewayapiv1.Hostname(str) })
 		route = &gatewayapiv1.HTTPRoute{
 			Spec: gatewayapiv1.HTTPRouteSpec{
 				Hostnames: gwHostnames,
-				Rules:     untargetedRules,
+				Rules:     routeRules,
 			},
 		}
 	}

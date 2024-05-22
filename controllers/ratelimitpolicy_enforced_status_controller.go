@@ -177,7 +177,7 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) hasErrCondOnSubResource(ctx co
 
 func (r *RateLimitPolicyEnforcedStatusReconciler) setCondition(ctx context.Context, logger logr.Logger, p *kuadrantv1beta2.RateLimitPolicy, conditions *[]metav1.Condition, cond metav1.Condition) error {
 	idx := utils.Index(*conditions, func(c metav1.Condition) bool {
-		return c.Type == cond.Type && c.Status == cond.Status && c.Reason == cond.Reason && c.Message == cond.Message
+		return c.Type == cond.Type && c.Status == cond.Status && c.Reason == cond.Reason
 	})
 	if idx == -1 {
 		meta.SetStatusCondition(conditions, cond)

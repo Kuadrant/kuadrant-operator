@@ -5,12 +5,14 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
 	externaldns "sigs.k8s.io/external-dns/endpoint"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,6 +30,7 @@ import (
 var _ = Describe("DNSPolicy Single Cluster", func() {
 
 	var gatewayClass *gatewayapiv1.GatewayClass
+	var dnsProviderSecret *corev1.Secret
 	var managedZone *kuadrantdnsv1alpha1.ManagedZone
 	var testNamespace string
 	var gateway *gatewayapiv1.Gateway
@@ -46,8 +49,21 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		gatewayClass = testBuildGatewayClass("gwc-"+testNamespace, "default", "kuadrant.io/bar")
 		Expect(k8sClient.Create(ctx, gatewayClass)).To(Succeed())
 
-		managedZone = testBuildManagedZone("mz-example-com", testNamespace, "example.com")
+		dnsProviderSecret = testBuildInMemoryCredentialsSecret("inmemory-credentials", testNamespace)
+		managedZone = testBuildManagedZone("mz-example-com", testNamespace, "example.com", dnsProviderSecret.Name)
+		Expect(k8sClient.Create(ctx, dnsProviderSecret)).To(Succeed())
 		Expect(k8sClient.Create(ctx, managedZone)).To(Succeed())
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(managedZone), managedZone)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(managedZone.Status.Conditions).To(
+				ContainElement(MatchFields(IgnoreExtras, Fields{
+					"Type":               Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
+					"Status":             Equal(metav1.ConditionTrue),
+					"ObservedGeneration": Equal(managedZone.Generation),
+				})),
+			)
+		}, TestTimeoutMedium, time.Second).Should(Succeed())
 
 		gateway = NewGatewayBuilder(TestGatewayName, gatewayClass.Name, testNamespace).
 			WithHTTPListener("foo", "foo.example.com").
@@ -112,6 +128,10 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		}
 		if managedZone != nil {
 			err := k8sClient.Delete(ctx, managedZone)
+			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
+		}
+		if dnsProviderSecret != nil {
+			err := k8sClient.Delete(ctx, dnsProviderSecret)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		}
 		if gatewayClass != nil {

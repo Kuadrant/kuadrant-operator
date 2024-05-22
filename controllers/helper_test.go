@@ -9,6 +9,7 @@ import (
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -136,20 +137,30 @@ func testObjectDoesNotExist(obj client.Object) func() bool {
 
 // DNS
 
-func testBuildManagedZone(name, ns, domainName string) *kuadrantdnsv1alpha1.ManagedZone {
+func testBuildManagedZone(name, ns, domainName, secretName string) *kuadrantdnsv1alpha1.ManagedZone {
 	return &kuadrantdnsv1alpha1.ManagedZone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 		},
 		Spec: kuadrantdnsv1alpha1.ManagedZoneSpec{
-			ID:          "1234",
 			DomainName:  domainName,
 			Description: domainName,
 			SecretRef: kuadrantdnsv1alpha1.ProviderRef{
-				Name: "secretname",
+				Name: secretName,
 			},
 		},
+	}
+}
+
+func testBuildInMemoryCredentialsSecret(name, ns string) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Data: map[string][]byte{},
+		Type: "kuadrant.io/inmemory",
 	}
 }
 

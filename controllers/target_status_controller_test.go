@@ -9,11 +9,13 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gstruct"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -521,11 +523,25 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 			}
 		}
 
+		var dnsProviderSecret *corev1.Secret
 		var managedZone *kuadrantdnsv1alpha1.ManagedZone
 
 		BeforeEach(func(ctx SpecContext) {
-			managedZone = testBuildManagedZone("mz-toystore-com", testNamespace, "toystore.com")
+			dnsProviderSecret = testBuildInMemoryCredentialsSecret("inmemory-credentials", testNamespace)
+			managedZone = testBuildManagedZone("mz-toystore-com", testNamespace, "toystore.com", dnsProviderSecret.Name)
+			Expect(k8sClient.Create(ctx, dnsProviderSecret)).To(Succeed())
 			Expect(k8sClient.Create(ctx, managedZone)).To(Succeed())
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(managedZone), managedZone)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(managedZone.Status.Conditions).To(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type":               Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
+						"Status":             Equal(metav1.ConditionTrue),
+						"ObservedGeneration": Equal(managedZone.Generation),
+					})),
+				)
+			}, TestTimeoutMedium, time.Second).Should(Succeed())
 		})
 
 		AfterEach(func(ctx SpecContext) {

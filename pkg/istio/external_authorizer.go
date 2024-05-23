@@ -37,16 +37,10 @@ func controlPlaneProviderName() string {
 }
 
 func UnregisterExternalAuthorizer(ctx context.Context, cl client.Client, kObj *kuadrantv1beta1.Kuadrant) error {
-	logger, _ := logr.FromContext(ctx)
-
 	isIstioInstalled, err := unregisterExternalAuthorizerIstio(ctx, cl, kObj)
 
 	if err == nil && !isIstioInstalled {
 		err = unregisterExternalAuthorizerOSSM(ctx, cl, kObj)
-	}
-
-	if err != nil {
-		logger.Error(err, "failed fo get service mesh control plane")
 	}
 
 	return err
@@ -90,6 +84,10 @@ func unregisterExternalAuthorizerOSSM(ctx context.Context, cl client.Client, kOb
 	smcpKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
 	if err := cl.Get(ctx, smcpKey, smcp); err != nil {
 		logger.V(1).Info("failed to get servicemeshcontrolplane object", "key", smcp, "err", err)
+		if apierrors.IsNotFound(err) || meta.IsNoMatchError(err) {
+			logger.Info("OSSM installation as GatewayAPI provider not found")
+			return nil
+		}
 		return err
 	}
 

@@ -22,9 +22,6 @@ type TopologyIndexes struct {
 	// Type: Policy -> HTTPRoute
 	policyRoute map[client.ObjectKey]*gatewayapiv1.HTTPRoute
 
-	// routes is an index of gateways mapping to HTTPRoutes that are children of the gateway
-	routes map[client.ObjectKey][]*gatewayapiv1.HTTPRoute
-
 	// untargetedRoutes is an index of gateways mapping to HTTPRoutes not targeted by a kuadrant policy
 	// Gateway -> []HTTPRoute
 	untargetedRoutes map[client.ObjectKey][]*gatewayapiv1.HTTPRoute
@@ -42,7 +39,6 @@ func NewTopologyIndexes(t *Topology) *TopologyIndexes {
 	return &TopologyIndexes{
 		gatewayPolicies:  buildGatewayPoliciesIndex(t),
 		policyRoute:      buildPolicyRouteIndex(t),
-		routes:           buildRoutesIndex(t),
 		untargetedRoutes: buildUntargetedRoutesIndex(t),
 		internalTopology: t,
 	}
@@ -60,12 +56,6 @@ func (k *TopologyIndexes) PoliciesFromGateway(gateway *gatewayapiv1.Gateway) []P
 // Type: Policy -> HTTPRoute
 func (k *TopologyIndexes) GetPolicyHTTPRoute(policy Policy) *gatewayapiv1.HTTPRoute {
 	return k.policyRoute[client.ObjectKeyFromObject(policy)]
-}
-
-// GetRoutes returns the HTTPRoutes having the gateway given as input as parent.
-// Gateway -> []HTTPRoute
-func (k *TopologyIndexes) GetRoutes(gateway *gatewayapiv1.Gateway) []*gatewayapiv1.HTTPRoute {
-	return k.routes[client.ObjectKeyFromObject(gateway)]
 }
 
 // GetUntargetedRoutes returns the HTTPRoutes not targeted by any kuadrant policy
@@ -160,19 +150,6 @@ func buildPolicyRouteIndex(t *Topology) map[client.ObjectKey]*gatewayapiv1.HTTPR
 		for _, policy := range routeNode.AttachedPolicies() {
 			index[client.ObjectKeyFromObject(policy)] = routeNode.Route()
 		}
-	}
-
-	return index
-}
-
-func buildRoutesIndex(t *Topology) map[client.ObjectKey][]*gatewayapiv1.HTTPRoute {
-	// Build Gateway -> []HTTPRoute index with all the routes
-	index := make(map[client.ObjectKey][]*gatewayapiv1.HTTPRoute, 0)
-
-	for _, gatewayNode := range t.Gateways() {
-		index[gatewayNode.ObjectKey()] = utils.Map(gatewayNode.Routes(), func(node RouteNode) *gatewayapiv1.HTTPRoute {
-			return node.Route()
-		})
 	}
 
 	return index

@@ -157,7 +157,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   1,
 				Seconds:    3 * 60,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
-				Conditions: []string{`limit.l1__2804bad6 == "1"`},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(rlp),
 			}))
@@ -243,7 +243,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   1,
 				Seconds:    3 * 60,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
-				Conditions: []string{`limit.l1__2804bad6 == "1"`},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(rlp),
 			}))
@@ -293,7 +293,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   1,
 				Seconds:    3 * 60,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
-				Conditions: []string{`limit.l1__2804bad6 == "1"`},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(rlp),
 			}))
@@ -368,7 +368,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 					MaxValue:   10,
 					Seconds:    5,
 					Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-					Conditions: []string{`limit.l1__2804bad6 == "1"`},
+					Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(routeRLPKey, "l1"))},
 					Variables:  []string{},
 					Name:       rlptools.LimitsNameFromRLP(routeRLP),
 				})).WithContext(ctx).Should(Succeed())
@@ -483,7 +483,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-				Conditions: []string{`limit.l1__2804bad6 == "1"`},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
 			})).WithContext(ctx).Should(Succeed())
@@ -505,7 +505,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   10,
 				Seconds:    5,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-				Conditions: []string{`limit.route__8a84e406 == "1"`},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(routeRLPKey, "route"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
 			})).WithContext(ctx).Should(Succeed())
@@ -540,7 +540,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-				Conditions: []string{`limit.l1__2804bad6 == "1"`},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
 			})).WithContext(ctx).Should(Succeed())
@@ -579,7 +579,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   10,
 				Seconds:    5,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-				Conditions: []string{`limit.route__8a84e406 == "1"`},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(routeRLPKey, "route"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
 			})).WithContext(ctx).Should(Succeed())
@@ -602,7 +602,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-				Conditions: []string{`limit.l1__2804bad6 == "1"`},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
 			})).WithContext(ctx).Should(Succeed())
@@ -628,7 +628,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-				Conditions: []string{`limit.l1__2804bad6 == "1"`},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
 			})).WithContext(ctx).Should(Succeed())
@@ -651,7 +651,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   10,
 				Seconds:    5,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-				Conditions: []string{`limit.route__8a84e406 == "1"`},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(routeRLPKey, "route"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
 			})).WithContext(ctx).Should(Succeed())

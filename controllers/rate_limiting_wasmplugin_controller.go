@@ -175,7 +175,7 @@ func (r *RateLimitingWASMPluginReconciler) wasmPluginConfig(ctx context.Context,
 
 	for _, policy := range rateLimitPolicies {
 		rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)
-		wasmRLP, err := r.wasmRateLimitPolicy(ctx, t, rlp, gw, rateLimitPolicies)
+		wasmRLP, err := r.wasmRateLimitPolicy(ctx, t, rlp, gw)
 		if err != nil {
 			return nil, err
 		}
@@ -220,7 +220,7 @@ func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx contex
 
 	policies := utils.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })
 
-	t, err := kuadrantgatewayapi.NewTopology(
+	topology, err := kuadrantgatewayapi.NewTopology(
 		kuadrantgatewayapi.WithGateways([]*gatewayapiv1.Gateway{gw}),
 		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
 		kuadrantgatewayapi.WithPolicies(policies),
@@ -230,15 +230,15 @@ func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx contex
 		return nil, err
 	}
 
-	return kuadrantgatewayapi.NewTopologyIndexes(t), nil
-}
-
-func (r *RateLimitingWASMPluginReconciler) wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway, affectedPolices []kuadrantgatewayapi.Policy) (*wasm.RateLimitPolicy, error) {
-	// Skip the wasm config for this policy if the policy has been overridden by another policy
-	if r.overridden(ctx, rlp, affectedPolices) {
-		return nil, nil
+	overriddenTopology, err := rlptools.ApplyOverrides(topology, gw)
+	if err != nil {
+		return nil, err
 	}
 
+	return kuadrantgatewayapi.NewTopologyIndexes(overriddenTopology), nil
+}
+
+func (r *RateLimitingWASMPluginReconciler) wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*wasm.RateLimitPolicy, error) {
 	route, err := r.routeFromRLP(ctx, t, rlp, gw)
 	if err != nil {
 		return nil, err
@@ -286,32 +286,6 @@ func (r *RateLimitingWASMPluginReconciler) wasmRateLimitPolicy(ctx context.Conte
 	}, nil
 }
 
-func (r *RateLimitingWASMPluginReconciler) overridden(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, affectedPolices []kuadrantgatewayapi.Policy) bool {
-	// Only route policies can be overridden
-	if !kuadrantgatewayapi.IsTargetRefHTTPRoute(rlp.GetTargetRef()) {
-		return false
-	}
-
-	logger, _ := logr.FromContext(ctx)
-	logger = logger.WithName("overridden")
-
-	gatewayPolicies := utils.Filter(affectedPolices, func(policy kuadrantgatewayapi.Policy) bool {
-		return policy.GetDeletionTimestamp() == nil &&
-			kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef()) &&
-			policy.GetUID() != rlp.GetUID()
-	})
-
-	for _, policy := range gatewayPolicies {
-		p := policy.(*kuadrantv1beta2.RateLimitPolicy)
-		if p.Spec.Overrides != nil {
-			logger.V(1).Info("policy has been overridden, skipping corresponding wasm config", "RateLimitPolicy", client.ObjectKeyFromObject(rlp), "overridden by", client.ObjectKeyFromObject(p))
-			return true
-		}
-	}
-
-	return false
-}
-
 func (r *RateLimitingWASMPluginReconciler) routeFromRLP(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*gatewayapiv1.HTTPRoute, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
@@ -322,33 +296,28 @@ func (r *RateLimitingWASMPluginReconciler) routeFromRLP(ctx context.Context, t *
 
 	if route == nil {
 		// The policy is targeting a gateway
-		// If the policy is an override → enforce it for all HTTPRoutes that are children of the gateway
-		// Otherwise → enforce it for all HTTPRoutes that do not have a policy attached to it
+		// This gateway policy will be enforced into all HTTPRoutes that do not have a policy attached to it
 
-		var routes []*gatewayapiv1.HTTPRoute
-		if rlp.Spec.Overrides != nil {
-			routes = t.GetRoutes(gw)
-		} else {
-			routes = t.GetUntargetedRoutes(gw)
-		}
+		// Build imaginary route with all the routes not having a RLP targeting it
+		untargetedRoutes := t.GetUntargetedRoutes(gw)
 
-		if len(routes) == 0 {
+		if len(untargetedRoutes) == 0 {
 			// For policies targeting a gateway, when no httproutes is attached to the gateway, skip wasm config
 			// test wasm config when no http routes attached to the gateway
-			logger.V(1).Info("no remaining httproutes attached to the targeted gateway, skipping wasm config for the gateway rlp", "ratelimitpolicy", client.ObjectKeyFromObject(rlp))
+			logger.V(1).Info("no untargeted httproutes attached to the targeted gateway, skipping wasm config for the gateway rlp", "ratelimitpolicy", client.ObjectKeyFromObject(rlp))
 			return nil, nil
 		}
 
-		// Build an imaginary route that merges all routes rules from all routes
-		routeRules := make([]gatewayapiv1.HTTPRouteRule, 0)
-		for idx := range routes {
-			routeRules = append(routeRules, routes[idx].Spec.Rules...)
+		untargetedRules := make([]gatewayapiv1.HTTPRouteRule, 0)
+		for idx := range untargetedRoutes {
+			untargetedRules = append(untargetedRules, untargetedRoutes[idx].Spec.Rules...)
 		}
-		gwHostnames := utils.Map(kuadrantgatewayapi.TargetHostnames(gw), func(str string) gatewayapiv1.Hostname { return gatewayapiv1.Hostname(str) })
+		gwHostnamesTmp := kuadrantgatewayapi.TargetHostnames(gw)
+		gwHostnames := utils.Map(gwHostnamesTmp, func(str string) gatewayapiv1.Hostname { return gatewayapiv1.Hostname(str) })
 		route = &gatewayapiv1.HTTPRoute{
 			Spec: gatewayapiv1.HTTPRouteSpec{
 				Hostnames: gwHostnames,
-				Rules:     routeRules,
+				Rules:     untargetedRules,
 			},
 		}
 	}

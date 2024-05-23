@@ -7,6 +7,8 @@ import (
 	"unicode"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -16,7 +18,7 @@ const (
 	LimitadorRateLimitIdentifierPrefix = "limit."
 )
 
-func LimitNameToLimitadorIdentifier(uniqueLimitName string) string {
+func LimitNameToLimitadorIdentifier(rlpKey types.NamespacedName, uniqueLimitName string) string {
 	identifier := LimitadorRateLimitIdentifierPrefix
 
 	// sanitize chars that are not allowed in limitador identifiers
@@ -29,7 +31,7 @@ func LimitNameToLimitadorIdentifier(uniqueLimitName string) string {
 	}
 
 	// to avoid breaking the uniqueness of the limit name after sanitization, we add a hash of the original name
-	hash := sha256.Sum256([]byte(uniqueLimitName))
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s/%s", rlpKey.String(), uniqueLimitName)))
 	identifier += "__" + hex.EncodeToString(hash[:4])
 
 	return identifier
@@ -39,10 +41,11 @@ func LimitNameToLimitadorIdentifier(uniqueLimitName string) string {
 // objects
 func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []limitadorv1alpha1.RateLimit {
 	limitsNamespace := LimitsNamespaceFromRLP(rlp)
+	rlpKey := client.ObjectKeyFromObject(rlp)
 
 	rateLimits := make([]limitadorv1alpha1.RateLimit, 0)
 	for limitKey, limit := range rlp.Spec.CommonSpec().Limits {
-		limitIdentifier := LimitNameToLimitadorIdentifier(limitKey)
+		limitIdentifier := LimitNameToLimitadorIdentifier(rlpKey, limitKey)
 		for _, rate := range limit.Rates {
 			maxValue, seconds := rateToSeconds(rate)
 			rateLimits = append(rateLimits, limitadorv1alpha1.RateLimit{

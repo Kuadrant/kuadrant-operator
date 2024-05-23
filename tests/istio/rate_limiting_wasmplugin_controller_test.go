@@ -162,7 +162,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 								Data: []wasm.DataItem{
 									{
 										Static: &wasm.StaticSpec{
-											Key:   `limit.l1__2804bad6`,
+											Key:   rlptools.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 											Value: "1",
 										},
 									},
@@ -354,7 +354,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 				Data: []wasm.DataItem{
 					{
 						Static: &wasm.StaticSpec{
-							Key:   "limit.toys__3bfcbeee",
+							Key:   rlptools.LimitNameToLimitadorIdentifier(rlpKey, "toys"),
 							Value: "1",
 						},
 					},
@@ -380,7 +380,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 				Data: []wasm.DataItem{
 					{
 						Static: &wasm.StaticSpec{
-							Key:   "limit.assets__8bf729ff",
+							Key:   rlptools.LimitNameToLimitadorIdentifier(rlpKey, "assets"),
 							Value: "1",
 						},
 					},
@@ -465,7 +465,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 								Data: []wasm.DataItem{
 									{
 										Static: &wasm.StaticSpec{
-											Key:   `limit.l1__2804bad6`,
+											Key:   rlptools.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 											Value: "1",
 										},
 									},
@@ -780,7 +780,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.l1__2804bad6`,
+												Key:   rlptools.LimitNameToLimitadorIdentifier(rlpAKey, "l1"),
 												Value: "1",
 											},
 										},
@@ -928,7 +928,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.l1__2804bad6`,
+												Key:   rlptools.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 												Value: "1",
 											},
 										},
@@ -1123,7 +1123,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.l1__2804bad6`,
+												Key:   rlptools.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 												Value: "1",
 											},
 										},
@@ -1239,7 +1239,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.l1__2804bad6`,
+												Key:   rlptools.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 												Value: "1",
 											},
 										},
@@ -1420,7 +1420,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.l1__2804bad6`,
+												Key:   rlptools.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 												Value: "1",
 											},
 										},
@@ -1499,7 +1499,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.l1__2804bad6`,
+												Key:   rlptools.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 												Value: "1",
 											},
 										},
@@ -1655,7 +1655,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.gatewaylimit__b95fa83b`,
+												Key:   rlptools.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
 												Value: "1",
 											},
 										},
@@ -1759,7 +1759,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.routelimit__efc5113c`,
+												Key:   rlptools.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
 												Value: "1",
 											},
 										},
@@ -1949,7 +1949,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.routelimit__efc5113c`,
+												Key:   rlptools.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
 												Value: "1",
 											},
 										},
@@ -2043,7 +2043,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.gatewaylimit__b95fa83b`,
+												Key:   rlptools.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
 												Value: "1",
 											},
 										},
@@ -2077,7 +2077,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.routelimit__efc5113c`,
+												Key:   rlptools.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
 												Value: "1",
 											},
 										},
@@ -2205,7 +2205,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 								Data: []wasm.DataItem{
 									{
 										Static: &wasm.StaticSpec{
-											Key:   `limit.l1__2804bad6`,
+											Key:   rlptools.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 											Value: "1",
 										},
 									},
@@ -2325,7 +2325,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(gwRLPKey, gwRLP, "limit.gateway__4ea5ee68", "*")))
+			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(gwRLPKey, gwRLP, rlptools.LimitNameToLimitadorIdentifier(gwRLPKey, "gateway"), "*")))
 
 			// Create Route RLP
 			routeRLP := &kuadrantv1beta2.RateLimitPolicy{
@@ -2361,7 +2361,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 				existingWASMConfig, err = rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, "limit.route__8a84e406", "*.example.com")))
+				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, rlptools.LimitNameToLimitadorIdentifier(routeRLPKey, "route"), "*.example.com")))
 			}).WithContext(ctx).Should(Succeed())
 
 			// Update GW RLP to overrides
@@ -2378,7 +2378,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 				existingWASMConfig, err = rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, "limit.gateway__4ea5ee68", "*.example.com")))
+				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, rlptools.LimitNameToLimitadorIdentifier(routeRLPKey, "gateway"), "*.example.com")))
 			}).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)

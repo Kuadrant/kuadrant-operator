@@ -303,18 +303,6 @@ test-unit: clean-cov generate fmt vet ## Run Unit tests.
 	mkdir -p $(PROJECT_PATH)/coverage/unit
 	go test $(UNIT_DIRS) -coverprofile $(PROJECT_PATH)/coverage/unit/cover.out -tags unit -v -timeout 0 $(TEST_PATTERN)
 
-
-.PHONY: test-istio-env-setup
-test-istio-env-setup: ## Deploys all services and manifests required by kuadrant to run on CI.
-	$(MAKE) namespace
-	$(MAKE) gateway-api-install
-	$(MAKE) install-metallb
-	$(MAKE) istio-install
-	$(MAKE) install-cert-manager
-	$(MAKE) deploy-gateway
-	$(MAKE) deploy-dependencies
-	$(MAKE) install
-
 ##@ Build
 
 build: generate fmt vet ## Build manager binary.

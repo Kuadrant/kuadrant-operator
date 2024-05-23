@@ -7,12 +7,11 @@ import (
 	"time"
 
 	. "github.com/onsi/gomega"
+	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -55,7 +54,7 @@ func BuildBasicGateway(gwName, ns string, mutateFns ...func(*gatewayapiv1.Gatewa
 	return gateway
 }
 
-func DeleteNamespaceCallbackWithContext(ctx context.Context, cl client.Client, namespace string) {
+func DeleteNamespace(ctx context.Context, cl client.Client, namespace string) {
 	desiredTestNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 	Eventually(func(g Gomega) {
 		err := cl.Delete(ctx, desiredTestNamespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
@@ -64,11 +63,13 @@ func DeleteNamespaceCallbackWithContext(ctx context.Context, cl client.Client, n
 	}).WithContext(ctx).Should(Succeed())
 }
 
-func CreateNamespace(ctx context.Context, cl client.Client) string {
-	return CreateNamespaceWithContext(ctx, cl)
+func DeleteNamespaceCallback(ctx context.Context, cl client.Client, namespace string) func() {
+	return func() {
+		DeleteNamespace(ctx, cl, namespace)
+	}
 }
 
-func CreateNamespaceWithContext(ctx context.Context, cl client.Client) string {
+func CreateNamespace(ctx context.Context, cl client.Client) string {
 	nsObject := &corev1.Namespace{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
 		ObjectMeta: metav1.ObjectMeta{GenerateName: "test-namespace-"},
@@ -220,24 +221,6 @@ func BuildMultipleRulesHttpRoute(routeName, gwName, ns string, hostnames []strin
 	return route
 }
 
-func DeleteNamespaceCallback(ctx context.Context, cl client.Client, namespace string) func() {
-	return func() {
-		desiredTestNamespace := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
-		err := cl.Delete(ctx, desiredTestNamespace, client.PropagationPolicy(metav1.DeletePropagationForeground))
-
-		Expect(err).ToNot(HaveOccurred())
-
-		existingNamespace := &v1.Namespace{}
-		Eventually(func() bool {
-			err := cl.Get(ctx, types.NamespacedName{Name: namespace}, existingNamespace)
-			if err != nil && apierrors.IsNotFound(err) {
-				return true
-			}
-			return false
-		}, 3*time.Minute, 2*time.Second).Should(BeTrue())
-	}
-}
-
 func DeleteKuadrantCR(ctx context.Context, cl client.Client, namespace string) {
 	k := &kuadrantv1beta1.Kuadrant{ObjectMeta: metav1.ObjectMeta{Name: "kuadrant-sample", Namespace: namespace}}
 	Eventually(func(g Gomega) {
@@ -280,4 +263,23 @@ func RLPEnforcedCondition(ctx context.Context, cl client.Client, rlpKey client.O
 	}
 
 	return cond.Reason == string(reason) && cond.Message == message
+}
+
+func WasmPluginIsAvailable(ctx context.Context, cl client.Client, key client.ObjectKey) func() bool {
+	return func() bool {
+		wp := &istioclientgoextensionv1alpha1.WasmPlugin{}
+		err := cl.Get(ctx, key, wp)
+		if err != nil {
+			logf.Log.V(1).Info("wasmplugin not read", "key", key, "error", err)
+			return false
+		}
+
+		// Unfortunately, WasmPlugin does not have status yet
+		// Leaving this here for future use
+		//if !meta.IsStatusConditionTrue(wp.Status.Conditions, "Available") {
+		//	return false
+		//}
+
+		return true
+	}
 }

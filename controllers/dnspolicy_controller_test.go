@@ -23,6 +23,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
+	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
 var _ = Describe("DNSPolicy controller", func() {
@@ -37,7 +38,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		testNamespace = CreateNamespaceWithContext(ctx)
+		testNamespace = tests.CreateNamespace(ctx, testClient())
 
 		gatewayClass = testBuildGatewayClass("gwc-"+testNamespace, "default", "kuadrant.io/bar")
 		Expect(k8sClient.Create(ctx, gatewayClass)).To(Succeed())
@@ -63,7 +64,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			err := k8sClient.Delete(ctx, gatewayClass)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		}
-		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
+		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	})
 
 	It("should validate routing strategy field correctly", func() {

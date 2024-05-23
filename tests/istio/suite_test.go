@@ -59,6 +59,10 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 		UseExistingCluster: &[]bool{true}[0],
 	}
 
+	cfg, err := testEnv.Start()
+	Expect(err).NotTo(HaveOccurred())
+	Expect(cfg).NotTo(BeNil())
+
 	controllers.SetupKuadrantOperatorForTest(scheme.Scheme, cfg)
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})

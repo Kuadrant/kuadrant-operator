@@ -22,11 +22,11 @@ var _ = Describe("Kuadrant controller is disabled", func() {
 	)
 
 	BeforeEach(func(ctx SpecContext) {
-		testNamespace = controllers.CreateNamespaceWithContext(ctx, testClient())
+		testNamespace = controllers.CreateNamespace(ctx, testClient())
 	})
 
 	AfterEach(func(ctx SpecContext) {
-		controllers.DeleteNamespaceCallbackWithContext(ctx, testClient(), testNamespace)
+		controllers.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
 	Context("when default kuadrant CR is created", func() {

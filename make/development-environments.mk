@@ -45,11 +45,20 @@ namespace: ## Creates a namespace where to deploy Kuadrant Operator
 	kubectl create namespace $(KUADRANT_NAMESPACE)
 
 .PHONY: local-deploy
-local-deploy: ## Deploy Kuadrant Operator in the cluster pointed by KUBECONFIG
+local-deploy: ## Deploy Kuadrant Operator from the current code
 	$(MAKE) docker-build IMG=$(IMAGE_TAG_BASE):dev
 	$(KIND) load docker-image $(IMAGE_TAG_BASE):dev --name $(KIND_CLUSTER_NAME)
 	$(MAKE) deploy IMG=$(IMAGE_TAG_BASE):dev
 	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
+
+.PHONY: local-env-setup
+local-env-setup: ## Alias of local-istio-env-setup
+	$(MAKE) local-istio-env-setup
+
+.PHONY: local-setup
+local-setup: $(KIND) ## Deploy Kuadrant operator on Istio powered kubernetes cluster from the current code
+	$(MAKE) local-env-setup
+	$(MAKE) local-deploy
 	@echo
 	@echo "Now you can export the kuadrant gateway by doing:"
 	@echo "kubectl port-forward -n istio-system service/istio-ingressgateway-istio 9080:80 &"
@@ -62,33 +71,9 @@ local-deploy: ## Deploy Kuadrant Operator in the cluster pointed by KUBECONFIG
 	@echo "curl -H \"Host: myhost.com\" \$$GATEWAY_URL"
 	@echo
 
-.PHONY: local-setup
-local-setup: $(KIND) ## Deploy locally kuadrant operator from the current code
-	$(MAKE) local-env-setup
-	$(MAKE) local-deploy
-
 .PHONY: local-cleanup
 local-cleanup: ## Delete local cluster
 	$(MAKE) kind-delete-cluster
-
-.PHONY: local-cluster-setup
-local-cluster-setup: ## Sets up Kind cluster with GatewayAPI manifests and istio GW, nothing Kuadrant.
-	$(MAKE) kind-delete-cluster
-	$(MAKE) kind-create-cluster
-	$(MAKE) deploy-metrics-server
-	$(MAKE) namespace
-	$(MAKE) gateway-api-install
-	$(MAKE) install-metallb
-	$(MAKE) istio-install
-	$(MAKE) install-cert-manager
-	$(MAKE) deploy-gateway
-
-# kuadrant is not deployed
-.PHONY: local-env-setup
-local-env-setup: ## Deploys all services and manifests required by kuadrant to run. Used to run kuadrant with "make run"
-	$(MAKE) local-cluster-setup
-	$(MAKE) deploy-dependencies
-	$(MAKE) install
 
 ##@ Development Environment: bare kubernetes
 

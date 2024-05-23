@@ -21,16 +21,16 @@ container-runtime-tool:
                                             exit 1; \
                                         fi))
 
-alerts-tests: container-runtime-tool # Test alerts using promtool 
+alerts-tests: container-runtime-tool ## Test alerts using promtool 
 	$(CONTAINER_RUNTIME_BIN) run --rm -t \
 	-v $(AVAILABILITY_SLO_RULES):/prometheus/slo-availability.yaml \
 	-v $(LATENCY_SLO_RULES):/prometheus/slo-latency.yaml \
 	-v $(UNIT_TEST_DIR):/prometheus/tests --entrypoint=/bin/sh \
 	$(IMAGE) -c 'tail -n +16 slo-latency.yaml > latency-rules.yaml  && tail -n +16 slo-availability.yaml > availability-rules.yaml && cd tests && promtool test rules *'
 
-sloth: $(SLOTH) # Install Sloth
+sloth: $(SLOTH) ## Install Sloth
 $(SLOTH):
 	cd $(WORKDIR)/bin && curl -L https://github.com/slok/sloth/releases/download/v0.11.0/sloth-$(OS)-$(ARCH) > sloth && chmod +x sloth
     
-sloth-generate: sloth # Generate alerts using Sloth templates
+sloth-generate: sloth ## Generate alerts using Sloth templates
 	$(SLOTH) generate -i $(WORKDIR)$(ALERTS_SLOTH_INPUT_DIR) -o $(WORKDIR)$(ALERTS_SLOTH_OUTPUT_DIR) --default-slo-period=28d

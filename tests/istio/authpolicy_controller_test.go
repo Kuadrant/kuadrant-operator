@@ -39,16 +39,16 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 	var kuadrantInstallationNS string
 
 	BeforeAll(func(ctx SpecContext) {
-		kuadrantInstallationNS = tests.CreateNamespaceWithContext(ctx, testClient())
+		kuadrantInstallationNS = tests.CreateNamespace(ctx, testClient())
 		tests.ApplyKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
 	})
 
 	AfterAll(func(ctx SpecContext) {
-		tests.DeleteNamespaceCallbackWithContext(ctx, testClient(), kuadrantInstallationNS)
+		tests.DeleteNamespace(ctx, testClient(), kuadrantInstallationNS)
 	})
 
 	BeforeEach(func(ctx SpecContext) {
-		testNamespace = tests.CreateNamespaceWithContext(ctx, testClient())
+		testNamespace = tests.CreateNamespace(ctx, testClient())
 
 		gateway := tests.BuildBasicGateway(TestGatewayName, testNamespace)
 		err := k8sClient.Create(ctx, gateway)
@@ -58,7 +58,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 	})
 
 	AfterEach(func(ctx SpecContext) {
-		tests.DeleteNamespaceCallbackWithContext(ctx, testClient(), testNamespace)
+		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
 	policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
@@ -1478,10 +1478,12 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 	var testNamespace string
 
 	BeforeEach(func(ctx SpecContext) {
-		testNamespace = tests.CreateNamespaceWithContext(ctx, testClient())
+		testNamespace = tests.CreateNamespace(ctx, testClient())
 	})
 
-	AfterEach(func(ctx SpecContext) { tests.DeleteNamespaceCallbackWithContext(ctx, testClient(), testNamespace) }, afterEachTimeOut)
+	AfterEach(func(ctx SpecContext) {
+		tests.DeleteNamespace(ctx, testClient(), testNamespace)
+	}, afterEachTimeOut)
 
 	policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
 		policy := &api.AuthPolicy{

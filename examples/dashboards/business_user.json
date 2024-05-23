@@ -227,7 +227,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "legendFormat": "API: {{name}}",
           "range": true,
           "refId": "A"
@@ -295,7 +295,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "format": "time_series",
           "instant": false,
           "legendFormat": "most recent",
@@ -308,7 +308,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{}[5m] offset $__range)) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{}[5m] offset $__range)) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "format": "time_series",
           "hide": false,
           "legendFormat": "previous",
@@ -405,7 +405,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name, request_url_path) * on(destination_service_name) group_left() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name, request_url_path) * on(destination_service_name) group_left() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "legendFormat": "{{request_url_path}}",
           "range": true,
           "refId": "A"
@@ -476,7 +476,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by(request_url_path) (increase(istio_requests_total{}[$__range]) * on(destination_service_name) group_left() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",exported_namespace=~\"$api_namespace\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\"))))",
+          "expr": "sum by(request_url_path) (increase(istio_requests_total{}[$__range]) * on(destination_service_name) group_left() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",exported_namespace=~\"$api_namespace\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\"))))",
           "format": "table",
           "instant": true,
           "range": false,
@@ -489,7 +489,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by(request_url_path) (increase(istio_requests_total{}[$__range] offset $__range) * on(destination_service_name) group_left() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",exported_namespace=~\"$api_namespace\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\"))))",
+          "expr": "sum by(request_url_path) (increase(istio_requests_total{}[$__range] offset $__range) * on(destination_service_name) group_left() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",exported_namespace=~\"$api_namespace\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\"))))",
           "format": "table",
           "hide": false,
           "instant": true,
@@ -503,7 +503,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by(request_url_path) (increase(istio_requests_total{}[$__range]) * on(destination_service_name) group_left() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",exported_namespace=~\"$api_namespace\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))) - sum by(request_url_path) (increase(istio_requests_total{}[$__range] offset $__range) * on(destination_service_name) group_left() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",exported_namespace=~\"$api_namespace\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\"))))",
+          "expr": "sum by(request_url_path) (increase(istio_requests_total{}[$__range]) * on(destination_service_name) group_left() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",exported_namespace=~\"$api_namespace\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))) - sum by(request_url_path) (increase(istio_requests_total{}[$__range] offset $__range) * on(destination_service_name) group_left() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$route_name\",exported_namespace=~\"$api_namespace\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\"))))",
           "format": "table",
           "hide": false,
           "instant": true,

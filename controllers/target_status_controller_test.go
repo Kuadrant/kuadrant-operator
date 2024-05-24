@@ -1,6 +1,6 @@
 //go:build integration
 
-package istio_test
+package controllers
 
 import (
 	"context"

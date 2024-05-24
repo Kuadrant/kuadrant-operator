@@ -1,5 +1,8 @@
 ##@ Deployment
 
+GATEWAYAPI_PROVIDER = ISTIO
+GATEWAYAPI_PROVIDER_LOWERCASE = $(shell echo $(GATEWAYAPI_PROVIDER) | tr A-Z a-z)
+
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	# Use server side apply, otherwise will hit into this issue https://medium.com/pareture/kubectl-install-crd-failed-annotations-too-long-2ebc91b40c7d
 	$(KUSTOMIZE) build config/crd | kubectl apply --server-side -f -
@@ -52,24 +55,13 @@ local-deploy: ## Deploy Kuadrant Operator from the current code
 	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
 
 .PHONY: local-env-setup
-local-env-setup: ## Alias of local-istio-env-setup
-	$(MAKE) local-istio-env-setup
+local-env-setup: ## Run local Kubernetes cluster and deploy kuadrant dependencies
+	$(MAKE) local-$(GATEWAYAPI_PROVIDER_LOWERCASE)-env-setup
 
 .PHONY: local-setup
-local-setup: $(KIND) ## Deploy Kuadrant operator on Istio powered kubernetes cluster from the current code
-	$(MAKE) local-env-setup
+local-setup: $(KIND) ## Run local Kubernetes cluster and deploy kuadrant operator (and *all* dependencies)
+	$(MAKE) local-env-setup GATEWAYAPI_PROVIDER=$(GATEWAYAPI_PROVIDER)
 	$(MAKE) local-deploy
-	@echo
-	@echo "Now you can export the kuadrant gateway by doing:"
-	@echo "kubectl port-forward -n istio-system service/istio-ingressgateway-istio 9080:80 &"
-	@echo "export GATEWAY_URL=localhost:9080"
-	@echo "after that, you can curl -H \"Host: myhost.com\" \$$GATEWAY_URL"
-	@echo "-- Linux only -- Ingress gateway is exported using loadbalancer service in port 80"
-	@echo "export INGRESS_HOST=\$$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.status.addresses[0].value}')"
-	@echo "export INGRESS_PORT=\$$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.spec.listeners[?(@.name==\"http\")].port}')"
-	@echo "export GATEWAY_URL=\$$INGRESS_HOST:\$$INGRESS_PORT"
-	@echo "curl -H \"Host: myhost.com\" \$$GATEWAY_URL"
-	@echo
 
 .PHONY: local-cleanup
 local-cleanup: ## Delete local cluster
@@ -78,7 +70,7 @@ local-cleanup: ## Delete local cluster
 ##@ Development Environment: bare kubernetes
 
 .PHONY: k8s-env-setup
-k8s-env-setup: ## No gateway provider, no GatewayAPI CRDs. Just Kuadrant API and Kuadrant dependencies. Kuadrant operator not deployed.
+k8s-env-setup: ## Install Kuadrant CRDs and dependencies.
 	$(MAKE) deploy-metrics-server
 	$(MAKE) install-metallb
 	$(MAKE) install-cert-manager
@@ -94,12 +86,12 @@ local-k8s-env-setup: ## k8s-env-setup based on Kind cluster
 ##@ Development Environment: Kubernetes with GatewayAPI
 
 .PHONY: gatewayapi-env-setup
-gatewayapi-env-setup: ## No gateway provider. GatewayAPI CRDs, Kuadrant API and Kuadrant dependencies. Kuadrant operator not deployed.
+gatewayapi-env-setup: ## Install GatewayAPI CRDs and k8s-env-setup
 	$(MAKE) k8s-env-setup
 	$(MAKE) gateway-api-install
 
 .PHONY: local-k8s-env-setup
-local-gatewayapi-env-setup: ## k8s-env-setup based on Kind cluster
+local-gatewayapi-env-setup: ## gatewayapi-env-setup based on Kind cluster
 	$(MAKE) kind-delete-cluster
 	$(MAKE) kind-create-cluster
 	$(MAKE) gatewayapi-env-setup
@@ -107,10 +99,21 @@ local-gatewayapi-env-setup: ## k8s-env-setup based on Kind cluster
 ##@ Development Environment: Kubernetes with GatewayAPI and Istio installed
 
 .PHONY: istio-env-setup
-istio-env-setup: ## GatewayAPI CRDs, Istio, Kuadrant API and Kuadrant dependencies. Kuadrant operator not deployed.
+istio-env-setup: ## Install Istio, istio gateway and gatewayapi-env-setup
 	$(MAKE) gatewayapi-env-setup
 	$(MAKE) istio-install
-	$(MAKE) deploy-gateway
+	$(MAKE) deploy-istio-gateway
+	@echo
+	@echo "Now you can open local access to the istio gateway by doing:"
+	@echo "kubectl port-forward -n istio-system service/istio-ingressgateway-istio 9080:80 &"
+	@echo "export GATEWAY_URL=localhost:9080"
+	@echo "after that, you can curl -H \"Host: myhost.com\" \$$GATEWAY_URL"
+	@echo "-- Linux only -- Ingress gateway is exported using loadbalancer service in port 80"
+	@echo "export INGRESS_HOST=\$$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.status.addresses[0].value}')"
+	@echo "export INGRESS_PORT=\$$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.spec.listeners[?(@.name==\"http\")].port}')"
+	@echo "export GATEWAY_URL=\$$INGRESS_HOST:\$$INGRESS_PORT"
+	@echo "curl -H \"Host: myhost.com\" \$$GATEWAY_URL"
+	@echo
 
 .PHONY: local-istio-env-setup
 local-istio-env-setup: ## istio-env-setup based on Kind cluster

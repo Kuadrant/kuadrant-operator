@@ -17,7 +17,7 @@ make build
 
 ## Deploy on local kubernetes cluster
 
-Run local Kubernetes clusters using Docker container using [Kind](https://kind.sigs.k8s.io/) and deploy kuadrant operator (and *all* dependencies) in a single command.
+Run local Kubernetes cluster using Docker container using [Kind](https://kind.sigs.k8s.io/) and deploy kuadrant operator (and *all* dependencies) in a single command.
 
 ```shell
 make local-setup
@@ -31,7 +31,7 @@ The `make local-setup` target accepts the following variables:
 
 ## Run as a local process
 
-Run local Kubernetes clusters using Docker container using [Kind](https://kind.sigs.k8s.io/) and deploy *all* dependencies in a single command.
+Run local Kubernetes cluster using Docker container using [Kind](https://kind.sigs.k8s.io/) and deploy *all* dependencies in a single command.
 
 ```shell
 make local-env-setup

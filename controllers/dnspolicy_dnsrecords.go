@@ -90,7 +90,7 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 			if err := r.dnsHelper.deleteDNSRecordForListener(ctx, gatewayWrapper, listener); client.IgnoreNotFound(err) != nil {
 				return fmt.Errorf("failed to delete dns record for listener %s : %w", listener.Name, err)
 			}
-			return nil
+			continue
 		}
 
 		dnsRecord, err := r.desiredDNSRecord(gatewayWrapper, dnsPolicy, listener, listenerGateways, mz)

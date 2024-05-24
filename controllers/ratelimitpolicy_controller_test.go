@@ -111,7 +111,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 	})
 
 	AfterAll(func(ctx SpecContext) {
-		tests.DeleteNamespaceCallback(ctx, testClient(), kuadrantInstallationNS)
+		tests.DeleteNamespace(ctx, testClient(), kuadrantInstallationNS)
 	})
 
 	BeforeEach(beforeEachCallback)

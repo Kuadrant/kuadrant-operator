@@ -54,9 +54,15 @@ local-deploy: ## Deploy Kuadrant Operator from the current code
 	$(MAKE) deploy IMG=$(IMAGE_TAG_BASE):dev
 	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
 
+.PHONY: env-setup
+env-setup: ## Install deploy kuadrant dependencies and configured gatewayapi provider
+	$(MAKE) $(GATEWAYAPI_PROVIDER_LOWERCASE)-env-setup ISTIO_INSTALL_SAIL=$(ISTIO_INSTALL_SAIL)
+
 .PHONY: local-env-setup
-local-env-setup: ## Run local Kubernetes cluster and deploy kuadrant dependencies
-	$(MAKE) local-$(GATEWAYAPI_PROVIDER_LOWERCASE)-env-setup
+local-env-setup: ## env-setup based on kind cluster
+	$(MAKE) kind-delete-cluster
+	$(MAKE) kind-create-cluster
+	$(MAKE) env-setup GATEWAYAPI_PROVIDER=$(GATEWAYAPI_PROVIDER)
 
 .PHONY: local-setup
 local-setup: $(KIND) ## Run local Kubernetes cluster and deploy kuadrant operator (and *all* dependencies)
@@ -101,7 +107,7 @@ local-gatewayapi-env-setup: ## gatewayapi-env-setup based on Kind cluster
 .PHONY: istio-env-setup
 istio-env-setup: ## Install Istio, istio gateway and gatewayapi-env-setup
 	$(MAKE) gatewayapi-env-setup
-	$(MAKE) istio-install
+	$(MAKE) istio-install ISTIO_INSTALL_SAIL=$(ISTIO_INSTALL_SAIL)
 	$(MAKE) deploy-istio-gateway
 	@echo
 	@echo "Now you can open local access to the istio gateway by doing:"
@@ -114,9 +120,3 @@ istio-env-setup: ## Install Istio, istio gateway and gatewayapi-env-setup
 	@echo "export GATEWAY_URL=\$$INGRESS_HOST:\$$INGRESS_PORT"
 	@echo "curl -H \"Host: myhost.com\" \$$GATEWAY_URL"
 	@echo
-
-.PHONY: local-istio-env-setup
-local-istio-env-setup: ## istio-env-setup based on Kind cluster
-	$(MAKE) kind-delete-cluster
-	$(MAKE) kind-create-cluster
-	$(MAKE) istio-env-setup

@@ -88,6 +88,7 @@ func unregisterExternalAuthorizerOSSM(ctx context.Context, cl client.Client, kOb
 			logger.Info("OSSM installation as GatewayAPI provider not found")
 			return nil
 		}
+		logger.Info("==================== unexpected err", "isnomatcherror", meta.IsNoMatchError(err))
 		return err
 	}
 

@@ -283,3 +283,47 @@ func WasmPluginIsAvailable(ctx context.Context, cl client.Client, key client.Obj
 		return true
 	}
 }
+
+func IsAuthPolicyAcceptedAndEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1beta2.AuthPolicy) func() bool {
+	return func() bool {
+		return IsAuthPolicyAccepted(ctx, cl, policy)() && IsAuthPolicyEnforced(ctx, cl, policy)()
+	}
+}
+
+func IsAuthPolicyAcceptedAndNotEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1beta2.AuthPolicy) func() bool {
+	return func() bool {
+		return IsAuthPolicyAccepted(ctx, cl, policy)() && !IsAuthPolicyEnforced(ctx, cl, policy)()
+	}
+}
+
+func IsAuthPolicyAccepted(ctx context.Context, cl client.Client, policy *kuadrantv1beta2.AuthPolicy) func() bool {
+	return IsAuthPolicyConditionTrue(ctx, cl, policy, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+}
+
+func IsAuthPolicyEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1beta2.AuthPolicy) func() bool {
+	return IsAuthPolicyConditionTrue(ctx, cl, policy, string(kuadrant.PolicyConditionEnforced))
+}
+
+func IsAuthPolicyEnforcedCondition(ctx context.Context, cl client.Client, key client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) func() bool {
+	return func() bool {
+		p := &kuadrantv1beta2.AuthPolicy{}
+		if err := cl.Get(ctx, key, p); err != nil {
+			return false
+		}
+
+		cond := meta.FindStatusCondition(p.Status.Conditions, string(kuadrant.PolicyConditionEnforced))
+		if cond == nil {
+			return false
+		}
+
+		return cond.Reason == string(reason) && cond.Message == message
+	}
+}
+
+func IsAuthPolicyConditionTrue(ctx context.Context, cl client.Client, policy *kuadrantv1beta2.AuthPolicy, condition string) func() bool {
+	return func() bool {
+		existingPolicy := &kuadrantv1beta2.AuthPolicy{}
+		err := cl.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)
+		return err == nil && meta.IsStatusConditionTrue(existingPolicy.Status.Conditions, condition)
+	}
+}

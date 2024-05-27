@@ -51,6 +51,11 @@ func TestAPIs(t *testing.T) {
 	RunSpecs(t, "Controller Suite on Istio")
 }
 
+const (
+	TestGatewayName   = "test-placed-gateway"
+	TestHTTPRouteName = "toystore-route"
+)
+
 var _ = BeforeSuite(func(ctx SpecContext) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 

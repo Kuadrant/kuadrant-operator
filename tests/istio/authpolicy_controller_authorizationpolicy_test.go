@@ -26,11 +26,6 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-const (
-	testGatewayName   = "toystore-gw"
-	testHTTPRouteName = "toystore-route"
-)
-
 var _ = Describe("AuthPolicy controller managing authorization policy", Ordered, func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
@@ -51,7 +46,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
 
-		gateway := tests.BuildBasicGateway(testGatewayName, testNamespace)
+		gateway := tests.BuildBasicGateway(TestGatewayName, testNamespace)
 		err := k8sClient.Create(ctx, gateway)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -76,7 +71,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 					Group:     gatewayapiv1.GroupName,
 					Kind:      "HTTPRoute",
-					Name:      testHTTPRouteName,
+					Name:      TestHTTPRouteName,
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				},
 				Defaults: &kuadrantv1beta2.AuthPolicyCommonSpec{
@@ -96,7 +91,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 		)
 
 		BeforeEach(func(ctx SpecContext) {
-			route := tests.BuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
+			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -105,7 +100,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = testGatewayName
+				policy.Spec.TargetRef.Name = TestGatewayName
 				policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
 			})
 
@@ -119,7 +114,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 
 		It("authpolicy has rules added", func(ctx SpecContext) {
 			// check istio authorizationpolicy
-			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(testGatewayName, gwPolicy.Spec.TargetRef), Namespace: testNamespace}
+			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(TestGatewayName, gwPolicy.Spec.TargetRef), Namespace: testNamespace}
 			iap := &secv1beta1resources.AuthorizationPolicy{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, iapKey, iap)
@@ -141,7 +136,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 		)
 
 		BeforeEach(func(ctx SpecContext) {
-			route := tests.BuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
+			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -149,7 +144,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			routePolicy = policyFactory(func(policy *kuadrantv1beta2.AuthPolicy) {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "HTTPRoute"
-				policy.Spec.TargetRef.Name = testHTTPRouteName
+				policy.Spec.TargetRef.Name = TestHTTPRouteName
 			})
 
 			err = k8sClient.Create(ctx, routePolicy)
@@ -162,7 +157,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 
 		It("authorization policy has rules added", func(ctx SpecContext) {
 			// check istio authorizationpolicy
-			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(testGatewayName, routePolicy.Spec.TargetRef), Namespace: testNamespace}
+			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(TestGatewayName, routePolicy.Spec.TargetRef), Namespace: testNamespace}
 			iap := &secv1beta1resources.AuthorizationPolicy{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, iapKey, iap)
@@ -184,7 +179,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			Expect(err).ToNot(HaveOccurred())
 
 			// check istio authorizationpolicy
-			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(testGatewayName, routePolicy.Spec.TargetRef), Namespace: testNamespace}
+			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(TestGatewayName, routePolicy.Spec.TargetRef), Namespace: testNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, iapKey, &secv1beta1resources.AuthorizationPolicy{})
 				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
@@ -203,7 +198,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			gwPolicy *kuadrantv1beta2.AuthPolicy
 		)
 		BeforeEach(func(ctx SpecContext) {
-			route := tests.BuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
+			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -212,7 +207,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = testGatewayName
+				policy.Spec.TargetRef.Name = TestGatewayName
 				policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
 			})
 
@@ -226,7 +221,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			routePolicy := policyFactory(func(policy *kuadrantv1beta2.AuthPolicy) {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "HTTPRoute"
-				policy.Spec.TargetRef.Name = testHTTPRouteName
+				policy.Spec.TargetRef.Name = TestHTTPRouteName
 			})
 
 			err = k8sClient.Create(ctx, routePolicy)
@@ -237,7 +232,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			// create second (policyless) httproute
-			otherRoute := tests.BuildBasicHttpRoute("policyless-route", testGatewayName, testNamespace, []string{"*.other"})
+			otherRoute := tests.BuildBasicHttpRoute("policyless-route", TestGatewayName, testNamespace, []string{"*.other"})
 			otherRoute.Spec.Rules = []gatewayapiv1.HTTPRouteRule{
 				{
 					Matches: []gatewayapiv1.HTTPRouteMatch{
@@ -253,7 +248,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 		})
 
 		It("check istio authorizationpolicy", func(ctx SpecContext) {
-			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(testGatewayName, gwPolicy.Spec.TargetRef), Namespace: testNamespace}
+			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(TestGatewayName, gwPolicy.Spec.TargetRef), Namespace: testNamespace}
 			iap := &secv1beta1resources.AuthorizationPolicy{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, iapKey, iap)
@@ -277,7 +272,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 		// Route A -> Gw A
 		// RLP 1 -> Route A
 		BeforeEach(func(ctx SpecContext) {
-			route := tests.BuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
+			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -285,7 +280,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			routePolicy = policyFactory(func(policy *kuadrantv1beta2.AuthPolicy) {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "HTTPRoute"
-				policy.Spec.TargetRef.Name = testHTTPRouteName
+				policy.Spec.TargetRef.Name = TestHTTPRouteName
 				policy.Spec.CommonSpec().RouteSelectors = []kuadrantv1beta2.RouteSelector{
 					{ // does not select any HTTPRouteRule
 						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
@@ -315,7 +310,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			}).WithContext(ctx).Should(BeTrue())
 
 			// check istio authorizationpolicy
-			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(testGatewayName, routePolicy.Spec.TargetRef), Namespace: testNamespace}
+			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(TestGatewayName, routePolicy.Spec.TargetRef), Namespace: testNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, iapKey, &secv1beta1resources.AuthorizationPolicy{})
 				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
@@ -332,7 +327,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 		// Route A -> Gw A
 		// RLP 1 -> Route A
 		BeforeEach(func(ctx SpecContext) {
-			route := tests.BuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
+			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -340,7 +335,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			routePolicy = policyFactory(func(policy *kuadrantv1beta2.AuthPolicy) {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "HTTPRoute"
-				policy.Spec.TargetRef.Name = testHTTPRouteName
+				policy.Spec.TargetRef.Name = TestHTTPRouteName
 				config := policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"]
 				config.RouteSelectors = []kuadrantv1beta2.RouteSelector{
 					{ // does not select any HTTPRouteRule
@@ -372,7 +367,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			}).WithContext(ctx).Should(BeTrue())
 
 			// check istio authorizationpolicy
-			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(testGatewayName, routePolicy.Spec.TargetRef), Namespace: testNamespace}
+			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(TestGatewayName, routePolicy.Spec.TargetRef), Namespace: testNamespace}
 			iap := &secv1beta1resources.AuthorizationPolicy{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, iapKey, iap)
@@ -390,7 +385,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 
 	Context("Complex HTTPRoute with multiple rules and hostnames", func() {
 		BeforeEach(func(ctx SpecContext) {
-			route := tests.BuildMultipleRulesHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com", "*.admin.toystore.com"})
+			route := tests.BuildMultipleRulesHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com", "*.admin.toystore.com"})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -406,7 +401,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check istio authorizationpolicy
-			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
+			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(TestGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
 			iap := &secv1beta1resources.AuthorizationPolicy{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, iapKey, iap)
@@ -465,7 +460,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check istio authorizationpolicy
-			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
+			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(TestGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
 			iap := &secv1beta1resources.AuthorizationPolicy{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, iapKey, iap)
@@ -519,7 +514,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check istio authorizationpolicy
-			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(testGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
+			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(TestGatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
 			iap := &secv1beta1resources.AuthorizationPolicy{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, iapKey, iap)

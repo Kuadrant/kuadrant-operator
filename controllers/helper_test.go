@@ -41,11 +41,6 @@ const (
 	TestHTTPRouteName        = "toystore-route"
 )
 
-const (
-	testGatewayName   = "toystore-gw"
-	testHTTPRouteName = "toystore-route"
-)
-
 func testRLPIsNotAccepted(ctx context.Context, rlpKey client.ObjectKey) func() bool {
 	return func() bool {
 		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}

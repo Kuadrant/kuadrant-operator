@@ -52,7 +52,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
 
 		// create gateway
-		gateway := tests.BuildBasicGateway(testGatewayName, testNamespace, func(gateway *gatewayapiv1.Gateway) {
+		gateway := tests.BuildBasicGateway(TestGatewayName, testNamespace, func(gateway *gatewayapiv1.Gateway) {
 			gateway.Spec.Listeners = []gatewayapiv1.Listener{{
 				Name:     gatewayapiv1.SectionName("test-listener-toystore-com"),
 				Hostname: ptr.To(gatewayapiv1.Hostname("*.toystore.com")),
@@ -66,7 +66,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 
 		// create application
-		route := tests.BuildBasicHttpRoute(testHTTPRouteName, testGatewayName, testNamespace, []string{"*.toystore.com"})
+		route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
 		err = k8sClient.Create(ctx, route)
 		Expect(err).ToNot(HaveOccurred())
 		Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -92,7 +92,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 		if err != nil {
 			return false
 		}
-		routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
+		routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
 		if !found {
 			return false
 		}
@@ -106,7 +106,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 		if err != nil {
 			return false
 		}
-		routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
+		routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
 		if !found {
 			return false
 		}
@@ -151,7 +151,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 						Group:     gatewayapiv1.GroupName,
 						Kind:      "HTTPRoute",
-						Name:      testHTTPRouteName,
+						Name:      TestHTTPRouteName,
 						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 					},
 					Defaults: &v1beta2.AuthPolicyCommonSpec{
@@ -208,7 +208,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 			Eventually(func() bool {
 				return policyAcceptedAndTargetsAffected(ctx, routePolicy1)() &&
 					!tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy2)() &&
-					!routeAffected(ctx, testHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy2))
+					!routeAffected(ctx, TestHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy2))
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
@@ -227,9 +227,9 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 
 			Eventually(func() bool {
 				return !tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy1)() &&
-					routeNotAffected(ctx, testHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy1)) &&
+					routeNotAffected(ctx, TestHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy1)) &&
 					!tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy2)() &&
-					!routeAffected(ctx, testHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy2))
+					!routeAffected(ctx, TestHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy2))
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
@@ -242,11 +242,11 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 
 			Eventually(func() bool { // route is not affected by the policy
 				route := &gatewayapiv1.HTTPRoute{}
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: testHTTPRouteName, Namespace: testNamespace}, route)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: TestHTTPRouteName, Namespace: testNamespace}, route)
 				if err != nil {
 					return false
 				}
-				routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
+				routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
 				return !found || meta.IsStatusConditionFalse(routeParentStatus.Conditions, policyAffectedCondition)
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
@@ -257,12 +257,12 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 				policy.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
 					Group:     gatewayapiv1.GroupName,
 					Kind:      "Gateway",
-					Name:      testGatewayName,
+					Name:      TestGatewayName,
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				}
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(ctx, policy, testHTTPRouteName)).WithContext(ctx).Should(BeTrue())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy, TestHTTPRouteName)).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
 		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func(ctx SpecContext) {
@@ -271,7 +271,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 				policy.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
 					Group:     gatewayapiv1.GroupName,
 					Kind:      "Gateway",
-					Name:      testGatewayName,
+					Name:      TestGatewayName,
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				}
 			})
@@ -282,17 +282,17 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 
 			Eventually(func() bool { // gateway and route not affected by the policy
 				gateway := &gatewayapiv1.Gateway{}
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, gateway)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}, gateway)
 				if err != nil || meta.IsStatusConditionTrue(gateway.Status.Conditions, policyAffectedCondition) {
 					return false
 				}
 
 				route := &gatewayapiv1.HTTPRoute{}
-				err = k8sClient.Get(ctx, client.ObjectKey{Name: testHTTPRouteName, Namespace: testNamespace}, route)
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: TestHTTPRouteName, Namespace: testNamespace}, route)
 				if err != nil {
 					return false
 				}
-				routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
+				routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
 				return !found || meta.IsStatusConditionFalse(routeParentStatus.Conditions, policyAffectedCondition)
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
@@ -302,8 +302,8 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 			Expect(k8sClient.Create(ctx, routePolicy)).To(Succeed())
 			Eventually(policyAcceptedAndTargetsAffected(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 
-			otherRouteName := testHTTPRouteName + "-other"
-			otherRoute := tests.BuildBasicHttpRoute(otherRouteName, testGatewayName, testNamespace, []string{"other.toystore.com"})
+			otherRouteName := TestHTTPRouteName + "-other"
+			otherRoute := tests.BuildBasicHttpRoute(otherRouteName, TestGatewayName, testNamespace, []string{"other.toystore.com"})
 			Expect(k8sClient.Create(ctx, otherRoute)).To(Succeed())
 
 			gatewayPolicy := policyFactory(func(policy *v1beta2.AuthPolicy) {
@@ -311,7 +311,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 				policy.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
 					Group:     gatewayapiv1.GroupName,
 					Kind:      "Gateway",
-					Name:      testGatewayName,
+					Name:      TestGatewayName,
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				}
 			})
@@ -325,7 +325,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 
 			// remove route policy and check if the gateway policy has been rolled out to the status of the newly non-targeted route
 			Expect(k8sClient.Delete(ctx, routePolicy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(ctx, gatewayPolicy, otherRouteName, testHTTPRouteName)).WithContext(ctx).Should(BeTrue())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, gatewayPolicy, otherRouteName, TestHTTPRouteName)).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
 
@@ -347,7 +347,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1.ObjectName(testHTTPRouteName),
+						Name:  gatewayapiv1.ObjectName(TestHTTPRouteName),
 					},
 					Defaults: &v1beta2.RateLimitPolicyCommonSpec{
 						Limits: map[string]v1beta2.Limit{
@@ -395,11 +395,11 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 
 			Eventually(func() bool { // route is not affected by the policy
 				route := &gatewayapiv1.HTTPRoute{}
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: testHTTPRouteName, Namespace: testNamespace}, route)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: TestHTTPRouteName, Namespace: testNamespace}, route)
 				if err != nil {
 					return false
 				}
-				routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
+				routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
 				return !found || meta.IsStatusConditionFalse(routeParentStatus.Conditions, policyAffectedCondition)
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
@@ -410,12 +410,12 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 				policy.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
 					Group:     gatewayapiv1.GroupName,
 					Kind:      "Gateway",
-					Name:      testGatewayName,
+					Name:      TestGatewayName,
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				}
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(ctx, policy, testHTTPRouteName)).WithContext(ctx).Should(BeTrue())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, policy, TestHTTPRouteName)).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
 		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func(ctx SpecContext) {
@@ -424,7 +424,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 				policy.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
 					Group:     gatewayapiv1.GroupName,
 					Kind:      "Gateway",
-					Name:      testGatewayName,
+					Name:      TestGatewayName,
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				}
 			})
@@ -435,17 +435,17 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 
 			Eventually(func() bool { // gateway and route not affected by the policy
 				gateway := &gatewayapiv1.Gateway{}
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, gateway)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}, gateway)
 				if err != nil || meta.IsStatusConditionTrue(gateway.Status.Conditions, policyAffectedCondition) {
 					return false
 				}
 
 				route := &gatewayapiv1.HTTPRoute{}
-				err = k8sClient.Get(ctx, client.ObjectKey{Name: testHTTPRouteName, Namespace: testNamespace}, route)
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: TestHTTPRouteName, Namespace: testNamespace}, route)
 				if err != nil {
 					return false
 				}
-				routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
+				routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
 				return !found || meta.IsStatusConditionFalse(routeParentStatus.Conditions, policyAffectedCondition)
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
@@ -455,8 +455,8 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 			Expect(k8sClient.Create(ctx, routePolicy)).To(Succeed())
 			Eventually(policyAcceptedAndTargetsAffected(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 
-			otherRouteName := testHTTPRouteName + "-other"
-			otherRoute := tests.BuildBasicHttpRoute(otherRouteName, testGatewayName, testNamespace, []string{"other.toystore.com"})
+			otherRouteName := TestHTTPRouteName + "-other"
+			otherRoute := tests.BuildBasicHttpRoute(otherRouteName, TestGatewayName, testNamespace, []string{"other.toystore.com"})
 			Expect(k8sClient.Create(ctx, otherRoute)).To(Succeed())
 
 			gatewayPolicy := policyFactory(func(policy *v1beta2.RateLimitPolicy) {
@@ -464,7 +464,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 				policy.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
 					Group:     gatewayapiv1.GroupName,
 					Kind:      "Gateway",
-					Name:      testGatewayName,
+					Name:      TestGatewayName,
 					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
 				}
 			})
@@ -478,7 +478,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 
 			// remove route policy and check if the gateway policy has been rolled out to the status of the newly non-targeted route
 			Expect(k8sClient.Delete(ctx, routePolicy)).To(Succeed())
-			Eventually(policyAcceptedAndTargetsAffected(ctx, gatewayPolicy, otherRouteName, testHTTPRouteName)).WithContext(ctx).Should(BeTrue())
+			Eventually(policyAcceptedAndTargetsAffected(ctx, gatewayPolicy, otherRouteName, TestHTTPRouteName)).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
 
@@ -487,7 +487,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 
 		// policyFactory builds a standards DNSPolicy object that targets the test gateway by default, with the given mutate functions applied
 		policyFactory := func(mutateFns ...func(policy *v1alpha1.DNSPolicy)) *v1alpha1.DNSPolicy {
-			policy := v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).WithTargetGateway(testGatewayName).WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
+			policy := v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).WithTargetGateway(TestGatewayName).WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
 			for _, mutateFn := range mutateFns {
 				mutateFn(policy)
 			}
@@ -503,15 +503,21 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 			return meta.IsStatusConditionTrue(policy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
 		}
 
+		isDNSPolicyEnforced := func(ctx context.Context, policyKey client.ObjectKey) bool {
+			policy := &v1alpha1.DNSPolicy{}
+			err := k8sClient.Get(ctx, policyKey, policy)
+			if err != nil {
+				return false
+			}
+			return meta.IsStatusConditionTrue(policy.Status.Conditions, string(kuadrant.PolicyConditionEnforced))
+		}
+
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if a DNSPolicy is accepted
 		// and the statuses of its target object has been all updated as affected by the policy
 		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *v1alpha1.DNSPolicy) func() bool {
 			return func() bool {
 				policyKey := client.ObjectKeyFromObject(policy)
-				if !isDNSPolicyAccepted(ctx, policyKey) {
-					return false
-				}
-				return targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef)
+				return isDNSPolicyAccepted(ctx, policyKey) && targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef)
 			}
 		}
 
@@ -529,6 +535,8 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 		It("adds PolicyAffected status condition to the targeted gateway", func(ctx SpecContext) {
 			policy := policyFactory()
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			// policy should not be enforced since DNS Record is not ready because of the missing secret on the MZ
+			Eventually(isDNSPolicyEnforced(ctx, client.ObjectKeyFromObject(policy))).ShouldNot(BeTrue())
 			Eventually(policyAcceptedAndTargetsAffected(ctx, policy)).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
@@ -542,11 +550,11 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 
 			Eventually(func() bool {
 				gateway := &gatewayapiv1.Gateway{}
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, gateway)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}, gateway)
 				if err != nil {
 					return false
 				}
-				condition := meta.FindStatusCondition(gateway.Status.Conditions, testGatewayName)
+				condition := meta.FindStatusCondition(gateway.Status.Conditions, TestGatewayName)
 				return condition == nil || !strings.Contains(condition.Message, policyKey.String()) || condition.Status == metav1.ConditionFalse
 			})
 		}, testTimeOut)
@@ -560,7 +568,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 
 		// policyFactory builds a standards TLSPolicy object that targets the test gateway by default, with the given mutate functions applied
 		policyFactory := func(mutateFns ...func(policy *v1alpha1.TLSPolicy)) *v1alpha1.TLSPolicy {
-			policy := v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).WithTargetGateway(testGatewayName).WithIssuerRef(*issuerRef)
+			policy := v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).WithTargetGateway(TestGatewayName).WithIssuerRef(*issuerRef)
 			for _, mutateFn := range mutateFns {
 				mutateFn(policy)
 			}
@@ -616,11 +624,11 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 
 			Eventually(func() bool {
 				gateway := &gatewayapiv1.Gateway{}
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: testGatewayName, Namespace: testNamespace}, gateway)
+				err := k8sClient.Get(ctx, client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}, gateway)
 				if err != nil {
 					return false
 				}
-				condition := meta.FindStatusCondition(gateway.Status.Conditions, testGatewayName)
+				condition := meta.FindStatusCondition(gateway.Status.Conditions, TestGatewayName)
 				return condition == nil || !strings.Contains(condition.Message, policyKey.String()) || condition.Status == metav1.ConditionFalse
 			})
 		}, testTimeOut)

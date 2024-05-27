@@ -133,10 +133,9 @@ func getIstioConfigObjects(ctx context.Context, cl client.Client) ([]configWrapp
 				// return nil and nil if there's no istiooperator or istio CR
 				logger.Info("Istio installation as GatewayAPI provider not found")
 				return nil, nil
-			} else {
-				// return nil and err if there's an error other than not found (no istio CR)
-				return nil, err
 			}
+			// return nil and err if there's an error other than not found (no istio CR)
+			return nil, err
 		}
 		configsToUpdate = append(configsToUpdate, NewSailWrapper(ist))
 	} else {

@@ -166,7 +166,7 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *LimitadorClusterEnvoyFilterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	ok, err := kuadrantistioutils.IsIstioEnvoyFilterInstalled(mgr.GetRESTMapper())
+	ok, err := kuadrantistioutils.IsEnvoyFilterInstalled(mgr.GetRESTMapper())
 	if err != nil {
 		return err
 	}

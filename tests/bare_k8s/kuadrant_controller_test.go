@@ -11,7 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/controllers"
+	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
 var _ = Describe("Kuadrant controller is disabled", func() {
@@ -22,11 +22,11 @@ var _ = Describe("Kuadrant controller is disabled", func() {
 	)
 
 	BeforeEach(func(ctx SpecContext) {
-		testNamespace = controllers.CreateNamespace(ctx, testClient())
+		testNamespace = tests.CreateNamespace(ctx, testClient())
 	})
 
 	AfterEach(func(ctx SpecContext) {
-		controllers.DeleteNamespace(ctx, testClient(), testNamespace)
+		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
 	Context("when default kuadrant CR is created", func() {

@@ -140,6 +140,7 @@ func main() {
 
 	if err = (&controllers.KuadrantReconciler{
 		BaseReconciler: kuadrantBaseReconciler,
+		RestMapper:     mgr.GetRESTMapper(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Kuadrant")
 		os.Exit(1)

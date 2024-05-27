@@ -61,7 +61,7 @@ func createKuadrantAuthorizer(namespace string) *istiomeshv1alpha1.MeshConfig_Ex
 	}
 }
 
-// HasKuadrantAuthorizer returns true if the IstioOperator has the Kuadrant ExtensionProvider
+// hasKuadrantAuthorizer returns true if the IstioOperator has the Kuadrant ExtensionProvider
 func hasKuadrantAuthorizer(configWrapper configWrapper, authorizer kuadrantAuthorizer) (bool, error) {
 	config, err := configWrapper.GetMeshConfig()
 	if err != nil {

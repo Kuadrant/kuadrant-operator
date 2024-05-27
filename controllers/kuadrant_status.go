@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -19,6 +20,7 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
 )
 
 const (
@@ -97,7 +99,18 @@ func (r *KuadrantReconciler) readyCondition(ctx context.Context, kObj *kuadrantv
 		return cond, nil
 	}
 
-	reason, err := r.checkLimitadorReady(ctx, kObj)
+	reason, err := r.checkGatewayProviders()
+	if err != nil {
+		return nil, err
+	}
+	if reason != nil {
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "GatewayAPIPRoviderNotFound"
+		cond.Message = *reason
+		return cond, nil
+	}
+
+	reason, err = r.checkLimitadorReady(ctx, kObj)
 	if err != nil {
 		return nil, err
 	}
@@ -172,4 +185,33 @@ func (r *KuadrantReconciler) checkAuthorinoAvailable(ctx context.Context, kObj *
 	}
 
 	return nil, nil
+}
+
+func (r *KuadrantReconciler) checkGatewayProviders() (*string, error) {
+	anyProviderFunc := func(checks []func(restMapper meta.RESTMapper) (bool, error)) (bool, error) {
+		for _, check := range checks {
+			ok, err := check(r.RestMapper)
+			if err != nil {
+				return false, err
+			}
+			if ok {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+
+	anyProvider, err := anyProviderFunc([]func(restMapper meta.RESTMapper) (bool, error){
+		kuadrantistioutils.IsIstioInstalled,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if anyProvider {
+		return nil, nil
+	}
+
+	return ptr.To("GatewayAPI provider not found"), nil
 }

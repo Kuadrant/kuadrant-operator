@@ -7,14 +7,16 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Kuadrant controller is disabled", func() {
+var _ = Describe("Kuadrant controller on istio", func() {
 	var (
 		testNamespace    string
 		kuadrantName     string = "local"
@@ -30,7 +32,7 @@ var _ = Describe("Kuadrant controller is disabled", func() {
 	}, afterEachTimeOut)
 
 	Context("when default kuadrant CR is created", func() {
-		It("Status is not populated", func(ctx SpecContext) {
+		It("Status is ready", func(ctx SpecContext) {
 			kuadrantCR := &kuadrantv1beta1.Kuadrant{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "Kuadrant",
@@ -43,12 +45,16 @@ var _ = Describe("Kuadrant controller is disabled", func() {
 			}
 			Expect(testClient().Create(ctx, kuadrantCR)).ToNot(HaveOccurred())
 
-			kObj := &kuadrantv1beta1.Kuadrant{}
-			err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kObj)
-			Expect(err).ToNot(HaveOccurred())
-			// expected empty. The controller should not have updated it
-			// TODO: status should not be empty
-			Expect(kObj.Status).To(Equal(kuadrantv1beta1.KuadrantStatus{}))
+			Eventually(func(g Gomega) {
+				kObj := &kuadrantv1beta1.Kuadrant{}
+				err := testClient().Get(ctx, client.ObjectKeyFromObject(kuadrantCR), kObj)
+				g.Expect(err).ToNot(HaveOccurred())
+				cond := meta.FindStatusCondition(kObj.Status.Conditions, string(controllers.ReadyConditionType))
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(cond.Reason).To(Equal("Ready"))
+				g.Expect(cond.Message).To(Equal("Kuadrant is ready"))
+			}, time.Minute, 15*time.Second).WithContext(ctx).Should(Succeed())
 		})
 	})
 })

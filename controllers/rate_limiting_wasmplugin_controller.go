@@ -366,7 +366,7 @@ func addHTTPRouteByGatewayIndexer(mgr ctrl.Manager, baseLogger logr.Logger) erro
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RateLimitingWASMPluginReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	ok, err := kuadrantistioutils.IsIstioWASMPluginInstalled(mgr.GetRESTMapper())
+	ok, err := kuadrantistioutils.IsWASMPluginInstalled(mgr.GetRESTMapper())
 	if err != nil {
 		return err
 	}

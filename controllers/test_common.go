@@ -164,6 +164,7 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	err = (&KuadrantReconciler{
 		BaseReconciler: kuadrantBaseReconciler,
+		RestMapper:     mgr.GetRESTMapper(),
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())

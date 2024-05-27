@@ -120,7 +120,7 @@ func getIstioConfigObjects(ctx context.Context, cl client.Client) ([]configWrapp
 	iop := &iopv1alpha1.IstioOperator{}
 	istKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
 	err := cl.Get(ctx, istKey, iop)
-	// TODO(eguzki): burn this spaghetti code
+	// TODO(eguzki): 🔥 this spaghetti code 🔥
 	if err == nil {
 		configsToUpdate = append(configsToUpdate, NewOperatorWrapper(iop))
 	} else if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {

@@ -70,7 +70,7 @@ export CONTAINER_RUNTIME_BIN=$(containerRuntime)
 export KIND_BIN=kind
 export HELM_BIN=helm
 export KUSTOMIZE_BIN=$(dockerBinCmd "kustomize")
-export SUBNET_OFFSET=0
+export SUBNET_OFFSET=1
 export HUB=1
 
 YQ_BIN=$(dockerBinCmd "yq")
@@ -402,7 +402,7 @@ if cluster_exists "${KUADRANT_CLUSTER_NAME}"; then
             next_cluster_number=$((last_number + 1))
         fi
         KUADRANT_CLUSTER_NAME="${KUADRANT_CLUSTER_NAME}-${next_cluster_number}"
-        SUBNET_OFFSET=${next_cluster_number}
+        SUBNET_OFFSET=$((SUBNET_OFFSET + 1))
         HUB=0
         echo "Next cluster number will be ${KUADRANT_CLUSTER_NAME}."
         read -r -p "Is it okay to create the cluster '${KUADRANT_CLUSTER_NAME}'? (y/N): " confirm </dev/tty

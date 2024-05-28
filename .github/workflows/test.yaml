@@ -221,7 +221,7 @@ jobs:
           kubectl cluster-info dump
       - name: Run make istio-env-setup
         run: |
-          make make istio-env-setup
+          make istio-env-setup
       - name: Run integration tests
         run: |
           make test-istio-env-integration

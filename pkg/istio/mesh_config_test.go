@@ -36,7 +36,7 @@ func (c *stubbedConfigWrapper) GetConfigObject() client.Object {
 }
 
 func TestKuadrantAuthorizer_GetExtensionProvider(t *testing.T) {
-	authorizer := newKuadrantAuthorizer("default")
+	authorizer := NewKuadrantAuthorizer("default")
 	provider := authorizer.GetExtensionProvider()
 
 	assert.Equal(t, provider.Name, ExtAuthorizerName)
@@ -44,22 +44,22 @@ func TestKuadrantAuthorizer_GetExtensionProvider(t *testing.T) {
 }
 
 func TestHasKuadrantAuthorizer(t *testing.T) {
-	authorizer := newKuadrantAuthorizer("default")
+	authorizer := NewKuadrantAuthorizer("default")
 	configWrapper := &stubbedConfigWrapper{getStubbedMeshConfig()}
 
-	hasAuthorizer, err := hasKuadrantAuthorizer(configWrapper, *authorizer)
+	hasAuthorizer, err := HasKuadrantAuthorizer(configWrapper, *authorizer)
 
 	assert.NilError(t, err)
 	assert.Equal(t, hasAuthorizer, false)
 
 	configWrapper.istioMeshConfig.ExtensionProviders = append(configWrapper.istioMeshConfig.ExtensionProviders, authorizer.GetExtensionProvider())
-	hasAuthorizer, err = hasKuadrantAuthorizer(configWrapper, *authorizer)
+	hasAuthorizer, err = HasKuadrantAuthorizer(configWrapper, *authorizer)
 	assert.NilError(t, err)
 	assert.Equal(t, hasAuthorizer, true)
 }
 
 func TestRegisterKuadrantAuthorizer(t *testing.T) {
-	authorizer := newKuadrantAuthorizer("default")
+	authorizer := NewKuadrantAuthorizer("default")
 	configWrapper := &stubbedConfigWrapper{getStubbedMeshConfig()}
 
 	err := RegisterKuadrantAuthorizer(configWrapper, authorizer)
@@ -70,7 +70,7 @@ func TestRegisterKuadrantAuthorizer(t *testing.T) {
 }
 
 func TestUnregisterKuadrantAuthorizer(t *testing.T) {
-	authorizer := newKuadrantAuthorizer("default")
+	authorizer := NewKuadrantAuthorizer("default")
 	configWrapper := &stubbedConfigWrapper{getStubbedMeshConfig()}
 
 	err := RegisterKuadrantAuthorizer(configWrapper, authorizer)
@@ -241,8 +241,7 @@ func TestConfigMapWrapper_SetMeshConfig(t *testing.T) {
 
 func TestOSSMControlPlaneWrapper_GetConfigObject(t *testing.T) {
 	ossmControlPlane := &maistrav2.ServiceMeshControlPlane{}
-	wrapper := newOSSMControlPlaneWrapper(ossmControlPlane)
-
+	wrapper := NewOSSMControlPlaneWrapper(ossmControlPlane)
 	assert.Equal(t, wrapper.GetConfigObject(), ossmControlPlane)
 }
 
@@ -252,7 +251,7 @@ func TestOSSMControlPlaneWrapper_GetMeshConfig(t *testing.T) {
 	err := ossmControlPlane.Spec.TechPreview.SetField("meshConfig", getStubbedMeshConfigStruct().AsMap())
 	assert.NilError(t, err)
 
-	wrapper := newOSSMControlPlaneWrapper(ossmControlPlane)
+	wrapper := NewOSSMControlPlaneWrapper(ossmControlPlane)
 	meshConfig, _ := wrapper.GetMeshConfig()
 
 	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, "custom-authorizer")
@@ -266,7 +265,7 @@ func TestOSSMControlPlaneWrapper_SetMeshConfig(t *testing.T) {
 	err := ossmControlPlane.Spec.TechPreview.SetField("meshConfig", emptyConfig.AsMap())
 	assert.NilError(t, err)
 
-	wrapper := newOSSMControlPlaneWrapper(ossmControlPlane)
+	wrapper := NewOSSMControlPlaneWrapper(ossmControlPlane)
 
 	stubbedMeshConfig := getStubbedMeshConfig()
 	err = wrapper.SetMeshConfig(stubbedMeshConfig)

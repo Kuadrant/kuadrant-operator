@@ -131,7 +131,7 @@ jobs:
           kubectl cluster-info dump
       - name: Run make k8s-env-setup
         run: |
-          make make k8s-env-setup
+          make k8s-env-setup
       - name: Run integration tests
         run: |
           make test-bare-k8s-integration

@@ -176,7 +176,7 @@ jobs:
           kubectl cluster-info dump
       - name: Run make gatewayapi-env-setup
         run: |
-          make make gatewayapi-env-setup
+          make gatewayapi-env-setup
       - name: Run integration tests
         run: |
           make test-gatewayapi-env-integration

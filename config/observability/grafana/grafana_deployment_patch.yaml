@@ -50,24 +50,38 @@
 - op: add
   path: /spec/template/spec/volumes/-
   value:
-    name: grafana-appdeveloper
+    name: grafana-app-developer
     configMap:
       defaultMode: 420
-      name: grafana-appdeveloper
+      name: grafana-app-developer
 - op: add
   path: /spec/template/spec/volumes/-
   value:
-    name: grafana-platformengineer
+    name: grafana-platform-engineer
     configMap:
       defaultMode: 420
-      name: grafana-platformengineer
+      name: grafana-platform-engineer
 - op: add
   path: /spec/template/spec/volumes/-
   value:
-    name: grafana-businessuser
+    name: grafana-business-user
     configMap:
       defaultMode: 420
-      name: grafana-businessuser
+      name: grafana-business-user
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: grafana-controller-resources
+    configMap:
+      defaultMode: 420
+      name: grafana-controller-resources
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: grafana-controller-runtime
+    configMap:
+      defaultMode: 420
+      name: grafana-controller-runtime          
 - op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
@@ -97,7 +111,7 @@
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
     name: grafana-tcproutes
-    mountPath: /grafana-dashboard-definitions/0/grafana-tcpcroutes
+    mountPath: /grafana-dashboard-definitions/0/grafana-tcproutes
 - op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
@@ -106,15 +120,25 @@
 - op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
-    name: grafana-appdeveloper
-    mountPath: /grafana-dashboard-definitions/0/grafana-appdeveloper
+    name: grafana-app-developer
+    mountPath: /grafana-dashboard-definitions/0/grafana-app-developer
 - op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
-    name: grafana-businessuser
-    mountPath: /grafana-dashboard-definitions/0/grafana-businessuser
+    name: grafana-business-user
+    mountPath: /grafana-dashboard-definitions/0/grafana-business-user
 - op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
-    name: grafana-platformengineer
-    mountPath: /grafana-dashboard-definitions/0/grafana-platformengineer
+    name: grafana-platform-engineer
+    mountPath: /grafana-dashboard-definitions/0/grafana-platform-engineer
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: grafana-controller-runtime
+    mountPath: /grafana-dashboard-definitions/0/grafana-controller-runtime
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: grafana-controller-resources
+    mountPath: /grafana-dashboard-definitions/0/grafana-controller-resources

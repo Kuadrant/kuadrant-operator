@@ -750,7 +750,7 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "count(gatewayapi_gateway_info unless (gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"} * on(name, exported_namespace, instance) group_left gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Programmed\"})\nor ignoring(type)\ngatewayapi_gateway_info unless (gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"} * on(name, exported_namespace, instance) group_left gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Accepted\"}))",
+          "expr": "count(\n(gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"} * on(name, exported_namespace, instance) group_left gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Programmed\"} < 1)\nor ignoring(type) \n(gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"} * on(name, exported_namespace, instance) group_left gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Accepted\"} < 1)\n)",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -1556,8 +1556,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1737,8 +1736,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",

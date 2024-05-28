@@ -284,6 +284,8 @@
               "__name__ 1": true,
               "__name__ 2": true,
               "__name__ 3": true,
+              "cluster_id 2": true,
+              "cluster_id 3": true,
               "container 1": true,
               "container 2": true,
               "container 3": true,
@@ -373,6 +375,7 @@
               "Value #B": "Programmed",
               "Value #C": "Accepted",
               "__name__ 3": "",
+              "cluster_id 1": "Cluster ID",
               "exported_namespace 1": "Namespace",
               "gatewayclass_name": "Gateway Class",
               "job 1": "",
@@ -612,10 +615,12 @@
             },
             "renameByName": {
               "Value #A": "",
+              "cluster_id": "Cluster ID",
               "customresource_kind": "Kind",
               "exported_namespace": "Namespace",
               "name": "Name",
               "namespace": "Namespace",
+              "receive": "",
               "target_kind": "Target Kind",
               "target_name": "Target Name"
             }
@@ -855,21 +860,22 @@
       "title": "APIs/HTTPRoutes",
       "transformations": [
         {
-          "id": "seriesToColumns",
+          "id": "concatenate",
           "options": {
-            "byField": "name"
+            "frameNameLabel": "frame",
+            "frameNameMode": "drop"
           }
         },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time 1": true,
-              "Time 2": true,
+              "Time": true,
               "Value #A": true,
               "Value #B": true,
               "__name__ 1": true,
               "__name__ 2": true,
+              "cluster_id 2": true,
               "container 1": true,
               "container 2": true,
               "customresource_group 1": true,
@@ -878,67 +884,66 @@
               "customresource_kind 2": true,
               "customresource_version 1": true,
               "customresource_version 2": true,
-              "exported_namespace 2": true,
               "instance 1": true,
               "instance 2": true,
               "job 1": true,
               "job 2": true,
+              "name 1": true,
+              "name 2": true,
               "namespace 1": false,
               "namespace 2": true,
               "prometheus 1": true,
-              "prometheus 2": true
+              "prometheus 2": true,
+              "receive 1": true,
+              "receive 2": true,
+              "replica 1": true,
+              "replica 2": true,
+              "service": true,
+              "tenant_id 1": true,
+              "tenant_id 2": true
             },
             "indexByName": {
-              "Time 1": 1,
-              "Time 2": 14,
-              "Value #A": 13,
-              "Value #B": 26,
-              "__name__ 1": 2,
-              "__name__ 2": 15,
-              "container 1": 3,
-              "container 2": 16,
-              "customresource_group 1": 4,
-              "customresource_group 2": 17,
-              "customresource_kind 1": 5,
-              "customresource_kind 2": 18,
-              "customresource_version 1": 6,
-              "customresource_version 2": 19,
-              "deployment": 20,
-              "exported_namespace 1": 8,
-              "exported_namespace 2": 21,
+              "Time": 0,
+              "Value #A": 17,
+              "Value #B": 33,
+              "__name__ 1": 1,
+              "__name__ 2": 18,
+              "cluster_id 1": 9,
+              "cluster_id 2": 19,
+              "container 1": 2,
+              "container 2": 20,
+              "customresource_group 1": 3,
+              "customresource_group 2": 21,
+              "customresource_kind 1": 4,
+              "customresource_kind 2": 22,
+              "customresource_version 1": 5,
+              "customresource_version 2": 23,
+              "deployment": 6,
               "hostname": 7,
-              "instance 1": 9,
-              "instance 2": 22,
-              "job 1": 10,
-              "job 2": 23,
-              "name": 0,
-              "namespace 1": 11,
-              "namespace 2": 24,
-              "prometheus 1": 12,
-              "prometheus 2": 25
+              "instance 1": 10,
+              "instance 2": 24,
+              "job 1": 11,
+              "job 2": 25,
+              "name 1": 12,
+              "name 2": 26,
+              "namespace 1": 8,
+              "namespace 2": 27,
+              "prometheus 1": 13,
+              "prometheus 2": 28,
+              "receive 1": 14,
+              "receive 2": 29,
+              "replica 1": 15,
+              "replica 2": 30,
+              "service": 31,
+              "tenant_id 1": 16,
+              "tenant_id 2": 32
             },
             "renameByName": {
-              "Time 1": "",
-              "deployment": "Deployment Name",
-              "exported_namespace 1": "Namespace",
-              "exported_namespace 2": "",
+              "cluster_id 1": "Cluster ID",
+              "deployment": "Deployment",
               "hostname": "Hostname",
-              "job 1": "",
-              "name": "Name",
-              "owner": "Owner"
-            }
-          }
-        },
-        {
-          "id": "filterFieldsByName",
-          "options": {
-            "include": {
-              "names": [
-                "Name",
-                "Hostname",
-                "Namespace",
-                "Deployment Name"
-              ]
+              "namespace 1": "Namespace",
+              "prometheus 2": ""
             }
           }
         }
@@ -1074,6 +1079,7 @@
               "Value #A": true,
               "Value #B": true,
               "Value #C": true,
+              "Value #D": true,
               "__name__": true,
               "container": true,
               "customresource_group": true,
@@ -1108,6 +1114,7 @@
             },
             "renameByName": {
               "Value #A": "",
+              "cluster_id": "Cluster ID",
               "customresource_kind": "Kind",
               "exported_namespace": "Namespace",
               "name": "Name",
@@ -1208,7 +1215,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "legendFormat": "API: {{name}}",
           "range": true,
           "refId": "A"
@@ -1303,7 +1310,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(sum(irate(container_network_receive_bytes_total{exported_namespace=~\"$api_policy_namespace\"}[1h:5m])\n* on (namespace, exported_namespace,pod)\ngroup_left(workload,workload_type) namespace_workload_pod:kube_pod_owner:relabel{exported_namespace=~\"$api_policy_namespace\", workload=~\".+\"}) by (workload)) * on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "(sum(irate(container_network_receive_bytes_total{exported_namespace=~\"$api_policy_namespace\"}[1h:5m])\n* on (namespace, exported_namespace,pod)\ngroup_left(workload,workload_type) (group without(cluster_id) (namespace_workload_pod:kube_pod_owner:relabel{exported_namespace=~\"$api_policy_namespace\", workload=~\".+\"}))) by (workload)) * on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"service\", \"(.+)\")))",
           "legendFormat": "API: {{workload}}",
           "range": true,
           "refId": "A"
@@ -1396,7 +1403,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "legendFormat": "Total Errors: {{name}} ",
           "range": true,
           "refId": "A"
@@ -1407,7 +1414,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "4xx: {{name}} ",
           "range": true,
@@ -1419,7 +1426,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "5xx: {{name}} ",
           "range": true,
@@ -1431,7 +1438,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"404\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"404\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "404: {{name}}",
           "range": true,
@@ -1443,7 +1450,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"401\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"401\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "401: {{name}}",
           "range": true,
@@ -1455,7 +1462,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"429\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"429\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "429: {{name}}",
           "range": true,
@@ -1467,7 +1474,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"500\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"500\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "500: {{name}}",
           "range": true,
@@ -1479,7 +1486,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"501\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"501\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "501: {{name}}",
           "range": true,
@@ -1491,7 +1498,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"503\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"503\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "503: {{name}}",
           "range": true,

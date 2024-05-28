@@ -525,7 +525,7 @@ success "observability stack installed successfully."
 # Patch prometheus to remote write metrics to thanos in hub
 info "Patching prometheus remote write config in ${KUADRANT_CLUSTER_NAME}..."
 THANOS_RECEIVE_ROUTER_IP=$(kubectl --context="kind-$KUADRANT_CLUSTER_NAME_BASE" -n monitoring get svc thanos-receive-router-lb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-kubectl -n monitoring patch prometheus k8s --type='merge' -p '{"spec":{"remoteWrite":[{"url":"http://'"$THANOS_RECEIVE_ROUTER_IP"':19291/api/v1/receive"}]}}'
+kubectl -n monitoring patch prometheus k8s --type='merge' -p '{"spec":{"remoteWrite":[{"url":"http://'"$THANOS_RECEIVE_ROUTER_IP"':19291/api/v1/receive", "writeRelabelConfigs":[{"action":"replace", "replacement":"'"$KUADRANT_CLUSTER_NAME"'", "targetLabel":"cluster_id"}]}]}}'
 success "prometheus remote write config patched successfully."
 
 info "✨🌟 Setup Complete! Your Kuadrant Quick Start environment has been successfully created. 🌟✨"

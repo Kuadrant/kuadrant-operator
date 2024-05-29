@@ -4,11 +4,13 @@ package targetstatus
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/util/rand"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
@@ -28,14 +30,19 @@ import (
 	"github.com/kuadrant/kuadrant-operator/test"
 )
 
-var _ = Describe("Target status reconciler", Ordered, func() {
+var _ = Describe("Target status reconciler", func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 	var (
 		testNamespace string
+		gwHost        = fmt.Sprintf("*.toystore-%s.com", rand.String(6))
 	)
+
+	randomHostFromGWHost := func() string {
+		return strings.Replace(gwHost, "*", rand.String(6), 1)
+	}
 
 	BeforeEach(func(ctx SpecContext) {
 		// create namespace
@@ -45,7 +52,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 		gateway := test.BuildBasicGateway(test.GatewayName, testNamespace, func(gateway *gatewayapiv1.Gateway) {
 			gateway.Spec.Listeners = []gatewayapiv1.Listener{{
 				Name:     gatewayapiv1.SectionName("test-listener-toystore-com"),
-				Hostname: ptr.To(gatewayapiv1.Hostname("*.toystore.com")),
+				Hostname: ptr.To(gatewayapiv1.Hostname(gwHost)),
 				Port:     gatewayapiv1.PortNumber(80),
 				Protocol: gatewayapiv1.HTTPProtocolType,
 			}}
@@ -56,7 +63,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 		Eventually(test.GatewayIsReady(k8sClient, gateway)).WithContext(ctx).Should(BeTrue())
 
 		// create application
-		route := test.BuildBasicHTTPRoute(test.HTTPRouteName, test.GatewayName, testNamespace, []string{"*.toystore.com"})
+		route := test.BuildBasicHTTPRoute(test.HTTPRouteName, test.GatewayName, testNamespace, []string{randomHostFromGWHost()})
 		err = k8sClient.Create(ctx, route)
 		Expect(err).ToNot(HaveOccurred())
 		Eventually(test.RouteIsAccepted(k8sClient, client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -290,7 +297,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 			Eventually(policyAcceptedAndTargetsAffected(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			otherRouteName := test.HTTPRouteName + "-other"
-			otherRoute := test.BuildBasicHTTPRoute(otherRouteName, test.GatewayName, testNamespace, []string{"other.toystore.com"})
+			otherRoute := test.BuildBasicHTTPRoute(otherRouteName, test.GatewayName, testNamespace, []string{randomHostFromGWHost()})
 			Expect(k8sClient.Create(ctx, otherRoute)).To(Succeed())
 
 			gatewayPolicy := policyFactory(func(policy *v1beta2.AuthPolicy) {
@@ -443,7 +450,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 			Eventually(policyAcceptedAndTargetsAffected(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			otherRouteName := test.HTTPRouteName + "-other"
-			otherRoute := test.BuildBasicHTTPRoute(otherRouteName, test.GatewayName, testNamespace, []string{"other.toystore.com"})
+			otherRoute := test.BuildBasicHTTPRoute(otherRouteName, test.GatewayName, testNamespace, []string{randomHostFromGWHost()})
 			Expect(k8sClient.Create(ctx, otherRoute)).To(Succeed())
 
 			gatewayPolicy := policyFactory(func(policy *v1beta2.RateLimitPolicy) {
@@ -511,7 +518,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 		var managedZone *kuadrantdnsv1alpha1.ManagedZone
 
 		BeforeEach(func(ctx SpecContext) {
-			managedZone = test.BuildManagedZone("mz-toystore-com", testNamespace, "toystore.com")
+			managedZone = test.BuildManagedZone("mz-toystore-com", testNamespace, strings.Replace(gwHost, "*.", "", 1))
 			Expect(k8sClient.Create(ctx, managedZone)).To(Succeed())
 		})
 

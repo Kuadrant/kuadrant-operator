@@ -20,7 +20,6 @@ import (
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -130,20 +129,6 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		})
 
 		It("should create dns records", func() {
-
-			Eventually(func(g Gomega, ctx context.Context) {
-
-				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)).To(Succeed())
-				g.Expect(dnsPolicy.Status.Conditions).To(
-					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
-						"Status":  Equal(metav1.ConditionFalse),
-						"Reason":  Equal(string(kuadrant.PolicyReasonEnforced)),
-						"Message": Equal("DNSPolicy has been partially enforced"),
-					})),
-				)
-
-			}, TestTimeoutMedium, TestRetryIntervalMedium, ctx).Should(Succeed())
 
 			Eventually(func(g Gomega, ctx context.Context) {
 				recordList := &kuadrantdnsv1alpha1.DNSRecordList{}

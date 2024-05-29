@@ -88,12 +88,15 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 		}
 	}
 
-	limitadorContainsLimit := func(ctx context.Context, limit limitadorv1alpha1.RateLimit) func(g Gomega) {
+	limitadorContainsLimit := func(ctx context.Context, limits ...limitadorv1alpha1.RateLimit) func(g Gomega) {
 		return func(g Gomega) {
 			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
 			existingLimitador := &limitadorv1alpha1.Limitador{}
 			g.Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
-			g.Expect(existingLimitador.Spec.Limits).To(ContainElements(limit))
+			for i := range limits {
+				limit := limits[i]
+				g.Expect(existingLimitador.Spec.Limits).To(ContainElements(limit))
+			}
 		}
 	}
 
@@ -483,7 +486,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(routeRLPKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
 			})).WithContext(ctx).Should(Succeed())
@@ -540,7 +543,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(routeRLPKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
 			})).WithContext(ctx).Should(Succeed())
@@ -602,7 +605,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(routeRLPKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
 			})).WithContext(ctx).Should(Succeed())
@@ -628,7 +631,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				MaxValue:   1,
 				Seconds:    180,
 				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(gwRLPKey, "l1"))},
+				Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(routeRLPKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
 			})).WithContext(ctx).Should(Succeed())
@@ -1207,6 +1210,148 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpAKey)).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
+	})
+
+	Context("HTTPRoute with multiple gateway parents", func() {
+		var (
+			gatewayAName        = "gateway-a"
+			gatewayBName        = "gateway-b"
+			targetedRouteName   = "targeted-route"
+			untargetedRouteName = "untargeted-route"
+
+			gatewayA        *gatewayapiv1.Gateway
+			gatewayB        *gatewayapiv1.Gateway
+			targetedRoute   *gatewayapiv1.HTTPRoute
+			untargetedRoute *gatewayapiv1.HTTPRoute
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			gatewayA = tests.BuildBasicGateway(gatewayAName, testNamespace, func(g *gatewayapiv1.Gateway) {
+				g.Spec.Listeners[0].Hostname = ptr.To(gatewayapiv1.Hostname("*.a.example.com"))
+			})
+			err := k8sClient.Create(ctx, gatewayA)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(tests.GatewayIsReady(ctx, testClient(), gatewayA)).WithContext(ctx).Should(BeTrue())
+
+			gatewayB = tests.BuildBasicGateway(gatewayBName, testNamespace, func(g *gatewayapiv1.Gateway) {
+				g.Spec.Listeners[0].Hostname = ptr.To(gatewayapiv1.Hostname("*.b.example.com"))
+			})
+			err = k8sClient.Create(ctx, gatewayB)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(tests.GatewayIsReady(ctx, testClient(), gatewayB)).WithContext(ctx).Should(BeTrue())
+
+			gatewayParentsFunc := func(r *gatewayapiv1.HTTPRoute) {
+				r.Spec.ParentRefs = []gatewayapiv1.ParentReference{
+					{Name: gatewayapiv1.ObjectName(gatewayAName)},
+					{Name: gatewayapiv1.ObjectName(gatewayBName)},
+				}
+			}
+
+			targetedRoute = tests.BuildBasicHttpRoute(targetedRouteName, gatewayAName, testNamespace, []string{"targeted.a.example.com", "targeted.b.example.com"}, gatewayParentsFunc)
+			err = k8sClient.Create(ctx, targetedRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(targetedRoute))).WithContext(ctx).Should(BeTrue())
+
+			untargetedRoute = tests.BuildBasicHttpRoute(untargetedRouteName, gatewayAName, testNamespace, []string{"untargeted.a.example.com", "untargeted.b.example.com"}, gatewayParentsFunc)
+			err = k8sClient.Create(ctx, untargetedRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(untargetedRoute))).WithContext(ctx).Should(BeTrue())
+		})
+
+		It("It defines route policy limits with gateway policy overrides", func(ctx SpecContext) {
+			rlpGatewayA := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.ObjectMeta.Name = gatewayAName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gatewayAName)
+				policy.Spec.Defaults = nil
+				policy.Spec.Overrides = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"gw-a-1000rps": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1000, Duration: 1, Unit: "second",
+								},
+							},
+						},
+					},
+				}
+			})
+			err := k8sClient.Create(ctx, rlpGatewayA)
+			Expect(err).ToNot(HaveOccurred())
+
+			rlpGatewayB := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.ObjectMeta.Name = gatewayBName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gatewayBName)
+				policy.Spec.Defaults = nil
+				policy.Spec.Overrides = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"gw-b-100rps": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 100, Duration: 1, Unit: "second",
+								},
+							},
+						},
+					},
+				}
+			})
+			err = k8sClient.Create(ctx, rlpGatewayB)
+			Expect(err).ToNot(HaveOccurred())
+
+			rlpTargetedRoute := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.ObjectMeta.Name = targetedRouteName
+				policy.Spec.TargetRef.Kind = "HTTPRoute"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(targetedRouteName)
+				policy.Spec.CommonSpec().Limits = map[string]kuadrantv1beta2.Limit{
+					"route-10rps": {
+						Rates: []kuadrantv1beta2.Rate{
+							{
+								Limit: 10, Duration: 1, Unit: "second",
+							},
+						},
+					},
+				}
+			})
+			err = k8sClient.Create(ctx, rlpTargetedRoute)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(limitadorContainsLimit(
+				ctx,
+				limitadorv1alpha1.RateLimit{
+					MaxValue:   1000,
+					Seconds:    1,
+					Namespace:  rlptools.LimitsNamespaceFromRLP(rlpTargetedRoute),
+					Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(client.ObjectKeyFromObject(rlpTargetedRoute), "gw-a-1000rps"))},
+					Variables:  []string{},
+					Name:       rlptools.LimitsNameFromRLP(rlpTargetedRoute),
+				},
+				limitadorv1alpha1.RateLimit{
+					MaxValue:   100,
+					Seconds:    1,
+					Namespace:  rlptools.LimitsNamespaceFromRLP(rlpTargetedRoute),
+					Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(client.ObjectKeyFromObject(rlpTargetedRoute), "gw-b-100rps"))},
+					Variables:  []string{},
+					Name:       rlptools.LimitsNameFromRLP(rlpTargetedRoute),
+				},
+				limitadorv1alpha1.RateLimit{ // FIXME(@guicassolato): we need to create one limit definition per gateway × route combination, not one per gateway × policy combination
+					MaxValue:   1000,
+					Seconds:    1,
+					Namespace:  rlptools.LimitsNamespaceFromRLP(rlpGatewayA),
+					Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(client.ObjectKeyFromObject(rlpGatewayA), "gw-a-1000rps"))},
+					Variables:  []string{},
+					Name:       rlptools.LimitsNameFromRLP(rlpGatewayA),
+				},
+				limitadorv1alpha1.RateLimit{
+					MaxValue:   100,
+					Seconds:    1,
+					Namespace:  rlptools.LimitsNamespaceFromRLP(rlpGatewayB),
+					Conditions: []string{fmt.Sprintf(`%s == "1"`, rlptools.LimitNameToLimitadorIdentifier(client.ObjectKeyFromObject(rlpGatewayB), "gw-b-100rps"))},
+					Variables:  []string{},
+					Name:       rlptools.LimitsNameFromRLP(rlpGatewayB),
+				},
+			)).WithContext(ctx).Should(Succeed())
+		})
 	})
 })
 

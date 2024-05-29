@@ -115,7 +115,7 @@ func (r *DNSPolicyReconciler) enforcedCondition(recordsList *kuadrantdnsv1alpha1
 				controlled = true
 				// if at least one record not ready the policy is not enforced
 				for _, condition := range record.Status.Conditions {
-					if condition.Type == string(kuadrantdnsv1alpha1.ConditionTypeReady) && condition.Status == metav1.ConditionFalse {
+					if condition.Type == string(v1alpha2.PolicyConditionAccepted) && condition.Status == metav1.ConditionFalse {
 						return kuadrant.EnforcedCondition(dnsPolicy, nil, false)
 					}
 				}

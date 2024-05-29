@@ -31,8 +31,9 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Ordered, func() {
 	var (
 		testNamespace          string
 		kuadrantInstallationNS string
+		gwName                 = "toystore-gw"
 		rlpName                = "toystore-rlp"
-		efName                 = fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", TestGatewayName)
+		efName                 = fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", gwName)
 	)
 
 	BeforeAll(func(ctx SpecContext) {
@@ -46,7 +47,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Ordered, func() {
 
 	beforeEachCallback := func(ctx SpecContext) {
 		testNamespace = CreateNamespaceWithContext(ctx)
-		gateway := testBuildBasicGateway(TestGatewayName, testNamespace)
+		gateway := testBuildBasicGateway(gwName, testNamespace)
 		err := k8sClient.Create(ctx, gateway)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -101,7 +102,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", Ordered, func() {
 					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
-						Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						Name:  gatewayapiv1.ObjectName(gwName),
 					},
 					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
 						Limits: map[string]kuadrantv1beta2.Limit{

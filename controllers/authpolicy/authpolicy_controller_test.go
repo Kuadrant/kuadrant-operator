@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -29,7 +30,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/test"
 )
 
-var _ = Describe("AuthPolicy controller", Serial, func() {
+var _ = Describe("AuthPolicy controller (Serial)", Serial, func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
@@ -79,154 +80,14 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 	}
 
 	Context("Basic HTTPRoute", func() {
+		var host = fmt.Sprintf("*.toystore-%s.com", rand.String(6))
+
 		BeforeEach(func(ctx SpecContext) {
-			route := test.BuildBasicHTTPRoute(test.HTTPRouteName, test.GatewayName, testNamespace, []string{"*.toystore.com"})
+			route := test.BuildBasicHTTPRoute(test.HTTPRouteName, test.GatewayName, testNamespace, []string{host})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(test.RouteIsAccepted(k8sClient, client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
 		})
-
-		It("Attaches policy to the Gateway", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
-				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = test.GatewayName
-				policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, policy)).WithContext(ctx).Should(BeTrue())
-
-			// check istio authorizationpolicy
-			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(test.GatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
-			iap := &secv1beta1resources.AuthorizationPolicy{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, iapKey, iap)
-				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
-				return err == nil
-			}).WithContext(ctx).Should(BeTrue())
-			Expect(iap.Spec.Rules).To(HaveLen(1))
-			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
-			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*"}))
-			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"GET"}))
-			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/toy*"}))
-
-			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
-			authConfig := &authorinoapi.AuthConfig{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, authConfigKey, authConfig)
-				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
-				return err == nil && authConfig.Status.Ready()
-			}).WithContext(ctx).Should(BeTrue())
-			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
-			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*"}))
-			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
-			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(1))        // 1 HTTPRouteRule in the HTTPRoute
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the HTTPRouteRule
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(2))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("request.method"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal("GET"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`request.url_path`))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/toy.*"))
-		}, testTimeOut)
-
-		It("Attaches policy to a Gateway with hostname in listeners", func(ctx SpecContext) {
-			gatewayName := fmt.Sprintf("%s-with-hostnames", test.GatewayName)
-			gateway := test.BuildBasicGateway(gatewayName, testNamespace)
-			Expect(gateway.Spec.Listeners).To(HaveLen(1))
-			// Set hostname
-			gateway.Spec.Listeners[0].Hostname = &[]gatewayapiv1.Hostname{"*.example.com"}[0]
-			err := k8sClient.Create(ctx, gateway)
-			Expect(err).ToNot(HaveOccurred())
-
-			Eventually(test.GatewayIsReady(k8sClient, gateway)).WithContext(ctx).Should(BeTrue())
-
-			routeName := fmt.Sprintf("%s-with-hostnames", test.HTTPRouteName)
-			route := test.BuildBasicHTTPRoute(routeName, gatewayName, testNamespace, []string{"*.api.example.com"})
-			err = k8sClient.Create(ctx, route)
-			Expect(err).ToNot(HaveOccurred())
-			Eventually(test.RouteIsAccepted(k8sClient, client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
-
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
-				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gatewayName)
-			})
-
-			err = k8sClient.Create(ctx, policy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, policy)).WithContext(ctx).Should(BeTrue())
-
-			// check authorino authconfig hosts
-			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
-			authConfig := &authorinoapi.AuthConfig{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, authConfigKey, authConfig)
-				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
-				return err == nil && authConfig.Status.Ready()
-			}).WithContext(ctx).Should(BeTrue())
-
-			Expect(authConfig.Spec.Hosts).To(ConsistOf("*.example.com"))
-		}, testTimeOut)
-
-		It("Attaches policy to the HTTPRoute", func(ctx SpecContext) {
-			policy := policyFactory()
-
-			err := k8sClient.Create(ctx, policy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, policy)).WithContext(ctx).Should(BeTrue())
-
-			// check istio authorizationpolicy
-			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(test.GatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
-			iap := &secv1beta1resources.AuthorizationPolicy{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, iapKey, iap)
-				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
-				return err == nil
-			}).WithContext(ctx).Should(BeTrue())
-			Expect(iap.Spec.Rules).To(HaveLen(1))
-			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
-			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com"}))
-			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"GET"}))
-			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/toy*"}))
-
-			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
-			authConfig := &authorinoapi.AuthConfig{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, authConfigKey, authConfig)
-				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
-				return err == nil && authConfig.Status.Ready()
-			}).WithContext(ctx).Should(BeTrue())
-			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
-			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*.toystore.com"}))
-			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(1))        // 1 HTTPRouteRule in the HTTPRoute
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the HTTPRouteRule
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(2))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("request.method"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal("GET"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`request.url_path`))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/toy.*"))
-		}, testTimeOut)
 
 		It("Attaches policy to the Gateway while having other policies attached to some HTTPRoutes", func(ctx SpecContext) {
 			routePolicy := policyFactory()
@@ -303,6 +164,510 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`request.url_path`))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/.*"))
+		}, testTimeOut)
+	})
+
+	Context("Enforced Reasons", func() {
+		assertAcceptedCondTrueAndEnforcedCond := func(ctx context.Context, policy *api.AuthPolicy, conditionStatus metav1.ConditionStatus, reason, message string) func() bool {
+			return func() bool {
+				existingPolicy := &api.AuthPolicy{}
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)
+				if err != nil {
+					return false
+				}
+				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				if acceptedCond == nil {
+					return false
+				}
+
+				acceptedCondMatch := acceptedCond.Status == metav1.ConditionTrue && acceptedCond.Reason == string(gatewayapiv1alpha2.PolicyReasonAccepted)
+
+				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(kuadrant.PolicyReasonEnforced))
+				if enforcedCond == nil {
+					return false
+				}
+				enforcedCondMatch := enforcedCond.Status == conditionStatus && enforcedCond.Reason == reason && enforcedCond.Message == message
+
+				return acceptedCondMatch && enforcedCondMatch
+			}
+		}
+		var host = fmt.Sprintf("*.toystore-%s.com", rand.String(6))
+
+		BeforeEach(func(ctx SpecContext) {
+			route := test.BuildBasicHTTPRoute(test.HTTPRouteName, test.GatewayName, testNamespace, []string{host})
+			err := k8sClient.Create(ctx, route)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(test.RouteIsAccepted(k8sClient, client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
+		})
+
+		It("Unknown reason", func(ctx SpecContext) {
+			// Remove kuadrant to simulate AuthPolicy enforcement error
+			defer test.ApplyKuadrantCR(k8sClient, kuadrantInstallationNS)
+			test.DeleteKuadrantCR(ctx, k8sClient, kuadrantInstallationNS)
+
+			policy := policyFactory()
+
+			err := k8sClient.Create(ctx, policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(assertAcceptedCondTrueAndEnforcedCond(ctx, policy, metav1.ConditionFalse, string(kuadrant.PolicyReasonUnknown),
+				"AuthPolicy has encountered some issues: AuthScheme is not ready yet")).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+
+		It("Overridden reason - Attaches policy to the Gateway while having other policies attached to all HTTPRoutes", func(ctx SpecContext) {
+			routePolicy := policyFactory()
+
+			err := k8sClient.Create(ctx, routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check route policy status
+			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
+
+			// attach policy to the gatewaay
+			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = test.GatewayName
+			})
+
+			err = k8sClient.Create(ctx, gwPolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gwPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAccepted(ctx, k8sClient, gwPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(
+				assertAcceptedCondTrueAndEnforcedCond(ctx, gwPolicy, metav1.ConditionFalse, string(kuadrant.PolicyReasonOverridden),
+					fmt.Sprintf("AuthPolicy is overridden by [%s/%s]", testNamespace, routePolicy.Name))).WithContext(ctx).Should(BeTrue())
+
+			// check istio authorizationpolicy
+			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(test.GatewayName, gwPolicy.Spec.TargetRef), Namespace: testNamespace}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, iapKey, &secv1beta1resources.AuthorizationPolicy{})
+				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
+				return apierrors.IsNotFound(err)
+			}).WithContext(ctx).Should(BeTrue())
+
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(gwPolicy)), Namespace: testNamespace}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, authConfigKey, &authorinoapi.AuthConfig{})
+				return apierrors.IsNotFound(err)
+			}).WithContext(ctx).Should(BeTrue())
+
+			// GW Policy should go back to being enforced when a HTTPRoute with no AP attached becomes available
+			route2 := test.BuildBasicHTTPRoute("route2", test.GatewayName, testNamespace, []string{"*.carstore.com"})
+
+			err = k8sClient.Create(ctx, route2)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, gwPolicy)).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+	})
+
+	Context("AuthPolicies configured with overrides", func() {
+		var host = fmt.Sprintf("*.toystore-%s.com", rand.String(6))
+
+		BeforeEach(func(ctx SpecContext) {
+			route := test.BuildBasicHTTPRoute(test.HTTPRouteName, test.GatewayName, testNamespace, []string{host})
+			err := k8sClient.Create(ctx, route)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(test.RouteIsAccepted(k8sClient, client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
+		})
+
+		It("Gateway AuthPolicy has overrides and Route AuthPolicy is added.", func(ctx SpecContext) {
+			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = test.GatewayName
+				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Defaults = nil
+				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
+				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+			})
+
+			err := k8sClient.Create(ctx, gatewayPolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
+
+			routePolicy := policyFactory()
+			err = k8sClient.Create(ctx, routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAcceptedAndNotEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+
+		It("Route AuthPolicy exists and Gateway AuthPolicy with overrides is added.", func(ctx SpecContext) {
+			routePolicy := policyFactory()
+			err := k8sClient.Create(ctx, routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAccepted(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
+
+			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = test.GatewayName
+				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Defaults = nil
+				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
+				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+			})
+
+			err = k8sClient.Create(ctx, gatewayPolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeFalse())
+			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+
+		It("Route AuthPolicy exists and Gateway AuthPolicy with overrides is removed.", func(ctx SpecContext) {
+			routePolicy := policyFactory()
+			err := k8sClient.Create(ctx, routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
+
+			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = test.GatewayName
+				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Defaults = nil
+				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
+				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+			})
+
+			err = k8sClient.Create(ctx, gatewayPolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeFalse())
+			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
+
+			err = k8sClient.Delete(ctx, gatewayPolicy)
+			logf.Log.V(1).Info("Deleting AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+
+		It("Route and Gateway AuthPolicies exist. Gateway AuthPolicy updated to include overrides.", func(ctx SpecContext) {
+			routePolicy := policyFactory()
+			err := k8sClient.Create(ctx, routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAccepted(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
+
+			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = test.GatewayName
+				policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+			})
+
+			err = k8sClient.Create(ctx, gatewayPolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAcceptedAndNotEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(gatewayPolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(routePolicy)))).WithContext(ctx).Should(BeTrue())
+			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
+
+			Eventually(func() bool {
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(gatewayPolicy), gatewayPolicy)
+				if err != nil {
+					return false
+				}
+				gatewayPolicy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				gatewayPolicy.Spec.Defaults = nil
+				gatewayPolicy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
+				gatewayPolicy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+				err = k8sClient.Update(ctx, gatewayPolicy)
+				logf.Log.V(1).Info("Updating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+				return err == nil
+			}).WithContext(ctx).Should(BeTrue())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeFalse())
+			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+
+		It("Route and Gateway AuthPolicies exist. Gateway AuthPolicy updated to remove overrides.", func(ctx SpecContext) {
+			routePolicy := policyFactory()
+			err := k8sClient.Create(ctx, routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
+
+			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = test.GatewayName
+				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Defaults = nil
+				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
+				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+			})
+
+			err = k8sClient.Create(ctx, gatewayPolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeFalse())
+			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
+
+			Eventually(func() bool {
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(gatewayPolicy), gatewayPolicy)
+				if err != nil {
+					return false
+				}
+				gatewayPolicy.Spec.Overrides = nil
+				gatewayPolicy.Spec.CommonSpec().AuthScheme = testBasicAuthScheme()
+				gatewayPolicy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+				err = k8sClient.Update(ctx, gatewayPolicy)
+				logf.Log.V(1).Info("Updating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
+				return err == nil
+			}).WithContext(ctx).Should(BeTrue())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAcceptedAndNotEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
+			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(gatewayPolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(routePolicy)))).WithContext(ctx).Should(BeTrue())
+			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+	})
+})
+
+var _ = Describe("AuthPolicy controller", func() {
+	const (
+		testTimeOut      = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+	)
+	var testNamespace string
+
+	BeforeEach(func(ctx SpecContext) {
+		testNamespace = test.CreateNamespaceWithContext(ctx, k8sClient)
+
+		gateway := test.BuildBasicGateway(test.GatewayName, testNamespace)
+		err := k8sClient.Create(ctx, gateway)
+		Expect(err).ToNot(HaveOccurred())
+
+		Eventually(test.GatewayIsReady(k8sClient, gateway)).WithContext(ctx).Should(BeTrue())
+	})
+
+	AfterEach(func(ctx SpecContext) {
+		test.DeleteNamespaceCallbackWithContext(ctx, k8sClient, testNamespace)
+	}, afterEachTimeOut)
+
+	policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
+		policy := &api.AuthPolicy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "AuthPolicy",
+				APIVersion: api.GroupVersion.String(),
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "toystore",
+				Namespace: testNamespace,
+			},
+			Spec: api.AuthPolicySpec{
+				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					Group:     gatewayapiv1.GroupName,
+					Kind:      "HTTPRoute",
+					Name:      test.HTTPRouteName,
+					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
+				},
+				Defaults: &api.AuthPolicyCommonSpec{
+					AuthScheme: testBasicAuthScheme(),
+				},
+			},
+		}
+		for _, mutateFn := range mutateFns {
+			mutateFn(policy)
+		}
+		return policy
+	}
+
+	Context("Basic HTTPRoute", func() {
+		var host = fmt.Sprintf("*.toystore-%s.com", rand.String(6))
+		BeforeEach(func(ctx SpecContext) {
+			route := test.BuildBasicHTTPRoute(test.HTTPRouteName, test.GatewayName, testNamespace, []string{host})
+			err := k8sClient.Create(ctx, route)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(test.RouteIsAccepted(k8sClient, client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
+		})
+
+		It("Attaches policy to the Gateway", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = test.GatewayName
+				policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+			})
+
+			err := k8sClient.Create(ctx, policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, policy)).WithContext(ctx).Should(BeTrue())
+
+			// check istio authorizationpolicy
+			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(test.GatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
+			iap := &secv1beta1resources.AuthorizationPolicy{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, iapKey, iap)
+				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
+				return err == nil
+			}).WithContext(ctx).Should(BeTrue())
+			Expect(iap.Spec.Rules).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"GET"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/toy*"}))
+
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfig := &authorinoapi.AuthConfig{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, authConfigKey, authConfig)
+				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
+				return err == nil && authConfig.Status.Ready()
+			}).WithContext(ctx).Should(BeTrue())
+			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
+			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*"}))
+			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
+			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(1))        // 1 HTTPRouteRule in the HTTPRoute
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the HTTPRouteRule
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("request.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal("GET"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`request.url_path`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/toy.*"))
+		}, testTimeOut)
+
+		It("Attaches policy to a Gateway with hostname in listeners", func(ctx SpecContext) {
+			gatewayName := fmt.Sprintf("%s-with-hostnames", test.GatewayName)
+			gateway := test.BuildBasicGateway(gatewayName, testNamespace)
+			Expect(gateway.Spec.Listeners).To(HaveLen(1))
+			// Set hostname
+			gateway.Spec.Listeners[0].Hostname = ptr.To[gatewayapiv1.Hostname]("*.example.com")
+			err := k8sClient.Create(ctx, gateway)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(test.GatewayIsReady(k8sClient, gateway)).WithContext(ctx).Should(BeTrue())
+
+			routeName := fmt.Sprintf("%s-with-hostnames", test.HTTPRouteName)
+			route := test.BuildBasicHTTPRoute(routeName, gatewayName, testNamespace, []string{"*.api.example.com"})
+			err = k8sClient.Create(ctx, route)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(test.RouteIsAccepted(k8sClient, client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
+
+			policy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Name = "gw-auth"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gatewayName)
+			})
+
+			err = k8sClient.Create(ctx, policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, policy)).WithContext(ctx).Should(BeTrue())
+
+			// check authorino authconfig hosts
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfig := &authorinoapi.AuthConfig{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, authConfigKey, authConfig)
+				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
+				return err == nil && authConfig.Status.Ready()
+			}).WithContext(ctx).Should(BeTrue())
+
+			Expect(authConfig.Spec.Hosts).To(ConsistOf("*.example.com"))
+		}, testTimeOut)
+
+		It("Attaches policy to the HTTPRoute", func(ctx SpecContext) {
+			policy := policyFactory()
+
+			err := k8sClient.Create(ctx, policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status Attaches policy to the Gateway while having other policies attached to some HTTPRoutes
+			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, policy)).WithContext(ctx).Should(BeTrue())
+
+			// check istio authorizationpolicy
+			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(test.GatewayName, policy.Spec.TargetRef), Namespace: testNamespace}
+			iap := &secv1beta1resources.AuthorizationPolicy{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, iapKey, iap)
+				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
+				return err == nil
+			}).WithContext(ctx).Should(BeTrue())
+			Expect(iap.Spec.Rules).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
+			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{host}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"GET"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/toy*"}))
+
+			// check authorino authconfig
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfig := &authorinoapi.AuthConfig{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, authConfigKey, authConfig)
+				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
+				return err == nil && authConfig.Status.Ready()
+			}).WithContext(ctx).Should(BeTrue())
+			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
+			Expect(authConfig.Spec.Hosts).To(Equal([]string{host}))
+			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(1))        // 1 HTTPRouteRule in the HTTPRoute
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the HTTPRouteRule
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(2))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("request.method"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal("GET"))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`request.url_path`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/toy.*"))
 		}, testTimeOut)
 
 		It("Rejects policy with only unmatching top-level route selectors while trying to configure the gateway", func(ctx SpecContext) {
@@ -388,7 +753,7 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 			Expect(iap.Spec.Rules).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{host}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"GET"}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/toy*"}))
 
@@ -659,7 +1024,7 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 				return err == nil && authConfig.Status.Ready()
 			}).WithContext(ctx).Should(BeTrue())
 			authConfigSpecAsJSON, _ := json.Marshal(authConfig.Spec)
-			Expect(string(authConfigSpecAsJSON)).To(Equal(`{"hosts":["*.toystore.com"],"patterns":{"authz-and-rl-required":[{"selector":"source.ip","operator":"neq","value":"192.168.0.10"}],"internal-source":[{"selector":"source.ip","operator":"matches","value":"192\\.168\\..*"}]},"when":[{"patternRef":"internal-source"},{"any":[{"any":[{"all":[{"selector":"request.method","operator":"eq","value":"GET"},{"selector":"request.url_path","operator":"matches","value":"/toy.*"}]}]}]}],"authentication":{"jwt":{"when":[{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt","operator":"neq"}],"credentials":{"authorizationHeader":{}},"plain":{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt"}}},"metadata":{"user-groups":{"when":[{"selector":"auth.identity.admin","operator":"neq","value":"true"}],"http":{"url":"http://user-groups/username={auth.identity.username}","method":"GET","contentType":"application/x-www-form-urlencoded","credentials":{"authorizationHeader":{}}}}},"authorization":{"admin-or-privileged":{"when":[{"patternRef":"authz-and-rl-required"}],"patternMatching":{"patterns":[{"any":[{"selector":"auth.identity.admin","operator":"eq","value":"true"},{"selector":"auth.metadata.user-groups","operator":"incl","value":"privileged"}]}]}}},"response":{"unauthenticated":{"message":{"value":"Missing verified JWT injected by the gateway"}},"unauthorized":{"message":{"value":"User must be admin or member of privileged group"}},"success":{"headers":{"x-username":{"when":[{"selector":"request.headers.x-propagate-username.@case:lower","operator":"matches","value":"1|yes|true"}],"plain":{"value":null,"selector":"auth.identity.username"}}},"dynamicMetadata":{"x-auth-data":{"when":[{"patternRef":"authz-and-rl-required"}],"json":{"properties":{"groups":{"value":null,"selector":"auth.metadata.user-groups"},"username":{"value":null,"selector":"auth.identity.username"}}}}}}},"callbacks":{"unauthorized-attempt":{"when":[{"patternRef":"authz-and-rl-required"},{"selector":"auth.authorization.admin-or-privileged","operator":"neq","value":"true"}],"http":{"url":"http://events/unauthorized","method":"POST","body":{"value":null,"selector":"\\{\"identity\":{auth.identity},\"request-id\":{request.id}\\}"},"contentType":"application/json","credentials":{"authorizationHeader":{}}}}}}`))
+			Expect(string(authConfigSpecAsJSON)).To(Equal(fmt.Sprintf(`{"hosts":["%s"],"patterns":{"authz-and-rl-required":[{"selector":"source.ip","operator":"neq","value":"192.168.0.10"}],"internal-source":[{"selector":"source.ip","operator":"matches","value":"192\\.168\\..*"}]},"when":[{"patternRef":"internal-source"},{"any":[{"any":[{"all":[{"selector":"request.method","operator":"eq","value":"GET"},{"selector":"request.url_path","operator":"matches","value":"/toy.*"}]}]}]}],"authentication":{"jwt":{"when":[{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt","operator":"neq"}],"credentials":{"authorizationHeader":{}},"plain":{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt"}}},"metadata":{"user-groups":{"when":[{"selector":"auth.identity.admin","operator":"neq","value":"true"}],"http":{"url":"http://user-groups/username={auth.identity.username}","method":"GET","contentType":"application/x-www-form-urlencoded","credentials":{"authorizationHeader":{}}}}},"authorization":{"admin-or-privileged":{"when":[{"patternRef":"authz-and-rl-required"}],"patternMatching":{"patterns":[{"any":[{"selector":"auth.identity.admin","operator":"eq","value":"true"},{"selector":"auth.metadata.user-groups","operator":"incl","value":"privileged"}]}]}}},"response":{"unauthenticated":{"message":{"value":"Missing verified JWT injected by the gateway"}},"unauthorized":{"message":{"value":"User must be admin or member of privileged group"}},"success":{"headers":{"x-username":{"when":[{"selector":"request.headers.x-propagate-username.@case:lower","operator":"matches","value":"1|yes|true"}],"plain":{"value":null,"selector":"auth.identity.username"}}},"dynamicMetadata":{"x-auth-data":{"when":[{"patternRef":"authz-and-rl-required"}],"json":{"properties":{"groups":{"value":null,"selector":"auth.metadata.user-groups"},"username":{"value":null,"selector":"auth.identity.username"}}}}}}},"callbacks":{"unauthorized-attempt":{"when":[{"patternRef":"authz-and-rl-required"},{"selector":"auth.authorization.admin-or-privileged","operator":"neq","value":"true"}],"http":{"url":"http://events/unauthorized","method":"POST","body":{"value":null,"selector":"\\{\"identity\":{auth.identity},\"request-id\":{request.id}\\}"},"contentType":"application/json","credentials":{"authorizationHeader":{}}}}}}`, host)))
 		}, testTimeOut)
 
 		It("Succeeds when AuthScheme is not defined", func(ctx SpecContext) {
@@ -676,8 +1041,11 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 	})
 
 	Context("Complex HTTPRoute with multiple rules and hostnames", func() {
+		var host1 = fmt.Sprintf("*.toystore-%s.com", rand.String(6))
+		var host2 = fmt.Sprintf("*.admin.toystore-%s.com", rand.String(6))
+
 		BeforeEach(func(ctx SpecContext) {
-			route := test.BuildMultipleRulesHTTPRoute(test.HTTPRouteName, test.GatewayName, testNamespace, []string{"*.toystore.com", "*.admin.toystore.com"})
+			route := test.BuildMultipleRulesHTTPRoute(test.HTTPRouteName, test.GatewayName, testNamespace, []string{host1, host2})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(test.RouteIsAccepted(k8sClient, client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -703,17 +1071,17 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 			Expect(iap.Spec.Rules).To(HaveLen(3))
 			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{host1, host2}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"POST"}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
 			Expect(iap.Spec.Rules[1].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[1].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[1].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[1].To[0].Operation.Hosts).To(Equal([]string{host1, host2}))
 			Expect(iap.Spec.Rules[1].To[0].Operation.Methods).To(Equal([]string{"DELETE"}))
 			Expect(iap.Spec.Rules[1].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
 			Expect(iap.Spec.Rules[2].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[2].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{host1, host2}))
 			Expect(iap.Spec.Rules[2].To[0].Operation.Methods).To(Equal([]string{"GET"}))
 			Expect(iap.Spec.Rules[2].To[0].Operation.Paths).To(Equal([]string{"/private*"}))
 
@@ -726,7 +1094,7 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 				return err == nil && authConfig.Status.Ready()
 			}).WithContext(ctx).Should(BeTrue())
 			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
-			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(authConfig.Spec.Hosts).To(Equal([]string{host1, host2}))
 			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
 			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(2))        // 2 HTTPRouteRules in the HTTPRoute
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(2)) // 2 HTTPRouteMatches in the 1st HTTPRouteRule
@@ -766,7 +1134,7 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 								},
 							},
 						},
-						Hostnames: []gatewayapiv1.Hostname{"*.admin.toystore.com"},
+						Hostnames: []gatewayapiv1.Hostname{gatewayapiv1.Hostname(host2)},
 					},
 					{ // Selects: GET /private*
 						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
@@ -799,19 +1167,19 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 			// POST *.admin.toystore.com/admin*
 			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{host2}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"POST"}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
 			// DELETE *.admin.toystore.com/admin*
 			Expect(iap.Spec.Rules[1].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[1].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[1].To[0].Operation.Hosts).To(Equal([]string{"*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[1].To[0].Operation.Hosts).To(Equal([]string{host2}))
 			Expect(iap.Spec.Rules[1].To[0].Operation.Methods).To(Equal([]string{"DELETE"}))
 			Expect(iap.Spec.Rules[1].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
 			// GET (*.toystore.com|*.admin.toystore.com)/private*
 			Expect(iap.Spec.Rules[2].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[2].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{host1, host2}))
 			Expect(iap.Spec.Rules[2].To[0].Operation.Methods).To(Equal([]string{"GET"}))
 			Expect(iap.Spec.Rules[2].To[0].Operation.Paths).To(Equal([]string{"/private*"}))
 
@@ -824,14 +1192,14 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 				return err == nil && authConfig.Status.Ready()
 			}).WithContext(ctx).Should(BeTrue())
 			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
-			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(authConfig.Spec.Hosts).To(Equal([]string{host1, host2}))
 			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
 			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(2))        // 2 HTTPRouteRules in the HTTPRoute
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(2)) // 2 HTTPRouteMatches in the 1st HTTPRouteRule
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(3))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("request.host"))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal(`.*\.admin\.toystore\.com`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal("." + strings.Replace(host2, ".", `\.`, -1)))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal("request.method"))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("POST"))
@@ -841,7 +1209,7 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All).To(HaveLen(3))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Selector).To(Equal("request.host"))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Value).To(Equal(`.*\.admin\.toystore\.com`))
+			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Value).To(Equal("." + strings.Replace(host2, ".", `\.`, -1)))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Selector).To(Equal("request.method"))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Value).To(Equal("DELETE"))
@@ -871,7 +1239,7 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 								},
 							},
 						},
-						Hostnames: []gatewayapiv1.Hostname{"*.admin.toystore.com"},
+						Hostnames: []gatewayapiv1.Hostname{gatewayapiv1.Hostname(host2)},
 					},
 				}
 				policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"] = config
@@ -895,19 +1263,19 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 			// POST *.admin.toystore.com/admin*
 			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{host1, host2}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"POST"}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
 			// DELETE *.admin.toystore.com/admin*
 			Expect(iap.Spec.Rules[1].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[1].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{host1, host2}))
 			Expect(iap.Spec.Rules[1].To[0].Operation.Methods).To(Equal([]string{"DELETE"}))
 			Expect(iap.Spec.Rules[1].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
 			// GET (*.toystore.com|*.admin.toystore.com)/private*
 			Expect(iap.Spec.Rules[2].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[2].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{host1, host2}))
 			Expect(iap.Spec.Rules[2].To[0].Operation.Methods).To(Equal([]string{"GET"}))
 			Expect(iap.Spec.Rules[2].To[0].Operation.Paths).To(Equal([]string{"/private*"}))
 
@@ -921,7 +1289,7 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 			}).WithContext(ctx).Should(BeTrue())
 			apiKeyConditions := authConfig.Spec.Authentication["apiKey"].Conditions
 			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions, "apiKey conditions", apiKeyConditions)
-			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(authConfig.Spec.Hosts).To(Equal([]string{host1, host2}))
 			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
 			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(2))        // 2 HTTPRouteRules in the HTTPRoute
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(2)) // 2 HTTPRouteMatches in the 1st HTTPRouteRule
@@ -953,7 +1321,7 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 			Expect(apiKeyConditions[0].Any[0].Any[0].All).To(HaveLen(3))
 			Expect(apiKeyConditions[0].Any[0].Any[0].All[0].Selector).To(Equal("request.host"))
 			Expect(apiKeyConditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(apiKeyConditions[0].Any[0].Any[0].All[0].Value).To(Equal(`.*\.admin\.toystore\.com`))
+			Expect(apiKeyConditions[0].Any[0].Any[0].All[0].Value).To(Equal("." + strings.Replace(host2, ".", `\.`, -1)))
 			Expect(apiKeyConditions[0].Any[0].Any[0].All[1].Selector).To(Equal("request.method"))
 			Expect(apiKeyConditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
 			Expect(apiKeyConditions[0].Any[0].Any[0].All[1].Value).To(Equal("POST"))
@@ -963,7 +1331,7 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 			Expect(apiKeyConditions[0].Any[0].Any[1].All).To(HaveLen(3))
 			Expect(apiKeyConditions[0].Any[0].Any[1].All[0].Selector).To(Equal("request.host"))
 			Expect(apiKeyConditions[0].Any[0].Any[1].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(apiKeyConditions[0].Any[0].Any[1].All[0].Value).To(Equal(`.*\.admin\.toystore\.com`))
+			Expect(apiKeyConditions[0].Any[0].Any[1].All[0].Value).To(Equal("." + strings.Replace(host2, ".", `\.`, -1)))
 			Expect(apiKeyConditions[0].Any[0].Any[1].All[1].Selector).To(Equal("request.method"))
 			Expect(apiKeyConditions[0].Any[0].Any[1].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
 			Expect(apiKeyConditions[0].Any[0].Any[1].All[1].Value).To(Equal("DELETE"))
@@ -1016,7 +1384,7 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 			}).WithContext(ctx).Should(BeTrue())
 			apiKeyConditions := authConfig.Spec.Authentication["apiKey"].Conditions
 			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions, "apiKey conditions", apiKeyConditions)
-			Expect(authConfig.Spec.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(authConfig.Spec.Hosts).To(Equal([]string{host1, host2}))
 			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
 			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(2))        // 2 HTTPRouteRules in the HTTPRoute
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(2)) // 2 HTTPRouteMatches in the 1st HTTPRouteRule
@@ -1160,9 +1528,10 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 				return acceptedCondMatch && enforcedCondMatch
 			}
 		}
+		var host = fmt.Sprintf("*.toystore-%s.com", rand.String(6))
 
 		BeforeEach(func(ctx SpecContext) {
-			route := test.BuildBasicHTTPRoute(test.HTTPRouteName, test.GatewayName, testNamespace, []string{"*.toystore.com"})
+			route := test.BuildBasicHTTPRoute(test.HTTPRouteName, test.GatewayName, testNamespace, []string{host})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(test.RouteIsAccepted(k8sClient, client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -1177,284 +1546,6 @@ var _ = Describe("AuthPolicy controller", Serial, func() {
 
 			Eventually(assertAcceptedCondTrueAndEnforcedCond(ctx, policy, metav1.ConditionTrue, string(kuadrant.PolicyReasonEnforced),
 				"AuthPolicy has been successfully enforced")).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
-
-		It("Unknown reason", func(ctx SpecContext) {
-			// Remove kuadrant to simulate AuthPolicy enforcement error
-			defer test.ApplyKuadrantCR(k8sClient, kuadrantInstallationNS)
-			test.DeleteKuadrantCR(ctx, k8sClient, kuadrantInstallationNS)
-
-			policy := policyFactory()
-
-			err := k8sClient.Create(ctx, policy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			Eventually(assertAcceptedCondTrueAndEnforcedCond(ctx, policy, metav1.ConditionFalse, string(kuadrant.PolicyReasonUnknown),
-				"AuthPolicy has encountered some issues: AuthScheme is not ready yet")).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
-
-		It("Overridden reason - Attaches policy to the Gateway while having other policies attached to all HTTPRoutes", func(ctx SpecContext) {
-			routePolicy := policyFactory()
-
-			err := k8sClient.Create(ctx, routePolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check route policy status
-			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
-
-			// attach policy to the gatewaay
-			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
-				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = test.GatewayName
-			})
-
-			err = k8sClient.Create(ctx, gwPolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gwPolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAccepted(ctx, k8sClient, gwPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(
-				assertAcceptedCondTrueAndEnforcedCond(ctx, gwPolicy, metav1.ConditionFalse, string(kuadrant.PolicyReasonOverridden),
-					fmt.Sprintf("AuthPolicy is overridden by [%s/%s]", testNamespace, routePolicy.Name))).WithContext(ctx).Should(BeTrue())
-
-			// check istio authorizationpolicy
-			iapKey := types.NamespacedName{Name: istioAuthorizationPolicyName(test.GatewayName, gwPolicy.Spec.TargetRef), Namespace: testNamespace}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, iapKey, &secv1beta1resources.AuthorizationPolicy{})
-				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
-				return apierrors.IsNotFound(err)
-			}).WithContext(ctx).Should(BeTrue())
-
-			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(gwPolicy)), Namespace: testNamespace}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, authConfigKey, &authorinoapi.AuthConfig{})
-				return apierrors.IsNotFound(err)
-			}).WithContext(ctx).Should(BeTrue())
-
-			// GW Policy should go back to being enforced when a HTTPRoute with no AP attached becomes available
-			route2 := test.BuildBasicHTTPRoute("route2", test.GatewayName, testNamespace, []string{"*.carstore.com"})
-
-			err = k8sClient.Create(ctx, route2)
-			Expect(err).ToNot(HaveOccurred())
-
-			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, gwPolicy)).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
-	})
-
-	Context("AuthPolicies configured with overrides", func() {
-		BeforeEach(func(ctx SpecContext) {
-			route := test.BuildBasicHTTPRoute(test.HTTPRouteName, test.GatewayName, testNamespace, []string{"*.toystore.com"})
-			err := k8sClient.Create(ctx, route)
-			Expect(err).ToNot(HaveOccurred())
-			Eventually(test.RouteIsAccepted(k8sClient, client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
-		})
-
-		It("Gateway AuthPolicy has overrides and Route AuthPolicy is added.", func(ctx SpecContext) {
-			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
-				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = test.GatewayName
-				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
-				policy.Spec.Defaults = nil
-				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
-				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
-			})
-
-			err := k8sClient.Create(ctx, gatewayPolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-
-			routePolicy := policyFactory()
-			err = k8sClient.Create(ctx, routePolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAcceptedAndNotEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
-
-		It("Route AuthPolicy exists and Gateway AuthPolicy with overrides is added.", func(ctx SpecContext) {
-			routePolicy := policyFactory()
-			err := k8sClient.Create(ctx, routePolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAccepted(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
-
-			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
-				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = test.GatewayName
-				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
-				policy.Spec.Defaults = nil
-				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
-				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
-			})
-
-			err = k8sClient.Create(ctx, gatewayPolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeFalse())
-			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
-
-		It("Route AuthPolicy exists and Gateway AuthPolicy with overrides is removed.", func(ctx SpecContext) {
-			routePolicy := policyFactory()
-			err := k8sClient.Create(ctx, routePolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
-
-			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
-				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = test.GatewayName
-				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
-				policy.Spec.Defaults = nil
-				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
-				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
-			})
-
-			err = k8sClient.Create(ctx, gatewayPolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeFalse())
-			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
-
-			err = k8sClient.Delete(ctx, gatewayPolicy)
-			logf.Log.V(1).Info("Deleting AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
-
-		It("Route and Gateway AuthPolicies exist. Gateway AuthPolicy updated to include overrides.", func(ctx SpecContext) {
-			routePolicy := policyFactory()
-			err := k8sClient.Create(ctx, routePolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAccepted(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
-
-			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
-				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = test.GatewayName
-				policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
-			})
-
-			err = k8sClient.Create(ctx, gatewayPolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAcceptedAndNotEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(gatewayPolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(routePolicy)))).WithContext(ctx).Should(BeTrue())
-			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
-
-			Eventually(func() bool {
-				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(gatewayPolicy), gatewayPolicy)
-				if err != nil {
-					return false
-				}
-				gatewayPolicy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
-				gatewayPolicy.Spec.Defaults = nil
-				gatewayPolicy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
-				gatewayPolicy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
-				err = k8sClient.Update(ctx, gatewayPolicy)
-				logf.Log.V(1).Info("Updating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
-				return err == nil
-			}).WithContext(ctx).Should(BeTrue())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeFalse())
-			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
-
-		It("Route and Gateway AuthPolicies exist. Gateway AuthPolicy updated to remove overrides.", func(ctx SpecContext) {
-			routePolicy := policyFactory()
-			err := k8sClient.Create(ctx, routePolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
-
-			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Name = "gw-auth"
-				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
-				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = test.GatewayName
-				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
-				policy.Spec.Defaults = nil
-				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
-				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
-			})
-
-			err = k8sClient.Create(ctx, gatewayPolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAcceptedAndEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeFalse())
-			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(routePolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(gatewayPolicy)))).WithContext(ctx).Should(BeTrue())
-
-			Eventually(func() bool {
-				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(gatewayPolicy), gatewayPolicy)
-				if err != nil {
-					return false
-				}
-				gatewayPolicy.Spec.Overrides = nil
-				gatewayPolicy.Spec.CommonSpec().AuthScheme = testBasicAuthScheme()
-				gatewayPolicy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
-				err = k8sClient.Update(ctx, gatewayPolicy)
-				logf.Log.V(1).Info("Updating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
-				return err == nil
-			}).WithContext(ctx).Should(BeTrue())
-
-			// check policy status
-			Eventually(test.IsAuthPolicyAcceptedAndNotEnforced(ctx, k8sClient, gatewayPolicy)).WithContext(ctx).Should(BeTrue())
-			Eventually(test.IsAuthPolicyEnforcedCondition(ctx, k8sClient, client.ObjectKeyFromObject(gatewayPolicy), kuadrant.PolicyReasonOverridden, fmt.Sprintf("AuthPolicy is overridden by [%s]", client.ObjectKeyFromObject(routePolicy)))).WithContext(ctx).Should(BeTrue())
-			Eventually(test.IsAuthPolicyEnforced(ctx, k8sClient, routePolicy)).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
-
-		It("Blocks creation of AuthPolicies with overrides targeting HTTPRoutes", func(ctx SpecContext) {
-			routePolicy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
-				policy.Spec.Defaults = nil
-				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
-			})
-			err := k8sClient.Create(ctx, routePolicy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("Overrides are not allowed for policies targeting a HTTPRoute resource"))
 		}, testTimeOut)
 	})
 })
@@ -1981,6 +2072,20 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).ToNot(BeNil())
 			Expect(err.Error(), ContainSubstring("Too many: 9: must have at most 8 items"))
+		})
+	})
+
+	Context("Defaults / Overrides", func() {
+		It("Blocks creation of AuthPolicies with overrides targeting HTTPRoutes", func(ctx SpecContext) {
+			routePolicy := policyFactory(func(policy *api.AuthPolicy) {
+				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Defaults = nil
+				policy.Spec.Overrides.AuthScheme = testBasicAuthScheme()
+			})
+			err := k8sClient.Create(ctx, routePolicy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("Overrides are not allowed for policies targeting a HTTPRoute resource"))
 		})
 	})
 })

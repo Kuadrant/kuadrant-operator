@@ -423,7 +423,7 @@ deploy-dependencies: kustomize dependencies-manifests ## Deploy dependencies to 
 	kubectl -n "$(KUADRANT_NAMESPACE)" wait --timeout=300s --for=condition=Available deployments --all
 
 .PHONY: install-metallb
-install-metallb: SUBNET_OFFSET=0
+install-metallb: SUBNET_OFFSET=1
 install-metallb: kustomize yq ## Installs the metallb load balancer allowing use of an LoadBalancer type with a gateway
 	$(KUSTOMIZE) build config/metallb | kubectl apply -f -
 	kubectl -n metallb-system wait --for=condition=Available deployments controller --timeout=300s

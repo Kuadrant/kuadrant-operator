@@ -1,7 +1,6 @@
 ##@ Deployment
 
-GATEWAYAPI_PROVIDER = ISTIO
-GATEWAYAPI_PROVIDER_LOWERCASE = $(shell echo $(GATEWAYAPI_PROVIDER) | tr A-Z a-z)
+GATEWAYAPI_PROVIDER = istio
 
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	# Use server side apply, otherwise will hit into this issue https://medium.com/pareture/kubectl-install-crd-failed-annotations-too-long-2ebc91b40c7d
@@ -56,7 +55,7 @@ local-deploy: ## Deploy Kuadrant Operator from the current code
 
 .PHONY: env-setup
 env-setup: ## Install deploy kuadrant dependencies and configured gatewayapi provider
-	$(MAKE) $(GATEWAYAPI_PROVIDER_LOWERCASE)-env-setup ISTIO_INSTALL_SAIL=$(ISTIO_INSTALL_SAIL)
+	$(MAKE) $(GATEWAYAPI_PROVIDER)-env-setup ISTIO_INSTALL_SAIL=$(ISTIO_INSTALL_SAIL)
 
 .PHONY: local-env-setup
 local-env-setup: ## env-setup based on kind cluster

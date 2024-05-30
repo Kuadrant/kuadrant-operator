@@ -53,7 +53,7 @@ func (m *gatewayEventMapper) MapToPolicy(obj client.Object, policyGVK schema.Gro
 	policyList.SetAPIVersion(policyGVK.Version)
 	policyList.SetKind(policyGVK.Kind)
 	if err := m.opts.Client.List(ctx, policyList, client.InNamespace(obj.GetNamespace())); err != nil {
-		logger.V(1).Error(err, fmt.Sprintf("unable to list UnstructuredList of policies, %T", policyGVK))
+		logger.V(1).Info("unable to list UnstructuredList of policies, %T", policyGVK)
 		return []reconcile.Request{}
 	}
 

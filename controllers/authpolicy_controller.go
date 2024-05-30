@@ -272,7 +272,7 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return nil
 	}
 
-	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httpRouteEventMapper")))
+	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httpRouteEventMapper")), mappers.WithClient(mgr.GetClient()))
 	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")), mappers.WithClient(mgr.GetClient()))
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -281,7 +281,7 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return httpRouteEventMapper.MapToPolicy(object, &api.AuthPolicy{})
+				return httpRouteEventMapper.MapToPolicy(object, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "AuthPolicy"})
 			}),
 		).
 		Watches(&gatewayapiv1.Gateway{},

@@ -251,6 +251,13 @@ $(GINKGO):
 .PHONY: ginkgo
 ginkgo: $(GINKGO) ## Download ginkgo locally if necessary.
 
+HELM = $(PROJECT_PATH)/bin/helm
+$(HELM):
+	curl -sSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | PATH=$(PROJECT_PATH)/bin:$(PATH) USE_SUDO=false HELM_INSTALL_DIR=$(PROJECT_PATH)/bin bash
+
+.PHONY: helm
+helm: $(HELM) ## Download helm locally if necessary.
+
 ##@ Development
 define patch-config
 	envsubst \

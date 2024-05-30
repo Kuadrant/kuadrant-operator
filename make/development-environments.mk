@@ -119,3 +119,11 @@ istio-env-setup: ## Install Istio, istio gateway and gatewayapi-env-setup
 	@echo "export GATEWAY_URL=\$$INGRESS_HOST:\$$INGRESS_PORT"
 	@echo "curl -H \"Host: myhost.com\" \$$GATEWAY_URL"
 	@echo
+
+##@ Development Environment: Kubernetes with GatewayAPI and EnvoyGateway installed
+
+.PHONY: envoygateway-env-setup
+envoygateway-env-setup: ## Install Envoy Gateway and one gateway
+	$(MAKE) k8s-env-setup
+	$(MAKE) envoy-gateway-install # envoy gateway k8s manifests include gateway API CRDs
+	$(MAKE) deploy-eg-gateway

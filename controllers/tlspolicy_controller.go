@@ -204,7 +204,7 @@ func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&gatewayapiv1.Gateway{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return gatewayEventMapper.MapToPolicy(object, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1alpha1", Kind: "TLSPolicy"})
+				return gatewayEventMapper.MapToPolicy(ctx, object, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1alpha1", Kind: "TLSPolicy"})
 			}),
 		).
 		Complete(r)

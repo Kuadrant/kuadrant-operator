@@ -245,7 +245,7 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return httpRouteEventMapper.MapToPolicy(object, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "RateLimitPolicy"})
+				return httpRouteEventMapper.MapToPolicy(ctx, object, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "RateLimitPolicy"})
 			}),
 		).
 		// Currently the purpose is to generate events when rlp references change in gateways
@@ -253,7 +253,7 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&gatewayapiv1.Gateway{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return gatewayEventMapper.MapToPolicy(object, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "RateLimitPolicy"})
+				return gatewayEventMapper.MapToPolicy(ctx, object, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "RateLimitPolicy"})
 			}),
 		).
 		Complete(r)

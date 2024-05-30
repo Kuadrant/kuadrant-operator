@@ -19,24 +19,18 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-// TODO: Clean this up
-type EventMapperTwo interface {
-	MapToPolicy(client.Object, schema.GroupVersionKind) []reconcile.Request
-}
-
-func NewGatewayEventMapper(o ...MapperOption) EventMapperTwo {
+func NewGatewayEventMapper(o ...MapperOption) EventMapper {
 	return &gatewayEventMapper{opts: Apply(o...)}
 }
 
-var _ EventMapperTwo = &gatewayEventMapper{}
+var _ EventMapper = &gatewayEventMapper{}
 
 type gatewayEventMapper struct {
 	opts MapperOptions
 }
 
-func (m *gatewayEventMapper) MapToPolicy(obj client.Object, policyGVK schema.GroupVersionKind) []reconcile.Request {
+func (m *gatewayEventMapper) MapToPolicy(ctx context.Context, obj client.Object, policyGVK schema.GroupVersionKind) []reconcile.Request {
 	logger := m.opts.Logger.WithValues("gateway", client.ObjectKeyFromObject(obj))
-	ctx := context.Background()
 	gateway, ok := obj.(*gatewayapiv1.Gateway)
 	if !ok {
 		logger.V(1).Info(fmt.Sprintf("%T is not type gateway, unable to map policies to gateway", obj))
@@ -53,7 +47,7 @@ func (m *gatewayEventMapper) MapToPolicy(obj client.Object, policyGVK schema.Gro
 	policyList.SetAPIVersion(policyGVK.Version)
 	policyList.SetKind(policyGVK.Kind)
 	if err := m.opts.Client.List(ctx, policyList, client.InNamespace(obj.GetNamespace())); err != nil {
-		logger.V(1).Info("unable to list UnstructuredList of policies, %T", policyGVK)
+		logger.V(1).Info("unable to list UnstructuredList of policies, %T", "policyGVl", policyGVK)
 		return []reconcile.Request{}
 	}
 

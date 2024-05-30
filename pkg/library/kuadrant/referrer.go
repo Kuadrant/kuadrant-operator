@@ -2,6 +2,7 @@ package kuadrant
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,16 +36,16 @@ func BackReferencesFromObject(obj client.Object, referrer Referrer) []client.Obj
 	return refs
 }
 
-func DirectReferencesFromObject(obj client.Object, referrer Referrer) client.ObjectKey {
+func DirectReferencesFromObject(obj client.Object, referrer Referrer) (client.ObjectKey, error) {
 	annotations := utils.ReadAnnotationsFromObject(obj)
 	key := referrer.DirectReferenceAnnotationName()
 	directRefs, found := annotations[key]
 	if !found {
-		return client.ObjectKey{}
+		return client.ObjectKey{}, fmt.Errorf("annotation %s not found", key)
 	}
 
 	parts := strings.Split(directRefs, "/")
 	ref := client.ObjectKey{Namespace: parts[0], Name: parts[1]}
 
-	return ref
+	return ref, nil
 }

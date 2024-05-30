@@ -3,6 +3,7 @@
 package mappers
 
 import (
+	"context"
 	"testing"
 
 	"gotest.tools/assert"
@@ -68,12 +69,12 @@ func TestNewGatewayEventMapper(t *testing.T) {
 	em := NewGatewayEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 	t.Run("not gateway related event", func(subT *testing.T) {
-		requests := em.MapToPolicy(&gatewayapiv1.HTTPRoute{}, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "RateLimitPolicy"})
+		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.HTTPRoute{}, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "RateLimitPolicy"})
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
 
 	t.Run("gateway related event - no requests", func(subT *testing.T) {
-		requests := em.MapToPolicy(&gatewayapiv1.Gateway{}, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "RateLimitPolicy"})
+		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.Gateway{}, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "RateLimitPolicy"})
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
 
@@ -89,7 +90,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 				},
 			},
 		}
-		requests := em.MapToPolicy(gateway, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "AuthPolicy"})
+		requests := em.MapToPolicy(context.Background(), gateway, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "AuthPolicy"})
 		expected := []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: "app-ns", Name: "policy-1"}}, {NamespacedName: types.NamespacedName{Namespace: "app-ns", Name: "policy-2"}}}
 		assert.DeepEqual(subT, expected, requests)
 	})

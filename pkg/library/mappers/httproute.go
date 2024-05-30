@@ -3,11 +3,7 @@ package mappers
 import (
 	"context"
 	"fmt"
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -16,21 +12,26 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-func NewHTTPRouteEventMapper(o ...MapperOption) EventMapperTwo {
+func NewHTTPRouteEventMapper(o ...MapperOption) EventMapper {
 	return &httpRouteEventMapper{opts: Apply(o...)}
 }
 
-var _ EventMapperTwo = &httpRouteEventMapper{}
+var _ EventMapper = &httpRouteEventMapper{}
 
 type httpRouteEventMapper struct {
 	opts MapperOptions
 }
 
-func (m *httpRouteEventMapper) MapToPolicy(obj client.Object, policyGVK schema.GroupVersionKind) []reconcile.Request {
+func (m *httpRouteEventMapper) MapToPolicy(ctx context.Context, obj client.Object, policyGVK schema.GroupVersionKind) []reconcile.Request {
 	logger := m.opts.Logger.WithValues("httproute", client.ObjectKeyFromObject(obj))
-	ctx := context.Background()
 	requests := make([]reconcile.Request, 0)
 	httpRoute, ok := obj.(*gatewayapiv1.HTTPRoute)
 	if !ok {
@@ -58,7 +59,7 @@ func (m *httpRouteEventMapper) MapToPolicy(obj client.Object, policyGVK schema.G
 		policyList.SetAPIVersion(policyGVK.Version)
 		policyList.SetKind(policyGVK.Kind)
 		if err = m.opts.Client.List(ctx, policyList, client.InNamespace(obj.GetNamespace())); err != nil {
-			logger.V(1).Info("unable to list UnstructuredList of policies, %T", policyGVK)
+			logger.V(1).Info("unable to list UnstructuredList of policies, %T", "policyGVK", policyGVK)
 			continue
 		}
 
@@ -147,7 +148,10 @@ func (m *httpRouteEventMapper) MapToPolicy(obj client.Object, policyGVK schema.G
 	default:
 		return requests
 	}
-	policyKey := kuadrant.DirectReferencesFromObject(httpRoute, policy)
+	policyKey, err := kuadrant.DirectReferencesFromObject(httpRoute, policy)
+	if err != nil {
+		return requests
+	}
 	requests = append(requests, reconcile.Request{NamespacedName: policyKey})
 	return requests
 }

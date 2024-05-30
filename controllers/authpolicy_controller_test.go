@@ -112,7 +112,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
 			authConfig := &authorinoapi.AuthConfig{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, authConfigKey, authConfig)
@@ -165,7 +165,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig hosts
-			authConfigKey := types.NamespacedName{Name: AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
 			authConfig := &authorinoapi.AuthConfig{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, authConfigKey, authConfig)
@@ -187,7 +187,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
 			authConfig := &authorinoapi.AuthConfig{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, authConfigKey, authConfig)
@@ -248,7 +248,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), gwPolicy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: AuthConfigName(client.ObjectKeyFromObject(gwPolicy)), Namespace: testNamespace}
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(gwPolicy)), Namespace: testNamespace}
 			authConfig := &authorinoapi.AuthConfig{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, authConfigKey, authConfig)
@@ -298,7 +298,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			}).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, authConfigKey, &authorinoapi.AuthConfig{})
 				return apierrors.IsNotFound(err)
@@ -335,7 +335,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			}).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, authConfigKey, &authorinoapi.AuthConfig{})
 				return apierrors.IsNotFound(err)
@@ -357,7 +357,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: AuthConfigName(client.ObjectKey{Name: "toystore", Namespace: testNamespace}), Namespace: testNamespace}
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKey{Name: "toystore", Namespace: testNamespace}), Namespace: testNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, authConfigKey, &authorinoapi.AuthConfig{})
 				return apierrors.IsNotFound(err)
@@ -585,7 +585,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
 			authConfig := &authorinoapi.AuthConfig{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, authConfigKey, authConfig)
@@ -627,7 +627,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
 			authConfig := &authorinoapi.AuthConfig{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, authConfigKey, authConfig)
@@ -697,7 +697,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
 			authConfig := &authorinoapi.AuthConfig{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, authConfigKey, authConfig)
@@ -765,7 +765,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
 			authConfig := &authorinoapi.AuthConfig{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, authConfigKey, authConfig)
@@ -860,7 +860,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
 			authConfig := &authorinoapi.AuthConfig{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, authConfigKey, authConfig)
@@ -1076,7 +1076,7 @@ var _ = Describe("AuthPolicy controller", Ordered, func() {
 					fmt.Sprintf("AuthPolicy is overridden by [%s/%s]", testNamespace, routePolicy.Name))).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: AuthConfigName(client.ObjectKeyFromObject(gwPolicy)), Namespace: testNamespace}
+			authConfigKey := types.NamespacedName{Name: authConfigName(client.ObjectKeyFromObject(gwPolicy)), Namespace: testNamespace}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, authConfigKey, &authorinoapi.AuthConfig{})
 				return apierrors.IsNotFound(err)

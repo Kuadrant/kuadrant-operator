@@ -38,7 +38,7 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-// This test suite will be run on bare k8s env without GatewayAPI CRDs, just Kuadrant CRDs installed
+// This test suite will be run on bare k8s env with just GatewayAPI CRDs and Kuadrant CRDs installed
 
 var k8sClient client.Client
 var testEnv *envtest.Environment

@@ -10,7 +10,7 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
 
 .PHONY: install-metallb
-install-metallb: SUBNET_OFFSET=0
+install-metallb: SUBNET_OFFSET=1
 install-metallb: kustomize yq ## Installs the metallb load balancer allowing use of an LoadBalancer type with a gateway
 	$(KUSTOMIZE) build config/metallb | kubectl apply -f -
 	kubectl -n metallb-system wait --for=condition=Available deployments controller --timeout=300s

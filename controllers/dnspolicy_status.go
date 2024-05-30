@@ -124,7 +124,7 @@ func (r *DNSPolicyReconciler) enforcedCondition(recordsList *kuadrantdnsv1alpha1
 		}
 	}
 
-	// at least one DNS record is controlled byt the policy
+	// at least one DNS record is controlled by the policy
 	// and all controlled records are accepted
 	if controlled {
 		return kuadrant.EnforcedCondition(dnsPolicy, nil, true)

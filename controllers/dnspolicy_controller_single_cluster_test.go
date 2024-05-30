@@ -137,7 +137,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
 						"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
-						"Status":  Equal(metav1.ConditionFalse),
+						"Status":  Equal(metav1.ConditionTrue),
 						"Reason":  Equal(string(kuadrant.PolicyReasonEnforced)),
 						"Message": Equal("DNSPolicy has been partially enforced"),
 					})),

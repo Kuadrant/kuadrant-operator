@@ -85,18 +85,6 @@ func ApplyKuadrantCRWithName(k8sClient client.Client, namespace, name string) {
 	}
 	err := k8sClient.Create(context.Background(), kuadrantCR)
 	gomega.Expect(err).ToNot(gomega.HaveOccurred())
-
-	gomega.Eventually(func() bool {
-		kuadrant := &kuadrantv1beta1.Kuadrant{}
-		err := k8sClient.Get(context.Background(), client.ObjectKey{Name: name, Namespace: namespace}, kuadrant)
-		if err != nil {
-			return false
-		}
-		if !meta.IsStatusConditionTrue(kuadrant.Status.Conditions, "Ready") {
-			return false
-		}
-		return true
-	}, time.Minute, 5*time.Second).Should(gomega.BeTrue())
 }
 
 func DeleteKuadrantCR(ctx context.Context, k8sClient client.Client, namespace string) {

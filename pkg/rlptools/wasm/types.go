@@ -2,6 +2,7 @@ package wasm
 
 import (
 	"encoding/json"
+	"errors"
 
 	_struct "google.golang.org/protobuf/types/known/structpb"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -97,20 +98,38 @@ const (
 	FailureModeAllow FailureModeType = "allow"
 )
 
-type Plugin struct {
+type Config struct {
 	FailureMode       FailureModeType   `json:"failureMode"`
 	RateLimitPolicies []RateLimitPolicy `json:"rateLimitPolicies"`
 }
 
-func (w *Plugin) ToStruct() (*_struct.Struct, error) {
-	wasmPluginJSON, err := json.Marshal(w)
+func (w *Config) ToStruct() (*_struct.Struct, error) {
+	configJSON, err := json.Marshal(w)
 	if err != nil {
 		return nil, err
 	}
 
-	pluginConfigStruct := &_struct.Struct{}
-	if err := pluginConfigStruct.UnmarshalJSON(wasmPluginJSON); err != nil {
+	configStruct := &_struct.Struct{}
+	if err := configStruct.UnmarshalJSON(configJSON); err != nil {
 		return nil, err
 	}
-	return pluginConfigStruct, nil
+	return configStruct, nil
+}
+
+func ConfigFromStruct(structure *_struct.Struct) (*Config, error) {
+	if structure == nil {
+		return nil, errors.New("cannot desestructure config from nil")
+	}
+	// Serialize struct into json
+	configJSON, err := structure.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	// Deserialize protobuf struct into Config struct
+	config := &Config{}
+	if err := json.Unmarshal(configJSON, config); err != nil {
+		return nil, err
+	}
+
+	return config, nil
 }

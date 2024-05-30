@@ -50,6 +50,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
@@ -70,6 +71,7 @@ func init() {
 	utilruntime.Must(authorinoapi.AddToScheme(scheme))
 	utilruntime.Must(istionetworkingv1alpha3.AddToScheme(scheme))
 	utilruntime.Must(istiosecurityv1beta1.AddToScheme(scheme))
+	utilruntime.Must(istiov1alpha1.AddToScheme(scheme))
 	utilruntime.Must(gatewayapiv1.Install(scheme))
 	utilruntime.Must(istioextensionv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(apiextv1.AddToScheme(scheme))
@@ -129,6 +131,14 @@ func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	if err := fieldindexers.HTTPRouteIndexByGateway(
+		mgr,
+		log.Log.WithName("kuadrant").WithName("indexer").WithName("routeIndexByGateway"),
+	); err != nil {
+		setupLog.Error(err, "unable to add indexer")
 		os.Exit(1)
 	}
 
@@ -229,16 +239,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	rateLimitingWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
+	rateLimitingIstioWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("ratelimitpolicy").WithName("wasmplugin"),
-		mgr.GetEventRecorderFor("RateLimitingWASMPlugin"),
+		mgr.GetEventRecorderFor("RateLimitingIstioWASMPlugin"),
 	)
 
-	if err = (&controllers.RateLimitingWASMPluginReconciler{
-		BaseReconciler: rateLimitingWASMPluginBaseReconciler,
+	if err = (&controllers.RateLimitingIstioWASMPluginReconciler{
+		BaseReconciler: rateLimitingIstioWASMPluginBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "RateLimitingWASMPlugin")
+		setupLog.Error(err, "unable to create controller", "controller", "RateLimitingIstioWASMPlugin")
 		os.Exit(1)
 	}
 

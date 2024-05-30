@@ -193,14 +193,14 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	Expect(err).NotTo(HaveOccurred())
 
-	rateLimitingWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
+	rateLimitingIstioWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("ratelimitpolicy").WithName("wasmplugin"),
-		mgr.GetEventRecorderFor("RateLimitingWASMPlugin"),
+		mgr.GetEventRecorderFor("RateLimitingIstioWASMPlugin"),
 	)
 
-	err = (&RateLimitingWASMPluginReconciler{
-		BaseReconciler: rateLimitingWASMPluginBaseReconciler,
+	err = (&RateLimitingIstioWASMPluginReconciler{
+		BaseReconciler: rateLimitingIstioWASMPluginBaseReconciler,
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())

@@ -47,6 +47,10 @@ spec:
           service: tempo.tempo.svc.cluster.local
 ```
 
+**Important:**
+
+The OpenTelemetry collector protocol should be explicitly set in the service port `name` or `appProtocol` fields as per the [Istio documentation](https://istio.io/latest/docs/ops/configuration/traffic-management/protocol-selection/#explicit-protocol-selection). For example, when using gRPC, the port `name` should begin with `grpc-` or the `appProtocol` should be `grpc`.
+
 ### Kuadrant Tracing Configuration
 
 The Authorino and Limitador components have request tracing capabilities.

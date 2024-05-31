@@ -2,15 +2,15 @@ dependencies:
   - type: olm.package
     value:
       packageName: authorino-operator
-      version: "0.0.0"
+      version: "0.11.1"
   - type: olm.package
     value:
       packageName: limitador-operator
-      version: "0.0.0"
+      version: "0.9.0"
   - type: olm.package
     value:
       packageName: dns-operator
-      version: "0.0.0"
+      version: "0.3.0"
   - type: olm.package
     value:
       packageName: cert-manager

@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: kuadrant
+    control-plane: controller-manager
+  name: kuadrant-operator-controller-manager
+  namespace: kuadrant-system
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        env:
+        - name: LOG_LEVEL
+          value: debug
+        - name: LOG_MODE
+          value: development

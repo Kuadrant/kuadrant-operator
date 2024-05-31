@@ -15,6 +15,10 @@
 make build
 ```
 
+## Build docker image
+
+TODO
+
 ## Deploy on local kubernetes cluster
 
 Run local Kubernetes cluster using Docker container using [Kind](https://kind.sigs.k8s.io/) and deploy kuadrant operator (and *all* dependencies) in a single command.
@@ -29,25 +33,6 @@ The `make local-setup` target accepts the following variables:
 | --- | --- |--- |
 | `GATEWAYAPI_PROVIDER` | GatewayAPI provider name. Accepted values: [*istio*] | *istio* |
 
-## Run as a local process
-
-Run local Kubernetes cluster using Docker container using [Kind](https://kind.sigs.k8s.io/) and deploy *all* dependencies in a single command.
-
-```shell
-make local-env-setup
-```
-
-The `make local-env-setup` target accepts the following variables:
-
-| **Makefile Variable** | **Description** | **Default value** |
-| --- | --- |--- |
-| `GATEWAYAPI_PROVIDER` | GatewayAPI provider name. Accepted values: [*istio*] | *istio* |
-
-Then, run the operator locally
-
-```shell
-make run
-```
 
 ## Deploy on existing kubernetes cluster
 
@@ -118,7 +103,6 @@ The `make bundle` target accepts the following variables:
 | `LIMITADOR_OPERATOR_BUNDLE_IMG` | Limitador operator bundle URL | `quay.io/kuadrant/limitador-operator-bundle:latest` | `LIMITADOR_OPERATOR_VERSION` var could be used to build this, defaults to _latest_ if not provided |
 | `AUTHORINO_OPERATOR_BUNDLE_IMG` | Authorino operator bundle URL | `quay.io/kuadrant/authorino-operator-bundle:latest` | `AUTHORINO_OPERATOR_VERSION` var could be used to build this, defaults to _latest_ if not provided |
 | `DNS_OPERATOR_BUNDLE_IMG`       | DNS operator bundle URL       | `quay.io/kuadrant/dns-operator-bundle:latest`       | `DNS_OPERATOR_BUNDLE_IMG` var could be used to build this, defaults to _latest_ if not provided    |
-| `RELATED_IMAGE_WASMSHIM`        | WASM shim image URL           | `oci://quay.io/kuadrant/wasm-shim:latest`           | `WASM_SHIM_VERSION` var could be used to build this, defaults to _latest_ if not provided          |
 
 * Build the bundle manifests
 
@@ -128,8 +112,7 @@ make bundle [IMG=quay.io/kuadrant/kuadrant-operator:latest] \
             [VERSION=0.0.0] \
             [LIMITADOR_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/limitador-operator-bundle:latest] \
             [AUTHORINO_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/authorino-operator-bundle:latest] \
-            [DNS_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/dns-operator-bundle:latest] \
-            [RELATED_IMAGE_WASMSHIM=oci://quay.io/kuadrant/wasm-shim:latest]
+            [DNS_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/dns-operator-bundle:latest]
 ```
 
 * Build the bundle image from the manifests

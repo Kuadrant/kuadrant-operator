@@ -106,7 +106,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2024-05-30T13:48:45Z"
+    createdAt: "2024-06-03T21:19:26Z"
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator
@@ -598,8 +598,11 @@ spec:
                 command:
                 - /manager
                 env:
-                - name: RELATED_IMAGE_WASMSHIM
-                  value: oci://quay.io/kuadrant/wasm-shim:latest
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      apiVersion: v1
+                      fieldPath: metadata.namespace
                 image: quay.io/kuadrant/kuadrant-operator:latest
                 livenessProbe:
                   httpGet:
@@ -609,6 +612,8 @@ spec:
                   periodSeconds: 20
                 name: manager
                 ports:
+                - containerPort: 8082
+                  name: ratelimit-wasm
                 - containerPort: 8080
                   name: metrics
                 readinessProbe:
@@ -701,8 +706,5 @@ spec:
   provider:
     name: Red Hat
     url: https://github.com/Kuadrant/kuadrant-operator
-  relatedImages:
-  - image: oci://quay.io/kuadrant/wasm-shim:latest
-    name: wasmshim
   replaces: kuadrant-operator.v0.0.0-alpha
   version: 0.0.0

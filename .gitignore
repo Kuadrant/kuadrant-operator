@@ -31,5 +31,7 @@ tmp
 /catalog/kuadrant-operator-catalog.Dockerfile
 /coverage/
 
+/kuadrant-ratelimit-wasm
+
 # Vendor dependencies
 vendor

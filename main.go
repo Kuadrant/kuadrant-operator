@@ -19,6 +19,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"runtime"
 
@@ -54,6 +56,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -98,7 +101,44 @@ func printControllerMetaInfo() {
 
 	setupLog.Info(fmt.Sprintf("go version: %s", runtime.Version()))
 	setupLog.Info(fmt.Sprintf("go os/arch: %s/%s", runtime.GOOS, runtime.GOARCH))
-	setupLog.Info("base logger", "log level", logLevel, "log mode", logMode)
+	setupLog.Info("wasm-shim", "sha256", wasm.WASM_SHIM_SHA256)
+}
+
+func startWasmShimFileServer(wasmShimPort int) {
+	logger := log.Log
+
+	if wasmShimPort == 0 {
+		logger.Info("wasm shim port is 0, file server disabled")
+		return
+	}
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", wasmShimPort))
+	if err != nil {
+		logger.Error(err, "failed to obtain port for the http wasm-shim file service")
+		os.Exit(1)
+	}
+
+	if lis == nil {
+		logger.Error(err, "failed to obtain listener for the http wasm-shim file service")
+		os.Exit(1)
+	}
+
+	mux := http.NewServeMux()
+
+	mux.Handle("/", http.FileServer(http.Dir("/opt/kuadrant/wasm-shim")))
+
+	go func() {
+		var err error
+
+		logger.Info("starting http wasm-shim file service", "port", wasmShimPort)
+
+		err = http.Serve(lis, mux)
+
+		if err != nil {
+			logger.Error(err, "failed to start listener for the http wasm-shim file service")
+			os.Exit(1)
+		}
+	}()
 }
 
 func main() {
@@ -111,13 +151,17 @@ func main() {
 		enableLeaderElection bool
 		probeAddr            string
 		err                  error
+		wasmShimPort         int
 	)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.IntVar(&wasmShimPort, "wasm-shim-http-port", 8082, "Port number of wasm binary http file server")
 	flag.Parse()
+
+	startWasmShimFileServer(wasmShimPort)
 
 	options := ctrl.Options{
 		Scheme:                 scheme,

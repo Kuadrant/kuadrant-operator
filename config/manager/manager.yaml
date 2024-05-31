@@ -28,8 +28,11 @@ spec:
         - command:
             - /manager
           env:
-            - name: RELATED_IMAGE_WASMSHIM
-              value: "oci://quay.io/kuadrant/wasm-shim:latest"
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
           image: controller:latest
           name: manager
           securityContext:

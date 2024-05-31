@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sort"
 
 	"github.com/go-logr/logr"
@@ -43,10 +44,6 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
-)
-
-var (
-	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
 )
 
 func WASMPluginName(gw *gatewayapiv1.Gateway) string {
@@ -108,6 +105,13 @@ func (r *RateLimitingIstioWASMPluginReconciler) desiredRateLimitingWASMPlugin(ct
 		return nil, err
 	}
 
+	wasmServerURL := url.URL{
+		Scheme: "http",
+		// Warning: .cluster.local may not be true in all clusters
+		Host: fmt.Sprintf("%s.%s.svc.cluster.local:%d", wasm.ServerServiceName(), wasm.ServerServiceNamespace(), wasm.ServerServicePort()),
+		Path: "/kuadrant-ratelimit-wasm",
+	}
+
 	wasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "WasmPlugin",
@@ -118,8 +122,13 @@ func (r *RateLimitingIstioWASMPluginReconciler) desiredRateLimitingWASMPlugin(ct
 			Namespace: gw.Namespace,
 		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{
-			TargetRef:    kuadrantistioutils.PolicyTargetRefFromGateway(gw),
-			Url:          WASMFilterImageURL,
+			TargetRef: kuadrantistioutils.PolicyTargetRefFromGateway(gw),
+			Url:       wasmServerURL.String(),
+			// The SHA256 will be used to notify Istio that the Wasm module has been changed
+			// and it needs to be reloaded.
+			// The URL does not have any versioning info
+			// so it does not change when the Wasm module changes.
+			Sha256:       wasm.SHA256(),
 			PluginConfig: nil,
 			// Insert plugin before Istio stats filters and after Istio authorization filters.
 			Phase: istioextensionsv1alpha1.PluginPhase_STATS,

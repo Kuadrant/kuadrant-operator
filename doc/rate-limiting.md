@@ -479,5 +479,6 @@ spec:
   selector:
     matchLabels:
       istio.io/gateway-name: istio-ingressgateway
+      TODO!!
   url: oci://quay.io/kuadrant/wasm-shim:v0.3.0
 ```

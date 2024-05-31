@@ -69,7 +69,7 @@ Additionally, Kuadrant provides the following CRDs
   [Istio getting started guide](https://istio.io/latest/docs/setup/getting-started/).
 * Kubernetes Gateway API is installed in the cluster. Otherwise,
   [configure Istio to expose a service using the Kubernetes Gateway API](https://istio.io/latest/docs/tasks/traffic-management/ingress/gateway-api/).
-* cert-manager is installed in the cluster. Otherwise, refer to the 
+* cert-manager is installed in the cluster. Otherwise, refer to the
   [cert-manager installation guide](https://cert-manager.io/docs/installation/).
 
 ### Installing Kuadrant

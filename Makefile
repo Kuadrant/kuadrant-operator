@@ -154,16 +154,6 @@ DNS_OPERATOR_GITREF = $(DNS_OPERATOR_BUNDLE_VERSION)
 endif
 DNS_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/dns-operator-bundle:$(DNS_OPERATOR_BUNDLE_IMG_TAG)
 
-## wasm-shim
-WASM_SHIM_VERSION ?= latest
-shim_version_is_semantic := $(call is_semantic_version,$(WASM_SHIM_VERSION))
-
-ifeq (true,$(shim_version_is_semantic))
-RELATED_IMAGE_WASMSHIM ?= oci://quay.io/kuadrant/wasm-shim:v$(WASM_SHIM_VERSION)
-else
-RELATED_IMAGE_WASMSHIM ?= oci://quay.io/kuadrant/wasm-shim:$(WASM_SHIM_VERSION)
-endif
-
 all: build
 
 ##@ General
@@ -311,11 +301,6 @@ test-unit: clean-cov generate fmt vet ## Run Unit tests.
 build: generate fmt vet ## Build manager binary.
 	go build -o bin/manager main.go
 
-run: export LOG_LEVEL = debug
-run: export LOG_MODE = development
-run: generate fmt vet ## Run a controller from your host.
-	go run ./main.go
-
 docker-build: ## Build docker image with the manager.
 	$(CONTAINER_ENGINE) build -t $(IMG) .
 
@@ -348,9 +333,6 @@ endef
 .PHONY: bundle
 bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
-	# Set desired operator image and related wasm shim image
-	V="$(RELATED_IMAGE_WASMSHIM)" \
-	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Update CSV
 	$(call update-csv-config,kuadrant-operator.v$(BUNDLE_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.name)

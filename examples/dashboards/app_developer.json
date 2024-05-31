@@ -374,7 +374,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Requests per second, broken down by success (2xx,3xx) and error (4xx,5xx)",
+      "description": "Requests per second, broken down by response code e.g. 200, 302, 403, 500",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -509,26 +509,14 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{destination_service_name=~\"$api\"}[5m])) by (destination_service_name, response_code) * on(destination_service_name) group_left(name) (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
-          "legendFormat": "error (4xx,5xx)",
+          "legendFormat": "{{response_code}}",
           "range": true,
           "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"2.*|3.*\",destination_service_name=~\"$api\"}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
-          "hide": false,
-          "legendFormat": "success (2xx,3xx)",
-          "range": true,
-          "refId": "C"
         }
       ],
-      "title": "request breakdown (req/s)",
+      "title": "request breakdown by code (req/s)",
       "type": "timeseries"
     },
     {
@@ -1308,7 +1296,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Requests per second, broken down by success (2xx,3xx) and error (4xx,5xx)",
+      "description": "Requests per second, broken down by response code e.g. 200, 302, 403, 500",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1443,26 +1431,14 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\",destination_service_name=~\"$api\"}[5m])) by (cluster_id, destination_service_name) * on(cluster_id, destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "sum(rate(istio_requests_total{destination_service_name=~\"$api\"}[5m])) by (cluster_id, destination_service_name, response_code) * on(cluster_id, destination_service_name) group_left(name) (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
-          "legendFormat": "\"{{cluster_id}}\" error (4xx,5xx)",
+          "legendFormat": "\"{{cluster_id}}\" {{response_code}}",
           "range": true,
           "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"2.*|3.*\",destination_service_name=~\"$api\"}[5m])) by (cluster_id, destination_service_name) * on(cluster_id, destination_service_name) group_right() (group without(instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{deployment=~\"$api\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
-          "hide": false,
-          "legendFormat": "\"{{cluster_id}}\" success (2xx,3xx)",
-          "range": true,
-          "refId": "C"
         }
       ],
-      "title": "request breakdown by cluster (req/s)",
+      "title": "request breakdown by cluster and code (req/s)",
       "type": "timeseries"
     },
     {

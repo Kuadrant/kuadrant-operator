@@ -1,4 +1,5 @@
 INTEGRATION_COVER_PKGS = ./pkg/...,./controllers/...,./api/...
+INTEGRATION_TESTS_EXTRA_ARGS =
 
 ##@ Integration tests
 
@@ -11,7 +12,7 @@ test-bare-k8s-integration: clean-cov generate fmt vet ginkgo ## Requires only ba
 		--output-dir $(PROJECT_PATH)/coverage/bare-k8s-integration \
 		--coverprofile cover.out \
 		-tags integration \
-		./tests/bare_k8s/...
+		$(INTEGRATION_TESTS_EXTRA_ARGS) ./tests/bare_k8s/...
 
 .PHONY: test-gatewayapi-env-integration
 test-gatewayapi-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes cluster with GatewayAPI installed.
@@ -22,7 +23,7 @@ test-gatewayapi-env-integration: clean-cov generate fmt vet ginkgo ## Requires k
 		--output-dir $(PROJECT_PATH)/coverage/gatewayapi-integration \
 		--coverprofile cover.out \
 		-tags integration \
-		./tests/gatewayapi/...
+		$(INTEGRATION_TESTS_EXTRA_ARGS) ./tests/gatewayapi/...
 
 .PHONY: test-istio-env-integration
 test-istio-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes cluster with GatewayAPI and Istio installed.
@@ -33,7 +34,7 @@ test-istio-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubern
 		--output-dir $(PROJECT_PATH)/coverage/istio-integration \
 		--coverprofile cover.out \
 		-tags integration \
-		tests/istio/...
+		$(INTEGRATION_TESTS_EXTRA_ARGS) tests/istio/...
 
 .PHONY: test-integration
 test-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes cluster with at least one GatewayAPI provider installed.
@@ -44,4 +45,4 @@ test-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes clust
 		--output-dir $(PROJECT_PATH)/coverage/integration \
 		--coverprofile cover.out \
 		-tags integration \
-		./controllers/...
+		$(INTEGRATION_TESTS_EXTRA_ARGS) ./controllers/...

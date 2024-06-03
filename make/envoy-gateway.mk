@@ -9,8 +9,24 @@ EG_NAMESPACE = envoy-gateway-system
 # egctl tool
 EGCTL=$(PROJECT_PATH)/bin/egctl
 EGCTL_VERSION ?= v1.0.0
-OS = linux
-ARCH = amd64
+OS = $(shell uname -s | tr '[:upper:]' '[:lower:]')
+UNAME_P := $(shell uname -p)
+ifeq ($(UNAME_P),x86_64)
+	ARCH = amd64
+endif
+ifeq ($(UNAME_P),aarch64)
+	ARCH = arm64
+endif
+ifneq ($(filter armv5%,$(UNAME_P)),)
+    ARCH = armv5
+endif
+ifneq ($(filter armv6%,$(UNAME_P)),)
+    ARCH = armv6
+endif
+ifneq ($(filter armv7%,$(UNAME_P)),)
+    ARCH = arm
+endif
+
 $(EGCTL):
 	mkdir -p $(PROJECT_PATH)/bin
 	## get-egctl.sh requires sudo and does not allow installing in a custom location. Fails if not in the PATH as well

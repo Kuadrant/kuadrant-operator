@@ -25,6 +25,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
 var _ = Describe("Target status reconciler", Ordered, func() {
@@ -38,20 +39,20 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 	)
 
 	BeforeAll(func(ctx SpecContext) {
-		kuadrantInstallationNS = CreateNamespaceWithContext(ctx)
-		ApplyKuadrantCR(kuadrantInstallationNS)
+		kuadrantInstallationNS = tests.CreateNamespace(ctx, testClient())
+		tests.ApplyKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
 	})
 
 	AfterAll(func(ctx SpecContext) {
-		DeleteNamespaceCallbackWithContext(ctx, kuadrantInstallationNS)
+		tests.DeleteNamespace(ctx, testClient(), kuadrantInstallationNS)
 	})
 
 	BeforeEach(func(ctx SpecContext) {
 		// create namespace
-		testNamespace = CreateNamespaceWithContext(ctx)
+		testNamespace = tests.CreateNamespace(ctx, testClient())
 
 		// create gateway
-		gateway := testBuildBasicGateway(TestGatewayName, testNamespace, func(gateway *gatewayapiv1.Gateway) {
+		gateway := tests.BuildBasicGateway(TestGatewayName, testNamespace, func(gateway *gatewayapiv1.Gateway) {
 			gateway.Spec.Listeners = []gatewayapiv1.Listener{{
 				Name:     gatewayapiv1.SectionName("test-listener-toystore-com"),
 				Hostname: ptr.To(gatewayapiv1.Hostname("*.toystore.com")),
@@ -62,17 +63,17 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 		err := k8sClient.Create(ctx, gateway)
 		Expect(err).ToNot(HaveOccurred())
 
-		Eventually(testGatewayIsReady(gateway)).WithContext(ctx).Should(BeTrue())
+		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 
 		// create application
-		route := testBuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
+		route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
 		err = k8sClient.Create(ctx, route)
 		Expect(err).ToNot(HaveOccurred())
-		Eventually(testRouteIsAccepted(client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
+		Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
 	})
 
 	AfterEach(func(ctx SpecContext) {
-		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
+		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
 	gatewayAffected := func(ctx context.Context, gatewayName, conditionType string, policyKey client.ObjectKey) bool {
@@ -178,7 +179,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 		// and the statuses of its target object and other optional route objects have been all updated as affected by the policy
 		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *v1beta2.AuthPolicy, routeNames ...string) func() bool {
 			return func() bool {
-				if !isAuthPolicyAccepted(ctx, policy)() {
+				if !tests.IsAuthPolicyAccepted(ctx, testClient(), policy)() {
 					return false
 				}
 				return targetsAffected(ctx, client.ObjectKeyFromObject(policy), policyAffectedCondition, policy.Spec.TargetRef, routeNames...)
@@ -206,7 +207,8 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 
 			Eventually(func() bool {
 				return policyAcceptedAndTargetsAffected(ctx, routePolicy1)() &&
-					!isAuthPolicyAccepted(ctx, routePolicy2)() && !routeAffected(ctx, TestHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy2))
+					!tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy2)() &&
+					!routeAffected(ctx, TestHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy2))
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
@@ -224,8 +226,10 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 			Expect(k8sClient.Create(ctx, routePolicy2)).To(Succeed())
 
 			Eventually(func() bool {
-				return !isAuthPolicyAccepted(ctx, routePolicy1)() && routeNotAffected(ctx, TestHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy1)) &&
-					!isAuthPolicyAccepted(ctx, routePolicy2)() && !routeAffected(ctx, TestHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy2))
+				return !tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy1)() &&
+					routeNotAffected(ctx, TestHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy1)) &&
+					!tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy2)() &&
+					!routeAffected(ctx, TestHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy2))
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
@@ -299,7 +303,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 			Eventually(policyAcceptedAndTargetsAffected(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			otherRouteName := TestHTTPRouteName + "-other"
-			otherRoute := testBuildBasicHttpRoute(otherRouteName, TestGatewayName, testNamespace, []string{"other.toystore.com"})
+			otherRoute := tests.BuildBasicHttpRoute(otherRouteName, TestGatewayName, testNamespace, []string{"other.toystore.com"})
 			Expect(k8sClient.Create(ctx, otherRoute)).To(Succeed())
 
 			gatewayPolicy := policyFactory(func(policy *v1beta2.AuthPolicy) {
@@ -314,7 +318,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 			Expect(k8sClient.Create(ctx, gatewayPolicy)).To(Succeed())
 
 			Eventually(func() bool {
-				return testRouteIsAccepted(client.ObjectKeyFromObject(otherRoute))() &&
+				return tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(otherRoute))() &&
 					policyAcceptedAndTargetsAffected(ctx, routePolicy)() &&
 					policyAcceptedAndTargetsAffected(ctx, gatewayPolicy, otherRouteName)()
 			}).WithContext(ctx).Should(BeTrue())
@@ -369,7 +373,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *v1beta2.RateLimitPolicy, routeNames ...string) func() bool {
 			return func() bool {
 				policyKey := client.ObjectKeyFromObject(policy)
-				if !testRLPIsAccepted(ctx, policyKey)() {
+				if !tests.RLPIsAccepted(ctx, testClient(), policyKey)() {
 					return false
 				}
 				return targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef, routeNames...)
@@ -452,7 +456,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 			Eventually(policyAcceptedAndTargetsAffected(ctx, routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			otherRouteName := TestHTTPRouteName + "-other"
-			otherRoute := testBuildBasicHttpRoute(otherRouteName, TestGatewayName, testNamespace, []string{"other.toystore.com"})
+			otherRoute := tests.BuildBasicHttpRoute(otherRouteName, TestGatewayName, testNamespace, []string{"other.toystore.com"})
 			Expect(k8sClient.Create(ctx, otherRoute)).To(Succeed())
 
 			gatewayPolicy := policyFactory(func(policy *v1beta2.RateLimitPolicy) {
@@ -467,7 +471,7 @@ var _ = Describe("Target status reconciler", Ordered, func() {
 			Expect(k8sClient.Create(ctx, gatewayPolicy)).To(Succeed())
 
 			Eventually(func() bool {
-				return testRouteIsAccepted(client.ObjectKeyFromObject(otherRoute))() &&
+				return tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(otherRoute))() &&
 					policyAcceptedAndTargetsAffected(ctx, routePolicy)() &&
 					policyAcceptedAndTargetsAffected(ctx, gatewayPolicy, otherRouteName)()
 			}).WithContext(ctx).Should(BeTrue())

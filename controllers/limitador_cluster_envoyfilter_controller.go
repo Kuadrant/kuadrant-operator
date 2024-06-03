@@ -37,6 +37,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -165,6 +166,24 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *LimitadorClusterEnvoyFilterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ok, err := kuadrantistioutils.IsEnvoyFilterInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("Istio EnvoyFilter controller disabled. Istio was not found")
+		return nil
+	}
+
+	ok, err = kuadrantgatewayapi.IsGatewayAPIInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("Istio EnvoyFilter controller disabled. GatewayAPI was not found")
+		return nil
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		// Limitador cluster EnvoyFilter controller only cares about
 		// the annotation having references to RLP's

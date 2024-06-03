@@ -53,3 +53,7 @@ sail-uninstall: kustomize
 .PHONY: istio-install
 istio-install:
 	$(MAKE) $(INSTALL_COMMAND)
+
+.PHONY: deploy-istio-gateway
+deploy-istio-gateway: $(KUSTOMIZE) ## Deploy Gateway API gateway with gatewayclass set to Istio
+	$(KUSTOMIZE) build config/dependencies/istio/gateway | kubectl apply -f -

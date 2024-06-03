@@ -2,10 +2,10 @@ name: Test
 
 on:
   push:
-    branches: [ 'main' ]
+    branches: ['main']
 
   pull_request:
-    branches: [ '*' ]
+    branches: ['*']
     paths-ignore:
       - '**.adoc'
       - '**.md'
@@ -20,8 +20,8 @@ jobs:
     name: Unit Tests
     strategy:
       matrix:
-        go-version: [ 1.21.x ]
-        platform: [ ubuntu-latest ]
+        go-version: [1.21.x]
+        platform: [ubuntu-latest]
     runs-on: ${{ matrix.platform }}
     defaults:
       run:
@@ -49,16 +49,16 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
-  integration-tests:
-    name: Integration Tests
+  controllers-integration-tests:
+    name: Integration Tests for github.com/kuadrant/kuadrant-operator/controllers
     strategy:
       matrix:
-        istio-type: [ sail, istioctl ]
-        pr-event:
-          - ${{ github.event_name == 'pull_request' }}
-        exclude:
-          - istio-type: sail
-            pr-event: true
+        gatewayapi-provider: [istio]
+        include:
+          # - istio-type: sail
+          #   gatewayapi-provider: istio
+          - istio-type: istioctl
+            gatewayapi-provider: istio
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test
@@ -84,12 +84,9 @@ jobs:
       - name: Check cluster info
         run: |
           kubectl cluster-info dump
-      - name: Run make test-env-setup istio-type=${{ matrix.istio-type }}
+      - name: Run make env-setup GATEWAYAPI_PROVIDER=${{ matrix.gatewayapi-provider }} ISTIO_INSTALL_SAIL=${{ matrix.istio-type == 'sail' && true || false }}
         run: |
-          make test-env-setup ISTIO_INSTALL_SAIL=${{ matrix.istio-type == 'sail' && true || false }}
-      - name: Wait for deployments
-        run: |
-          kubectl -n ${{ env.KUADRANT_NAMESPACE }} wait --timeout=300s --for=condition=Available deployments --all
+          make env-setup GATEWAYAPI_PROVIDER=${{ matrix.gatewayapi-provider }} ISTIO_INSTALL_SAIL=${{ matrix.istio-type == 'sail' && true || false }}
       - name: Run integration tests
         run: |
           make test-integration
@@ -101,7 +98,142 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          flags: integration
+          flags: controllers-integration
+          fail_ci_if_error: false
+          verbose: true
+
+  bare-k8s-integration-tests:
+    name: Integration Tests for github.com/kuadrant/kuadrant-operator/tests/bare_k8s
+    runs-on: ubuntu-latest
+    env:
+      KIND_CLUSTER_NAME: kuadrant-test
+      KUADRANT_NAMESPACE: kuadrant-system
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Set up Go 1.21.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.21.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.2.0
+        with:
+          version: v0.22.0
+          config: utils/kind-cluster.yaml
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+          wait: 120s
+      - name: Check cluster info
+        run: |
+          kubectl cluster-info dump
+      - name: Run make k8s-env-setup
+        run: |
+          make k8s-env-setup
+      - name: Run integration tests
+        run: |
+          make test-bare-k8s-integration
+      - name: Upload integration-test coverage reports to CodeCov
+        # more at https://github.com/codecov/codecov-action
+        # Only run if the feature branch is in your repo (not in a fork)
+        # as Tokenless uploading is rate limited for public repos
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: bare-k8s-integration
+          fail_ci_if_error: false
+          verbose: true
+
+  gatewayapi-integration-tests:
+    name: Integration Tests for github.com/kuadrant/kuadrant-operator/tests/gatewayapi
+    runs-on: ubuntu-latest
+    env:
+      KIND_CLUSTER_NAME: kuadrant-test
+      KUADRANT_NAMESPACE: kuadrant-system
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Set up Go 1.21.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.21.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.2.0
+        with:
+          version: v0.22.0
+          config: utils/kind-cluster.yaml
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+          wait: 120s
+      - name: Check cluster info
+        run: |
+          kubectl cluster-info dump
+      - name: Run make gatewayapi-env-setup
+        run: |
+          make gatewayapi-env-setup
+      - name: Run integration tests
+        run: |
+          make test-gatewayapi-env-integration
+      - name: Upload integration-test coverage reports to CodeCov
+        # more at https://github.com/codecov/codecov-action
+        # Only run if the feature branch is in your repo (not in a fork)
+        # as Tokenless uploading is rate limited for public repos
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: gatewayapi-integration
+          fail_ci_if_error: false
+          verbose: true
+
+  istio-integration-tests:
+    name: Integration Tests for github.com/kuadrant/kuadrant-operator/tests/istio
+    runs-on: ubuntu-latest
+    env:
+      KIND_CLUSTER_NAME: kuadrant-test
+      KUADRANT_NAMESPACE: kuadrant-system
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Set up Go 1.21.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.21.x
+        id: go
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Create k8s Kind Cluster
+        uses: helm/kind-action@v1.2.0
+        with:
+          version: v0.22.0
+          config: utils/kind-cluster.yaml
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+          wait: 120s
+      - name: Check cluster info
+        run: |
+          kubectl cluster-info dump
+      - name: Run make istio-env-setup
+        run: |
+          make istio-env-setup
+      - name: Run integration tests
+        run: |
+          make test-istio-env-integration
+      - name: Upload integration-test coverage reports to CodeCov
+        # more at https://github.com/codecov/codecov-action
+        # Only run if the feature branch is in your repo (not in a fork)
+        # as Tokenless uploading is rate limited for public repos
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: istio-integration
           fail_ci_if_error: false
           verbose: true
 
@@ -154,8 +286,8 @@ jobs:
     name: Test Scripts
     strategy:
       matrix:
-        go-version: [ 1.21.x ]
-        platform: [ ubuntu-latest, macos-latest ]
+        go-version: [1.21.x]
+        platform: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.platform }}
     defaults:
       run:

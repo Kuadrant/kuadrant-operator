@@ -22,6 +22,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
+	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
 var _ = Describe("DNSPolicy Multi Cluster", func() {
@@ -36,7 +37,7 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 
 	BeforeEach(func() {
 		ctx = context.Background()
-		testNamespace = CreateNamespaceWithContext(ctx)
+		testNamespace = tests.CreateNamespace(ctx, testClient())
 
 		var err error
 		ownerID, err = utils.GetClusterUID(ctx, k8sClient)
@@ -123,7 +124,7 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 			err := k8sClient.Delete(ctx, gatewayClass)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		}
-		DeleteNamespaceCallbackWithContext(ctx, testNamespace)
+		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	})
 
 	Context("simple routing strategy", func() {

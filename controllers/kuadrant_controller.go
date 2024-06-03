@@ -26,7 +26,7 @@ import (
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/env"
 	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
@@ -40,19 +40,36 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
 const (
 	kuadrantFinalizer = "kuadrant.io/finalizer"
+)
+
+const (
 	// (Sail) The istio CR must be named default to process GW API resources
 	istioCRName = "default"
 )
 
+func controlPlaneConfigMapName() string {
+	return env.GetString("ISTIOCONFIGMAP_NAME", "istio")
+}
+
+func controlPlaneProviderNamespace() string {
+	return env.GetString("ISTIOOPERATOR_NAMESPACE", "istio-system")
+}
+
+func controlPlaneProviderName() string {
+	return env.GetString("ISTIOOPERATOR_NAME", "istiocontrolplane")
+}
+
 // KuadrantReconciler reconciles a Kuadrant object
 type KuadrantReconciler struct {
 	*reconcilers.BaseReconciler
+	RestMapper meta.RESTMapper
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants,verbs=get;list;watch;create;update;patch;delete
@@ -156,16 +173,10 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 }
 
 func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	logger, _ := logr.FromContext(ctx)
-
 	isIstioInstalled, err := r.unregisterExternalAuthorizerIstio(ctx, kObj)
 
 	if err == nil && !isIstioInstalled {
 		err = r.unregisterExternalAuthorizerOSSM(ctx, kObj)
-	}
-
-	if err != nil {
-		logger.Error(err, "failed fo get service mesh control plane")
 	}
 
 	return err
@@ -173,22 +184,22 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizer(ctx context.Context, k
 
 func (r *KuadrantReconciler) unregisterExternalAuthorizerIstio(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (bool, error) {
 	logger, _ := logr.FromContext(ctx)
-	configsToUpdate, err := r.getIstioConfigObjects(ctx, logger)
+	configsToUpdate, err := r.getIstioConfigObjects(ctx)
 	isIstioInstalled := configsToUpdate != nil
 
 	if !isIstioInstalled || err != nil {
 		return isIstioInstalled, err
 	}
 
-	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
+	kuadrantAuthorizer := istio.NewKuadrantAuthorizer(kObj.Namespace)
 
 	for _, config := range configsToUpdate {
-		hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(config, *kuadrantAuthorizer)
+		hasAuthorizer, err := istio.HasKuadrantAuthorizer(config, *kuadrantAuthorizer)
 		if err != nil {
 			return true, err
 		}
-		if hasKuadrantAuthorizer {
-			if err = common.UnregisterKuadrantAuthorizer(config, kuadrantAuthorizer); err != nil {
+		if hasAuthorizer {
+			if err = istio.UnregisterKuadrantAuthorizer(config, kuadrantAuthorizer); err != nil {
 				return true, err
 			}
 
@@ -209,18 +220,22 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Contex
 	smcpKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
 	if err := r.Client().Get(ctx, smcpKey, smcp); err != nil {
 		logger.V(1).Info("failed to get servicemeshcontrolplane object", "key", smcp, "err", err)
+		if apierrors.IsNotFound(err) || meta.IsNoMatchError(err) {
+			logger.Info("OSSM installation as GatewayAPI provider not found")
+			return nil
+		}
 		return err
 	}
 
 	smcpWrapper := istio.NewOSSMControlPlaneWrapper(smcp)
-	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
+	kuadrantAuthorizer := istio.NewKuadrantAuthorizer(kObj.Namespace)
 
-	hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(smcpWrapper, *kuadrantAuthorizer)
+	hasAuthorizer, err := istio.HasKuadrantAuthorizer(smcpWrapper, *kuadrantAuthorizer)
 	if err != nil {
 		return err
 	}
-	if hasKuadrantAuthorizer {
-		err = common.UnregisterKuadrantAuthorizer(smcpWrapper, kuadrantAuthorizer)
+	if hasAuthorizer {
+		err = istio.UnregisterKuadrantAuthorizer(smcpWrapper, kuadrantAuthorizer)
 		if err != nil {
 			return err
 		}
@@ -234,16 +249,10 @@ func (r *KuadrantReconciler) unregisterExternalAuthorizerOSSM(ctx context.Contex
 }
 
 func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	logger, _ := logr.FromContext(ctx)
-
 	isIstioInstalled, err := r.registerExternalAuthorizerIstio(ctx, kObj)
 
 	if err == nil && !isIstioInstalled {
 		err = r.registerExternalAuthorizerOSSM(ctx, kObj)
-	}
-
-	if err != nil {
-		logger.Error(err, "failed fo get service mesh control plane")
 	}
 
 	return err
@@ -251,21 +260,21 @@ func (r *KuadrantReconciler) registerExternalAuthorizer(ctx context.Context, kOb
 
 func (r *KuadrantReconciler) registerExternalAuthorizerIstio(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) (bool, error) {
 	logger, _ := logr.FromContext(ctx)
-	configsToUpdate, err := r.getIstioConfigObjects(ctx, logger)
+	configsToUpdate, err := r.getIstioConfigObjects(ctx)
 	isIstioInstalled := configsToUpdate != nil
 
 	if !isIstioInstalled || err != nil {
 		return isIstioInstalled, err
 	}
 
-	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
+	kuadrantAuthorizer := istio.NewKuadrantAuthorizer(kObj.Namespace)
 	for _, config := range configsToUpdate {
-		hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(config, *kuadrantAuthorizer)
+		hasKuadrantAuthorizer, err := istio.HasKuadrantAuthorizer(config, *kuadrantAuthorizer)
 		if err != nil {
 			return true, err
 		}
 		if !hasKuadrantAuthorizer {
-			err = common.RegisterKuadrantAuthorizer(config, kuadrantAuthorizer)
+			err = istio.RegisterKuadrantAuthorizer(config, kuadrantAuthorizer)
 			if err != nil {
 				return true, err
 			}
@@ -282,26 +291,30 @@ func (r *KuadrantReconciler) registerExternalAuthorizerIstio(ctx context.Context
 func (r *KuadrantReconciler) registerExternalAuthorizerOSSM(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
 	logger, _ := logr.FromContext(ctx)
 
-	if err := r.registerServiceMeshMember(ctx, kObj); err != nil {
-		return err
-	}
-
 	smcp := &maistrav2.ServiceMeshControlPlane{}
 
 	smcpKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
 	if err := r.GetResource(ctx, smcpKey, smcp); err != nil {
 		logger.V(1).Info("failed to get servicemeshcontrolplane object", "key", smcp, "err", err)
+		if apierrors.IsNotFound(err) || meta.IsNoMatchError(err) {
+			logger.Info("OSSM installation as GatewayAPI provider not found")
+			return nil
+		}
+	}
+
+	if err := r.registerServiceMeshMember(ctx, kObj); err != nil {
 		return err
 	}
-	smcpWrapper := istio.NewOSSMControlPlaneWrapper(smcp)
-	kuadrantAuthorizer := common.NewKuadrantAuthorizer(kObj.Namespace)
 
-	hasKuadrantAuthorizer, err := common.HasKuadrantAuthorizer(smcpWrapper, *kuadrantAuthorizer)
+	smcpWrapper := istio.NewOSSMControlPlaneWrapper(smcp)
+	kuadrantAuthorizer := istio.NewKuadrantAuthorizer(kObj.Namespace)
+
+	hasAuthorizer, err := istio.HasKuadrantAuthorizer(smcpWrapper, *kuadrantAuthorizer)
 	if err != nil {
 		return err
 	}
-	if !hasKuadrantAuthorizer {
-		err = common.RegisterKuadrantAuthorizer(smcpWrapper, kuadrantAuthorizer)
+	if !hasAuthorizer {
+		err = istio.RegisterKuadrantAuthorizer(smcpWrapper, kuadrantAuthorizer)
 		if err != nil {
 			return err
 		}
@@ -314,32 +327,34 @@ func (r *KuadrantReconciler) registerExternalAuthorizerOSSM(ctx context.Context,
 	return nil
 }
 
-func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context, logger logr.Logger) ([]common.ConfigWrapper, error) {
-	var configsToUpdate []common.ConfigWrapper
+func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context) ([]istio.ConfigWrapper, error) {
+	logger, _ := logr.FromContext(ctx)
+	var configsToUpdate []istio.ConfigWrapper
 
 	iop := &iopv1alpha1.IstioOperator{}
 	istKey := client.ObjectKey{Name: controlPlaneProviderName(), Namespace: controlPlaneProviderNamespace()}
 	err := r.GetResource(ctx, istKey, iop)
-	if err == nil || apierrors.IsNotFound(err) {
+	// TODO(eguzki): 🔥 this spaghetti code 🔥
+	if err == nil {
 		configsToUpdate = append(configsToUpdate, istio.NewOperatorWrapper(iop))
-	} else if !apimeta.IsNoMatchError(err) {
-		logger.V(1).Info("failed to get istiooperator object", "key", istKey, "err", err)
-		return nil, err
-	} else {
-		// Error is NoMatchError so check for Istio CR instead
+	} else if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
+		// IstioOperator not existing or not CRD not found, so check for Istio CR instead
 		ist := &istiov1alpha1.Istio{}
 		istKey := client.ObjectKey{Name: istioCRName}
 		if err := r.GetResource(ctx, istKey, ist); err != nil {
 			logger.V(1).Info("failed to get istio object", "key", istKey, "err", err)
-			if apimeta.IsNoMatchError(err) {
+			if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
 				// return nil and nil if there's no istiooperator or istio CR
+				logger.Info("Istio installation as GatewayAPI provider not found")
 				return nil, nil
-			} else if !apierrors.IsNotFound(err) {
-				// return nil and err if there's an error other than not found (no istio CR)
-				return nil, err
 			}
+			// return nil and err if there's an error other than not found (no istio CR)
+			return nil, err
 		}
 		configsToUpdate = append(configsToUpdate, istio.NewSailWrapper(ist))
+	} else {
+		logger.V(1).Info("failed to get istiooperator object", "key", istKey, "err", err)
+		return nil, err
 	}
 
 	istioConfigMap := &corev1.ConfigMap{}
@@ -355,7 +370,23 @@ func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context, logger l
 }
 
 func (r *KuadrantReconciler) registerServiceMeshMember(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	member := buildServiceMeshMember(kObj)
+	member := &maistrav1.ServiceMeshMember{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ServiceMeshMember",
+			APIVersion: maistrav1.SchemeGroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "default",
+			Namespace: kObj.Namespace,
+		},
+		Spec: maistrav1.ServiceMeshMemberSpec{
+			ControlPlaneRef: maistrav1.ServiceMeshControlPlaneRef{
+				Name:      controlPlaneProviderName(),
+				Namespace: controlPlaneProviderNamespace(),
+			},
+		},
+	}
+
 	err := r.SetOwnerReference(kObj, member)
 	if err != nil {
 		return err
@@ -374,37 +405,6 @@ func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1
 	}
 
 	return r.reconcileAuthorino(ctx, kObj)
-}
-
-func controlPlaneProviderName() string {
-	return env.GetString("ISTIOOPERATOR_NAME", "istiocontrolplane")
-}
-
-func controlPlaneConfigMapName() string {
-	return env.GetString("ISTIOCONFIGMAP_NAME", "istio")
-}
-
-func controlPlaneProviderNamespace() string {
-	return env.GetString("ISTIOOPERATOR_NAMESPACE", "istio-system")
-}
-
-func buildServiceMeshMember(kObj *kuadrantv1beta1.Kuadrant) *maistrav1.ServiceMeshMember {
-	return &maistrav1.ServiceMeshMember{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ServiceMeshMember",
-			APIVersion: maistrav1.SchemeGroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "default",
-			Namespace: kObj.Namespace,
-		},
-		Spec: maistrav1.ServiceMeshMemberSpec{
-			ControlPlaneRef: maistrav1.ServiceMeshControlPlaneRef{
-				Name:      controlPlaneProviderName(),
-				Namespace: controlPlaneProviderNamespace(),
-			},
-		},
-	}
 }
 
 func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
@@ -495,6 +495,15 @@ func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadr
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *KuadrantReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ok, err := kuadrantgatewayapi.IsGatewayAPIInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("Kuadrant controller disabled. GatewayAPI was not found")
+		return nil
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta1.Kuadrant{}).
 		Owns(&limitadorv1alpha1.Limitador{}).

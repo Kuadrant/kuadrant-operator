@@ -12,39 +12,63 @@
 ## Build
 
 ```sh
-make
+make build
 ```
 
-## Run locally
+## Deploy on local kubernetes cluster
 
-You need an active session open to a kubernetes cluster.
+Run local Kubernetes cluster using Docker container using [Kind](https://kind.sigs.k8s.io/) and deploy kuadrant operator (and *all* dependencies) in a single command.
 
-Optionally, run kind and deploy kuadrant deps
-
-```sh
-make local-env-setup
-```
-
-Then, run the operator locally
-
-```sh
-make run
-```
-
-## Deploy the operator in a deployment object
-
-```sh
+```shell
 make local-setup
 ```
 
-List of tasks done by the command above:
+The `make local-setup` target accepts the following variables:
 
-* Create local cluster using kind
-* Build kuadrant docker image from the current working directory
-* Deploy Kuadrant control plane (including istio, authorino and limitador)
+| **Makefile Variable** | **Description** | **Default value** |
+| --- | --- |--- |
+| `GATEWAYAPI_PROVIDER` | GatewayAPI provider name. Accepted values: [*istio*] | *istio* |
 
-TODO: customize with custom authorino and limitador git refs.
-Make sure Makefile propagates variable to `deploy` target
+## Run as a local process
+
+Run local Kubernetes cluster using Docker container using [Kind](https://kind.sigs.k8s.io/) and deploy *all* dependencies in a single command.
+
+```shell
+make local-env-setup
+```
+
+The `make local-env-setup` target accepts the following variables:
+
+| **Makefile Variable** | **Description** | **Default value** |
+| --- | --- |--- |
+| `GATEWAYAPI_PROVIDER` | GatewayAPI provider name. Accepted values: [*istio*] | *istio* |
+
+Then, run the operator locally
+
+```shell
+make run
+```
+
+## Deploy on existing kubernetes cluster
+
+**Requirements**:
+* Active session open to the kubernetes cluster.
+* GatewayAPI installed
+* GatewayAPI provider installed. Currently only Istio supported.
+* [Cert Manager](https://cert-manager.io/) installed
+
+Before running the kuadrant operator, some dependencies needs to be deployed.
+
+```
+make install
+make deploy-dependencies
+```
+
+Then, deploy the operator
+
+```sh
+make deploy
+```
 
 ## Deploy kuadrant operator using OLM
 
@@ -216,35 +240,14 @@ make test-unit TEST_NAME=TestLimitIndexEquals/empty_indexes_are_equal
 
 ### Integration tests
 
-You need an active session open to a kubernetes cluster.
+Multiple controller integration tests are defined
 
-Optionally, run kind and deploy kuadrant deps
-
-```sh
-make local-env-setup
-```
-
-Run integration tests
-
-```sh
-make test-integration
-```
-
-### All tests
-
-You need an active session open to a kubernetes cluster.
-
-Optionally, run kind and deploy kuadrant deps
-
-```sh
-make local-env-setup
-```
-
-Run all tests
-
-```sh
-make test
-```
+| Golang package | Required environment | Makefile env setup target | Makefile test run target |
+| --- | --- | --- | --- |
+| `github.com/kuadrant/kuadrant-operator/tests/bare_k8s` | no gateway provider, no GatewayAPI CRDs. Just Kuadrant API and Kuadrant dependencies. | `make local-k8s-env-setup` | `make test-bare-k8s-integration` |
+| `github.com/kuadrant/kuadrant-operator/tests/gatewayapi` | no gateway provider. GatewayAPI CRDs, Kuadrant API and Kuadrant dependencies. | `make local-gatewayapi-env-setup` | `make test-gatewayapi-env-integration` |
+| `github.com/kuadrant/kuadrant-operator/controllers` | at least one gatewayapi provider. It can be any: istio, envoygateway, ...  | `make local-env-setup GATEWAYAPI_PROVIDER=[istio]` (Default *istio*) | `make test-integration` |
+| `github.com/kuadrant/kuadrant-operator/tests/istio` | GatewayAPI CRDs, Istio, Kuadrant API and Kuadrant dependencies.  | `make local-env-setup GATEWAYAPI_PROVIDER=istio` | `make test-istio-env-integration` |
 
 ### Lint tests
 

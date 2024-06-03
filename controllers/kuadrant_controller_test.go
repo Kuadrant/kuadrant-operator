@@ -14,6 +14,7 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
 var _ = Describe("Kuadrant controller", func() {
@@ -27,13 +28,14 @@ var _ = Describe("Kuadrant controller", func() {
 	)
 	Context("Reconcile limitador resources", func() {
 		BeforeEach(func(ctx SpecContext) {
-			testNamespace = CreateNamespaceWithContext(ctx)
-			ApplyKuadrantCR(testNamespace)
+			testNamespace = tests.CreateNamespace(ctx, testClient())
+			tests.ApplyKuadrantCRWithName(ctx, testClient(), testNamespace, kuadrant)
 		})
 
 		AfterEach(func(ctx SpecContext) {
-			DeleteNamespaceCallbackWithContext(ctx, testNamespace)
+			tests.DeleteNamespace(ctx, testClient(), testNamespace)
 		}, afterEachTimeOut)
+
 		It("Copy configuration from Kuadrant CR to Limitador CR", func(ctx SpecContext) {
 			kObj := &kuadrantv1beta1.Kuadrant{}
 			lObj := &v1alpha1.Limitador{}

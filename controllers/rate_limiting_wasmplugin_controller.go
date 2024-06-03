@@ -366,8 +366,26 @@ func addHTTPRouteByGatewayIndexer(mgr ctrl.Manager, baseLogger logr.Logger) erro
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RateLimitingWASMPluginReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ok, err := kuadrantistioutils.IsWASMPluginInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("Istio WasmPlugin controller disabled. Istio was not found")
+		return nil
+	}
+
+	ok, err = kuadrantgatewayapi.IsGatewayAPIInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("Istio WasmPlugin controller disabled. GatewayAPI was not found")
+		return nil
+	}
+
 	// Add custom indexer
-	err := addHTTPRouteByGatewayIndexer(mgr, r.Logger().WithName("routeByGatewayIndexer"))
+	err = addHTTPRouteByGatewayIndexer(mgr, r.Logger().WithName("routeByGatewayIndexer"))
 	if err != nil {
 		return err
 	}

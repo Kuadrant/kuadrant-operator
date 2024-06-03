@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package istio_test
 
 import (
 	"os"
@@ -31,13 +31,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-// This test suite will be run on k8s with GatewayAPI CRDS and at least one GatewayAPI provider installed
+// This test suite will be run on k8s env with GatewayAPI CRDs, Istio and Kuadrant CRDs installed
 
 var k8sClient client.Client
 var testEnv *envtest.Environment
@@ -47,8 +48,13 @@ func testClient() client.Client { return k8sClient }
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "Controller Suite")
+	RunSpecs(t, "Controller Suite on Istio")
 }
+
+const (
+	TestGatewayName   = "test-placed-gateway"
+	TestHTTPRouteName = "toystore-route"
+)
 
 var _ = BeforeSuite(func(ctx SpecContext) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
@@ -62,7 +68,7 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	SetupKuadrantOperatorForTest(scheme.Scheme, cfg)
+	controllers.SetupKuadrantOperatorForTest(scheme.Scheme, cfg)
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
@@ -80,7 +86,7 @@ func TestMain(m *testing.M) {
 		log.SetLevel(log.DebugLevel),
 		log.SetMode(log.ModeDev),
 		log.WriteTo(GinkgoWriter),
-	).WithName("controller_test")
+	).WithName("istio_controller_test")
 	log.SetLogger(logger)
 	os.Exit(m.Run())
 }

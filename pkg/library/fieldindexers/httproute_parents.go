@@ -22,6 +22,15 @@ const (
 // to prevent creating the same index field multiple times, the function is declared private to be
 // called only by this controller
 func HTTPRouteIndexByGateway(mgr ctrl.Manager, baseLogger logr.Logger) error {
+	ok, err := kuadrantgatewayapi.IsGatewayAPIInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		baseLogger.Info("HTTPRouteIndexByGateway index disabled. GatewayAPI was not found")
+		return nil
+	}
+
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &gatewayapiv1.HTTPRoute{}, HTTPRouteGatewayParentField, func(rawObj client.Object) []string {
 		// grab the route object, extract the parents
 		route, assertionOk := rawObj.(*gatewayapiv1.HTTPRoute)

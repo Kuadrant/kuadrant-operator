@@ -19,10 +19,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"runtime"
+	"time"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
@@ -101,7 +101,7 @@ func printControllerMetaInfo() {
 
 	setupLog.Info(fmt.Sprintf("go version: %s", runtime.Version()))
 	setupLog.Info(fmt.Sprintf("go os/arch: %s/%s", runtime.GOOS, runtime.GOARCH))
-	setupLog.Info("wasm-shim", "sha256", wasm.WASM_SHIM_SHA256)
+	setupLog.Info("wasm-shim", "sha256", wasm.SHA256())
 }
 
 func startWasmShimFileServer(wasmShimPort int) {
@@ -112,27 +112,20 @@ func startWasmShimFileServer(wasmShimPort int) {
 		return
 	}
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", wasmShimPort))
-	if err != nil {
-		logger.Error(err, "failed to obtain port for the http wasm-shim file service")
-		os.Exit(1)
-	}
-
-	if lis == nil {
-		logger.Error(err, "failed to obtain listener for the http wasm-shim file service")
-		os.Exit(1)
-	}
-
 	mux := http.NewServeMux()
 
 	mux.Handle("/", http.FileServer(http.Dir("/opt/kuadrant/wasm-shim")))
 
 	go func() {
-		var err error
-
 		logger.Info("starting http wasm-shim file service", "port", wasmShimPort)
 
-		err = http.Serve(lis, mux)
+		server := &http.Server{
+			Addr:              fmt.Sprintf(":%d", wasmShimPort),
+			ReadHeaderTimeout: 3 * time.Second,
+			Handler:           mux,
+		}
+
+		err := server.ListenAndServe()
 
 		if err != nil {
 			logger.Error(err, "failed to start listener for the http wasm-shim file service")

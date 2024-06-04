@@ -3,15 +3,15 @@ package wasm
 import "k8s.io/utils/env"
 
 const (
-	SERVER_SERVICE_NAME = "kuadrant-operator-controller-manager-ratelimit-wasm-service"
+	ServerSvcName = "kuadrant-operator-controller-manager-ratelimit-wasm-service"
 )
 
 var (
-	WASM_SHIM_SHA256 = "not injected"
+	WasmShimSha256 = "not injected"
 )
 
 func ServerServiceName() string {
-	return SERVER_SERVICE_NAME
+	return ServerSvcName
 }
 
 func ServerServicePort() int {
@@ -23,5 +23,5 @@ func ServerServiceNamespace() string {
 }
 
 func SHA256() string {
-	return WASM_SHIM_SHA256
+	return WasmShimSha256
 }

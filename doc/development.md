@@ -17,7 +17,9 @@ make build
 
 ## Build docker image
 
-TODO
+```sh
+make docker-build
+```
 
 ## Deploy on local kubernetes cluster
 

@@ -27,7 +27,7 @@ COPY pkg/ pkg/
 # Build
 RUN WASM_SHIM_SHA256=$(cat /opt/kuadrant/wasm-shim/kuadrant-ratelimit-wasm.sha256) \
     && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags "-X github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm.WASM_SHIM_SHA256=${WASM_SHIM_SHA256}" \
+    -ldflags "-X github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm.WasmShimSha256=${WASM_SHIM_SHA256}" \
     -a -o manager main.go
 
 # Use distroless as minimal base image to package the manager binary

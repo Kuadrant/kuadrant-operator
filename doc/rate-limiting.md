@@ -395,6 +395,12 @@ metadata:
   namespace: istio-system
   …
 spec:
+  sha256: b101508ddd5fd40eb2116204e6c768332a359c21feb2dbb348956459349e7d71
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: istio-ingressgateway
+  url: http://kuadrant-operator-controller-manager-ratelimit-wasm-service.kuadrant-system.svc.cluster.local:8082/kuadrant-ratelimit-wasm
   phase: STATS
   pluginConfig:
     failureMode: deny
@@ -476,9 +482,4 @@ spec:
             key: limit.toystore_v1_website_unauthenticated__3f9c40c6
             value: "1"
       service: kuadrant-rate-limiting-service
-  selector:
-    matchLabels:
-      istio.io/gateway-name: istio-ingressgateway
-      TODO!!
-  url: oci://quay.io/kuadrant/wasm-shim:v0.3.0
 ```

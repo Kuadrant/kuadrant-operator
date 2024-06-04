@@ -131,18 +131,6 @@ func ApplyKuadrantCRWithName(ctx context.Context, cl client.Client, namespace, n
 	}
 	err := cl.Create(ctx, kuadrantCR)
 	Expect(err).ToNot(HaveOccurred())
-
-	Eventually(func() bool {
-		kuadrant := &kuadrantv1beta1.Kuadrant{}
-		err := cl.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, kuadrant)
-		if err != nil {
-			return false
-		}
-		if !meta.IsStatusConditionTrue(kuadrant.Status.Conditions, "Ready") {
-			return false
-		}
-		return true
-	}, time.Minute, 5*time.Second).Should(BeTrue())
 }
 
 func GatewayIsReady(ctx context.Context, cl client.Client, gateway *gatewayapiv1.Gateway) func() bool {

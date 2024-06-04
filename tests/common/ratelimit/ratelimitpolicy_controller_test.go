@@ -1,6 +1,6 @@
 //go:build integration
 
-package controllers
+package ratelimit
 
 import (
 	"context"
@@ -28,17 +28,16 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("RateLimitPolicy controller", Ordered, func() {
+var _ = Describe("RateLimitPolicy controller", func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 	var (
-		testNamespace          string
-		kuadrantInstallationNS string
-		routeName              = "toystore-route"
-		rlpName                = "toystore-rlp"
-		gateway                *gatewayapiv1.Gateway
+		testNamespace string
+		routeName     = "toystore-route"
+		rlpName       = "toystore-rlp"
+		gateway       *gatewayapiv1.Gateway
 	)
 
 	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
@@ -108,15 +107,6 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 		Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 	}
-
-	BeforeAll(func(ctx SpecContext) {
-		kuadrantInstallationNS = tests.CreateNamespace(ctx, testClient())
-		tests.ApplyKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
-	})
-
-	AfterAll(func(ctx SpecContext) {
-		tests.DeleteNamespace(ctx, testClient(), kuadrantInstallationNS)
-	})
 
 	BeforeEach(beforeEachCallback)
 	AfterEach(func(ctx SpecContext) {
@@ -841,7 +831,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 			// Check HTTPRoute A direct back reference
 			routeAKey := client.ObjectKey{Name: routeAName, Namespace: testNamespace}
 			Eventually(
-				testHTTPRouteHasDirectBackReference(
+				tests.HTTPRouteHasDirectBackReference(testClient(),
 					routeAKey, rlp.DirectReferenceAnnotationName(),
 					client.ObjectKeyFromObject(rlp).String(),
 				)).WithContext(ctx).Should(BeTrue())
@@ -867,12 +857,12 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 
 			// Check HTTPRoute A direct back reference is gone
 			Eventually(
-				testHTTPRouteWithoutDirectBackReference(routeAKey, rlp.DirectReferenceAnnotationName())).WithContext(ctx).Should(BeTrue())
+				tests.HTTPRouteWithoutDirectBackReference(testClient(), routeAKey, rlp.DirectReferenceAnnotationName())).WithContext(ctx).Should(BeTrue())
 
 			// Check HTTPRoute B direct back reference
 			routeBKey := client.ObjectKey{Name: routeBName, Namespace: testNamespace}
 			Eventually(
-				testHTTPRouteHasDirectBackReference(
+				tests.HTTPRouteHasDirectBackReference(testClient(),
 					routeBKey, rlp.DirectReferenceAnnotationName(),
 					client.ObjectKeyFromObject(rlp).String(),
 				)).WithContext(ctx).Should(BeTrue())
@@ -917,7 +907,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 			// Check Gateway direct back reference
 			gwAKey := client.ObjectKey{Name: gwAName, Namespace: testNamespace}
 			Eventually(
-				testGatewayHasDirectBackReference(
+				tests.GatewayHasDirectBackReference(testClient(),
 					gwAKey, rlp.DirectReferenceAnnotationName(),
 					client.ObjectKeyFromObject(rlp).String(),
 				)).WithContext(ctx).Should(BeTrue())
@@ -944,12 +934,12 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 
 			// Check Gw A direct back reference is gone
 			Eventually(
-				testGatewayWithoutDirectBackReference(gwAKey, rlp.DirectReferenceAnnotationName())).WithContext(ctx).Should(BeTrue())
+				tests.GatewayWithoutDirectBackReference(testClient(), gwAKey, rlp.DirectReferenceAnnotationName())).WithContext(ctx).Should(BeTrue())
 
 			// Check Gateway B direct back reference
 			gwBKey := client.ObjectKey{Name: gwBName, Namespace: testNamespace}
 			Eventually(
-				testGatewayHasDirectBackReference(
+				tests.GatewayHasDirectBackReference(testClient(),
 					gwBKey, rlp.DirectReferenceAnnotationName(),
 					client.ObjectKeyFromObject(rlp).String(),
 				)).WithContext(ctx).Should(BeTrue())
@@ -1017,7 +1007,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 			// Check HTTPRoute A direct back reference
 			routeAKey := client.ObjectKey{Name: routeAName, Namespace: testNamespace}
 			Eventually(
-				testHTTPRouteHasDirectBackReference(
+				tests.HTTPRouteHasDirectBackReference(testClient(),
 					routeAKey, rlpA.DirectReferenceAnnotationName(),
 					client.ObjectKeyFromObject(rlpA).String(),
 				)).WithContext(ctx).Should(BeTrue())
@@ -1025,7 +1015,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 			// Check HTTPRoute B direct back reference
 			routeBKey := client.ObjectKey{Name: routeBName, Namespace: testNamespace}
 			Eventually(
-				testHTTPRouteHasDirectBackReference(
+				tests.HTTPRouteHasDirectBackReference(testClient(),
 					routeBKey, rlpB.DirectReferenceAnnotationName(),
 					client.ObjectKeyFromObject(rlpB).String(),
 				)).WithContext(ctx).Should(BeTrue())
@@ -1043,15 +1033,15 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 				g.Expect(err).ToNot(HaveOccurred())
 				// Check RLP status is available
 			}).WithContext(ctx).Should(Succeed())
-			Eventually(testRLPIsNotAccepted(ctx, rlpAKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(tests.RLPIsNotAccepted(ctx, testClient(), rlpAKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check HTTPRoute A direct back reference is gone
 			Eventually(
-				testHTTPRouteWithoutDirectBackReference(routeAKey, rlpA.DirectReferenceAnnotationName())).WithContext(ctx).Should(BeTrue())
+				tests.HTTPRouteWithoutDirectBackReference(testClient(), routeAKey, rlpA.DirectReferenceAnnotationName())).WithContext(ctx).Should(BeTrue())
 
 			// Check HTTPRoute B direct back reference
 			Eventually(
-				testHTTPRouteHasDirectBackReference(
+				tests.HTTPRouteHasDirectBackReference(testClient(),
 					routeBKey, rlpB.DirectReferenceAnnotationName(),
 					client.ObjectKeyFromObject(rlpB).String(),
 				)).WithContext(ctx).Should(BeTrue())
@@ -1091,7 +1081,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 			// Check HTTPRoute A direct back reference
 			routeKey := client.ObjectKey{Name: routeName, Namespace: testNamespace}
 			Eventually(
-				testHTTPRouteHasDirectBackReference(
+				tests.HTTPRouteHasDirectBackReference(testClient(),
 					routeKey, rlp.DirectReferenceAnnotationName(),
 					client.ObjectKeyFromObject(rlp).String(),
 				)).WithContext(ctx).Should(BeTrue())
@@ -1100,10 +1090,10 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 			// Delete Route A
 			err = k8sClient.Delete(ctx, httpRoute)
 			Expect(err).ToNot(HaveOccurred())
-			Eventually(testObjectDoesNotExist(httpRoute)).WithContext(ctx).Should(BeTrue())
+			Eventually(tests.ObjectDoesNotExist(testClient(), httpRoute)).WithContext(ctx).Should(BeTrue())
 
 			// Check RLP status is available
-			Eventually(testRLPIsNotAccepted(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(tests.RLPIsNotAccepted(ctx, testClient(), rlpKey)).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
 
@@ -1163,12 +1153,12 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 
 			// Check RLP status is not available
 			rlpBKey := client.ObjectKeyFromObject(rlpB)
-			Eventually(testRLPIsNotAccepted(ctx, rlpBKey)).WithContext(ctx).Should(BeTrue())
+			Eventually(tests.RLPIsNotAccepted(ctx, testClient(), rlpBKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check HTTPRoute A direct back reference to RLP A
 			routeAKey := client.ObjectKey{Name: routeAName, Namespace: testNamespace}
 			Eventually(
-				testHTTPRouteHasDirectBackReference(
+				tests.HTTPRouteHasDirectBackReference(testClient(),
 					routeAKey, rlpA.DirectReferenceAnnotationName(),
 					client.ObjectKeyFromObject(rlpA).String(),
 				)).WithContext(ctx).Should(BeTrue())
@@ -1194,7 +1184,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 
 			// Check HTTPRoute A direct back reference to RLP B
 			Eventually(
-				testHTTPRouteHasDirectBackReference(
+				tests.HTTPRouteHasDirectBackReference(testClient(),
 					routeAKey, rlpB.DirectReferenceAnnotationName(),
 					client.ObjectKeyFromObject(rlpB).String(),
 				)).WithContext(ctx).Should(BeTrue())
@@ -1204,7 +1194,7 @@ var _ = Describe("RateLimitPolicy controller", Ordered, func() {
 			routeBKey := client.ObjectKey{Name: routeBName, Namespace: testNamespace}
 			// Check HTTPRoute B direct back reference to RLP A
 			Eventually(
-				testHTTPRouteHasDirectBackReference(
+				tests.HTTPRouteHasDirectBackReference(testClient(),
 					routeBKey, rlpA.DirectReferenceAnnotationName(),
 					client.ObjectKeyFromObject(rlpA).String(),
 				)).WithContext(ctx).Should(BeTrue())

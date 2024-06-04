@@ -1,6 +1,6 @@
 //go:build integration
 
-package controllers
+package kuadrant
 
 import (
 	"reflect"

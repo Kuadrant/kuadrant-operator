@@ -118,7 +118,7 @@ func (r *TargetStatusReconciler) reconcileResourcesForPolicyKind(parentCtx conte
 	gatewayPolicyExists := len(policies) > 0 && utils.Index(policies, func(p kuadrantgatewayapi.Policy) bool { return kuadrantgatewayapi.IsTargetRefGateway(p.GetTargetRef()) }) >= 0
 	if !gatewayPolicyExists {
 		// remove the condition from the gateway
-		conditionType := policyAffectedConditionType(policyKind)
+		conditionType := PolicyAffectedConditionType(policyKind)
 		if c := meta.FindStatusCondition(gw.Status.Conditions, conditionType); c == nil {
 			logger.V(1).Info("condition already absent, skipping", "condition", conditionType)
 		} else {
@@ -270,7 +270,7 @@ func (r *TargetStatusReconciler) addRouteCondition(ctx context.Context, route *g
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithValues("route", client.ObjectKeyFromObject(route), "condition", condition.Type, "status", condition.Status)
 
-	i := utils.Index(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, gatewayKey, controllerName))
+	i := utils.Index(route.Status.RouteStatus.Parents, FindRouteParentStatusFunc(route, gatewayKey, controllerName))
 	if i < 0 {
 		logger.V(1).Info("cannot find parent status, creating new one")
 		route.Status.RouteStatus.Parents = append(route.Status.RouteStatus.Parents, gatewayapiv1.RouteParentStatus{
@@ -282,7 +282,7 @@ func (r *TargetStatusReconciler) addRouteCondition(ctx context.Context, route *g
 			},
 			Conditions: []metav1.Condition{},
 		})
-		i = utils.Index(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, gatewayKey, controllerName))
+		i = utils.Index(route.Status.RouteStatus.Parents, FindRouteParentStatusFunc(route, gatewayKey, controllerName))
 	}
 
 	if c := meta.FindStatusCondition(route.Status.RouteStatus.Parents[i].Conditions, condition.Type); c != nil && c.Status == condition.Status && c.Reason == condition.Reason && c.Message == condition.Message && c.ObservedGeneration == route.GetGeneration() {
@@ -301,7 +301,7 @@ func (r *TargetStatusReconciler) removeRouteCondition(ctx context.Context, route
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithValues("route", client.ObjectKeyFromObject(route), "condition", condition.Type, "status", condition.Status)
 
-	i := utils.Index(route.Status.RouteStatus.Parents, findRouteParentStatusFunc(route, gatewayKey, controllerName))
+	i := utils.Index(route.Status.RouteStatus.Parents, FindRouteParentStatusFunc(route, gatewayKey, controllerName))
 	if i < 0 {
 		logger.V(1).Info("cannot find parent status, skipping")
 		return nil
@@ -320,7 +320,7 @@ func (r *TargetStatusReconciler) removeRouteCondition(ctx context.Context, route
 	return r.Client().Status().Update(ctx, route)
 }
 
-func findRouteParentStatusFunc(route *gatewayapiv1.HTTPRoute, gatewayKey client.ObjectKey, controllerName gatewayapiv1.GatewayController) func(gatewayapiv1.RouteParentStatus) bool {
+func FindRouteParentStatusFunc(route *gatewayapiv1.HTTPRoute, gatewayKey client.ObjectKey, controllerName gatewayapiv1.GatewayController) func(gatewayapiv1.RouteParentStatus) bool {
 	return func(p gatewayapiv1.RouteParentStatus) bool {
 		return *p.ParentRef.Kind == ("Gateway") &&
 			p.ControllerName == controllerName &&
@@ -398,7 +398,7 @@ func buildPolicyAffectedCondition(policy kuadrantgatewayapi.Policy) metav1.Condi
 	policyKind := policy.GetObjectKind().GroupVersionKind().Kind
 
 	condition := metav1.Condition{
-		Type:    policyAffectedConditionType(policyKind),
+		Type:    PolicyAffectedConditionType(policyKind),
 		Status:  metav1.ConditionTrue,
 		Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
 		Message: fmt.Sprintf("Object affected by %s %s", policyKind, client.ObjectKeyFromObject(policy)),
@@ -416,7 +416,7 @@ func buildPolicyAffectedCondition(policy kuadrantgatewayapi.Policy) metav1.Condi
 	return condition
 }
 
-func policyAffectedConditionType(policyKind string) string {
+func PolicyAffectedConditionType(policyKind string) string {
 	return fmt.Sprintf(PolicyAffectedConditionPattern, policyKind)
 }
 

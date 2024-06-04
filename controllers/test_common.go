@@ -206,9 +206,10 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 // SharedConfig contains minimum cluster connection config that can be safely marshalled as rest.Config is unsafe to marshall
 type SharedConfig struct {
-	Host            string          `json:"host"`
-	TLSClientConfig TLSClientConfig `json:"tlsClientConfig"`
-	KuadrantNS      string          `json:"kuadrantNS"`
+	Host                  string          `json:"host"`
+	TLSClientConfig       TLSClientConfig `json:"tlsClientConfig"`
+	KuadrantNS            string          `json:"kuadrantNS"`
+	DNSProviderSecretName string          `json:"dnsProviderSecretName"`
 }
 
 type TLSClientConfig struct {
@@ -292,5 +293,11 @@ func MarshalConfig(cfg *rest.Config, opts ...func(config *SharedConfig)) []byte 
 func WithKuadrantInstallNS(ns string) func(config *SharedConfig) {
 	return func(cfg *SharedConfig) {
 		cfg.KuadrantNS = ns
+	}
+}
+
+func WithDNSProviderSecretNS(secret string) func(config *SharedConfig) {
+	return func(cfg *SharedConfig) {
+		cfg.DNSProviderSecretName = secret
 	}
 }

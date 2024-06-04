@@ -56,7 +56,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 			APIVersion: authorinoapi.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      authConfigName(client.ObjectKeyFromObject(ap)),
+			Name:      AuthConfigName(client.ObjectKeyFromObject(ap)),
 			Namespace: ap.Namespace,
 		},
 		Spec: authorinoapi.AuthConfigSpec{},
@@ -235,8 +235,8 @@ func getAffectedPolicies(t *kuadrantgatewayapi.Topology, ap *api.AuthPolicy) []k
 	return affectedPolicies
 }
 
-// authConfigName returns the name of Authorino AuthConfig CR.
-func authConfigName(apKey client.ObjectKey) string {
+// AuthConfigName returns the name of Authorino AuthConfig CR.
+func AuthConfigName(apKey client.ObjectKey) string {
 	return fmt.Sprintf("ap-%s-%s", apKey.Namespace, apKey.Name)
 }
 

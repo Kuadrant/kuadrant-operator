@@ -1,6 +1,6 @@
 //go:build integration
 
-package controllers
+package dnspolicy
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
+	"k8s.io/apimachinery/pkg/util/rand"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -22,6 +23,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 	"github.com/kuadrant/kuadrant-operator/tests"
@@ -37,16 +39,17 @@ var _ = Describe("DNSPolicy controller", func() {
 	var dnsPolicy *v1alpha1.DNSPolicy
 	var recordName, wildcardRecordName string
 	var ctx context.Context
+	var domain = fmt.Sprintf("example-%s.com", rand.String(6))
 
 	BeforeEach(func() {
 		ctx = context.Background()
 		testNamespace = tests.CreateNamespace(ctx, testClient())
 
-		gatewayClass = testBuildGatewayClass("gwc-"+testNamespace, "default", "kuadrant.io/bar")
+		gatewayClass = tests.BuildGatewayClass("gwc-"+testNamespace, "default", "kuadrant.io/bar")
 		Expect(k8sClient.Create(ctx, gatewayClass)).To(Succeed())
 
-		dnsProviderSecret = testBuildInMemoryCredentialsSecret("inmemory-credentials", testNamespace)
-		managedZone = testBuildManagedZone("mz-example-com", testNamespace, "example.com", dnsProviderSecret.Name)
+		dnsProviderSecret = tests.BuildInMemoryCredentialsSecret("inmemory-credentials", testNamespace)
+		managedZone = tests.BuildManagedZone("mz-example-com", testNamespace, domain, dnsProviderSecret.Name)
 		Expect(k8sClient.Create(ctx, dnsProviderSecret)).To(Succeed())
 		Expect(k8sClient.Create(ctx, managedZone)).To(Succeed())
 
@@ -60,7 +63,7 @@ var _ = Describe("DNSPolicy controller", func() {
 					"ObservedGeneration": Equal(managedZone.Generation),
 				})),
 			)
-		}, TestTimeoutMedium, time.Second).Should(Succeed())
+		}, tests.TimeoutMedium, time.Second).Should(Succeed())
 	})
 
 	AfterEach(func() {
@@ -75,6 +78,11 @@ var _ = Describe("DNSPolicy controller", func() {
 		if managedZone != nil {
 			err := k8sClient.Delete(ctx, managedZone)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
+			// Wait until managed zone is delete before deleting the provider secret
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(managedZone), managedZone)
+				g.Expect(k8serrors.IsNotFound(err)).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
 		}
 		if dnsProviderSecret != nil {
 			err := k8sClient.Delete(ctx, dnsProviderSecret)
@@ -88,8 +96,8 @@ var _ = Describe("DNSPolicy controller", func() {
 	})
 
 	It("should validate routing strategy field correctly", func() {
-		gateway = NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
-			WithHTTPListener(TestListenerNameOne, TestHostTwo).Gateway
+		gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+			WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).Gateway
 
 		// simple should succeed
 		dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
@@ -105,7 +113,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			err = k8sClient.Update(ctx, dnsPolicy)
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err).To(MatchError(ContainSubstring("RoutingStrategy is immutable")))
-		}, TestTimeoutMedium, time.Second).Should(Succeed())
+		}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		Expect(k8sClient.Delete(ctx, dnsPolicy)).ToNot(HaveOccurred())
 
 		// loadbalanced missing loadbalancing field
@@ -143,14 +151,14 @@ var _ = Describe("DNSPolicy controller", func() {
 						"Message": Equal("DNSPolicy target test-gateway was not found"),
 					})),
 				)
-			}, TestTimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		})
 
 		It("should have accepted condition with status true", func() {
 			By("creating a valid Gateway")
 
-			gateway = NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
-				WithHTTPListener("test-listener", "test.example.com").Gateway
+			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+				WithHTTPListener("test-listener", tests.HostOne(domain)).Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 
 			Eventually(func(g Gomega) {
@@ -164,13 +172,13 @@ var _ = Describe("DNSPolicy controller", func() {
 						"Message": Equal("DNSPolicy has been accepted"),
 					})),
 				)
-			}, TestTimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		})
 
 		It("should not process gateway with inconsistent addresses", func() {
 			// build invalid gateway
-			gateway = NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
-				WithHTTPListener(TestListenerNameOne, TestHostTwo).Gateway
+			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+				WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 
 			// ensure Gateway exists and invalidate it by setting inconsistent addresses
@@ -180,22 +188,22 @@ var _ = Describe("DNSPolicy controller", func() {
 				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
 						Type:  ptr.To(gatewayapiv1.HostnameAddressType),
-						Value: TestIPAddressOne,
+						Value: tests.IPAddressOne,
 					},
 					{
 						Type:  ptr.To(multicluster.MultiClusterIPAddressType),
-						Value: TestIPAddressTwo,
+						Value: tests.IPAddressTwo,
 					},
 				}
 				gateway.Status.Listeners = []gatewayapiv1.ListenerStatus{
 					{
-						Name:           TestClusterNameOne + "." + TestListenerNameOne,
+						Name:           tests.ClusterNameOne + "." + tests.ListenerNameOne,
 						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
 						AttachedRoutes: 1,
 						Conditions:     []metav1.Condition{},
 					},
 					{
-						Name:           TestListenerNameOne,
+						Name:           tests.ListenerNameOne,
 						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
 						AttachedRoutes: 1,
 						Conditions:     []metav1.Condition{},
@@ -203,7 +211,7 @@ var _ = Describe("DNSPolicy controller", func() {
 				}
 				err = k8sClient.Status().Update(ctx, gateway)
 				g.Expect(err).ToNot(HaveOccurred())
-			}, TestTimeoutMedium, TestRetryIntervalMedium).Should(Succeed())
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 			// expect no dns records
 			Consistently(func() []kuadrantdnsv1alpha1.DNSRecord {
@@ -223,7 +231,7 @@ var _ = Describe("DNSPolicy controller", func() {
 						"Message": ContainSubstring("gateway is invalid: inconsistent status addresses"),
 					})),
 				)
-			}, TestTimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		})
 
 	})
@@ -232,8 +240,8 @@ var _ = Describe("DNSPolicy controller", func() {
 		testGatewayName := "test-no-gateway-status"
 
 		BeforeEach(func() {
-			gateway = NewGatewayBuilder(testGatewayName, gatewayClass.Name, testNamespace).
-				WithHTTPListener(TestListenerNameOne, TestHostTwo).
+			gateway = tests.NewGatewayBuilder(testGatewayName, gatewayClass.Name, testNamespace).
+				WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).
 				Gateway
 			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithTargetGateway(testGatewayName).
@@ -267,11 +275,11 @@ var _ = Describe("DNSPolicy controller", func() {
 						MatchFields(IgnoreExtras, Fields{
 							"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
 							"Status":  Equal(metav1.ConditionFalse),
-							"Reason":  Equal(PolicyReasonUnknown),
+							"Reason":  Equal(string(kuadrant.PolicyReasonUnknown)),
 							"Message": Equal("DNSPolicy has encountered some issues: policy is not enforced on any dns record: no routes attached for listeners"),
 						})),
 				)
-			}, TestTimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		})
 
 		It("should set gateway back reference", func() {
@@ -285,19 +293,19 @@ var _ = Describe("DNSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
 				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
-			}, TestTimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		})
 	})
 
 	Context("valid target and valid gateway status", func() {
 
 		BeforeEach(func() {
-			gateway = NewGatewayBuilder(TestGatewayName, gatewayClass.Name, testNamespace).
-				WithHTTPListener(TestListenerNameOne, TestHostTwo).
-				WithHTTPListener(TestListenerNameWildcard, TestHostWildcard).
+			gateway = tests.NewGatewayBuilder(tests.GatewayName, gatewayClass.Name, testNamespace).
+				WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).
+				WithHTTPListener(tests.ListenerNameWildcard, tests.HostWildcard(domain)).
 				Gateway
 			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
-				WithTargetGateway(TestGatewayName).
+				WithTargetGateway(tests.GatewayName).
 				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
 
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
@@ -310,51 +318,51 @@ var _ = Describe("DNSPolicy controller", func() {
 				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
 						Type:  ptr.To(multicluster.MultiClusterIPAddressType),
-						Value: TestClusterNameOne + "/" + TestIPAddressOne,
+						Value: tests.ClusterNameOne + "/" + tests.IPAddressOne,
 					},
 					{
 						Type:  ptr.To(multicluster.MultiClusterIPAddressType),
-						Value: TestClusterNameTwo + "/" + TestIPAddressTwo,
+						Value: tests.ClusterNameTwo + "/" + tests.IPAddressTwo,
 					},
 				}
 				gateway.Status.Listeners = []gatewayapiv1.ListenerStatus{
 					{
-						Name:           TestClusterNameOne + "." + TestListenerNameOne,
+						Name:           tests.ClusterNameOne + "." + tests.ListenerNameOne,
 						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
 						AttachedRoutes: 1,
 						Conditions:     []metav1.Condition{},
 					},
 					{
-						Name:           TestClusterNameTwo + "." + TestListenerNameOne,
+						Name:           tests.ClusterNameTwo + "." + tests.ListenerNameOne,
 						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
 						AttachedRoutes: 1,
 						Conditions:     []metav1.Condition{},
 					},
 					{
-						Name:           TestClusterNameOne + "." + TestListenerNameWildcard,
+						Name:           tests.ClusterNameOne + "." + tests.ListenerNameWildcard,
 						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
 						AttachedRoutes: 1,
 						Conditions:     []metav1.Condition{},
 					},
 					{
-						Name:           TestClusterNameTwo + "." + TestListenerNameWildcard,
+						Name:           tests.ClusterNameTwo + "." + tests.ListenerNameWildcard,
 						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
 						AttachedRoutes: 1,
 						Conditions:     []metav1.Condition{},
 					},
 				}
 				return k8sClient.Status().Update(ctx, gateway)
-			}, TestTimeoutMedium, TestRetryIntervalMedium).ShouldNot(HaveOccurred())
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).ShouldNot(HaveOccurred())
 
-			recordName = fmt.Sprintf("%s-%s", TestGatewayName, TestListenerNameOne)
-			wildcardRecordName = fmt.Sprintf("%s-%s", TestGatewayName, TestListenerNameWildcard)
+			recordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameOne)
+			wildcardRecordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameWildcard)
 		})
 
 		It("should have correct status", func() {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(dnsPolicy.Finalizers).To(ContainElement(DNSPolicyFinalizer))
+				g.Expect(dnsPolicy.Finalizers).To(ContainElement(controllers.DNSPolicyFinalizer))
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElements(
 						MatchFields(IgnoreExtras, Fields{
@@ -370,7 +378,7 @@ var _ = Describe("DNSPolicy controller", func() {
 							"Message": Equal("DNSPolicy has been partially enforced"),
 						})),
 				)
-			}, TestTimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 
 			// ensure there are no policies with not accepted condition
 			// in this case the "enforced" on the policy should be false
@@ -382,7 +390,7 @@ var _ = Describe("DNSPolicy controller", func() {
 					"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
 					"Status": Equal(metav1.ConditionFalse),
 				})))
-			}, TestTimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		})
 
 		It("should set gateway back reference", func() {
@@ -395,7 +403,7 @@ var _ = Describe("DNSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
 				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
-			}, TestTimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		})
 
 		It("should remove dns records when listener removed", func() {
@@ -408,7 +416,7 @@ var _ = Describe("DNSPolicy controller", func() {
 				}
 				newListeners := []gatewayapiv1.Listener{}
 				for _, existing := range existingGateway.Spec.Listeners {
-					if existing.Name == TestListenerNameWildcard {
+					if existing.Name == tests.ListenerNameWildcard {
 						newListeners = append(newListeners, existing)
 					}
 				}
@@ -440,8 +448,8 @@ var _ = Describe("DNSPolicy controller", func() {
 
 				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(dnsPolicy.Finalizers).To(ContainElement(DNSPolicyFinalizer))
-			}, TestTimeoutMedium, time.Second).Should(Succeed())
+				g.Expect(dnsPolicy.Finalizers).To(ContainElement(controllers.DNSPolicyFinalizer))
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 
 			By("deleting the dns policy")
 			Expect(k8sClient.Delete(ctx, dnsPolicy)).To(BeNil())
@@ -451,14 +459,14 @@ var _ = Describe("DNSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(gateway.Annotations).ToNot(HaveKey(v1alpha1.DNSPolicyDirectReferenceAnnotationName))
 				g.Expect(gateway.Annotations).ToNot(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
-			}, TestTimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		})
 
 		It("should remove dns record reference on policy deletion even if gateway is removed", func() {
 
 			Eventually(func() error { // DNS record exists
 				return k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})
-			}, TestTimeoutMedium, TestRetryIntervalMedium).Should(Succeed())
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 			err := k8sClient.Delete(ctx, gateway)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
@@ -471,7 +479,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			// (in case we are running on a cluster that actually has a dnsrecord reconciler running), or that it is marked for deletion
 			//Eventually(func() error { // DNS record removed
 			//	return k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})
-			//}, TestTimeoutMedium, TestRetryIntervalMedium).Should(MatchError(ContainSubstring("not found")))
+			//}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(MatchError(ContainSubstring("not found")))
 
 		})
 

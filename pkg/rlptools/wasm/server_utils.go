@@ -25,3 +25,7 @@ func ServerServiceNamespace() string {
 func SHA256() string {
 	return WasmShimSha256
 }
+
+func ServerEndpoint() string {
+	return "/kuadrant-ratelimit-wasm"
+}

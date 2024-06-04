@@ -109,7 +109,7 @@ func (r *RateLimitingIstioWASMPluginReconciler) desiredRateLimitingWASMPlugin(ct
 		Scheme: "http",
 		// Warning: .cluster.local may not be true in all clusters
 		Host: fmt.Sprintf("%s.%s.svc.cluster.local:%d", wasm.ServerServiceName(), wasm.ServerServiceNamespace(), wasm.ServerServicePort()),
-		Path: "/kuadrant-ratelimit-wasm",
+		Path: wasm.ServerEndpoint(),
 	}
 
 	wasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{

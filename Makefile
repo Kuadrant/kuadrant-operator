@@ -308,8 +308,8 @@ $(WASM_SHIM):
 	) \
 	&& echo "Downloading kuadrant-ratelimit-wasm@$(WASM_SHIM_VERSION) from https://api.github.com/repos/Kuadrant/wasm-shim/releases/assets/$${ASSET_ID}" \
 	&& curl -sSLo $@ -H "Accept: application/octet-stream" https://api.github.com/repos/Kuadrant/wasm-shim/releases/assets/$${ASSET_ID}; \
-	sha256sum $@; \
 	}
+	sha256sum $@
 
 .PHONY: wasm-shim
 wasm-shim: $(WASM_SHIM) ## Download opm locally if necessary.

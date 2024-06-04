@@ -23,10 +23,6 @@ on:
         description: DNS Operator bundle version
         default: latest
         type: string
-      wasmShimVersion:
-        description: WASM Shim version
-        default: latest
-        type: string
       replacesVersion:
         description: Kuadrant Operator replaced version
         default: 0.0.0-alpha
@@ -57,10 +53,6 @@ on:
         description: DNS Operator bundle version
         default: latest
         type: string
-      wasmShimVersion:
-        description: WASM Shim version
-        default: latest
-        type: string
       replacesVersion:
         description: Kuadrant Operator replaced version
         default: 0.0.0-alpha
@@ -89,6 +81,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-user-static
+      - name: Link rate limit wasm module at build time
+        run: |
+          make wasm-shim
       - name: Build Image
         id: build-image
         uses: redhat-actions/buildah-build@v2
@@ -135,7 +130,6 @@ jobs:
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
             DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
-            WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
             REPLACES_VERSION=${{ inputs.replacesVersion }} \
             CHANNELS=${{ inputs.channels }}
       - name: Build Image
@@ -179,7 +173,6 @@ jobs:
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
             DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
-            WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
             REPLACES_VERSION=${{ inputs.replacesVersion }} \
             CHANNELS=${{ inputs.channels }}
       - name: Install qemu dependency

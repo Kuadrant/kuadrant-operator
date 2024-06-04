@@ -50,6 +50,7 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 
+	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -257,6 +258,7 @@ func BootstrapScheme() *runtime.Scheme {
 		istioclientnetworkingv1alpha3.AddToScheme,
 		istioclientgoextensionv1alpha1.AddToScheme,
 		certmanv1.AddToScheme,
+		maistraapis.AddToScheme,
 	)
 
 	err := sb.AddToScheme(s)

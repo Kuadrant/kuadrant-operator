@@ -50,6 +50,13 @@ test-istio-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubern
 		--output-dir $(PROJECT_PATH)/coverage/istio-integration \
 		--coverprofile cover.out \
 		-tags integration \
+		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
+		--procs=$(INTEGRATION_TEST_NUM_PROCESSES) \
+		--randomize-all \
+		--randomize-suites \
+		--fail-on-pending \
+		--keep-going \
+		--trace \
 		$(INTEGRATION_TESTS_EXTRA_ARGS) tests/istio/...
 
 .PHONY: test-integration

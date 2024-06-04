@@ -19,8 +19,9 @@ import (
 var _ = Describe("Kuadrant controller on istio", func() {
 	var (
 		testNamespace    string
-		kuadrantName     string = "local"
-		afterEachTimeOut        = NodeTimeout(3 * time.Minute)
+		kuadrantName     = "local"
+		testTimeOut      = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 
 	BeforeEach(func(ctx SpecContext) {
@@ -54,7 +55,7 @@ var _ = Describe("Kuadrant controller on istio", func() {
 				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
 				g.Expect(cond.Reason).To(Equal("Ready"))
 				g.Expect(cond.Message).To(Equal("Kuadrant is ready"))
-			}, time.Minute, 15*time.Second).WithContext(ctx).Should(Succeed())
-		})
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
 	})
 })

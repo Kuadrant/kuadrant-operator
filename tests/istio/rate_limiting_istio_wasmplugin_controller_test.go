@@ -28,14 +28,13 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
+var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 	const (
 		testTimeOut      = SpecTimeout(3 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 	var (
-		testNamespace          string
-		kuadrantInstallationNS string
+		testNamespace string
 	)
 
 	assertPolicyIsAcceptedAndEnforced := func(ctx context.Context, key client.ObjectKey) func() bool {
@@ -53,15 +52,6 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 	beforeEachCallback := func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
 	}
-
-	BeforeAll(func(ctx SpecContext) {
-		kuadrantInstallationNS = tests.CreateNamespace(ctx, testClient())
-		tests.ApplyKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
-	})
-
-	AfterAll(func(ctx SpecContext) {
-		tests.DeleteNamespace(ctx, testClient(), kuadrantInstallationNS)
-	})
 
 	BeforeEach(beforeEachCallback)
 	AfterEach(func(ctx SpecContext) {

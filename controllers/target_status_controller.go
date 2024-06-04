@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
@@ -111,6 +112,8 @@ func (r *TargetStatusReconciler) reconcileResourcesForPolicyKind(parentCtx conte
 		return err
 	}
 	policies := topology.PoliciesFromGateway(gw)
+
+	sort.Sort(kuadrantgatewayapi.PolicyByTargetRefKindAndCreationTimeStampStatus(policies))
 
 	var errs error
 

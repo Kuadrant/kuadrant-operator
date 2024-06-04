@@ -1,5 +1,7 @@
 INTEGRATION_COVER_PKGS = ./pkg/...,./controllers/...,./api/...
 INTEGRATION_TESTS_EXTRA_ARGS =
+INTEGRATION_TEST_NUM_CORES ?= 4
+INTEGRATION_TEST_NUM_PROCESSES ?= 10
 
 ##@ Integration tests
 
@@ -12,6 +14,13 @@ test-bare-k8s-integration: clean-cov generate fmt vet ginkgo ## Requires only ba
 		--output-dir $(PROJECT_PATH)/coverage/bare-k8s-integration \
 		--coverprofile cover.out \
 		-tags integration \
+		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
+		--procs=$(INTEGRATION_TEST_NUM_PROCESSES) \
+		--randomize-all \
+		--randomize-suites \
+		--fail-on-pending \
+		--keep-going \
+		--trace \
 		$(INTEGRATION_TESTS_EXTRA_ARGS) ./tests/bare_k8s/...
 
 .PHONY: test-gatewayapi-env-integration
@@ -23,6 +32,13 @@ test-gatewayapi-env-integration: clean-cov generate fmt vet ginkgo ## Requires k
 		--output-dir $(PROJECT_PATH)/coverage/gatewayapi-integration \
 		--coverprofile cover.out \
 		-tags integration \
+		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
+		--procs=$(INTEGRATION_TEST_NUM_PROCESSES) \
+		--randomize-all \
+		--randomize-suites \
+		--fail-on-pending \
+		--keep-going \
+		--trace \
 		$(INTEGRATION_TESTS_EXTRA_ARGS) ./tests/gatewayapi/...
 
 .PHONY: test-istio-env-integration
@@ -45,4 +61,11 @@ test-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes clust
 		--output-dir $(PROJECT_PATH)/coverage/integration \
 		--coverprofile cover.out \
 		-tags integration \
+		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
+		--procs=$(INTEGRATION_TEST_NUM_PROCESSES) \
+		--randomize-all \
+		--randomize-suites \
+		--fail-on-pending \
+		--keep-going \
+		--trace \
 		$(INTEGRATION_TESTS_EXTRA_ARGS) ./controllers/...

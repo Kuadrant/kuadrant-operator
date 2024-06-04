@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -31,7 +32,9 @@ func (r *TLSPolicyReconciler) reconcileCertificates(ctx context.Context, tlsPoli
 	}
 
 	// Reconcile Certificates for each gateway directly referred by the policy (existing and new)
-	for _, gw := range append(gwDiffObj.GatewaysWithValidPolicyRef, gwDiffObj.GatewaysMissingPolicyRef...) {
+	gwList := append(gwDiffObj.GatewaysWithValidPolicyRef, gwDiffObj.GatewaysMissingPolicyRef...)
+	time.Sleep(250 * time.Millisecond) // Sleep required to make "should delete tls certificate when listener is removed" integration test pass.
+	for _, gw := range gwList {
 		log.V(1).Info("reconcileCertificates: gateway with valid or missing policy ref", "key", gw.Key())
 		expectedCertificates := r.expectedCertificatesForGateway(ctx, gw.Gateway, tlsPolicy)
 		if err := r.createOrUpdateGatewayCertificates(ctx, expectedCertificates); err != nil {

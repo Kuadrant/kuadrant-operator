@@ -49,7 +49,12 @@ namespace: ## Creates a namespace where to deploy Kuadrant Operator
 .PHONY: local-deploy
 local-deploy: ## Deploy Kuadrant Operator from the current code
 	$(MAKE) docker-build IMG=$(IMAGE_TAG_BASE):dev
-	$(KIND) load docker-image $(IMAGE_TAG_BASE):dev --name $(KIND_CLUSTER_NAME)
+
+	@mkdir -p ./tmp
+	@if [ -f ./tmp/image.tar ]; then rm ./tmp/image.tar; fi
+	$(CONTAINER_ENGINE) save -o ./tmp/image.tar $(IMAGE_TAG_BASE):dev
+	KIND_EXPERIMENTAL_PROVIDER=$(CONTAINER_ENGINE) $(KIND) load image-archive ./tmp/image.tar $(IMAGE_TAG_BASE):dev --name $(KIND_CLUSTER_NAME)
+
 	$(MAKE) deploy IMG=$(IMAGE_TAG_BASE):dev
 	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
 

@@ -278,12 +278,12 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&authorinoapi.AuthConfig{}).
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, object client.Object) []reconcile.Request {
 				return httpRouteEventMapper.MapToPolicy(object, &api.AuthPolicy{})
 			}),
 		).
 		Watches(&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, object client.Object) []reconcile.Request {
 				return gatewayEventMapper.MapToPolicy(object, &api.AuthPolicy{})
 			}),
 		).

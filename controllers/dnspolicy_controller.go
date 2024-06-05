@@ -195,7 +195,7 @@ func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&kuadrantdnsv1alpha1.DNSRecord{}).
 		Watches(
 			&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, object client.Object) []reconcile.Request {
 				return gatewayEventMapper.MapToPolicy(object, &v1alpha1.DNSPolicy{})
 			}),
 		)

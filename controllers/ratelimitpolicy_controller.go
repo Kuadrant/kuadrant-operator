@@ -241,7 +241,7 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&kuadrantv1beta2.RateLimitPolicy{}).
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, object client.Object) []reconcile.Request {
 				return httpRouteEventMapper.MapToPolicy(object, &kuadrantv1beta2.RateLimitPolicy{})
 			}),
 		).
@@ -249,7 +249,7 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// so the status of the rlps targeting a route can be keep in sync
 		Watches(
 			&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, object client.Object) []reconcile.Request {
 				return gatewayEventMapper.MapToPolicy(object, &kuadrantv1beta2.RateLimitPolicy{})
 			}),
 		).

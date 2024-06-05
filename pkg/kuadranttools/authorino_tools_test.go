@@ -5,9 +5,10 @@ import (
 	"testing"
 
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
 )
 
 func Test_authorinoSpecSubSet(t *testing.T) {

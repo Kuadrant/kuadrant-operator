@@ -499,24 +499,38 @@ func (r *KuadrantReconciler) reconcileAuthorino(ctx context.Context, kObj *kuadr
 	}
 
 	if kObj.Spec.Authorino != nil {
+		authorino.Spec.EvaluatorCacheSize = nil
 		if kObj.Spec.Authorino.EvaluatorCacheSize != nil {
 			authorino.Spec.EvaluatorCacheSize = kObj.Spec.Authorino.EvaluatorCacheSize
 		}
+		authorino.Spec.Metrics = authorinov1beta1.Metrics{}
 		if kObj.Spec.Authorino.Metrics != nil {
 			authorino.Spec.Metrics = *kObj.Spec.Authorino.Metrics
 		}
+
+		authorino.Spec.Replicas = nil
 		if kObj.Spec.Authorino.Replicas != nil {
 			authorino.Spec.Replicas = kObj.Spec.Authorino.Replicas
 		}
+
+		authorino.Spec.Tracing = authorinov1beta1.Tracing{}
 		if kObj.Spec.Authorino.Tracing != nil {
 			authorino.Spec.Tracing = *kObj.Spec.Authorino.Tracing
 		}
+
+		authorino.Spec.OIDCServer = authorinov1beta1.OIDCServer{}
+		authorino.Spec.OIDCServer.Tls.Enabled = ptr.To(false)
 		if kObj.Spec.Authorino.OIDCServer != nil {
 			authorino.Spec.OIDCServer = *kObj.Spec.Authorino.OIDCServer
 		}
+
+		authorino.Spec.Listener = authorinov1beta1.Listener{}
+		authorino.Spec.Listener.Tls.Enabled = ptr.To(false)
 		if kObj.Spec.Authorino.Listener != nil {
 			authorino.Spec.Listener = kuadranttools.MapListenerSpec(&authorino.Spec.Listener, *kObj.Spec.Authorino.Listener)
 		}
+
+		authorino.Spec.Volumes = authorinov1beta1.VolumesSpec{}
 		if kObj.Spec.Authorino.Volumes != nil {
 			authorino.Spec.Volumes = *kObj.Spec.Authorino.Volumes
 		}

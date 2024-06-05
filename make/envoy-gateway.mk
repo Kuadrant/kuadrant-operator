@@ -9,22 +9,21 @@ EG_NAMESPACE = envoy-gateway-system
 # egctl tool
 EGCTL=$(PROJECT_PATH)/bin/egctl
 EGCTL_VERSION ?= v1.0.0
-OS = $(shell uname -s | tr '[:upper:]' '[:lower:]')
-UNAME_P := $(shell uname -p)
-ifeq ($(UNAME_P),x86_64)
-	ARCH = amd64
+
+ifeq ($(ARCH),x86_64)
+	EG_ARCH = amd64
 endif
-ifeq ($(UNAME_P),aarch64)
-	ARCH = arm64
+ifeq ($(ARCH),aarch64)
+	EG_ARCH = arm64
 endif
-ifneq ($(filter armv5%,$(UNAME_P)),)
-    ARCH = armv5
+ifneq ($(filter armv5%,$(ARCH)),)
+	EG_ARCH = armv5
 endif
-ifneq ($(filter armv6%,$(UNAME_P)),)
-    ARCH = armv6
+ifneq ($(filter armv6%,$(ARCH)),)
+	EG_ARCH = armv6
 endif
-ifneq ($(filter armv7%,$(UNAME_P)),)
-    ARCH = arm
+ifneq ($(filter armv7%,$(ARCH)),)
+	EG_ARCH = arm
 endif
 
 $(EGCTL):
@@ -32,9 +31,9 @@ $(EGCTL):
 	## get-egctl.sh requires sudo and does not allow installing in a custom location. Fails if not in the PATH as well
 	# curl -sSL https://gateway.envoyproxy.io/get-egctl.sh | EGCTL_INSTALL_DIR=$(PROJECT_PATH)/bin  VERSION=$(EGCTL_VERSION) bash
 	$(eval TMP := $(shell mktemp -d))
-	cd $(TMP); curl -sSL https://github.com/envoyproxy/gateway/releases/download/$(EGCTL_VERSION)/egctl_$(EGCTL_VERSION)_$(OS)_$(ARCH).tar.gz -o egctl.tar.gz
+	cd $(TMP); curl -sSL https://github.com/envoyproxy/gateway/releases/download/$(EGCTL_VERSION)/egctl_$(EGCTL_VERSION)_$(OS)_$(EG_ARCH).tar.gz -o egctl.tar.gz
 	tar xf $(TMP)/egctl.tar.gz -C $(TMP)
-	cp $(TMP)/bin/$(OS)/$(ARCH)/egctl $(EGCTL)
+	cp $(TMP)/bin/$(OS)/$(EG_ARCH)/egctl $(EGCTL)
 	-rm -rf $(TMP)
 
 .PHONY: egctl

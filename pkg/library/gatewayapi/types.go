@@ -99,10 +99,7 @@ func (a PolicyByTargetRefKindAndCreationTimeStampStatus) Less(i, j int) bool {
 	p1Status := meta.IsStatusConditionTrue(a[i].GetStatus().GetConditions(), string(gatewayapiv1alpha2.PolicyConditionAccepted))
 	p2Status := meta.IsStatusConditionTrue(a[j].GetStatus().GetConditions(), string(gatewayapiv1alpha2.PolicyConditionAccepted))
 	if p1Status != p2Status {
-		if p1Status {
-			return true
-		}
-		return false
+		return p1Status
 	}
 
 	//  The policy appearing first in alphabetical order by "{namespace}/{name}".

@@ -31,6 +31,113 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
+var _ = Describe("AuthPolicy controller (Serial)", Serial, func() {
+	const (
+		testTimeOut      = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+	)
+	var (
+		testNamespace string
+		gwHost        = fmt.Sprintf("*.toystore-%s.com", rand.String(6))
+	)
+
+	BeforeEach(func(ctx SpecContext) {
+		testNamespace = tests.CreateNamespace(ctx, testClient())
+
+		gateway := tests.BuildBasicGateway(TestGatewayName, testNamespace, func(gateway *gatewayapiv1.Gateway) {
+			gateway.Spec.Listeners[0].Hostname = ptr.To(gatewayapiv1.Hostname(gwHost))
+		})
+		err := k8sClient.Create(ctx, gateway)
+		Expect(err).ToNot(HaveOccurred())
+
+		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
+	})
+
+	AfterEach(func(ctx SpecContext) {
+		tests.DeleteNamespace(ctx, testClient(), testNamespace)
+	}, afterEachTimeOut)
+
+	Context("AuthPolicy enforced condition reasons", func() {
+		assertAcceptedCondTrueAndEnforcedCond := func(ctx context.Context, policy *api.AuthPolicy, conditionStatus metav1.ConditionStatus, reason, message string) func() bool {
+			return func() bool {
+				existingPolicy := &api.AuthPolicy{}
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)
+				if err != nil {
+					return false
+				}
+				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				if acceptedCond == nil {
+					return false
+				}
+
+				acceptedCondMatch := acceptedCond.Status == metav1.ConditionTrue && acceptedCond.Reason == string(gatewayapiv1alpha2.PolicyReasonAccepted)
+
+				enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(kuadrant.PolicyReasonEnforced))
+				if enforcedCond == nil {
+					return false
+				}
+				enforcedCondMatch := enforcedCond.Status == conditionStatus && enforcedCond.Reason == reason && enforcedCond.Message == message
+
+				return acceptedCondMatch && enforcedCondMatch
+			}
+		}
+
+		policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
+			policy := &api.AuthPolicy{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "AuthPolicy",
+					APIVersion: api.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "toystore",
+					Namespace: testNamespace,
+				},
+				Spec: api.AuthPolicySpec{
+					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+						Group:     gatewayapiv1.GroupName,
+						Kind:      "HTTPRoute",
+						Name:      TestHTTPRouteName,
+						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
+					},
+					Defaults: &api.AuthPolicyCommonSpec{
+						AuthScheme: testBasicAuthScheme(),
+					},
+				},
+			}
+			for _, mutateFn := range mutateFns {
+				mutateFn(policy)
+			}
+			return policy
+		}
+
+		randomHostFromGWHost := func() string {
+			return strings.Replace(gwHost, "*", rand.String(3), 1)
+		}
+
+		BeforeEach(func(ctx SpecContext) {
+			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{randomHostFromGWHost()})
+			err := k8sClient.Create(ctx, route)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
+		})
+
+		It("Unknown reason", func(ctx SpecContext) {
+			// Remove kuadrant to simulate AuthPolicy enforcement error
+			defer tests.ApplyKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
+			tests.DeleteKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
+
+			policy := policyFactory()
+
+			err := k8sClient.Create(ctx, policy)
+			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(assertAcceptedCondTrueAndEnforcedCond(ctx, policy, metav1.ConditionFalse, string(kuadrant.PolicyReasonUnknown),
+				"AuthPolicy has encountered some issues: AuthScheme is not ready yet")).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+	})
+})
+
 var _ = Describe("AuthPolicy controller", func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
@@ -1035,21 +1142,6 @@ var _ = Describe("AuthPolicy controller", func() {
 
 			Eventually(assertAcceptedCondTrueAndEnforcedCond(ctx, policy, metav1.ConditionTrue, string(kuadrant.PolicyReasonEnforced),
 				"AuthPolicy has been successfully enforced")).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
-
-		It("Unknown reason", func(ctx SpecContext) {
-			// Remove kuadrant to simulate AuthPolicy enforcement error
-			defer tests.ApplyKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
-			tests.DeleteKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
-
-			policy := policyFactory()
-
-			err := k8sClient.Create(ctx, policy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			Eventually(assertAcceptedCondTrueAndEnforcedCond(ctx, policy, metav1.ConditionFalse, string(kuadrant.PolicyReasonUnknown),
-				"AuthPolicy has encountered some issues: AuthScheme is not ready yet")).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
 		It("Overridden reason - Attaches policy to the Gateway while having other policies attached to all HTTPRoutes", func(ctx SpecContext) {

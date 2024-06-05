@@ -24,7 +24,6 @@ package controllers
 
 import (
 	"encoding/json"
-	"path/filepath"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	. "github.com/onsi/ginkgo/v2"
@@ -36,11 +35,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"k8s.io/utils/ptr"
 	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -219,27 +215,6 @@ type TLSClientConfig struct {
 	CAData   []uint8 `json:"caData,omitempty"`
 }
 
-// BootstrapTestEnv bootstraps the test environment and returns the config and client
-func BootstrapTestEnv() (*rest.Config, client.Client, *envtest.Environment, *runtime.Scheme) {
-	testEnv := &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("../..", "config", "crd", "bases")},
-		ErrorIfCRDPathMissing: true,
-		UseExistingCluster:    ptr.To(true),
-	}
-
-	cfg, err := testEnv.Start()
-	Expect(err).NotTo(HaveOccurred())
-	Expect(cfg).NotTo(BeNil())
-
-	s := BootstrapScheme()
-
-	k8sClient, err := client.New(cfg, client.Options{Scheme: s})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sClient).NotTo(BeNil())
-
-	return cfg, k8sClient, testEnv, s
-}
-
 func BootstrapScheme() *runtime.Scheme {
 	s := runtime.NewScheme()
 
@@ -293,11 +268,5 @@ func MarshalConfig(cfg *rest.Config, opts ...func(config *SharedConfig)) []byte 
 func WithKuadrantInstallNS(ns string) func(config *SharedConfig) {
 	return func(cfg *SharedConfig) {
 		cfg.KuadrantNS = ns
-	}
-}
-
-func WithDNSProviderSecretNS(secret string) func(config *SharedConfig) {
-	return func(cfg *SharedConfig) {
-		cfg.DNSProviderSecretName = secret
 	}
 }

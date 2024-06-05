@@ -2357,10 +2357,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 			// Update GW RLP to overrides
 			Eventually(func(g Gomega) {
-				Expect(testClient().Get(ctx, gwRLPKey, gwRLP)).To(Succeed())
+				g.Expect(testClient().Get(ctx, gwRLPKey, gwRLP)).To(Succeed())
 				gwRLP.Spec.Overrides = gwRLP.Spec.Defaults.DeepCopy()
 				gwRLP.Spec.Defaults = nil
-				Expect(testClient().Update(ctx, gwRLP)).To(Succeed())
+				g.Expect(testClient().Update(ctx, gwRLP)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), gwRLPKey)).WithContext(ctx).Should(BeTrue())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeFalse())

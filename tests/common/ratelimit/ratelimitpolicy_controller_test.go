@@ -262,19 +262,21 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			// check limits
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
-			existingLimitador := &limitadorv1alpha1.Limitador{}
-			err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
-				MaxValue:   1,
-				Seconds:    3 * 60,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
-				Variables:  []string{},
-				Name:       rlptools.LimitsNameFromRLP(rlp),
-			}))
+			Eventually(func(g Gomega) {
+				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
+				existingLimitador := &limitadorv1alpha1.Limitador{}
+				err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
+				// must exist
+				Expect(err).ToNot(HaveOccurred())
+				Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+					MaxValue:   1,
+					Seconds:    3 * 60,
+					Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
+					Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
+					Variables:  []string{},
+					Name:       rlptools.LimitsNameFromRLP(rlp),
+				}))
+			}).WithContext(ctx).Should(Succeed())
 
 			// Check gateway back references
 			gwKey := client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}
@@ -348,19 +350,21 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			}).WithContext(ctx).Should(Succeed())
 
 			// check limits
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
-			existingLimitador := &limitadorv1alpha1.Limitador{}
-			err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
-				MaxValue:   1,
-				Seconds:    3 * 60,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
-				Variables:  []string{},
-				Name:       rlptools.LimitsNameFromRLP(rlp),
-			}))
+			Eventually(func(g Gomega) {
+				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
+				existingLimitador := &limitadorv1alpha1.Limitador{}
+				err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
+				// must exist
+				Expect(err).ToNot(HaveOccurred())
+				Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+					MaxValue:   1,
+					Seconds:    3 * 60,
+					Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
+					Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
+					Variables:  []string{},
+					Name:       rlptools.LimitsNameFromRLP(rlp),
+				}))
+			}).WithContext(ctx).Should(Succeed())
 
 			Eventually(func(g Gomega) {
 				// Check gateway back references
@@ -398,19 +402,21 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
 
 			// check limits
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
-			existingLimitador := &limitadorv1alpha1.Limitador{}
-			err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
-			// must exist
-			Expect(err).ToNot(HaveOccurred())
-			Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
-				MaxValue:   1,
-				Seconds:    3 * 60,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
-				Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
-				Variables:  []string{},
-				Name:       rlptools.LimitsNameFromRLP(rlp),
-			}))
+			Eventually(func(g Gomega) {
+				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
+				existingLimitador := &limitadorv1alpha1.Limitador{}
+				err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
+				// must exist
+				Expect(err).ToNot(HaveOccurred())
+				Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
+					MaxValue:   1,
+					Seconds:    3 * 60,
+					Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
+					Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
+					Variables:  []string{},
+					Name:       rlptools.LimitsNameFromRLP(rlp),
+				}))
+			}).WithContext(ctx).Should(Succeed())
 
 			Eventually(func(g Gomega) {
 				// Check gateway back references
@@ -909,12 +915,15 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRouteB))).WithContext(ctx).Should(BeTrue())
 
-			rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
-			err = k8sClient.Get(ctx, client.ObjectKeyFromObject(rlp), rlpUpdated)
-			Expect(err).ToNot(HaveOccurred())
-			rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeBName)
-			err = k8sClient.Update(ctx, rlpUpdated)
-			Expect(err).ToNot(HaveOccurred())
+			Eventually(func(g Gomega) {
+				rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(rlp), rlpUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+				rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeBName)
+				err = k8sClient.Update(ctx, rlpUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
+
 			// Check RLP status is available
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
@@ -985,12 +994,15 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gatewayB)).WithContext(ctx).Should(BeTrue())
 
-			rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
-			err = k8sClient.Get(ctx, client.ObjectKeyFromObject(rlp), rlpUpdated)
-			Expect(err).ToNot(HaveOccurred())
-			rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gwBName)
-			err = k8sClient.Update(ctx, rlpUpdated)
-			Expect(err).ToNot(HaveOccurred())
+			Eventually(func(g Gomega) {
+				rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(rlp), rlpUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+				rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gwBName)
+				err = k8sClient.Update(ctx, rlpUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
+
 			// Check RLP status is available
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
@@ -1238,12 +1250,14 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRouteB))).WithContext(ctx).Should(BeTrue())
 
 			// RLP A -> Route B
-			rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
-			err = k8sClient.Get(ctx, client.ObjectKeyFromObject(rlpA), rlpUpdated)
-			Expect(err).ToNot(HaveOccurred())
-			rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeBName)
-			err = k8sClient.Update(ctx, rlpUpdated)
-			Expect(err).ToNot(HaveOccurred())
+			Eventually(func(g Gomega) {
+				rlpUpdated := &kuadrantv1beta2.RateLimitPolicy{}
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(rlpA), rlpUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+				rlpUpdated.Spec.TargetRef.Name = gatewayapiv1.ObjectName(routeBName)
+				err = k8sClient.Update(ctx, rlpUpdated)
+				g.Expect(err).ToNot(HaveOccurred())
+			}).WithContext(ctx).Should(Succeed())
 
 			// Check HTTPRoute A direct back reference to RLP B
 			Eventually(

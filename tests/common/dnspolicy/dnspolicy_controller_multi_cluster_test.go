@@ -500,7 +500,7 @@ var _ = Describe("DNSPolicy Multi Cluster", func() {
 									"ProviderSpecific": Equal(externaldns.ProviderSpecific{{Name: "geo-code", Value: "*"}}),
 								})),
 								PointTo(MatchFields(IgnoreExtras, Fields{
-									"DNSName":       Equal(tests.HostOne),
+									"DNSName":       Equal(tests.HostOne(domain)),
 									"Targets":       ConsistOf("klb.test." + domain),
 									"RecordType":    Equal("CNAME"),
 									"SetIdentifier": Equal(""),

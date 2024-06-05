@@ -113,7 +113,7 @@ func (r *TargetStatusReconciler) reconcileResourcesForPolicyKind(parentCtx conte
 	}
 	policies := topology.PoliciesFromGateway(gw)
 
-	sort.Sort(kuadrantgatewayapi.PolicyByTargetRefKindAndCreationTimeStampStatus(policies))
+	sort.Sort(kuadrantgatewayapi.PolicyByTargetRefKindAndAcceptedStatus(policies))
 
 	var errs error
 

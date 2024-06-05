@@ -71,9 +71,11 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	controllers.SetupKuadrantOperatorForTest(controllers.BootstrapScheme(), cfg)
+	s := controllers.BootstrapScheme()
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: controllers.BootstrapScheme()})
+	controllers.SetupKuadrantOperatorForTest(s, cfg)
+
+	k8sClient, err = client.New(cfg, client.Options{Scheme: s})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 

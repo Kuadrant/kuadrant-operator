@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/samber/lo"
 	_struct "google.golang.org/protobuf/types/known/structpb"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	"k8s.io/utils/env"
@@ -31,20 +32,17 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1.HTTPRou
 		return rules
 	}
 
-	// Sort RLP limits for consistent comparison with existing wasmplugin objects
+	rlpKey := client.ObjectKeyFromObject(rlp)
 	limits := rlp.Spec.CommonSpec().Limits
-	limitNames := make([]string, 0, len(limits))
-	for name := range limits {
-		limitNames = append(limitNames, name)
-	}
 
-	// sort the slice by limit name
+	// Sort RLP limits for consistent comparison with existing wasmplugin objects
+	limitNames := lo.Keys(limits)
 	slices.Sort(limitNames)
 
 	for _, limitName := range limitNames {
 		// 1 RLP limit <---> 1 WASM rule
 		limit := limits[limitName]
-		limitIdentifier := LimitNameToLimitadorIdentifier(limitName)
+		limitIdentifier := LimitNameToLimitadorIdentifier(rlpKey, limitName)
 		rule, err := ruleFromLimit(limitIdentifier, &limit, route)
 		if err == nil {
 			rules = append(rules, rule)

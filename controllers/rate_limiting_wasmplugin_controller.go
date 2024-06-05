@@ -23,6 +23,7 @@ import (
 	"sort"
 
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	istioextensionsv1alpha1 "istio.io/api/extensions/v1alpha1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -61,7 +62,7 @@ type RateLimitingWASMPluginReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *RateLimitingWASMPluginReconciler) Reconcile(eventCtx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := r.Logger().WithValues("Gateway", req.NamespacedName)
+	logger := r.Logger().WithValues("Gateway", req.NamespacedName, "request id", uuid.NewString())
 	logger.Info("Reconciling rate limiting WASMPlugin")
 	ctx := logr.NewContext(eventCtx, logger)
 
@@ -174,7 +175,7 @@ func (r *RateLimitingWASMPluginReconciler) wasmPluginConfig(ctx context.Context,
 
 	for _, policy := range rateLimitPolicies {
 		rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)
-		wasmRLP, err := r.wasmRateLimitPolicy(ctx, t, rlp, gw, rateLimitPolicies)
+		wasmRLP, err := r.wasmRateLimitPolicy(ctx, t, rlp, gw)
 		if err != nil {
 			return nil, err
 		}
@@ -219,7 +220,7 @@ func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx contex
 
 	policies := utils.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })
 
-	t, err := kuadrantgatewayapi.NewTopology(
+	topology, err := kuadrantgatewayapi.NewTopology(
 		kuadrantgatewayapi.WithGateways([]*gatewayapiv1.Gateway{gw}),
 		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
 		kuadrantgatewayapi.WithPolicies(policies),
@@ -229,12 +230,15 @@ func (r *RateLimitingWASMPluginReconciler) topologyIndexesFromGateway(ctx contex
 		return nil, err
 	}
 
-	return kuadrantgatewayapi.NewTopologyIndexes(t), nil
+	overriddenTopology, err := rlptools.ApplyOverrides(topology, gw)
+	if err != nil {
+		return nil, err
+	}
+
+	return kuadrantgatewayapi.NewTopologyIndexes(overriddenTopology), nil
 }
 
-func (r *RateLimitingWASMPluginReconciler) wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway, affectedPolices []kuadrantgatewayapi.Policy) (*wasm.RateLimitPolicy, error) {
-	logger, _ := logr.FromContext(ctx)
-
+func (r *RateLimitingWASMPluginReconciler) wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*wasm.RateLimitPolicy, error) {
 	route, err := r.routeFromRLP(ctx, t, rlp, gw)
 	if err != nil {
 		return nil, err
@@ -266,22 +270,6 @@ func (r *RateLimitingWASMPluginReconciler) wasmRateLimitPolicy(ctx context.Conte
 	//
 	routeWithEffectiveHostnames := route.DeepCopy()
 	routeWithEffectiveHostnames.Spec.Hostnames = hostnames
-
-	// Policy limits may be overridden by a gateway policy for route policies
-	if kuadrantgatewayapi.IsTargetRefHTTPRoute(rlp.GetTargetRef()) {
-		filteredPolicies := utils.Filter(affectedPolices, func(p kuadrantgatewayapi.Policy) bool {
-			return kuadrantgatewayapi.IsTargetRefGateway(p.GetTargetRef()) && p.GetUID() != rlp.GetUID()
-		})
-
-		for _, policy := range filteredPolicies {
-			p := policy.(*kuadrantv1beta2.RateLimitPolicy)
-			if p.Spec.Overrides != nil {
-				rlp.Spec.CommonSpec().Limits = p.Spec.Overrides.Limits
-				logger.V(1).Info("applying overrides from parent policy", "parentPolicy", client.ObjectKeyFromObject(p))
-				break
-			}
-		}
-	}
 
 	rules := rlptools.WasmRules(rlp, routeWithEffectiveHostnames)
 	if len(rules) == 0 {
@@ -324,7 +312,6 @@ func (r *RateLimitingWASMPluginReconciler) routeFromRLP(ctx context.Context, t *
 		for idx := range untargetedRoutes {
 			untargetedRules = append(untargetedRules, untargetedRoutes[idx].Spec.Rules...)
 		}
-
 		gwHostnamesTmp := kuadrantgatewayapi.TargetHostnames(gw)
 		gwHostnames := utils.Map(gwHostnamesTmp, func(str string) gatewayapiv1.Hostname { return gatewayapiv1.Hostname(str) })
 		route = &gatewayapiv1.HTTPRoute{

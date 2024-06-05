@@ -15,6 +15,7 @@ require (
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/onsi/ginkgo/v2 v2.13.2
 	github.com/onsi/gomega v1.30.0
+	github.com/samber/lo v1.39.0
 	go.uber.org/zap v1.26.0
 	golang.org/x/net v0.23.0
 	google.golang.org/protobuf v1.33.0

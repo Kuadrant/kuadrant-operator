@@ -128,8 +128,8 @@ func GatewayIsReady(ctx context.Context, cl client.Client, gateway *gatewayapiv1
 	}
 }
 
-func BuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string) *gatewayapiv1.HTTPRoute {
-	return &gatewayapiv1.HTTPRoute{
+func BuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string, mutateFns ...func(*gatewayapiv1.HTTPRoute)) *gatewayapiv1.HTTPRoute {
+	route := &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "HTTPRoute",
 			APIVersion: gatewayapiv1.GroupVersion.String(),
@@ -164,6 +164,10 @@ func BuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string) *gate
 			},
 		},
 	}
+	for _, mutateFn := range mutateFns {
+		mutateFn(route)
+	}
+	return route
 }
 
 func RouteIsAccepted(ctx context.Context, cl client.Client, routeKey client.ObjectKey) func() bool {

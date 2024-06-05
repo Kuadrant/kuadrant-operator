@@ -9,6 +9,7 @@ import (
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -145,39 +146,51 @@ func testRLP_1Limit_1Rate_1Counter(ns, name string) *kuadrantv1beta2.RateLimitPo
 
 func TestLimitNameToLimitadorIdentifier(t *testing.T) {
 	testCases := []struct {
-		name     string
-		input    string
-		expected *regexp.Regexp
+		name            string
+		rlpKey          types.NamespacedName
+		uniqueLimitName string
+		expected        *regexp.Regexp
 	}{
 		{
-			name:     "prepends the limitador limit identifier prefix",
-			input:    "foo",
-			expected: regexp.MustCompile(`^limit\.foo.+`),
+			name:            "prepends the limitador limit identifier prefix",
+			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
+			uniqueLimitName: "foo",
+			expected:        regexp.MustCompile(`^limit\.foo.+`),
 		},
 		{
-			name:     "sanitizes invalid chars",
-			input:    "my/limit-0",
-			expected: regexp.MustCompile(`^limit\.my_limit_0.+$`),
+			name:            "sanitizes invalid chars",
+			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
+			uniqueLimitName: "my/limit-0",
+			expected:        regexp.MustCompile(`^limit\.my_limit_0.+$`),
 		},
 		{
-			name:     "sanitizes the dot char (.) even though it is a valid char in limitador identifiers",
-			input:    "my.limit",
-			expected: regexp.MustCompile(`^limit\.my_limit.+$`),
+			name:            "sanitizes the dot char (.) even though it is a valid char in limitador identifiers",
+			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
+			uniqueLimitName: "my.limit",
+			expected:        regexp.MustCompile(`^limit\.my_limit.+$`),
 		},
 		{
-			name:     "appends a hash of the original name to avoid breaking uniqueness",
-			input:    "foo",
-			expected: regexp.MustCompile(`^.+__2c26b46b$`),
+			name:            "appends a hash of the original name to avoid breaking uniqueness",
+			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
+			uniqueLimitName: "foo",
+			expected:        regexp.MustCompile(`^.+__1da6e70a$`),
 		},
 		{
-			name:     "empty string",
-			input:    "",
-			expected: regexp.MustCompile(`^limit.__e3b0c442$`),
+			name:            "different rlp keys result in different identifiers",
+			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpB"},
+			uniqueLimitName: "foo",
+			expected:        regexp.MustCompile(`^.+__2c1520b6$`),
+		},
+		{
+			name:            "empty string",
+			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
+			uniqueLimitName: "",
+			expected:        regexp.MustCompile(`^limit.__6d5e49dc$`),
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(subT *testing.T) {
-			identifier := LimitNameToLimitadorIdentifier(tc.input)
+			identifier := LimitNameToLimitadorIdentifier(tc.rlpKey, tc.uniqueLimitName)
 			if !tc.expected.MatchString(identifier) {
 				subT.Errorf("identifier does not match, expected(%s), got (%s)", tc.expected, identifier)
 			}
@@ -199,7 +212,7 @@ func TestLimitadorRateLimitsFromRLP(t *testing.T) {
 					Namespace:  "testNS/rlpA",
 					MaxValue:   5,
 					Seconds:    10,
-					Conditions: []string{`limit.l1__2804bad6 == "1"`},
+					Conditions: []string{`limit.l1__65f19ee8 == "1"`},
 					Variables:  []string{},
 					Name:       "testNS/rlpA",
 				},
@@ -213,7 +226,7 @@ func TestLimitadorRateLimitsFromRLP(t *testing.T) {
 					Namespace:  "testNS/rlpA",
 					MaxValue:   5,
 					Seconds:    10,
-					Conditions: []string{`limit.l1__2804bad6 == "1"`},
+					Conditions: []string{`limit.l1__65f19ee8 == "1"`},
 					Variables:  []string{},
 					Name:       "testNS/rlpA",
 				},
@@ -221,7 +234,7 @@ func TestLimitadorRateLimitsFromRLP(t *testing.T) {
 					Namespace:  "testNS/rlpA",
 					MaxValue:   3,
 					Seconds:    3600,
-					Conditions: []string{`limit.l2__8a1cee43 == "1"`},
+					Conditions: []string{`limit.l2__3e871d60 == "1"`},
 					Variables:  []string{},
 					Name:       "testNS/rlpA",
 				},
@@ -235,7 +248,7 @@ func TestLimitadorRateLimitsFromRLP(t *testing.T) {
 					Namespace:  "testNS/rlpA",
 					MaxValue:   5,
 					Seconds:    10,
-					Conditions: []string{`limit.l1__2804bad6 == "1"`},
+					Conditions: []string{`limit.l1__65f19ee8 == "1"`},
 					Variables:  []string{},
 					Name:       "testNS/rlpA",
 				},
@@ -243,7 +256,7 @@ func TestLimitadorRateLimitsFromRLP(t *testing.T) {
 					Namespace:  "testNS/rlpA",
 					MaxValue:   3,
 					Seconds:    60,
-					Conditions: []string{`limit.l1__2804bad6 == "1"`},
+					Conditions: []string{`limit.l1__65f19ee8 == "1"`},
 					Variables:  []string{},
 					Name:       "testNS/rlpA",
 				},
@@ -257,7 +270,7 @@ func TestLimitadorRateLimitsFromRLP(t *testing.T) {
 					Namespace:  "testNS/rlpA",
 					MaxValue:   5,
 					Seconds:    10,
-					Conditions: []string{`limit.l1__2804bad6 == "1"`},
+					Conditions: []string{`limit.l1__65f19ee8 == "1"`},
 					Variables:  []string{"request.path"},
 					Name:       "testNS/rlpA",
 				},

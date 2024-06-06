@@ -4,13 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"unicode"
 
 	"github.com/samber/lo"
-	_struct "google.golang.org/protobuf/types/known/structpb"
-	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/env"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -55,7 +55,7 @@ func Rules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1.HTTPRoute) 
 	return rules
 }
 
-func LimitNameToLimitadorIdentifier(uniqueLimitName string) string {
+func LimitNameToLimitadorIdentifier(rlpKey types.NamespacedName, uniqueLimitName string) string {
 	identifier := LimitadorRateLimitIdentifierPrefix
 
 	// sanitize chars that are not allowed in limitador identifiers
@@ -68,7 +68,7 @@ func LimitNameToLimitadorIdentifier(uniqueLimitName string) string {
 	}
 
 	// to avoid breaking the uniqueness of the limit name after sanitization, we add a hash of the original name
-	hash := sha256.Sum256([]byte(uniqueLimitName))
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s/%s", rlpKey.String(), uniqueLimitName)))
 	identifier += "__" + hex.EncodeToString(hash[:4])
 
 	return identifier

@@ -228,7 +228,7 @@ func (r *RateLimitingIstioWASMPluginReconciler) wasmRateLimitPolicy(ctx context.
 	routeWithEffectiveHostnames := route.DeepCopy()
 	routeWithEffectiveHostnames.Spec.Hostnames = hostnames
 
-	rules := rlptools.WasmRules(rlp, routeWithEffectiveHostnames)
+	rules := wasm.Rules(rlp, routeWithEffectiveHostnames)
 	if len(rules) == 0 {
 		// no need to add the policy if there are no rules; a rlp can return no rules if all its limits fail to match any route rule
 		return nil, nil

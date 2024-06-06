@@ -48,7 +48,7 @@ func TopologyIndexesFromGateway(ctx context.Context, cl client.Client, gw *gatew
 
 	policies := utils.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })
 
-	t, err := kuadrantgatewayapi.NewTopology(
+	topology, err := kuadrantgatewayapi.NewTopology(
 		kuadrantgatewayapi.WithGateways([]*gatewayapiv1.Gateway{gw}),
 		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To)),
 		kuadrantgatewayapi.WithPolicies(policies),
@@ -58,5 +58,10 @@ func TopologyIndexesFromGateway(ctx context.Context, cl client.Client, gw *gatew
 		return nil, err
 	}
 
-	return kuadrantgatewayapi.NewTopologyIndexes(t), nil
+	overriddenTopology, err := ApplyOverrides(topology, gw)
+	if err != nil {
+		return nil, err
+	}
+
+	return kuadrantgatewayapi.NewTopologyIndexes(overriddenTopology), nil
 }

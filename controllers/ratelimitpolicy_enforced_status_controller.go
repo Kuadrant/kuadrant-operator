@@ -24,6 +24,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
@@ -180,7 +181,12 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) buildTopology(ctx context.Cont
 
 	routeList := &gatewayapiv1.HTTPRouteList{}
 	// Get all the routes having the gateway as parent
-	err = r.Client().List(ctx, routeList, client.MatchingFields{HTTPRouteGatewayParentField: client.ObjectKeyFromObject(gw).String()})
+	err = r.Client().List(
+		ctx,
+		routeList,
+		client.MatchingFields{
+			fieldindexers.HTTPRouteGatewayParentField: client.ObjectKeyFromObject(gw).String(),
+		})
 	logger.V(1).Info("list routes by gateway", "#routes", len(routeList.Items), "err", err)
 	if err != nil {
 		return nil, err

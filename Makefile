@@ -323,16 +323,13 @@ docker-push: ## Push docker image with the manager.
 	$(CONTAINER_ENGINE) push $(IMG)
 
 kind-load-image: ## Load image to local cluster
-	@mkdir -p ./tmp
-	@if [ -f ./tmp/image.tar ]; then rm ./tmp/image.tar; fi
-	$(CONTAINER_ENGINE) save -o ./tmp/image.tar $(IMG)
-	KIND_EXPERIMENTAL_PROVIDER=$(CONTAINER_ENGINE) $(KIND) load image-archive ./tmp/image.tar $(IMG) --name $(KIND_CLUSTER_NAME)
+	$(eval TMP_DIR := $(shell mktemp -d))
+	$(CONTAINER_ENGINE) save -o $(TMP_DIR)/image.tar $(IMG) \
+	   && KIND_EXPERIMENTAL_PROVIDER=$(CONTAINER_ENGINE) $(KIND) load image-archive $(TMP_DIR)/image.tar $(IMG) --name $(KIND_CLUSTER_NAME) ; \
+	   EXITVAL=$$? ; \
+	   rm -rf $(TMP_DIR) ;\
+	   exit $${EXITVAL}
 
-kind-load-bundle: ## Load image to local cluster
-	@mkdir -p ./tmp
-	@if [ -f ./tmp/bundle_image.tar ]; then rm ./tmp/bundle_image.tar; fi
-	$(CONTAINER_ENGINE) save -o ./tmp/bundle_image.tar $(BUNDLE_IMG)
-	KIND_EXPERIMENTAL_PROVIDER=$(CONTAINER_ENGINE) $(KIND) load image-archive ./tmp/bundle_image.tar $(BUNDLE_IMG) --name $(KIND_CLUSTER_NAME)
 
 # go-install-tool will 'go install' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))

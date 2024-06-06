@@ -121,6 +121,11 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
 				return err == nil
 			}).WithContext(ctx).Should(BeTrue())
+
+			// has the correct target ref
+			Expect(iap.Spec.TargetRef.Group).To(Equal("gateway.networking.k8s.io"))
+			Expect(iap.Spec.TargetRef.Kind).To(Equal("Gateway"))
+			Expect(iap.Spec.TargetRef.Name).To(Equal(TestGatewayName))
 			Expect(iap.Spec.Rules).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
@@ -164,6 +169,11 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 				logf.Log.V(1).Info("Fetching Istio's AuthorizationPolicy", "key", iapKey.String(), "error", err)
 				return err == nil
 			}).WithContext(ctx).Should(BeTrue())
+
+			// has the correct target ref
+			Expect(iap.Spec.TargetRef.Group).To(Equal("gateway.networking.k8s.io"))
+			Expect(iap.Spec.TargetRef.Kind).To(Equal("Gateway"))
+			Expect(iap.Spec.TargetRef.Name).To(Equal(TestGatewayName))
 			Expect(iap.Spec.Rules).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
@@ -365,7 +375,6 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
 				return condition != nil && condition.Reason == string(kuadrant.PolicyReasonUnknown) && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
 			}).WithContext(ctx).Should(BeTrue())
-
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(TestGatewayName, routePolicy.Spec.TargetRef), Namespace: testNamespace}
 			iap := &secv1beta1resources.AuthorizationPolicy{}

@@ -1,0 +1,6 @@
+---
+# Adds namespace to all resources.
+namespace: envoy-gateway-system
+resources:
+- gateway-class.yaml
+- gateway.yaml

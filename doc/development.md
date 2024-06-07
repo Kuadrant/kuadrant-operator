@@ -27,7 +27,7 @@ The `make local-setup` target accepts the following variables:
 
 | **Makefile Variable** | **Description** | **Default value** |
 | --- | --- |--- |
-| `GATEWAYAPI_PROVIDER` | GatewayAPI provider name. Accepted values: [*istio*] | *istio* |
+| `GATEWAYAPI_PROVIDER` | GatewayAPI provider name. Accepted values: [*istio* \| *envoygateway*] | *istio* |
 
 ## Run as a local process
 
@@ -41,7 +41,7 @@ The `make local-env-setup` target accepts the following variables:
 
 | **Makefile Variable** | **Description** | **Default value** |
 | --- | --- |--- |
-| `GATEWAYAPI_PROVIDER` | GatewayAPI provider name. Accepted values: [*istio*] | *istio* |
+| `GATEWAYAPI_PROVIDER` | GatewayAPI provider name. Accepted values: [*istio* \| *envoygateway*] | *istio* |
 
 Then, run the operator locally
 
@@ -54,12 +54,12 @@ make run
 **Requirements**:
 * Active session open to the kubernetes cluster.
 * GatewayAPI installed
-* GatewayAPI provider installed. Currently only Istio supported.
+* GatewayAPI provider installed. Currently only [Istio](https://istio.io/) and [EnvoyGateway](https://gateway.envoyproxy.io/) supported.
 * [Cert Manager](https://cert-manager.io/) installed
 
 Before running the kuadrant operator, some dependencies needs to be deployed.
 
-```
+```sh
 make install
 make deploy-dependencies
 ```
@@ -246,7 +246,7 @@ Multiple controller integration tests are defined
 | --- | --- | --- | --- |
 | `github.com/kuadrant/kuadrant-operator/tests/bare_k8s` | no gateway provider, no GatewayAPI CRDs. Just Kuadrant API and Kuadrant dependencies. | `make local-k8s-env-setup` | `make test-bare-k8s-integration` |
 | `github.com/kuadrant/kuadrant-operator/tests/gatewayapi` | no gateway provider. GatewayAPI CRDs, Kuadrant API and Kuadrant dependencies. | `make local-gatewayapi-env-setup` | `make test-gatewayapi-env-integration` |
-| `github.com/kuadrant/kuadrant-operator/controllers` | at least one gatewayapi provider. It can be any: istio, envoygateway, ...  | `make local-env-setup GATEWAYAPI_PROVIDER=[istio]` (Default *istio*) | `make test-integration` |
+| `github.com/kuadrant/kuadrant-operator/controllers` | at least one gatewayapi provider. It can be any: istio, envoygateway, ...  | `make local-env-setup GATEWAYAPI_PROVIDER=[istio \| envoygateway]` (Default *istio*) | `make test-integration` |
 | `github.com/kuadrant/kuadrant-operator/tests/istio` | GatewayAPI CRDs, Istio, Kuadrant API and Kuadrant dependencies.  | `make local-env-setup GATEWAYAPI_PROVIDER=istio` | `make test-istio-env-integration` |
 
 ### Lint tests

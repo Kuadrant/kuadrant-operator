@@ -1,12 +1,9 @@
 ##@ Alerts
-export WORKDIR ?= $(shell pwd)
 export IMAGE ?= quay.io/prometheus/prometheus
-export AVAILABILITY_SLO_RULES ?= $(WORKDIR)/examples/alerts/slo-availability.yaml
-export LATENCY_SLO_RULES ?= $(WORKDIR)/examples/alerts/slo-latency.yaml
-export UNIT_TEST_DIR ?= $(WORKDIR)/examples/alerts/tests
-export OS = $(shell uname | tr '[:upper:]' '[:lower:]')
-export ARCH = $(shell uname -m | tr '[:upper:]' '[:lower:]')
-export SLOTH = $(WORKDIR)/bin/sloth
+export AVAILABILITY_SLO_RULES ?= $(PROJECT_PATH)/examples/alerts/slo-availability.yaml
+export LATENCY_SLO_RULES ?= $(PROJECT_PATH)/examples/alerts/slo-latency.yaml
+export UNIT_TEST_DIR ?= $(PROJECT_PATH)/examples/alerts/tests
+export SLOTH = $(PROJECT_PATH)/bin/sloth
 export ALERTS_SLOTH_INPUT_DIR = /examples/alerts/sloth
 export ALERTS_SLOTH_OUTPUT_DIR = /examples/alerts
 
@@ -30,7 +27,7 @@ alerts-tests: container-runtime-tool ## Test alerts using promtool
 
 sloth: $(SLOTH) ## Install Sloth
 $(SLOTH):
-	cd $(WORKDIR)/bin && curl -L https://github.com/slok/sloth/releases/download/v0.11.0/sloth-$(OS)-$(ARCH) > sloth && chmod +x sloth
+	cd $(PROJECT_PATH)/bin && curl -L https://github.com/slok/sloth/releases/download/v0.11.0/sloth-$(OS)-$(ARCH) > sloth && chmod +x sloth
     
 sloth-generate: sloth ## Generate alerts using Sloth templates
-	$(SLOTH) generate -i $(WORKDIR)$(ALERTS_SLOTH_INPUT_DIR) -o $(WORKDIR)$(ALERTS_SLOTH_OUTPUT_DIR) --default-slo-period=28d
+	$(SLOTH) generate -i $(PROJECT_PATH)$(ALERTS_SLOTH_INPUT_DIR) -o $(PROJECT_PATH)$(ALERTS_SLOTH_OUTPUT_DIR) --default-slo-period=28d

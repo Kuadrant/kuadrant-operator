@@ -6,6 +6,8 @@ SHELL = /usr/bin/env bash -o pipefail
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 PROJECT_PATH := $(patsubst %/,%,$(dir $(MKFILE_PATH)))
 
+OS = $(shell uname -s | tr '[:upper:]' '[:lower:]')
+ARCH := $(shell uname -m | tr '[:upper:]' '[:lower:]')
 # Container Engine to be used for building image and with kind
 CONTAINER_ENGINE ?= docker
 
@@ -258,7 +260,7 @@ $(GINKGO):
 .PHONY: ginkgo
 ginkgo: $(GINKGO) ## Download ginkgo locally if necessary.
 
-HELM = ./bin/helm
+HELM = $(PROJECT_PATH)/bin/helm
 HELM_VERSION = v3.15.0
 $(HELM):
 	@{ \

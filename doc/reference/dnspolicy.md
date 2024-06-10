@@ -21,7 +21,7 @@
 
 | **Field**         | **Type**                                                                                                                          |      **Required**      | **Description**                                                           |
 |-------------------|-----------------------------------------------------------------------------------------------------------------------------------|:----------------------:|---------------------------------------------------------------------------|
-| `targetRef`       | [Gateway API PolicyTargetReference](https://gateway-api.sigs.k8s.io/geps/gep-713/?h=policytargetreference#policy-targetref-api)   |          Yes           | Reference to a Kubernetes resource that the policy attaches to            |
+| `targetRef`       | [Gateway API NamespacedPolicyTargetReference](https://gateway-api.sigs.k8s.io/geps/gep-713)   |          Yes           | Reference to a Kubernetes resource that the policy attaches to            |
 | `healthCheck`     | [HealthCheckSpec](#healthcheckspec)                                                                                               |           No           | HealthCheck spec                                                          |
 | `loadBalancing`   | [LoadBalancingSpec](#loadbalancingspec)                                                                                           | Yes(loadbalanced only) | LoadBalancing Spec, required when routingStrategy is "loadbalanced"       |
 | `routingStrategy` | String (immutable)                                                                                                                |          Yes           | **Immutable!** Routing Strategy to use, one of "simple" or "loadbalanced" |

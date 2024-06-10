@@ -25,7 +25,7 @@ func testBuildBasicRLP(name string, kind gatewayapiv1.Kind, mutateFn func(*RateL
 			Namespace: "testNS",
 		},
 		Spec: RateLimitPolicySpec{
-			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+			TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 				Group: gatewayapiv1.GroupName,
 				Kind:  kind,
 				Name:  "some-name",

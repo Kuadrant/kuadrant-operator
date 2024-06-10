@@ -51,7 +51,7 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  gatewayapiv1.ObjectName(routeName),
@@ -171,7 +171,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  gatewayapiv1.ObjectName(routeName),
@@ -313,7 +313,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -1446,7 +1446,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  "my-target",

@@ -1,8 +1,10 @@
 package istio
 
 import (
+	"encoding/json"
 	"fmt"
 
+	sailv1alpha1 "github.com/istio-ecosystem/sail-operator/api/v1alpha1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
@@ -10,8 +12,6 @@ import (
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	"istio.io/istio/pkg/util/protomarshal"
 	corev1 "k8s.io/api/core/v1"
-	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
-	"maistra.io/istio-operator/pkg/helm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
@@ -152,7 +152,7 @@ func (w *OperatorWrapper) GetMeshConfig() (*istiomeshv1alpha1.MeshConfig, error)
 
 // SetMeshConfig sets the IstioOperator MeshConfig
 func (w *OperatorWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshConfig) error {
-	meshConfigStruct, err := meshConfigToStruct(config)
+	meshConfigStruct, err := istioMeshConfigToStruct(config)
 	if err != nil {
 		return err
 	}
@@ -211,11 +211,11 @@ func (w *OSSMControlPlaneWrapper) GetConfigObject() client.Object {
 
 // SailWrapper wraps the IstioCR
 type SailWrapper struct {
-	config *istiov1alpha1.Istio
+	config *sailv1alpha1.Istio
 }
 
 // NewSailWrapper creates a new SailWrapper
-func NewSailWrapper(config *istiov1alpha1.Istio) *SailWrapper {
+func NewSailWrapper(config *sailv1alpha1.Istio) *SailWrapper {
 	return &SailWrapper{config: config}
 }
 
@@ -226,12 +226,11 @@ func (w *SailWrapper) GetConfigObject() client.Object {
 
 // GetMeshConfig returns the Istio MeshConfig
 func (w *SailWrapper) GetMeshConfig() (*istiomeshv1alpha1.MeshConfig, error) {
-	values := w.config.Spec.GetValues()
-	config, ok := values["meshConfig"].(map[string]any)
-	if !ok {
+	values := w.config.Spec.Values
+	if values == nil || values.MeshConfig == nil {
 		return &istiomeshv1alpha1.MeshConfig{}, nil
 	}
-	meshConfigStruct, err := structpb.NewStruct(config)
+	meshConfigStruct, err := sailMeshConfigToStruct(values.MeshConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -244,18 +243,19 @@ func (w *SailWrapper) GetMeshConfig() (*istiomeshv1alpha1.MeshConfig, error) {
 
 // SetMeshConfig sets the Istio MeshConfig
 func (w *SailWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshConfig) error {
-	meshConfigStruct, err := meshConfigToStruct(config)
+	meshConfigStruct, err := istioMeshConfigToStruct(config)
 	if err != nil {
 		return err
 	}
-	values := w.config.Spec.GetValues()
-	if values == nil {
-		values = helm.HelmValues{}
-	}
-	if err := values.Set("meshConfig", meshConfigStruct.AsMap()); err != nil {
+	sailMeshConfig, err := sailMeshConfigFromStruct(meshConfigStruct)
+	if err != nil {
 		return err
 	}
-	return w.config.Spec.SetValues(values)
+	if w.config.Spec.Values == nil {
+		w.config.Spec.Values = &sailv1alpha1.Values{}
+	}
+	w.config.Spec.Values.MeshConfig = sailMeshConfig
+	return nil
 }
 
 // GetMeshConfig returns the MeshConfig from the OSSM ServiceMeshControlPlane
@@ -278,7 +278,7 @@ func (w *OSSMControlPlaneWrapper) GetMeshConfig() (*istiomeshv1alpha1.MeshConfig
 
 // SetMeshConfig sets the MeshConfig in the OSSM ServiceMeshControlPlane
 func (w *OSSMControlPlaneWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshConfig) error {
-	meshConfigStruct, err := meshConfigToStruct(config)
+	meshConfigStruct, err := istioMeshConfigToStruct(config)
 	if err != nil {
 		return err
 	}
@@ -312,15 +312,45 @@ func meshConfigFromStruct(structure *structpb.Struct) (*istiomeshv1alpha1.MeshCo
 	return meshConfig, nil
 }
 
+func sailMeshConfigFromStruct(structure *structpb.Struct) (*sailv1alpha1.MeshConfig, error) {
+	if structure == nil {
+		return &sailv1alpha1.MeshConfig{}, nil
+	}
+
+	meshConfigJSON, err := structure.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+
+	meshConfig := &sailv1alpha1.MeshConfig{}
+	if err = json.Unmarshal(meshConfigJSON, meshConfig); err != nil {
+		return nil, err
+	}
+
+	return meshConfig, nil
+}
+
 // meshConfigToStruct Marshals the Istio MeshConfig into a struct
-func meshConfigToStruct(config *istiomeshv1alpha1.MeshConfig) (*structpb.Struct, error) {
+func istioMeshConfigToStruct(config *istiomeshv1alpha1.MeshConfig) (*structpb.Struct, error) {
 	configJSON, err := protojson.Marshal(config)
 	if err != nil {
 		return nil, err
 	}
-	configStruct := &structpb.Struct{}
+	return jsonByteToStruct(configJSON)
+}
 
-	if err = configStruct.UnmarshalJSON(configJSON); err != nil {
+// meshConfigToStruct Marshals the Sail MeshConfig into a struct
+func sailMeshConfigToStruct(config *sailv1alpha1.MeshConfig) (*structpb.Struct, error) {
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return nil, err
+	}
+	return jsonByteToStruct(configJSON)
+}
+
+func jsonByteToStruct(configJSON []byte) (*structpb.Struct, error) {
+	configStruct := &structpb.Struct{}
+	if err := configStruct.UnmarshalJSON(configJSON); err != nil {
 		return nil, err
 	}
 	return configStruct, nil

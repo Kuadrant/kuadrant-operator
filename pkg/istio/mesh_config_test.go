@@ -5,18 +5,16 @@ package istio
 import (
 	"testing"
 
+	sailv1alpha1 "github.com/istio-ecosystem/sail-operator/api/v1alpha1"
+	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
+	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gotest.tools/assert"
 	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
 	istioapiv1alpha1 "istio.io/api/operator/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
-	"maistra.io/istio-operator/pkg/helm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
-	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 )
 
 type stubbedConfigWrapper struct {
@@ -271,7 +269,7 @@ func TestOSSMControlPlaneWrapper_SetMeshConfig(t *testing.T) {
 }
 
 func TestSailWrapper_GetConfigObject(t *testing.T) {
-	ist := &istiov1alpha1.Istio{}
+	ist := &sailv1alpha1.Istio{}
 	wrapper := NewSailWrapper(ist)
 
 	assert.Equal(t, wrapper.GetConfigObject(), ist)
@@ -279,13 +277,15 @@ func TestSailWrapper_GetConfigObject(t *testing.T) {
 
 func TestSailWrapper_GetMeshConfig(t *testing.T) {
 	structConfig := getStubbedMeshConfigStruct()
-	values := helm.HelmValues{}
-	if err := values.Set("meshConfig", structConfig.AsMap()); err != nil {
-		assert.NilError(t, err)
-	}
-	config := &istiov1alpha1.Istio{}
-	if err := config.Spec.SetValues(values); err != nil {
-		assert.NilError(t, err)
+	sailMeshConfig, err := sailMeshConfigFromStruct(structConfig)
+	assert.NilError(t, err)
+
+	config := &sailv1alpha1.Istio{
+		Spec: sailv1alpha1.IstioSpec{
+			Values: &sailv1alpha1.Values{
+				MeshConfig: sailMeshConfig,
+			},
+		},
 	}
 	wrapper := NewSailWrapper(config)
 
@@ -296,7 +296,7 @@ func TestSailWrapper_GetMeshConfig(t *testing.T) {
 }
 
 func TestSailWrapper_SetMeshConfig(t *testing.T) {
-	config := &istiov1alpha1.Istio{}
+	config := &sailv1alpha1.Istio{}
 	wrapper := NewSailWrapper(config)
 
 	stubbedMeshConfig := getStubbedMeshConfig()

@@ -1229,7 +1229,103 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Aggregated rate of bytes per API (HTTPRoute). The API name can be cross referenced with the API list to see additional details.\n\nNote: HTTPRoutes require a label `deployment` with the name of the corresponding Deployment so that istio request metrics can be paired with HTTPRoute metrics.",
+      "description": "Aggregated rate of requests per API (HTTPRoute). The API name can be cross referenced with the API list to see additional details.\n\nNote: HTTPRoutes require a label `deployment` with the name of the corresponding Deployment so that istio request metrics can be paired with HTTPRoute metrics.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 24
+      },
+      "id": 153,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "legendFormat": "API: {{name}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Total requests (req/sec)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Aggregated request latencies per API (HTTPRoute). 99th and 95th percentiles are shown. The API name can be cross referenced with the API list to see additional details.\n\nNote: HTTPRoutes require a label `deployment` with the name of the corresponding Deployment so that istio request metrics can be paired with HTTPRoute metrics.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1280,14 +1376,14 @@
               }
             ]
           },
-          "unit": "Bps"
+          "unit": "ms"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 7,
         "w": 8,
-        "x": 8,
+        "x": 16,
         "y": 24
       },
       "id": 137,
@@ -1310,101 +1406,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(sum(irate(container_network_receive_bytes_total{exported_namespace=~\"$api_policy_namespace\"}[1h:5m])\n* on (namespace, exported_namespace,pod)\ngroup_left(workload,workload_type) (group without(cluster_id) (namespace_workload_pod:kube_pod_owner:relabel{exported_namespace=~\"$api_policy_namespace\", workload=~\".+\"}))) by (workload)) * on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"service\", \"(.+)\")))",
-          "legendFormat": "API: {{workload}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Total requests (bytes/sec)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "Rate of 4xx & 5xx response codes and total HTTP response code errors by API/HTTPRoute",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "light-yellow",
-            "mode": "continuous-YlRd"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 5,
-            "gradientMode": "opacity",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 8,
-        "x": 16,
-        "y": 24
-      },
-      "id": 139,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name, response_code) * on(destination_service_name) group_left(name) (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
-          "legendFormat": "{{name}} - {{response_code}}",
+          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$route_name\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{service=~\"$route_name\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "legendFormat": "{{service}} - 99th %ile",
           "range": true,
           "refId": "A"
         },
@@ -1414,14 +1417,14 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_left(name) (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "histogram_quantile(0.95, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$route_name\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{service=~\"$route_name\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
-          "legendFormat": "{{name}} - Total Errors",
+          "legendFormat": "{{service}} - 95th %ile",
           "range": true,
-          "refId": "B"
+          "refId": "C"
         }
       ],
-      "title": "Errors (req/s)",
+      "title": "Request latency",
       "type": "timeseries"
     },
     {
@@ -1784,6 +1787,111 @@
         }
       ],
       "title": "Memory Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Rate of 4xx & 5xx response codes and total HTTP response code errors by API/HTTPRoute",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "light-yellow",
+            "mode": "continuous-YlRd"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 31
+      },
+      "id": 139,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name, response_code) * on(destination_service_name) group_left(name) (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "legendFormat": "{{name}} - {{response_code}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_left(name) (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "hide": false,
+          "legendFormat": "{{name}} - Total Errors",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Errors (req/s)",
       "type": "timeseries"
     }
   ],

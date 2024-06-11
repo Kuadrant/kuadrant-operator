@@ -53,12 +53,12 @@ jobs:
     name: Integration Tests for github.com/kuadrant/kuadrant-operator/controllers
     strategy:
       matrix:
-        gatewayapi-provider: [istio]
         include:
-          # - istio-type: sail
-          #   gatewayapi-provider: istio
-          - istio-type: istioctl
-            gatewayapi-provider: istio
+          - gatewayapi-provider: istio 
+            istio-type: istioctl
+          - gatewayapi-provider: istio
+            istio-type: sail
+      fail-fast: false
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test

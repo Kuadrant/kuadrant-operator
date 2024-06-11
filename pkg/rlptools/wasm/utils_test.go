@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"k8s.io/apimachinery/pkg/types"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -322,6 +323,77 @@ func TestRules(t *testing.T) {
 							Selector: &SelectorSpec{
 								Selector: "auth.identity.username",
 							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Route with header match",
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+				"50rps": {
+					Rates: []kuadrantv1beta2.Rate{counter50rps},
+				},
+			}),
+			route: &gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{
+					Hostnames: []gatewayapiv1.Hostname{"*.example.com"},
+					Rules: []gatewayapiv1.HTTPRouteRule{
+						{
+							Matches: []gatewayapiv1.HTTPRouteMatch{
+								{
+									Path: &gatewayapiv1.HTTPPathMatch{
+										Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+										Value: ptr.To("/v1"),
+									},
+									Method: ptr.To(gatewayapiv1.HTTPMethodGet),
+									Headers: []gatewayapiv1.HTTPHeaderMatch{
+										{
+											Name:  gatewayapiv1.HTTPHeaderName("X-kuadrant-a"),
+											Value: "1",
+										},
+										{
+											Name:  gatewayapiv1.HTTPHeaderName("X-kuadrant-b"),
+											Value: "1",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedRules: []wasm.Rule{
+				{
+					Conditions: []wasm.Condition{
+						{
+							AllOf: []wasm.PatternExpression{
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Value:    "/v1",
+								},
+								{
+									Selector: "request.method",
+									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Value:    "GET",
+								},
+								{
+									Selector: "request.headers.X-kuadrant-a",
+									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Value:    "1",
+								},
+								{
+									Selector: "request.headers.X-kuadrant-b",
+									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Value:    "1",
+								},
+							},
+						},
+					},
+					Data: []wasm.DataItem{
+						{
+							Static: &wasm.StaticSpec{Key: "limit.50rps__783b9343", Value: "1"},
 						},
 					},
 				},

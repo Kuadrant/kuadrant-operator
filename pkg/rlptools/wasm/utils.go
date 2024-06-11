@@ -186,15 +186,25 @@ func conditionsFromRule(rule gatewayapiv1.HTTPRouteRule, hostnames []gatewayapiv
 func patternExpresionsFromMatch(match gatewayapiv1.HTTPRouteMatch) []PatternExpression {
 	expressions := make([]PatternExpression, 0)
 
+	// path
 	if match.Path != nil {
 		expressions = append(expressions, patternExpresionFromPathMatch(*match.Path))
 	}
 
+	// method
 	if match.Method != nil {
 		expressions = append(expressions, patternExpresionFromMethod(*match.Method))
 	}
 
-	// TODO(eastizle): only paths and methods implemented
+	// headers
+	for _, headerMatch := range match.Headers {
+		// Multiple match values are ANDed together
+		expressions = append(expressions, patternExpresionFromHeader(headerMatch))
+	}
+
+	// TODO(eguzki): query params. Investigate integration with wasm regarding Envoy params
+	// from https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+	// request.query -> string : The query portion of the URL in the format of “name1=value1&name2=value2”.
 
 	return expressions
 }
@@ -227,6 +237,17 @@ func patternExpresionFromMethod(method gatewayapiv1.HTTPMethod) PatternExpressio
 		Selector: "request.method",
 		Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
 		Value:    string(method),
+	}
+}
+
+func patternExpresionFromHeader(headerMatch gatewayapiv1.HTTPHeaderMatch) PatternExpression {
+	// As for gateway api v1, the only operation type with core support is Exact match.
+	// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPHeaderMatch
+
+	return wasm.PatternExpression{
+		Selector: kuadrantv1beta2.ContextSelector(fmt.Sprintf("request.headers.%s", headerMatch.Name)),
+		Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+		Value:    headerMatch.Value,
 	}
 }
 

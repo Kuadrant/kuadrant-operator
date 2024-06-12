@@ -5,12 +5,12 @@ metadata:
   labels:
     app: kuadrant
     control-plane: controller-manager
-  name: kuadrant-operator-controller-manager-ratelimit-wasm-service
+  name: kuadrant-operator-controller-manager-wasm-shim-service
 spec:
   ports:
-  - name: ratelimit-wasm
+  - name: wasm-shim
     port: 8082
-    targetPort: ratelimit-wasm
+    targetPort: wasm-shim
   selector:
     app: kuadrant
     control-plane: controller-manager

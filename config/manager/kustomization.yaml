@@ -1,7 +1,7 @@
 resources:
 - manager.yaml
 - metrics_service.yaml
-- ratelimit_wasm_service.yaml
+- wasm_shim_service.yaml
 
 generatorOptions:
   disableNameSuffixHash: true

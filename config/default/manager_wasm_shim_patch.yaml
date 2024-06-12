@@ -10,4 +10,4 @@ spec:
       - name: manager
         ports:
         - containerPort: 8082
-          name: ratelimit-wasm
+          name: wasm-shim

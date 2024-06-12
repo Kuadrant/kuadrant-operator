@@ -400,7 +400,7 @@ spec:
     group: gateway.networking.k8s.io
     kind: Gateway
     name: istio-ingressgateway
-  url: http://kuadrant-operator-controller-manager-ratelimit-wasm-service.kuadrant-system.svc.cluster.local:8082/kuadrant-ratelimit-wasm
+  url: http://kuadrant-operator-controller-manager-wasm-shim-service.kuadrant-system.svc.cluster.local:8082/kuadrant-wasm-shim
   phase: STATS
   pluginConfig:
     failureMode: deny

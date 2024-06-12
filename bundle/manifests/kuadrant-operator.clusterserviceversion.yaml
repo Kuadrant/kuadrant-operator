@@ -106,7 +106,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2024-06-03T21:19:26Z"
+    createdAt: "2024-06-12T08:30:06Z"
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator
@@ -613,7 +613,7 @@ spec:
                 name: manager
                 ports:
                 - containerPort: 8082
-                  name: ratelimit-wasm
+                  name: wasm-shim
                 - containerPort: 8080
                   name: metrics
                 readinessProbe:

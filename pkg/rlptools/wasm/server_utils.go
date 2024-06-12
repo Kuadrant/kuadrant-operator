@@ -3,7 +3,7 @@ package wasm
 import "k8s.io/utils/env"
 
 const (
-	ServerSvcName = "kuadrant-operator-controller-manager-ratelimit-wasm-service"
+	ServerSvcName = "kuadrant-operator-controller-manager-wasm-shim-service"
 )
 
 var (
@@ -27,5 +27,5 @@ func SHA256() string {
 }
 
 func ServerEndpoint() string {
-	return "/kuadrant-ratelimit-wasm"
+	return "/kuadrant-wasm-shim"
 }

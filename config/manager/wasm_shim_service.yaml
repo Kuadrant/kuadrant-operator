@@ -4,12 +4,12 @@ kind: Service
 metadata:
   labels:
     control-plane: controller-manager
-  name: controller-manager-ratelimit-wasm-service
+  name: controller-manager-wasm-shim-service
   namespace: system
 spec:
   ports:
-  - name: ratelimit-wasm
+  - name: wasm-shim
     port: 8082
-    targetPort: ratelimit-wasm
+    targetPort: wasm-shim
   selector:
     control-plane: controller-manager

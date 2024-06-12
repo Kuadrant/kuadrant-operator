@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -363,37 +363,37 @@ func TestRules(t *testing.T) {
 					},
 				},
 			},
-			expectedRules: []wasm.Rule{
+			expectedRules: []Rule{
 				{
-					Conditions: []wasm.Condition{
+					Conditions: []Condition{
 						{
-							AllOf: []wasm.PatternExpression{
+							AllOf: []PatternExpression{
 								{
 									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Operator: PatternOperator(kuadrantv1beta2.StartsWithOperator),
 									Value:    "/v1",
 								},
 								{
 									Selector: "request.method",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
 									Value:    "GET",
 								},
 								{
 									Selector: "request.headers.X-kuadrant-a",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
 									Value:    "1",
 								},
 								{
 									Selector: "request.headers.X-kuadrant-b",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
 									Value:    "1",
 								},
 							},
 						},
 					},
-					Data: []wasm.DataItem{
+					Data: []DataItem{
 						{
-							Static: &wasm.StaticSpec{Key: "limit.50rps__783b9343", Value: "1"},
+							Static: &StaticSpec{Key: "limit.50rps__783b9343", Value: "1"},
 						},
 					},
 				},

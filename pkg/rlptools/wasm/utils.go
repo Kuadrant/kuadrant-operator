@@ -244,7 +244,7 @@ func patternExpresionFromHeader(headerMatch gatewayapiv1.HTTPHeaderMatch) Patter
 	// As for gateway api v1, the only operation type with core support is Exact match.
 	// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPHeaderMatch
 
-	return wasm.PatternExpression{
+	return PatternExpression{
 		Selector: kuadrantv1beta2.ContextSelector(fmt.Sprintf("request.headers.%s", headerMatch.Name)),
 		Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
 		Value:    headerMatch.Value,

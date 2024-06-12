@@ -19,11 +19,11 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
-
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 )
 
 func TestNewHTTPRouteEventMapper(t *testing.T) {
@@ -69,7 +69,7 @@ func TestNewHTTPRouteEventMapper(t *testing.T) {
 		},
 	}
 	objs := []runtime.Object{routeList, authPolicyList, gateway}
-	cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(objs...).WithIndex(&gatewayapiv1.HTTPRoute{}, kuadrantgatewayapi.HTTPRouteGatewayParentField, func(rawObj client.Object) []string {
+	cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(objs...).WithIndex(&gatewayapiv1.HTTPRoute{}, fieldindexers.HTTPRouteGatewayParentField, func(rawObj client.Object) []string {
 		return nil
 	}).Build()
 	em := NewHTTPRouteEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
@@ -118,7 +118,7 @@ func TestNewHTTPRouteEventMapper(t *testing.T) {
 		}
 
 		objs = []runtime.Object{routeList, authPolicyList, gateway, httpRoute}
-		cl = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(objs...).WithIndex(&gatewayapiv1.HTTPRoute{}, kuadrantgatewayapi.HTTPRouteGatewayParentField, func(rawObj client.Object) []string {
+		cl = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(objs...).WithIndex(&gatewayapiv1.HTTPRoute{}, fieldindexers.HTTPRouteGatewayParentField, func(rawObj client.Object) []string {
 			route, assertionOk := rawObj.(*gatewayapiv1.HTTPRoute)
 			if !assertionOk {
 				return nil

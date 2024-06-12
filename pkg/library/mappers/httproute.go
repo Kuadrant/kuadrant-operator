@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -44,7 +45,7 @@ func (m *httpRouteEventMapper) MapToPolicy(ctx context.Context, obj client.Objec
 		}
 
 		routeList := &gatewayapiv1.HTTPRouteList{}
-		fields := client.MatchingFields{kuadrantgatewayapi.HTTPRouteGatewayParentField: client.ObjectKeyFromObject(gateway).String()}
+		fields := client.MatchingFields{fieldindexers.HTTPRouteGatewayParentField: client.ObjectKeyFromObject(gateway).String()}
 		if err = m.opts.Client.List(ctx, routeList, fields); err != nil {
 			logger.Info("cannot list httproutes", "error", err)
 			continue

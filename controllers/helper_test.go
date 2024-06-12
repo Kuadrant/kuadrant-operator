@@ -186,7 +186,6 @@ func testEndpointsTraversable(endpoints []*endpoint.Endpoint, host string, desti
 					// this means that at least one of the targets on the endpoint leads to the destination
 					allTargetsFound = allTargetsFound || testEndpointsTraversable(endpoints, target, []string{destination})
 				}
-
 			}
 		}
 		// we must match all destinations

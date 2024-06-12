@@ -19,7 +19,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
@@ -62,7 +62,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 		},
 	}}
 	objs := []runtime.Object{routeList, authPolicyList}
-	cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(objs...).WithIndex(&gatewayapiv1.HTTPRoute{}, kuadrantgatewayapi.HTTPRouteGatewayParentField, func(rawObj client.Object) []string {
+	cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(objs...).WithIndex(&gatewayapiv1.HTTPRoute{}, fieldindexers.HTTPRouteGatewayParentField, func(rawObj client.Object) []string {
 		return nil
 	}).Build()
 	em := NewGatewayEventMapper(WithLogger(log.NewLogger()), WithClient(cl))

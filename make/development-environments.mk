@@ -72,6 +72,7 @@ local-setup: $(KIND) ## Run local Kubernetes cluster and deploy kuadrant operato
 .PHONY: local-cleanup
 local-cleanup: ## Delete local cluster
 	$(MAKE) kind-delete-cluster
+	-rm -rf $(WASM_SHIM)
 
 ##@ Development Environment: bare kubernetes
 

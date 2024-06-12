@@ -1,33 +1,36 @@
-package rlptools
+package wasm
 
 import (
-	"encoding/json"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"reflect"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/samber/lo"
-	_struct "google.golang.org/protobuf/types/known/structpb"
-	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/env"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
+)
+
+const (
+	LimitadorRateLimitIdentifierPrefix = "limit."
 )
 
 var (
 	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
 )
 
-// WasmRules computes WASM rules from the policy and the targeted route.
+// Rules computes WASM rules from the policy and the targeted route.
 // It returns an empty list of wasm rules if the policy specifies no limits or if all limits specified in the policy
 // fail to match any route rule according to the limits route selectors.
-func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1.HTTPRoute) []wasm.Rule {
-	rules := make([]wasm.Rule, 0)
+func Rules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1.HTTPRoute) []Rule {
+	rules := make([]Rule, 0)
 	if rlp == nil {
 		return rules
 	}
@@ -52,8 +55,27 @@ func WasmRules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1.HTTPRou
 	return rules
 }
 
-func ruleFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPRoute) (wasm.Rule, error) {
-	rule := wasm.Rule{}
+func LimitNameToLimitadorIdentifier(rlpKey types.NamespacedName, uniqueLimitName string) string {
+	identifier := LimitadorRateLimitIdentifierPrefix
+
+	// sanitize chars that are not allowed in limitador identifiers
+	for _, c := range uniqueLimitName {
+		if unicode.IsLetter(c) || unicode.IsDigit(c) || c == '_' {
+			identifier += string(c)
+		} else {
+			identifier += "_"
+		}
+	}
+
+	// to avoid breaking the uniqueness of the limit name after sanitization, we add a hash of the original name
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s/%s", rlpKey.String(), uniqueLimitName)))
+	identifier += "__" + hex.EncodeToString(hash[:4])
+
+	return identifier
+}
+
+func ruleFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPRoute) (Rule, error) {
+	rule := Rule{}
 
 	conditions, err := conditionsFromLimit(limit, route)
 	if err != nil {
@@ -62,19 +84,19 @@ func ruleFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit, route *
 
 	rule.Conditions = conditions
 
-	if data := dataFromLimt(limitIdentifier, limit); data != nil {
+	if data := dataFromLimit(limitIdentifier, limit); data != nil {
 		rule.Data = data
 	}
 
 	return rule, nil
 }
 
-func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPRoute) ([]wasm.Condition, error) {
+func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPRoute) ([]Condition, error) {
 	if limit == nil {
 		return nil, errors.New("limit should not be nil")
 	}
 
-	routeConditions := make([]wasm.Condition, 0)
+	routeConditions := make([]Condition, 0)
 
 	if len(limit.RouteSelectors) > 0 {
 		// build conditions from the rules selected by the route selectors
@@ -105,7 +127,7 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPR
 
 	if len(routeConditions) > 0 {
 		// merge the 'when' conditions into each route level one
-		mergedConditions := make([]wasm.Condition, len(routeConditions))
+		mergedConditions := make([]Condition, len(routeConditions))
 		for _, when := range limit.When {
 			for idx := range routeConditions {
 				mergedCondition := routeConditions[idx]
@@ -117,9 +139,9 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPR
 	}
 
 	// build conditions only from the 'when' field
-	whenConditions := make([]wasm.Condition, len(limit.When))
+	whenConditions := make([]Condition, len(limit.When))
 	for idx, when := range limit.When {
-		whenConditions[idx] = wasm.Condition{AllOf: []wasm.PatternExpression{patternExpresionFromWhen(when)}}
+		whenConditions[idx] = Condition{AllOf: []PatternExpression{patternExpresionFromWhen(when)}}
 	}
 	return whenConditions, nil
 }
@@ -128,20 +150,20 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPR
 // each combination of a rule match and hostname yields one condition
 // rules that specify no explicit match are assumed to match all request (i.e. implicit catch-all rule)
 // empty list of hostnames yields a condition without a hostname pattern expression
-func conditionsFromRule(rule gatewayapiv1.HTTPRouteRule, hostnames []gatewayapiv1.Hostname) (conditions []wasm.Condition) {
+func conditionsFromRule(rule gatewayapiv1.HTTPRouteRule, hostnames []gatewayapiv1.Hostname) (conditions []Condition) {
 	if len(rule.Matches) == 0 {
 		for _, hostname := range hostnames {
 			if hostname == "*" {
 				continue
 			}
-			condition := wasm.Condition{AllOf: []wasm.PatternExpression{patternExpresionFromHostname(hostname)}}
+			condition := Condition{AllOf: []PatternExpression{patternExpresionFromHostname(hostname)}}
 			conditions = append(conditions, condition)
 		}
 		return
 	}
 
 	for _, match := range rule.Matches {
-		condition := wasm.Condition{AllOf: patternExpresionsFromMatch(match)}
+		condition := Condition{AllOf: patternExpresionsFromMatch(match)}
 
 		if len(hostnames) > 0 {
 			for _, hostname := range hostnames {
@@ -161,8 +183,8 @@ func conditionsFromRule(rule gatewayapiv1.HTTPRouteRule, hostnames []gatewayapiv
 	return
 }
 
-func patternExpresionsFromMatch(match gatewayapiv1.HTTPRouteMatch) []wasm.PatternExpression {
-	expressions := make([]wasm.PatternExpression, 0)
+func patternExpresionsFromMatch(match gatewayapiv1.HTTPRouteMatch) []PatternExpression {
+	expressions := make([]PatternExpression, 0)
 
 	if match.Path != nil {
 		expressions = append(expressions, patternExpresionFromPathMatch(*match.Path))
@@ -177,10 +199,10 @@ func patternExpresionsFromMatch(match gatewayapiv1.HTTPRouteMatch) []wasm.Patter
 	return expressions
 }
 
-func patternExpresionFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) wasm.PatternExpression {
+func patternExpresionFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) PatternExpression {
 	var (
-		operator = wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator) // default value
-		value    = "/"                                                      // default value
+		operator = PatternOperator(kuadrantv1beta2.StartsWithOperator) // default value
+		value    = "/"                                                 // default value
 	)
 
 	if pathMatch.Value != nil {
@@ -188,113 +210,59 @@ func patternExpresionFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) wasm.Pa
 	}
 
 	if pathMatch.Type != nil {
-		if val, ok := wasm.PathMatchTypeMap[*pathMatch.Type]; ok {
+		if val, ok := PathMatchTypeMap[*pathMatch.Type]; ok {
 			operator = val
 		}
 	}
 
-	return wasm.PatternExpression{
+	return PatternExpression{
 		Selector: "request.url_path",
 		Operator: operator,
 		Value:    value,
 	}
 }
 
-func patternExpresionFromMethod(method gatewayapiv1.HTTPMethod) wasm.PatternExpression {
-	return wasm.PatternExpression{
+func patternExpresionFromMethod(method gatewayapiv1.HTTPMethod) PatternExpression {
+	return PatternExpression{
 		Selector: "request.method",
-		Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+		Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
 		Value:    string(method),
 	}
 }
 
-func patternExpresionFromHostname(hostname gatewayapiv1.Hostname) wasm.PatternExpression {
+func patternExpresionFromHostname(hostname gatewayapiv1.Hostname) PatternExpression {
 	value := string(hostname)
 	operator := "eq"
 	if strings.HasPrefix(value, "*.") {
 		operator = "endswith"
 		value = value[1:]
 	}
-	return wasm.PatternExpression{
+	return PatternExpression{
 		Selector: "request.host",
-		Operator: wasm.PatternOperator(operator),
+		Operator: PatternOperator(operator),
 		Value:    value,
 	}
 }
 
-func patternExpresionFromWhen(when kuadrantv1beta2.WhenCondition) wasm.PatternExpression {
-	return wasm.PatternExpression{
+func patternExpresionFromWhen(when kuadrantv1beta2.WhenCondition) PatternExpression {
+	return PatternExpression{
 		Selector: when.Selector,
-		Operator: wasm.PatternOperator(when.Operator),
+		Operator: PatternOperator(when.Operator),
 		Value:    when.Value,
 	}
 }
 
-func dataFromLimt(limitIdentifier string, limit *kuadrantv1beta2.Limit) (data []wasm.DataItem) {
+func dataFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit) (data []DataItem) {
 	if limit == nil {
 		return
 	}
 
 	// static key representing the limit
-	data = append(data, wasm.DataItem{Static: &wasm.StaticSpec{Key: limitIdentifier, Value: "1"}})
+	data = append(data, DataItem{Static: &StaticSpec{Key: limitIdentifier, Value: "1"}})
 
 	for _, counter := range limit.Counters {
-		data = append(data, wasm.DataItem{Selector: &wasm.SelectorSpec{Selector: counter}})
+		data = append(data, DataItem{Selector: &SelectorSpec{Selector: counter}})
 	}
 
 	return data
-}
-
-func WASMPluginFromStruct(structure *_struct.Struct) (*wasm.Plugin, error) {
-	if structure == nil {
-		return nil, errors.New("cannot desestructure WASMPlugin from nil")
-	}
-	// Serialize struct into json
-	configJSON, err := structure.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-	// Deserialize struct into PluginConfig struct
-	wasmPlugin := &wasm.Plugin{}
-	if err := json.Unmarshal(configJSON, wasmPlugin); err != nil {
-		return nil, err
-	}
-
-	return wasmPlugin, nil
-}
-
-type WasmRulesByDomain map[string][]wasm.Rule
-
-func WASMPluginMutator(existingObj, desiredObj client.Object) (bool, error) {
-	update := false
-	existing, ok := existingObj.(*istioclientgoextensionv1alpha1.WasmPlugin)
-	if !ok {
-		return false, fmt.Errorf("%T is not a *istioclientgoextensionv1alpha1.WasmPlugin", existingObj)
-	}
-	desired, ok := desiredObj.(*istioclientgoextensionv1alpha1.WasmPlugin)
-	if !ok {
-		return false, fmt.Errorf("%T is not a *istioclientgoextensionv1alpha1.WasmPlugin", desiredObj)
-	}
-
-	existingWASMPlugin, err := WASMPluginFromStruct(existing.Spec.PluginConfig)
-	if err != nil {
-		return false, err
-	}
-
-	desiredWASMPlugin, err := WASMPluginFromStruct(desired.Spec.PluginConfig)
-	if err != nil {
-		return false, err
-	}
-
-	// TODO(eastizle): reflect.DeepEqual does not work well with lists without order
-	if !reflect.DeepEqual(desiredWASMPlugin, existingWASMPlugin) {
-		update = true
-		existing.Spec.PluginConfig = desired.Spec.PluginConfig
-	}
-
-	return update, nil
-}
-
-func WASMPluginName(gw *gatewayapiv1.Gateway) string {
-	return fmt.Sprintf("kuadrant-%s", gw.Name)
 }

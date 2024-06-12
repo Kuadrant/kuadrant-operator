@@ -47,6 +47,7 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
@@ -102,6 +103,12 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 		HealthProbeBindAddress: "0",
 		Metrics:                metricsserver.Options{BindAddress: "0"},
 	})
+	Expect(err).ToNot(HaveOccurred())
+
+	err = fieldindexers.HTTPRouteIndexByGateway(
+		mgr,
+		log.Log.WithName("kuadrant").WithName("indexer").WithName("routeIndexByGateway"),
+	)
 	Expect(err).ToNot(HaveOccurred())
 
 	authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
@@ -193,14 +200,14 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	Expect(err).NotTo(HaveOccurred())
 
-	rateLimitingWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
+	rateLimitingIstioWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("ratelimitpolicy").WithName("wasmplugin"),
-		mgr.GetEventRecorderFor("RateLimitingWASMPlugin"),
+		mgr.GetEventRecorderFor("RateLimitingIstioWASMPlugin"),
 	)
 
-	err = (&RateLimitingWASMPluginReconciler{
-		BaseReconciler: rateLimitingWASMPluginBaseReconciler,
+	err = (&RateLimitingIstioWASMPluginReconciler{
+		BaseReconciler: rateLimitingIstioWASMPluginBaseReconciler,
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())

@@ -4,12 +4,10 @@ package rlptools
 
 import (
 	"reflect"
-	"regexp"
 	"testing"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -141,60 +139,6 @@ func testRLP_1Limit_1Rate_1Counter(ns, name string) *kuadrantv1beta2.RateLimitPo
 				},
 			},
 		},
-	}
-}
-
-func TestLimitNameToLimitadorIdentifier(t *testing.T) {
-	testCases := []struct {
-		name            string
-		rlpKey          types.NamespacedName
-		uniqueLimitName string
-		expected        *regexp.Regexp
-	}{
-		{
-			name:            "prepends the limitador limit identifier prefix",
-			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
-			uniqueLimitName: "foo",
-			expected:        regexp.MustCompile(`^limit\.foo.+`),
-		},
-		{
-			name:            "sanitizes invalid chars",
-			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
-			uniqueLimitName: "my/limit-0",
-			expected:        regexp.MustCompile(`^limit\.my_limit_0.+$`),
-		},
-		{
-			name:            "sanitizes the dot char (.) even though it is a valid char in limitador identifiers",
-			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
-			uniqueLimitName: "my.limit",
-			expected:        regexp.MustCompile(`^limit\.my_limit.+$`),
-		},
-		{
-			name:            "appends a hash of the original name to avoid breaking uniqueness",
-			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
-			uniqueLimitName: "foo",
-			expected:        regexp.MustCompile(`^.+__1da6e70a$`),
-		},
-		{
-			name:            "different rlp keys result in different identifiers",
-			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpB"},
-			uniqueLimitName: "foo",
-			expected:        regexp.MustCompile(`^.+__2c1520b6$`),
-		},
-		{
-			name:            "empty string",
-			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
-			uniqueLimitName: "",
-			expected:        regexp.MustCompile(`^limit.__6d5e49dc$`),
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(subT *testing.T) {
-			identifier := LimitNameToLimitadorIdentifier(tc.rlpKey, tc.uniqueLimitName)
-			if !tc.expected.MatchString(identifier) {
-				subT.Errorf("identifier does not match, expected(%s), got (%s)", tc.expected, identifier)
-			}
-		})
 	}
 }
 

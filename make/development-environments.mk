@@ -50,8 +50,9 @@ namespace: ## Creates a namespace where to deploy Kuadrant Operator
 local-deploy: ## Deploy Kuadrant Operator from the current code
 	$(MAKE) docker-build IMG=$(IMAGE_TAG_BASE):dev
 	$(MAKE) kind-load-image IMG=$(IMAGE_TAG_BASE):dev
-
 	$(MAKE) deploy IMG=$(IMAGE_TAG_BASE):dev
+	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
+	./utils/kuadrant-operator-debug-mode.sh
 	kubectl -n $(KUADRANT_NAMESPACE) wait --timeout=300s --for=condition=Available deployments --all
 
 .PHONY: env-setup

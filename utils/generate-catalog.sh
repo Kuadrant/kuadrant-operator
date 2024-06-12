@@ -4,11 +4,6 @@
 
 set -euo pipefail
 
-### CONSTANTS
-# Used as well in the subscription object
-DEFAULT_CHANNEL=preview
-###
-
 OPM="${1?:Error \$OPM not set. Bye}"
 YQ="${2?:Error \$YQ not set. Bye}"
 BUNDLE_IMG="${3?:Error \$BUNDLE_IMG not set. Bye}"
@@ -16,7 +11,7 @@ REPLACES_VERSION="${4?:Error \$REPLACES_VERSION not set. Bye}"
 LIMITADOR_OPERATOR_BUNDLE_IMG="${5?:Error \$LIMITADOR_OPERATOR_BUNDLE_IMG not set. Bye}"
 AUTHORINO_OPERATOR_BUNDLE_IMG="${6?:Error \$AUTHORINO_OPERATOR_BUNDLE_IMG not set. Bye}"
 DNS_OPERATOR_BUNDLE_IMG="${7?:Error \$DNS_OPERATOR_BUNDLE_IMG not set. Bye}"
-CHANNELS="${8:-$DEFAULT_CHANNEL}"
+CHANNELS="${8?:Error \$CHANNELS not set. Bye}"
 CATALOG_FILE="${9?:Error \$CATALOG_FILE not set. Bye}"
 
 CATALOG_FILE_BASEDIR="$( cd "$( dirname "$(realpath ${CATALOG_FILE})" )" && pwd )"

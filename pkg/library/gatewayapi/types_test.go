@@ -3,10 +3,13 @@
 package gatewayapi
 
 import (
+	"context"
 	"reflect"
 	"sort"
 	"testing"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/google/go-cmp/cmp"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -27,6 +30,22 @@ type TestPolicy struct {
 
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
 	Status    FakePolicyStatus                         `json:"status"`
+}
+
+func (p *TestPolicy) Kind() string {
+	return "FakePolicy"
+}
+
+func (p *TestPolicy) List(ctx context.Context, c client.Client, namespace string) []Policy {
+	return nil
+}
+
+func (p *TestPolicy) BackReferenceAnnotationName() string {
+	return ""
+}
+
+func (p *TestPolicy) DirectReferenceAnnotationName() string {
+	return ""
 }
 
 func (p *TestPolicy) PolicyClass() PolicyClass {

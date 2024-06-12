@@ -10,7 +10,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -69,12 +68,12 @@ func TestNewGatewayEventMapper(t *testing.T) {
 	em := NewGatewayEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 	t.Run("not gateway related event", func(subT *testing.T) {
-		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.HTTPRoute{}, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "RateLimitPolicy"})
+		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.HTTPRoute{}, &kuadrantv1beta2.RateLimitPolicy{})
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
 
 	t.Run("gateway related event - no requests", func(subT *testing.T) {
-		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.Gateway{}, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "RateLimitPolicy"})
+		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.Gateway{}, &kuadrantv1beta2.RateLimitPolicy{})
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
 
@@ -90,7 +89,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 				},
 			},
 		}
-		requests := em.MapToPolicy(context.Background(), gateway, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "AuthPolicy"})
+		requests := em.MapToPolicy(context.Background(), gateway, &kuadrantv1beta2.AuthPolicy{})
 		expected := []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: "app-ns", Name: "policy-1"}}, {NamespacedName: types.NamespacedName{Namespace: "app-ns", Name: "policy-2"}}}
 		assert.DeepEqual(subT, expected, requests)
 	})

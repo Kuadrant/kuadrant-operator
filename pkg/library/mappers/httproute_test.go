@@ -6,14 +6,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
-	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"gotest.tools/assert"
 	"istio.io/client-go/pkg/clientset/versioned/scheme"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,6 +18,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/log"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -75,12 +75,12 @@ func TestNewHTTPRouteEventMapper(t *testing.T) {
 	em := NewHTTPRouteEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 	t.Run("not http route related event", func(subT *testing.T) {
-		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.Gateway{}, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "AuthPolicy"})
+		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.Gateway{}, &kuadrantv1beta2.AuthPolicy{})
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
 
 	t.Run("http route related event - no requests", func(subT *testing.T) {
-		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.HTTPRoute{}, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "AuthPolicy"})
+		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.HTTPRoute{}, &kuadrantv1beta2.AuthPolicy{})
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
 
@@ -129,7 +129,7 @@ func TestNewHTTPRouteEventMapper(t *testing.T) {
 			})
 		}).Build()
 		em = NewHTTPRouteEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
-		requests := em.MapToPolicy(context.Background(), httpRoute, schema.GroupVersionKind{Group: "kuadrant.io", Version: "kuadrant.io/v1beta2", Kind: "AuthPolicy"})
+		requests := em.MapToPolicy(context.Background(), httpRoute, &kuadrantv1beta2.AuthPolicy{})
 		expected := []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: "app-ns", Name: "policy-1"}}}
 		assert.DeepEqual(subT, expected, requests)
 	})

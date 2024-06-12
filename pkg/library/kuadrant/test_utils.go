@@ -59,8 +59,16 @@ func (p *FakePolicy) Kind() string {
 	return "FakePolicy"
 }
 
-func (p *FakePolicy) List(ctx context.Context, client client.Client, namespace string) []Policy {
+func (p *FakePolicy) List(ctx context.Context, c client.Client, namespace string) []kuadrantgatewayapi.Policy {
 	return nil
+}
+
+func (p *FakePolicy) BackReferenceAnnotationName() string {
+	return ""
+}
+
+func (p *FakePolicy) DirectReferenceAnnotationName() string {
+	return ""
 }
 
 func (_ *FakePolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {

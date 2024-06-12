@@ -21,7 +21,6 @@ import (
 )
 
 func TestObjectKeyListDifference(t *testing.T) {
-
 	key1 := client.ObjectKey{Namespace: "ns1", Name: "obj1"}
 	key2 := client.ObjectKey{Namespace: "ns2", Name: "obj2"}
 	key3 := client.ObjectKey{Namespace: "ns3", Name: "obj3"}

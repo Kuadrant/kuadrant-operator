@@ -11,7 +11,6 @@ import (
 
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/env"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 

@@ -21,6 +21,16 @@ func WASMPluginMutator(existingObj, desiredObj client.Object) (bool, error) {
 		return false, fmt.Errorf("%T is not a *istioclientgoextensionv1alpha1.WasmPlugin", desiredObj)
 	}
 
+	if desired.Spec.Url != existing.Spec.Url {
+		update = true
+		existing.Spec.Url = desired.Spec.Url
+	}
+
+	if desired.Spec.Sha256 != existing.Spec.Sha256 {
+		update = true
+		existing.Spec.Sha256 = desired.Spec.Sha256
+	}
+
 	existingWasmConfig, err := wasm.ConfigFromStruct(existing.Spec.PluginConfig)
 	if err != nil {
 		return false, err

@@ -3,6 +3,8 @@
 package kuadrant
 
 import (
+	"context"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -55,6 +57,10 @@ func (p *FakePolicy) GetRulesHostnames() []string {
 
 func (p *FakePolicy) Kind() string {
 	return "FakePolicy"
+}
+
+func (p *FakePolicy) List(ctx context.Context, client client.Client, namespace string) []Policy {
+	return nil
 }
 
 func (_ *FakePolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {

@@ -4,14 +4,15 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 )
 
 type EventMapper interface {
-	MapToPolicy(context.Context, client.Object, schema.GroupVersionKind) []reconcile.Request
+	MapToPolicy(context.Context, client.Object, kuadrantgatewayapi.Policy) []reconcile.Request
 }
 
 // options

@@ -4,17 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -30,7 +24,7 @@ type httpRouteEventMapper struct {
 	opts MapperOptions
 }
 
-func (m *httpRouteEventMapper) MapToPolicy(ctx context.Context, obj client.Object, policyGVK schema.GroupVersionKind) []reconcile.Request {
+func (m *httpRouteEventMapper) MapToPolicy(ctx context.Context, obj client.Object, policyKind kuadrantgatewayapi.Policy) []reconcile.Request {
 	logger := m.opts.Logger.WithValues("httproute", client.ObjectKeyFromObject(obj))
 	requests := make([]reconcile.Request, 0)
 	httpRoute, ok := obj.(*gatewayapiv1.HTTPRoute)
@@ -55,58 +49,7 @@ func (m *httpRouteEventMapper) MapToPolicy(ctx context.Context, obj client.Objec
 			logger.Info("cannot list httproutes", "error", err)
 			continue
 		}
-		policyList := &unstructured.UnstructuredList{}
-		policyList.SetAPIVersion(policyGVK.Version)
-		policyList.SetKind(policyGVK.Kind)
-		if err = m.opts.Client.List(ctx, policyList, client.InNamespace(obj.GetNamespace())); err != nil {
-			logger.V(1).Info("unable to list UnstructuredList of policies, %T", "policyGVK", policyGVK)
-			continue
-		}
-
-		var policies []kuadrantgatewayapi.Policy
-		if err = policyList.EachListItem(func(obj runtime.Object) error {
-			objBytes, err := json.Marshal(obj)
-			if err != nil {
-				return err
-			}
-
-			switch obj.GetObjectKind().GroupVersionKind().Kind {
-			case "AuthPolicy":
-				policy := &api.AuthPolicy{}
-				err = json.Unmarshal(objBytes, policy)
-				if err != nil {
-					return err
-				}
-				policies = append(policies, policy)
-			case "DNSPolicy":
-				policy := &v1alpha1.DNSPolicy{}
-				err = json.Unmarshal(objBytes, policy)
-				if err != nil {
-					return err
-				}
-				policies = append(policies, policy)
-			case "TLSPolicy":
-				policy := &v1alpha1.TLSPolicy{}
-				err = json.Unmarshal(objBytes, policy)
-				if err != nil {
-					return err
-				}
-				policies = append(policies, policy)
-			case "RateLimitPolicy":
-				policy := &api.RateLimitPolicy{}
-				err = json.Unmarshal(objBytes, policy)
-				if err != nil {
-					return err
-				}
-				policies = append(policies, policy)
-			default:
-				return fmt.Errorf("unknown policy kind: %s", obj.GetObjectKind().GroupVersionKind().Kind)
-			}
-			return nil
-		}); err != nil {
-			logger.Info("unable to list UnstructuredList of policies, %T", policyGVK)
-			continue
-		}
+		policies := policyKind.List(ctx, m.opts.Client, obj.GetNamespace())
 		if len(policies) == 0 {
 			logger.Info("no kuadrant policy possibly affected by the gateway related event")
 			continue
@@ -124,7 +67,7 @@ func (m *httpRouteEventMapper) MapToPolicy(ctx context.Context, obj client.Objec
 		index := kuadrantgatewayapi.NewTopologyIndexes(topology)
 		data := utils.Map(index.PoliciesFromGateway(gateway), func(p kuadrantgatewayapi.Policy) reconcile.Request {
 			policyKey := client.ObjectKeyFromObject(p)
-			logger.V(1).Info("kuadrant policy possibly affected by the gateway related event found", policyGVK.Kind, policyKey)
+			logger.V(1).Info("kuadrant policy possibly affected by the gateway related event found")
 			return reconcile.Request{NamespacedName: policyKey}
 		})
 		requests = append(requests, data...)
@@ -134,21 +77,7 @@ func (m *httpRouteEventMapper) MapToPolicy(ctx context.Context, obj client.Objec
 		return requests
 	}
 
-	// This block is required when a HTTProute has being deleted
-	var policy kuadrant.Referrer
-	switch policyGVK.Kind {
-	case "AuthPolicy":
-		policy = &api.AuthPolicy{}
-	case "DNSPolicy":
-		policy = &v1alpha1.DNSPolicy{}
-	case "TLSPolicy":
-		policy = &v1alpha1.TLSPolicy{}
-	case "RateLimitPolicy":
-		policy = &api.RateLimitPolicy{}
-	default:
-		return requests
-	}
-	policyKey, err := kuadrant.DirectReferencesFromObject(httpRoute, policy)
+	policyKey, err := kuadrant.DirectReferencesFromObject(httpRoute, policyKind)
 	if err != nil {
 		return requests
 	}

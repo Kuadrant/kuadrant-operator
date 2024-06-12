@@ -2,6 +2,8 @@ package gatewayapi
 
 import (
 	"k8s.io/apimachinery/pkg/api/meta"
+	"context"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,6 +22,10 @@ type Policy interface {
 	PolicyClass() PolicyClass
 	GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference
 	GetStatus() PolicyStatus
+	List(context.Context, client.Client, string) []Policy
+	Kind() string
+	BackReferenceAnnotationName() string
+	DirectReferenceAnnotationName() string
 }
 
 type PolicyStatus interface {

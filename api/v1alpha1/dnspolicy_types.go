@@ -187,7 +187,7 @@ func (p *DNSPolicy) List(ctx context.Context, c client.Client, namespace string)
 	if err != nil {
 		return []kuadrantgatewayapi.Policy{}
 	}
-	policies := make([]kuadrantgatewayapi.Policy, 0)
+	policies := make([]kuadrantgatewayapi.Policy, 0, len(policyList.Items))
 	for i := range policyList.Items {
 		policies = append(policies, &policyList.Items[i])
 	}

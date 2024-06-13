@@ -1,6 +1,6 @@
 //go:build integration
 
-package ratelimit
+package ratelimitpolicy
 
 import (
 	"context"

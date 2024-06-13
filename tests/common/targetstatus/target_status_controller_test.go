@@ -545,6 +545,13 @@ var _ = Describe("Target status reconciler", func() {
 		})
 
 		AfterEach(func(ctx SpecContext) {
+			// Wait until dns records are finished deleting since it can't finish deleting without managed zone
+			Eventually(func(g Gomega) {
+				dnsRecords := &kuadrantdnsv1alpha1.DNSRecordList{}
+				err := k8sClient.List(ctx, dnsRecords, client.InNamespace(testNamespace))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsRecords.Items).To(HaveLen(0))
+			}).WithContext(ctx).Should(Succeed())
 			Expect(k8sClient.Delete(ctx, managedZone)).To(Succeed())
 			// Wait until managed zone is delete before deleting the provider secret
 			Eventually(func(g Gomega) {
@@ -555,6 +562,7 @@ var _ = Describe("Target status reconciler", func() {
 
 		It("adds PolicyAffected status condition to the targeted gateway", func(ctx SpecContext) {
 			policy := policyFactory()
+			defer k8sClient.Delete(ctx, policy)
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 			// policy should not be enforced since DNS Record is not ready because of the missing secret on the MZ
 			Eventually(isDNSPolicyEnforced(ctx, client.ObjectKeyFromObject(policy))).ShouldNot(BeTrue())
@@ -563,6 +571,7 @@ var _ = Describe("Target status reconciler", func() {
 
 		It("removes PolicyAffected status condition from the targeted gateway when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory()
+			defer k8sClient.Delete(ctx, policy)
 			policyKey := client.ObjectKeyFromObject(policy)
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 			Eventually(policyAcceptedAndTargetsAffected(ctx, policy)).WithContext(ctx).Should(BeTrue())

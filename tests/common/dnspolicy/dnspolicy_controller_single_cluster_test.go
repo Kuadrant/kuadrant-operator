@@ -30,6 +30,10 @@ import (
 )
 
 var _ = Describe("DNSPolicy Single Cluster", func() {
+	const (
+		testTimeOut      = SpecTimeout(1 * time.Minute)
+		afterEachTimeOut = NodeTimeout(2 * time.Minute)
+	)
 
 	var gatewayClass *gatewayapiv1.GatewayClass
 	var dnsProviderSecret *corev1.Secret
@@ -38,11 +42,9 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 	var gateway *gatewayapiv1.Gateway
 	var dnsPolicy *v1alpha1.DNSPolicy
 	var ownerID, clusterHash, gwHash, recordName, wildcardRecordName string
-	var ctx context.Context
 	var domain = fmt.Sprintf("example-%s.com", rand.String(6))
 
-	BeforeEach(func() {
-		ctx = context.Background()
+	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
 
 		var err error
@@ -122,7 +124,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		wildcardRecordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameWildcard)
 	})
 
-	AfterEach(func() {
+	AfterEach(func(ctx SpecContext) {
 		if gateway != nil {
 			err := k8sClient.Delete(ctx, gateway)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
@@ -130,6 +132,13 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		if dnsPolicy != nil {
 			err := k8sClient.Delete(ctx, dnsPolicy)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
+			// Wait until dns records are finished deleting since it can't finish deleting without managed zone
+			Eventually(func(g Gomega) {
+				dnsRecords := &kuadrantdnsv1alpha1.DNSRecordList{}
+				err := k8sClient.List(ctx, dnsRecords, client.InNamespace(testNamespace))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsRecords.Items).To(HaveLen(0))
+			}).WithContext(ctx).Should(Succeed())
 
 		}
 		if managedZone != nil {
@@ -150,18 +159,18 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		}
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
-	})
+	}, afterEachTimeOut)
 
 	Context("simple routing strategy", func() {
 
-		BeforeEach(func() {
+		BeforeEach(func(ctx SpecContext) {
 			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithTargetGateway(tests.GatewayName).
 				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 		})
 
-		It("should create dns records", func() {
+		It("should create dns records", func(ctx SpecContext) {
 
 			Eventually(func(g Gomega, ctx context.Context) {
 
@@ -230,13 +239,13 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 				)
 				g.Expect(tests.EndpointsTraversable(wildcardDnsRecord.Spec.Endpoints, tests.HostWildcard(domain), []string{tests.IPAddressOne, tests.IPAddressTwo})).To(BeTrue())
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium, ctx).Should(Succeed())
-		})
+		}, testTimeOut)
 
 	})
 
 	Context("loadbalanced routing strategy", func() {
 
-		BeforeEach(func() {
+		BeforeEach(func(ctx SpecContext) {
 			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithTargetGateway(tests.GatewayName).
 				WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
@@ -244,7 +253,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 		})
 
-		It("should create dns records", func() {
+		It("should create dns records", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
 				recordList := &kuadrantdnsv1alpha1.DNSRecordList{}
 				err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
@@ -360,7 +369,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 				)
 				g.Expect(tests.EndpointsTraversable(wildcardDnsRecord.Spec.Endpoints, tests.HostWildcard(domain), []string{tests.IPAddressOne, tests.IPAddressTwo})).To(BeTrue())
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium, ctx).Should(Succeed())
-		})
+		}, testTimeOut)
 
 	})
 })

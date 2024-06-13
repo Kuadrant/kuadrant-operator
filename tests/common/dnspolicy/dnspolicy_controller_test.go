@@ -3,7 +3,6 @@
 package dnspolicy
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -30,6 +29,10 @@ import (
 )
 
 var _ = Describe("DNSPolicy controller", func() {
+	const (
+		testTimeOut      = SpecTimeout(1 * time.Minute)
+		afterEachTimeOut = NodeTimeout(2 * time.Minute)
+	)
 
 	var gatewayClass *gatewayapiv1.GatewayClass
 	var dnsProviderSecret *corev1.Secret
@@ -38,11 +41,9 @@ var _ = Describe("DNSPolicy controller", func() {
 	var gateway *gatewayapiv1.Gateway
 	var dnsPolicy *v1alpha1.DNSPolicy
 	var recordName, wildcardRecordName string
-	var ctx context.Context
 	var domain = fmt.Sprintf("example-%s.com", rand.String(6))
 
-	BeforeEach(func() {
-		ctx = context.Background()
+	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
 
 		gatewayClass = tests.BuildGatewayClass("gwc-"+testNamespace, "default", "kuadrant.io/bar")
@@ -66,7 +67,7 @@ var _ = Describe("DNSPolicy controller", func() {
 		}, tests.TimeoutMedium, time.Second).Should(Succeed())
 	})
 
-	AfterEach(func() {
+	AfterEach(func(ctx SpecContext) {
 		if gateway != nil {
 			err := k8sClient.Delete(ctx, gateway)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
@@ -74,6 +75,13 @@ var _ = Describe("DNSPolicy controller", func() {
 		if dnsPolicy != nil {
 			err := k8sClient.Delete(ctx, dnsPolicy)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
+			// Wait until dns records are finished deleting since it can't finish deleting without managed zone
+			Eventually(func(g Gomega) {
+				dnsRecords := &kuadrantdnsv1alpha1.DNSRecordList{}
+				err := k8sClient.List(ctx, dnsRecords, client.InNamespace(testNamespace))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsRecords.Items).To(HaveLen(0))
+			}).WithContext(ctx).Should(Succeed())
 		}
 		if managedZone != nil {
 			err := k8sClient.Delete(ctx, managedZone)
@@ -93,9 +101,9 @@ var _ = Describe("DNSPolicy controller", func() {
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
 		}
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
-	})
+	}, afterEachTimeOut)
 
-	It("should validate routing strategy field correctly", func() {
+	It("should validate routing strategy field correctly", func(ctx SpecContext) {
 		gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 			WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).Gateway
 
@@ -128,18 +136,18 @@ var _ = Describe("DNSPolicy controller", func() {
 			WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
 			WithLoadBalancingFor(100, nil, "foo")
 		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
-	})
+	}, testTimeOut)
 
 	Context("invalid target", func() {
 
-		BeforeEach(func() {
+		BeforeEach(func(ctx SpecContext) {
 			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithTargetGateway("test-gateway").
 				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 		})
 
-		It("should have accepted condition with status false and correct reason", func() {
+		It("should have accepted condition with status false and correct reason", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -152,9 +160,9 @@ var _ = Describe("DNSPolicy controller", func() {
 					})),
 				)
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
-		})
+		}, testTimeOut)
 
-		It("should have accepted condition with status true", func() {
+		It("should have accepted condition with status true", func(ctx SpecContext) {
 			By("creating a valid Gateway")
 
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
@@ -173,9 +181,9 @@ var _ = Describe("DNSPolicy controller", func() {
 					})),
 				)
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
-		})
+		}, testTimeOut)
 
-		It("should not process gateway with inconsistent addresses", func() {
+		It("should not process gateway with inconsistent addresses", func(ctx SpecContext) {
 			// build invalid gateway
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 				WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).Gateway
@@ -232,14 +240,14 @@ var _ = Describe("DNSPolicy controller", func() {
 					})),
 				)
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
-		})
+		}, testTimeOut)
 
 	})
 
 	Context("valid target with no gateway status", func() {
 		testGatewayName := "test-no-gateway-status"
 
-		BeforeEach(func() {
+		BeforeEach(func(ctx SpecContext) {
 			gateway = tests.NewGatewayBuilder(testGatewayName, gatewayClass.Name, testNamespace).
 				WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).
 				Gateway
@@ -251,16 +259,16 @@ var _ = Describe("DNSPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 		})
 
-		It("should not create a dns record", func() {
+		It("should not create a dns record", func(ctx SpecContext) {
 			Consistently(func() []kuadrantdnsv1alpha1.DNSRecord { // DNS record exists
 				dnsRecords := kuadrantdnsv1alpha1.DNSRecordList{}
 				err := k8sClient.List(ctx, &dnsRecords, client.InNamespace(dnsPolicy.GetNamespace()))
 				Expect(err).ToNot(HaveOccurred())
 				return dnsRecords.Items
 			}, time.Second*15, time.Second).Should(BeEmpty())
-		})
+		}, testTimeOut)
 
-		It("should have accepted and not enforced status", func() {
+		It("should have accepted and not enforced status", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -280,9 +288,9 @@ var _ = Describe("DNSPolicy controller", func() {
 						})),
 				)
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
-		})
+		}, testTimeOut)
 
-		It("should set gateway back reference", func() {
+		It("should set gateway back reference", func(ctx SpecContext) {
 			policyBackRefValue := testNamespace + "/" + dnsPolicy.Name
 			refs, _ := json.Marshal([]client.ObjectKey{{Name: dnsPolicy.Name, Namespace: testNamespace}})
 			policiesBackRefValue := string(refs)
@@ -294,12 +302,12 @@ var _ = Describe("DNSPolicy controller", func() {
 				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
 				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
-		})
+		}, testTimeOut)
 	})
 
 	Context("valid target and valid gateway status", func() {
 
-		BeforeEach(func() {
+		BeforeEach(func(ctx SpecContext) {
 			gateway = tests.NewGatewayBuilder(tests.GatewayName, gatewayClass.Name, testNamespace).
 				WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).
 				WithHTTPListener(tests.ListenerNameWildcard, tests.HostWildcard(domain)).
@@ -358,7 +366,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			wildcardRecordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameWildcard)
 		})
 
-		It("should have correct status", func() {
+		It("should have correct status", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -391,9 +399,9 @@ var _ = Describe("DNSPolicy controller", func() {
 					"Status": Equal(metav1.ConditionFalse),
 				})))
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
-		})
+		}, testTimeOut)
 
-		It("should set gateway back reference", func() {
+		It("should set gateway back reference", func(ctx SpecContext) {
 			policyBackRefValue := testNamespace + "/" + dnsPolicy.Name
 			refs, _ := json.Marshal([]client.ObjectKey{{Name: dnsPolicy.Name, Namespace: testNamespace}})
 			policiesBackRefValue := string(refs)
@@ -404,9 +412,9 @@ var _ = Describe("DNSPolicy controller", func() {
 				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
 				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
-		})
+		}, testTimeOut)
 
-		It("should remove dns records when listener removed", func() {
+		It("should remove dns records when listener removed", func(ctx SpecContext) {
 			//get the gateway and remove the listeners
 
 			Eventually(func() error {
@@ -433,9 +441,9 @@ var _ = Describe("DNSPolicy controller", func() {
 				}
 				return k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, rec)
 			}, time.Second*10, time.Second).Should(BeNil())
-		})
+		}, testTimeOut)
 
-		It("should remove gateway back reference on policy deletion", func() {
+		It("should remove gateway back reference on policy deletion", func(ctx SpecContext) {
 			policyBackRefValue := testNamespace + "/" + dnsPolicy.Name
 			refs, _ := json.Marshal([]client.ObjectKey{{Name: dnsPolicy.Name, Namespace: testNamespace}})
 			policiesBackRefValue := string(refs)
@@ -460,9 +468,9 @@ var _ = Describe("DNSPolicy controller", func() {
 				g.Expect(gateway.Annotations).ToNot(HaveKey(v1alpha1.DNSPolicyDirectReferenceAnnotationName))
 				g.Expect(gateway.Annotations).ToNot(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
-		})
+		}, testTimeOut)
 
-		It("should remove dns record reference on policy deletion even if gateway is removed", func() {
+		It("should remove dns record reference on policy deletion even if gateway is removed", func(ctx SpecContext) {
 
 			Eventually(func() error { // DNS record exists
 				return k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})
@@ -481,7 +489,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			//	return k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})
 			//}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(MatchError(ContainSubstring("not found")))
 
-		})
+		}, testTimeOut)
 
 	})
 

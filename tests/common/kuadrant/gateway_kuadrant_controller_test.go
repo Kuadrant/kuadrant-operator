@@ -1,6 +1,6 @@
 //go:build integration
 
-package controllers
+package kuadrant
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Kuadrant Gateway controller", Ordered, func() {
+var _ = Describe("Kuadrant Gateway controller", Serial, func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)

@@ -16,9 +16,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package bare_k8s_test
+package ratelimitpolicy
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"testing"
@@ -33,23 +34,30 @@ import (
 
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
+	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-// This test suite will be run on bare k8s env without GatewayAPI CRDs, just Kuadrant CRDs installed
+// This test suite will be run on k8s env with GatewayAPI CRDs, Istio and Kuadrant CRDs installed
 
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var kuadrantInstallationNS string
 
 func testClient() client.Client { return k8sClient }
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "Controller suite on bare k8s")
+	RunSpecs(t, "RateLimitPolicy Controller Suite")
 }
+
+const (
+	TestGatewayName   = "test-placed-gateway"
+	TestHTTPRouteName = "toystore-route"
+)
 
 var _ = SynchronizedBeforeSuite(func() []byte {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
@@ -63,9 +71,19 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	controllers.SetupKuadrantOperatorForTest(controllers.BootstrapScheme(), cfg)
+	s := controllers.BootstrapScheme()
 
-	data := controllers.MarshalConfig(cfg)
+	controllers.SetupKuadrantOperatorForTest(s, cfg)
+
+	k8sClient, err = client.New(cfg, client.Options{Scheme: s})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(k8sClient).NotTo(BeNil())
+
+	ctx := context.Background()
+	ns := tests.CreateNamespace(ctx, testClient())
+	tests.ApplyKuadrantCR(ctx, testClient(), ns)
+
+	data := controllers.MarshalConfig(cfg, controllers.WithKuadrantInstallNS(ns))
 
 	return data
 }, func(data []byte) {
@@ -84,6 +102,8 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 		},
 	}
 
+	kuadrantInstallationNS = sharedCfg.KuadrantNS
+
 	// Create new scheme for each client
 	s := controllers.BootstrapScheme()
 
@@ -96,6 +116,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 
 var _ = SynchronizedAfterSuite(func() {}, func() {
 	By("tearing down the test environment")
+	tests.DeleteNamespace(context.Background(), k8sClient, kuadrantInstallationNS)
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
@@ -105,7 +126,7 @@ func TestMain(m *testing.M) {
 		log.SetLevel(log.DebugLevel),
 		log.SetMode(log.ModeDev),
 		log.WriteTo(GinkgoWriter),
-	).WithName("bare_k8s_controller_test")
+	).WithName("ratelimitpolicy_controller_test")
 	log.SetLogger(logger)
 	os.Exit(m.Run())
 }

@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package bare_k8s_test
+package kuadrant
 
 import (
 	"encoding/json"
@@ -38,7 +38,7 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-// This test suite will be run on bare k8s env without GatewayAPI CRDs, just Kuadrant CRDs installed
+// This test suite will be run on k8s env with GatewayAPI CRDs, Istio and Kuadrant CRDs installed
 
 var k8sClient client.Client
 var testEnv *envtest.Environment
@@ -48,7 +48,7 @@ func testClient() client.Client { return k8sClient }
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "Controller suite on bare k8s")
+	RunSpecs(t, "Kuadrant Controller Suite")
 }
 
 var _ = SynchronizedBeforeSuite(func() []byte {
@@ -105,7 +105,7 @@ func TestMain(m *testing.M) {
 		log.SetLevel(log.DebugLevel),
 		log.SetMode(log.ModeDev),
 		log.WriteTo(GinkgoWriter),
-	).WithName("bare_k8s_controller_test")
+	).WithName("kuadrant_controller_test")
 	log.SetLogger(logger)
 	os.Exit(m.Run())
 }

@@ -28,14 +28,13 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
+var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 	const (
 		testTimeOut      = SpecTimeout(3 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 	var (
-		testNamespace          string
-		kuadrantInstallationNS string
+		testNamespace string
 	)
 
 	assertPolicyIsAcceptedAndEnforced := func(ctx context.Context, key client.ObjectKey) func() bool {
@@ -53,15 +52,6 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 	beforeEachCallback := func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
 	}
-
-	BeforeAll(func(ctx SpecContext) {
-		kuadrantInstallationNS = tests.CreateNamespace(ctx, testClient())
-		tests.ApplyKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
-	})
-
-	AfterAll(func(ctx SpecContext) {
-		tests.DeleteNamespace(ctx, testClient(), kuadrantInstallationNS)
-	})
 
 	BeforeEach(beforeEachCallback)
 	AfterEach(func(ctx SpecContext) {
@@ -2367,10 +2357,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 
 			// Update GW RLP to overrides
 			Eventually(func(g Gomega) {
-				Expect(testClient().Get(ctx, gwRLPKey, gwRLP)).To(Succeed())
+				g.Expect(testClient().Get(ctx, gwRLPKey, gwRLP)).To(Succeed())
 				gwRLP.Spec.Overrides = gwRLP.Spec.Defaults.DeepCopy()
 				gwRLP.Spec.Defaults = nil
-				Expect(testClient().Update(ctx, gwRLP)).To(Succeed())
+				g.Expect(testClient().Update(ctx, gwRLP)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), gwRLPKey)).WithContext(ctx).Should(BeTrue())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeFalse())

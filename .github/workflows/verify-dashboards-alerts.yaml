@@ -20,10 +20,51 @@ jobs:
       run:
         shell: bash
     steps:
+    - name: Install expect
+      run: |
+        sudo apt-get update
+        sudo apt-get install expect -y
+    - name: Set up Docker
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          apt-transport-https \
+          ca-certificates \
+          curl \
+          gnupg-agent \
+          software-properties-common
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+        sudo add-apt-repository -y \
+          "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+          $(lsb_release -cs) \
+          stable"
+        sudo apt-get update
+        sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+        sudo usermod -aG docker $USER
+    - name: Install kind
+      run: |
+        sudo curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
+        sudo chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+    - name: Install kubectl
+      run: |
+        sudo curl -LO https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl
+        sudo chmod +x ./kubectl
+        sudo mv ./kubectl /usr/local/bin/kubectl
     - uses: actions/checkout@v2
     - name: Run Quickstart
       run: |
-        bash ./hack/quickstart.sh
+        cat << 'EOF' > automate_setup.expect
+        #!/usr/bin/expect -f
+        spawn bash hack/quickstart-setup.sh
+        expect "Are you ready to begin? (y/n)"
+        send "y\r"
+        expect "Do you want to set up a DNS provider for use with Kuadrant's DNSPolicy API? (y/n)"
+        send "n\r"
+        expect eof
+        EOF
+        chmod +x automate_setup.expect
+        ./automate_setup.expect
     - name: Port forward grafana and check if contains dashboards.
       run: |
         # Port forward Grafana

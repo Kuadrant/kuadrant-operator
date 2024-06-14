@@ -1,0 +1,106 @@
+name: Verify Dashboards and Alerts OK
+
+on: 
+  push:
+    paths:
+      # Dashboards
+      - examples/dashboards/app_developer.json
+      - examples/dashboards/business_user.json
+      - examples/dashboards/platform_engineer.json
+      # Alerts
+      - examples/alerts/prometheusrules_policies_missing.yaml
+      - examples/alerts/slo-availability.yaml
+      - examples/alerts/slo-latency.yaml
+
+jobs:
+  verify-dashboards-alerts:
+    name: Verify Dashboards and Alerts OK
+    runs-on: ubuntu-latest
+    defaults: 
+      run:
+        shell: bash
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run Quickstart
+      run: |
+        bash ./hack/quickstart.sh
+    - name: Port forward grafana and check if contains dashboards.
+      run: |
+        # Port forward Grafana
+        kubectl -n monitoring port-forward service/grafana 3000:3000 &
+        grafana_process_id=$!
+        echo "Successfully port forwarded Grafana service."
+
+        # Make API Call and save response to variable.
+        grafana_api_call=$(curl http://admin@admin:127.0.0.1:3000/api/search)
+
+        # Compare the content in json file with field containing dashboard names
+
+        app_developer=$(jq -r '.description' examples/dashboards/app_developer.json)
+        business_user=$(jq -r '.description' examples/dashboards/business_user.json)
+        platform_engineer=$(jq -r '.description' examples/dashboards/platform_engineer.json)
+
+        declare -a missing_dashboards=()
+
+        if [[ "$grafana_api_call" != *"$app_developer"* ]]; then
+          echo "Grafana does not have $app_developer dashboard."
+          missing_dashboards+=("$app_developer")
+        elif [[ "$grafana_api_call" != *"$business_user"* ]]; then
+          echo "Grafana does not have $business_user dashboard."
+          missing_dashboards+=("$app_developer")
+        elif [[ "$grafana_api_call" != *"$platform_engineer"*]]; then
+          echo "Grafana does not have $platform_engineer dashboard."
+          missing_dashboards+=("$app_developer")
+        fi
+
+        if [ ${#missing_dashboards[@]} -gt 0 ]; then
+          echo "Grafana is missing the following dashboards:"
+          printf '%s\n' "${missing_dashboards[@]}"
+          echo "Exiting..."
+          exit 1
+        fi
+
+        echo "Grafana contains dashboards $app_developer, $business_user and $platform_engineer. Continuing to Prometheus..."
+
+        # Close Grafana port-forward.
+        kill $grafana_process_id
+        echo "Stoppped port forwarding Grafana."
+    - name: Port forward Prometheus and check if contains alert rules.
+      run: |
+        # Port forward Prometheus
+        kubectl -n monitoring port-forward service/prometheus-k8s 9090:9090 &
+        prometheus_process_id=$!
+        echo "Successfully port forwarded Prometheus service."
+
+        # Make API Call and save response to variable
+        prometheus_api_call=$(curl http://localhost:9090/api/v1/rules)
+
+        # Compare the content in json file with field containing dashboard names.
+
+        prometheusrules_policies_missing_alerts=$(yq e '.spec.groups[].rules[].alert' examples/alerts/prometheusrules_policies_missing.yaml)
+        slo_availability_alerts=$(yq e '.spec.groups[].rules[].alert' examples/alerts/slo-availability.yaml)
+        slo_latency_alerts=$(yq e '.spec.groups[].rules[].alert' examples/alerts/slo-latency.yaml)
+
+        combined_alerts=("${prometheusrules_policies_missing_alerts[@]}" "${slo_availability_alerts[@]}" "${slo_latency_alerts[@]}")
+
+        declare -a missing_alerts=()
+
+        for alert in "${combined_alerts[@]}"; do
+          if [[ "$substring" != *"$alert"* ]]; then
+            echo "Prometheus does not have $alert rule."
+            missing_alerts+=("$alert")
+          fi
+        fi
+
+        if [ ${#missing_alerts[@]} -gt 0 ]; then
+          echo "Prometheus is missing the following alerts:"
+          printf '%s\n' "${missing_alerts[@]}"
+          echo "Exiting..."
+          exit 1
+        fi
+
+        echo "Prometheus has all alert rules."
+
+        # Close Prometheus port-forward
+        kill prometheus_process_id=$!
+        echo "Stopped port forwarding Prometheus."

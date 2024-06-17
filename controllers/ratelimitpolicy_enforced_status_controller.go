@@ -24,6 +24,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -250,6 +251,37 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) setCondition(ctx context.Conte
 
 	logger.V(1).Info("skipping policy enforced condition status update - already up to date")
 	return nil
+}
+
+func GetLimitador(ctx context.Context, k8sclient client.Client, rlp *kuadrantv1beta2.RateLimitPolicy) (*limitadorv1alpha1.Limitador, error) {
+	logger, _ := logr.FromContext(ctx)
+
+	logger.V(1).Info("get kuadrant namespace")
+	var kuadrantNamespace string
+	kuadrantNamespace, isSet := kuadrant.GetKuadrantNamespaceFromPolicy(rlp)
+	if !isSet {
+		var err error
+		kuadrantNamespace, err = kuadrant.GetKuadrantNamespaceFromPolicyTargetRef(ctx, k8sclient, rlp)
+		if err != nil {
+			logger.Error(err, "failed to get kuadrant namespace")
+			return nil, err
+		}
+		kuadrant.AnnotateObject(rlp, kuadrantNamespace)
+		err = k8sclient.Update(ctx, rlp) // @guicassolato: not sure if this belongs to here
+		if err != nil {
+			logger.Error(err, "failed to update policy, re-queuing")
+			return nil, err
+		}
+	}
+	limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantNamespace}
+	limitador := &limitadorv1alpha1.Limitador{}
+	err := k8sclient.Get(ctx, limitadorKey, limitador)
+	logger.V(1).Info("get limitador", "limitador", limitadorKey, "err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	return limitador, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

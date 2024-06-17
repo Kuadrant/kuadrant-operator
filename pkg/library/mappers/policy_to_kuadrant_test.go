@@ -10,18 +10,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
-func TestRLPToLimitadorEventMapper(t *testing.T) {
+func TestPolicyToKuadrantEventMapper(t *testing.T) {
 	t.Run("not policy related event", func(subT *testing.T) {
 		// Objects to track in the fake client.
 		s := runtime.NewScheme()
@@ -31,19 +31,22 @@ func TestRLPToLimitadorEventMapper(t *testing.T) {
 		objs := []runtime.Object{}
 		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
 
-		m := NewRLPToLimitadorEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
+		m := NewPolicyToKuadrantEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 		requests := m.Map(context.TODO(), &gatewayapiv1.HTTPRoute{})
 		assert.Equal(subT, len(requests), 0)
 	})
 
-	t.Run("policy targeting gateway", func(subT *testing.T) {
-		ns := "ns"
+	t.Run("policy targeting kuadrant annotated gateway", func(subT *testing.T) {
+		userNamespace := "user-ns"
+		kuadrantNamespace := "kuadrant-ns"
+		kuadrantName := "kuadrant-name"
+
 		rlp := &kuadrantv1beta2.RateLimitPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: userNamespace},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
 				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -57,9 +60,9 @@ func TestRLPToLimitadorEventMapper(t *testing.T) {
 			TypeMeta: metav1.TypeMeta{
 				Kind: "Gateway", APIVersion: gatewayapiv1.GroupVersion.String(),
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "mygateway", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "mygateway", Namespace: userNamespace},
 		}
-		kuadrant.AnnotateObject(gateway, ns)
+		kuadrant.AnnotateObject(gateway, kuadrantName, kuadrantNamespace)
 
 		s := runtime.NewScheme()
 		assert.NilError(subT, gatewayapiv1.AddToScheme(s))
@@ -68,22 +71,24 @@ func TestRLPToLimitadorEventMapper(t *testing.T) {
 		objs := []runtime.Object{gateway}
 		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
 
-		m := NewRLPToLimitadorEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
+		m := NewPolicyToKuadrantEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 		requests := m.Map(context.TODO(), rlp)
 		assert.Equal(subT, len(requests), 1)
 		assert.DeepEqual(subT, requests[0],
-			reconcile.Request{NamespacedName: common.LimitadorObjectKey(ns)},
+			reconcile.Request{
+				NamespacedName: client.ObjectKey{Name: kuadrantName, Namespace: kuadrantNamespace},
+			},
 		)
 	})
 
 	t.Run("policy targeting not existing gateway", func(subT *testing.T) {
-		ns := "ns"
+		userNamespace := "user-ns"
 		rlp := &kuadrantv1beta2.RateLimitPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: userNamespace},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
 				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -100,19 +105,19 @@ func TestRLPToLimitadorEventMapper(t *testing.T) {
 		objs := []runtime.Object{}
 		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
 
-		m := NewRLPToLimitadorEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
+		m := NewPolicyToKuadrantEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 		requests := m.Map(context.TODO(), rlp)
 		assert.Equal(subT, len(requests), 0)
 	})
 
-	t.Run("policy targeting gateway not assigned to kuadrant", func(subT *testing.T) {
-		ns := "ns"
+	t.Run("policy targeting gateway missing kuadrant annotations", func(subT *testing.T) {
+		userNamespace := "user-ns"
 		rlp := &kuadrantv1beta2.RateLimitPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: userNamespace},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
 				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -122,12 +127,12 @@ func TestRLPToLimitadorEventMapper(t *testing.T) {
 			},
 		}
 
-		// Does not have kuadrant namespace annotated
+		// Does not have kuadrant annotations
 		gateway := &gatewayapiv1.Gateway{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "Gateway", APIVersion: gatewayapiv1.GroupVersion.String(),
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "mygateway", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "mygateway", Namespace: userNamespace},
 		}
 
 		s := runtime.NewScheme()
@@ -137,19 +142,22 @@ func TestRLPToLimitadorEventMapper(t *testing.T) {
 		objs := []runtime.Object{gateway}
 		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
 
-		m := NewRLPToLimitadorEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
+		m := NewPolicyToKuadrantEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 		requests := m.Map(context.TODO(), rlp)
 		assert.Equal(subT, len(requests), 0)
 	})
 
 	t.Run("policy targeting accepted route", func(subT *testing.T) {
-		ns := "ns"
+		userNamespace := "user-ns"
+		kuadrantNamespace := "kuadrant-ns"
+		kuadrantName := "kuadrant-name"
+
 		rlp := &kuadrantv1beta2.RateLimitPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: userNamespace},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
 				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -163,15 +171,15 @@ func TestRLPToLimitadorEventMapper(t *testing.T) {
 			TypeMeta: metav1.TypeMeta{
 				Kind: "Gateway", APIVersion: gatewayapiv1.GroupVersion.String(),
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "mygateway", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "mygateway", Namespace: userNamespace},
 		}
-		kuadrant.AnnotateObject(gateway, ns)
+		kuadrant.AnnotateObject(gateway, kuadrantName, kuadrantNamespace)
 
 		route := &gatewayapiv1.HTTPRoute{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "HTTPRoute", APIVersion: gatewayapiv1.GroupVersion.String(),
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "myroute", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "myroute", Namespace: userNamespace},
 			Spec: gatewayapiv1.HTTPRouteSpec{
 				CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
 					ParentRefs: []gatewayapiv1.ParentReference{
@@ -211,22 +219,27 @@ func TestRLPToLimitadorEventMapper(t *testing.T) {
 		objs := []runtime.Object{gateway, route}
 		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
 
-		m := NewRLPToLimitadorEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
+		m := NewPolicyToKuadrantEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 		requests := m.Map(context.TODO(), rlp)
 		assert.Equal(subT, len(requests), 1)
 		assert.DeepEqual(subT, requests[0],
-			reconcile.Request{NamespacedName: common.LimitadorObjectKey(ns)},
+			reconcile.Request{
+				NamespacedName: client.ObjectKey{Name: kuadrantName, Namespace: kuadrantNamespace},
+			},
 		)
 	})
 
 	t.Run("policy targeting not accepted route", func(subT *testing.T) {
-		ns := "ns"
+		userNamespace := "user-ns"
+		kuadrantNamespace := "kuadrant-ns"
+		kuadrantName := "kuadrant-name"
+
 		rlp := &kuadrantv1beta2.RateLimitPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: userNamespace},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
 				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -240,9 +253,9 @@ func TestRLPToLimitadorEventMapper(t *testing.T) {
 			TypeMeta: metav1.TypeMeta{
 				Kind: "Gateway", APIVersion: gatewayapiv1.GroupVersion.String(),
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "mygateway", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "mygateway", Namespace: userNamespace},
 		}
-		kuadrant.AnnotateObject(gateway, ns)
+		kuadrant.AnnotateObject(gateway, kuadrantName, kuadrantNamespace)
 
 		route := &gatewayapiv1.HTTPRoute{
 			TypeMeta: metav1.TypeMeta{
@@ -295,12 +308,12 @@ func TestRLPToLimitadorEventMapper(t *testing.T) {
 	})
 
 	t.Run("policy targeting not existing route", func(subT *testing.T) {
-		ns := "ns"
+		userNamespace := "user-ns"
 		rlp := &kuadrantv1beta2.RateLimitPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: userNamespace},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
 				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -324,12 +337,12 @@ func TestRLPToLimitadorEventMapper(t *testing.T) {
 	})
 
 	t.Run("policy targeting unexpected resource", func(subT *testing.T) {
-		ns := "ns"
+		userNamespace := "user-ns"
 		rlp := &kuadrantv1beta2.RateLimitPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: userNamespace},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
 				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
 					Group: gatewayapiv1.GroupName,

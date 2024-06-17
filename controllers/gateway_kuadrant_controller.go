@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,6 +33,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
@@ -108,19 +110,17 @@ func (r *GatewayKuadrantReconciler) reconcileGatewayWithKuadrantMetadata(ctx con
 
 	if len(kuadrantList.Items) == 0 {
 		logger.Info("Kuadrant instance not found in the cluster")
-		return r.removeKuadrantNamespaceAnnotation(ctx, gw)
+		return r.removeKuadrantAnnotations(ctx, gw)
 	}
 
-	val, ok := gw.GetAnnotations()[kuadrant.KuadrantNamespaceAnnotation]
-	if !ok || val != kuadrantList.Items[0].Namespace {
-		// Either the annotation does not exist or
-		// the namespace differs from the available Kuadrant CR, hence the gateway is updated.
-		annotations := gw.GetAnnotations()
-		if annotations == nil {
-			annotations = map[string]string{}
-		}
-		annotations[kuadrant.KuadrantNamespaceAnnotation] = kuadrantList.Items[0].Namespace
-		gw.SetAnnotations(annotations)
+	desiredAnnotations := map[string]string{
+		kuadrant.KuadrantNamespaceAnnotation: kuadrantList.Items[0].Namespace,
+		kuadrant.KuadrantNameAnnotation:      kuadrantList.Items[0].Name,
+	}
+
+	updated := common.MergeMapStringString(ptr.To(gw.GetAnnotations()), desiredAnnotations)
+
+	if updated {
 		logger.Info("annotate gateway with kuadrant namespace", "namespace", kuadrantList.Items[0].Namespace)
 		return r.UpdateResource(ctx, gw)
 	}
@@ -128,15 +128,29 @@ func (r *GatewayKuadrantReconciler) reconcileGatewayWithKuadrantMetadata(ctx con
 	return nil
 }
 
-func (r *GatewayKuadrantReconciler) removeKuadrantNamespaceAnnotation(ctx context.Context, gw *gatewayapiv1.Gateway) error {
+func (r *GatewayKuadrantReconciler) removeKuadrantAnnotations(ctx context.Context, gw *gatewayapiv1.Gateway) error {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return err
 	}
 
-	if _, ok := gw.GetAnnotations()[kuadrant.KuadrantNamespaceAnnotation]; ok {
+	update := false
+
+	_, ok := gw.GetAnnotations()[kuadrant.KuadrantNamespaceAnnotation]
+	if ok {
 		delete(gw.Annotations, kuadrant.KuadrantNamespaceAnnotation)
 		logger.Info("remove gateway annotation with kuadrant namespace")
+		update = true
+	}
+
+	_, ok = gw.GetAnnotations()[kuadrant.KuadrantNameAnnotation]
+	if ok {
+		delete(gw.Annotations, kuadrant.KuadrantNameAnnotation)
+		logger.Info("remove gateway annotation with kuadrant name")
+		update = true
+	}
+
+	if update {
 		return r.UpdateResource(ctx, gw)
 	}
 

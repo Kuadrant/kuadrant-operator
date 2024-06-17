@@ -17,6 +17,7 @@ import (
 )
 
 const (
+	KuadrantNameAnnotation      = "kuadrant.io/name"
 	KuadrantNamespaceAnnotation = "kuadrant.io/namespace"
 	ControllerName              = "kuadrant.io/policy-controller"
 )
@@ -80,18 +81,21 @@ func GetKuadrantNamespace(obj client.Object) (string, error) {
 	return obj.GetAnnotations()[KuadrantNamespaceAnnotation], nil
 }
 
-func AnnotateObject(obj client.Object, namespace string) {
+func GetKuadrantName(obj client.Object) (string, bool) {
+	val, ok := obj.GetAnnotations()[KuadrantNameAnnotation]
+	return val, ok
+}
+
+func AnnotateObject(obj client.Object, name, namespace string) {
 	annotations := obj.GetAnnotations()
-	if len(annotations) == 0 {
-		obj.SetAnnotations(
-			map[string]string{
-				KuadrantNamespaceAnnotation: namespace,
-			},
-		)
-	} else {
-		annotations[KuadrantNamespaceAnnotation] = namespace
-		obj.SetAnnotations(annotations)
+	if annotations == nil {
+		annotations = make(map[string]string, 0)
 	}
+
+	annotations[KuadrantNamespaceAnnotation] = namespace
+	annotations[KuadrantNameAnnotation] = name
+
+	obj.SetAnnotations(annotations)
 }
 
 // RulesFromHTTPRoute computes a list of rules from the HTTPRoute object

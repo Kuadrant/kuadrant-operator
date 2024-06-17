@@ -26,7 +26,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/samber/lo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -36,10 +35,8 @@ import (
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 )
@@ -50,6 +47,7 @@ type RateLimitingLimitsReconciler struct {
 }
 
 //+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants,verbs=get;list;watch;create;update;patch;delete
 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
@@ -58,82 +56,59 @@ func (r *RateLimitingLimitsReconciler) Reconcile(eventCtx context.Context, req c
 	logger.Info("Reconciling rate limiting limits")
 	ctx := logr.NewContext(eventCtx, logger)
 
-	limitadorCR := &limitadorv1alpha1.Limitador{}
-	if err := r.Client().Get(ctx, req.NamespacedName, limitadorCR); err != nil {
+	kuadrantCR := &kuadrantv1beta1.Kuadrant{}
+	if err := r.Client().Get(ctx, req.NamespacedName, kuadrantCR); err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("no limitador found")
+			logger.Info("no kuadrant instance found")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "failed to get limitador")
+		logger.Error(err, "failed to get kuadrant")
 		return ctrl.Result{}, err
 	}
 
 	if logger.V(1).Enabled() {
-		jsonData, err := json.MarshalIndent(limitadorCR, "", "  ")
+		jsonData, err := json.MarshalIndent(kuadrantCR, "", "  ")
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		logger.V(1).Info(string(jsonData))
 	}
 
-	//
-	// Check that Limitador CR is the resource managed by kuadrant
-	// This validation relies on the kuadrant management of the limitador instance
-	// Which is currently driven by some hardcoded name and same namespacepace as the kuadrant CR
-	//
-	if limitadorCR.GetName() != common.LimitadorName {
-		logger.Info("this limitador resource is not managed by kuadrant, unexpected name")
-		return ctrl.Result{}, nil
-	}
-
-	kuadrantList := &kuadrantv1beta1.KuadrantList{}
-	if err := r.Client().List(ctx, kuadrantList); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if len(kuadrantList.Items) == 0 {
-		logger.Info("this limitador resource is not managed by kuadrant, kuadrant instance could not be found")
-		return ctrl.Result{}, nil
-	}
-
-	if limitadorCR.GetNamespace() != kuadrantList.Items[0].Namespace {
-		logger.Info("this limitador resource is not managed by kuadrant, unexpected namespace")
-		return ctrl.Result{}, nil
-	}
-
-	rateLimitIndexFromCluster, err := r.buildRateLimitIndexFromCluster(ctx)
+	rateLimitIndexFromTopology, err := r.buildRateLimitIndexFromTopology(ctx)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	for _, rlp := range rlps {
-		if _, ok := rateLimitIndex.Get(client.ObjectKeyFromObject(rlp)); ok {
-			continue
+	// get the current limitador cr for the kuadrant instance so we can compare if it needs to be updated
+	limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantCR.GetNamespace()}
+	limitador := &limitadorv1alpha1.Limitador{}
+	err = r.Client().Get(ctx, limitadorKey, limitador)
+	logger.V(1).Info("get limitador", "limitador", limitadorKey, "err", err)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if !rlptools.Equal(rateLimitIndexFromTopology.ToRateLimits(), limitador.Spec.Limits) {
+		// update limitador
+		limitador.Spec.Limits = rateLimitIndexFromTopology.ToRateLimits()
+		err = r.UpdateResource(ctx, limitador)
+		logger.V(1).Info("update limitador", "limitador", client.ObjectKeyFromObject(limitador), "err", err)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
-
-		rateLimitIndex.Set(client.ObjectKeyFromObject(rlp), rlptools.LimitadorRateLimitsFromRLP(rlp))
-	}
-
-	// return if limitador is up to date
-	if rlptools.Equal(rateLimitIndex.ToRateLimits(), limitadorCR.Spec.Limits) {
-		logger.V(1).Info("limitador is up to date, skipping update")
-		return ctrl.Result{}, nil
-	}
-
-	// update limitador
-	limitadorCR.Spec.Limits = rateLimitIndex.ToRateLimits()
-	err = r.UpdateResource(ctx, limitadorCR)
-	logger.V(1).Info("update limitador", "limitador", client.ObjectKeyFromObject(limitadorCR), "err", err)
-	if err != nil {
-		return ctrl.Result{}, err
 	}
 
 	logger.Info("Rate limiting limits reconciled successfully")
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitingLimitsReconciler) buildRateLimitIndexFromCluster(ctx context.Context, topology *kuadrantgatewayapi.Topology) (*rlptools.RateLimitIndex, error) {
+func (r *RateLimitingLimitsReconciler) buildRateLimitIndexFromTopology(ctx context.Context) (*rlptools.RateLimitIndex, error) {
 	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	topology, err := rlptools.Topology(ctx, r.Client())
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +128,7 @@ func (r *RateLimitingLimitsReconciler) buildRateLimitIndexFromCluster(ctx contex
 		topologyWithOverrides, err := rlptools.ApplyOverrides(topology, gateway)
 		if err != nil {
 			logger.Error(err, "failed to apply overrides")
-			return nil
+			return nil, err
 		}
 
 		// sort the policies for deterministic output and consistent comparison against existing objects
@@ -161,7 +136,11 @@ func (r *RateLimitingLimitsReconciler) buildRateLimitIndexFromCluster(ctx contex
 		policies := indexes.PoliciesFromGateway(gateway)
 		sort.Sort(kuadrantgatewayapi.PolicyByTargetRefKindAndCreationTimeStamp(policies))
 
-		logger.V(1).Info("new rate limit index", "gateway", client.ObjectKeyFromObject(gateway), "policies", lo.Map(policies, func(p kuadrantgatewayapi.Policy, _ int) string { return client.ObjectKeyFromObject(p).String() }))
+		logger.V(1).Info("new rate limit index",
+			"gateway", client.ObjectKeyFromObject(gateway),
+			"policies", lo.Map(policies, func(p kuadrantgatewayapi.Policy, _ int) string {
+				return client.ObjectKeyFromObject(p).String()
+			}))
 
 		for _, policy := range policies {
 			rlpKey := client.ObjectKeyFromObject(policy)
@@ -171,7 +150,9 @@ func (r *RateLimitingLimitsReconciler) buildRateLimitIndexFromCluster(ctx contex
 				GatewayKey:         gatewayKey,
 			}
 			if _, ok := rateLimitIndex.Get(key); ok { // should never happen
-				logger.Error(fmt.Errorf("unexpected duplicate rate limit policy key found"), "failed do add rate limit policy to index", "RateLimitPolicy", rlpKey.String(), "Gateway", gatewayKey)
+				logger.Error(fmt.Errorf("unexpected duplicate rate limit policy key found"),
+					"failed do add rate limit policy to index",
+					"RateLimitPolicy", rlpKey.String(), "Gateway", gatewayKey)
 				continue
 			}
 			rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)
@@ -179,131 +160,48 @@ func (r *RateLimitingLimitsReconciler) buildRateLimitIndexFromCluster(ctx contex
 		}
 	}
 
-}
-
-// Rate limit policies targeting programmed gateways or routes accepted by parent gateways.
-func (r *RateLimitingLimitsReconciler) readRLPs(ctx context.Context, kuadrantNS string) ([]*kuadrantv1beta2.RateLimitPolicy, error) {
-	logger, err := logr.FromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// When multiple kuadrant instances are supported, this fetching could be targeted to all
-	// gateways for the same kuadrant instance of the reconciled limitador instance
-	gwList := &gatewayapiv1.GatewayList{}
-	// Get all the routes having the gateway as parent
-	err = r.Client().List(ctx, gwList)
-	logger.V(1).Info("topology: list gateways", "#Gateways", len(gwList.Items), "err", err)
-	if err != nil {
-		return nil, err
-	}
-
-	routeList := &gatewayapiv1.HTTPRouteList{}
-	// Get all the routes having the gateway as parent
-	err = r.Client().List(ctx, routeList)
-	logger.V(1).Info("topology: list httproutes", "#HTTPRoutes", len(routeList.Items), "err", err)
-	if err != nil {
-		return nil, err
-	}
-
-	rlpList := &kuadrantv1beta2.RateLimitPolicyList{}
-	// Get all the rate limit policies
-	err = r.Client().List(ctx, rlpList)
-	logger.V(1).Info("topology: list rate limit policies", "#RLPS", len(rlpList.Items), "err", err)
-	if err != nil {
-		return nil, err
-	}
-
-	policies := utils.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })
-
-	t, err := kuadrantgatewayapi.NewTopology(
-		kuadrantgatewayapi.WithGateways(utils.Map(gwList.Items, ptr.To)),
-		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To)),
-		kuadrantgatewayapi.WithPolicies(policies),
-		kuadrantgatewayapi.WithLogger(logger),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	topologyindexes := kuadrantgatewayapi.NewTopologyIndexes(t)
-
-	validRLPs := make([]*kuadrantv1beta2.RateLimitPolicy, 0)
-
-	// Valid gateways are those assigned to the kuadrant instance where the current
-	// limitador CR is living
-	validGateways := utils.Filter(t.Gateways(), func(gwNode kuadrantgatewayapi.GatewayNode) bool {
-		val, err := kuadrant.GetKuadrantNamespace(gwNode.Gateway)
-		if err != nil {
-			logger.V(1).Info("readRLPs: skipping gateway not assigned to kuadrant",
-				"gateway", client.ObjectKeyFromObject(gwNode.Gateway))
-			return false
-		}
-
-		if val != kuadrantNS {
-			logger.V(1).Info("readRLPs: skipping gateway assigned to a different kuadrant instance",
-				"gateway", client.ObjectKeyFromObject(gwNode.Gateway))
-			return false
-		}
-
-		// valid gateway
-		return true
-	})
-
-	for _, gwNode := range validGateways {
-		gwPolicies := topologyindexes.PoliciesFromGateway(gwNode.Gateway)
-
-		// filter out those policies that do not have any effect:
-		// * targeting a gateway without any route
-		// * targeting a gateway when all the route already have another policy attached
-		numUntargetedRoutes := len(topologyindexes.GetUntargetedRoutes(gwNode.Gateway))
-		validGwPolicies := utils.Filter(gwPolicies, func(p kuadrantgatewayapi.Policy) bool {
-			// topologyindexes.GetPolicyHTTPRoute(p) != nil => the policy is targeting a route so it is effective
-			// topologyindexes.GetPolicyHTTPRoute(p) == nil && numUntargetedRoutes == 0 => the policy is not effective
-			return topologyindexes.GetPolicyHTTPRoute(p) != nil || numUntargetedRoutes > 0
-		})
-
-		validGwRLPs := utils.Map(validGwPolicies,
-			func(p kuadrantgatewayapi.Policy) *kuadrantv1beta2.RateLimitPolicy {
-				return p.(*kuadrantv1beta2.RateLimitPolicy)
-			})
-
-		validRLPs = append(validRLPs, validGwRLPs...)
-	}
-
-	logger.V(1).Info("readRLPs: valid rate limit policies", "#RLPS", len(validRLPs))
-	return validRLPs, nil
+	return rateLimitIndex, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *RateLimitingLimitsReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	rlpToLimitadorEventMapper := mappers.NewRLPToLimitadorEventMapper(
-		mappers.WithLogger(r.Logger().WithName("ratelimitpolicyToLimitadorEventMapper")),
+	ok, err := kuadrantgatewayapi.IsGatewayAPIInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("Kuadrant controller disabled. GatewayAPI was not found")
+		return nil
+	}
+
+	rlpToKuadrantEventMapper := mappers.NewPolicyToKuadrantEventMapper(
+		mappers.WithLogger(r.Logger().WithName("ratelimitpolicyToKuadrantEventMapper")),
 		mappers.WithClient(r.Client()),
 	)
 
-	gatewayToLimitadorEventMapper := mappers.NewGatewayToLimitadorEventMapper(
-		mappers.WithLogger(r.Logger().WithName("gatewayToLimitadorEventMapper")),
+	gatewayToKuadrantEventMapper := mappers.NewGatewayToKuadrantEventMapper(
+		mappers.WithLogger(r.Logger().WithName("gatewayToKuadrantEventMapper")),
 	)
 
-	routeToLimitadorEventMapper := mappers.NewHTTPRouteToLimitadorEventMapper(
-		mappers.WithLogger(r.Logger().WithName("routeToLimitadorEventMapper")),
+	routeToKuadrantEventMapper := mappers.NewHTTPRouteToKuadrantEventMapper(
+		mappers.WithLogger(r.Logger().WithName("routeToKuadrantEventMapper")),
 		mappers.WithClient(r.Client()),
 	)
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&limitadorv1alpha1.Limitador{}).
+		For(&kuadrantv1beta1.Kuadrant{}).
+		Owns(&limitadorv1alpha1.Limitador{}).
 		Watches(
 			&kuadrantv1beta2.RateLimitPolicy{},
-			handler.EnqueueRequestsFromMapFunc(rlpToLimitadorEventMapper.Map),
+			handler.EnqueueRequestsFromMapFunc(rlpToKuadrantEventMapper.Map),
 		).
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
-			handler.EnqueueRequestsFromMapFunc(routeToLimitadorEventMapper.Map),
+			handler.EnqueueRequestsFromMapFunc(routeToKuadrantEventMapper.Map),
 		).
 		Watches(
 			&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(gatewayToLimitadorEventMapper.Map),
+			handler.EnqueueRequestsFromMapFunc(gatewayToKuadrantEventMapper.Map),
 		).
 		Complete(r)
 }

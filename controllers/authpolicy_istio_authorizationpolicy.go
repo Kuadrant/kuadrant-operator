@@ -94,8 +94,8 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 			Labels:    istioAuthorizationPolicyLabels(client.ObjectKeyFromObject(gateway), client.ObjectKeyFromObject(ap)),
 		},
 		Spec: istiosecurity.AuthorizationPolicy{
-			Action:   istiosecurity.AuthorizationPolicy_CUSTOM,
-			Selector: kuadrantistioutils.WorkloadSelectorFromGateway(ctx, r.Client(), gateway),
+			Action:    istiosecurity.AuthorizationPolicy_CUSTOM,
+			TargetRef: kuadrantistioutils.PolicyTargetRefFromGateway(gateway),
 			ActionDetail: &istiosecurity.AuthorizationPolicy_Provider{
 				Provider: &istiosecurity.AuthorizationPolicy_ExtensionProvider{
 					Name: KuadrantExtAuthProviderName,

@@ -32,19 +32,12 @@ func (k *GatewayToKuadrantEventMapper) Map(ctx context.Context, obj client.Objec
 		return []reconcile.Request{}
 	}
 
-	kuadrantNamespace, err := kuadrant.GetKuadrantNamespace(gateway)
-	if err != nil {
-		logger.Info("cannot get kuadrant namespace from gateway", "gateway", client.ObjectKeyFromObject(gateway))
-		return []reconcile.Request{}
-	}
-
-	kuadrantName, ok := kuadrant.GetKuadrantName(gateway)
+	kuadrantKey, ok := kuadrant.GetKuadrantKeyFromGateway(gateway)
 	if !ok {
-		logger.Info("cannot get kuadrant name from gateway", "gateway", client.ObjectKeyFromObject(gateway))
+		logger.Info("cannot get kuadrant key from gateway", "gateway", client.ObjectKeyFromObject(gateway))
 		return []reconcile.Request{}
 	}
 
-	kuadrantKey := client.ObjectKey{Name: kuadrantName, Namespace: kuadrantNamespace}
 	logger.V(1).Info("map", "kuadrant instance", kuadrantKey)
 	return []reconcile.Request{{NamespacedName: kuadrantKey}}
 }

@@ -2,16 +2,18 @@ package kuadrant
 
 import (
 	"context"
+	coreerrors "errors"
 	"fmt"
 	"reflect"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/go-logr/logr"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -45,26 +47,38 @@ func IsKuadrantManaged(obj client.Object) bool {
 }
 
 func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, policy Policy) (string, error) {
-	targetRef := policy.GetTargetRef()
-	gwNamespacedName := types.NamespacedName{Namespace: string(ptr.Deref(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)}
-	if kuadrantgatewayapi.IsTargetRefHTTPRoute(targetRef) {
-		route := &gatewayapiv1.HTTPRoute{}
-		if err := cli.Get(
-			ctx,
-			types.NamespacedName{Namespace: string(ptr.Deref(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)},
-			route,
-		); err != nil {
-			return "", err
-		}
-		// First should be OK considering there's 1 Kuadrant instance per cluster and all are tagged
-		parentRef := route.Spec.ParentRefs[0]
-		gwNamespacedName = types.NamespacedName{Namespace: string(ptr.Deref(parentRef.Namespace, gatewayapiv1.Namespace(route.Namespace))), Name: string(parentRef.Name)}
-	}
-	gw := &gatewayapiv1.Gateway{}
-	if err := cli.Get(ctx, gwNamespacedName, gw); err != nil {
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
 		return "", err
 	}
-	return GetKuadrantNamespace(gw)
+
+	gwKeys, err := GatewaysFromPolicy(ctx, cli, policy)
+	if err != nil {
+		return "", err
+	}
+
+	for _, gwKey := range gwKeys {
+		gateway := &gatewayapiv1.Gateway{}
+		if err := cli.Get(ctx, gwKey, gateway); err != nil {
+			if apierrors.IsNotFound(err) {
+				logger.V(1).Info("no gateway found", "gateway", gwKey)
+				continue
+			}
+			return "", err
+		}
+
+		kuadrantKey, ok := GetKuadrantKeyFromGateway(gateway)
+		if !ok {
+			logger.Info("cannot get kuadrant key from gateway", "gateway", client.ObjectKeyFromObject(gateway))
+			continue
+		}
+
+		// Currently, only one kuadrant instance is supported.
+		// Then, reading only one valid gateway is enough
+		return kuadrantKey.Namespace, nil
+	}
+
+	return "", errors.NewInternalError(coreerrors.New("could not find kuadrant managed gateway"))
 }
 
 func GetKuadrantNamespaceFromPolicy(p Policy) (string, bool) {
@@ -81,9 +95,17 @@ func GetKuadrantNamespace(obj client.Object) (string, error) {
 	return obj.GetAnnotations()[KuadrantNamespaceAnnotation], nil
 }
 
-func GetKuadrantName(obj client.Object) (string, bool) {
-	val, ok := obj.GetAnnotations()[KuadrantNameAnnotation]
-	return val, ok
+func GetKuadrantKeyFromGateway(obj client.Object) (client.ObjectKey, bool) {
+	name, ok := obj.GetAnnotations()[KuadrantNameAnnotation]
+	if !ok {
+		return client.ObjectKey{}, false
+	}
+	ns, ok := obj.GetAnnotations()[KuadrantNamespaceAnnotation]
+	if !ok {
+		return client.ObjectKey{}, false
+	}
+
+	return client.ObjectKey{Name: name, Namespace: ns}, true
 }
 
 func AnnotateObject(obj client.Object, name, namespace string) {

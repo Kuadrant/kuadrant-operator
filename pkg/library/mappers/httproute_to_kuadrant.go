@@ -49,15 +49,9 @@ func (k *HTTPRouteToKuadrantEventMapper) Map(ctx context.Context, obj client.Obj
 			return []reconcile.Request{}
 		}
 
-		kuadrantNamespace, err := kuadrant.GetKuadrantNamespace(gateway)
-		if err != nil {
-			logger.Info("cannot get kuadrant namespace from gateway", "gateway", client.ObjectKeyFromObject(gateway))
-			continue
-		}
-
-		kuadrantName, ok := kuadrant.GetKuadrantName(gateway)
+		kuadrantKey, ok := kuadrant.GetKuadrantKeyFromGateway(gateway)
 		if !ok {
-			logger.Info("cannot get kuadrant name from gateway", "gateway", client.ObjectKeyFromObject(gateway))
+			logger.Info("cannot get kuadrant key from gateway", "gateway", client.ObjectKeyFromObject(gateway))
 			continue
 		}
 
@@ -66,9 +60,7 @@ func (k *HTTPRouteToKuadrantEventMapper) Map(ctx context.Context, obj client.Obj
 		// When multiple kuadrant instances are supported,
 		// each gateway could be managed by one kuadrant instances and
 		// this mapper would generate multiple requests
-		return []reconcile.Request{{NamespacedName: client.ObjectKey{
-			Name: kuadrantName, Namespace: kuadrantNamespace,
-		}}}
+		return []reconcile.Request{{NamespacedName: kuadrantKey}}
 	}
 
 	// nothing to return

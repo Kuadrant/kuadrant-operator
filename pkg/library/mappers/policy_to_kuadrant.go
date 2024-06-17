@@ -49,21 +49,15 @@ func (k *PolicyToKuadrantEventMapper) Map(eventCtx context.Context, obj client.O
 		if err := k.opts.Client.Get(ctx, gwKey, gateway); err != nil {
 			if apierrors.IsNotFound(err) {
 				logger.V(1).Info("no gateway found", "gateway", gwKey)
-				return []reconcile.Request{}
+				continue
 			}
 			logger.Error(err, "failed to get target", "gateway", gwKey)
 			return []reconcile.Request{}
 		}
 
-		kuadrantNamespace, err := kuadrant.GetKuadrantNamespace(gateway)
-		if err != nil {
-			logger.Info("cannot get kuadrant namespace from gateway", "gateway", client.ObjectKeyFromObject(gateway))
-			continue
-		}
-
-		kuadrantName, ok := kuadrant.GetKuadrantName(gateway)
+		kuadrantKey, ok := kuadrant.GetKuadrantKeyFromGateway(gateway)
 		if !ok {
-			logger.Info("cannot get kuadrant name from gateway", "gateway", client.ObjectKeyFromObject(gateway))
+			logger.Info("cannot get kuadrant key from gateway", "gateway", client.ObjectKeyFromObject(gateway))
 			continue
 		}
 
@@ -72,9 +66,7 @@ func (k *PolicyToKuadrantEventMapper) Map(eventCtx context.Context, obj client.O
 		// When multiple kuadrant instances are supported,
 		// each gateway could be managed by one kuadrant instances and
 		// this mapper would generate multiple requests
-		return []reconcile.Request{{NamespacedName: client.ObjectKey{
-			Name: kuadrantName, Namespace: kuadrantNamespace,
-		}}}
+		return []reconcile.Request{{NamespacedName: kuadrantKey}}
 	}
 
 	// nothing to return

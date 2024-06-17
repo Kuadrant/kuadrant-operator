@@ -74,7 +74,7 @@ func (r *RateLimitingLimitsReconciler) Reconcile(eventCtx context.Context, req c
 		logger.V(1).Info(string(jsonData))
 	}
 
-	rateLimitIndexFromTopology, err := r.buildRateLimitIndexFromTopology(ctx)
+	rateLimitIndex, err := r.buildRateLimitIndexFromTopology(ctx)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -88,9 +88,9 @@ func (r *RateLimitingLimitsReconciler) Reconcile(eventCtx context.Context, req c
 		return ctrl.Result{}, err
 	}
 
-	if !rlptools.Equal(rateLimitIndexFromTopology.ToRateLimits(), limitador.Spec.Limits) {
+	if !rlptools.Equal(rateLimitIndex.ToRateLimits(), limitador.Spec.Limits) {
 		// update limitador
-		limitador.Spec.Limits = rateLimitIndexFromTopology.ToRateLimits()
+		limitador.Spec.Limits = rateLimitIndex.ToRateLimits()
 		err = r.UpdateResource(ctx, limitador)
 		logger.V(1).Info("update limitador", "limitador", client.ObjectKeyFromObject(limitador), "err", err)
 		if err != nil {

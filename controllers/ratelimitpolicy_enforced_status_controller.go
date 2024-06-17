@@ -266,12 +266,6 @@ func GetLimitador(ctx context.Context, k8sclient client.Client, rlp *kuadrantv1b
 			logger.Error(err, "failed to get kuadrant namespace")
 			return nil, err
 		}
-		kuadrant.AnnotateObject(rlp, kuadrantNamespace)
-		err = k8sclient.Update(ctx, rlp) // @guicassolato: not sure if this belongs to here
-		if err != nil {
-			logger.Error(err, "failed to update policy, re-queuing")
-			return nil, err
-		}
 	}
 	limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantNamespace}
 	limitador := &limitadorv1alpha1.Limitador{}

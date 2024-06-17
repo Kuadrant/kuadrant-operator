@@ -38,6 +38,7 @@ var _ = Describe("DNSPolicy controller", func() {
 	var dnsProviderSecret *corev1.Secret
 	var managedZone *kuadrantdnsv1alpha1.ManagedZone
 	var testNamespace string
+
 	var gateway *gatewayapiv1.Gateway
 	var dnsPolicy *v1alpha1.DNSPolicy
 	var recordName, wildcardRecordName string

@@ -375,6 +375,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
 				return condition != nil && condition.Reason == string(kuadrant.PolicyReasonUnknown) && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
 			}).WithContext(ctx).Should(BeTrue())
+
 			// check istio authorizationpolicy
 			iapKey := types.NamespacedName{Name: controllers.IstioAuthorizationPolicyName(TestGatewayName, routePolicy.Spec.TargetRef), Namespace: testNamespace}
 			iap := &secv1beta1resources.AuthorizationPolicy{}

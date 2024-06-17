@@ -20,6 +20,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -200,4 +203,23 @@ func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}),
 		)
 	return ctrlr.Complete(r)
+}
+
+const (
+	dnsPolicyNameLabel      = "dns_policy_name"
+	dnsPolicyNamespaceLabel = "dns_policy_namespace"
+	dnsPolicyCondition      = "dns_policy_condition"
+)
+
+var (
+	dnsPolicyReady = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "kuadrant_dns_policy_ready",
+			Help: "DNS Policy ready",
+		},
+		[]string{dnsPolicyNameLabel, dnsPolicyNamespaceLabel, dnsPolicyCondition})
+)
+
+func init() {
+	metrics.Registry.MustRegister(dnsPolicyReady)
 }

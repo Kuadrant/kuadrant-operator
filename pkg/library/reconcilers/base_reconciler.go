@@ -220,6 +220,9 @@ func (b *BaseReconciler) UpdateResource(ctx context.Context, obj client.Object) 
 func (b *BaseReconciler) DeleteResource(ctx context.Context, obj client.Object, options ...client.DeleteOption) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("delete object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
+	if obj.GetDeletionTimestamp() != nil {
+		return nil
+	}
 	return b.Client().Delete(ctx, obj, options...)
 }
 

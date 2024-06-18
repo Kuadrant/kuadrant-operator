@@ -202,7 +202,7 @@ func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&v1alpha1.TLSPolicy{}).
 		Watches(
 			&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+			handler.EnqueueRequestsFromMapFunc(func(_ context.Context, object client.Object) []reconcile.Request {
 				return gatewayEventMapper.MapToPolicy(object, &v1alpha1.TLSPolicy{})
 			}),
 		).

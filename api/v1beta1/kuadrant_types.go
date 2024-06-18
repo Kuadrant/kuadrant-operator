@@ -19,6 +19,7 @@ package v1beta1
 import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +33,30 @@ import (
 // KuadrantSpec defines the desired state of Kuadrant
 type KuadrantSpec struct {
 	// +optional
+	Authorino *AuthorinoSpec `json:"authorino,omitempty"`
+	// +optional
 	Limitador *LimitadorSpec `json:"limitador,omitempty"`
+}
+
+type AuthorinoSpec struct {
+	EvaluatorCacheSize *int                          `json:"evaluatorCacheSize,omitempty"`
+	Listener           *AuthorinoListener            `json:"listener,omitempty"`
+	Metrics            *authorinov1beta1.Metrics     `json:"metrics,omitempty"`
+	OIDCServer         *authorinov1beta1.OIDCServer  `json:"oidcServer,omitempty"`
+	Replicas           *int32                        `json:"replicas,omitempty"`
+	Tracing            *authorinov1beta1.Tracing     `json:"tracing,omitempty"`
+	Volumes            *authorinov1beta1.VolumesSpec `json:"volumes,omitempty"`
+}
+
+type AuthorinoListener struct {
+	// Port numbers of the GRPC and HTTP auth interfaces.
+	Ports *authorinov1beta1.Ports `json:"ports,omitempty"`
+	// TLS configuration of the auth service (GRPC and HTTP interfaces).
+	TLS *authorinov1beta1.Tls `json:"tls"`
+	// Timeout of the auth service (GRPC and HTTP interfaces), in milliseconds.
+	Timeout *int `json:"timeout,omitempty"`
+	// Maximum payload (request body) size for the auth service (HTTP interface), in bytes.
+	MaxHTTPRequestBodySize *int `json:"maxHttpRequestBodySize,omitempty"`
 }
 
 type LimitadorSpec struct {

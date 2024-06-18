@@ -2,6 +2,8 @@ name: Verify Dashboards and Alerts OK
 
 on: 
   push:
+    branches:
+      - 444-add-a-gh-action-for-deploying-and-verifying-dashboards-alerts-load-ok-with-quickstart
     paths:
       # Dashboards
       - examples/dashboards/app_developer.json
@@ -15,36 +17,14 @@ on:
 jobs:
   verify-dashboards-alerts:
     name: Verify Dashboards and Alerts OK
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     defaults: 
       run:
         shell: bash
     steps:
-    - name: Install expect
-      run: |
-        sudo apt-get update
-        sudo apt-get install expect -y
-    - name: Set up Podman
-      run: |
-        curl -LO https://github.com/mgoltzsche/podman-static/releases/download/v4.9.5/podman-linux-amd64.tar.gz
-        tar -xzf podman-linux-amd64.tar.gz
-        sudo cp -r podman-linux-amd64/usr podman-linux-amd64/etc /
-    - name: Install kind
-      run: |
-        sudo curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
-        sudo chmod +x ./kind
-        sudo mv ./kind /usr/local/bin/kind
-    - name: Install kubectl
-      run: |
-        sudo curl -LO https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl
-        sudo chmod +x ./kubectl
-        sudo mv ./kubectl /usr/local/bin/kubectl
     - uses: actions/checkout@v2
     - name: Run Quickstart
       run: |
-        rm /usr/bin/docker
-
-        sudo podman pull docker.io/kindest/node:v1.29.2
         cat << 'EOF' > automate_setup.expect
         #!/usr/bin/expect -f
         spawn bash hack/quickstart-setup.sh

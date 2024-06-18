@@ -80,6 +80,7 @@ func (m *httpRouteEventMapper) MapToPolicy(ctx context.Context, obj client.Objec
 
 	policyKey, err := kuadrant.DirectReferencesFromObject(httpRoute, policyKind)
 	if err != nil {
+		logger.Info("could not create direct reference from object", "error", err)
 		return requests
 	}
 	requests = append(requests, reconcile.Request{NamespacedName: policyKey})

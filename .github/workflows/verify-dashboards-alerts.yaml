@@ -1,18 +1,15 @@
 name: Verify Dashboards and Alerts OK
 
-on: 
-  push:
-    branches:
-      - 444-add-a-gh-action-for-deploying-and-verifying-dashboards-alerts-load-ok-with-quickstart
-    paths:
-      # Dashboards
-      - examples/dashboards/app_developer.json
-      - examples/dashboards/business_user.json
-      - examples/dashboards/platform_engineer.json
-      # Alerts
-      - examples/alerts/prometheusrules_policies_missing.yaml
-      - examples/alerts/slo-availability.yaml
-      - examples/alerts/slo-latency.yaml
+on: push
+    # paths:
+    #   # Dashboards
+    #   - examples/dashboards/app_developer.json
+    #   - examples/dashboards/business_user.json
+    #   - examples/dashboards/platform_engineer.json
+    #   # Alerts
+    #   - examples/alerts/prometheusrules_policies_missing.yaml
+    #   - examples/alerts/slo-availability.yaml
+    #   - examples/alerts/slo-latency.yaml
 
 jobs:
   verify-dashboards-alerts:
@@ -25,48 +22,58 @@ jobs:
     - uses: actions/checkout@v2
     - name: Run Quickstart
       run: |
-      
+        kind delete clusters kuadrant-local
+        kind delete clusters kuadrant-local
+
+        export ISTIO_INSTALL_SAIL=true
+
         cat << 'EOF' > automate_setup.expect
         #!/usr/bin/expect -f
+        set timeout -1
         spawn bash hack/quickstart-setup.sh
         expect "Are you ready to begin? (y/n)"
         send "y\r"
         expect "Do you want to set up a DNS provider for use with Kuadrant's DNSPolicy API? (y/n)"
         send "n\r"
-        expect eof
+        expect "Thank you for using Kuadrant! If you have any questions or feedback, please reach out to our community."
         EOF
         chmod +x automate_setup.expect
         ./automate_setup.expect
     - name: Port forward grafana and check if contains dashboards.
       run: |
         # Port forward Grafana
+        kubectl -n monitoring wait --for=condition=available deployment grafana --timeout=300s
         kubectl -n monitoring port-forward service/grafana 3000:3000 &
         grafana_process_id=$!
         echo "Successfully port forwarded Grafana service."
 
+        sleep 1
+
         # Make API Call and save response to variable.
-        grafana_api_call=$(curl http://admin@admin:127.0.0.1:3000/api/search)
+        grafana_api_call=$(curl -u admin:admin http://127.0.0.1:3000/api/search)
 
         # Compare the content in json file with field containing dashboard names
 
-        app_developer=$(jq -r '.description' examples/dashboards/app_developer.json)
-        business_user=$(jq -r '.description' examples/dashboards/business_user.json)
-        platform_engineer=$(jq -r '.description' examples/dashboards/platform_engineer.json)
+        app_developer=$(jq -r '.panels[1].title' examples/dashboards/app_developer.json)
+        business_user=$(jq -r '.panels[1].title' examples/dashboards/business_user.json)
+        platform_engineer=$(jq -r '.panels[1].title' examples/dashboards/platform_engineer.json)
 
         declare -a missing_dashboards=()
 
         if [[ "$grafana_api_call" != *"$app_developer"* ]]; then
           echo "Grafana does not have $app_developer dashboard."
           missing_dashboards+=("$app_developer")
-        elif [[ "$grafana_api_call" != *"$business_user"* ]]; then
+        fi
+        if [[ "$grafana_api_call" != *"$business_user"* ]]; then
           echo "Grafana does not have $business_user dashboard."
-          missing_dashboards+=("$app_developer")
-        elif [[ "$grafana_api_call" != *"$platform_engineer"*]]; then
+          missing_dashboards+=("$business_user")
+        fi
+        if [[ "$grafana_api_call" != *"$platform_engineer"* ]]; then
           echo "Grafana does not have $platform_engineer dashboard."
-          missing_dashboards+=("$app_developer")
+          missing_dashboards+=("$platform_engineer")
         fi
 
-        if [ ${#missing_dashboards[@]} -gt 0 ]; then
+        if [[ ${#missing_dashboards[@]} -gt 0 ]]; then
           echo "Grafana is missing the following dashboards:"
           printf '%s\n' "${missing_dashboards[@]}"
           echo "Exiting..."

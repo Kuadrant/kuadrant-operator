@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 // GatewayToKuadrantEventMapper is an EventHandler that maps gateway events to kuadrant events,
@@ -23,7 +24,7 @@ func NewGatewayToKuadrantEventMapper(o ...MapperOption) *GatewayToKuadrantEventM
 // Map triggers reconciliation event for a kuadrant CR
 // approach:
 // Gateway -> kuadrant CR name
-func (k *GatewayToKuadrantEventMapper) Map(ctx context.Context, obj client.Object) []reconcile.Request {
+func (k *GatewayToKuadrantEventMapper) Map(_ context.Context, obj client.Object) []reconcile.Request {
 	logger := k.opts.Logger.WithValues("object", client.ObjectKeyFromObject(obj))
 
 	gateway, ok := obj.(*gatewayapiv1.Gateway)

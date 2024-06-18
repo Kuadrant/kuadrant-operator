@@ -7,27 +7,31 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"gotest.tools/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
 func TestGatewaysFromPolicy(t *testing.T) {
 	t.Run("policy targeting gateway", func(subT *testing.T) {
-		rlp := &kuadrantv1beta2.RateLimitPolicy{
-			TypeMeta: metav1.TypeMeta{
-				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
-			},
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns"},
-			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "Gateway",
-					Name:  gatewayapiv1.ObjectName("g"),
+		policy := &FakePolicy{
+			Object: &metav1.PartialObjectMetadata{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: "ns",
 				},
+			},
+			targetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				Group: gatewayapiv1.GroupName,
+				Kind:  "Gateway",
+				Name:  gatewayapiv1.ObjectName("g"),
 			},
 		}
 
@@ -35,28 +39,28 @@ func TestGatewaysFromPolicy(t *testing.T) {
 		objs := []runtime.Object{}
 		cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 
-		ctx := logr.NewContext(context.TODO(), log.NewLogger())
+		ctx := logr.NewContext(context.TODO(), log.Log)
 
-		gwKeys, err := GatewaysFromPolicy(ctx, cl, rlp)
+		gwKeys, err := GatewaysFromPolicy(ctx, cl, policy)
 		assert.NilError(subT, err)
 		assert.Equal(subT, len(gwKeys), 1)
 		assert.DeepEqual(subT, gwKeys[0],
-			client.Objectkey{Name: "g", Namespace: "ns"},
+			client.ObjectKey{Name: "g", Namespace: "ns"},
 		)
 	})
 
 	t.Run("policy targeting accepted route", func(subT *testing.T) {
-		rlp := &kuadrantv1beta2.RateLimitPolicy{
-			TypeMeta: metav1.TypeMeta{
-				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
-			},
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns"},
-			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "HTTPRoute",
-					Name:  gatewayapiv1.ObjectName("myroute"),
+		policy := &FakePolicy{
+			Object: &metav1.PartialObjectMetadata{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: "ns",
 				},
+			},
+			targetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				Group: gatewayapiv1.GroupName,
+				Kind:  "HTTPRoute",
+				Name:  gatewayapiv1.ObjectName("myroute"),
 			},
 		}
 
@@ -104,28 +108,28 @@ func TestGatewaysFromPolicy(t *testing.T) {
 		objs := []runtime.Object{route}
 		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
 
-		ctx := logr.NewContext(context.TODO(), log.NewLogger())
+		ctx := logr.NewContext(context.TODO(), log.Log)
 
-		gwKeys, err := GatewaysFromPolicy(ctx, cl, rlp)
+		gwKeys, err := GatewaysFromPolicy(ctx, cl, policy)
 		assert.NilError(subT, err)
 		assert.Equal(subT, len(gwKeys), 1)
 		assert.DeepEqual(subT, gwKeys[0],
-			client.Objectkey{Name: "mygateway", Namespace: "ns"},
+			client.ObjectKey{Name: "mygateway", Namespace: "ns"},
 		)
 	})
 
 	t.Run("policy targeting not existing route", func(subT *testing.T) {
-		rlp := &kuadrantv1beta2.RateLimitPolicy{
-			TypeMeta: metav1.TypeMeta{
-				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
-			},
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns"},
-			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "HTTPRoute",
-					Name:  gatewayapiv1.ObjectName("notexistingroute"),
+		policy := &FakePolicy{
+			Object: &metav1.PartialObjectMetadata{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: "ns",
 				},
+			},
+			targetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				Group: gatewayapiv1.GroupName,
+				Kind:  "HTTPRoute",
+				Name:  gatewayapiv1.ObjectName("notexistingroute"),
 			},
 		}
 
@@ -136,24 +140,25 @@ func TestGatewaysFromPolicy(t *testing.T) {
 		objs := []runtime.Object{}
 		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
 
-		ctx := logr.NewContext(context.TODO(), log.NewLogger())
-		gwKeys, err := GatewaysFromPolicy(ctx, cl, rlp)
+		ctx := logr.NewContext(context.TODO(), log.Log)
+
+		gwKeys, err := GatewaysFromPolicy(ctx, cl, policy)
 		assert.NilError(subT, err)
 		assert.Equal(subT, len(gwKeys), 0)
 	})
 
 	t.Run("policy targeting not accepted route", func(subT *testing.T) {
-		rlp := &kuadrantv1beta2.RateLimitPolicy{
-			TypeMeta: metav1.TypeMeta{
-				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
-			},
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns"},
-			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "HTTPRoute",
-					Name:  gatewayapiv1.ObjectName("myroute"),
+		policy := &FakePolicy{
+			Object: &metav1.PartialObjectMetadata{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: "ns",
 				},
+			},
+			targetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				Group: gatewayapiv1.GroupName,
+				Kind:  "HTTPRoute",
+				Name:  gatewayapiv1.ObjectName("myroute"),
 			},
 		}
 
@@ -201,23 +206,25 @@ func TestGatewaysFromPolicy(t *testing.T) {
 		objs := []runtime.Object{route}
 		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
 
-		gwKeys, err := GatewaysFromPolicy(ctx, cl, rlp)
+		ctx := logr.NewContext(context.TODO(), log.Log)
+
+		gwKeys, err := GatewaysFromPolicy(ctx, cl, policy)
 		assert.NilError(subT, err)
 		assert.Equal(subT, len(gwKeys), 0)
 	})
 
 	t.Run("policy targeting unexpected resource", func(subT *testing.T) {
-		rlp := &kuadrantv1beta2.RateLimitPolicy{
-			TypeMeta: metav1.TypeMeta{
-				Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String(),
-			},
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "ns"},
-			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "Unknown",
-					Name:  gatewayapiv1.ObjectName("other"),
+		policy := &FakePolicy{
+			Object: &metav1.PartialObjectMetadata{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-policy",
+					Namespace: "ns",
 				},
+			},
+			targetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				Group: gatewayapiv1.GroupName,
+				Kind:  "Unknown",
+				Name:  gatewayapiv1.ObjectName("other"),
 			},
 		}
 
@@ -225,9 +232,9 @@ func TestGatewaysFromPolicy(t *testing.T) {
 		objs := []runtime.Object{}
 		cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
 
-		ctx := logr.NewContext(context.TODO(), log.NewLogger())
+		ctx := logr.NewContext(context.TODO(), log.Log)
 
-		gwKeys, err := GatewaysFromPolicy(ctx, cl, rlp)
+		gwKeys, err := GatewaysFromPolicy(ctx, cl, policy)
 		assert.NilError(subT, err)
 		assert.Equal(subT, len(gwKeys), 0)
 	})

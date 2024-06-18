@@ -263,7 +263,7 @@ func TestHTTPRouteToKuadrantEventMapper(t *testing.T) {
 		objs := []runtime.Object{route, gateway}
 		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
 
-		m := NewHTTPRouteToLimitadorEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
+		m := NewHTTPRouteToKuadrantEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 		requests := m.Map(context.TODO(), route)
 

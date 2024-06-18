@@ -2,18 +2,17 @@ package kuadrant
 
 import (
 	"context"
-	coreerrors "errors"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/go-logr/logr"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -78,7 +77,7 @@ func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Cli
 		return kuadrantKey.Namespace, nil
 	}
 
-	return "", errors.NewInternalError(coreerrors.New("could not find kuadrant managed gateway"))
+	return "", apierrors.NewInternalError(errors.New("could not find kuadrant managed gateway"))
 }
 
 func GetKuadrantNamespaceFromPolicy(p Policy) (string, bool) {
@@ -90,7 +89,7 @@ func GetKuadrantNamespaceFromPolicy(p Policy) (string, bool) {
 
 func GetKuadrantNamespace(obj client.Object) (string, error) {
 	if !IsKuadrantManaged(obj) {
-		return "", errors.NewInternalError(fmt.Errorf("object %T is not Kuadrant managed", obj))
+		return "", apierrors.NewInternalError(fmt.Errorf("object %T is not Kuadrant managed", obj))
 	}
 	return obj.GetAnnotations()[KuadrantNamespaceAnnotation], nil
 }

@@ -261,7 +261,7 @@ func TestPolicyToKuadrantEventMapper(t *testing.T) {
 			TypeMeta: metav1.TypeMeta{
 				Kind: "HTTPRoute", APIVersion: gatewayapiv1.GroupVersion.String(),
 			},
-			ObjectMeta: metav1.ObjectMeta{Name: "myroute", Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{Name: "myroute", Namespace: userNamespace},
 			Spec: gatewayapiv1.HTTPRouteSpec{
 				CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
 					ParentRefs: []gatewayapiv1.ParentReference{
@@ -301,7 +301,7 @@ func TestPolicyToKuadrantEventMapper(t *testing.T) {
 		objs := []runtime.Object{gateway, route}
 		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
 
-		m := NewRLPToLimitadorEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
+		m := NewPolicyToKuadrantEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 		requests := m.Map(context.TODO(), rlp)
 		assert.Equal(subT, len(requests), 0)
@@ -330,7 +330,7 @@ func TestPolicyToKuadrantEventMapper(t *testing.T) {
 		objs := []runtime.Object{}
 		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
 
-		m := NewRLPToLimitadorEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
+		m := NewPolicyToKuadrantEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 		requests := m.Map(context.TODO(), rlp)
 		assert.Equal(subT, len(requests), 0)
@@ -359,7 +359,7 @@ func TestPolicyToKuadrantEventMapper(t *testing.T) {
 		objs := []runtime.Object{}
 		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
 
-		m := NewRLPToLimitadorEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
+		m := NewPolicyToKuadrantEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 		requests := m.Map(context.TODO(), rlp)
 		assert.Equal(subT, len(requests), 0)

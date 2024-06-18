@@ -31,6 +31,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -38,7 +40,6 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 )
 
 // RateLimitingLimitsReconciler reconciles Limitador CR's "spec.Limits" slice for rate limiting

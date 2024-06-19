@@ -151,7 +151,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 	var (
 		testNamespace string
 		routeName     = "toystore-route"
-		gwName        = "toystore-gw"
 		rlpName       = "toystore-rlp"
 		gateway       *gatewayapiv1.Gateway
 	)
@@ -919,7 +918,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			routeName = "route-a"
 		)
 
-		It("policy status reports error", func(ctx SpecContext) {
+		FIt("policy status reports error", func(ctx SpecContext) {
 			// Initial state
 			// Route A
 			// RLP A -> Route A

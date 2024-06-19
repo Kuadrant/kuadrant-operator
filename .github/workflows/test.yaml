@@ -22,10 +22,10 @@ jobs:
       matrix:
         gatewayapi-provider: [istio, envoygateway]
         include:
-          - istio-type: istioctl
-            gatewayapi-provider: istio
-          - istio-type: sail
-            gatewayapi-provider: istio
+          - gatewayapi-provider: istio
+            istio-type: istioctl
+          - gatewayapi-provider: istio
+            istio-type: sail
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test

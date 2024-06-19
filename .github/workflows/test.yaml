@@ -20,7 +20,7 @@ jobs:
     name: Integration Tests for github.com/kuadrant/kuadrant-operator/controllers
     strategy:
       matrix:
-        gatewayapi-provider: [istio]
+        gatewayapi-provider: [istio, envoygateway]
         include:
           - istio-type: istioctl
             gatewayapi-provider: istio

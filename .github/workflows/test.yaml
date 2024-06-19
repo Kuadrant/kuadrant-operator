@@ -22,9 +22,9 @@ jobs:
       matrix:
         gatewayapi-provider: [istio]
         include:
-          - istio-type: sail
+          - istio-type: istioctl
             gatewayapi-provider: istio
-          - istio-type: istioctlother
+          - istio-type: sail
             gatewayapi-provider: istio
     runs-on: ubuntu-latest
     env:

@@ -13,10 +13,15 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, specErr error) (ctrl.Result, error) {
+func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, topology *kuadrantgatewayapi.Topology) error {
+	return nil
+}
+
+func (r *RateLimitPolicyReconciler) reconcileSinglePolicyStatus(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, specErr error) (ctrl.Result, error) {
 	logger, _ := logr.FromContext(ctx)
 	newStatus := r.calculateStatus(rlp, specErr)
 

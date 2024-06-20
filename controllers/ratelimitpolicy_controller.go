@@ -19,22 +19,22 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
-
-const rateLimitPolicyFinalizer = "ratelimitpolicy.kuadrant.io/finalizer"
 
 // RateLimitPolicyReconciler reconciles a RateLimitPolicy object
 type RateLimitPolicyReconciler struct {
@@ -48,151 +48,63 @@ type RateLimitPolicyReconciler struct {
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;update;patch
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the RateLimitPolicy object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := r.Logger().WithValues("RateLimitPolicy", req.NamespacedName, "request id", uuid.NewString())
-	logger.Info("Reconciling RateLimitPolicy")
+	logger.Info("Reconciling RateLimitPolicy instances")
 	ctx := logr.NewContext(eventCtx, logger)
 
-	// fetch the ratelimitpolicy
-	rlp := &kuadrantv1beta2.RateLimitPolicy{}
-	if err := r.Client().Get(ctx, req.NamespacedName, rlp); err != nil {
+	kuadrantCR := &kuadrantv1beta1.Kuadrant{}
+	if err := r.Client().Get(ctx, req.NamespacedName, kuadrantCR); err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("no RateLimitPolicy found")
+			logger.Info("no kuadrant instance found")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "failed to get RateLimitPolicy")
+		logger.Error(err, "failed to get kuadrant")
 		return ctrl.Result{}, err
 	}
 
 	if logger.V(1).Enabled() {
-		jsonData, err := json.MarshalIndent(rlp, "", "  ")
+		jsonData, err := json.MarshalIndent(kuadrantCR, "", "  ")
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		logger.V(1).Info(string(jsonData))
 	}
 
-	markedForDeletion := rlp.GetDeletionTimestamp() != nil
-
-	// fetch the target network object
-	targetNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), rlp.GetTargetRef(), rlp.Namespace)
+	topology, err := rlptools.Topology(ctx, r.Client())
 	if err != nil {
-		if !markedForDeletion {
-			if apierrors.IsNotFound(err) {
-				logger.V(1).Info("Network object not found. Cleaning up")
-				delResErr := r.deleteResources(ctx, rlp, nil)
-				if delResErr == nil {
-					delResErr = err
-				}
-				return r.reconcileStatus(ctx, rlp, kuadrant.NewErrTargetNotFound(rlp.Kind(), rlp.GetTargetRef(), delResErr))
-			}
-			return ctrl.Result{}, err
-		}
-		targetNetworkObject = nil // we need the object set to nil when there's an error, otherwise deleting the resources (when marked for deletion) will panic
+		return ctrl.Result{}, err
 	}
-
-	// handle ratelimitpolicy marked for deletion
-	if markedForDeletion {
-		if controllerutil.ContainsFinalizer(rlp, rateLimitPolicyFinalizer) {
-			logger.V(1).Info("Handling removal of ratelimitpolicy object")
-
-			if err := r.deleteResources(ctx, rlp, targetNetworkObject); err != nil {
-				return ctrl.Result{}, err
-			}
-
-			logger.Info("removing finalizer")
-			if err := r.RemoveFinalizer(ctx, rlp, rateLimitPolicyFinalizer); err != nil {
-				return ctrl.Result{}, err
-			}
-		}
-
-		return ctrl.Result{}, nil
-	}
-
-	// add finalizer to the ratelimitpolicy
-	if !controllerutil.ContainsFinalizer(rlp, rateLimitPolicyFinalizer) {
-		controllerutil.AddFinalizer(rlp, rateLimitPolicyFinalizer)
-		if err := r.UpdateResource(ctx, rlp); client.IgnoreNotFound(err) != nil {
-			return ctrl.Result{Requeue: true}, err
-		}
-	}
-
-	// reconcile the ratelimitpolicy spec
-	specErr := r.reconcileResources(ctx, rlp, targetNetworkObject)
 
 	// reconcile ratelimitpolicy status
-	statusResult, statusErr := r.reconcileStatus(ctx, rlp, specErr)
+	err = r.reconcileStatus(ctx, topology)
+	if err != nil {
+		// Ignore conflicts, resource might just be outdated.
+		if apierrors.IsConflict(err) {
+			logger.V(1).Info("Failed to update status: resource might just be outdated", "error", err)
+			return reconcile.Result{Requeue: true}, nil
+		}
 
-	if specErr != nil {
-		return ctrl.Result{}, specErr
+		return ctrl.Result{}, err
 	}
 
-	if statusErr != nil {
-		return ctrl.Result{}, statusErr
-	}
+	// reconcile network object
+	// set direct back ref - i.e. claim the target network object
+	err = r.reconcileDirectBackReferences(ctx, topology)
+	if err != nil {
+		// Ignore conflicts, resource might just be outdated.
+		if apierrors.IsConflict(err) {
+			logger.V(1).Info("Failed to update status: resource might just be outdated", "error", err)
+			return reconcile.Result{Requeue: true}, nil
+		}
 
-	if statusResult.Requeue {
-		logger.V(1).Info("Reconciling status not finished. Requeueing.")
-		return statusResult, nil
+		return ctrl.Result{}, err
 	}
 
 	logger.Info("RateLimitPolicy reconciled successfully")
 	return ctrl.Result{}, nil
-}
-
-// validate performs validation before proceeding with the reconcile loop, returning a common.ErrInvalid on failing validation
-func (r *RateLimitPolicyReconciler) validate(rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
-	if err := rlp.Validate(); err != nil {
-		return kuadrant.NewErrInvalid(rlp.Kind(), err)
-	}
-
-	if err := kuadrant.ValidateHierarchicalRules(rlp, targetNetworkObject); err != nil {
-		return kuadrant.NewErrInvalid(rlp.Kind(), err)
-	}
-
-	return nil
-}
-
-func (r *RateLimitPolicyReconciler) reconcileResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
-	if err := r.validate(rlp, targetNetworkObject); err != nil {
-		return err
-	}
-
-	// set direct back ref - i.e. claim the target network object as taken asap
-	if err := r.reconcileNetworkResourceDirectBackReference(ctx, rlp, targetNetworkObject); err != nil {
-		return fmt.Errorf("reconcile TargetBackReference error %w", err)
-	}
-
-	return nil
-}
-
-func (r *RateLimitPolicyReconciler) deleteResources(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
-	// remove direct back ref
-	if targetNetworkObject != nil {
-		if err := r.deleteNetworkResourceDirectBackReference(ctx, targetNetworkObject, rlp); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// Ensures only one RLP targets the network resource
-func (r *RateLimitPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, policy *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
-	return r.TargetRefReconciler.ReconcileTargetBackReference(ctx, policy, targetNetworkObject, policy.DirectReferenceAnnotationName())
-}
-
-func (r *RateLimitPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object, policy *kuadrantv1beta2.RateLimitPolicy) error {
-	return r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, policy.DirectReferenceAnnotationName())
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -205,7 +117,34 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.Logger().Info("Ratelimitpolicy controller disabled. GatewayAPI was not found")
 		return nil
 	}
+
+	rlpToKuadrantEventMapper := mappers.NewPolicyToKuadrantEventMapper(
+		mappers.WithLogger(r.Logger().WithName("ratelimitpolicyToKuadrantEventMapper")),
+		mappers.WithClient(r.Client()),
+	)
+
+	gatewayToKuadrantEventMapper := mappers.NewGatewayToKuadrantEventMapper(
+		mappers.WithLogger(r.Logger().WithName("gatewayToKuadrantEventMapper")),
+	)
+
+	routeToKuadrantEventMapper := mappers.NewHTTPRouteToKuadrantEventMapper(
+		mappers.WithLogger(r.Logger().WithName("routeToKuadrantEventMapper")),
+		mappers.WithClient(r.Client()),
+	)
+
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&kuadrantv1beta2.RateLimitPolicy{}).
+		For(&kuadrantv1beta1.Kuadrant{}).
+		Watches(
+			&kuadrantv1beta2.RateLimitPolicy{},
+			handler.EnqueueRequestsFromMapFunc(rlpToKuadrantEventMapper.Map),
+		).
+		Watches(
+			&gatewayapiv1.HTTPRoute{},
+			handler.EnqueueRequestsFromMapFunc(routeToKuadrantEventMapper.Map),
+		).
+		Watches(
+			&gatewayapiv1.Gateway{},
+			handler.EnqueueRequestsFromMapFunc(gatewayToKuadrantEventMapper.Map),
+		).
 		Complete(r)
 }

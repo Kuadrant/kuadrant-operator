@@ -26,6 +26,7 @@ jobs:
         kind delete clusters kuadrant-local
 
         export ISTIO_INSTALL_SAIL=true
+        alias podman='sudo podman'
 
         cat << 'EOF' > automate_setup.expect
         #!/usr/bin/expect -f
@@ -100,20 +101,20 @@ jobs:
 
         # Compare the content in json file with field containing dashboard names.
 
-        prometheusrules_policies_missing_alerts=$(yq e '.spec.groups[].rules[].alert' examples/alerts/prometheusrules_policies_missing.yaml)
-        slo_availability_alerts=$(yq e '.spec.groups[].rules[].alert' examples/alerts/slo-availability.yaml)
-        slo_latency_alerts=$(yq e '.spec.groups[].rules[].alert' examples/alerts/slo-latency.yaml)
+        readarray -t prometheusrules_policies_missing_alerts < <(yq e '.spec.groups[].rules[].alert' examples/alerts/prometheusrules_policies_missing.yaml)
+        readarray -t slo_availability_alerts < <(yq e '.spec.groups[].rules[].alert' examples/alerts/slo-availability.yaml)
+        readarray -t slo_latency_alerts < <(yq e '.spec.groups[].rules[].alert' examples/alerts/slo-latency.yaml)
 
         combined_alerts=("${prometheusrules_policies_missing_alerts[@]}" "${slo_availability_alerts[@]}" "${slo_latency_alerts[@]}")
 
         declare -a missing_alerts=()
 
         for alert in "${combined_alerts[@]}"; do
-          if [[ "$substring" != *"$alert"* ]]; then
+          if [[ "$prometheus_api_call" != *"$alert"* && "$alert" != "null" ]]; then
             echo "Prometheus does not have $alert rule."
             missing_alerts+=("$alert")
           fi
-        fi
+        done
 
         if [[ ${#missing_alerts[@]} -gt 0 ]]; then
           echo "Prometheus is missing the following alerts:"
@@ -125,5 +126,5 @@ jobs:
         echo "Prometheus has all alert rules."
 
         # Close Prometheus port-forward
-        kill prometheus_process_id=$!
+        kill $prometheus_process_id
         echo "Stopped port forwarding Prometheus."

@@ -33,3 +33,7 @@ tmp
 
 # Vendor dependencies
 vendor
+.terraform
+terraform.*
+.terraform.*
+*.pem

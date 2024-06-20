@@ -1,13 +1,14 @@
 # Install Kuadrant on an OpenShift cluster
 
-NOTE: You must perform these steps on each OpenShift cluster that you want to use Kuadrant on.
+!!! note
+
+    You must perform these steps on each OpenShift cluster that you want to use Kuadrant on.
 
 ## Prerequisites
 
 - OpenShift Container Platform 4.14.x or later with community Operator catalog available.
 - AWS account with Route 53 and zone.
 - Accessible Redis instance.
-
 
 ## Procedure
 

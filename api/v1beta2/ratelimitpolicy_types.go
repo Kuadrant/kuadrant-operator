@@ -276,8 +276,7 @@ func (r *RateLimitPolicy) Kind() string {
 
 func (r *RateLimitPolicy) List(ctx context.Context, c client.Client, namespace string) []kuadrantgatewayapi.Policy {
 	policyList := &RateLimitPolicyList{}
-	listOptions := &client.ListOptions{Namespace: namespace}
-	err := c.List(ctx, policyList, listOptions)
+	err := c.List(ctx, policyList, client.InNamespace(namespace))
 	if err != nil {
 		return []kuadrantgatewayapi.Policy{}
 	}

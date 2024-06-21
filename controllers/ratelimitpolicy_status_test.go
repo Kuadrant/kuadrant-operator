@@ -3,6 +3,7 @@
 package controllers
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -11,13 +12,14 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 func TestRateLimitPolicyReconciler_calculateStatus(t *testing.T) {
 	type args struct {
-		rlp     *kuadrantv1beta2.RateLimitPolicy
-		specErr error
+		rlp      *kuadrantv1beta2.RateLimitPolicy
+		topology *kuadrantgatewayapi.Topology
 	}
 	tests := []struct {
 		name string
@@ -30,12 +32,6 @@ func TestRateLimitPolicyReconciler_calculateStatus(t *testing.T) {
 				rlp: &kuadrantv1beta2.RateLimitPolicy{
 					Status: kuadrantv1beta2.RateLimitPolicyStatus{
 						Conditions: []metav1.Condition{
-							{
-								Message: "not accepted",
-								Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
-								Status:  metav1.ConditionFalse,
-								Reason:  string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
-							},
 							{
 								Message: "RateLimitPolicy has been successfully enforced",
 								Type:    string(kuadrant.PolicyConditionEnforced),
@@ -62,7 +58,7 @@ func TestRateLimitPolicyReconciler_calculateStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &RateLimitPolicyReconciler{}
-			if got := r.calculateStatus(tt.args.rlp, tt.args.specErr); !reflect.DeepEqual(got, tt.want) {
+			if got := r.calculateStatus(context.TODO, tt.args.rlp, topology); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("calculateStatus() = %v, want %v", got, tt.want)
 			}
 		})

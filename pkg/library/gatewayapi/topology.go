@@ -21,24 +21,45 @@ const (
 	policyLabel    dag.NodeLabel = dag.NodeLabel("policy")
 )
 
+type PolicyTargetNode interface{}
+
 type PolicyNode struct {
-	Policy
+	policyDAGNode
+
+	graph *dag.DAG
 }
 
 func (p *PolicyNode) GetPolicy() Policy {
 	return p.Policy
 }
 
-type RouteNode struct {
-	*gatewayapiv1.HTTPRoute
+func (p *PolicyNode) TargetRef() PolicyTargetNode {
+	targetNodes := p.graph.Parents(p.ID())
 
-	graph  *dag.DAG
-	nodeID string
+	if len(targetNodes) == 0 {
+		return nil
+	}
+
+	// there should be only one
+	switch typedNode := targetNodes[0].(type) {
+	case gatewayDAGNode:
+		return &GatewayNode{typedNode, p.graph}
+	case httpRouteDAGNode:
+		return &RouteNode{typedNode, p.graph}
+	}
+
+	return nil
+}
+
+type RouteNode struct {
+	httpRouteDAGNode
+
+	graph *dag.DAG
 }
 
 func (r *RouteNode) AttachedPolicies() []Policy {
 	// get children of Policy kind
-	policyNodeList := utils.Filter(r.graph.Children(r.nodeID), func(n dag.Node) bool {
+	policyNodeList := utils.Filter(r.graph.Children(r.ID()), func(n dag.Node) bool {
 		_, ok := n.(policyDAGNode)
 		return ok
 	})
@@ -53,16 +74,19 @@ func (r *RouteNode) Route() *gatewayapiv1.HTTPRoute {
 	return r.HTTPRoute
 }
 
-type GatewayNode struct {
-	*gatewayapiv1.Gateway
+func (r *RouteNode) ObjectKey() client.ObjectKey {
+	return client.ObjectKeyFromObject(r.HTTPRoute)
+}
 
-	graph  *dag.DAG
-	nodeID string
+type GatewayNode struct {
+	gatewayDAGNode
+
+	graph *dag.DAG
 }
 
 func (g *GatewayNode) AttachedPolicies() []Policy {
 	// get children of Policy kind
-	policyNodeList := utils.Filter(g.graph.Children(g.nodeID), func(n dag.Node) bool {
+	policyNodeList := utils.Filter(g.graph.Children(g.ID()), func(n dag.Node) bool {
 		_, ok := n.(policyDAGNode)
 		return ok
 	})
@@ -75,14 +99,14 @@ func (g *GatewayNode) AttachedPolicies() []Policy {
 
 func (g *GatewayNode) Routes() []RouteNode {
 	// get children of httproute kind
-	routeNodeList := utils.Filter(g.graph.Children(g.nodeID), func(n dag.Node) bool {
+	routeNodeList := utils.Filter(g.graph.Children(g.ID()), func(n dag.Node) bool {
 		_, ok := n.(httpRouteDAGNode)
 		return ok
 	})
 
 	return utils.Map(routeNodeList, func(n dag.Node) RouteNode {
 		routeDAGNode := n.(httpRouteDAGNode)
-		return RouteNode{HTTPRoute: routeDAGNode.HTTPRoute, graph: g.graph, nodeID: n.ID()}
+		return RouteNode{routeDAGNode, g.graph}
 	})
 }
 
@@ -90,6 +114,14 @@ func (g *GatewayNode) ObjectKey() client.ObjectKey {
 	return client.ObjectKeyFromObject(g.Gateway)
 }
 
+// Topology defines a graph with Gateway API entities.
+// Contains GatewayNodes (Gateway API gateways)
+// Contains RouteNodes (Gateway API httproutes)
+// Contains PolicyNodes (Gateway API policy attachment objects)
+// Hierarchy is as follows.
+// GatewayNode children can be either RouteNode or PolicyNode nodes
+// RouteNode children are PolicyNode nodes
+// PolicyNode parents can be either RouteNode or GatewayNode nodes
 type Topology struct {
 	graph  *dag.DAG
 	Logger logr.Logger
@@ -313,7 +345,7 @@ func (g *Topology) Gateways() []GatewayNode {
 			return GatewayNode{}
 		}
 
-		return GatewayNode{Gateway: gNode.Gateway, graph: g.graph, nodeID: gNode.ID()}
+		return GatewayNode{gNode, g.graph}
 	})
 }
 
@@ -329,7 +361,7 @@ func (g *Topology) Routes() []RouteNode {
 			)
 			return RouteNode{}
 		}
-		return RouteNode{HTTPRoute: rNode.HTTPRoute, graph: g.graph, nodeID: rNode.ID()}
+		return RouteNode{rNode, g.graph}
 	})
 }
 
@@ -345,6 +377,6 @@ func (g *Topology) Policies() []PolicyNode {
 			)
 			return PolicyNode{}
 		}
-		return PolicyNode{Policy: pNode.Policy}
+		return PolicyNode{pNode, g.graph}
 	})
 }

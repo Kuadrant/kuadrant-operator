@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -347,12 +346,12 @@ func buildDAGEdges(opts *topologyOptions, gateways []gatewayDAGNode, routes []ht
 			group := p.GetTargetRef().Group
 			kind := p.GetTargetRef().Kind
 			name := p.GetTargetRef().Name
-			namespace := ptr.Deref(p.GetTargetRef().Namespace, gatewayapiv1.Namespace(p.GetNamespace()))
+			namespace := p.GetNamespace()
 
 			return group == gatewayapiv1.GroupName &&
 				kind == "HTTPRoute" &&
 				name == gatewayapiv1.ObjectName(route.Name) &&
-				namespace == gatewayapiv1.Namespace(route.Namespace)
+				namespace == route.Namespace
 		})
 
 		for _, attachedPolicy := range attachedPolicies {
@@ -366,12 +365,12 @@ func buildDAGEdges(opts *topologyOptions, gateways []gatewayDAGNode, routes []ht
 			group := p.GetTargetRef().Group
 			kind := p.GetTargetRef().Kind
 			name := p.GetTargetRef().Name
-			namespace := ptr.Deref(p.GetTargetRef().Namespace, gatewayapiv1.Namespace(p.GetNamespace()))
+			namespace := p.GetNamespace()
 
 			return group == gatewayapiv1.GroupName &&
 				kind == "Gateway" &&
 				name == gatewayapiv1.ObjectName(g.Name) &&
-				namespace == gatewayapiv1.Namespace(g.Namespace)
+				namespace == g.Namespace
 		})
 
 		for _, attachedPolicy := range attachedPolicies {

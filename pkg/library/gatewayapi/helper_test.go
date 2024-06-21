@@ -95,11 +95,10 @@ func testBasicGatewayPolicy(name, namespace string, gateway *gatewayapiv1.Gatewa
 			Namespace: namespace,
 			Name:      name,
 		},
-		TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
-			Group:     gatewayapiv1.Group(gatewayapiv1.GroupName),
-			Kind:      gatewayapiv1.Kind("Gateway"),
-			Namespace: ptr.To(gatewayapiv1.Namespace(gateway.Namespace)),
-			Name:      gatewayapiv1.ObjectName(gateway.Name),
+		TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			Group: gatewayapiv1.Group(gatewayapiv1.GroupName),
+			Kind:  gatewayapiv1.Kind("Gateway"),
+			Name:  gatewayapiv1.ObjectName(gateway.Name),
 		},
 	}
 }
@@ -114,11 +113,10 @@ func testBasicRoutePolicy(name, namespace string, route *gatewayapiv1.HTTPRoute)
 			Namespace: namespace,
 			Name:      name,
 		},
-		TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
-			Group:     gatewayapiv1.Group(gatewayapiv1.GroupName),
-			Kind:      gatewayapiv1.Kind("HTTPRoute"),
-			Namespace: ptr.To(gatewayapiv1.Namespace(route.Namespace)),
-			Name:      gatewayapiv1.ObjectName(route.Name),
+		TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			Group: gatewayapiv1.Group(gatewayapiv1.GroupName),
+			Kind:  gatewayapiv1.Kind("HTTPRoute"),
+			Name:  gatewayapiv1.ObjectName(route.Name),
 		},
 	}
 }
@@ -133,11 +131,10 @@ func testStandalonePolicy(name, namespace string) Policy {
 			Namespace: namespace,
 			Name:      name,
 		},
-		TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
-			Group:     gatewayapiv1.Group(gatewayapiv1.GroupName),
-			Kind:      gatewayapiv1.Kind("Gateway"),
-			Namespace: ptr.To(gatewayapiv1.Namespace("unknown")),
-			Name:      gatewayapiv1.ObjectName("unknown"),
+		TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			Group: gatewayapiv1.Group(gatewayapiv1.GroupName),
+			Kind:  gatewayapiv1.Kind("Gateway"),
+			Name:  gatewayapiv1.ObjectName("unknown"),
 		},
 	}
 }

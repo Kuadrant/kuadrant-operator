@@ -41,13 +41,13 @@ func TestFetchTargetRefObject(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	routeTargetRef := gatewayapiv1alpha2.NamespacedPolicyTargetReference{
+	routeTargetRef := gatewayapiv1alpha2.LocalPolicyTargetReference{
 		Group: gatewayapiv1.GroupName,
 		Kind:  "HTTPRoute",
 		Name:  gatewayapiv1.ObjectName(routeName),
 	}
 
-	gatewayTargetRef := gatewayapiv1alpha2.NamespacedPolicyTargetReference{
+	gatewayTargetRef := gatewayapiv1alpha2.LocalPolicyTargetReference{
 		Group: gatewayapiv1.GroupName,
 		Kind:  "Gateway",
 		Name:  gatewayapiv1.ObjectName(gatewayName),
@@ -176,8 +176,7 @@ func TestFetchTargetRefObject(t *testing.T) {
 	})
 
 	t.Run("unknown network resource", func(subT *testing.T) {
-		ns := gatewayapiv1.Namespace(namespace)
-		targetRef := gatewayapiv1alpha2.NamespacedPolicyTargetReference{Kind: "Service", Name: "my-sv", Namespace: &ns}
+		targetRef := gatewayapiv1alpha2.LocalPolicyTargetReference{Kind: "Service", Name: "my-sv"}
 		clientAPIReader := clientFactory()
 		res, err := FetchTargetRefObject(ctx, clientAPIReader, targetRef, namespace, true)
 		assert.Error(subT, err, fmt.Sprintf("FetchValidTargetRef: targetRef (%v) to unknown network resource", targetRef))

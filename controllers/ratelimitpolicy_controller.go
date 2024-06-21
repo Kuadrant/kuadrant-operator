@@ -154,10 +154,6 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 
 // validate performs validation before proceeding with the reconcile loop, returning a common.ErrInvalid on failing validation
 func (r *RateLimitPolicyReconciler) validate(rlp *kuadrantv1beta2.RateLimitPolicy, targetNetworkObject client.Object) error {
-	if err := rlp.Validate(); err != nil {
-		return kuadrant.NewErrInvalid(rlp.Kind(), err)
-	}
-
 	if err := kuadrant.ValidateHierarchicalRules(rlp, targetNetworkObject); err != nil {
 		return kuadrant.NewErrInvalid(rlp.Kind(), err)
 	}

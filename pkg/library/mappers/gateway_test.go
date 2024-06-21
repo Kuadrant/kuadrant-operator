@@ -39,7 +39,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 	}
 
 	spec := kuadrantv1beta2.AuthPolicySpec{
-		TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
+		TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 			Group: "gateway.networking.k8s.io",
 			Kind:  "Gateway",
 			Name:  "test-gw",

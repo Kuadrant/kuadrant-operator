@@ -135,13 +135,7 @@ func (r *TLSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 func (r *TLSPolicyReconciler) reconcileResources(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy, targetNetworkObject client.Object) error {
-	// validate
-	err := tlsPolicy.Validate()
-	if err != nil {
-		return err
-	}
-
-	err = validateIssuer(ctx, r.Client(), tlsPolicy)
+	err := validateIssuer(ctx, r.Client(), tlsPolicy)
 	if err != nil {
 		return err
 	}

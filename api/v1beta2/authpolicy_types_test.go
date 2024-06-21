@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"testing"
 
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -71,7 +70,7 @@ func TestAuthPolicyGetRulesHostnames(t *testing.T) {
 			Namespace: "my-namespace",
 		},
 		Spec: AuthPolicySpec{
-			TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
+			TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 				Group: gatewayapiv1.GroupName,
 				Kind:  "HTTPRoute",
 				Name:  "my-route",
@@ -210,72 +209,6 @@ func TestAuthPolicyGetRulesHostnames(t *testing.T) {
 	}
 	if expected := "toystore.kuadrant.io"; result[9] != expected {
 		t.Errorf("Expected hostname to be %s, got %s", expected, result[9])
-	}
-}
-
-func TestAuthPolicyValidate(t *testing.T) {
-	testCases := []struct {
-		name    string
-		policy  *AuthPolicy
-		valid   bool
-		message string
-	}{
-		{
-			name: "invalid targetRef namespace",
-			policy: &AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: "my-namespace",
-				},
-				Spec: AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
-						Group:     gatewayapiv1.GroupName,
-						Kind:      "HTTPRoute",
-						Name:      "my-route",
-						Namespace: ptr.To(gatewayapiv1.Namespace("other-namespace")),
-					},
-					AuthPolicyCommonSpec: AuthPolicyCommonSpec{
-						AuthScheme: &AuthSchemeSpec{
-							Authentication: map[string]AuthenticationSpec{
-								"my-rule": {
-									AuthenticationSpec: authorinoapi.AuthenticationSpec{
-										AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-											AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
-										},
-									},
-									CommonAuthRuleSpec: CommonAuthRuleSpec{
-										RouteSelectors: []RouteSelector{
-											{
-												Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
-												Matches: []gatewayapiv1.HTTPRouteMatch{
-													{
-														Path: &gatewayapiv1.HTTPPathMatch{
-															Value: ptr.To("/foo"),
-														},
-													},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			message: "invalid targetRef.Namespace other-namespace. Currently only supporting references to the same namespace",
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := tc.policy.Validate()
-			if tc.valid && result != nil {
-				t.Errorf("Expected policy to be valid, got %t", result)
-			}
-			if !tc.valid && result == nil {
-				t.Error("Expected policy to be invalid, got no validation error")
-			}
-		})
 	}
 }
 

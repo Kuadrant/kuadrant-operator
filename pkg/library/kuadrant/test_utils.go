@@ -36,10 +36,10 @@ const (
 type FakePolicy struct {
 	client.Object
 	Hosts     []string
-	targetRef gatewayapiv1alpha2.NamespacedPolicyTargetReference
+	targetRef gatewayapiv1alpha2.LocalPolicyTargetReference
 }
 
-func (p *FakePolicy) GetTargetRef() gatewayapiv1alpha2.NamespacedPolicyTargetReference {
+func (p *FakePolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
 	return p.targetRef
 }
 

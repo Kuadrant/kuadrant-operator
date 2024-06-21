@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -69,11 +70,8 @@ func (m *HTTPRouteParentRefsEventMapper) mapToPolicyRequest(obj client.Object, p
 			if !kuadrantgatewayapi.IsTargetRefGateway(targetRef) {
 				continue
 			}
-			targetRefNamespace := targetRef.Namespace
-			if targetRefNamespace == nil {
-				ns := gatewayapiv1.Namespace(policy.GetNamespace())
-				targetRefNamespace = &ns
-			}
+			targetRefNamespace := ptr.To(policy.GetWrappedNamespace())
+
 			if *parentRefNamespace == *targetRefNamespace && parentRef.Name == targetRef.Name {
 				obj, _ := policy.(client.Object)
 				requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(obj)})

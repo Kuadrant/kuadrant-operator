@@ -427,5 +427,5 @@ func PolicyAffectedConditionType(policyKind string) string {
 
 func targetRefKey(policy kuadrantgatewayapi.Policy) string {
 	targetRef := policy.GetTargetRef()
-	return fmt.Sprintf("%s.%s/%s/%s", targetRef.Group, targetRef.Kind, ptr.Deref(targetRef.Namespace, gatewayapiv1.Namespace(policy.GetNamespace())), targetRef.Name)
+	return fmt.Sprintf("%s.%s/%s/%s", targetRef.Group, targetRef.Kind, gatewayapiv1.Namespace(policy.GetNamespace()), targetRef.Name)
 }

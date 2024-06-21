@@ -139,10 +139,6 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 
 // validate performs validation before proceeding with the reconcile loop, returning a common.ErrInvalid on any failing validation
 func (r *AuthPolicyReconciler) validate(ap *api.AuthPolicy, targetNetworkObject client.Object) error {
-	if err := ap.Validate(); err != nil {
-		return kuadrant.NewErrInvalid(ap.Kind(), err)
-	}
-
 	if err := kuadrant.ValidateHierarchicalRules(ap, targetNetworkObject); err != nil {
 		return kuadrant.NewErrInvalid(ap.Kind(), err)
 	}

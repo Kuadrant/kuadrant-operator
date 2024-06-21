@@ -65,11 +65,10 @@ var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1beta2.AuthPolicySpec{
-				TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
-					Group:     gatewayapiv1.GroupName,
-					Kind:      "HTTPRoute",
-					Name:      TestHTTPRouteName,
-					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
+				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					Group: gatewayapiv1.GroupName,
+					Kind:  "HTTPRoute",
+					Name:  TestHTTPRouteName,
 				},
 				Defaults: &kuadrantv1beta2.AuthPolicyCommonSpec{
 					AuthScheme: testBasicAuthScheme(),
@@ -125,6 +124,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 			}).WithContext(ctx).Should(BeTrue())
 
 			// has the correct target ref
+			Expect(iap.Spec.TargetRef).To(Not(BeNil()))
 			Expect(iap.Spec.TargetRef.Group).To(Equal("gateway.networking.k8s.io"))
 			Expect(iap.Spec.TargetRef.Kind).To(Equal("Gateway"))
 			Expect(iap.Spec.TargetRef.Name).To(Equal(TestGatewayName))
@@ -174,6 +174,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 			}).WithContext(ctx).Should(BeTrue())
 
 			// has the correct target ref
+			Expect(iap.Spec.TargetRef).To(Not(BeNil()))
 			Expect(iap.Spec.TargetRef.Group).To(Equal("gateway.networking.k8s.io"))
 			Expect(iap.Spec.TargetRef.Kind).To(Equal("Gateway"))
 			Expect(iap.Spec.TargetRef.Name).To(Equal(TestGatewayName))

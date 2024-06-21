@@ -147,7 +147,7 @@ func TestAcceptedCondition(t *testing.T) {
 			name: "target not found reason",
 			args: args{
 				policy: &FakePolicy{},
-				err: NewErrTargetNotFound("FakePolicy", gatewayapiv1alpha2.NamespacedPolicyTargetReference{
+				err: NewErrTargetNotFound("FakePolicy", gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  "my-target-ref",
@@ -164,7 +164,7 @@ func TestAcceptedCondition(t *testing.T) {
 			name: "target not found reason with err",
 			args: args{
 				policy: &FakePolicy{},
-				err: NewErrTargetNotFound("FakePolicy", gatewayapiv1alpha2.NamespacedPolicyTargetReference{
+				err: NewErrTargetNotFound("FakePolicy", gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  "my-target-ref",

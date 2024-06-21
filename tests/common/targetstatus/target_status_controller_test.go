@@ -115,7 +115,7 @@ var _ = Describe("Target status reconciler", func() {
 		return condition.Status == metav1.ConditionFalse && strings.Contains(condition.Message, policyKey.String())
 	}
 
-	targetsAffected := func(ctx context.Context, policyKey client.ObjectKey, conditionType string, targetRef gatewayapiv1alpha2.NamespacedPolicyTargetReference, routeNames ...string) bool {
+	targetsAffected := func(ctx context.Context, policyKey client.ObjectKey, conditionType string, targetRef gatewayapiv1alpha2.LocalPolicyTargetReference, routeNames ...string) bool {
 		switch string(targetRef.Kind) {
 		case "Gateway":
 			if !gatewayAffected(ctx, string(targetRef.Name), conditionType, policyKey) {
@@ -149,11 +149,10 @@ var _ = Describe("Target status reconciler", func() {
 					Namespace: testNamespace,
 				},
 				Spec: v1beta2.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
-						Group:     gatewayapiv1.GroupName,
-						Kind:      "HTTPRoute",
-						Name:      TestHTTPRouteName,
-						Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						Group: gatewayapiv1.GroupName,
+						Kind:  "HTTPRoute",
+						Name:  TestHTTPRouteName,
 					},
 					Defaults: &v1beta2.AuthPolicyCommonSpec{
 						AuthScheme: &v1beta2.AuthSchemeSpec{
@@ -255,11 +254,10 @@ var _ = Describe("Target status reconciler", func() {
 		It("adds PolicyAffected status condition to the targeted gateway and routes", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *v1beta2.AuthPolicy) {
 				policy.Name = "gateway-auth"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.NamespacedPolicyTargetReference{
-					Group:     gatewayapiv1.GroupName,
-					Kind:      "Gateway",
-					Name:      TestGatewayName,
-					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
+				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
+					Group: gatewayapiv1.GroupName,
+					Kind:  "Gateway",
+					Name:  TestGatewayName,
 				}
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
@@ -269,11 +267,10 @@ var _ = Describe("Target status reconciler", func() {
 		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *v1beta2.AuthPolicy) {
 				policy.Name = "gateway-auth"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.NamespacedPolicyTargetReference{
-					Group:     gatewayapiv1.GroupName,
-					Kind:      "Gateway",
-					Name:      TestGatewayName,
-					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
+				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
+					Group: gatewayapiv1.GroupName,
+					Kind:  "Gateway",
+					Name:  TestGatewayName,
 				}
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
@@ -309,11 +306,10 @@ var _ = Describe("Target status reconciler", func() {
 
 			gatewayPolicy := policyFactory(func(policy *v1beta2.AuthPolicy) {
 				policy.Name = "gateway-auth"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.NamespacedPolicyTargetReference{
-					Group:     gatewayapiv1.GroupName,
-					Kind:      "Gateway",
-					Name:      TestGatewayName,
-					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
+				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
+					Group: gatewayapiv1.GroupName,
+					Kind:  "Gateway",
+					Name:  TestGatewayName,
 				}
 			})
 			Expect(k8sClient.Create(ctx, gatewayPolicy)).To(Succeed())
@@ -345,7 +341,7 @@ var _ = Describe("Target status reconciler", func() {
 					Namespace: testNamespace,
 				},
 				Spec: v1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(TestHTTPRouteName),
@@ -408,11 +404,10 @@ var _ = Describe("Target status reconciler", func() {
 		It("adds PolicyAffected status condition to the targeted gateway and routes", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *v1beta2.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.NamespacedPolicyTargetReference{
-					Group:     gatewayapiv1.GroupName,
-					Kind:      "Gateway",
-					Name:      TestGatewayName,
-					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
+				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
+					Group: gatewayapiv1.GroupName,
+					Kind:  "Gateway",
+					Name:  TestGatewayName,
 				}
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
@@ -422,11 +417,10 @@ var _ = Describe("Target status reconciler", func() {
 		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *v1beta2.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.NamespacedPolicyTargetReference{
-					Group:     gatewayapiv1.GroupName,
-					Kind:      "Gateway",
-					Name:      TestGatewayName,
-					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
+				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
+					Group: gatewayapiv1.GroupName,
+					Kind:  "Gateway",
+					Name:  TestGatewayName,
 				}
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
@@ -462,11 +456,10 @@ var _ = Describe("Target status reconciler", func() {
 
 			gatewayPolicy := policyFactory(func(policy *v1beta2.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.NamespacedPolicyTargetReference{
-					Group:     gatewayapiv1.GroupName,
-					Kind:      "Gateway",
-					Name:      TestGatewayName,
-					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
+				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
+					Group: gatewayapiv1.GroupName,
+					Kind:  "Gateway",
+					Name:  TestGatewayName,
 				}
 			})
 			Expect(k8sClient.Create(ctx, gatewayPolicy)).To(Succeed())

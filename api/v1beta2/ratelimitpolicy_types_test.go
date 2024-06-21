@@ -3,7 +3,6 @@
 package v1beta2
 
 import (
-	"strings"
 	"testing"
 
 	"gotest.tools/assert"
@@ -25,7 +24,7 @@ func testBuildBasicRLP(name string, kind gatewayapiv1.Kind, mutateFn func(*RateL
 			Namespace: "testNS",
 		},
 		Spec: RateLimitPolicySpec{
-			TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
+			TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 				Group: gatewayapiv1.GroupName,
 				Kind:  kind,
 				Name:  "some-name",
@@ -42,26 +41,6 @@ func testBuildBasicRLP(name string, kind gatewayapiv1.Kind, mutateFn func(*RateL
 
 func testBuildBasicHTTPRouteRLP(name string, mutateFn func(*RateLimitPolicy)) *RateLimitPolicy {
 	return testBuildBasicRLP(name, "HTTPRoute", mutateFn)
-}
-
-// TestRateLimitPolicyValidation calls rlp.Validate()
-// for a valid return value.
-func TestRateLimitPolicyValidation(t *testing.T) {
-	name := "httproute-a"
-
-	t.Run("Invalid - Different namespace", func(subT *testing.T) {
-		rlp := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
-			otherNS := gatewayapiv1.Namespace(policy.GetNamespace() + "other")
-			policy.Spec.TargetRef.Namespace = &otherNS
-		})
-		err := rlp.Validate()
-		if err == nil {
-			subT.Fatal(`rlp.Validate() did not return error and should`)
-		}
-		if !strings.Contains(err.Error(), "invalid targetRef.Namespace") {
-			subT.Fatalf(`rlp.Validate() did not return expected error. Instead: %v`, err)
-		}
-	})
 }
 
 func TestRateLimitPolicyListGetItems(t *testing.T) {

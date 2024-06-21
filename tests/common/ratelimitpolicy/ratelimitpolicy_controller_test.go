@@ -51,7 +51,7 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
+				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  gatewayapiv1.ObjectName(routeName),
@@ -171,7 +171,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
+				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  gatewayapiv1.ObjectName(routeName),
@@ -313,7 +313,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -845,21 +845,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(assertAcceptedConditionFalse(ctx, rlp2, string(gatewayapiv1alpha2.PolicyReasonConflicted),
 				fmt.Sprintf("RateLimitPolicy is conflicted by %[1]v/toystore-rlp: the gateway.networking.k8s.io/v1, Kind=HTTPRoute target %[1]v/toystore-route is already referenced by policy %[1]v/toystore-rlp", testNamespace)),
 			).WithContext(ctx).Should(Succeed())
-		}, testTimeOut)
-
-		It("Invalid reason", func(ctx SpecContext) {
-			otherNamespace := tests.CreateNamespace(ctx, testClient())
-			defer tests.DeleteNamespaceCallback(ctx, testClient(), otherNamespace)()
-
-			policy := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
-				policy.Namespace = otherNamespace // create the policy in a different namespace than the target
-				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gateway.Name)
-				policy.Spec.TargetRef.Namespace = ptr.To(gatewayapiv1.Namespace(testNamespace))
-			})
-			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
-
-			Eventually(assertAcceptedConditionFalse(ctx, policy, string(gatewayapiv1alpha2.PolicyReasonInvalid), fmt.Sprintf("RateLimitPolicy target is invalid: invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", testNamespace))).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
 
@@ -1446,7 +1431,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
+				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  "my-target",

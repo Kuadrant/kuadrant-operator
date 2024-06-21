@@ -20,7 +20,7 @@ const (
 type Policy interface {
 	client.Object
 	PolicyClass() PolicyClass
-	GetTargetRef() gatewayapiv1alpha2.NamespacedPolicyTargetReference
+	GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference
 	GetStatus() PolicyStatus
 	List(context.Context, client.Client, string) []Policy
 	Kind() string

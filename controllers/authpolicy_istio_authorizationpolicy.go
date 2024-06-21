@@ -170,7 +170,7 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 }
 
 // IstioAuthorizationPolicyName generates the name of an AuthorizationPolicy.
-func IstioAuthorizationPolicyName(gwName string, targetRef gatewayapiv1alpha2.NamespacedPolicyTargetReference) string {
+func IstioAuthorizationPolicyName(gwName string, targetRef gatewayapiv1alpha2.LocalPolicyTargetReference) string {
 	switch targetRef.Kind {
 	case "Gateway":
 		return fmt.Sprintf("on-%s", gwName) // Without this, IAP will be named: on-<gw.Name>-using-<gw.Name>;

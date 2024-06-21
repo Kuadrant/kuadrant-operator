@@ -42,7 +42,6 @@ jobs:
             -X POST \
             -H "Authorization: Bearer ${{ secrets.REGISTRATION_PAT }}" \
             https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners/registration-token)
-          echo $RESPONSE
 
           echo "REGISTRATION_TOKEN=$(echo $RESPONSE | jq -r .token)" >> $GITHUB_ENV
 
@@ -58,7 +57,7 @@ jobs:
             tar xzf ./actions-runner-linux-x64-2.317.0.tar.gz
 
             ./config.sh --url https://github.com/${{ github.repository_owner }}/${{ github.event.repository.name }} --token $REGISTRATION_TOKEN --unattended --labels self-hosted,linux,aws
-            ./run.sh
+            nohup ./run.sh > nohup.out 2> nohup.err < /dev/null &
           EOF
 
   verify-dashboards-alerts:
@@ -67,17 +66,17 @@ jobs:
     runs-on: self-hosted
     defaults: 
       run:
-        shell: bash
+        shell: bash -ieo pipefail {0}
     steps:
       - uses: actions/checkout@v2
 
       - name: Run Quickstart
         run: |
+          sudo chown $(whoami) .
           kind delete clusters kuadrant-local
           kind delete clusters kuadrant-local
 
           export ISTIO_INSTALL_SAIL=true
-          alias podman='sudo podman'
 
           cat << 'EOF' > automate_setup.expect
           #!/usr/bin/expect -f
@@ -200,11 +199,11 @@ jobs:
           REPO_OWNER=${{ github.repository_owner }}
           REPO_NAME=${{ github.event.repository.name }}
 
-          RUNNER_ID=$(curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          RUNNER_ID=$(curl -H "Authorization: Bearer ${{ secrets.REGISTRATION_PAT }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners | jq '.runners[] | select(.name=="self-hosted") | .id')
 
-          curl -X DELETE -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          curl -X DELETE -H "Authorization: Bearer ${{ secrets.REGISTRATION_PAT }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners/$RUNNER_ID
 

@@ -40,7 +40,8 @@ resource "aws_instance" "example" {
     #!/bin/bash
     echo "Starting user_data script..."
     sudo apt-get update -y
-    sudo apt-get install -y podman golang libicu-dev
+    sudo apt-get install -y podman golang libicu-dev expect
+    sudo snap install yq
     curl -O https://s3.us-west-2.amazonaws.com/amazon-eks/1.30.0/2024-05-12/bin/linux/amd64/kubectl
     chmod +x ./kubectl
     mkdir -p /home/ubuntu/bin && cp ./kubectl /home/ubuntu/bin/kubectl

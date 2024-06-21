@@ -4,6 +4,21 @@ provider "aws" {
   secret_key = var.aws_secret_key
 }
 
+variable "aws_access_key" {
+  description = "AWS Access Key"
+  type        = string
+}
+
+variable "aws_secret_key" {
+  description = "AWS Secret Key"
+  type        = string
+}
+
+variable "aws_key_name" {
+  description = "AWS Key Name"
+  type = string
+}
+
 resource "aws_instance" "example" {
   ami           = "ami-0776c814353b4814d"
   instance_type = "t2.xlarge"
@@ -46,6 +61,8 @@ resource "aws_instance" "example" {
     touch /tmp/user_data_done
   EOL
 }
+
+
 
 resource "aws_security_group" "ssh_http_https_access" {
   name        = "ssh-http-https-access"
@@ -96,4 +113,8 @@ resource "null_resource" "wait_for_user_data" {
   }
 
   depends_on = [aws_instance.example]
+}
+
+output "instance_public_ip" {
+  value = aws_instance.example.public_ip
 }

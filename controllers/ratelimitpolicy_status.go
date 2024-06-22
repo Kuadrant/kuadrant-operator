@@ -27,8 +27,7 @@ func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, topolog
 	logger.V(1).Info("reconcile status", "#rlp", len(policies))
 
 	for _, policy := range policies {
-		rlp := policy.Policy.(*kuadrantv1beta2.RateLimitPolicy)
-		err := r.reconcileSinglePolicyStatus(ctx, rlp, topology)
+		err := r.reconcileSinglePolicyStatus(ctx, policy, topology)
 		if err != nil {
 			return err
 		}
@@ -37,9 +36,9 @@ func (r *RateLimitPolicyReconciler) reconcileStatus(ctx context.Context, topolog
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) reconcileSinglePolicyStatus(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, topology *kuadrantgatewayapi.Topology) error {
+func (r *RateLimitPolicyReconciler) reconcileSinglePolicyStatus(ctx context.Context, policy kuadrantgatewayapi.PolicyNode, topology *kuadrantgatewayapi.Topology) error {
 	logger, _ := logr.FromContext(ctx)
-	newStatus := r.calculateStatus(ctx, rlp, topology)
+	newStatus := r.calculateStatus(ctx, policy, topology)
 
 	equalStatus := rlp.Status.Equals(newStatus, logger)
 	logger.V(1).Info("Status", "status is different", !equalStatus)
@@ -68,7 +67,7 @@ func (r *RateLimitPolicyReconciler) reconcileSinglePolicyStatus(ctx context.Cont
 	return nil
 }
 
-func (r *RateLimitPolicyReconciler) calculateStatus(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, topology *kuadrantgatewayapi.Topology) *kuadrantv1beta2.RateLimitPolicyStatus {
+func (r *RateLimitPolicyReconciler) calculateStatus(ctx context.Context, policy kuadrantgatewayapi.PolicyNode, topology *kuadrantgatewayapi.Topology) *kuadrantv1beta2.RateLimitPolicyStatus {
 	newStatus := &kuadrantv1beta2.RateLimitPolicyStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions:         slices.Clone(rlp.Status.Conditions),
@@ -87,7 +86,7 @@ func (r *RateLimitPolicyReconciler) calculateStatus(ctx context.Context, rlp *ku
 	return newStatus
 }
 
-func (r *RateLimitPolicyReconciler) acceptedCondition(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, topology *kuadrantgatewayapi.Topology) *metav1.Condition {
+func (r *RateLimitPolicyReconciler) acceptedCondition(ctx context.Context, policy kuadrantgatewayapi.PolicyNode, topology *kuadrantgatewayapi.Topology) *metav1.Condition {
 	validations := []func(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, topology *kuadrantgatewayapi.Topology) error{
 		r.validatePolicy,
 		r.checkTargetReference,
@@ -131,13 +130,16 @@ func (r *RateLimitPolicyReconciler) validatePolicy(_ context.Context, rlp *kuadr
 }
 
 func (r *RateLimitPolicyReconciler) checkTargetReference(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, topology *kuadrantgatewayapi.Topology) error {
+	// TODO
 	return nil
 }
 
 func (r *RateLimitPolicyReconciler) validatePolicyHostnames(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, topology *kuadrantgatewayapi.Topology) error {
+	// TODO
 	return nil
 }
 
 func (r *RateLimitPolicyReconciler) checkDirectReferences(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, topology *kuadrantgatewayapi.Topology) error {
+	// TODO
 	return nil
 }

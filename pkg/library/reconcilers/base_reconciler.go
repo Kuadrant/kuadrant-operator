@@ -34,6 +34,18 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
+type StatusObject interface {
+	Equals(StatusObject, logr.Logger) bool
+	GetObservedGeneration() int64
+	SetObservedGeneration(int64)
+}
+
+type ObjectWithStatus interface {
+	client.Object
+	Status() StatusObject
+	SetStatus(StatusObject)
+}
+
 // MutateFn is a function which mutates the existing object into it's desired state.
 type MutateFn func(existing, desired client.Object) (bool, error)
 
@@ -138,6 +150,50 @@ func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired cli
 
 	if update {
 		return b.UpdateResource(ctx, obj)
+	}
+
+	return nil
+}
+
+func (b *BaseReconciler) ReconcileResourceStatus(ctx context.Context, objKey client.ObjectKey, obj client.Object, desired StatusObject) error {
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	//newStatus := r.calculateStatus(ctx, policy, topology)
+
+	if err := b.Client().Get(ctx, objKey, obj); err != nil {
+		return err
+	}
+
+	objectWithStatus, ok := obj.(ObjectWithStatus)
+	if !ok {
+		return fmt.Errorf("StatusObject not implemented")
+	}
+
+	equalStatus := objectWithStatus.Status().Equals(desired, logger)
+	logger.V(1).Info("Status", "status is different", !equalStatus)
+	logger.V(1).Info("Status", "generation is different", objectWithStatus.GetGeneration() != objectWithStatus.Status().GetObservedGeneration())
+	if equalStatus && objectWithStatus.GetGeneration() == objectWithStatus.Status().GetObservedGeneration() {
+		// Steady state, early return 🎉
+		logger.V(1).Info("Status was not updated")
+		return nil
+	}
+
+	// Save the generation number we acted on, otherwise we might wrongfully indicate
+	// that we've seen a spec update when we retry.
+	// TODO: This can clobber an update if we allow multiple agents to write to the
+	// same status.
+	desired.SetObservedGeneration(objectWithStatus.GetGeneration())
+
+	logger.V(1).Info("Updating Status", "sequence no:", fmt.Sprintf("sequence No: %v->%v", objectWithStatus.Status().GetObservedGeneration(), desired.GetObservedGeneration()))
+
+	objectWithStatus.SetStatus(desired)
+	updateErr := b.Client().Status().Update(ctx, objectWithStatus)
+	logger.V(1).Info("Updating Status", "err", updateErr)
+	if updateErr != nil {
+		return fmt.Errorf("failed to update status: %w", updateErr)
 	}
 
 	return nil

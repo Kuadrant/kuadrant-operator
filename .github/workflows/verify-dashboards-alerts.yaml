@@ -22,10 +22,11 @@ jobs:
       - name: Initialize Terraform Environment
         run: terraform init
 
-      - name: Create PEM file
+      - name: Create PEM files
         run: |
           echo "${{ secrets.AWS_PEM_KEY }}" > ${{ secrets.AWS_KEY_NAME }}.pem
-          chmod 400 ${{ secrets.AWS_KEY_NAME }}.pem
+          echo "${{ secrets.APP_PRIVATE_KEY }}" > app_private.pem
+          chmod 400 ${{ secrets.AWS_KEY_NAME }}.pem app_private.pem
 
       - name: Apply Terraform Configuration + Extract Public IP
         run: |
@@ -39,16 +40,52 @@ jobs:
           name: terraform-tfstate
           path: terraform.tfstate
 
-      - name: Generate a token
-        id: generate-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - name: Generate a JWT Token
+        run: |
+          #!/usr/bin/env bash
+
+          set -o pipefail
+
+          client_id=${{ var.APP_ID }} # Client ID as first argument
+
+          pem=$( cat app_private.pem ) # file path of the private key as second argument
+
+          now=$(date +%s)
+          iat=$((${now} - 60)) # Issues 60 seconds in the past
+          exp=$((${now} + 600)) # Expires 10 minutes in the future
+
+          b64enc() { openssl base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n'; }
+
+          header_json='{
+              "typ":"JWT",
+              "alg":"RS256"
+          }'
+          # Header encode
+          header=$( echo -n "${header_json}" | b64enc )
+
+          payload_json='{
+              "iat":'"${iat}"',
+              "exp":'"${exp}"',
+              "iss":'"${client_id}"'
+          }'
+          # Payload encode
+          payload=$( echo -n "${payload_json}" | b64enc )
+
+          # Signature
+          header_payload="${header}"."${payload}"
+          signature=$(
+              openssl dgst -sha256 -sign <(echo -n "${pem}") \
+              <(echo -n "${header_payload}") | b64enc
+          )
+
+          # Create JWT
+          JWT="${header_payload}"."${signature}"
+
+          # echo to variable for later use
+          echo $JWT_TOKEN >> $GITHUB_ENV
+
 
       - name: Generate Registration Token
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           REPO_OWNER=${{ github.repository_owner }}
           REPO_NAME=${{ github.event.repository.name }}

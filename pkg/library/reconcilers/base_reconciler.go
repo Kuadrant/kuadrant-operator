@@ -42,8 +42,8 @@ type StatusObject interface {
 
 type ObjectWithStatus interface {
 	client.Object
-	Status() StatusObject
-	SetStatus(StatusObject)
+	GetStatusObject() StatusObject
+	SetStatusObject(StatusObject)
 }
 
 // MutateFn is a function which mutates the existing object into it's desired state.
@@ -161,8 +161,6 @@ func (b *BaseReconciler) ReconcileResourceStatus(ctx context.Context, objKey cli
 		return err
 	}
 
-	//newStatus := r.calculateStatus(ctx, policy, topology)
-
 	if err := b.Client().Get(ctx, objKey, obj); err != nil {
 		return err
 	}
@@ -172,10 +170,10 @@ func (b *BaseReconciler) ReconcileResourceStatus(ctx context.Context, objKey cli
 		return fmt.Errorf("StatusObject not implemented")
 	}
 
-	equalStatus := objectWithStatus.Status().Equals(desired, logger)
+	equalStatus := objectWithStatus.GetStatusObject().Equals(desired, logger)
 	logger.V(1).Info("Status", "status is different", !equalStatus)
-	logger.V(1).Info("Status", "generation is different", objectWithStatus.GetGeneration() != objectWithStatus.Status().GetObservedGeneration())
-	if equalStatus && objectWithStatus.GetGeneration() == objectWithStatus.Status().GetObservedGeneration() {
+	logger.V(1).Info("Status", "generation is different", objectWithStatus.GetGeneration() != objectWithStatus.GetStatusObject().GetObservedGeneration())
+	if equalStatus && objectWithStatus.GetGeneration() == objectWithStatus.GetStatusObject().GetObservedGeneration() {
 		// Steady state, early return 🎉
 		logger.V(1).Info("Status was not updated")
 		return nil
@@ -187,9 +185,9 @@ func (b *BaseReconciler) ReconcileResourceStatus(ctx context.Context, objKey cli
 	// same status.
 	desired.SetObservedGeneration(objectWithStatus.GetGeneration())
 
-	logger.V(1).Info("Updating Status", "sequence no:", fmt.Sprintf("sequence No: %v->%v", objectWithStatus.Status().GetObservedGeneration(), desired.GetObservedGeneration()))
+	logger.V(1).Info("Updating Status", "sequence no:", fmt.Sprintf("sequence No: %v->%v", objectWithStatus.GetStatusObject().GetObservedGeneration(), desired.GetObservedGeneration()))
 
-	objectWithStatus.SetStatus(desired)
+	objectWithStatus.SetStatusObject(desired)
 	updateErr := b.Client().Status().Update(ctx, objectWithStatus)
 	logger.V(1).Info("Updating Status", "err", updateErr)
 	if updateErr != nil {

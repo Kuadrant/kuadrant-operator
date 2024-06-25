@@ -21,7 +21,10 @@ const (
 	policyLabel    dag.NodeLabel = dag.NodeLabel("policy")
 )
 
-type PolicyTargetNode interface{}
+type PolicyTargetNode interface {
+	GetGatewayNode() *GatewayNode
+	GetRouteNode() *RouteNode
+}
 
 type PolicyNode struct {
 	policyDAGNode
@@ -57,6 +60,8 @@ type RouteNode struct {
 	graph *dag.DAG
 }
 
+var _ PolicyTargetNode = &RouteNode{}
+
 func (r *RouteNode) AttachedPolicies() []Policy {
 	// get children of Policy kind
 	policyNodeList := utils.Filter(r.graph.Children(r.ID()), func(n dag.Node) bool {
@@ -78,11 +83,21 @@ func (r *RouteNode) ObjectKey() client.ObjectKey {
 	return client.ObjectKeyFromObject(r.HTTPRoute)
 }
 
+func (r *RouteNode) GetGatewayNode() *GatewayNode {
+	return nil
+}
+
+func (r *RouteNode) GetRouteNode() *RouteNode {
+	return r
+}
+
 type GatewayNode struct {
 	gatewayDAGNode
 
 	graph *dag.DAG
 }
+
+var _ PolicyTargetNode = &GatewayNode{}
 
 func (g *GatewayNode) AttachedPolicies() []Policy {
 	// get children of Policy kind
@@ -114,6 +129,14 @@ func (g *GatewayNode) ObjectKey() client.ObjectKey {
 	return client.ObjectKeyFromObject(g.Gateway)
 }
 
+func (g *GatewayNode) GetGatewayNode() *GatewayNode {
+	return g
+}
+
+func (g *GatewayNode) GetRouteNode() *RouteNode {
+	return nil
+}
+
 // Topology defines a graph with Gateway API entities.
 // Contains GatewayNodes (Gateway API gateways)
 // Contains RouteNodes (Gateway API httproutes)
@@ -135,7 +158,7 @@ func dagNodeIDFromObject(obj client.Object) dag.NodeID {
 	return fmt.Sprintf("%s#%s", obj.GetObjectKind().GroupVersionKind().String(), client.ObjectKeyFromObject(obj).String())
 }
 
-func (g gatewayDAGNode) ID() string {
+func (g gatewayDAGNode) ID() dag.NodeID {
 	return dagNodeIDFromObject(g.Gateway)
 }
 
@@ -143,7 +166,7 @@ type httpRouteDAGNode struct {
 	*gatewayapiv1.HTTPRoute
 }
 
-func (h httpRouteDAGNode) ID() string {
+func (h httpRouteDAGNode) ID() dag.NodeID {
 	return dagNodeIDFromObject(h.HTTPRoute)
 }
 
@@ -151,7 +174,7 @@ type policyDAGNode struct {
 	Policy
 }
 
-func (p policyDAGNode) ID() string {
+func (p policyDAGNode) ID() dag.NodeID {
 	return dagNodeIDFromObject(p.Policy)
 }
 
@@ -373,10 +396,28 @@ func (g *Topology) Policies() []PolicyNode {
 		if !ok { // should not happen
 			g.Logger.Error(
 				fmt.Errorf("node ID %s type %T", r.ID(), r),
-				"DAG route index returns nodes that are not routes",
+				"DAG policy index returns nodes that are not policies",
 			)
 			return PolicyNode{}
 		}
 		return PolicyNode{pNode, g.graph}
 	})
+}
+
+func (g *Topology) GetPolicy(policy Policy) (PolicyNode, bool) {
+	dagNode, err := g.graph.GetNode(policyDAGNode{policy}.ID())
+	if err != nil {
+		return PolicyNode{}, false
+	}
+
+	pNode, ok := dagNode.(policyDAGNode)
+	if !ok {
+		g.Logger.Error(
+			fmt.Errorf("policy key %s with node ID %s type %T",
+				client.ObjectKeyFromObject(policy), dagNode.ID(), dagNode),
+			"the policy ID conflicts with another graph node type",
+		)
+		return PolicyNode{}, false
+	}
+	return PolicyNode{pNode, g.graph}, true
 }

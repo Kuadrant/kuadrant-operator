@@ -298,11 +298,6 @@ func TestGatewayAPITopology_Policies(t *testing.T) {
 
 func TestGatewayAPITopology_Policies_TargetRef(t *testing.T) {
 	t.Run("policy targetting missing network objet does not return TargetRef", func(subT *testing.T) {
-		policies := make([]Policy, 0)
-		for _, pName := range []string{"p1", "p2", "p3"} {
-			policies = append(policies, testStandalonePolicy(pName, NS))
-		}
-
 		topology, err := NewTopology(
 			WithPolicies([]Policy{testStandalonePolicy("p", NS)}),
 			WithLogger(log.NewLogger()),
@@ -356,5 +351,35 @@ func TestGatewayAPITopology_Policies_TargetRef(t *testing.T) {
 		targetGatewayNode, ok := targetRefNode.(*GatewayNode)
 		assert.Assert(subT, ok, "policy's target ref is not gatewaynode")
 		assert.Equal(subT, targetGatewayNode.ObjectKey(), client.ObjectKeyFromObject(gw), "policy's target ref has unexpected key")
+	})
+}
+
+func TestGatewayAPITopology_GetPolicy(t *testing.T) {
+	t.Run("when ID is not found, returns not found", func(subT *testing.T) {
+		topology, err := NewTopology(
+			WithPolicies([]Policy{testStandalonePolicy("p", NS)}),
+			WithLogger(log.NewLogger()),
+		)
+		assert.NilError(subT, err)
+
+		policyNode, ok := topology.GetPolicy(testStandalonePolicy("other", NS))
+		assert.Assert(subT, !ok, "'other' policy should not be found")
+	})
+
+	t.Run("when ID is found, returns the policy", func(subT *testing.T) {
+		policies := make([]Policy, 0)
+		for _, pName := range []string{"p1", "p2", "p3"} {
+			policies = append(policies, testStandalonePolicy(pName, NS))
+		}
+
+		topology, err := NewTopology(WithPolicies(policies), WithLogger(log.NewLogger()))
+		assert.NilError(subT, err)
+
+		policyNode, ok := topology.GetPolicy(testStandalonePolicy("p1", NS))
+		assert.Assert(subT, ok, "policy should be found")
+
+		assert.Equal(subT, client.ObjectKeyFromObject(policyNode), client.Object{
+			Name: "p1", Namespace: NS,
+		})
 	})
 }

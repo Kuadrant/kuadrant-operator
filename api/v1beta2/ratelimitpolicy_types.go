@@ -27,6 +27,7 @@ import (
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -167,7 +168,15 @@ type RateLimitPolicyStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr.Logger) bool {
+var _ reconcilers.StatusObject = &RateLimitPolicyStatus{}
+
+func (s *RateLimitPolicyStatus) Equals(otherStatus reconcilers.StatusObject, logger logr.Logger) bool {
+	other, ok := otherStatus.(*RateLimitPolicyStatus)
+	if !ok {
+		logger.Info("ERROR in RateLimitPolicyStatus Equals: type does not match")
+		return false
+	}
+
 	if s.ObservedGeneration != other.ObservedGeneration {
 		diff := cmp.Diff(s.ObservedGeneration, other.ObservedGeneration)
 		logger.V(1).Info("ObservedGeneration not equal", "difference", diff)
@@ -192,7 +201,13 @@ func (s *RateLimitPolicyStatus) GetConditions() []metav1.Condition {
 	return s.Conditions
 }
 
-var _ kuadrant.Policy = &RateLimitPolicy{}
+func (s *RateLimitPolicyStatus) GetObservedGeneration() int64 {
+	return s.ObservedGeneration
+}
+
+func (s *RateLimitPolicyStatus) SetObservedGeneration(o int64) {
+	s.ObservedGeneration = o
+}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -213,6 +228,8 @@ type RateLimitPolicy struct {
 }
 
 var _ kuadrantgatewayapi.Policy = &RateLimitPolicy{}
+var _ kuadrant.Policy = &RateLimitPolicy{}
+var _ reconcilers.ObjectWithStatus = &RateLimitPolicy{}
 
 func (r *RateLimitPolicy) Validate() error {
 	if r.Spec.TargetRef.Namespace != nil && string(*r.Spec.TargetRef.Namespace) != r.Namespace {
@@ -220,6 +237,17 @@ func (r *RateLimitPolicy) Validate() error {
 	}
 
 	return nil
+}
+
+func (r *RateLimitPolicy) GetStatusObject() reconcilers.StatusObject {
+	return &r.Status
+}
+
+func (r *RateLimitPolicy) SetStatusObject(statusObject reconcilers.StatusObject) {
+	switch status := statusObject.(type) {
+	case *RateLimitPolicyStatus:
+		r.Status = *status
+	}
 }
 
 //+kubebuilder:object:root=true

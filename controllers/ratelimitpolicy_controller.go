@@ -33,7 +33,6 @@ import (
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
 // RateLimitPolicyReconciler reconciles a RateLimitPolicy object
@@ -73,13 +72,8 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 		logger.V(1).Info(string(jsonData))
 	}
 
-	topology, err := rlptools.Topology(ctx, r.Client())
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
 	// reconcile ratelimitpolicy status
-	err = r.reconcileStatus(ctx, topology)
+	err := r.reconcileStatus(ctx)
 	if err != nil {
 		// Ignore conflicts, resource might just be outdated.
 		if apierrors.IsConflict(err) {
@@ -92,7 +86,7 @@ func (r *RateLimitPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl
 
 	// reconcile network object
 	// set direct back ref - i.e. claim the target network object
-	err = r.reconcileDirectBackReferences(ctx, topology)
+	err = r.reconcileDirectBackReferences(ctx)
 	if err != nil {
 		// Ignore conflicts, resource might just be outdated.
 		if apierrors.IsConflict(err) {

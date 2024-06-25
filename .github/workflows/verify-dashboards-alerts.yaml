@@ -29,15 +29,15 @@ jobs:
 
       - name: Apply Terraform Configuration + Extract Public IP
         run: |
-          terraform apply -auto-approve -var=aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }} -var=aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }} -var=aws_key_name=${{ secrets.AWS_KEY_NAME }} -state=statefile
+          terraform apply -auto-approve -var=aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }} -var=aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }} -var=aws_key_name=${{ secrets.AWS_KEY_NAME }}
           # Get the public IP address of the instance
           echo "EC2_PUBLIC_IP=$(terraform output instance_public_ip)" >> $GITHUB_ENV
-          
+
       - name: Upload statefile for use further down
         uses: actions/upload-artifact@v4
         with:
-          name: statefile
-          path: statefile
+          name: terraform-tfstate
+          path: terraform.tfstate
 
       - name: Generate Registration Token
         id: reg_token
@@ -198,12 +198,13 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
 
       - name: Initialize Terraform Environment
-        run: terraform init
+        run: |
+          terraform init
 
       - name: Download statefile to teardown resources
         uses: actions/download-artifact@v4
         with:
-          name: statefile
+          name: terraform-tfstate
       
       - name: Create PEM file
         run: |
@@ -225,4 +226,4 @@ jobs:
             https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners/$RUNNER_ID
 
       - name: Terraform Destroy
-        run: terraform destroy -auto-approve -var=aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }} -var=aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }} -var=aws_key_name=${{ secrets.AWS_KEY_NAME }} -state=statefile
+        run: terraform destroy -auto-approve -var=aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }} -var=aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }} -var=aws_key_name=${{ secrets.AWS_KEY_NAME }}

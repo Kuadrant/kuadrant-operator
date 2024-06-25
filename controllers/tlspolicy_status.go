@@ -123,7 +123,7 @@ func (r *TLSPolicyReconciler) isIssuerReady(ctx context.Context, tlsPolicy *v1al
 		return metav1.Condition{Reason: c.Reason, Status: metav1.ConditionStatus(c.Status), Type: string(c.Type), Message: c.Message}
 	})
 
-	if meta.IsStatusConditionFalse(transformedCond, string(certmanv1.IssuerConditionReady)) {
+	if !meta.IsStatusConditionTrue(transformedCond, string(certmanv1.IssuerConditionReady)) {
 		return errors.New("issuer not ready")
 	}
 
@@ -152,7 +152,7 @@ func (r *TLSPolicyReconciler) isCertificatesReady(ctx context.Context, tlsPolicy
 				return metav1.Condition{Reason: c.Reason, Status: metav1.ConditionStatus(c.Status), Type: string(c.Type), Message: c.Message}
 			})
 
-			if meta.IsStatusConditionFalse(conditions, string(certmanv1.CertificateConditionReady)) {
+			if !meta.IsStatusConditionTrue(conditions, string(certmanv1.CertificateConditionReady)) {
 				return fmt.Errorf("certificate %s not ready", cert.Name)
 			}
 		}

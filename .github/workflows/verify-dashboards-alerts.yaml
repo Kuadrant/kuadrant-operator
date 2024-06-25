@@ -39,14 +39,22 @@ jobs:
           name: terraform-tfstate
           path: terraform.tfstate
 
+      - name: Generate a token
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Generate Registration Token
-        id: reg_token
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           REPO_OWNER=${{ github.repository_owner }}
           REPO_NAME=${{ github.event.repository.name }}
           RESPONSE=$(curl -L \
             -X POST \
-            -H "Authorization: Bearer ${{ secrets.REGISTRATION_PAT }}" \
+            -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
             https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners/registration-token)
 
           echo "REGISTRATION_TOKEN=$(echo $RESPONSE | jq -r .token)" >> $GITHUB_ENV
@@ -211,17 +219,26 @@ jobs:
           echo "${{ secrets.AWS_PEM_KEY }}" > ${{ secrets.AWS_KEY_NAME }}.pem
           chmod 600 ${{ secrets.AWS_KEY_NAME }}.pem
 
+      - name: Generate a token
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Generate Remove Token
+        env:
+         GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         id: remove_token
         run: |
           REPO_OWNER=${{ github.repository_owner }}
           REPO_NAME=${{ github.event.repository.name }}
 
-          RUNNER_ID=$(curl -H "Authorization: Bearer ${{ secrets.REGISTRATION_PAT }}" \
+          RUNNER_ID=$(curl -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners | jq '.runners[] | select(.name=="self-hosted") | .id')
 
-          curl -X DELETE -H "Authorization: Bearer ${{ secrets.REGISTRATION_PAT }}" \
+          curl -X DELETE -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners/$RUNNER_ID
 

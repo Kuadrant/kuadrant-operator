@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"gotest.tools/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -17,6 +18,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
 func TestRulesFromHTTPRoute(t *testing.T) {
@@ -684,6 +687,11 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 	_ = corev1.AddToScheme(scheme)
 	_ = gatewayapiv1.AddToScheme(scheme)
 
+	kuadrantAnnotations := map[string]string{
+		KuadrantNamespaceAnnotation: "my-kuadrant-ns",
+		KuadrantNameAnnotation:      "my-kuadrant-name",
+	}
+
 	testCases := []struct {
 		name        string
 		k8sClient   client.Client
@@ -698,7 +706,7 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace:   "my-ns",
 						Name:        "my-gw",
-						Annotations: map[string]string{"kuadrant.io/namespace": "my-ns"},
+						Annotations: kuadrantAnnotations,
 					},
 				},
 				&gatewayapiv1.HTTPRoute{
@@ -710,8 +718,30 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 						CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
 							ParentRefs: []gatewayapiv1.ParentReference{
 								{
+									Kind:      ptr.To(gatewayapiv1.Kind("Gateway")),
+									Group:     ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
 									Name:      "my-gw",
 									Namespace: ptr.To[gatewayapiv1.Namespace](gatewayapiv1.Namespace("my-ns")),
+								},
+							},
+						},
+					},
+					Status: gatewayapiv1.HTTPRouteStatus{
+						RouteStatus: gatewayapiv1.RouteStatus{
+							Parents: []gatewayapiv1.RouteParentStatus{
+								{
+									ParentRef: gatewayapiv1.ParentReference{
+										Kind:      ptr.To(gatewayapiv1.Kind("Gateway")),
+										Group:     ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
+										Name:      "my-gw",
+										Namespace: ptr.To[gatewayapiv1.Namespace](gatewayapiv1.Namespace("my-ns")),
+									},
+									Conditions: []metav1.Condition{
+										{
+											Type:   "Accepted",
+											Status: metav1.ConditionTrue,
+										},
+									},
 								},
 							},
 						},
@@ -732,7 +762,7 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 					Namespace: ptr.To[gatewayapiv1.Namespace](gatewayapiv1.Namespace("my-ns")),
 				},
 			},
-			"my-ns",
+			"my-kuadrant-ns",
 			false,
 		},
 		{
@@ -742,7 +772,7 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace:   "my-ns",
 						Name:        "my-gw",
-						Annotations: map[string]string{"kuadrant.io/namespace": "my-ns"},
+						Annotations: kuadrantAnnotations,
 					},
 				},
 				&gatewayapiv1.HTTPRoute{
@@ -754,7 +784,28 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 						CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
 							ParentRefs: []gatewayapiv1.ParentReference{
 								{
-									Name: "my-gw",
+									Kind:  ptr.To(gatewayapiv1.Kind("Gateway")),
+									Group: ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
+									Name:  "my-gw",
+								},
+							},
+						},
+					},
+					Status: gatewayapiv1.HTTPRouteStatus{
+						RouteStatus: gatewayapiv1.RouteStatus{
+							Parents: []gatewayapiv1.RouteParentStatus{
+								{
+									ParentRef: gatewayapiv1.ParentReference{
+										Kind:  ptr.To(gatewayapiv1.Kind("Gateway")),
+										Group: ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
+										Name:  "my-gw",
+									},
+									Conditions: []metav1.Condition{
+										{
+											Type:   "Accepted",
+											Status: metav1.ConditionTrue,
+										},
+									},
 								},
 							},
 						},
@@ -774,7 +825,7 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 					Name:  "my-httproute",
 				},
 			},
-			"my-ns",
+			"my-kuadrant-ns",
 			false,
 		},
 		{
@@ -795,7 +846,28 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 						CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
 							ParentRefs: []gatewayapiv1.ParentReference{
 								{
-									Name: "my-gw",
+									Kind:  ptr.To(gatewayapiv1.Kind("Gateway")),
+									Group: ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
+									Name:  "my-gw",
+								},
+							},
+						},
+					},
+					Status: gatewayapiv1.HTTPRouteStatus{
+						RouteStatus: gatewayapiv1.RouteStatus{
+							Parents: []gatewayapiv1.RouteParentStatus{
+								{
+									ParentRef: gatewayapiv1.ParentReference{
+										Kind:  ptr.To(gatewayapiv1.Kind("Gateway")),
+										Group: ptr.To(gatewayapiv1.Group(gatewayapiv1.GroupName)),
+										Name:  "my-gw",
+									},
+									Conditions: []metav1.Condition{
+										{
+											Type:   "Accepted",
+											Status: metav1.ConditionTrue,
+										},
+									},
 								},
 							},
 						},
@@ -821,9 +893,10 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(subT *testing.T) {
-			res, err := GetKuadrantNamespaceFromPolicyTargetRef(context.TODO(), tc.k8sClient, tc.policy)
+			ctx := logr.NewContext(context.TODO(), log.Log)
+			res, err := GetKuadrantNamespaceFromPolicyTargetRef(ctx, tc.k8sClient, tc.policy)
 			if err != nil && !tc.expectedErr {
-				subT.Errorf("received err (%s) when expected error (%T)", err, tc.expectedErr)
+				subT.Errorf("received err (%s) when not expected", err)
 			}
 			if res != tc.expected {
 				subT.Errorf("result (%s) does not match expected (%s)", res, tc.expected)

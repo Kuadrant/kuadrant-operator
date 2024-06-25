@@ -2,13 +2,14 @@ package kuadrant
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/errors"
+	"github.com/go-logr/logr"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -17,6 +18,7 @@ import (
 )
 
 const (
+	KuadrantNameAnnotation      = "kuadrant.io/name"
 	KuadrantNamespaceAnnotation = "kuadrant.io/namespace"
 	ControllerName              = "kuadrant.io/policy-controller"
 )
@@ -44,26 +46,38 @@ func IsKuadrantManaged(obj client.Object) bool {
 }
 
 func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, policy Policy) (string, error) {
-	targetRef := policy.GetTargetRef()
-	gwNamespacedName := types.NamespacedName{Namespace: string(ptr.Deref(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)}
-	if kuadrantgatewayapi.IsTargetRefHTTPRoute(targetRef) {
-		route := &gatewayapiv1.HTTPRoute{}
-		if err := cli.Get(
-			ctx,
-			types.NamespacedName{Namespace: string(ptr.Deref(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)},
-			route,
-		); err != nil {
-			return "", err
-		}
-		// First should be OK considering there's 1 Kuadrant instance per cluster and all are tagged
-		parentRef := route.Spec.ParentRefs[0]
-		gwNamespacedName = types.NamespacedName{Namespace: string(ptr.Deref(parentRef.Namespace, gatewayapiv1.Namespace(route.Namespace))), Name: string(parentRef.Name)}
-	}
-	gw := &gatewayapiv1.Gateway{}
-	if err := cli.Get(ctx, gwNamespacedName, gw); err != nil {
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
 		return "", err
 	}
-	return GetKuadrantNamespace(gw)
+
+	gwKeys, err := GatewaysFromPolicy(ctx, cli, policy)
+	if err != nil {
+		return "", err
+	}
+
+	for _, gwKey := range gwKeys {
+		gateway := &gatewayapiv1.Gateway{}
+		if err := cli.Get(ctx, gwKey, gateway); err != nil {
+			if apierrors.IsNotFound(err) {
+				logger.V(1).Info("no gateway found", "gateway", gwKey)
+				continue
+			}
+			return "", err
+		}
+
+		kuadrantKey, ok := GetKuadrantKeyFromGateway(gateway)
+		if !ok {
+			logger.Info("cannot get kuadrant key from gateway", "gateway", client.ObjectKeyFromObject(gateway))
+			continue
+		}
+
+		// Currently, only one kuadrant instance is supported.
+		// Then, reading only one valid gateway is enough
+		return kuadrantKey.Namespace, nil
+	}
+
+	return "", apierrors.NewInternalError(errors.New("could not find kuadrant managed gateway"))
 }
 
 func GetKuadrantNamespaceFromPolicy(p Policy) (string, bool) {
@@ -75,23 +89,34 @@ func GetKuadrantNamespaceFromPolicy(p Policy) (string, bool) {
 
 func GetKuadrantNamespace(obj client.Object) (string, error) {
 	if !IsKuadrantManaged(obj) {
-		return "", errors.NewInternalError(fmt.Errorf("object %T is not Kuadrant managed", obj))
+		return "", apierrors.NewInternalError(fmt.Errorf("object %T is not Kuadrant managed", obj))
 	}
 	return obj.GetAnnotations()[KuadrantNamespaceAnnotation], nil
 }
 
-func AnnotateObject(obj client.Object, namespace string) {
-	annotations := obj.GetAnnotations()
-	if len(annotations) == 0 {
-		obj.SetAnnotations(
-			map[string]string{
-				KuadrantNamespaceAnnotation: namespace,
-			},
-		)
-	} else {
-		annotations[KuadrantNamespaceAnnotation] = namespace
-		obj.SetAnnotations(annotations)
+func GetKuadrantKeyFromGateway(obj client.Object) (client.ObjectKey, bool) {
+	name, ok := obj.GetAnnotations()[KuadrantNameAnnotation]
+	if !ok {
+		return client.ObjectKey{}, false
 	}
+	ns, ok := obj.GetAnnotations()[KuadrantNamespaceAnnotation]
+	if !ok {
+		return client.ObjectKey{}, false
+	}
+
+	return client.ObjectKey{Name: name, Namespace: ns}, true
+}
+
+func AnnotateObject(obj client.Object, name, namespace string) {
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string, 0)
+	}
+
+	annotations[KuadrantNamespaceAnnotation] = namespace
+	annotations[KuadrantNameAnnotation] = name
+
+	obj.SetAnnotations(annotations)
 }
 
 // RulesFromHTTPRoute computes a list of rules from the HTTPRoute object

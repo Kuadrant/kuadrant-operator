@@ -14,6 +14,46 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
+func Topology(ctx context.Context, cl client.Client) (*kuadrantgatewayapi.Topology, error) {
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get all the gateways
+	gwList := &gatewayapiv1.GatewayList{}
+	err = cl.List(ctx, gwList)
+	logger.V(1).Info("TopologyIndex: list gateways", "#Gateways", len(gwList.Items), "err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get all the routes
+	routeList := &gatewayapiv1.HTTPRouteList{}
+	err = cl.List(ctx, routeList)
+	logger.V(1).Info("TopologyIndex: list httproutes", "#HTTPRoutes", len(routeList.Items), "err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get all the rate limit policies
+	rlpList := &kuadrantv1beta2.RateLimitPolicyList{}
+	err = cl.List(ctx, rlpList)
+	logger.V(1).Info("TopologyIndex: list rate limit policies", "#RLPS", len(rlpList.Items), "err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	policies := utils.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })
+
+	return kuadrantgatewayapi.NewTopology(
+		kuadrantgatewayapi.WithGateways(utils.Map(gwList.Items, ptr.To[gatewayapiv1.Gateway])),
+		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
+		kuadrantgatewayapi.WithPolicies(policies),
+		kuadrantgatewayapi.WithLogger(logger),
+	)
+}
+
 func TopologyIndexesFromGateway(ctx context.Context, cl client.Client, gw *gatewayapiv1.Gateway) (*kuadrantgatewayapi.TopologyIndexes, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {

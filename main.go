@@ -276,6 +276,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	rateLimitingLimitsBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("limits"),
+		mgr.GetEventRecorderFor("RateLimitingLimits"),
+	)
+
+	if err = (&controllers.RateLimitingLimitsReconciler{
+		BaseReconciler: rateLimitingLimitsBaseReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RateLimitingLimitsReconciler")
+		os.Exit(1)
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

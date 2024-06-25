@@ -84,6 +84,25 @@ func testBasicRoute(name, namespace string, parents ...*gatewayapiv1.Gateway) *g
 	}
 }
 
+func testStandalonePolicy(name, namespace string) Policy {
+	return &TestPolicy{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "example.com/v1",
+			Kind:       "TestPolicy",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+		TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+			Group:     gatewayapiv1.Group(gatewayapiv1.GroupName),
+			Kind:      gatewayapiv1.Kind("Gateway"),
+			Namespace: ptr.To(gatewayapiv1.Namespace("unknown")),
+			Name:      gatewayapiv1.ObjectName("unknown"),
+		},
+	}
+}
+
 func testBasicGatewayPolicy(name, namespace string, gateway *gatewayapiv1.Gateway) Policy {
 	return &TestPolicy{
 		TypeMeta: metav1.TypeMeta{

@@ -46,7 +46,7 @@ jobs:
 
           set -o pipefail
 
-          client_id=${{ var.APP_ID }} # Client ID as first argument
+          client_id=${{ vars.APP_ID }} # Client ID as first argument
 
           pem=$( cat app_private.pem ) # file path of the private key as second argument
 
@@ -83,7 +83,23 @@ jobs:
 
           # echo to variable for later use
           echo $JWT_TOKEN >> $GITHUB_ENV
+      
+      - name: Get the installation ID
+        run: |
+          RESPONSE=$(curl -L \
+            -H "Authorization: Bearer ${{ env.JWT_TOKEN }}"
+            https://api.github.com/app/installations)
 
+          echo "INSTALLATION_ID=$(echo $RESPONSE | jq -r .[0].id)" >> $GITHUB_ENV
+      
+      - name: Generate Installation Access Token
+        run: |
+          RESPONSE=$(curl -L \
+            -X POST \
+            -H "Authorization: Bearer ${{ env.JWT_TOKEN }}"
+            https://api.github.com/app/installations/${{ env.INSTALLATION_ID }}/access_tokens)
+
+          echo "ACCESS_TOKEN=$(echo $RESPONSE | jq -r .token)" >> $GITHUB_ENV
 
       - name: Generate Registration Token
         run: |
@@ -91,7 +107,7 @@ jobs:
           REPO_NAME=${{ github.event.repository.name }}
           RESPONSE=$(curl -L \
             -X POST \
-            -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
+            -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
             https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners/registration-token)
 
           echo "REGISTRATION_TOKEN=$(echo $RESPONSE | jq -r .token)" >> $GITHUB_ENV

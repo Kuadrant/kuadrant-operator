@@ -1,12 +1,14 @@
 package v1beta2
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -336,6 +338,21 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 
 func (ap *AuthPolicy) Kind() string {
 	return ap.TypeMeta.Kind
+}
+
+func (ap *AuthPolicy) List(ctx context.Context, c client.Client, namespace string) []kuadrantgatewayapi.Policy {
+	policyList := &AuthPolicyList{}
+	listOptions := &client.ListOptions{Namespace: namespace}
+	err := c.List(ctx, policyList, listOptions)
+	if err != nil {
+		return []kuadrantgatewayapi.Policy{}
+	}
+	policies := make([]kuadrantgatewayapi.Policy, 0, len(policyList.Items))
+	for i := range policyList.Items {
+		policies = append(policies, &policyList.Items[i])
+	}
+
+	return policies
 }
 
 func (ap *AuthPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {

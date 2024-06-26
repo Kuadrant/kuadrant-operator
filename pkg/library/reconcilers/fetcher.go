@@ -13,7 +13,7 @@ import (
 )
 
 // FetchTargetRefObject fetches the target reference object and checks the status is valid
-func FetchTargetRefObject(ctx context.Context, k8sClient client.Reader, targetRef gatewayapiv1alpha2.PolicyTargetReference, defaultNs string) (client.Object, error) {
+func FetchTargetRefObject(ctx context.Context, k8sClient client.Reader, targetRef gatewayapiv1alpha2.PolicyTargetReference, defaultNs string, fetchOnlyProgrammedGateways bool) (client.Object, error) {
 	ns := defaultNs
 	if targetRef.Namespace != nil {
 		ns = string(*targetRef.Namespace)
@@ -23,6 +23,9 @@ func FetchTargetRefObject(ctx context.Context, k8sClient client.Reader, targetRe
 
 	switch targetRef.Kind {
 	case "Gateway":
+		if fetchOnlyProgrammedGateways {
+			return fetchProgrammedGateway(ctx, k8sClient, objKey)
+		}
 		return fetchGateway(ctx, k8sClient, objKey)
 	case "HTTPRoute":
 		return fetchHTTPRoute(ctx, k8sClient, objKey)
@@ -41,6 +44,14 @@ func fetchGateway(ctx context.Context, k8sClient client.Reader, key client.Objec
 		return nil, err
 	}
 
+	return gw, nil
+}
+
+func fetchProgrammedGateway(ctx context.Context, k8sClient client.Reader, key client.ObjectKey) (*gatewayapiv1.Gateway, error) {
+	gw, err := fetchGateway(ctx, k8sClient, key)
+	if err != nil {
+		return nil, err
+	}
 	if meta.IsStatusConditionFalse(gw.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed)) {
 		return nil, fmt.Errorf("gateway (%v) not ready", key)
 	}

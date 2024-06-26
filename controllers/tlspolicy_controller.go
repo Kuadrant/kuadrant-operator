@@ -72,7 +72,7 @@ func (r *TLSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	markedForDeletion := tlsPolicy.GetDeletionTimestamp() != nil
 
-	targetReferenceObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), tlsPolicy.GetTargetRef(), tlsPolicy.Namespace)
+	targetReferenceObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), tlsPolicy.GetTargetRef(), tlsPolicy.Namespace, false)
 	log.V(3).Info("TLSPolicyReconciler targetReferenceObject", "targetReferenceObject", targetReferenceObject)
 	if err != nil {
 		if !markedForDeletion {

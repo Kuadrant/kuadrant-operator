@@ -75,7 +75,7 @@ func (r *DNSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	markedForDeletion := dnsPolicy.GetDeletionTimestamp() != nil
 
-	targetNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), dnsPolicy.GetTargetRef(), dnsPolicy.Namespace)
+	targetNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), dnsPolicy.GetTargetRef(), dnsPolicy.Namespace, true)
 	if err != nil {
 		if !markedForDeletion {
 			if apierrors.IsNotFound(err) {

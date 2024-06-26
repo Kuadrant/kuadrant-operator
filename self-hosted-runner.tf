@@ -19,8 +19,8 @@ variable "aws_key_name" {
   type = string
 }
 
-resource "aws_instance" "example" {
-  ami           = "ami-0776c814353b4814d"
+resource "aws_instance" "self_hosted_runner" {
+  ami           = "ami-055032149717ffb30" # change to ami-0776c814353b4814d when creating an AMI. 
   instance_type = "t2.xlarge"
 
   root_block_device {
@@ -36,7 +36,9 @@ resource "aws_instance" "example" {
   // Security Group for SSH, HTTP, and HTTPS access
   security_groups = ["ssh-http-https-access"]
 
-  user_data = <<-EOL
+  # Uncomment when creating an AMI . 
+
+  /* user_data = <<-EOL
     #!/bin/bash
     echo "Starting user_data script..."
     sudo apt-get update -y
@@ -60,7 +62,7 @@ resource "aws_instance" "example" {
     sudo chmod 7777 kuadrant-operator/hack
     echo "user_data script execution completed."
     touch /tmp/user_data_done
-  EOL
+  EOL */
 }
 
 
@@ -105,7 +107,7 @@ resource "aws_security_group" "ssh_http_https_access" {
 resource "null_resource" "wait_for_user_data" {
   provisioner "local-exec" {
     command = <<EOT
-    while ! ssh -o StrictHostKeyChecking=no -i ${aws_instance.example.key_name}.pem ubuntu@${aws_instance.example.public_ip} 'test -f /tmp/user_data_done'; do
+    while ! ssh -o StrictHostKeyChecking=no -i ${aws_instance.self_hosted_runner.key_name}.pem ubuntu@${aws_instance.self_hosted_runner.public_ip} 'test -f /tmp/user_data_done'; do
       echo "Waiting for user_data script to complete..."
       sleep 10
     done
@@ -113,9 +115,9 @@ resource "null_resource" "wait_for_user_data" {
     EOT
   }
 
-  depends_on = [aws_instance.example]
+  depends_on = [aws_instance.self_hosted_runner]
 }
 
 output "instance_public_ip" {
-  value = aws_instance.example.public_ip
+  value = aws_instance.self_hosted_runner.public_ip
 }

@@ -2,15 +2,16 @@ name: Verify Dashboards and Alerts OK
 
 on: 
   push:
-    # paths:
-    #   # Dashboards
-    #   - examples/dashboards/app_developer.json
-    #   - examples/dashboards/business_user.json
-    #   - examples/dashboards/platform_engineer.json
-    #   # Alerts
-    #   - examples/alerts/prometheusrules_policies_missing.yaml
-    #   - examples/alerts/slo-availability.yaml
-    #   - examples/alerts/slo-latency.yaml
+    branches: main
+    paths:
+       # Dashboards
+       - examples/dashboards/app_developer.json
+       - examples/dashboards/business_user.json
+       - examples/dashboards/platform_engineer.json
+       # Alerts
+       - examples/alerts/prometheusrules_policies_missing.yaml
+       - examples/alerts/slo-availability.yaml
+       - examples/alerts/slo-latency.yaml
 jobs:
   deploy-register-self-runner:
     runs-on: ubuntu-latest
@@ -20,7 +21,10 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
 
       - name: Initialize Terraform Environment
-        run: terraform init
+        run: |
+          # Remove ami-self-hosted-runner.tf to prevent constant creation of AMIs
+          rm ami-self-hosted-runner.tf
+          terraform init
 
       - name: Create PEM files
         run: |
@@ -260,6 +264,8 @@ jobs:
 
       - name: Initialize Terraform Environment
         run: |
+          # Remove ami-self-hosted-runner.tf to prevent constant creation of AMIs
+          rm ami-self-hosted-runner.tf
           terraform init
 
       - name: Download statefile to teardown resources

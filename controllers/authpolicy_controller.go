@@ -65,7 +65,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	markedForDeletion := ap.GetDeletionTimestamp() != nil
 
 	// fetch the target network object
-	targetNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), ap.GetTargetRef(), ap.Namespace)
+	targetNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), ap.GetTargetRef(), ap.Namespace, true)
 	if err != nil {
 		if !markedForDeletion {
 			if apierrors.IsNotFound(err) {
@@ -186,7 +186,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 				return err
 			}
 
-			refNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), ref.GetTargetRef(), ref.Namespace)
+			refNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), ref.GetTargetRef(), ref.Namespace, true)
 			if err != nil {
 				return err
 			}

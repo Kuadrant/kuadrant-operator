@@ -17,10 +17,8 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewatapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -248,7 +246,7 @@ func policyAsAuthPolicy(p kuadrantgatewayapi.Policy) (*api.AuthPolicy, error) {
 	return out, nil
 }
 
-func getAttachedHTTPRoutes(t *gatewayapi.Topology, gw kuadrant.GatewayWrapper) []*gatewayapiv1.HTTPRoute {
+func getAttachedHTTPRoutes(t *kuadrantgatewayapi.Topology, gw kuadrant.GatewayWrapper) []*gatewayapiv1.HTTPRoute {
 	httpRouteList := make([]*gatewayapiv1.HTTPRoute, 0)
 
 	for _, gateway := range t.Gateways() {
@@ -263,11 +261,11 @@ func getAttachedHTTPRoutes(t *gatewayapi.Topology, gw kuadrant.GatewayWrapper) [
 	return httpRouteList
 }
 
-func isRouteReference(route gatewayapi.RouteNode, targetRef gatewatapiv1alpha2.PolicyTargetReference) bool {
+func isRouteReference(route kuadrantgatewayapi.RouteNode, targetRef gatewatapiv1alpha2.PolicyTargetReference) bool {
 	return gatewayapiv1.Namespace(route.Namespace) == *targetRef.Namespace && gatewayapiv1.ObjectName(route.Name) == targetRef.Name
 }
 
-func getAttachedRoute(t *gatewayapi.Topology, ap *v1beta2.AuthPolicy) *gatewayapiv1.HTTPRoute {
+func getAttachedRoute(t *kuadrantgatewayapi.Topology, ap *api.AuthPolicy) *gatewayapiv1.HTTPRoute {
 	targetRef := ap.GetTargetRef()
 	if targetRef.Namespace == nil {
 		ns := gatewayapiv1.Namespace(ap.GetNamespace())

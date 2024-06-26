@@ -2,7 +2,8 @@ name: Verify Dashboards and Alerts OK
 
 on: 
   push:
-     paths:
+    branches: main
+    paths:
        # Dashboards
        - examples/dashboards/app_developer.json
        - examples/dashboards/business_user.json

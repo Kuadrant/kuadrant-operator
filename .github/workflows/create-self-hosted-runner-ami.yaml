@@ -2,6 +2,7 @@ name: Create Self Hosted Runner AMI
 
 on:
     push:
+        branches: main
         paths:
             - self-hosted-runner.tf
 

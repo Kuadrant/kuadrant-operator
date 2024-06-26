@@ -46,7 +46,7 @@ jobs:
 
           set -o pipefail
 
-          client_id=${{ var.APP_ID }} # Client ID as first argument
+          client_id=${{ vars.APP_ID }} # Client ID as first argument
 
           pem=$( cat app_private.pem ) # file path of the private key as second argument
 
@@ -82,8 +82,24 @@ jobs:
           JWT="${header_payload}"."${signature}"
 
           # echo to variable for later use
-          echo $JWT_TOKEN >> $GITHUB_ENV
+          echo "JWT_TOKEN=$JWT" >> $GITHUB_ENV
+      
+      - name: Get the installation ID
+        run: |
+          RESPONSE=$(curl -L \
+            -H "Authorization: Bearer ${{ env.JWT_TOKEN }}" \
+            https://api.github.com/app/installations)
 
+          echo "INSTALLATION_ID=$(echo $RESPONSE | jq -r .[0].id)" >> $GITHUB_ENV
+      
+      - name: Generate Installation Access Token
+        run: |
+          RESPONSE=$(curl -L \
+            -X POST \
+            -H "Authorization: Bearer ${{ env.JWT_TOKEN }}" \
+            https://api.github.com/app/installations/${{ env.INSTALLATION_ID }}/access_tokens) 
+
+          echo "ACCESS_TOKEN=$(echo $RESPONSE | jq -r .token)" >> $GITHUB_ENV
 
       - name: Generate Registration Token
         run: |
@@ -91,7 +107,7 @@ jobs:
           REPO_NAME=${{ github.event.repository.name }}
           RESPONSE=$(curl -L \
             -X POST \
-            -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
+            -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
             https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners/registration-token)
 
           echo "REGISTRATION_TOKEN=$(echo $RESPONSE | jq -r .token)" >> $GITHUB_ENV
@@ -107,7 +123,7 @@ jobs:
             curl -o actions-runner-linux-x64-2.317.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.317.0/actions-runner-linux-x64-2.317.0.tar.gz
             tar xzf ./actions-runner-linux-x64-2.317.0.tar.gz
 
-            ./config.sh --url https://github.com/${{ github.repository_owner }}/${{ github.event.repository.name }} --token $REGISTRATION_TOKEN --unattended --labels self-hosted,linux,aws
+            ./config.sh --url https://github.com/${{ github.repository_owner }}/${{ github.event.repository.name }} --token ${{ env.REGISTRATION_TOKEN }} --unattended --labels self-hosted,linux,aws
             nohup ./run.sh > nohup.out 2> nohup.err < /dev/null &
           EOF
 
@@ -255,27 +271,80 @@ jobs:
         run: |
           echo "${{ secrets.AWS_PEM_KEY }}" > ${{ secrets.AWS_KEY_NAME }}.pem
           chmod 600 ${{ secrets.AWS_KEY_NAME }}.pem
+          echo "${{ secrets.APP_PRIVATE_KEY }}" > app_private.pem
+          chmod 400 ${{ secrets.AWS_KEY_NAME }}.pem app_private.pem
 
-      - name: Generate a token
-        id: generate-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ vars.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - name: Generate a JWT Token
+        run: |
+          #!/usr/bin/env bash
+
+          set -o pipefail
+
+          client_id=${{ vars.APP_ID }} # Client ID as first argument
+
+          pem=$( cat app_private.pem ) # file path of the private key as second argument
+
+          now=$(date +%s)
+          iat=$((${now} - 60)) # Issues 60 seconds in the past
+          exp=$((${now} + 600)) # Expires 10 minutes in the future
+
+          b64enc() { openssl base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n'; }
+
+          header_json='{
+              "typ":"JWT",
+              "alg":"RS256"
+          }'
+          # Header encode
+          header=$( echo -n "${header_json}" | b64enc )
+
+          payload_json='{
+              "iat":'"${iat}"',
+              "exp":'"${exp}"',
+              "iss":'"${client_id}"'
+          }'
+          # Payload encode
+          payload=$( echo -n "${payload_json}" | b64enc )
+
+          # Signature
+          header_payload="${header}"."${payload}"
+          signature=$(
+              openssl dgst -sha256 -sign <(echo -n "${pem}") \
+              <(echo -n "${header_payload}") | b64enc
+          )
+
+          # Create JWT
+          JWT="${header_payload}"."${signature}"
+
+          # echo to variable for later use
+          echo "JWT_TOKEN=$JWT" >> $GITHUB_ENV
+        
+      - name: Get the installation ID
+        run: |
+          RESPONSE=$(curl -L \
+            -H "Authorization: Bearer ${{ env.JWT_TOKEN }}" \
+            https://api.github.com/app/installations)
+
+          echo "INSTALLATION_ID=$(echo $RESPONSE | jq -r .[0].id)" >> $GITHUB_ENV
+      
+      - name: Generate Installation Access Token
+        run: |
+          RESPONSE=$(curl -L \
+            -X POST \
+            -H "Authorization: Bearer ${{ env.JWT_TOKEN }}" \
+            https://api.github.com/app/installations/${{ env.INSTALLATION_ID }}/access_tokens) 
+
+          echo "ACCESS_TOKEN=$(echo $RESPONSE | jq -r .token)" >> $GITHUB_ENV
 
       - name: Generate Remove Token
-        env:
-         GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-        id: remove_token
         run: |
           REPO_OWNER=${{ github.repository_owner }}
           REPO_NAME=${{ github.event.repository.name }}
 
-          RUNNER_ID=$(curl -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
+          RUNNER_ID=$(curl -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners | jq '.runners[] | select(.name=="self-hosted") | .id')
 
-          curl -X DELETE -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
+          curl -X DELETE -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners/$RUNNER_ID
 

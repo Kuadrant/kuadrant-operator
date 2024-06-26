@@ -159,7 +159,7 @@ func (r *AuthPolicyReconciler) generateTopology(ctx context.Context) (*kuadrantg
 
 	aplist := &api.AuthPolicyList{}
 	err = r.Client().List(ctx, aplist)
-	logger.V(1).Info("topology: list rate limit policies", "#RLPS", len(aplist.Items), "err", err)
+	logger.V(1).Info("topology: list auth policies", "#APLS", len(aplist.Items), "err", err)
 	if err != nil {
 		return nil, err
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -33,6 +34,14 @@ import (
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+var (
+	RateLimitPolicyGVK schema.GroupVersionKind = schema.GroupVersionKind{
+		Group:   GroupVersion.Group,
+		Version: GroupVersion.Version,
+		Kind:    "RateLimitPolicy",
+	}
+)
 
 // ContextSelector defines one item from the well known attributes
 // Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
@@ -54,8 +63,6 @@ const (
 	IncludeOperator    WhenConditionOperator = "incl"
 	ExcludeOperator    WhenConditionOperator = "excl"
 	MatchesOperator    WhenConditionOperator = "matches"
-
-	RateLimitPolicyDirectReferenceAnnotationName = "kuadrant.io/ratelimitpolicy"
 )
 
 // +kubebuilder:validation:Enum:=second;minute;hour;day
@@ -300,10 +307,6 @@ func (r *RateLimitPolicy) Kind() string {
 
 func (r *RateLimitPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
 	return kuadrantgatewayapi.InheritedPolicy
-}
-
-func (r *RateLimitPolicy) DirectReferenceAnnotationName() string {
-	return RateLimitPolicyDirectReferenceAnnotationName
 }
 
 // CommonSpec returns the Default RateLimitPolicyCommonSpec if it is defined.

@@ -4,11 +4,12 @@ package controllers
 
 import (
 	"context"
-	"errors"
-	"reflect"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -24,12 +25,28 @@ func TestRateLimitPolicyReconciler_calculateStatus(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want *kuadrantv1beta2.RateLimitPolicyStatus
 	}{
 		{
 			name: "Enforced status block removed if policy not Accepted. (Regression test)", // https://github.com/Kuadrant/kuadrant-operator/issues/588
 			args: args{
+				// invalid policy targeting to some external namespace
 				rlp: &kuadrantv1beta2.RateLimitPolicy{
+					TypeMeta: metav1.TypeMeta{
+						Kind:       "RateLimitPolicy",
+						APIVersion: kuadrantv1beta2.GroupVersion.String(),
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "a",
+						Namespace: "ns-rlp",
+					},
+					Spec: kuadrantv1beta2.RateLimitPolicySpec{
+						TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+							Group:     gatewayapiv1.GroupName,
+							Kind:      "HTTPRoute",
+							Name:      gatewayapiv1.ObjectName("some-route"),
+							Namespace: ptr.To(gatewayapiv1.Namespace("ns-external")),
+						},
+					},
 					Status: kuadrantv1beta2.RateLimitPolicyStatus{
 						Conditions: []metav1.Condition{
 							{
@@ -41,25 +58,23 @@ func TestRateLimitPolicyReconciler_calculateStatus(t *testing.T) {
 						},
 					},
 				},
-				specErr: kuadrant.NewErrInvalid("RateLimitPolicy", errors.New("policy Error")),
-			},
-			want: &kuadrantv1beta2.RateLimitPolicyStatus{
-				Conditions: []metav1.Condition{
-					{
-						Message: "RateLimitPolicy target is invalid: policy Error",
-						Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
-						Status:  metav1.ConditionFalse,
-						Reason:  string(gatewayapiv1alpha2.PolicyReasonInvalid),
-					},
-				},
+				topology: nil,
 			},
 		},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(subT *testing.T) {
 			r := &RateLimitPolicyReconciler{}
-			if got := r.calculateStatus(context.TODO, tt.args.rlp, topology); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("calculateStatus() = %v, want %v", got, tt.want)
+			got := r.calculateStatus(context.TODO(), tt.args.rlp, tt.args.topology)
+
+			if meta.IsStatusConditionTrue(
+				got.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted),
+			) {
+				subT.Error("accepted condition is true")
+			}
+
+			if meta.FindStatusCondition(got.Conditions, string(kuadrant.PolicyConditionEnforced)) != nil {
+				subT.Error("enforced condition is still present")
 			}
 		})
 	}

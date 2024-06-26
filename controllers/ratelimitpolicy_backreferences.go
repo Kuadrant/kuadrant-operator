@@ -4,10 +4,14 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
 func (r *RateLimitPolicyReconciler) reconcileDirectBackReferences(ctx context.Context) error {
+	// TODO(eguzki): make this method generic to any policy of a kind
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return err
@@ -23,12 +27,13 @@ func (r *RateLimitPolicyReconciler) reconcileDirectBackReferences(ctx context.Co
 	logger.V(1).Info("reconcile back references", "#gateways", len(gwNodeList))
 
 	for _, gwNode := range gwNodeList {
-		val := desiredBackReferenceAnnotation()
-		// TODO
-		// no annotation -> delete only if exists
-		// annotation -> if does not exist -> create
-		//            -> if exists and equal -> NO OP
-		//            -> if exists and diff -> update
+		err := kuadrant.ReconcilePolicyReferenceOnObject(
+			ctx, r.Client(), kuadrantv1beta2.RateLimitPolicyGVK,
+			gwNode, gwNode.AttachedPolicies(),
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	routeNodeList := topology.Routes()
@@ -36,12 +41,14 @@ func (r *RateLimitPolicyReconciler) reconcileDirectBackReferences(ctx context.Co
 	logger.V(1).Info("reconcile back references", "#routes", len(routeNodeList))
 
 	for _, routeNode := range routeNodeList {
-		val := desiredBackReferenceAnnotation()
+		err := kuadrant.ReconcilePolicyReferenceOnObject(
+			ctx, r.Client(), kuadrantv1beta2.RateLimitPolicyGVK,
+			routeNode, routeNode.AttachedPolicies(),
+		)
+		if err != nil {
+			return err
+		}
 	}
 
-	return nil
-}
-
-func desiredBackReferenceAnnotation() *string {
 	return nil
 }

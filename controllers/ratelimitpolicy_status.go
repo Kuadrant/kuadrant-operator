@@ -15,7 +15,6 @@ import (
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
@@ -151,6 +150,8 @@ func (r *RateLimitPolicyReconciler) validatePolicyHostnames(ctx context.Context,
 	return nil
 }
 
+// checkDirectReference returns error only when the target reference has a policy reference set
+// and the reference does not belong to the provided policy
 func (r *RateLimitPolicyReconciler) checkDirectReferences(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, topology *kuadrantgatewayapi.Topology) error {
 	policyNode, ok := topology.GetPolicy(rlp)
 	if !ok {
@@ -165,17 +166,16 @@ func (r *RateLimitPolicyReconciler) checkDirectReferences(ctx context.Context, r
 		targetNetworkObject = rNode.HTTPRoute
 	}
 
-	targetNetworkObjectAnnotations := utils.ReadAnnotationsFromObject(targetNetworkObject)
-	targetNetworkObjectKey := client.ObjectKeyFromObject(targetNetworkObject)
-	targetNetworkObjectKind := targetNetworkObject.GetObjectKind().GroupVersionKind()
+	key := kuadrant.GetPolicyReference(targetNetworkObject, kuadrantv1beta2.RateLimitPolicyGVK)
 
-	directAnnotationValue, ok := targetNetworkObjectAnnotations[rlp.DirectReferenceAnnotationName()]
-	if ok && directAnnotationValue != client.ObjectKeyFromObject(rlp).String() {
+	if key != nil && client.ObjectKeyFromObject(rlp) != *key {
 		return kuadrant.NewErrConflict(
-			rlp.Kind(),
-			directAnnotationValue,
+			kuadrantv1beta2.RateLimitPolicyGVK.Kind,
+			key.String(),
 			fmt.Errorf("the %s target %s is already referenced by policy %s",
-				targetNetworkObjectKind, targetNetworkObjectKey, directAnnotationValue),
+				targetNetworkObject.GetObjectKind().GroupVersionKind(),
+				client.ObjectKeyFromObject(targetNetworkObject),
+				key.String()),
 		)
 	}
 

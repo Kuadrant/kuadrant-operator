@@ -362,7 +362,7 @@ func TestGatewayAPITopology_GetPolicy(t *testing.T) {
 		)
 		assert.NilError(subT, err)
 
-		policyNode, ok := topology.GetPolicy(testStandalonePolicy("other", NS))
+		_, ok := topology.GetPolicy(testStandalonePolicy("other", NS))
 		assert.Assert(subT, !ok, "'other' policy should not be found")
 	})
 
@@ -378,7 +378,7 @@ func TestGatewayAPITopology_GetPolicy(t *testing.T) {
 		policyNode, ok := topology.GetPolicy(testStandalonePolicy("p1", NS))
 		assert.Assert(subT, ok, "policy should be found")
 
-		assert.Equal(subT, client.ObjectKeyFromObject(policyNode), client.Object{
+		assert.Equal(subT, client.ObjectKeyFromObject(policyNode), client.ObjectKey{
 			Name: "p1", Namespace: NS,
 		})
 	})

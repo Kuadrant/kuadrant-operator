@@ -83,7 +83,75 @@ func (r *TargetRefReconciler) TargetedGatewayKeys(_ context.Context, targetNetwo
 	}
 }
 
+// ReconcileTargetBackReferenceDAG reconciles policy key in annotations of the target object
+func (r *TargetRefReconciler) ReconcileTargetBackReferenceDAG(ctx context.Context, p kuadrant.Policy, targetNetworkObject client.Object, annotationName string, topology *kuadrantgatewayapi.Topology) error {
+	logger, _ := logr.FromContext(ctx)
+
+	policyKey := client.ObjectKeyFromObject(p)
+	targetNetworkObjectKey := client.ObjectKeyFromObject(targetNetworkObject)
+	targetNetworkObjectKind := targetNetworkObject.GetObjectKind().GroupVersionKind()
+
+	// Step 1 Build list of network objects in the same namespace as the policy
+	// Step 2 Remove the direct back reference annotation to the current policy from any network object not being currently referenced
+	// Step 3 Check direct back ref annotation from the current target network object
+	//   Step 3.1 if it does not exit -> create it
+	//   Step 3.2 if it already exits and the reference is the current policy -> nothing to do
+	//   Step 3.3 if it already exits and the reference is not the current policy -> return err
+
+	// Step 1
+	gwNodeList := topology.Gateways()
+	routeNodeList := topology.Routes()
+
+	networkObjectList := utils.Map(gwNodeList, func(g kuadrantgatewayapi.GatewayNode) client.Object { return g.Gateway })
+	networkObjectList = append(networkObjectList, utils.Map(routeNodeList, func(r kuadrantgatewayapi.RouteNode) client.Object { return r.Route() })...)
+	// remove currently targeted network resource from the list
+	networkObjectList = utils.Filter(networkObjectList, func(obj client.Object) bool {
+		return targetNetworkObjectKey != client.ObjectKeyFromObject(obj)
+	})
+
+	// Step 2
+	for _, networkObject := range networkObjectList {
+		annotations := networkObject.GetAnnotations()
+		if val, ok := annotations[annotationName]; ok && val == policyKey.String() {
+			delete(annotations, annotationName)
+			networkObject.SetAnnotations(annotations)
+			err := r.Client.Update(ctx, networkObject)
+			logger.V(1).Info("ReconcileTargetBackReference: update network resource",
+				"kind", networkObject.GetObjectKind().GroupVersionKind(),
+				"name", client.ObjectKeyFromObject(networkObject), "err", err)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Step 3
+	objAnnotations := utils.ReadAnnotationsFromObject(targetNetworkObject)
+
+	if val, ok := objAnnotations[annotationName]; ok {
+		if val != policyKey.String() {
+			// Step  3.3
+			return kuadrant.NewErrConflict(p.Kind(), val, fmt.Errorf("the %s target %s is already referenced by policy %s", targetNetworkObjectKind, targetNetworkObjectKey, val))
+		}
+		// Step  3.2
+		// NO OP
+	} else {
+		// Step  3.1
+		objAnnotations[annotationName] = policyKey.String()
+		targetNetworkObject.SetAnnotations(objAnnotations)
+		err := r.Client.Update(ctx, targetNetworkObject)
+		logger.V(1).Info("ReconcileTargetBackReference: update target object", "kind", targetNetworkObjectKind, "name", targetNetworkObjectKey, "err", err)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // ReconcileTargetBackReference reconciles policy key in annotations of the target object
+// Deprecated: This is being improved with use of the DAG, but as it cross multiple controller not every instance is ready to use the DAG.
+// Try use ReconcileTargetBackReferenceDAG is possible.
 func (r *TargetRefReconciler) ReconcileTargetBackReference(ctx context.Context, p kuadrant.Policy, targetNetworkObject client.Object, annotationName string) error {
 	logger, _ := logr.FromContext(ctx)
 

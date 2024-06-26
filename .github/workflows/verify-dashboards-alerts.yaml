@@ -266,13 +266,16 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: terraform-tfstate
+          
       
-      - name: Create PEM file
+      - name: Create PEM file + Get EC2 IP
         run: |
           echo "${{ secrets.AWS_PEM_KEY }}" > ${{ secrets.AWS_KEY_NAME }}.pem
           chmod 600 ${{ secrets.AWS_KEY_NAME }}.pem
           echo "${{ secrets.APP_PRIVATE_KEY }}" > app_private.pem
           chmod 400 ${{ secrets.AWS_KEY_NAME }}.pem app_private.pem
+          # Get the public IP address of the instance
+          echo "EC2_PUBLIC_IP=$(terraform output instance_public_ip)" >> $GITHUB_ENV
 
       - name: Generate a JWT Token
         run: |
@@ -340,13 +343,21 @@ jobs:
           REPO_OWNER=${{ github.repository_owner }}
           REPO_NAME=${{ github.event.repository.name }}
 
-          RUNNER_ID=$(curl -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners | jq '.runners[] | select(.name=="self-hosted") | .id')
+          RESPONSE=$(curl -L \
+          -X POST \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners/remove-token)
 
-          curl -X DELETE -H "Authorization: Bearer ${{ env.ACCESS_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/runners/$RUNNER_ID
+          echo "REMOVE_TOKEN=$(echo $RESPONSE | jq -r .token)" >> $GITHUB_ENV
 
+      - name: SSH into EC2 instance and Remove Self-Hosted Runner
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ${{ secrets.AWS_KEY_NAME }}.pem ubuntu@${{ env.EC2_PUBLIC_IP }} << EOF
+            cd actions-runner
+            ./config.sh remove --token ${{ env.REMOVE_TOKEN }}
+          EOF
+          
       - name: Terraform Destroy
         run: terraform destroy -auto-approve -var=aws_access_key=${{ secrets.AWS_ACCESS_KEY_ID }} -var=aws_secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }} -var=aws_key_name=${{ secrets.AWS_KEY_NAME }}

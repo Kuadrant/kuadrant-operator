@@ -18,7 +18,7 @@ var _ PolicyError = ErrTargetNotFound{}
 
 type ErrTargetNotFound struct {
 	Kind      string
-	TargetRef gatewayapiv1alpha2.PolicyTargetReference
+	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReference
 	Err       error
 }
 
@@ -34,7 +34,7 @@ func (e ErrTargetNotFound) Reason() gatewayapiv1alpha2.PolicyConditionReason {
 	return gatewayapiv1alpha2.PolicyReasonTargetNotFound
 }
 
-func NewErrTargetNotFound(kind string, targetRef gatewayapiv1alpha2.PolicyTargetReference, err error) ErrTargetNotFound {
+func NewErrTargetNotFound(kind string, targetRef gatewayapiv1alpha2.LocalPolicyTargetReference, err error) ErrTargetNotFound {
 	return ErrTargetNotFound{
 		Kind:      kind,
 		TargetRef: targetRef,

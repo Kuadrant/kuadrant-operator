@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -210,12 +209,12 @@ func buildGatewayDAGNodes(gateways []*gatewayapiv1.Gateway, policies []Policy) [
 			group := p.GetTargetRef().Group
 			kind := p.GetTargetRef().Kind
 			name := p.GetTargetRef().Name
-			namespace := ptr.Deref(p.GetTargetRef().Namespace, gatewayapiv1.Namespace(p.GetNamespace()))
+			namespace := p.GetNamespace()
 
 			return group == gatewayapiv1.GroupName &&
 				kind == "Gateway" &&
 				name == gatewayapiv1.ObjectName(g.Name) &&
-				namespace == gatewayapiv1.Namespace(g.Namespace)
+				namespace == g.Namespace
 		})
 		return gatewayDAGNode{Gateway: g, attachedPolicies: attachedPolicies}
 	})
@@ -228,12 +227,12 @@ func buildHTTPRouteDAGNodes(routes []*gatewayapiv1.HTTPRoute, policies []Policy)
 			group := p.GetTargetRef().Group
 			kind := p.GetTargetRef().Kind
 			name := p.GetTargetRef().Name
-			namespace := ptr.Deref(p.GetTargetRef().Namespace, gatewayapiv1.Namespace(p.GetNamespace()))
+			namespace := p.GetNamespace()
 
 			return group == gatewayapiv1.GroupName &&
 				kind == "HTTPRoute" &&
 				name == gatewayapiv1.ObjectName(route.Name) &&
-				namespace == gatewayapiv1.Namespace(route.Namespace)
+				namespace == route.Namespace
 		})
 		return httpRouteDAGNode{HTTPRoute: route, attachedPolicies: attachedPolicies}
 	})

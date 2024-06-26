@@ -15,7 +15,6 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
@@ -113,7 +112,6 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 }
 
 func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *multicluster.GatewayWrapper, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener, clusterGateways []multicluster.ClusterGateway, managedZone *kuadrantdnsv1alpha1.ManagedZone) (*kuadrantdnsv1alpha1.DNSRecord, error) {
-	ownerID := common.ToBase36HashLen(fmt.Sprintf("%s-%s-%s", gateway.ClusterID, gateway.Name, gateway.Namespace), utils.ClusterIDLength)
 	rootHost := string(*targetListener.Hostname)
 	var healthProtocol *string
 	var healthCheckSpec *kuadrantdnsv1alpha1.HealthCheckSpec
@@ -134,8 +132,7 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *multicluster.GatewayWrap
 			Labels:    commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy),
 		},
 		Spec: kuadrantdnsv1alpha1.DNSRecordSpec{
-			OwnerID:  &ownerID,
-			RootHost: &rootHost,
+			RootHost: rootHost,
 			ManagedZoneRef: &kuadrantdnsv1alpha1.ManagedZoneReference{
 				Name: managedZone.Name,
 			},

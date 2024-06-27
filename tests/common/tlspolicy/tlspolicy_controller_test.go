@@ -38,7 +38,7 @@ var _ = Describe("TLSPolicy controller", func() {
 	var tlsPolicy *v1alpha1.TLSPolicy
 	var ctx context.Context
 
-	hostName := func() string {
+	newHostName := func() string {
 		return fmt.Sprintf("test.example-%s.com", rand.String(6))
 	}
 
@@ -122,7 +122,7 @@ var _ = Describe("TLSPolicy controller", func() {
 
 			By("creating a valid Gateway")
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
-				WithHTTPListener("test-listener", hostName()).Gateway
+				WithHTTPListener("test-listener", newHostName()).Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 
 			Eventually(func(g Gomega) {
@@ -144,7 +144,7 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Message": Equal("TLSPolicy has been successfully enforced"),
 					})),
 				)
-			}, 10*time.Second, time.Second).Should(Succeed())
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		})
 
 	})
@@ -152,7 +152,7 @@ var _ = Describe("TLSPolicy controller", func() {
 	Context("valid target, issuer and policy", func() {
 		BeforeEach(func() {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
-				WithHTTPListener("test-listener", hostName()).Gateway
+				WithHTTPListener("test-listener", newHostName()).Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
 			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
@@ -180,7 +180,7 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Message": Equal("TLSPolicy has been successfully enforced"),
 					})),
 				)
-			}, 30*time.Second, time.Second).Should(Succeed())
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		})
 
 		It("should set gateway back reference and policy affected status", func() {
@@ -207,7 +207,7 @@ var _ = Describe("TLSPolicy controller", func() {
 			clusterIssuer, clusterIssuerRef = tests.BuildSelfSignedClusterIssuer("testclusterissuer", testNamespace)
 			Expect(k8sClient.Create(ctx, clusterIssuer)).To(BeNil())
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
-				WithHTTPListener("test-listener", hostName()).Gateway
+				WithHTTPListener("test-listener", newHostName()).Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
 			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
@@ -240,14 +240,14 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Message": Equal("TLSPolicy has been successfully enforced"),
 					})),
 				)
-			}, 30*time.Second, time.Second).Should(Succeed())
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		})
 	})
 
 	Context("with http listener", func() {
 		BeforeEach(func() {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
-				WithHTTPListener("test-listener", hostName()).Gateway
+				WithHTTPListener("test-listener", newHostName()).Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
 			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
@@ -296,7 +296,7 @@ var _ = Describe("TLSPolicy controller", func() {
 	Context("with https listener", func() {
 		BeforeEach(func() {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
-				WithHTTPSListener(hostName(), "test-tls-secret").Gateway
+				WithHTTPSListener(newHostName(), "test-tls-secret").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
 			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
@@ -459,7 +459,7 @@ var _ = Describe("TLSPolicy controller", func() {
 	})
 
 	Context("with https listener and multiple issuer configurations", func() {
-		testHostName := hostName()
+		testHostName := newHostName()
 		commonName := strings.Replace(testHostName, "test.", "", 1)
 
 		BeforeEach(func() {

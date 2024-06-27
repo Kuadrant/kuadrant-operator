@@ -135,7 +135,7 @@ func TestFetchTargetRefObject(t *testing.T) {
 	t.Run("fetch http route", func(subT *testing.T) {
 		existingRoute := routeFactory(metav1.ConditionTrue)
 		clientAPIReader := clientFactory(existingRoute)
-		res, err := FetchTargetRefObject(ctx, clientAPIReader, routeTargetRef, namespace)
+		res, err := FetchTargetRefObject(ctx, clientAPIReader, routeTargetRef, namespace, true)
 		assert.NilError(subT, err)
 		assert.Equal(subT, res == nil, false)
 		assertion(res, existingRoute)
@@ -144,7 +144,7 @@ func TestFetchTargetRefObject(t *testing.T) {
 	t.Run("fetch http route - not accepted", func(subT *testing.T) {
 		existingRoute := routeFactory(metav1.ConditionFalse)
 		clientAPIReader := clientFactory(existingRoute)
-		res, err := FetchTargetRefObject(ctx, clientAPIReader, routeTargetRef, namespace)
+		res, err := FetchTargetRefObject(ctx, clientAPIReader, routeTargetRef, namespace, true)
 		assert.Error(subT, err, fmt.Sprintf("httproute (%s/%s) not accepted", namespace, routeName))
 		assert.DeepEqual(subT, res, (*gatewayapiv1.HTTPRoute)(nil))
 	})
@@ -152,7 +152,7 @@ func TestFetchTargetRefObject(t *testing.T) {
 	t.Run("fetch gateway", func(subT *testing.T) {
 		existingGateway := gatewayFactory(metav1.ConditionTrue)
 		clientAPIReader := clientFactory(existingGateway)
-		res, err := FetchTargetRefObject(ctx, clientAPIReader, gatewayTargetRef, namespace)
+		res, err := FetchTargetRefObject(ctx, clientAPIReader, gatewayTargetRef, namespace, true)
 		assert.NilError(subT, err)
 		assert.Equal(subT, res == nil, false)
 		assertion(res, existingGateway)
@@ -161,16 +161,25 @@ func TestFetchTargetRefObject(t *testing.T) {
 	t.Run("fetch gateway - not ready", func(subT *testing.T) {
 		existingGateway := gatewayFactory(metav1.ConditionFalse)
 		clientAPIReader := clientFactory(existingGateway)
-		res, err := FetchTargetRefObject(ctx, clientAPIReader, gatewayTargetRef, namespace)
+		res, err := FetchTargetRefObject(ctx, clientAPIReader, gatewayTargetRef, namespace, true)
 		assert.Error(subT, err, fmt.Sprintf("gateway (%s/%s) not ready", namespace, gatewayName))
 		assert.DeepEqual(subT, res, (*gatewayapiv1.Gateway)(nil))
+	})
+
+	t.Run("fetch gateway - not ready - skip check for only ready gateways", func(subT *testing.T) {
+		existingGateway := gatewayFactory(metav1.ConditionFalse)
+		clientAPIReader := clientFactory(existingGateway)
+		res, err := FetchTargetRefObject(ctx, clientAPIReader, gatewayTargetRef, namespace, false)
+		assert.NilError(subT, err)
+		assert.Equal(subT, res == nil, false)
+		assertion(res, existingGateway)
 	})
 
 	t.Run("unknown network resource", func(subT *testing.T) {
 		ns := gatewayapiv1.Namespace(namespace)
 		targetRef := gatewayapiv1alpha2.PolicyTargetReference{Kind: "Service", Name: "my-sv", Namespace: &ns}
 		clientAPIReader := clientFactory()
-		res, err := FetchTargetRefObject(ctx, clientAPIReader, targetRef, namespace)
+		res, err := FetchTargetRefObject(ctx, clientAPIReader, targetRef, namespace, true)
 		assert.Error(subT, err, fmt.Sprintf("FetchValidTargetRef: targetRef (%v) to unknown network resource", targetRef))
 		assert.DeepEqual(subT, res, nil)
 	})

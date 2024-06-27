@@ -19,15 +19,18 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -199,6 +202,22 @@ func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")), mappers.WithClient(mgr.GetClient()))
 
+	issuerStatusChangedPredicate := predicate.Funcs{
+		UpdateFunc: func(ev event.UpdateEvent) bool {
+			oldPolicy, ok := ev.ObjectOld.(certmanagerv1.GenericIssuer)
+			if !ok {
+				return false
+			}
+			newPolicy, ok := ev.ObjectNew.(certmanagerv1.GenericIssuer)
+			if !ok {
+				return false
+			}
+			oldStatus := oldPolicy.GetStatus()
+			newStatus := newPolicy.GetStatus()
+			return !reflect.DeepEqual(oldStatus, newStatus)
+		},
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.TLSPolicy{}).
 		Owns(&certmanagerv1.Certificate{}).
@@ -208,18 +227,19 @@ func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return gatewayEventMapper.MapToPolicy(ctx, object, &v1alpha1.TLSPolicy{})
 			}),
 		).
+		Watches(
+			&certmanagerv1.Issuer{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+				return mapIssuerToPolicy(ctx, mgr.GetClient(), r.Logger(), object)
+			}),
+			builder.WithPredicates(issuerStatusChangedPredicate),
+		).
+		Watches(
+			&certmanagerv1.ClusterIssuer{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+				return mapClusterIssuerToPolicy(ctx, mgr.GetClient(), r.Logger(), object)
+			}),
+			builder.WithPredicates(issuerStatusChangedPredicate),
+		).
 		Complete(r)
-}
-
-func (r *TLSPolicyReconciler) FetchValidGateway(ctx context.Context, key client.ObjectKey) (*gatewayapiv1.Gateway, error) {
-	logger, _ := logr.FromContext(ctx)
-
-	gw := &gatewayapiv1.Gateway{}
-	err := r.Client().Get(ctx, key, gw)
-	logger.V(1).Info("FetchValidGateway", "gateway", key, "err", err)
-	if err != nil {
-		return nil, err
-	}
-
-	return gw, nil
 }

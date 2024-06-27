@@ -104,7 +104,9 @@ resource "aws_security_group" "ssh_http_https_access" {
   }
 }
 
-resource "null_resource" "wait_for_user_data" {
+# Uncomment when creating AMI.
+
+/* resource "null_resource" "wait_for_user_data" {
   provisioner "local-exec" {
     command = <<EOT
     while ! ssh -o StrictHostKeyChecking=no -i ${aws_instance.self_hosted_runner.key_name}.pem ubuntu@${aws_instance.self_hosted_runner.public_ip} 'test -f /tmp/user_data_done'; do
@@ -116,7 +118,7 @@ resource "null_resource" "wait_for_user_data" {
   }
 
   depends_on = [aws_instance.self_hosted_runner]
-}
+} */
 
 output "instance_public_ip" {
   value = aws_instance.self_hosted_runner.public_ip

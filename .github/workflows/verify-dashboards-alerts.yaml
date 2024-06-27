@@ -122,6 +122,22 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y libicu-dev
+
+          # Function to check SSH connectivity
+          function check_ssh {
+              nc -z -w 5 ${{ env.EC2_PUBLIC_IP }} 22
+          }
+
+          echo "Checking SSH connectivity to ${{ env.EC2_PUBLIC_IP }}..."
+
+          # Loop until SSH is available
+          while ! check_ssh; do
+              echo "SSH is not yet available. Retrying in 10 seconds..."
+              sleep 10
+          done
+
+          echo "SSH is now available. Connecting now..."
+
           ssh -o StrictHostKeyChecking=no -i ${{ secrets.AWS_KEY_NAME }}.pem ubuntu@${{ env.EC2_PUBLIC_IP }} << EOF
             mkdir actions-runner && cd actions-runner
             curl -o actions-runner-linux-x64-2.317.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.317.0/actions-runner-linux-x64-2.317.0.tar.gz

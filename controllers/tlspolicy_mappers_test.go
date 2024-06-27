@@ -50,7 +50,7 @@ func Test_mapClusterIssuerToPolicy(t *testing.T) {
 		{
 			name: "map cluster issuer to matching policies",
 			args: args{
-				k8sClient: fake.NewClientBuilder().WithScheme(s).WithObjects(clusterIssuer).WithLists(testInitPolicies(clusterIssuer.Name, certmanagerv1.IssuerKind)).Build(),
+				k8sClient: fake.NewClientBuilder().WithScheme(s).WithObjects(clusterIssuer).WithLists(testInitPolicies(clusterIssuer.Name, certmanagerv1.ClusterIssuerKind)).Build(),
 				object:    clusterIssuer,
 			},
 			want: []reconcile.Request{

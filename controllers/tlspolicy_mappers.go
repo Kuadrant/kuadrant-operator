@@ -38,7 +38,7 @@ func mapClusterIssuerToPolicy(ctx context.Context, k8sClient client.Client, logg
 
 	policies := &v1alpha1.TLSPolicyList{}
 	if err := k8sClient.List(ctx, policies); err != nil {
-		logger.V(1).Error(err, "cannot list policies", "namespace", object.GetNamespace())
+		logger.V(1).Error(err, "cannot list policies for all namespaces")
 		return nil
 	}
 

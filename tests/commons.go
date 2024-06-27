@@ -20,6 +20,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -369,6 +370,40 @@ func RLPIsNotAccepted(ctx context.Context, k8sClient client.Client, rlpKey clien
 		}
 
 		return true
+	}
+}
+
+func HTTPRouteMissingPolicyReference(ctx context.Context, k8sClient client.Client, routeKey client.ObjectKey, ownerKind schema.GroupVersionKind) func(Gomega) {
+	return ObjectMissingPolicyReference(ctx, k8sClient, &gatewayapiv1.HTTPRoute{}, routeKey, ownerKind)
+}
+
+func GatewayMissingPolicyReference(ctx context.Context, k8sClient client.Client, gwKey client.ObjectKey, ownerKind schema.GroupVersionKind) func(Gomega) {
+	return ObjectMissingPolicyReference(ctx, k8sClient, &gatewayapiv1.Gateway{}, gwKey, ownerKind)
+}
+
+func ObjectMissingPolicyReference(ctx context.Context, k8sClient client.Client, obj client.Object, objKey client.ObjectKey, ownerKind schema.GroupVersionKind) func(Gomega) {
+	return func(g Gomega) {
+		err := k8sClient.Get(ctx, objKey, obj)
+		// must exist
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(kuadrant.GetPolicyReference(obj, ownerKind)).To(BeNil())
+	}
+}
+
+func HTTPRouteWithPolicyReference(ctx context.Context, k8sClient client.Client, routeKey client.ObjectKey, ownerKind schema.GroupVersionKind, ownerKey client.ObjectKey) func(Gomega) {
+	return ObjectWithPolicyReference(ctx, k8sClient, &gatewayapiv1.HTTPRoute{}, routeKey, ownerKind, ownerKey)
+}
+
+func GatewayWithPolicyReference(ctx context.Context, k8sClient client.Client, gwKey client.ObjectKey, ownerKind schema.GroupVersionKind, ownerKey client.ObjectKey) func(Gomega) {
+	return ObjectWithPolicyReference(ctx, k8sClient, &gatewayapiv1.Gateway{}, gwKey, ownerKind, ownerKey)
+}
+
+func ObjectWithPolicyReference(ctx context.Context, k8sClient client.Client, obj client.Object, objKey client.ObjectKey, ownerKind schema.GroupVersionKind, ownerKey client.ObjectKey) func(Gomega) {
+	return func(g Gomega) {
+		err := k8sClient.Get(ctx, objKey, obj)
+		// must exist
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(kuadrant.GetPolicyReference(obj, ownerKind)).To(Equal(ptr.To(ownerKey)))
 	}
 }
 

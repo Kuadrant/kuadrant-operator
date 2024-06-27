@@ -111,7 +111,7 @@ func ReconcilePolicyReferenceOnObject(
 		err := cl.Update(ctx, obj)
 		logger.V(1).Info("reconcileNetworkObjectDirectBackReferenceAnnotation: update network resource",
 			"kind", obj.GetObjectKind().GroupVersionKind(),
-			"name", client.ObjectKeyFromObject(obj), "err", err)
+			"key", client.ObjectKeyFromObject(obj), "err", err)
 		return err
 	}
 

@@ -112,6 +112,10 @@ func (g *GatewayNode) AttachedPolicies() []Policy {
 	})
 }
 
+func (g *GatewayNode) GetGateway() *gatewayapiv1.Gateway {
+	return g.Gateway
+}
+
 func (g *GatewayNode) Routes() []RouteNode {
 	// get children of httproute kind
 	routeNodeList := utils.Filter(g.graph.Children(g.ID()), func(n dag.Node) bool {

@@ -29,7 +29,7 @@ func (r *RateLimitPolicyReconciler) reconcileDirectBackReferences(ctx context.Co
 	for _, gwNode := range gwNodeList {
 		err := kuadrant.ReconcilePolicyReferenceOnObject(
 			ctx, r.Client(), kuadrantv1beta2.RateLimitPolicyGVK,
-			gwNode, gwNode.AttachedPolicies(),
+			gwNode.GetGateway(), gwNode.AttachedPolicies(),
 		)
 		if err != nil {
 			return err
@@ -43,7 +43,7 @@ func (r *RateLimitPolicyReconciler) reconcileDirectBackReferences(ctx context.Co
 	for _, routeNode := range routeNodeList {
 		err := kuadrant.ReconcilePolicyReferenceOnObject(
 			ctx, r.Client(), kuadrantv1beta2.RateLimitPolicyGVK,
-			routeNode, routeNode.AttachedPolicies(),
+			routeNode.Route(), routeNode.AttachedPolicies(),
 		)
 		if err != nil {
 			return err

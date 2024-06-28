@@ -113,16 +113,14 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 
 func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *multicluster.GatewayWrapper, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener, clusterGateways []multicluster.ClusterGateway, managedZone *kuadrantdnsv1alpha1.ManagedZone) (*kuadrantdnsv1alpha1.DNSRecord, error) {
 	rootHost := string(*targetListener.Hostname)
-	var healthProtocol *string
 	var healthCheckSpec *kuadrantdnsv1alpha1.HealthCheckSpec
 
 	if dnsPolicy.Spec.HealthCheck != nil {
-		healthProtocol = &dnsPolicy.Spec.HealthCheck.Protocol
 		healthCheckSpec = &kuadrantdnsv1alpha1.HealthCheckSpec{
 			Endpoint:         dnsPolicy.Spec.HealthCheck.Endpoint,
-			Port:             &dnsPolicy.Spec.HealthCheck.Port,
-			Protocol:         (*kuadrantdnsv1alpha1.HealthProtocol)(healthProtocol),
-			FailureThreshold: &dnsPolicy.Spec.HealthCheck.FailureThreshold,
+			Port:             dnsPolicy.Spec.HealthCheck.Port,
+			Protocol:         dnsPolicy.Spec.HealthCheck.Protocol,
+			FailureThreshold: dnsPolicy.Spec.HealthCheck.FailureThreshold,
 		}
 	}
 	dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{

@@ -84,10 +84,11 @@ func (h httpRouteDAGNode) ID() string {
 }
 
 type topologyOptions struct {
-	gateways []*gatewayapiv1.Gateway
-	routes   []*gatewayapiv1.HTTPRoute
-	policies []Policy
-	logger   logr.Logger
+	gateways               []*gatewayapiv1.Gateway
+	routes                 []*gatewayapiv1.HTTPRoute
+	policies               []Policy
+	logger                 logr.Logger
+	programmedGatewaysOnly bool
 }
 
 // TopologyOpts allows to manipulate topologyOptions.
@@ -117,10 +118,17 @@ func WithPolicies(policies []Policy) TopologyOpts {
 	}
 }
 
+func WithProgrammedGatewaysOnly(programmedGatewaysOnly bool) TopologyOpts {
+	return func(o *topologyOptions) {
+		o.programmedGatewaysOnly = programmedGatewaysOnly
+	}
+}
+
 func NewTopology(opts ...TopologyOpts) (*Topology, error) {
 	// defaults
 	o := &topologyOptions{
-		logger: logr.Discard(),
+		logger:                 logr.Discard(),
+		programmedGatewaysOnly: true,
 	}
 
 	for _, opt := range opts {
@@ -140,7 +148,7 @@ func NewTopology(opts ...TopologyOpts) (*Topology, error) {
 
 	graph := dag.NewDAG(typeIndexer)
 
-	gatewayDAGNodes := buildGatewayDAGNodes(o.gateways, o.policies)
+	gatewayDAGNodes := buildGatewayDAGNodes(o.gateways, o.policies, o.programmedGatewaysOnly)
 
 	routeDAGNodes := buildHTTPRouteDAGNodes(o.routes, o.policies)
 
@@ -199,12 +207,15 @@ func buildDAGEdges(gateways []gatewayDAGNode, routes []httpRouteDAGNode) []edge 
 	return edges
 }
 
-func buildGatewayDAGNodes(gateways []*gatewayapiv1.Gateway, policies []Policy) []gatewayDAGNode {
-	programmedGateways := utils.Filter(gateways, func(g *gatewayapiv1.Gateway) bool {
-		return meta.IsStatusConditionTrue(g.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed))
-	})
+func buildGatewayDAGNodes(gateways []*gatewayapiv1.Gateway, policies []Policy, programmedGatewaysOnly bool) []gatewayDAGNode {
+	targetedGateways := gateways
+	if programmedGatewaysOnly {
+		targetedGateways = utils.Filter(gateways, func(g *gatewayapiv1.Gateway) bool {
+			return meta.IsStatusConditionTrue(g.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed))
+		})
+	}
 
-	return utils.Map(programmedGateways, func(g *gatewayapiv1.Gateway) gatewayDAGNode {
+	return utils.Map(targetedGateways, func(g *gatewayapiv1.Gateway) gatewayDAGNode {
 		// Compute attached policies
 		attachedPolicies := utils.Filter(policies, func(p Policy) bool {
 			group := p.GetTargetRef().Group

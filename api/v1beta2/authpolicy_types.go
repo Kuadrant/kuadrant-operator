@@ -355,6 +355,10 @@ func (ap *AuthPolicy) List(ctx context.Context, c client.Client, namespace strin
 	return policies
 }
 
+func (ap *AuthPolicy) TargetProgrammedGatewaysOnly() bool {
+	return true
+}
+
 func (ap *AuthPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
 	return kuadrantgatewayapi.InheritedPolicy
 }

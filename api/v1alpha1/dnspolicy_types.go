@@ -195,6 +195,10 @@ func (p *DNSPolicy) List(ctx context.Context, c client.Client, namespace string)
 	return policies
 }
 
+func (p *DNSPolicy) TargetProgrammedGatewaysOnly() bool {
+	return true
+}
+
 func (p *DNSPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
 	return kuadrantgatewayapi.DirectPolicy
 }

@@ -58,11 +58,23 @@ func (r *DNSPolicyReconciler) reconcileStatus(ctx context.Context, dnsPolicy *v1
 		return ctrl.Result{}, updateErr
 	}
 
+	// policy updated in API, emit metrics based on status conditions
+	r.emitConditionMetrics(dnsPolicy)
+
 	if kuadrant.IsTargetNotFound(specErr) {
 		return ctrl.Result{Requeue: true}, nil
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *DNSPolicyReconciler) emitConditionMetrics(dnsPolicy *v1alpha1.DNSPolicy) {
+	readyStatus := meta.FindStatusCondition(dnsPolicy.Status.Conditions, ReadyConditionType)
+	if readyStatus == nil {
+		dnsPolicyReady.WithLabelValues(dnsPolicy.Name, dnsPolicy.Namespace, "false").Set(1)
+	} else {
+		dnsPolicyReady.WithLabelValues(dnsPolicy.Name, dnsPolicy.Namespace, string(readyStatus.Status)).Set(1)
+	}
 }
 
 func (r *DNSPolicyReconciler) calculateStatus(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, specErr error) *v1alpha1.DNSPolicyStatus {

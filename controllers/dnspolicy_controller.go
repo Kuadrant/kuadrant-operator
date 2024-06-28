@@ -20,6 +20,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -199,5 +202,35 @@ func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				return gatewayEventMapper.MapToPolicy(ctx, object, &v1alpha1.DNSPolicy{})
 			}),
 		)
+	r.RegisterEventHandler(&DNSMetricsEventHandler{})
 	return ctrlr.Complete(r)
+}
+
+const (
+	dnsRecordNameLabel      = "dns_record_name"
+	dnsRecordNamespaceLabel = "dns_record_namespace"
+	dnsRecordEventTypeLabel = "dns_record_event_type"
+	dnsPolicyNameLabel      = "dns_policy_name"
+	dnsPolicyNamespaceLabel = "dns_policy_namespace"
+	dnsPolicyReadyLabel     = "dns_policy_ready"
+)
+
+var (
+	dnsRecordEvent = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "dns_record_event",
+			Help: "DNS Record events",
+		},
+		[]string{dnsRecordNameLabel, dnsRecordNamespaceLabel, dnsRecordEventTypeLabel})
+	dnsPolicyReady = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "dns_policy_ready",
+			Help: "DNS Policy ready",
+		},
+		[]string{dnsPolicyNameLabel, dnsPolicyNamespaceLabel, dnsPolicyReadyLabel})
+)
+
+func init() {
+	metrics.Registry.MustRegister(dnsRecordEvent)
+	metrics.Registry.MustRegister(dnsPolicyReady)
 }

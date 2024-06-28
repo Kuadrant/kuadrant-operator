@@ -20,6 +20,34 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
+type DNSMetricsEventHandler struct{}
+
+func (m *DNSMetricsEventHandler) OnCreate(_ context.Context, obj client.Object) {
+	dnsRecord, ok := obj.(*kuadrantdnsv1alpha1.DNSRecord)
+	if !ok {
+		return
+	}
+	dnsRecordEvent.WithLabelValues(dnsRecord.Name, dnsRecord.Namespace, "create").Inc()
+}
+func (m *DNSMetricsEventHandler) OnUpdate(_ context.Context, obj client.Object) {
+	dnsRecord, ok := obj.(*kuadrantdnsv1alpha1.DNSRecord)
+	if !ok {
+		return
+	}
+	dnsRecordEvent.WithLabelValues(dnsRecord.Name, dnsRecord.Namespace, "update").Inc()
+}
+func (m *DNSMetricsEventHandler) OnDelete(_ context.Context, obj client.Object) {
+	dnsRecord, ok := obj.(*kuadrantdnsv1alpha1.DNSRecord)
+	if !ok {
+		return
+	}
+	dnsRecordEvent.WithLabelValues(dnsRecord.Name, dnsRecord.Namespace, "delete").Inc()
+}
+func (m *DNSMetricsEventHandler) OnStatusUpdate(_ context.Context, _ client.Object) {
+}
+func (m *DNSMetricsEventHandler) OnGet(_ context.Context, _ client.Object) {
+}
+
 func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, gwDiffObj *reconcilerutils.GatewayDiffs) error {
 	log := crlog.FromContext(ctx)
 

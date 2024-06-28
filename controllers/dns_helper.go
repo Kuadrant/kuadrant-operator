@@ -305,6 +305,7 @@ func (dh *dnsHelper) removeDNSForDeletedListeners(ctx context.Context, upstreamG
 			if err := dh.Delete(ctx, &dnsList.Items[i], &client.DeleteOptions{}); client.IgnoreNotFound(err) != nil {
 				return err
 			}
+			dnsRecordEvent.WithLabelValues(dnsRecord.Name, dnsRecord.Namespace, "delete").Inc()
 		}
 	}
 	return nil
@@ -333,7 +334,12 @@ func (dh *dnsHelper) deleteDNSRecordForListener(ctx context.Context, owner metav
 			Namespace: owner.GetNamespace(),
 		},
 	}
-	return dh.Delete(ctx, &dnsRecord, &client.DeleteOptions{})
+
+	err := dh.Delete(ctx, &dnsRecord, &client.DeleteOptions{})
+	if err == nil {
+		dnsRecordEvent.WithLabelValues(dnsRecord.Name, dnsRecord.Namespace, "delete").Inc()
+	}
+	return err
 }
 
 func isWildCardHost(host string) bool {

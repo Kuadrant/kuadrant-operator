@@ -34,6 +34,14 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
+type EventHandler interface {
+	OnCreate(context.Context, client.Object)
+	OnDelete(context.Context, client.Object)
+	OnUpdate(context.Context, client.Object)
+	OnStatusUpdate(context.Context, client.Object)
+	OnGet(context.Context, client.Object)
+}
+
 // MutateFn is a function which mutates the existing object into it's desired state.
 type MutateFn func(existing, desired client.Object) (bool, error)
 
@@ -47,6 +55,7 @@ type BaseReconciler struct {
 	apiClientReader client.Reader
 	logger          logr.Logger
 	recorder        record.EventRecorder
+	eventHandlers   []EventHandler
 }
 
 // blank assignment to verify that BaseReconciler implements reconcile.Reconciler
@@ -61,7 +70,12 @@ func NewBaseReconciler(
 		apiClientReader: apiClientReader,
 		logger:          logger,
 		recorder:        recorder,
+		eventHandlers:   []EventHandler{},
 	}
+}
+
+func (b *BaseReconciler) RegisterEventHandler(e EventHandler) {
+	b.eventHandlers = append(b.eventHandlers, e)
 }
 
 func (b *BaseReconciler) Reconcile(context.Context, ctrl.Request) (ctrl.Result, error) {
@@ -146,31 +160,64 @@ func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired cli
 func (b *BaseReconciler) GetResource(ctx context.Context, objKey types.NamespacedName, obj client.Object) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("get object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", objKey.Name, "namespace", objKey.Namespace)
-	return b.Client().Get(ctx, objKey, obj)
+	err := b.Client().Get(ctx, objKey, obj)
+	if err == nil {
+		for _, eh := range b.eventHandlers {
+			eh.OnGet(ctx, obj)
+		}
+	}
+	return err
 }
 
 func (b *BaseReconciler) CreateResource(ctx context.Context, obj client.Object) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("create object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
-	return b.Client().Create(ctx, obj)
+	err := b.Client().Create(ctx, obj)
+	if err == nil {
+		for _, eh := range b.eventHandlers {
+			eh.OnCreate(ctx, obj)
+		}
+	}
+	return err
 }
 
 func (b *BaseReconciler) UpdateResource(ctx context.Context, obj client.Object) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("update object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
-	return b.Client().Update(ctx, obj)
+	err := b.Client().Update(ctx, obj)
+	if err == nil {
+		for _, eh := range b.eventHandlers {
+			eh.OnUpdate(ctx, obj)
+		}
+	}
+	return err
 }
 
 func (b *BaseReconciler) DeleteResource(ctx context.Context, obj client.Object, options ...client.DeleteOption) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("delete object", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
-	return b.Client().Delete(ctx, obj, options...)
+	if obj.GetDeletionTimestamp() != nil {
+		return nil
+	}
+	err := b.Client().Delete(ctx, obj, options...)
+	if err == nil {
+		for _, eh := range b.eventHandlers {
+			eh.OnDelete(ctx, obj)
+		}
+	}
+	return err
 }
 
 func (b *BaseReconciler) UpdateResourceStatus(ctx context.Context, obj client.Object) error {
 	logger, _ := logr.FromContext(ctx)
 	logger.Info("update object status", "kind", strings.Replace(fmt.Sprintf("%T", obj), "*", "", 1), "name", obj.GetName(), "namespace", obj.GetNamespace())
-	return b.Client().Status().Update(ctx, obj)
+	err := b.Client().Status().Update(ctx, obj)
+	if err == nil {
+		for _, eh := range b.eventHandlers {
+			eh.OnStatusUpdate(ctx, obj)
+		}
+	}
+	return err
 }
 
 func (b *BaseReconciler) AddFinalizer(ctx context.Context, obj client.Object, finalizer string) error {

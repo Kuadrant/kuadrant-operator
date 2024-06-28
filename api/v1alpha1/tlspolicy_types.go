@@ -163,6 +163,10 @@ func (p *TLSPolicy) List(ctx context.Context, c client.Client, namespace string)
 	return policies
 }
 
+func (p *TLSPolicy) TargetProgrammedGatewaysOnly() bool {
+	return false
+}
+
 func (p *TLSPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
 	return kuadrantgatewayapi.DirectPolicy
 }

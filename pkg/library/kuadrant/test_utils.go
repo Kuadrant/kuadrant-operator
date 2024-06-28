@@ -75,6 +75,10 @@ func (_ *FakePolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
 	return kuadrantgatewayapi.DirectPolicy
 }
 
+func (p *FakePolicy) TargetProgrammedGatewaysOnly() bool {
+	return true
+}
+
 type FakePolicyStatus struct{}
 
 func (s *FakePolicyStatus) GetConditions() []metav1.Condition {

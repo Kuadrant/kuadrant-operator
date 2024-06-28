@@ -3,6 +3,7 @@ package kuadrant
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -17,7 +18,7 @@ import (
 )
 
 func policyReferenceAnnotationKey(gvk schema.GroupVersionKind) string {
-	return fmt.Sprintf("%s/policyreference", gvk.GroupKind().String())
+	return fmt.Sprintf("%s/policyreference", strings.ToLower(gvk.GroupKind().String()))
 }
 
 // SetPolicyReference sets a PolicyReference on obj for the given kind

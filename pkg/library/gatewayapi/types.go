@@ -3,6 +3,7 @@ package gatewayapi
 import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -104,4 +105,15 @@ func (a PolicyByTargetRefKindAndAcceptedStatus) Less(i, j int) bool {
 
 	//  The policy appearing first in alphabetical order by "{namespace}/{name}".
 	return client.ObjectKeyFromObject(a[i]).String() < client.ObjectKeyFromObject(a[j]).String()
+}
+
+type PolicyType interface {
+	GetGVK() schema.GroupVersionKind
+	GetInstance() client.Object
+}
+
+type GatewayAPIType interface {
+	GetGVK() schema.GroupVersionKind
+	GetInstance() client.Object
+	IsTargetRefTypeMatch(gatewayapiv1alpha2.PolicyTargetReference) bool
 }

@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -59,7 +60,7 @@ const (
 	TestHTTPRouteName = "toystore-route"
 )
 
-var _ = SynchronizedBeforeSuite(func() []byte {
+var _ = SynchronizedBeforeSuite(func(ctx SpecContext) []byte {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
@@ -79,14 +80,16 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
-	ctx := context.Background()
 	ns := tests.CreateNamespace(ctx, testClient())
-	tests.ApplyKuadrantCR(ctx, testClient(), ns)
+	kuadrantKey := client.ObjectKey{Name: "kuadrant-sample", Namespace: ns}
+	tests.ApplyKuadrantCRWithName(ctx, testClient(), kuadrantKey.Namespace, kuadrantKey.Name)
+	// rate limit policy controllers all need ready limitador, hence wait for kuadrant to be ready
+	Eventually(tests.KuadrantIsReady(ctx, testClient(), kuadrantKey)).WithContext(ctx).Should(Succeed())
 
 	data := controllers.MarshalConfig(cfg, controllers.WithKuadrantInstallNS(ns))
 
 	return data
-}, func(data []byte) {
+}, func(_ SpecContext, data []byte) {
 	// Unmarshal the shared configuration struct
 	var sharedCfg controllers.SharedConfig
 	Expect(json.Unmarshal(data, &sharedCfg)).To(Succeed())
@@ -112,7 +115,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: s})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
-})
+}, NodeTimeout(2*time.Minute))
 
 var _ = SynchronizedAfterSuite(func() {}, func() {
 	By("tearing down the test environment")

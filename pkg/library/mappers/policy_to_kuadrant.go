@@ -29,7 +29,7 @@ func NewPolicyToKuadrantEventMapper(o ...MapperOption) *PolicyToKuadrantEventMap
 // Policy -> gateways
 // Gateway -> Kuadrant CR name
 func (k *PolicyToKuadrantEventMapper) Map(eventCtx context.Context, obj client.Object) []reconcile.Request {
-	logger := k.opts.Logger.WithValues("object", client.ObjectKeyFromObject(obj), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
+	logger := k.opts.Logger.WithValues("object", client.ObjectKeyFromObject(obj))
 	ctx := logr.NewContext(eventCtx, logger)
 
 	policy, ok := obj.(kuadrantgatewayapi.Policy)
@@ -70,6 +70,6 @@ func (k *PolicyToKuadrantEventMapper) Map(eventCtx context.Context, obj client.O
 	}
 
 	// nothing to return
-	logger.V(1).Info("no valid gateways found")
+	logger.V(1).Info("no valid kuadrant instance found")
 	return []reconcile.Request{}
 }

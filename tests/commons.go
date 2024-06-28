@@ -134,6 +134,16 @@ func ApplyKuadrantCRWithName(ctx context.Context, cl client.Client, namespace, n
 	Expect(err).ToNot(HaveOccurred())
 }
 
+func KuadrantIsReady(ctx context.Context, k8sClient client.Client, key client.ObjectKey) func(Gomega) {
+	return func(g Gomega) {
+		kuadrant := &kuadrantv1beta1.Kuadrant{}
+		err := k8sClient.Get(ctx, key, kuadrant)
+		// must exist
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(meta.IsStatusConditionTrue(kuadrant.Status.Conditions, "Ready")).To(BeTrue())
+	}
+}
+
 func GatewayIsReady(ctx context.Context, cl client.Client, gateway *gatewayapiv1.Gateway) func() bool {
 	return func() bool {
 		existingGateway := &gatewayapiv1.Gateway{}

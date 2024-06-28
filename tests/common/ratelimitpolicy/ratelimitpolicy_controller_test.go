@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -34,6 +35,18 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 		rlpName       = "toystore-rlp"
 		gateway       *gatewayapiv1.Gateway
 	)
+
+	assertPolicyIsAcceptedAndEnforced := func(ctx context.Context, key client.ObjectKey) func() bool {
+		return func() bool {
+			return tests.RLPIsAccepted(ctx, testClient(), key)() && tests.RLPIsEnforced(ctx, testClient(), key)()
+		}
+	}
+
+	assertPolicyIsAcceptedAndNotEnforced := func(ctx context.Context, key client.ObjectKey) func() bool {
+		return func() bool {
+			return tests.RLPIsAccepted(ctx, testClient(), key)() && !tests.RLPIsEnforced(ctx, testClient(), key)()
+		}
+	}
 
 	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
 		policy := &kuadrantv1beta2.RateLimitPolicy{
@@ -141,81 +154,6 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 		}, testTimeOut)
 	})
 
-})
-
-var _ = Describe("RateLimitPolicy controller", func() {
-	const (
-		testTimeOut      = SpecTimeout(2 * time.Minute)
-		afterEachTimeOut = NodeTimeout(3 * time.Minute)
-	)
-	var (
-		testNamespace string
-		routeName     = "toystore-route"
-		rlpName       = "toystore-rlp"
-		gateway       *gatewayapiv1.Gateway
-	)
-
-	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
-		policy := &kuadrantv1beta2.RateLimitPolicy{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "RateLimitPolicy",
-				APIVersion: kuadrantv1beta2.GroupVersion.String(),
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      rlpName,
-				Namespace: testNamespace,
-			},
-			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "HTTPRoute",
-					Name:  gatewayapiv1.ObjectName(routeName),
-				},
-				Defaults: &kuadrantv1beta2.RateLimitPolicyCommonSpec{
-					Limits: map[string]kuadrantv1beta2.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: "minute",
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-		for _, mutateFn := range mutateFns {
-			mutateFn(policy)
-		}
-
-		return policy
-	}
-
-	assertPolicyIsAcceptedAndEnforced := func(ctx context.Context, key client.ObjectKey) func() bool {
-		return func() bool {
-			return tests.RLPIsAccepted(ctx, testClient(), key)() && tests.RLPIsEnforced(ctx, testClient(), key)()
-		}
-	}
-
-	assertPolicyIsAcceptedAndNotEnforced := func(ctx context.Context, key client.ObjectKey) func() bool {
-		return func() bool {
-			return tests.RLPIsAccepted(ctx, testClient(), key)() && !tests.RLPIsEnforced(ctx, testClient(), key)()
-		}
-	}
-
-	beforeEachCallback := func(ctx SpecContext) {
-		testNamespace = tests.CreateNamespace(ctx, testClient())
-		gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-
-		Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
-		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
-	}
-
-	BeforeEach(beforeEachCallback)
-	AfterEach(func(ctx SpecContext) {
-		tests.DeleteNamespace(ctx, testClient(), testNamespace)
-	}, afterEachTimeOut)
-
 	Context("RLP targeting HTTPRoute", func() {
 		It("policy status is available and backreference is set", func(ctx SpecContext) {
 			// create httproute
@@ -288,7 +226,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
 			Eventually(
-				tests.HTTPRouteWithPolicyReference(ctx, testClient(), gwKey, kuadrantv1beta2.RateLimitPolicyGVK, rlpKey),
+				tests.GatewayWithPolicyReference(ctx, testClient(), gwKey, kuadrantv1beta2.RateLimitPolicyGVK, rlpKey),
 			).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
@@ -309,7 +247,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
 			Eventually(
-				tests.HTTPRouteWithPolicyReference(ctx, testClient(), gwKey, kuadrantv1beta2.RateLimitPolicyGVK, rlpKey),
+				tests.GatewayWithPolicyReference(ctx, testClient(), gwKey, kuadrantv1beta2.RateLimitPolicyGVK, rlpKey),
 			).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
@@ -366,7 +304,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				// Check Gateway direct back reference
 				gwKey := client.ObjectKeyFromObject(gateway)
 				Eventually(
-					tests.HTTPRouteWithPolicyReference(ctx, testClient(), gwKey, kuadrantv1beta2.RateLimitPolicyGVK, gwRLPKey),
+					tests.GatewayWithPolicyReference(ctx, testClient(), gwKey, kuadrantv1beta2.RateLimitPolicyGVK, gwRLPKey),
 				).WithContext(ctx).Should(Succeed())
 			})
 
@@ -465,7 +403,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
 			Eventually(
-				tests.HTTPRouteWithPolicyReference(ctx, testClient(), gwKey, kuadrantv1beta2.RateLimitPolicyGVK, gwRLPKey),
+				tests.GatewayWithPolicyReference(ctx, testClient(), gwKey, kuadrantv1beta2.RateLimitPolicyGVK, gwRLPKey),
 			).WithContext(ctx).Should(Succeed())
 
 			// Delete GW RLP -> Route RLP should be enforced
@@ -491,7 +429,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check Gateway direct back reference
 			gwKey := client.ObjectKeyFromObject(gateway)
 			Eventually(
-				tests.HTTPRouteWithPolicyReference(ctx, testClient(), gwKey, kuadrantv1beta2.RateLimitPolicyGVK, gwRLPKey),
+				tests.GatewayWithPolicyReference(ctx, testClient(), gwKey, kuadrantv1beta2.RateLimitPolicyGVK, gwRLPKey),
 			).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)
@@ -598,9 +536,19 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 		// Accepted reason is already tested generally by the existing tests
 
-		It("Target not found reason", func(ctx SpecContext) {
+		FIt("Target not found reason", func(ctx SpecContext) {
 			rlp := policyFactory()
+			logf.Log.Info("==========================================================")
+			logf.Log.Info("==========================================================")
+			logf.Log.Info("==========================================================")
+			logf.Log.Info("=========== CREATE RLP ===============================================")
 			Expect(k8sClient.Create(ctx, rlp)).To(Succeed())
+
+			rlpList := &kuadrantv1beta2.RateLimitPolicyList{}
+			Expect(k8sClient.List(ctx, rlpList)).To(Succeed())
+			logf.Log.Info("==========================================================", "#rlp", len(rlpList.Items))
+			logf.Log.Info("==========================================================")
+			logf.Log.Info("==========================================================")
 
 			Eventually(assertAcceptedConditionFalse(ctx, rlp, string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
 				fmt.Sprintf("RateLimitPolicy target %s was not found", routeName)),
@@ -709,7 +657,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check HTTPRoute A direct back reference is gone
 			Eventually(
 				tests.HTTPRouteMissingPolicyReference(ctx, testClient(), routeAKey, kuadrantv1beta2.RateLimitPolicyGVK),
-			).WithContext(ctx).Should(BeTrue())
+			).WithContext(ctx).Should(Succeed())
 
 			// Check HTTPRoute B direct back reference
 			routeBKey := client.ObjectKey{Name: routeBName, Namespace: testNamespace}
@@ -757,7 +705,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check Gateway direct back reference
 			gwAKey := client.ObjectKey{Name: gwAName, Namespace: testNamespace}
 			Eventually(
-				tests.HTTPRouteWithPolicyReference(ctx, testClient(), gwAKey, kuadrantv1beta2.RateLimitPolicyGVK, rlpKey),
+				tests.GatewayWithPolicyReference(ctx, testClient(), gwAKey, kuadrantv1beta2.RateLimitPolicyGVK, rlpKey),
 			).WithContext(ctx).Should(Succeed())
 
 			// Proceed with the update:
@@ -786,12 +734,12 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check Gw A direct back reference is gone
 			Eventually(
 				tests.GatewayMissingPolicyReference(ctx, testClient(), gwAKey, kuadrantv1beta2.RateLimitPolicyGVK),
-			).WithContext(ctx).Should(BeTrue())
+			).WithContext(ctx).Should(Succeed())
 
 			// Check Gateway B direct back reference
 			gwBKey := client.ObjectKey{Name: gwBName, Namespace: testNamespace}
 			Eventually(
-				tests.HTTPRouteWithPolicyReference(ctx, testClient(), gwBKey, kuadrantv1beta2.RateLimitPolicyGVK, rlpKey),
+				tests.GatewayWithPolicyReference(ctx, testClient(), gwBKey, kuadrantv1beta2.RateLimitPolicyGVK, rlpKey),
 			).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
@@ -884,7 +832,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Check HTTPRoute A direct back reference is gone
 			Eventually(
 				tests.HTTPRouteMissingPolicyReference(ctx, testClient(), routeAKey, kuadrantv1beta2.RateLimitPolicyGVK),
-			).WithContext(ctx).Should(BeTrue())
+			).WithContext(ctx).Should(Succeed())
 
 			// Check HTTPRoute B direct back reference
 			Eventually(

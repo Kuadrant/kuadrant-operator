@@ -162,8 +162,8 @@ func propagateRecordConditions(records *kuadrantdnsv1alpha1.DNSRecordList, polic
 				continue
 			}
 
-			policyStatus.RecordConditions[*record.Spec.RootHost] = append(
-				policyStatus.RecordConditions[*record.Spec.RootHost],
+			policyStatus.RecordConditions[record.Spec.RootHost] = append(
+				policyStatus.RecordConditions[record.Spec.RootHost],
 				condition)
 		}
 	}

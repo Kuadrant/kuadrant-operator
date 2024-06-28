@@ -75,7 +75,7 @@ func TestPropagateRecordConditions(t *testing.T) {
 			Records: &kuadrantdnsv1alpha1.DNSRecordList{
 				Items: []kuadrantdnsv1alpha1.DNSRecord{
 					{
-						Spec: kuadrantdnsv1alpha1.DNSRecordSpec{RootHost: &rootHost},
+						Spec: kuadrantdnsv1alpha1.DNSRecordSpec{RootHost: rootHost},
 						Status: kuadrantdnsv1alpha1.DNSRecordStatus{
 							Conditions: []metav1.Condition{
 								healthyProviderCondition,
@@ -108,7 +108,7 @@ func TestPropagateRecordConditions(t *testing.T) {
 			Records: &kuadrantdnsv1alpha1.DNSRecordList{
 				Items: []kuadrantdnsv1alpha1.DNSRecord{
 					{
-						Spec: kuadrantdnsv1alpha1.DNSRecordSpec{RootHost: &rootHost},
+						Spec: kuadrantdnsv1alpha1.DNSRecordSpec{RootHost: rootHost},
 						Status: kuadrantdnsv1alpha1.DNSRecordStatus{
 							Conditions: []metav1.Condition{
 								healthyProviderCondition,

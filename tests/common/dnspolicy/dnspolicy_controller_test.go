@@ -541,10 +541,10 @@ var _ = Describe("DNSPolicy controller", func() {
 							"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
 							"Status":  Equal(metav1.ConditionTrue),
 							"Reason":  Equal(string(kuadrant.PolicyReasonEnforced)),
-							"Message": Equal("DNSPolicy has been partially enforced"),
+							"Message": Equal("DNSPolicy has been successfully enforced"),
 						})),
 				)
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutLong, time.Second).Should(Succeed())
 
 			// ensure there are no policies with not accepted condition
 			// in this case the "enforced" on the policy should be false

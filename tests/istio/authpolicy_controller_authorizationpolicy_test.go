@@ -3,6 +3,7 @@
 package istio_test
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -26,27 +28,22 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("AuthPolicy controller managing authorization policy", Ordered, func() {
+var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
-	var testNamespace string
-	var kuadrantInstallationNS string
-
-	BeforeAll(func(ctx SpecContext) {
-		kuadrantInstallationNS = tests.CreateNamespace(ctx, testClient())
-		tests.ApplyKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
-	})
-
-	AfterAll(func(ctx SpecContext) {
-		tests.DeleteNamespace(ctx, testClient(), kuadrantInstallationNS)
-	})
+	var (
+		testNamespace string
+		gwHost        = fmt.Sprintf("*.toystore-%s.com", rand.String(4))
+	)
 
 	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
 
-		gateway := tests.BuildBasicGateway(TestGatewayName, testNamespace)
+		gateway := tests.BuildBasicGateway(TestGatewayName, testNamespace, func(gateway *gatewayapiv1.Gateway) {
+			gateway.Spec.Listeners[0].Hostname = ptr.To(gatewayapiv1.Hostname(gwHost))
+		})
 		err := k8sClient.Create(ctx, gateway)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -85,13 +82,18 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 		return policy
 	}
 
+	randomHostFromGWHost := func() string {
+		return strings.Replace(gwHost, "*", rand.String(4), 1)
+	}
+
 	Context("policy attached to the gateway", func() {
+
 		var (
 			gwPolicy *kuadrantv1beta2.AuthPolicy
 		)
 
 		BeforeEach(func(ctx SpecContext) {
-			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
+			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{randomHostFromGWHost()})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -129,7 +131,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			Expect(iap.Spec.Rules).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{gwHost}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"GET"}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/toy*"}))
 		}, testTimeOut)
@@ -138,10 +140,11 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 	Context("policy attached to the route", func() {
 		var (
 			routePolicy *kuadrantv1beta2.AuthPolicy
+			routeHost   = randomHostFromGWHost()
 		)
 
 		BeforeEach(func(ctx SpecContext) {
-			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
+			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{routeHost})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -177,7 +180,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			Expect(iap.Spec.Rules).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{routeHost}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"GET"}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/toy*"}))
 		}, testTimeOut)
@@ -205,10 +208,11 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 		// RLP 1 -> Gw A
 		// RLP 2 -> Route A
 		var (
-			gwPolicy *kuadrantv1beta2.AuthPolicy
+			gwPolicy  *kuadrantv1beta2.AuthPolicy
+			routeHost = randomHostFromGWHost()
 		)
 		BeforeEach(func(ctx SpecContext) {
-			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
+			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{routeHost})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -242,7 +246,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			// create second (policyless) httproute
-			otherRoute := tests.BuildBasicHttpRoute("policyless-route", TestGatewayName, testNamespace, []string{"*.other"})
+			otherRoute := tests.BuildBasicHttpRoute("policyless-route", TestGatewayName, testNamespace, []string{randomHostFromGWHost()})
 			otherRoute.Spec.Rules = []gatewayapiv1.HTTPRouteRule{
 				{
 					Matches: []gatewayapiv1.HTTPRouteMatch{
@@ -268,7 +272,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			Expect(iap.Spec.Rules).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{gwHost}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"POST"}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/*"}))
 		}, testTimeOut)
@@ -277,12 +281,13 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 	Context("Attaches policy to the route with only unmatching top-level route selector", func() {
 		var (
 			routePolicy *kuadrantv1beta2.AuthPolicy
+			routeHost   = randomHostFromGWHost()
 		)
 		// Gw A
 		// Route A -> Gw A
 		// RLP 1 -> Route A
 		BeforeEach(func(ctx SpecContext) {
-			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
+			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{routeHost})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -332,12 +337,13 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 	Context("Attaches policy to the route with only unmatching config-level route selector", func() {
 		var (
 			routePolicy *kuadrantv1beta2.AuthPolicy
+			routeHost   = randomHostFromGWHost()
 		)
 		// Gw A
 		// Route A -> Gw A
 		// RLP 1 -> Route A
 		BeforeEach(func(ctx SpecContext) {
-			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
+			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{routeHost})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -387,15 +393,21 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			Expect(iap.Spec.Rules).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{routeHost}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"GET"}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/toy*"}))
 		}, testTimeOut)
 	})
 
 	Context("Complex HTTPRoute with multiple rules and hostnames", func() {
+
+		var (
+			routeHost1 = randomHostFromGWHost()
+			routeHost2 = randomHostFromGWHost()
+		)
+
 		BeforeEach(func(ctx SpecContext) {
-			route := tests.BuildMultipleRulesHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com", "*.admin.toystore.com"})
+			route := tests.BuildMultipleRulesHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{routeHost1, routeHost2})
 			err := k8sClient.Create(ctx, route)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
@@ -421,17 +433,17 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			Expect(iap.Spec.Rules).To(HaveLen(3))
 			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{routeHost1, routeHost2}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"POST"}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
 			Expect(iap.Spec.Rules[1].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[1].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[1].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[1].To[0].Operation.Hosts).To(Equal([]string{routeHost1, routeHost2}))
 			Expect(iap.Spec.Rules[1].To[0].Operation.Methods).To(Equal([]string{"DELETE"}))
 			Expect(iap.Spec.Rules[1].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
 			Expect(iap.Spec.Rules[2].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[2].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{routeHost1, routeHost2}))
 			Expect(iap.Spec.Rules[2].To[0].Operation.Methods).To(Equal([]string{"GET"}))
 			Expect(iap.Spec.Rules[2].To[0].Operation.Paths).To(Equal([]string{"/private*"}))
 		}, testTimeOut)
@@ -448,7 +460,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 								},
 							},
 						},
-						Hostnames: []gatewayapiv1.Hostname{"*.admin.toystore.com"},
+						Hostnames: []gatewayapiv1.Hostname{gatewayapiv1.Hostname(routeHost2)},
 					},
 					{ // Selects: GET /private*
 						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
@@ -481,19 +493,19 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			// POST *.admin.toystore.com/admin*
 			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{"*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[0].To[0].Operation.Hosts).To(Equal([]string{routeHost2}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"POST"}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
 			// DELETE *.admin.toystore.com/admin*
 			Expect(iap.Spec.Rules[1].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[1].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[1].To[0].Operation.Hosts).To(Equal([]string{"*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[1].To[0].Operation.Hosts).To(Equal([]string{routeHost2}))
 			Expect(iap.Spec.Rules[1].To[0].Operation.Methods).To(Equal([]string{"DELETE"}))
 			Expect(iap.Spec.Rules[1].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
 			// GET (*.toystore.com|*.admin.toystore.com)/private*
 			Expect(iap.Spec.Rules[2].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[2].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{routeHost1, routeHost2}))
 			Expect(iap.Spec.Rules[2].To[0].Operation.Methods).To(Equal([]string{"GET"}))
 			Expect(iap.Spec.Rules[2].To[0].Operation.Paths).To(Equal([]string{"/private*"}))
 		}, testTimeOut)
@@ -511,7 +523,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 								},
 							},
 						},
-						Hostnames: []gatewayapiv1.Hostname{"*.admin.toystore.com"},
+						Hostnames: []gatewayapiv1.Hostname{gatewayapiv1.Hostname(routeHost2)},
 					},
 				}
 				policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"] = config
@@ -535,19 +547,19 @@ var _ = Describe("AuthPolicy controller managing authorization policy", Ordered,
 			// POST *.admin.toystore.com/admin*
 			Expect(iap.Spec.Rules[0].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[0].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{routeHost1, routeHost2}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Methods).To(Equal([]string{"POST"}))
 			Expect(iap.Spec.Rules[0].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
 			// DELETE *.admin.toystore.com/admin*
 			Expect(iap.Spec.Rules[1].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[1].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{routeHost1, routeHost2}))
 			Expect(iap.Spec.Rules[1].To[0].Operation.Methods).To(Equal([]string{"DELETE"}))
 			Expect(iap.Spec.Rules[1].To[0].Operation.Paths).To(Equal([]string{"/admin*"}))
 			// GET (*.toystore.com|*.admin.toystore.com)/private*
 			Expect(iap.Spec.Rules[2].To).To(HaveLen(1))
 			Expect(iap.Spec.Rules[2].To[0].Operation).ShouldNot(BeNil())
-			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{"*.toystore.com", "*.admin.toystore.com"}))
+			Expect(iap.Spec.Rules[2].To[0].Operation.Hosts).To(Equal([]string{routeHost1, routeHost2}))
 			Expect(iap.Spec.Rules[2].To[0].Operation.Methods).To(Equal([]string{"GET"}))
 			Expect(iap.Spec.Rules[2].To[0].Operation.Paths).To(Equal([]string{"/private*"}))
 		}, testTimeOut)

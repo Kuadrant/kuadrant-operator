@@ -1,48 +1,40 @@
 package rlptools
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"unicode"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
-const (
-	LimitadorRateLimitIdentifierPrefix = "limit."
-)
+func LimitsNameFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) string {
+	return LimitsNamespaceFromRLP(rlp)
+}
 
-func LimitNameToLimitadorIdentifier(uniqueLimitName string) string {
-	identifier := LimitadorRateLimitIdentifierPrefix
+var timeUnitMap = map[kuadrantv1beta2.TimeUnit]int{
+	kuadrantv1beta2.TimeUnit("second"): 1,
+	kuadrantv1beta2.TimeUnit("minute"): 60,
+	kuadrantv1beta2.TimeUnit("hour"):   60 * 60,
+	kuadrantv1beta2.TimeUnit("day"):    60 * 60 * 24,
+}
 
-	// sanitize chars that are not allowed in limitador identifiers
-	for _, c := range uniqueLimitName {
-		if unicode.IsLetter(c) || unicode.IsDigit(c) || c == '_' {
-			identifier += string(c)
-		} else {
-			identifier += "_"
-		}
-	}
-
-	// to avoid breaking the uniqueness of the limit name after sanitization, we add a hash of the original name
-	hash := sha256.Sum256([]byte(uniqueLimitName))
-	identifier += "__" + hex.EncodeToString(hash[:4])
-
-	return identifier
+func LimitsNamespaceFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) string {
+	return fmt.Sprintf("%s/%s", rlp.GetNamespace(), rlp.GetName())
 }
 
 // LimitadorRateLimitsFromRLP converts rate limits from a Kuadrant RateLimitPolicy into a list of Limitador rate limit
 // objects
 func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []limitadorv1alpha1.RateLimit {
 	limitsNamespace := LimitsNamespaceFromRLP(rlp)
+	rlpKey := client.ObjectKeyFromObject(rlp)
 
 	rateLimits := make([]limitadorv1alpha1.RateLimit, 0)
 	for limitKey, limit := range rlp.Spec.CommonSpec().Limits {
-		limitIdentifier := LimitNameToLimitadorIdentifier(limitKey)
+		limitIdentifier := wasm.LimitNameToLimitadorIdentifier(rlpKey, limitKey)
 		for _, rate := range limit.Rates {
 			maxValue, seconds := rateToSeconds(rate)
 			rateLimits = append(rateLimits, limitadorv1alpha1.RateLimit{
@@ -56,21 +48,6 @@ func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []limitado
 		}
 	}
 	return rateLimits
-}
-
-func LimitsNamespaceFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) string {
-	return fmt.Sprintf("%s/%s", rlp.GetNamespace(), rlp.GetName())
-}
-
-func LimitsNameFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) string {
-	return LimitsNamespaceFromRLP(rlp)
-}
-
-var timeUnitMap = map[kuadrantv1beta2.TimeUnit]int{
-	kuadrantv1beta2.TimeUnit("second"): 1,
-	kuadrantv1beta2.TimeUnit("minute"): 60,
-	kuadrantv1beta2.TimeUnit("hour"):   60 * 60,
-	kuadrantv1beta2.TimeUnit("day"):    60 * 60 * 24,
 }
 
 // rateToSeconds converts from RLP Rate API (limit, duration and unit)

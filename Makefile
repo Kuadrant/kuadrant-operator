@@ -6,6 +6,9 @@ SHELL = /usr/bin/env bash -o pipefail
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 PROJECT_PATH := $(patsubst %/,%,$(dir $(MKFILE_PATH)))
 
+# Container Engine to be used for building image and with kind
+CONTAINER_ENGINE ?= docker
+
 # VERSION defines the project version for the bundle.
 # Update this value when you upgrade the version of your project.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
@@ -314,16 +317,19 @@ run: generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
 docker-build: ## Build docker image with the manager.
-	docker build -t $(IMG) .
+	$(CONTAINER_ENGINE) build -t $(IMG) .
 
 docker-push: ## Push docker image with the manager.
-	docker push $(IMG)
+	$(CONTAINER_ENGINE) push $(IMG)
 
 kind-load-image: ## Load image to local cluster
-	$(KIND) load docker-image $(IMG) --name $(KIND_CLUSTER_NAME)
+	$(eval TMP_DIR := $(shell mktemp -d))
+	$(CONTAINER_ENGINE) save -o $(TMP_DIR)/image.tar $(IMG) \
+	   && KIND_EXPERIMENTAL_PROVIDER=$(CONTAINER_ENGINE) $(KIND) load image-archive $(TMP_DIR)/image.tar $(IMG) --name $(KIND_CLUSTER_NAME) ; \
+	   EXITVAL=$$? ; \
+	   rm -rf $(TMP_DIR) ;\
+	   exit $${EXITVAL}
 
-kind-load-bundle: ## Load image to local cluster
-	$(KIND) load docker-image $(BUNDLE_IMG) --name $(KIND_CLUSTER_NAME)
 
 # go-install-tool will 'go install' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
@@ -374,7 +380,7 @@ bundle-ignore-createdAt:
 
 .PHONY: bundle-build
 bundle-build: ## Build the bundle image.
-	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+	$(CONTAINER_ENGINE) build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
 
 .PHONY: bundle-push
 bundle-push: ## Push the bundle image.

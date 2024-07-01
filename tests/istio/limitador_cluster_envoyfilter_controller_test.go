@@ -24,26 +24,16 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Limitador Cluster EnvoyFilter controller", Ordered, func() {
+var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 	var (
-		testNamespace          string
-		kuadrantInstallationNS string
-		rlpName                = "toystore-rlp"
-		efName                 = fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", TestGatewayName)
+		testNamespace string
+		rlpName       = "toystore-rlp"
+		efName        = fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", TestGatewayName)
 	)
-
-	BeforeAll(func(ctx SpecContext) {
-		kuadrantInstallationNS = tests.CreateNamespace(ctx, testClient())
-		tests.ApplyKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
-	})
-
-	AfterAll(func(ctx SpecContext) {
-		tests.DeleteNamespace(ctx, testClient(), kuadrantInstallationNS)
-	})
 
 	beforeEachCallback := func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())

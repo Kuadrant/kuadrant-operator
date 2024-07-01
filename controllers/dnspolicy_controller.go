@@ -187,7 +187,7 @@ func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return nil
 	}
 
-	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
+	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")), mappers.WithClient(mgr.GetClient()))
 
 	r.dnsHelper = dnsHelper{Client: r.Client()}
 	ctrlr := ctrl.NewControllerManagedBy(mgr).
@@ -196,7 +196,7 @@ func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&gatewayapiv1.Gateway{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return gatewayEventMapper.MapToPolicy(object, &v1alpha1.DNSPolicy{})
+				return gatewayEventMapper.MapToPolicy(ctx, object, &v1alpha1.DNSPolicy{})
 			}),
 		)
 	return ctrlr.Complete(r)

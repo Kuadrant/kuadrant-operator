@@ -4,17 +4,20 @@ package controllers
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/external-dns/endpoint"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -136,21 +139,61 @@ func testObjectDoesNotExist(obj client.Object) func() bool {
 
 // DNS
 
-func testBuildManagedZone(name, ns, domainName string) *kuadrantdnsv1alpha1.ManagedZone {
+func testBuildManagedZone(name, ns, domainName, secretName string) *kuadrantdnsv1alpha1.ManagedZone {
 	return &kuadrantdnsv1alpha1.ManagedZone{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 		},
 		Spec: kuadrantdnsv1alpha1.ManagedZoneSpec{
-			ID:          "1234",
 			DomainName:  domainName,
 			Description: domainName,
 			SecretRef: kuadrantdnsv1alpha1.ProviderRef{
-				Name: "secretname",
+				Name: secretName,
 			},
 		},
 	}
+}
+
+func testBuildInMemoryCredentialsSecret(name, ns string) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Data: map[string][]byte{},
+		Type: "kuadrant.io/inmemory",
+	}
+}
+
+// testEndpointsTraversable consumes an array of endpoints and returns a boolean
+// indicating presence of that path from host to all destinations
+// this function DOES NOT report a presence of an endpoint with one of destinations DNSNames
+func testEndpointsTraversable(endpoints []*endpoint.Endpoint, host string, destinations []string) bool {
+	allDestinationsFound := len(destinations) > 0
+	for _, destination := range destinations {
+		allTargetsFound := false
+		for _, ep := range endpoints {
+			// the host exists as a DNSName on an endpoint
+			if ep.DNSName == host {
+				// we found destination in the targets of the endpoint.
+				if slices.Contains(ep.Targets, destination) {
+					return true
+				}
+				// destination is not found on the endpoint. Use target as a host and check for existence of Endpoints with such a DNSName
+				for _, target := range ep.Targets {
+					// if at least one returns as true allTargetsFound will be locked in true
+					// this means that at least one of the targets on the endpoint leads to the destination
+					allTargetsFound = allTargetsFound || testEndpointsTraversable(endpoints, target, []string{destination})
+				}
+			}
+		}
+		// we must match all destinations
+		allDestinationsFound = allDestinationsFound && allTargetsFound
+	}
+	// there are no destinations to look for: len(destinations) == 0 locks allDestinationsFound into false
+	// or every destination was matched to a target on the endpoint
+	return allDestinationsFound
 }
 
 //Gateway

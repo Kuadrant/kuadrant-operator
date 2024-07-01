@@ -7,12 +7,15 @@ import (
 
 	"github.com/elliotchance/orderedmap/v2"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-type RateLimitIndexKey = client.ObjectKey
+type RateLimitIndexKey struct {
+	RateLimitPolicyKey types.NamespacedName
+	GatewayKey         types.NamespacedName
+}
 
 // NewRateLimitIndex builds an index to manage sets of rate limits, organized by key
 func NewRateLimitIndex() *RateLimitIndex {

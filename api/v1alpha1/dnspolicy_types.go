@@ -17,9 +17,11 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -177,6 +179,21 @@ func (p *DNSPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
 }
 
 func (p *DNSPolicy) Kind() string { return p.TypeMeta.Kind }
+
+func (p *DNSPolicy) List(ctx context.Context, c client.Client, namespace string) []kuadrantgatewayapi.Policy {
+	policyList := &DNSPolicyList{}
+	listOptions := &client.ListOptions{Namespace: namespace}
+	err := c.List(ctx, policyList, listOptions)
+	if err != nil {
+		return []kuadrantgatewayapi.Policy{}
+	}
+	policies := make([]kuadrantgatewayapi.Policy, 0, len(policyList.Items))
+	for i := range policyList.Items {
+		policies = append(policies, &policyList.Items[i])
+	}
+
+	return policies
+}
 
 func (p *DNSPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
 	return kuadrantgatewayapi.DirectPolicy

@@ -120,7 +120,7 @@ func (r *AuthPolicyReconciler) isAuthConfigReady(ctx context.Context, policy *ap
 	apKey := client.ObjectKeyFromObject(policy)
 	authConfigKey := client.ObjectKey{
 		Namespace: policy.Namespace,
-		Name:      authConfigName(apKey),
+		Name:      AuthConfigName(apKey),
 	}
 	authConfig := &authorinoapi.AuthConfig{}
 	err := r.GetResource(ctx, authConfigKey, authConfig)

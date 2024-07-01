@@ -1,21 +1,23 @@
 //go:build unit
 
-package rlptools
+package wasm
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
 // TODO(eastizle): missing WASMPluginMutator tests
 // TODO(eastizle): missing TestWasmRules use cases tests. Only happy path
-func TestWasmRules(t *testing.T) {
+func TestRules(t *testing.T) {
 	httpRoute := &gatewayapiv1.HTTPRoute{
 		Spec: gatewayapiv1.HTTPRouteSpec{
 			Hostnames: []gatewayapiv1.Hostname{
@@ -69,7 +71,7 @@ func TestWasmRules(t *testing.T) {
 		name          string
 		rlp           *kuadrantv1beta2.RateLimitPolicy
 		route         *gatewayapiv1.HTTPRoute
-		expectedRules []wasm.Rule
+		expectedRules []Rule
 	}{
 		{
 			name: "minimal RLP",
@@ -79,28 +81,28 @@ func TestWasmRules(t *testing.T) {
 				},
 			}),
 			route: httpRoute,
-			expectedRules: []wasm.Rule{
+			expectedRules: []Rule{
 				{
-					Conditions: []wasm.Condition{
+					Conditions: []Condition{
 						{
-							AllOf: []wasm.PatternExpression{
+							AllOf: []PatternExpression{
 								{
 									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Operator: PatternOperator(kuadrantv1beta2.StartsWithOperator),
 									Value:    "/toy",
 								},
 								{
 									Selector: "request.method",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
 									Value:    "GET",
 								},
 							},
 						},
 					},
-					Data: []wasm.DataItem{
+					Data: []DataItem{
 						{
-							Static: &wasm.StaticSpec{
-								Key:   "limit.50rps__770adfd9",
+							Static: &StaticSpec{
+								Key:   "limit.50rps__36e9aa4c",
 								Value: "1",
 							},
 						},
@@ -124,33 +126,33 @@ func TestWasmRules(t *testing.T) {
 				},
 			}),
 			route: httpRoute,
-			expectedRules: []wasm.Rule{
+			expectedRules: []Rule{
 				{
-					Conditions: []wasm.Condition{
+					Conditions: []Condition{
 						{
-							AllOf: []wasm.PatternExpression{
+							AllOf: []PatternExpression{
 								{
 									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Operator: PatternOperator(kuadrantv1beta2.StartsWithOperator),
 									Value:    "/toy",
 								},
 								{
 									Selector: "request.method",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
 									Value:    "GET",
 								},
 								{
 									Selector: "request.host",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EndsWithOperator),
+									Operator: PatternOperator(kuadrantv1beta2.EndsWithOperator),
 									Value:    ".example.com",
 								},
 							},
 						},
 					},
-					Data: []wasm.DataItem{
+					Data: []DataItem{
 						{
-							Static: &wasm.StaticSpec{
-								Key:   "limit.50rps_for_selected_hostnames__5af2c820",
+							Static: &StaticSpec{
+								Key:   "limit.50rps_for_selected_hostnames__ac4044ab",
 								Value: "1",
 							},
 						},
@@ -179,28 +181,28 @@ func TestWasmRules(t *testing.T) {
 				},
 			}),
 			route: httpRoute,
-			expectedRules: []wasm.Rule{
+			expectedRules: []Rule{
 				{
-					Conditions: []wasm.Condition{
+					Conditions: []Condition{
 						{
-							AllOf: []wasm.PatternExpression{
+							AllOf: []PatternExpression{
 								{
 									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Operator: PatternOperator(kuadrantv1beta2.StartsWithOperator),
 									Value:    "/toy",
 								},
 								{
 									Selector: "request.method",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
 									Value:    "GET",
 								},
 							},
 						},
 					},
-					Data: []wasm.DataItem{
+					Data: []DataItem{
 						{
-							Static: &wasm.StaticSpec{
-								Key:   "limit.50rps_for_selected_route__b6640119",
+							Static: &StaticSpec{
+								Key:   "limit.50rps_for_selected_route__db289136",
 								Value: "1",
 							},
 						},
@@ -228,28 +230,28 @@ func TestWasmRules(t *testing.T) {
 				},
 			}),
 			route: httpRoute,
-			expectedRules: []wasm.Rule{
+			expectedRules: []Rule{
 				{
-					Conditions: []wasm.Condition{
+					Conditions: []Condition{
 						{
-							AllOf: []wasm.PatternExpression{
+							AllOf: []PatternExpression{
 								{
 									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Operator: PatternOperator(kuadrantv1beta2.StartsWithOperator),
 									Value:    "/toy",
 								},
 								{
 									Selector: "request.method",
-									Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
 									Value:    "GET",
 								},
 							},
 						},
 					},
-					Data: []wasm.DataItem{
+					Data: []DataItem{
 						{
-							Static: &wasm.StaticSpec{
-								Key:   "limit.50rps_for_selected_path__4088dcf9",
+							Static: &StaticSpec{
+								Key:   "limit.50rps_for_selected_path__38eb97a4",
 								Value: "1",
 							},
 						},
@@ -274,7 +276,7 @@ func TestWasmRules(t *testing.T) {
 				},
 			}),
 			route:         httpRoute,
-			expectedRules: []wasm.Rule{},
+			expectedRules: []Rule{},
 		},
 		{
 			name: "HTTPRouteRules without rule matches",
@@ -284,13 +286,13 @@ func TestWasmRules(t *testing.T) {
 				},
 			}),
 			route: catchAllHTTPRoute,
-			expectedRules: []wasm.Rule{
+			expectedRules: []Rule{
 				{
 					Conditions: nil,
-					Data: []wasm.DataItem{
+					Data: []DataItem{
 						{
-							Static: &wasm.StaticSpec{
-								Key:   "limit.50rps__770adfd9",
+							Static: &StaticSpec{
+								Key:   "limit.50rps__783b9343",
 								Value: "1",
 							},
 						},
@@ -307,20 +309,91 @@ func TestWasmRules(t *testing.T) {
 				},
 			}),
 			route: catchAllHTTPRoute,
-			expectedRules: []wasm.Rule{
+			expectedRules: []Rule{
 				{
 					Conditions: nil,
-					Data: []wasm.DataItem{
+					Data: []DataItem{
 						{
-							Static: &wasm.StaticSpec{
-								Key:   "limit.50rps_per_username__f5bebfb8",
+							Static: &StaticSpec{
+								Key:   "limit.50rps_per_username__d681f6c3",
 								Value: "1",
 							},
 						},
 						{
-							Selector: &wasm.SelectorSpec{
+							Selector: &SelectorSpec{
 								Selector: "auth.identity.username",
 							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Route with header match",
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+				"50rps": {
+					Rates: []kuadrantv1beta2.Rate{counter50rps},
+				},
+			}),
+			route: &gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{
+					Hostnames: []gatewayapiv1.Hostname{"*.example.com"},
+					Rules: []gatewayapiv1.HTTPRouteRule{
+						{
+							Matches: []gatewayapiv1.HTTPRouteMatch{
+								{
+									Path: &gatewayapiv1.HTTPPathMatch{
+										Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+										Value: ptr.To("/v1"),
+									},
+									Method: ptr.To(gatewayapiv1.HTTPMethodGet),
+									Headers: []gatewayapiv1.HTTPHeaderMatch{
+										{
+											Name:  gatewayapiv1.HTTPHeaderName("X-kuadrant-a"),
+											Value: "1",
+										},
+										{
+											Name:  gatewayapiv1.HTTPHeaderName("X-kuadrant-b"),
+											Value: "1",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedRules: []Rule{
+				{
+					Conditions: []Condition{
+						{
+							AllOf: []PatternExpression{
+								{
+									Selector: "request.url_path",
+									Operator: PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Value:    "/v1",
+								},
+								{
+									Selector: "request.method",
+									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+									Value:    "GET",
+								},
+								{
+									Selector: "request.headers.X-kuadrant-a",
+									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+									Value:    "1",
+								},
+								{
+									Selector: "request.headers.X-kuadrant-b",
+									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+									Value:    "1",
+								},
+							},
+						},
+					},
+					Data: []DataItem{
+						{
+							Static: &StaticSpec{Key: "limit.50rps__783b9343", Value: "1"},
 						},
 					},
 				},
@@ -330,9 +403,63 @@ func TestWasmRules(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			computedRules := WasmRules(tc.rlp, tc.route)
+			computedRules := Rules(tc.rlp, tc.route)
 			if diff := cmp.Diff(tc.expectedRules, computedRules); diff != "" {
 				t.Errorf("unexpected wasm rules (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestLimitNameToLimitadorIdentifier(t *testing.T) {
+	testCases := []struct {
+		name            string
+		rlpKey          types.NamespacedName
+		uniqueLimitName string
+		expected        *regexp.Regexp
+	}{
+		{
+			name:            "prepends the limitador limit identifier prefix",
+			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
+			uniqueLimitName: "foo",
+			expected:        regexp.MustCompile(`^limit\.foo.+`),
+		},
+		{
+			name:            "sanitizes invalid chars",
+			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
+			uniqueLimitName: "my/limit-0",
+			expected:        regexp.MustCompile(`^limit\.my_limit_0.+$`),
+		},
+		{
+			name:            "sanitizes the dot char (.) even though it is a valid char in limitador identifiers",
+			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
+			uniqueLimitName: "my.limit",
+			expected:        regexp.MustCompile(`^limit\.my_limit.+$`),
+		},
+		{
+			name:            "appends a hash of the original name to avoid breaking uniqueness",
+			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
+			uniqueLimitName: "foo",
+			expected:        regexp.MustCompile(`^.+__1da6e70a$`),
+		},
+		{
+			name:            "different rlp keys result in different identifiers",
+			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpB"},
+			uniqueLimitName: "foo",
+			expected:        regexp.MustCompile(`^.+__2c1520b6$`),
+		},
+		{
+			name:            "empty string",
+			rlpKey:          types.NamespacedName{Namespace: "testNS", Name: "rlpA"},
+			uniqueLimitName: "",
+			expected:        regexp.MustCompile(`^limit.__6d5e49dc$`),
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			identifier := LimitNameToLimitadorIdentifier(tc.rlpKey, tc.uniqueLimitName)
+			if !tc.expected.MatchString(identifier) {
+				subT.Errorf("identifier does not match, expected(%s), got (%s)", tc.expected, identifier)
 			}
 		})
 	}

@@ -19,13 +19,14 @@ limitations under the License.
 package istio_test
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -33,6 +34,7 @@ import (
 
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
+	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -42,6 +44,7 @@ import (
 
 var k8sClient client.Client
 var testEnv *envtest.Environment
+var kuadrantInstallationNS string
 
 func testClient() client.Client { return k8sClient }
 
@@ -56,7 +59,7 @@ const (
 	TestHTTPRouteName = "toystore-route"
 )
 
-var _ = BeforeSuite(func(ctx SpecContext) {
+var _ = SynchronizedBeforeSuite(func() []byte {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
@@ -68,18 +71,54 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	controllers.SetupKuadrantOperatorForTest(scheme.Scheme, cfg)
+	s := controllers.BootstrapScheme()
+	controllers.SetupKuadrantOperatorForTest(s, cfg)
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	k8sClient, err = client.New(cfg, client.Options{Scheme: s})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(k8sClient).NotTo(BeNil())
+
+	ctx := context.Background()
+	ns := tests.CreateNamespace(ctx, testClient())
+	tests.ApplyKuadrantCR(ctx, testClient(), ns)
+
+	data := controllers.MarshalConfig(cfg, controllers.WithKuadrantInstallNS(ns))
+
+	return data
+}, func(data []byte) {
+	// Unmarshal the shared configuration struct
+	var sharedCfg controllers.SharedConfig
+	Expect(json.Unmarshal(data, &sharedCfg)).To(Succeed())
+
+	// Create the rest.Config object from the shared configuration
+	cfg := &rest.Config{
+		Host: sharedCfg.Host,
+		TLSClientConfig: rest.TLSClientConfig{
+			Insecure: sharedCfg.TLSClientConfig.Insecure,
+			CertData: sharedCfg.TLSClientConfig.CertData,
+			KeyData:  sharedCfg.TLSClientConfig.KeyData,
+			CAData:   sharedCfg.TLSClientConfig.CAData,
+		},
+	}
+
+	kuadrantInstallationNS = sharedCfg.KuadrantNS
+
+	// Create new scheme for each client
+	s := controllers.BootstrapScheme()
+
+	// Set the shared configuration
+	var err error
+	k8sClient, err = client.New(cfg, client.Options{Scheme: s})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 })
 
-var _ = AfterSuite(func(ctx SpecContext) {
+var _ = SynchronizedAfterSuite(func() {}, func() {
 	By("tearing down the test environment")
+	tests.DeleteNamespace(context.Background(), k8sClient, kuadrantInstallationNS)
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
-}, NodeTimeout(3*time.Minute))
+})
 
 func TestMain(m *testing.M) {
 	logger := log.NewLogger(

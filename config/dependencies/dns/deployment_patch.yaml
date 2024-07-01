@@ -9,3 +9,7 @@
 - op: replace
   path: /spec/template/metadata/labels/control-plane
   value: dns-operator-controller-manager
+
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --provider=aws,google,inmemory

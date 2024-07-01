@@ -104,10 +104,10 @@ func AcceptedCondition(p Policy, err error) *metav1.Condition {
 }
 
 // EnforcedCondition returns an enforced conditions with common reasons for a kuadrant policy
-func EnforcedCondition(policy Policy, err PolicyError, allSubresourcesReady bool) *metav1.Condition {
+func EnforcedCondition(policy Policy, err PolicyError, fully bool) *metav1.Condition {
 	// Enforced
 	message := fmt.Sprintf("%s has been successfully enforced", policy.Kind())
-	if !allSubresourcesReady {
+	if !fully {
 		message = fmt.Sprintf("%s has been partially enforced", policy.Kind())
 	}
 	cond := &metav1.Condition{

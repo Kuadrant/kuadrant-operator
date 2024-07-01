@@ -4,9 +4,17 @@ package tests
 
 import (
 	"context"
+	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	. "github.com/onsi/gomega"
+	"sigs.k8s.io/external-dns/endpoint"
+
+	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -24,6 +32,33 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
+
+const (
+	TimeoutMedium        = time.Second * 10
+	TimeoutLong          = time.Second * 30
+	RetryIntervalMedium  = time.Millisecond * 250
+	GatewayName          = "test-placed-gateway"
+	ClusterNameOne       = "test-placed-control"
+	ClusterNameTwo       = "test-placed-workload-1"
+	ListenerNameWildcard = "wildcard"
+	ListenerNameOne      = "test-listener-1"
+	ListenerNameTwo      = "test-listener-2"
+	IPAddressOne         = "172.0.0.1"
+	IPAddressTwo         = "172.0.0.2"
+	HTTPRouteName        = "toystore-route"
+)
+
+func HostWildcard(domain string) string {
+	return fmt.Sprintf("*.%s", domain)
+}
+
+func HostOne(domain string) string {
+	return fmt.Sprintf("%s.%s", "test", domain)
+}
+
+func HostTwo(domain string) string {
+	return fmt.Sprintf("%s.%s", "other.test", domain)
+}
 
 func BuildBasicGateway(gwName, ns string, mutateFns ...func(*gatewayapiv1.Gateway)) *gatewayapiv1.Gateway {
 	gateway := &gatewayapiv1.Gateway{
@@ -96,18 +131,6 @@ func ApplyKuadrantCRWithName(ctx context.Context, cl client.Client, namespace, n
 	}
 	err := cl.Create(ctx, kuadrantCR)
 	Expect(err).ToNot(HaveOccurred())
-
-	Eventually(func() bool {
-		kuadrant := &kuadrantv1beta1.Kuadrant{}
-		err := cl.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, kuadrant)
-		if err != nil {
-			return false
-		}
-		if !meta.IsStatusConditionTrue(kuadrant.Status.Conditions, "Ready") {
-			return false
-		}
-		return true
-	}, time.Minute, 5*time.Second).Should(BeTrue())
 }
 
 func GatewayIsReady(ctx context.Context, cl client.Client, gateway *gatewayapiv1.Gateway) func() bool {
@@ -128,8 +151,8 @@ func GatewayIsReady(ctx context.Context, cl client.Client, gateway *gatewayapiv1
 	}
 }
 
-func BuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string) *gatewayapiv1.HTTPRoute {
-	return &gatewayapiv1.HTTPRoute{
+func BuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string, mutateFns ...func(*gatewayapiv1.HTTPRoute)) *gatewayapiv1.HTTPRoute {
+	route := &gatewayapiv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "HTTPRoute",
 			APIVersion: gatewayapiv1.GroupVersion.String(),
@@ -164,6 +187,10 @@ func BuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string) *gate
 			},
 		},
 	}
+	for _, mutateFn := range mutateFns {
+		mutateFn(route)
+	}
+	return route
 }
 
 func RouteIsAccepted(ctx context.Context, cl client.Client, routeKey client.ObjectKey) func() bool {
@@ -325,5 +352,281 @@ func IsAuthPolicyConditionTrue(ctx context.Context, cl client.Client, policy *ku
 		existingPolicy := &kuadrantv1beta2.AuthPolicy{}
 		err := cl.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)
 		return err == nil && meta.IsStatusConditionTrue(existingPolicy.Status.Conditions, condition)
+	}
+}
+
+func RLPIsNotAccepted(ctx context.Context, k8sClient client.Client, rlpKey client.ObjectKey) func() bool {
+	return func() bool {
+		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+		err := k8sClient.Get(ctx, rlpKey, existingRLP)
+		if err != nil {
+			logf.Log.V(1).Info("ratelimitpolicy not read", "rlp", rlpKey, "error", err)
+			return false
+		}
+		if meta.IsStatusConditionTrue(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
+			logf.Log.V(1).Info("ratelimitpolicy still accepted", "rlp", rlpKey)
+			return false
+		}
+
+		return true
+	}
+}
+
+func HTTPRouteWithoutDirectBackReference(k8sClient client.Client, routeKey client.ObjectKey, annotationName string) func() bool {
+	return NetworkResourceWithoutDirectBackReference(k8sClient, routeKey, &gatewayapiv1.HTTPRoute{}, annotationName)
+}
+
+func GatewayWithoutDirectBackReference(k8sClient client.Client, gwKey client.ObjectKey, annotationName string) func() bool {
+	return NetworkResourceWithoutDirectBackReference(k8sClient, gwKey, &gatewayapiv1.Gateway{}, annotationName)
+}
+
+func NetworkResourceWithoutDirectBackReference(k8sClient client.Client, objKey client.ObjectKey, obj client.Object, annotationName string) func() bool {
+	return func() bool {
+		err := k8sClient.Get(context.Background(), objKey, obj)
+		if err != nil {
+			logf.Log.V(1).Info("object not read", "object", objKey,
+				"kind", obj.GetObjectKind().GroupVersionKind(), "error", err)
+			return false
+		}
+
+		_, ok := obj.GetAnnotations()[annotationName]
+		if ok {
+			logf.Log.V(1).Info("object sill has the direct ref annotation",
+				"object", objKey, "kind", obj.GetObjectKind().GroupVersionKind())
+			return false
+		}
+
+		return true
+	}
+}
+
+func HTTPRouteHasDirectBackReference(k8sClient client.Client, routeKey client.ObjectKey, annotationName, annotationVal string) func() bool {
+	return NetworkResourceHasDirectBackReference(k8sClient, routeKey, &gatewayapiv1.HTTPRoute{}, annotationName, annotationVal)
+}
+
+func GatewayHasDirectBackReference(k8sClient client.Client, gwKey client.ObjectKey, annotationName, annotationVal string) func() bool {
+	return NetworkResourceHasDirectBackReference(k8sClient, gwKey, &gatewayapiv1.Gateway{}, annotationName, annotationVal)
+}
+
+func NetworkResourceHasDirectBackReference(k8sClient client.Client, objKey client.ObjectKey, obj client.Object, annotationName, annotationVal string) func() bool {
+	return func() bool {
+		err := k8sClient.Get(context.Background(), objKey, obj)
+		if err != nil {
+			logf.Log.V(1).Info("object not read", "object", objKey,
+				"kind", obj.GetObjectKind().GroupVersionKind(), "error", err)
+			return false
+		}
+
+		val, ok := obj.GetAnnotations()[annotationName]
+		if !ok {
+			logf.Log.V(1).Info("object does not have the direct ref annotation",
+				"object", objKey, "kind", obj.GetObjectKind().GroupVersionKind())
+			return false
+		}
+
+		if val != annotationVal {
+			logf.Log.V(1).Info("object direct ref annotation value does not match",
+				"object", objKey, "kind", obj.GetObjectKind().GroupVersionKind(),
+				"val", val)
+			return false
+		}
+
+		return true
+	}
+}
+
+func ObjectDoesNotExist(k8sClient client.Client, obj client.Object) func() bool {
+	return func() bool {
+		err := k8sClient.Get(context.Background(), client.ObjectKeyFromObject(obj), obj)
+		if err != nil && apierrors.IsNotFound(err) {
+			return true
+		}
+
+		logf.Log.V(1).Info("object not deleted", "object", client.ObjectKeyFromObject(obj),
+			"kind", obj.GetObjectKind().GroupVersionKind())
+		return false
+	}
+}
+
+// DNS
+
+func BuildManagedZone(name, ns, domainName, secretName string) *kuadrantdnsv1alpha1.ManagedZone {
+	return &kuadrantdnsv1alpha1.ManagedZone{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: kuadrantdnsv1alpha1.ManagedZoneSpec{
+			DomainName:  domainName,
+			Description: domainName,
+			SecretRef: kuadrantdnsv1alpha1.ProviderRef{
+				Name: secretName,
+			},
+		},
+	}
+}
+
+func BuildInMemoryCredentialsSecret(name, ns string) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Data: map[string][]byte{},
+		Type: "kuadrant.io/inmemory",
+	}
+}
+
+// EndpointsTraversable consumes an array of endpoints and returns a boolean
+// indicating presence of that path from host to all destinations
+// this function DOES NOT report a presence of an endpoint with one of destinations DNSNames
+func EndpointsTraversable(endpoints []*endpoint.Endpoint, host string, destinations []string) bool {
+	allDestinationsFound := len(destinations) > 0
+	for _, destination := range destinations {
+		allTargetsFound := false
+		for _, ep := range endpoints {
+			// the host exists as a DNSName on an endpoint
+			if ep.DNSName == host {
+				// we found destination in the targets of the endpoint.
+				if slices.Contains(ep.Targets, destination) {
+					return true
+				}
+				// destination is not found on the endpoint. Use target as a host and check for existence of Endpoints with such a DNSName
+				for _, target := range ep.Targets {
+					// if at least one returns as true allTargetsFound will be locked in true
+					// this means that at least one of the targets on the endpoint leads to the destination
+					allTargetsFound = allTargetsFound || EndpointsTraversable(endpoints, target, []string{destination})
+				}
+			}
+		}
+		// we must match all destinations
+		allDestinationsFound = allDestinationsFound && allTargetsFound
+	}
+	// there are no destinations to look for: len(destinations) == 0 locks allDestinationsFound into false
+	// or every destination was matched to a target on the endpoint
+	return allDestinationsFound
+}
+
+//Gateway
+
+func BuildGatewayClass(name, ns, controllerName string) *gatewayapiv1.GatewayClass {
+	return &gatewayapiv1.GatewayClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: gatewayapiv1.GatewayClassSpec{
+			ControllerName: gatewayapiv1.GatewayController(controllerName),
+		},
+	}
+}
+
+// GatewayBuilder wrapper for Gateway builder helper
+type GatewayBuilder struct {
+	*gatewayapiv1.Gateway
+}
+
+func NewGatewayBuilder(gwName, gwClassName, ns string) *GatewayBuilder {
+	return &GatewayBuilder{
+		&gatewayapiv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      gwName,
+				Namespace: ns,
+			},
+			Spec: gatewayapiv1.GatewaySpec{
+				GatewayClassName: gatewayapiv1.ObjectName(gwClassName),
+				Listeners:        []gatewayapiv1.Listener{},
+			},
+		},
+	}
+}
+
+func (t *GatewayBuilder) WithListener(listener gatewayapiv1.Listener) *GatewayBuilder {
+	t.Spec.Listeners = append(t.Spec.Listeners, listener)
+	return t
+}
+
+func (t *GatewayBuilder) WithLabels(labels map[string]string) *GatewayBuilder {
+	if t.Labels == nil {
+		t.Labels = map[string]string{}
+	}
+	for key, value := range labels {
+		t.Labels[key] = value
+	}
+	return t
+}
+
+func (t *GatewayBuilder) WithHTTPListener(name, hostname string) *GatewayBuilder {
+	typedHostname := gatewayapiv1.Hostname(hostname)
+	t.WithListener(gatewayapiv1.Listener{
+		Name:     gatewayapiv1.SectionName(name),
+		Hostname: &typedHostname,
+		Port:     gatewayapiv1.PortNumber(80),
+		Protocol: gatewayapiv1.HTTPProtocolType,
+	})
+	return t
+}
+
+func (t *GatewayBuilder) WithHTTPSListener(hostname, tlsSecretName string) *GatewayBuilder {
+	typedHostname := gatewayapiv1.Hostname(hostname)
+	typedNamespace := gatewayapiv1.Namespace(t.GetNamespace())
+	typedNamed := gatewayapiv1.SectionName(strings.Replace(hostname, "*", "wildcard", 1))
+	t.WithListener(gatewayapiv1.Listener{
+		Name:     typedNamed,
+		Hostname: &typedHostname,
+		Port:     gatewayapiv1.PortNumber(443),
+		Protocol: gatewayapiv1.HTTPSProtocolType,
+		TLS: &gatewayapiv1.GatewayTLSConfig{
+			Mode: ptr.To(gatewayapiv1.TLSModeTerminate),
+			CertificateRefs: []gatewayapiv1.SecretObjectReference{
+				{
+					Name:      gatewayapiv1.ObjectName(tlsSecretName),
+					Namespace: ptr.To(typedNamespace),
+				},
+			},
+		},
+	})
+	return t
+}
+
+//CertMan
+
+func BuildSelfSignedIssuer(name, ns string) (*certmanv1.Issuer, *certmanmetav1.ObjectReference) {
+	issuer := &certmanv1.Issuer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: createSelfSignedIssuerSpec(),
+	}
+	objRef := &certmanmetav1.ObjectReference{
+		Group: certmanv1.SchemeGroupVersion.Group,
+		Kind:  certmanv1.IssuerKind,
+		Name:  issuer.Name,
+	}
+	return issuer, objRef
+}
+
+func BuildSelfSignedClusterIssuer(name, ns string) (*certmanv1.ClusterIssuer, *certmanmetav1.ObjectReference) {
+	issuer := &certmanv1.ClusterIssuer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+		Spec: createSelfSignedIssuerSpec(),
+	}
+	objRef := &certmanmetav1.ObjectReference{
+		Group: certmanv1.SchemeGroupVersion.Group,
+		Kind:  certmanv1.ClusterIssuerKind,
+		Name:  issuer.Name,
+	}
+	return issuer, objRef
+}
+
+func createSelfSignedIssuerSpec() certmanv1.IssuerSpec {
+	return certmanv1.IssuerSpec{
+		IssuerConfig: certmanv1.IssuerConfig{
+			SelfSigned: &certmanv1.SelfSignedIssuer{},
+		},
 	}
 }

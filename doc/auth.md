@@ -31,6 +31,7 @@ The `AuthPolicy` spec includes the following parts:
 * List of named patterns (`spec.patterns`)
 
 The auth scheme specify rules for:
+
 * Authentication (`spec.rules.authentication`)
 * External auth metadata fetching (`spec.rules.metadata`)
 * Authorization (`spec.rules.authorization`)

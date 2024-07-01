@@ -10,11 +10,12 @@ require (
 	github.com/google/uuid v1.4.0
 	github.com/kuadrant/authorino v0.17.2
 	github.com/kuadrant/authorino-operator v0.11.1
-	github.com/kuadrant/dns-operator v0.0.0-20240426081919-e328d819392b
+	github.com/kuadrant/dns-operator v0.0.0-20240627145308-8a571eaae927
 	github.com/kuadrant/limitador-operator v0.7.0
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/onsi/ginkgo/v2 v2.13.2
 	github.com/onsi/gomega v1.30.0
+	github.com/samber/lo v1.39.0
 	go.uber.org/zap v1.26.0
 	golang.org/x/net v0.23.0
 	google.golang.org/protobuf v1.33.0
@@ -45,7 +46,6 @@ require (
 	github.com/Masterminds/squirrel v1.5.4 // indirect
 	github.com/Microsoft/hcsshim v0.11.4 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
-	github.com/aws/aws-sdk-go v1.44.311 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/chai2010/gettext-go v1.0.2 // indirect
@@ -93,7 +93,6 @@ require (
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/imdario/mergo v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/jmoiron/sqlx v1.3.5 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect

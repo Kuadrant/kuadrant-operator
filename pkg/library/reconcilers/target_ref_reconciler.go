@@ -19,10 +19,8 @@ package reconcilers
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -182,44 +180,6 @@ func (r *TargetRefReconciler) DeleteTargetBackReference(ctx context.Context, tar
 	}
 
 	return nil
-}
-
-// GetAllGatewayPolicyRefs returns the policy refs of a given policy kind from all gateways managed by kuadrant.
-// The gateway objects are handled in order of creation to mitigate the risk of non-idenpotent reconciliations based on
-// this list of policy refs; nevertheless, the actual order of returned policy refs depends on the order the policy refs
-// appear in the annotations of the gateways.
-// Only gateways with status programmed are considered.
-func (r *TargetRefReconciler) GetAllGatewayPolicyRefs(ctx context.Context, policyRefsConfig kuadrant.Referrer) ([]client.ObjectKey, error) {
-	var uniquePolicyRefs map[string]struct{}
-	var policyRefs []client.ObjectKey
-
-	gwList := &gatewayapiv1.GatewayList{}
-	if err := r.Client.List(ctx, gwList); err != nil {
-		return nil, err
-	}
-
-	// sort the gateways by creation timestamp to mitigate the risk of non-idenpotent reconciliations
-	var gateways kuadrant.GatewayWrapperList
-	for i := range gwList.Items {
-		gateway := gwList.Items[i]
-		// skip gateways that are not managed by kuadrant or that are not ready
-		if !kuadrant.IsKuadrantManaged(&gateway) || meta.IsStatusConditionFalse(gateway.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed)) {
-			continue
-		}
-		gateways = append(gateways, kuadrant.GatewayWrapper{Gateway: &gateway, Referrer: policyRefsConfig})
-	}
-	sort.Sort(gateways)
-
-	for _, gw := range gateways {
-		for _, policyRef := range gw.PolicyRefs() {
-			if _, ok := uniquePolicyRefs[policyRef.String()]; ok {
-				continue
-			}
-			policyRefs = append(policyRefs, policyRef)
-		}
-	}
-
-	return policyRefs, nil
 }
 
 // ReconcileGatewayPolicyReferences updates the annotations in the Gateway resources that list to all the policies

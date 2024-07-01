@@ -23,6 +23,8 @@ limitations under the License.
 package controllers
 
 import (
+	"encoding/json"
+
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -31,6 +33,7 @@ import (
 	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	istioapis "istio.io/istio/operator/pkg/apis"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -47,61 +50,23 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
 func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
-	err := kuadrantdnsv1alpha1.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = kuadrantv1alpha1.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = kuadrantv1beta1.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = kuadrantv1beta2.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = gatewayapiv1.Install(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = authorinoopapi.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = authorinoapi.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = istioapis.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = istiov1alpha1.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = istiosecurityv1beta1.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = limitadorv1alpha1.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = istioclientnetworkingv1alpha3.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = istioclientgoextensionv1alpha1.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = maistraapis.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = certmanv1.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
-
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:                 s,
 		HealthProbeBindAddress: "0",
 		Metrics:                metricsserver.Options{BindAddress: "0"},
 	})
+	Expect(err).ToNot(HaveOccurred())
+
+	err = fieldindexers.HTTPRouteIndexByGateway(
+		mgr,
+		log.Log.WithName("kuadrant").WithName("indexer").WithName("routeIndexByGateway"),
+	)
 	Expect(err).ToNot(HaveOccurred())
 
 	authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
@@ -193,14 +158,14 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	Expect(err).NotTo(HaveOccurred())
 
-	rateLimitingWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
+	rateLimitingIstioWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("ratelimitpolicy").WithName("wasmplugin"),
-		mgr.GetEventRecorderFor("RateLimitingWASMPlugin"),
+		mgr.GetEventRecorderFor("RateLimitingIstioWASMPlugin"),
 	)
 
-	err = (&RateLimitingWASMPluginReconciler{
-		BaseReconciler: rateLimitingWASMPluginBaseReconciler,
+	err = (&RateLimitingIstioWASMPluginReconciler{
+		BaseReconciler: rateLimitingIstioWASMPluginBaseReconciler,
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())
@@ -233,4 +198,75 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 		err = mgr.Start(ctrl.SetupSignalHandler())
 		Expect(err).ToNot(HaveOccurred())
 	}()
+}
+
+// SharedConfig contains minimum cluster connection config that can be safely marshalled as rest.Config is unsafe to marshall
+type SharedConfig struct {
+	Host                  string          `json:"host"`
+	TLSClientConfig       TLSClientConfig `json:"tlsClientConfig"`
+	KuadrantNS            string          `json:"kuadrantNS"`
+	DNSProviderSecretName string          `json:"dnsProviderSecretName"`
+}
+
+type TLSClientConfig struct {
+	Insecure bool    `json:"insecure"`
+	CertData []uint8 `json:"certData,omitempty"`
+	KeyData  []uint8 `json:"keyData,omitempty"`
+	CAData   []uint8 `json:"caData,omitempty"`
+}
+
+func BootstrapScheme() *runtime.Scheme {
+	s := runtime.NewScheme()
+
+	sb := runtime.NewSchemeBuilder(
+		scheme.AddToScheme,
+		kuadrantdnsv1alpha1.AddToScheme,
+		kuadrantv1alpha1.AddToScheme,
+		kuadrantv1beta1.AddToScheme,
+		kuadrantv1beta2.AddToScheme,
+		gatewayapiv1.Install,
+		authorinoopapi.AddToScheme,
+		authorinoapi.AddToScheme,
+		istioapis.AddToScheme,
+		istiov1alpha1.AddToScheme,
+		istiosecurityv1beta1.AddToScheme,
+		limitadorv1alpha1.AddToScheme,
+		istioclientnetworkingv1alpha3.AddToScheme,
+		istioclientgoextensionv1alpha1.AddToScheme,
+		certmanv1.AddToScheme,
+		maistraapis.AddToScheme,
+	)
+
+	err := sb.AddToScheme(s)
+	Expect(err).NotTo(HaveOccurred())
+
+	return s
+}
+
+// MarshalConfig marshals the config to a shared configuration struct
+func MarshalConfig(cfg *rest.Config, opts ...func(config *SharedConfig)) []byte {
+	sharedCfg := &SharedConfig{
+		Host: cfg.Host,
+		TLSClientConfig: TLSClientConfig{
+			Insecure: cfg.TLSClientConfig.Insecure,
+			CertData: cfg.TLSClientConfig.CertData,
+			KeyData:  cfg.TLSClientConfig.KeyData,
+			CAData:   cfg.TLSClientConfig.CAData,
+		},
+	}
+
+	for _, opt := range opts {
+		opt(sharedCfg)
+	}
+
+	data, err := json.Marshal(sharedCfg)
+	Expect(err).NotTo(HaveOccurred())
+
+	return data
+}
+
+func WithKuadrantInstallNS(ns string) func(config *SharedConfig) {
+	return func(cfg *SharedConfig) {
+		cfg.KuadrantNS = ns
+	}
 }

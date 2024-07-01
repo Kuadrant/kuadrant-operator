@@ -21,7 +21,6 @@ import (
 )
 
 func TestObjectKeyListDifference(t *testing.T) {
-
 	key1 := client.ObjectKey{Namespace: "ns1", Name: "obj1"}
 	key2 := client.ObjectKey{Namespace: "ns2", Name: "obj2"}
 	key3 := client.ObjectKey{Namespace: "ns3", Name: "obj3"}
@@ -508,7 +507,7 @@ func TestGetServicePortNumber(t *testing.T) {
 						{
 							Name:       "http",
 							Port:       80,
-							TargetPort: intstr.FromInt(8080),
+							TargetPort: intstr.FromInt32(8080),
 						},
 					},
 				},
@@ -526,7 +525,7 @@ func TestGetServicePortNumber(t *testing.T) {
 						{
 							Name:       "http",
 							Port:       80,
-							TargetPort: intstr.FromInt(8080),
+							TargetPort: intstr.FromInt32(8080),
 						},
 					},
 				},
@@ -551,17 +550,17 @@ func TestGetServicePortNumber(t *testing.T) {
 						{
 							Name:       "http1",
 							Port:       8080,
-							TargetPort: intstr.FromInt(8080),
+							TargetPort: intstr.FromInt32(8080),
 						},
 						{
 							Name:       "http2",
 							Port:       8090,
-							TargetPort: intstr.FromInt(8090),
+							TargetPort: intstr.FromInt32(8090),
 						},
 						{
 							Name:       "http3",
 							Port:       8100,
-							TargetPort: intstr.FromInt(8100),
+							TargetPort: intstr.FromInt32(8100),
 						},
 					},
 				},
@@ -579,17 +578,17 @@ func TestGetServicePortNumber(t *testing.T) {
 						{
 							Name:       "http1",
 							Port:       8080,
-							TargetPort: intstr.FromInt(8080),
+							TargetPort: intstr.FromInt32(8080),
 						},
 						{
 							Name:       "http2",
 							Port:       8090,
-							TargetPort: intstr.FromInt(8090),
+							TargetPort: intstr.FromInt32(8090),
 						},
 						{
 							Name:       "http3",
 							Port:       8100,
-							TargetPort: intstr.FromInt(8100),
+							TargetPort: intstr.FromInt32(8100),
 						},
 					},
 				},

@@ -146,6 +146,71 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Total number of Gateway API gateways",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 0,
+        "y": 8
+      },
+      "id": 146,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "count(gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"})",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Total",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
       "description": "List of all Gateways, their class and status.",
       "fieldConfig": {
         "defaults": {
@@ -203,8 +268,8 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 11,
-        "x": 0,
+        "w": 21,
+        "x": 3,
         "y": 8
       },
       "id": 115,
@@ -391,11 +456,11 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Total number of Gateway API gateways",
+      "description": "Total Gateways with an [Accepted and Programmed](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io%2fv1.GatewayConditionType) state of True",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "fixedColor": "blue",
+            "fixedColor": "light-green",
             "mode": "fixed"
           },
           "mappings": [],
@@ -414,11 +479,11 @@
       },
       "gridPos": {
         "h": 3,
-        "w": 2,
-        "x": 11,
-        "y": 8
+        "w": 3,
+        "x": 0,
+        "y": 11
       },
-      "id": 146,
+      "id": 147,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
@@ -442,14 +507,223 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "count(gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"})",
+          "expr": "count(gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Accepted\"} > 0 and ignoring(type) gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Programmed\"} > 0)",
           "instant": true,
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Total",
+      "title": "Healthy",
       "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Total Gateways with a False or missing [Accepted or Programmed](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io%2fv1.GatewayConditionType) state.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "light-yellow",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 3,
+        "x": 0,
+        "y": 14
+      },
+      "id": 148,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.5.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "count(\n(gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"} * on(name, exported_namespace, instance) group_left gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Programmed\"} < 1)\nor ignoring(type) \n(gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"} * on(name, exported_namespace, instance) group_left gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Accepted\"} < 1)\n)",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Unhealthy",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "List of all listeners in Gateways",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "center",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "id": 154,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "frameIndex": 0,
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "9.5.3",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "gatewayapi_gateway_listener_info{exported_namespace=~\"${gateway_namespace}\"}",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Gateway Listeners",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "Value #A": true,
+              "Value #B": true,
+              "Value #C": true,
+              "Value #D": true,
+              "__name__": true,
+              "container": true,
+              "customresource_group": true,
+              "customresource_kind": true,
+              "customresource_version": true,
+              "instance": true,
+              "job": true,
+              "namespace": false,
+              "prometheus": true,
+              "receive": true,
+              "replica": true,
+              "target_group": true,
+              "tenant_id": true
+            },
+            "indexByName": {
+              "Time": 0,
+              "Value": 21,
+              "__name__": 1,
+              "allowed_routes_namespaces_from": 19,
+              "cluster_id": 20,
+              "container": 2,
+              "customresource_group": 3,
+              "customresource_kind": 4,
+              "customresource_version": 5,
+              "hostname": 11,
+              "instance": 7,
+              "job": 8,
+              "listener_name": 12,
+              "name": 6,
+              "namespace": 9,
+              "port": 13,
+              "prometheus": 10,
+              "protocol": 14,
+              "receive": 15,
+              "replica": 16,
+              "tenant_id": 17,
+              "tls_mode": 18
+            },
+            "renameByName": {
+              "Value #A": "",
+              "allowed_routes_namespaces_from": "Allowed Routes NS",
+              "cluster_id": "Cluster ID",
+              "customresource_kind": "Kind",
+              "exported_namespace": "Namespace",
+              "hostname": "Hostname",
+              "listener_name": "Listener",
+              "name": "Gateway",
+              "namespace": "Gateway NS",
+              "port": "Port",
+              "protocol": "Protocol",
+              "receive": "",
+              "target_kind": "Target Kind",
+              "target_name": "Target Name",
+              "tls_mode": "TLS Mode"
+            }
+          }
+        }
+      ],
+      "type": "table"
     },
     {
       "datasource": {
@@ -488,9 +762,9 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 11,
-        "x": 13,
-        "y": 8
+        "w": 12,
+        "x": 12,
+        "y": 17
       },
       "id": 117,
       "options": {
@@ -630,142 +904,12 @@
       "type": "table"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "Total Gateways with an [Accepted and Programmed](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io%2fv1.GatewayConditionType) state of True",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "light-green",
-            "mode": "fixed"
-          },
-          "mappings": [],
-          "noValue": "0",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 2,
-        "x": 11,
-        "y": 11
-      },
-      "id": 147,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "9.5.3",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "count(gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Accepted\"} > 0 and ignoring(type) gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Programmed\"} > 0)",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Healthy",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "Total Gateways with a False or missing [Accepted or Programmed](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io%2fv1.GatewayConditionType) state.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "light-yellow",
-            "mode": "fixed"
-          },
-          "mappings": [],
-          "noValue": "0",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 2,
-        "x": 11,
-        "y": 14
-      },
-      "id": 148,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "9.5.3",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "count(\n(gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"} * on(name, exported_namespace, instance) group_left gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Programmed\"} < 1)\nor ignoring(type) \n(gatewayapi_gateway_info{exported_namespace=~\"${gateway_namespace}\"} * on(name, exported_namespace, instance) group_left gatewayapi_gateway_status{exported_namespace=~\"${gateway_namespace}\",type=\"Accepted\"} < 1)\n)",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Unhealthy",
-      "type": "stat"
-    },
-    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 26
       },
       "id": 145,
       "panels": [],
@@ -811,7 +955,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 18
+        "y": 27
       },
       "id": 97,
       "options": {
@@ -989,7 +1133,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 18
+        "y": 27
       },
       "id": 118,
       "options": {
@@ -1193,7 +1337,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 24
+        "y": 33
       },
       "id": 120,
       "options": {
@@ -1229,7 +1373,103 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Aggregated rate of bytes per API (HTTPRoute). The API name can be cross referenced with the API list to see additional details.\n\nNote: HTTPRoutes require a label `deployment` with the name of the corresponding Deployment so that istio request metrics can be paired with HTTPRoute metrics.",
+      "description": "Aggregated rate of requests per API (HTTPRoute). The API name can be cross referenced with the API list to see additional details.\n\nNote: HTTPRoutes require a label `deployment` with the name of the corresponding Deployment so that istio request metrics can be paired with HTTPRoute metrics.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 33
+      },
+      "id": 153,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{}[5m])) by (destination_service_name) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"${route_name}\",exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "legendFormat": "API: {{name}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Total requests (req/sec)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Aggregated request latencies per API (HTTPRoute). 99th and 95th percentiles are shown. The API name can be cross referenced with the API list to see additional details.\n\nNote: HTTPRoutes require a label `deployment` with the name of the corresponding Deployment so that istio request metrics can be paired with HTTPRoute metrics.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1280,15 +1520,15 @@
               }
             ]
           },
-          "unit": "Bps"
+          "unit": "ms"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 7,
         "w": 8,
-        "x": 8,
-        "y": 24
+        "x": 16,
+        "y": 33
       },
       "id": 137,
       "options": {
@@ -1310,101 +1550,8 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "(sum(irate(container_network_receive_bytes_total{exported_namespace=~\"$api_policy_namespace\"}[1h:5m])\n* on (namespace, exported_namespace,pod)\ngroup_left(workload,workload_type) (group without(cluster_id) (namespace_workload_pod:kube_pod_owner:relabel{exported_namespace=~\"$api_policy_namespace\", workload=~\".+\"}))) by (workload)) * on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"service\", \"(.+)\")))",
-          "legendFormat": "API: {{workload}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Total requests (bytes/sec)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "description": "Rate of 4xx & 5xx response codes and total HTTP response code errors by API/HTTPRoute",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "light-yellow",
-            "mode": "continuous-YlRd"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "axisSoftMin": 0,
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 5,
-            "gradientMode": "opacity",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "reqps"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 8,
-        "x": 16,
-        "y": 24
-      },
-      "id": 139,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name, response_code) * on(destination_service_name) group_left(name) (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
-          "legendFormat": "{{name}} - {{response_code}}",
+          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$route_name\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{service=~\"$route_name\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "legendFormat": "{{service}} - 99th %ile",
           "range": true,
           "refId": "A"
         },
@@ -1414,14 +1561,14 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_left(name) (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "histogram_quantile(0.95, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$route_name\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{service=~\"$route_name\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
-          "legendFormat": "{{name}} - Total Errors",
+          "legendFormat": "{{service}} - 95th %ile",
           "range": true,
-          "refId": "B"
+          "refId": "C"
         }
       ],
-      "title": "Errors (req/s)",
+      "title": "Request latency",
       "type": "timeseries"
     },
     {
@@ -1570,7 +1717,7 @@
         "h": 7,
         "w": 8,
         "x": 0,
-        "y": 31
+        "y": 40
       },
       "id": 141,
       "interval": "1m",
@@ -1751,7 +1898,7 @@
         "h": 7,
         "w": 8,
         "x": 8,
-        "y": 31
+        "y": 40
       },
       "id": 143,
       "interval": "1m",
@@ -1784,6 +1931,111 @@
         }
       ],
       "title": "Memory Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Rate of 4xx & 5xx response codes and total HTTP response code errors by API/HTTPRoute",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "light-yellow",
+            "mode": "continuous-YlRd"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 40
+      },
+      "id": 139,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name, response_code) * on(destination_service_name) group_left(name) (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "legendFormat": "{{name}} - {{response_code}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(istio_requests_total{response_code=~\"4.*|5.*\"}[5m])) by (destination_service_name) * on(destination_service_name) group_left(name) (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"${api_policy_namespace}\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "hide": false,
+          "legendFormat": "{{name}} - Total Errors",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Errors (req/s)",
       "type": "timeseries"
     }
   ],

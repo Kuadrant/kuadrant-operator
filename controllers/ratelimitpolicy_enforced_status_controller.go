@@ -9,9 +9,11 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	"github.com/samber/lo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,6 +24,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
@@ -48,50 +51,113 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) Reconcile(eventCtx context.Con
 		return ctrl.Result{}, err
 	}
 
-	t, err := BuildTopology(ctx, r.Client(), gw, (&kuadrantv1beta2.RateLimitPolicy{}).Kind(), &kuadrantv1beta2.RateLimitPolicyList{})
+	topology, err := r.buildTopology(ctx, gw)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	policies := t.PoliciesFromGateway(gw)
-	unTargetedRoutes := len(t.GetUntargetedRoutes(gw))
+	indexes := kuadrantgatewayapi.NewTopologyIndexes(topology)
+	policies := indexes.PoliciesFromGateway(gw)
+	numRoutes := len(topology.Routes())
+	numUntargetedRoutes := len(indexes.GetUntargetedRoutes(gw))
 
 	sort.Sort(kuadrantgatewayapi.PolicyByTargetRefKindAndCreationTimeStamp(policies))
 
+	// for each policy:
+	//   if the policy is a gateway policy:
+	//     and no route exists (numRoutes == 0) → set the Enforced condition of the gateway policy to 'false' (unknown)
+	//     and the gateway contains routes (numRoutes > 0)
+	//       and the gateway policy contains overrides → set the Enforced condition of the gateway policy to 'true'
+	//       and the gateway policy contains defaults:
+	//         and no routes have an attached policy (numUntargetedRoutes == numRoutes) → set the Enforced condition of the gateway policy to 'true'
+	//         and some routes have attached policy (numUntargetedRoutes < numRoutes && numUntargetedRoutes > 1) → set the Enforced condition of the gateway policy to 'true' (partially enforced)
+	//         and all routes have attached policy (numUntargetedRoutes == 0) → set the Enforced condition of the gateway policy to 'false' (overridden)
+	//   if the policy is a route policy:
+	//     and the route has no gateway parent (numGatewayParents == 0) → set the Enforced condition of the route policy to 'false' (unknown)
+	//     and the route has gateway parents (numGatewayParents > 0)
+	//       and all gateway parents of the route have gateway policies with overrides (numGatewayParentsWithOverrides == numGatewayParents) → set the Enforced condition of the route policy to 'false' (overridden)
+	//       and some gateway parents of the route have gateway policies with overrides (numGatewayParentsWithOverrides < numGatewayParents && numGatewayParentsWithOverrides > 1) → set the Enforced condition of the route policy to 'true' (partially enforced)
+	//       and no gateway parent of the route has gateway policies with overrides (numGatewayParentsWithOverrides == 0) → set the Enforced condition of the route policy to 'true'
+
 	for i := range policies {
 		policy := policies[i]
-		p := policy.(*kuadrantv1beta2.RateLimitPolicy)
-		conditions := p.GetStatus().GetConditions()
+		rlpKey := client.ObjectKeyFromObject(policy)
+		rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)
+		conditions := rlp.GetStatus().GetConditions()
 
-		// Skip policies if accepted condition is false
+		// skip policy if accepted condition is false
 		if meta.IsStatusConditionFalse(policy.GetStatus().GetConditions(), string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
 			continue
 		}
 
-		// Policy has been accepted
-		// Ensure no error on underlying subresource (i.e. Limitador)
-		if cond := r.hasErrCondOnSubResource(ctx, logger, p); cond != nil {
-			if err := r.setCondition(ctx, logger, p, &conditions, *cond); err != nil {
+		// ensure no error on underlying subresource (i.e. Limitador)
+		if condition := r.hasErrCondOnSubResource(ctx, rlp); condition != nil {
+			if err := r.setCondition(ctx, rlp, &conditions, *condition); err != nil {
 				return ctrl.Result{}, err
 			}
 			continue
 		}
 
-		if kuadrantgatewayapi.IsTargetRefGateway(p.GetTargetRef()) {
-			if p.Spec.Overrides != nil {
-				if err := r.setConditionForGWPolicyWithOverrides(ctx, logger, p, conditions, policies, unTargetedRoutes); err != nil {
-					return ctrl.Result{}, err
+		var condition *metav1.Condition
+
+		if kuadrantgatewayapi.IsTargetRefGateway(rlp.GetTargetRef()) { // gateway policy
+			if numRoutes == 0 {
+				condition = kuadrant.EnforcedCondition(rlp, kuadrant.NewErrUnknown(rlp.Kind(), errors.New("no free routes to enforce policy")), true) // unknown
+			} else {
+				if rlp.Spec.Overrides != nil {
+					condition = kuadrant.EnforcedCondition(rlp, nil, true) // fully enforced
+				} else {
+					if numUntargetedRoutes == numRoutes {
+						condition = kuadrant.EnforcedCondition(rlp, nil, true) // fully enforced
+					} else if numUntargetedRoutes > 0 {
+						condition = kuadrant.EnforcedCondition(rlp, nil, false) // partially enforced
+					} else {
+						otherPolicies := lo.FilterMap(policies, func(p kuadrantgatewayapi.Policy, _ int) (client.ObjectKey, bool) {
+							key := client.ObjectKeyFromObject(p)
+							return key, key != rlpKey
+						})
+						condition = kuadrant.EnforcedCondition(rlp, kuadrant.NewErrOverridden(rlp.Kind(), otherPolicies), true) // overridden
+					}
 				}
-				break
 			}
-			if err := r.setConditionForGWPolicyWithDefaults(ctx, logger, p, conditions, policies, unTargetedRoutes); err != nil {
-				return ctrl.Result{}, err
+		} else { // route policy
+			route := indexes.GetPolicyHTTPRoute(rlp)
+			gatewayParents := lo.FilterMap(kuadrantgatewayapi.GetRouteAcceptedGatewayParentKeys(route), func(parentKey client.ObjectKey, _ int) (*gatewayapiv1.Gateway, bool) {
+				g, found := utils.Find(topology.Gateways(), func(g kuadrantgatewayapi.GatewayNode) bool { return client.ObjectKeyFromObject(g.Gateway) == parentKey })
+				if !found {
+					return nil, false
+				}
+				return g.Gateway, true
+			})
+			numGatewayParents := len(gatewayParents)
+			if numGatewayParents == 0 {
+				condition = kuadrant.EnforcedCondition(rlp, kuadrant.NewErrUnknown(rlp.Kind(), errors.New("the targeted route has not been accepted by any gateway parent")), true) // unknown
+			} else {
+				var gatewayParentOverridePolicies []kuadrantgatewayapi.Policy
+				gatewayParentsWithOverrides := utils.Filter(gatewayParents, func(gatewayParent *gatewayapiv1.Gateway) bool {
+					_, found := utils.Find(indexes.PoliciesFromGateway(gatewayParent), func(p kuadrantgatewayapi.Policy) bool {
+						rlp := p.(*kuadrantv1beta2.RateLimitPolicy)
+						if kuadrantgatewayapi.IsTargetRefGateway(p.GetTargetRef()) && rlp != nil && rlp.Spec.Overrides != nil {
+							gatewayParentOverridePolicies = append(gatewayParentOverridePolicies, p)
+							return true
+						}
+						return false
+					})
+					return found
+				})
+				numGatewayParentsWithOverrides := len(gatewayParentsWithOverrides)
+				if numGatewayParentsWithOverrides == numGatewayParents {
+					sort.Sort(kuadrantgatewayapi.PolicyByTargetRefKindAndCreationTimeStamp(gatewayParentOverridePolicies))
+					condition = kuadrant.EnforcedCondition(rlp, kuadrant.NewErrOverridden(rlp.Kind(), utils.Map(gatewayParentOverridePolicies, func(p kuadrantgatewayapi.Policy) client.ObjectKey { return client.ObjectKeyFromObject(p) })), true) // overridden
+				} else if numGatewayParentsWithOverrides > 0 {
+					condition = kuadrant.EnforcedCondition(rlp, nil, false) // partially enforced
+				} else {
+					condition = kuadrant.EnforcedCondition(rlp, nil, true) // fully enforced
+				}
 			}
-			continue
 		}
 
-		// Route Policy
-		if err := r.setCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, nil, true)); err != nil {
+		if err := r.setCondition(ctx, rlp, &conditions, *condition); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -100,67 +166,54 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) Reconcile(eventCtx context.Con
 	return ctrl.Result{}, nil
 }
 
-func (r *RateLimitPolicyEnforcedStatusReconciler) setConditionForGWPolicyWithOverrides(ctx context.Context, logger logr.Logger, p *kuadrantv1beta2.RateLimitPolicy, conditions []metav1.Condition, policies []kuadrantgatewayapi.Policy, unTargetedRoutes int) error {
-	// Only have this policy and no free routes
-	if len(policies) == 1 && unTargetedRoutes == 0 {
-		if err := r.setCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, kuadrant.NewErrUnknown(p.Kind(), errors.New("no free routes to enforce policy")), true)); err != nil {
-			return err
-		}
+func (r *RateLimitPolicyEnforcedStatusReconciler) buildTopology(ctx context.Context, gw *gatewayapiv1.Gateway) (*kuadrantgatewayapi.Topology, error) {
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	// Has free routes or is overriding policies
-	// Set Enforced true condition for this GW policy
-	if err := r.setCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, nil, true)); err != nil {
-		return err
+	gatewayList := &gatewayapiv1.GatewayList{}
+	err = r.Client().List(ctx, gatewayList)
+	logger.V(1).Info("list gateways", "#gateways", len(gatewayList.Items), "err", err)
+	if err != nil {
+		return nil, err
 	}
 
-	// Update the rest of the policies as overridden
-	affectedPolices := utils.Filter(policies, func(ap kuadrantgatewayapi.Policy) bool {
-		return p != ap && ap.GetDeletionTimestamp() == nil
-	})
-
-	for i := range affectedPolices {
-		af := affectedPolices[i]
-		afp := af.(*kuadrantv1beta2.RateLimitPolicy)
-		afConditions := afp.GetStatus().GetConditions()
-
-		if err := r.setCondition(ctx, logger, afp, &afConditions, *kuadrant.EnforcedCondition(afp, kuadrant.NewErrOverridden(afp.Kind(), []client.ObjectKey{client.ObjectKeyFromObject(p)}), true)); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (r *RateLimitPolicyEnforcedStatusReconciler) setConditionForGWPolicyWithDefaults(ctx context.Context, logger logr.Logger, p *kuadrantv1beta2.RateLimitPolicy, conditions []metav1.Condition, policies []kuadrantgatewayapi.Policy, unTargetedRoutes int) error {
-	// GW Policy defaults is defined
-	// Only have this policy or no free routes -> nothing to enforce policy
-	if len(policies) == 1 && unTargetedRoutes == 0 {
-		if err := r.setCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, kuadrant.NewErrUnknown(p.Kind(), errors.New("no free routes to enforce policy")), true)); err != nil {
-			return err
-		}
-	} else if len(policies) > 1 && unTargetedRoutes == 0 {
-		// GW policy defaults are overridden by child policies
-		affectedPolices := utils.Filter(policies, func(ap kuadrantgatewayapi.Policy) bool {
-			return p != ap && ap.GetDeletionTimestamp() == nil
+	routeList := &gatewayapiv1.HTTPRouteList{}
+	// Get all the routes having the gateway as parent
+	err = r.Client().List(
+		ctx,
+		routeList,
+		client.MatchingFields{
+			fieldindexers.HTTPRouteGatewayParentField: client.ObjectKeyFromObject(gw).String(),
 		})
-
-		if err := r.setCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, kuadrant.NewErrOverridden(p.Kind(), utils.Map(affectedPolices, func(ap kuadrantgatewayapi.Policy) client.ObjectKey {
-			return client.ObjectKeyFromObject(ap)
-		})), true)); err != nil {
-			return err
-		}
-	} else {
-		// Is enforcing default policy on a free route
-		if err := r.setCondition(ctx, logger, p, &conditions, *kuadrant.EnforcedCondition(p, nil, true)); err != nil {
-			return err
-		}
+	logger.V(1).Info("list routes by gateway", "#routes", len(routeList.Items), "err", err)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil
+	policyList := &kuadrantv1beta2.RateLimitPolicyList{}
+	err = r.Client().List(ctx, policyList)
+	logger.V(1).Info("list rate limit policies", "#policies", len(policyList.Items), "err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	return kuadrantgatewayapi.NewTopology(
+		kuadrantgatewayapi.WithGateways(utils.Map(gatewayList.Items, ptr.To[gatewayapiv1.Gateway])),
+		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
+		kuadrantgatewayapi.WithPolicies(utils.Map(policyList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })),
+		kuadrantgatewayapi.WithLogger(logger),
+	)
 }
 
-func (r *RateLimitPolicyEnforcedStatusReconciler) hasErrCondOnSubResource(ctx context.Context, logger logr.Logger, p *kuadrantv1beta2.RateLimitPolicy) *metav1.Condition {
+func (r *RateLimitPolicyEnforcedStatusReconciler) hasErrCondOnSubResource(ctx context.Context, p *kuadrantv1beta2.RateLimitPolicy) *metav1.Condition {
+	logger, err := logr.FromContext(ctx)
+	logger.WithName("hasErrCondOnSubResource")
+	if err != nil {
+		logger = r.Logger()
+	}
+
 	limitador, err := GetLimitador(ctx, r.Client(), p)
 	if err != nil {
 		logger.V(1).Error(err, "failed to get limitador")
@@ -175,7 +228,13 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) hasErrCondOnSubResource(ctx co
 	return nil
 }
 
-func (r *RateLimitPolicyEnforcedStatusReconciler) setCondition(ctx context.Context, logger logr.Logger, p *kuadrantv1beta2.RateLimitPolicy, conditions *[]metav1.Condition, cond metav1.Condition) error {
+func (r *RateLimitPolicyEnforcedStatusReconciler) setCondition(ctx context.Context, p *kuadrantv1beta2.RateLimitPolicy, conditions *[]metav1.Condition, cond metav1.Condition) error {
+	logger, err := logr.FromContext(ctx)
+	logger.WithName("setCondition")
+	if err != nil {
+		logger = r.Logger()
+	}
+
 	idx := utils.Index(*conditions, func(c metav1.Condition) bool {
 		return c.Type == cond.Type && c.Status == cond.Status && c.Reason == cond.Reason && c.Message == cond.Message
 	})

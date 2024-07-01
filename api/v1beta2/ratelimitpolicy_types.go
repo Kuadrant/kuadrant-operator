@@ -17,11 +17,13 @@ limitations under the License.
 package v1beta2
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -270,6 +272,20 @@ func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 
 func (r *RateLimitPolicy) Kind() string {
 	return r.TypeMeta.Kind
+}
+
+func (r *RateLimitPolicy) List(ctx context.Context, c client.Client, namespace string) []kuadrantgatewayapi.Policy {
+	policyList := &RateLimitPolicyList{}
+	err := c.List(ctx, policyList, client.InNamespace(namespace))
+	if err != nil {
+		return []kuadrantgatewayapi.Policy{}
+	}
+	policies := make([]kuadrantgatewayapi.Policy, 0, len(policyList.Items))
+	for i := range policyList.Items {
+		policies = append(policies, &policyList.Items[i])
+	}
+
+	return policies
 }
 
 func (r *RateLimitPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {

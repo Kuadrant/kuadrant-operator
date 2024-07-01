@@ -20,6 +20,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
@@ -27,14 +28,13 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
+var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 	const (
 		testTimeOut      = SpecTimeout(3 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 	var (
-		testNamespace          string
-		kuadrantInstallationNS string
+		testNamespace string
 	)
 
 	assertPolicyIsAcceptedAndEnforced := func(ctx context.Context, key client.ObjectKey) func() bool {
@@ -52,15 +52,6 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 	beforeEachCallback := func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
 	}
-
-	BeforeAll(func(ctx SpecContext) {
-		kuadrantInstallationNS = tests.CreateNamespace(ctx, testClient())
-		tests.ApplyKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
-	})
-
-	AfterAll(func(ctx SpecContext) {
-		tests.DeleteNamespace(ctx, testClient(), kuadrantInstallationNS)
-	})
 
 	BeforeEach(beforeEachCallback)
 	AfterEach(func(ctx SpecContext) {
@@ -123,7 +114,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -133,9 +124,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Expect(existingWasmPlugin.Spec.TargetRef.Group).To(Equal("gateway.networking.k8s.io"))
 			Expect(existingWasmPlugin.Spec.TargetRef.Kind).To(Equal("Gateway"))
 			Expect(existingWasmPlugin.Spec.TargetRef.Name).To(Equal(gateway.Name))
-			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(&wasm.Plugin{
+			Expect(existingWASMConfig).To(Equal(&wasm.Config{
 				FailureMode: wasm.FailureModeDeny,
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
@@ -162,7 +153,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 								Data: []wasm.DataItem{
 									{
 										Static: &wasm.StaticSpec{
-											Key:   `limit.l1__2804bad6`,
+											Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 											Value: "1",
 										},
 									},
@@ -287,13 +278,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
-			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig.FailureMode).To(Equal(wasm.FailureModeDeny))
 			Expect(existingWASMConfig.RateLimitPolicies).To(HaveLen(1))
@@ -354,7 +345,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 				Data: []wasm.DataItem{
 					{
 						Static: &wasm.StaticSpec{
-							Key:   "limit.toys__3bfcbeee",
+							Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "toys"),
 							Value: "1",
 						},
 					},
@@ -380,7 +371,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 				Data: []wasm.DataItem{
 					{
 						Static: &wasm.StaticSpec{
-							Key:   "limit.assets__8bf729ff",
+							Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "assets"),
 							Value: "1",
 						},
 					},
@@ -430,15 +421,15 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
-			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(&wasm.Plugin{
+			Expect(existingWASMConfig).To(Equal(&wasm.Config{
 				FailureMode: wasm.FailureModeDeny,
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
@@ -465,7 +456,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 								Data: []wasm.DataItem{
 									{
 										Static: &wasm.StaticSpec{
-											Key:   `limit.l1__2804bad6`,
+											Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 											Value: "1",
 										},
 									},
@@ -531,7 +522,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
 			// Wait a bit to catch cases where wasmplugin is created and takes a bit to be created
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey), 20*time.Second, 5*time.Second).Should(BeFalse())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
@@ -610,7 +601,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
 			// Wait a bit to catch cases where wasmplugin is created and takes a bit to be created
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey), 20*time.Second, 5*time.Second).Should(BeFalse())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
@@ -739,7 +730,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -747,13 +738,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				if err != nil {
 					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
 					return false
 				}
 
-				expectedPlugin := &wasm.Plugin{
+				expectedPlugin := &wasm.Config{
 					FailureMode: wasm.FailureModeDeny,
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
@@ -780,7 +771,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.l1__2804bad6`,
+												Key:   wasm.LimitNameToLimitadorIdentifier(rlpAKey, "l1"),
 												Value: "1",
 											},
 										},
@@ -887,7 +878,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -895,13 +886,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				if err != nil {
 					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
 					return false
 				}
 
-				expectedPlugin := &wasm.Plugin{
+				expectedPlugin := &wasm.Config{
 					FailureMode: wasm.FailureModeDeny,
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
@@ -928,7 +919,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.l1__2804bad6`,
+												Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 												Value: "1",
 											},
 										},
@@ -954,7 +945,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				// Check wasm plugin
-				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gwB), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gwB), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -984,7 +975,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// Check wasm plugin for gateway A no longer exists
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -1003,7 +994,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// There is not RLP targeting Gateway B or any route parented by Gateway B
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gwB), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gwB), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -1082,7 +1073,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1090,13 +1081,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				if err != nil {
 					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
 					return false
 				}
 
-				expectedPlugin := &wasm.Plugin{
+				expectedPlugin := &wasm.Config{
 					FailureMode: wasm.FailureModeDeny,
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
@@ -1123,7 +1114,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.l1__2804bad6`,
+												Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 												Value: "1",
 											},
 										},
@@ -1149,7 +1140,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				// Check wasm plugin
-				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gwB), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gwB), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -1179,7 +1170,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// Check wasm plugin for gateway A no longer exists
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -1198,7 +1189,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: rlptools.WASMPluginName(gwB), Namespace: testNamespace,
+					Name: controllers.WASMPluginName(gwB), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1206,13 +1197,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				if err != nil {
 					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
 					return false
 				}
 
-				expectedPlugin := &wasm.Plugin{
+				expectedPlugin := &wasm.Config{
 					FailureMode: wasm.FailureModeDeny,
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
@@ -1239,7 +1230,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.l1__2804bad6`,
+												Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 												Value: "1",
 											},
 										},
@@ -1379,7 +1370,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1387,13 +1378,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				if err != nil {
 					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
 					return false
 				}
 
-				expectedPlugin := &wasm.Plugin{
+				expectedPlugin := &wasm.Config{
 					FailureMode: wasm.FailureModeDeny,
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
@@ -1420,7 +1411,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.l1__2804bad6`,
+												Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 												Value: "1",
 											},
 										},
@@ -1458,7 +1449,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1466,13 +1457,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				if err != nil {
 					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
 					return false
 				}
 
-				expectedPlugin := &wasm.Plugin{
+				expectedPlugin := &wasm.Config{
 					FailureMode: wasm.FailureModeDeny,
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
@@ -1499,7 +1490,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.l1__2804bad6`,
+												Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 												Value: "1",
 											},
 										},
@@ -1614,7 +1605,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1622,13 +1613,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				if err != nil {
 					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
 					return false
 				}
 
-				expectedPlugin := &wasm.Plugin{
+				expectedPlugin := &wasm.Config{
 					FailureMode: wasm.FailureModeDeny,
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
@@ -1655,7 +1646,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.gatewaylimit__b95fa83b`,
+												Key:   wasm.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
 												Value: "1",
 											},
 										},
@@ -1718,7 +1709,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1726,13 +1717,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				if err != nil {
 					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
 					return false
 				}
 
-				expectedPlugin := &wasm.Plugin{
+				expectedPlugin := &wasm.Config{
 					FailureMode: wasm.FailureModeDeny,
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
@@ -1759,7 +1750,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.routelimit__efc5113c`,
+												Key:   wasm.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
 												Value: "1",
 											},
 										},
@@ -1908,7 +1899,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1916,13 +1907,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				if err != nil {
 					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
 					return false
 				}
 
-				expectedPlugin := &wasm.Plugin{
+				expectedPlugin := &wasm.Config{
 					FailureMode: wasm.FailureModeDeny,
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
@@ -1949,7 +1940,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.routelimit__efc5113c`,
+												Key:   wasm.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
 												Value: "1",
 											},
 										},
@@ -2002,7 +1993,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -2010,13 +2001,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 					logf.Log.V(1).Info("wasmplugin not read", "key", wasmPluginKey, "error", err)
 					return false
 				}
-				existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				if err != nil {
 					logf.Log.V(1).Info("wasmplugin could not be deserialized", "key", wasmPluginKey, "error", err)
 					return false
 				}
 
-				expectedPlugin := &wasm.Plugin{
+				expectedPlugin := &wasm.Config{
 					FailureMode: wasm.FailureModeDeny,
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{ // First RLP 1 as the controller will sort based on RLP name
@@ -2043,7 +2034,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.gatewaylimit__b95fa83b`,
+												Key:   wasm.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
 												Value: "1",
 											},
 										},
@@ -2077,7 +2068,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 									Data: []wasm.DataItem{
 										{
 											Static: &wasm.StaticSpec{
-												Key:   `limit.routelimit__efc5113c`,
+												Key:   wasm.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
 												Value: "1",
 											},
 										},
@@ -2170,15 +2161,15 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
-			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(&wasm.Plugin{
+			Expect(existingWASMConfig).To(Equal(&wasm.Config{
 				FailureMode: wasm.FailureModeDeny,
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
@@ -2205,7 +2196,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 								Data: []wasm.DataItem{
 									{
 										Static: &wasm.StaticSpec{
-											Key:   `limit.l1__2804bad6`,
+											Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 											Value: "1",
 										},
 									},
@@ -2236,8 +2227,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		expectedWasmPluginConfig := func(rlpKey client.ObjectKey, rlp *kuadrantv1beta2.RateLimitPolicy, key, hostname string) *wasm.Plugin {
-			return &wasm.Plugin{
+		expectedWasmPluginConfig := func(rlpKey client.ObjectKey, rlp *kuadrantv1beta2.RateLimitPolicy, key, hostname string) *wasm.Config {
+			return &wasm.Config{
 				FailureMode: wasm.FailureModeDeny,
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
@@ -2318,14 +2309,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: rlptools.WASMPluginName(gateway), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			// must exist
 			Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-			existingWASMConfig, err := rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(gwRLPKey, gwRLP, "limit.gateway__4ea5ee68", "*")))
+			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(gwRLPKey, gwRLP, wasm.LimitNameToLimitadorIdentifier(gwRLPKey, "gateway"), "*")))
 
 			// Create Route RLP
 			routeRLP := &kuadrantv1beta2.RateLimitPolicy{
@@ -2359,26 +2350,26 @@ var _ = Describe("Rate Limiting WasmPlugin controller", Ordered, func() {
 			// Wasm plugin config should now use route RLP limit key
 			Eventually(func(g Gomega) {
 				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err = rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err = wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, "limit.route__8a84e406", "*.example.com")))
+				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "route"), "*.example.com")))
 			}).WithContext(ctx).Should(Succeed())
 
 			// Update GW RLP to overrides
 			Eventually(func(g Gomega) {
-				Expect(testClient().Get(ctx, gwRLPKey, gwRLP)).To(Succeed())
+				g.Expect(testClient().Get(ctx, gwRLPKey, gwRLP)).To(Succeed())
 				gwRLP.Spec.Overrides = gwRLP.Spec.Defaults.DeepCopy()
 				gwRLP.Spec.Defaults = nil
-				Expect(testClient().Update(ctx, gwRLP)).To(Succeed())
+				g.Expect(testClient().Update(ctx, gwRLP)).To(Succeed())
 			}).WithContext(ctx).Should(Succeed())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), gwRLPKey)).WithContext(ctx).Should(BeTrue())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeFalse())
 			// Wasm plugin config should now use GW RLP limit key for route
 			Eventually(func(g Gomega) {
 				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
-				existingWASMConfig, err = rlptools.WASMPluginFromStruct(existingWasmPlugin.Spec.PluginConfig)
+				existingWASMConfig, err = wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, "limit.gateway__4ea5ee68", "*.example.com")))
+				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "gateway"), "*.example.com")))
 			}).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)

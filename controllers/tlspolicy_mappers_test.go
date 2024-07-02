@@ -1,7 +1,10 @@
+//go:build unit
+
 package controllers
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -13,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
@@ -48,9 +52,21 @@ func Test_mapClusterIssuerToPolicy(t *testing.T) {
 			want: nil,
 		},
 		{
+			name: "list error",
+			args: args{
+				k8sClient: fake.NewClientBuilder().WithScheme(s).WithInterceptorFuncs(interceptor.Funcs{
+					List: func(ctx context.Context, client client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+						return errors.New("list error")
+					},
+				}).Build(),
+				object: clusterIssuer,
+			},
+			want: nil,
+		},
+		{
 			name: "map cluster issuer to matching policies",
 			args: args{
-				k8sClient: fake.NewClientBuilder().WithScheme(s).WithObjects(clusterIssuer).WithLists(testInitPolicies(clusterIssuer.Name, certmanagerv1.ClusterIssuerKind)).Build(),
+				k8sClient: fake.NewClientBuilder().WithScheme(s).WithObjects(clusterIssuer).WithLists(testInitTLSPolicies(clusterIssuer.Name, certmanagerv1.ClusterIssuerKind)).Build(),
 				object:    clusterIssuer,
 			},
 			want: []reconcile.Request{
@@ -105,9 +121,21 @@ func Test_mapIssuerToPolicy(t *testing.T) {
 			want: nil,
 		},
 		{
+			name: "list error",
+			args: args{
+				k8sClient: fake.NewClientBuilder().WithScheme(s).WithInterceptorFuncs(interceptor.Funcs{
+					List: func(ctx context.Context, client client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+						return errors.New("list error")
+					},
+				}).Build(),
+				object: issuer,
+			},
+			want: nil,
+		},
+		{
 			name: "map issuer to matching policies",
 			args: args{
-				k8sClient: fake.NewClientBuilder().WithScheme(s).WithObjects(issuer).WithLists(testInitPolicies(issuer.Name, certmanagerv1.IssuerKind)).Build(),
+				k8sClient: fake.NewClientBuilder().WithScheme(s).WithObjects(issuer).WithLists(testInitTLSPolicies(issuer.Name, certmanagerv1.IssuerKind)).Build(),
 				object:    issuer,
 			},
 			want: []reconcile.Request{
@@ -126,7 +154,7 @@ func Test_mapIssuerToPolicy(t *testing.T) {
 	}
 }
 
-func testInitPolicies(issuerName, issuerKind string) *v1alpha1.TLSPolicyList {
+func testInitTLSPolicies(issuerName, issuerKind string) *v1alpha1.TLSPolicyList {
 	return &v1alpha1.TLSPolicyList{
 		Items: []v1alpha1.TLSPolicy{
 

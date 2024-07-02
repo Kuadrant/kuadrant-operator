@@ -3,11 +3,11 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	corev1 "k8s.io/api/core/v1"
-	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -34,7 +34,7 @@ func (r *TLSPolicyReconciler) reconcileCertificates(ctx context.Context, tlsPoli
 	for _, gw := range append(gwDiffObj.GatewaysWithValidPolicyRef, gwDiffObj.GatewaysMissingPolicyRef...) {
 		log.V(1).Info("reconcileCertificates: gateway with valid or missing policy ref", "key", gw.Key())
 		expectedCertificates := r.expectedCertificatesForGateway(ctx, gw.Gateway, tlsPolicy)
-		if err := r.createOrUpdateGatewayCertificates(ctx, expectedCertificates); err != nil {
+		if err := r.createOrUpdateGatewayCertificates(ctx, tlsPolicy, expectedCertificates); err != nil {
 			return fmt.Errorf("error creating and updating expected certificates for gateway %v: %w", gw.Gateway.Name, err)
 		}
 		if err := r.deleteUnexpectedCertificates(ctx, expectedCertificates, gw.Gateway, tlsPolicy); err != nil {
@@ -44,20 +44,15 @@ func (r *TLSPolicyReconciler) reconcileCertificates(ctx context.Context, tlsPoli
 	return nil
 }
 
-func (r *TLSPolicyReconciler) createOrUpdateGatewayCertificates(ctx context.Context, expectedCertificates []*certmanv1.Certificate) error {
+func (r *TLSPolicyReconciler) createOrUpdateGatewayCertificates(ctx context.Context, tlspolicy *v1alpha1.TLSPolicy, expectedCertificates []*certmanv1.Certificate) error {
 	//create or update all expected Certificates
-	for _, cert := range expectedCertificates {
-		p := &certmanv1.Certificate{}
-		if err := r.Client().Get(ctx, client.ObjectKeyFromObject(cert), p); k8serror.IsNotFound(err) {
-			if err := r.Client().Create(ctx, cert); err != nil {
-				return err
-			}
-		} else if client.IgnoreNotFound(err) == nil {
-			p.Spec = cert.Spec
-			if err := r.Client().Update(ctx, p); err != nil {
-				return err
-			}
-		} else {
+	for idx := range expectedCertificates {
+		cert := expectedCertificates[idx]
+		if err := r.SetOwnerReference(tlspolicy, cert); err != nil {
+			return err
+		}
+
+		if err := r.ReconcileResource(ctx, &certmanv1.Certificate{}, cert, certificateBasicMutator); err != nil {
 			return err
 		}
 	}
@@ -186,4 +181,23 @@ func gatewayTLSCertificateLabels(gwKey client.ObjectKey) map[string]string {
 		"gateway-namespace": gwKey.Namespace,
 		"gateway":           gwKey.Name,
 	}
+}
+
+func certificateBasicMutator(existingObj, desiredObj client.Object) (bool, error) {
+	existing, ok := existingObj.(*certmanv1.Certificate)
+	if !ok {
+		return false, fmt.Errorf("%T is not an *certmanv1.Certificate", existingObj)
+	}
+	desired, ok := desiredObj.(*certmanv1.Certificate)
+	if !ok {
+		return false, fmt.Errorf("%T is not an *certmanv1.Certificate", desiredObj)
+	}
+
+	if reflect.DeepEqual(existing.Spec, desired.Spec) {
+		return false, nil
+	}
+
+	existing.Spec = desired.Spec
+
+	return true, nil
 }

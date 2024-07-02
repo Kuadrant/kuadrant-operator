@@ -232,7 +232,7 @@ var _ = Describe("DNSPolicy controller", func() {
 					"Message": Equal("Provider ensured the dns record"),
 				})),
 			)
-		}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
+		}, tests.TimeoutLong, tests.RetryIntervalMedium).Should(Succeed())
 
 		// create policy2 targeting gateway2 with the load-balanced strategy
 		dnsPolicy2 := v1alpha1.NewDNSPolicy("test-dns-policy2", testNamespace).

@@ -234,6 +234,28 @@ func TestTLSPolicyReconciler_enforcedCondition(t *testing.T) {
 			},
 		},
 		{
+			name: "issuer has no ready condition",
+			fields: fields{
+				BaseReconciler: reconcilers.NewBaseReconciler(
+					fake.NewClientBuilder().
+						WithObjects(
+							issuerFactory(func(issuer *certmanv1.Issuer) {
+								issuer.Status.Conditions = []certmanv1.IssuerCondition{}
+							})).
+						WithScheme(scheme).Build(), nil, nil, log.NewLogger(), nil,
+				),
+			},
+			args: args{
+				tlsPolicy: policyFactory(),
+			},
+			want: &metav1.Condition{
+				Type:    string(kuadrant.PolicyConditionEnforced),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(kuadrant.PolicyReasonUnknown),
+				Message: "TLSPolicy has encountered some issues: issuer not ready",
+			},
+		},
+		{
 			name: "no valid gateways found",
 			fields: fields{
 				BaseReconciler: reconcilers.NewBaseReconciler(
@@ -276,6 +298,28 @@ func TestTLSPolicyReconciler_enforcedCondition(t *testing.T) {
 			fields: fields{
 				BaseReconciler: reconcilers.NewBaseReconciler(
 					fake.NewClientBuilder().WithObjects(issuerFactory(), gwFactory(), certificateFactory(certificateNotReadyMutater)).
+						WithScheme(scheme).Build(), nil, nil, log.NewLogger(), nil,
+				),
+			},
+			args: args{
+				tlsPolicy:           policyFactory(),
+				targetNetworkObject: gwFactory(),
+			},
+			want: &metav1.Condition{
+				Type:    string(kuadrant.PolicyConditionEnforced),
+				Status:  metav1.ConditionFalse,
+				Reason:  string(kuadrant.PolicyReasonUnknown),
+				Message: fmt.Sprintf("TLSPolicy has encountered some issues: certificate %s not ready", certificateName),
+			},
+		},
+		{
+			name: "certificate has no ready condition",
+			fields: fields{
+				BaseReconciler: reconcilers.NewBaseReconciler(
+					fake.NewClientBuilder().WithObjects(
+						issuerFactory(), gwFactory(), certificateFactory(func(certificate *certmanv1.Certificate) {
+							certificate.Status.Conditions = []certmanv1.CertificateCondition{}
+						})).
 						WithScheme(scheme).Build(), nil, nil, log.NewLogger(), nil,
 				),
 			},

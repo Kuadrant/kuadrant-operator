@@ -30,7 +30,7 @@ dependencies:
     version: 0.0.0
     repository: https://kuadrant.io/helm-charts/
   - name: dns-operator
-    version: main
+    version: 0.0.0
     repository: https://kuadrant.io/helm-charts/
 maintainers:
   - email: acatterm@redhat.com

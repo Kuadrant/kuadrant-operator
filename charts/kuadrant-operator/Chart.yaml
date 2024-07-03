@@ -1,0 +1,47 @@
+apiVersion: v2
+name: kuadrant-operator
+description: The Operator to install and manage the lifecycle of the Kuadrant components deployments.
+home: https://kuadrant.io
+icon: https://raw.githubusercontent.com/Kuadrant/kuadrant.github.io/main/static/img/apple-touch-icon.png
+keywords:
+  - kuadrant
+  - authorino
+  - authn
+  - authz
+  - authorization
+  - authentication
+  - service protection
+  - limitador
+  - rate limiting
+  - dns
+  - managed zones
+  - kubernetes
+sources:
+  - https://github.com/Kuadrant/kuadrant-operator/
+kubeVersion: ">=1.19.0-0"
+type: application
+# The chart version and dependencies will be properly set when the chart is released matching the operator version
+version: "0.0.0"
+dependencies:
+  - name: authorino-operator
+    version: 0.0.0
+    repository: https://kuadrant.io/helm-charts/
+  - name: limitador-operator
+    version: 0.0.0
+    repository: https://kuadrant.io/helm-charts/
+  - name: dns-operator
+    version: main
+    repository: https://kuadrant.io/helm-charts/
+maintainers:
+  - email: acatterm@redhat.com
+    name: Adam Cattermole
+  - email: didier@redhat.com
+    name: Didier Di Cesare
+  - email: eastizle@redhat.com
+    name: Eguzki Astiz Lezaun
+  - email: mcassola@redhat.com
+    name: Guilherme Cassolato
+  - email: jfitzpat@redhat.com
+    name: Jim Fitzpatrick
+  - email: chfan@redhat.com
+    name: Kevin Chi Fan

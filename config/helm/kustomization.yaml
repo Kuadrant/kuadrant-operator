@@ -1,0 +1,4 @@
+namespace: kuadrant-system
+
+resources:
+  - ../default

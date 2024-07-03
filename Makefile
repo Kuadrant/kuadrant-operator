@@ -66,6 +66,10 @@ REGISTRY = quay.io
 # Organization in container registry
 ORG ?= kuadrant
 
+# Repo in the container registry
+DEFAULT_REPO = kuadrant-operator
+REPO ?= $(DEFAULT_REPO)
+
 # IMAGE_TAG_BASE defines the docker.io namespace and part of the image name for remote images.
 # This variable is used to construct full image tags for bundle and catalog images.
 #
@@ -253,6 +257,23 @@ $(GINKGO):
 
 .PHONY: ginkgo
 ginkgo: $(GINKGO) ## Download ginkgo locally if necessary.
+
+HELM = ./bin/helm
+HELM_VERSION = v3.15.0
+$(HELM):
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(HELM)) ;\
+	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
+	wget -O helm.tar.gz https://get.helm.sh/helm-$(HELM_VERSION)-$${OS}-$${ARCH}.tar.gz ;\
+	tar -zxvf helm.tar.gz ;\
+	mv $${OS}-$${ARCH}/helm $(HELM) ;\
+	chmod +x $(HELM) ;\
+	rm -rf $${OS}-$${ARCH} helm.tar.gz ;\
+	}
+
+.PHONY: helm
+helm: $(HELM) ## Download helm locally if necessary.
 
 ##@ Development
 define patch-config

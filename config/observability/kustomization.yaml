@@ -7,9 +7,9 @@ resources:
   - github.com/Kuadrant/gateway-api-state-metrics/config/examples/dashboards?ref=0.4.0
 # To scrape istio metrics, 3 configurations are required:
 # 1. Envoy metrics directly from the istio ingress gateway pod
-  - podmonitor-envoy.yaml
+  - prometheus/monitors/pod-monitor-envoy.yaml
 # 2. Istiod metrics via the istiod service
-  - servicemonitor-istiod.yaml
+  - prometheus/monitors/service-monitor-istiod.yaml
 # 3. Istio metrics exposed via envoy on 15020 in each application.
 # We're using the additionalScrapeConfigs field of the Prometheus CR
 # here to read existing prometheus scrape annotations on pods.
@@ -18,12 +18,17 @@ resources:
 # exposed or named, so we need to drop to raw custom prometheus
 # scrape config.
 # See https://github.com/prometheus-operator/prometheus-operator/issues/3071#issuecomment-763746836
-  - additional-scrape-configs.yaml
+  - prometheus/additional-scrape-configs.yaml
   #https://istio.io/latest/docs/reference/config/telemetry/#MetricSelector-IstioMetric
-  - telemetry.yaml
+  - prometheus/monitors/service-monitor-limitador-operator.yaml
+  - prometheus/monitors/service-monitor-kuadrant-operator.yaml
+  - prometheus/monitors/service-monitor-authorino-operator.yaml
+  - prometheus/monitors/service-monitor-dns-operator.yaml
+
+  - prometheus/telemetry.yaml
 
 patchesStrategicMerge:
-  - cluster_role.yaml
+  - rbac/cluster_role.yaml
 
 patches:
   - target:
@@ -71,19 +76,19 @@ patchesJson6902:
       version: v1
       kind: Deployment
       name: kube-state-metrics
-    path: ksm_deployment_patch.yaml
+    path: openshift/ksm_deployment_patch.yaml
   - target:
       group: rbac.authorization.k8s.io
       version: v1
       kind: ClusterRole
       name: kube-state-metrics
-    path: ksm_clusterrole_patch.yaml
+    path: rbac/ksm_clusterrole_patch.yaml
   - target:
       group: apps
       version: v1
       kind: Deployment
       name: grafana
-    path: grafana_deployment_patch.yaml
+    path: grafana/grafana_deployment_patch.yaml
 
 generatorOptions:
   disableNameSuffixHash: true
@@ -93,5 +98,4 @@ secretGenerator:
   namespace: monitoring
   behavior: replace
   files:
-  - grafana_datasources.yaml
-
+  - grafana/grafana_datasources.yaml

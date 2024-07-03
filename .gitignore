@@ -24,7 +24,7 @@ testbin/*
 *.swp
 *.swo
 *~
-kuadrant-operator
+/kuadrant-operator
 tmp
 
 /catalog/kuadrant-operator-catalog

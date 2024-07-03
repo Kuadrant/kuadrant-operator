@@ -1,0 +1,23 @@
+# Description: This workflow is used to communicate Kuadrant helm charts repo that a release has been deleted.
+
+name: Delete Release Helm Chart
+on:
+  release:
+    types:
+      - deleted
+jobs:
+  delete_chart_release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Parse Tag
+        run: |
+          tag=${{ github.event.release.tag_name || inputs.operatorTag }}
+          echo "OPERATOR_VERSION=${tag#v}" >> $GITHUB_ENV
+      - name: Sync deleted Helm Chart with repository
+        run: |
+          make helm-sync-package-deleted \
+            VERSION=${{env.OPERATOR_VERSION}} \
+            HELM_WORKFLOWS_TOKEN=${{ secrets.HELM_WORKFLOWS_TOKEN }}

@@ -1,0 +1,53 @@
+# Description: This workflow is used to release the Helm chart to the GitHub repository. The chart manifests should be already
+# built with the target `helm-build` and the manifests changes already committed to the tag to be released.
+
+name: Release Helm Chart
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      operatorTag:
+        description: Operator bundle version tag
+        default: v0.0.0
+        type: string
+jobs:
+  chart_release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Package Helm Chart
+        run: |
+          make helm-package
+
+      - name: Parse Tag
+        run: |
+          tag=${{ github.event.release.tag_name || inputs.operatorTag }}
+          echo "OPERATOR_VERSION=${tag#v}" >> $GITHUB_ENV
+          echo "OPERATOR_TAG=${tag}" >> $GITHUB_ENV
+
+      - name: Upload package to GitHub Release
+        uses: svenstaro/upload-release-action@v2
+        id: upload-chart
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: limitador-operator-${{ env.OPERATOR_VERSION }}.tgz
+          asset_name: chart-limitador-operator-${{ env.OPERATOR_VERSION }}.tgz
+          tag: ${{ env.OPERATOR_TAG }}
+          overwrite: true
+
+      - name: Sync Helm Chart with repository
+        run: |
+          make helm-sync-package-created \
+            VERSION=${{env.OPERATOR_VERSION}} \
+            HELM_WORKFLOWS_TOKEN=${{ secrets.HELM_WORKFLOWS_TOKEN }} \
+            BROWSER_DOWNLOAD_URL=${{ steps.upload-chart.outputs.browser_download_url }}

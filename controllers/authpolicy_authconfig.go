@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -230,20 +229,6 @@ func getAffectedPolicies(t *kuadrantgatewayapi.Topology, ap *api.AuthPolicy) []k
 	}
 
 	return affectedPolicies
-}
-
-func policyAsAuthPolicy(p kuadrantgatewayapi.Policy) (*api.AuthPolicy, error) {
-	out := &api.AuthPolicy{}
-	data, err := json.Marshal(p)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = json.Unmarshal(data, out); err != nil {
-		return nil, err
-	}
-
-	return out, nil
 }
 
 func getAttachedHTTPRoutes(t *kuadrantgatewayapi.Topology, gw kuadrant.GatewayWrapper) []*gatewayapiv1.HTTPRoute {

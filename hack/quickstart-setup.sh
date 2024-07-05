@@ -545,7 +545,7 @@ fi
 info "Next steps:"
 info "  - Explore your new Kuadrant environment using 'kubectl get all -n kuadrant-system'."
 info "  - Head over to the Kuadrant quick start guide for further instructions on how to use Kuadrant with this environment:"
-info "    🔗 https://docs.kuadrant.io/kuadrant-operator/doc/user-guides/secure-protect-connect/"
+info "    🔗 https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/secure-protect-connect/"
 
 echo ""
 info "Thank you for using Kuadrant! If you have any questions or feedback, please reach out to our community."

@@ -281,6 +281,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	authPolicyEnvoySecurityPolicyReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("authpolicy").WithName("securitypolicy"),
+		mgr.GetEventRecorderFor("AuthPolicyEnvoySecurityPolicy"),
+	)
+	if err = (&controllers.AuthPolicyEnvoySecurityPolicyReconciler{
+		BaseReconciler: authPolicyEnvoySecurityPolicyReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicyEnvoySecurityPolicy")
+		os.Exit(1)
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

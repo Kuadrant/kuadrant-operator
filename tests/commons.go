@@ -51,6 +51,8 @@ const (
 	HTTPRouteName        = "toystore-route"
 )
 
+var GatewayClassName string
+
 func HostWildcard(domain string) string {
 	return fmt.Sprintf("*.%s", domain)
 }
@@ -76,7 +78,7 @@ func BuildBasicGateway(gwName, ns string, mutateFns ...func(*gatewayapiv1.Gatewa
 			Annotations: map[string]string{"networking.istio.io/service-type": string(corev1.ServiceTypeClusterIP)},
 		},
 		Spec: gatewayapiv1.GatewaySpec{
-			GatewayClassName: "istio",
+			GatewayClassName: gatewayapiv1.ObjectName(GatewayClassName),
 			Listeners: []gatewayapiv1.Listener{
 				{
 					Name:     "default",

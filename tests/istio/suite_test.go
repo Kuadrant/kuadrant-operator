@@ -24,6 +24,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/kuadrant/kuadrant-operator/controllers"
+	"github.com/kuadrant/kuadrant-operator/pkg/log"
+	"github.com/kuadrant/kuadrant-operator/tests"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/rest"
@@ -31,10 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	"github.com/kuadrant/kuadrant-operator/controllers"
-	"github.com/kuadrant/kuadrant-operator/pkg/log"
-	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -111,6 +110,9 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: s})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	tests.GatewayClassName = os.Getenv("GATEWAYAPI_PROVIDER")
+	Expect(tests.GatewayClassName).To(Equal("istio"), "Please make sure GATEWAYAPI_PROVIDER is set correctly.")
 })
 
 var _ = SynchronizedAfterSuite(func() {}, func() {

@@ -111,6 +111,9 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: s})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	tests.GatewayClassName = os.Getenv("GATEWAYAPI_PROVIDER")
+	Expect(tests.GatewayClassName).NotTo(BeZero(), "Please make sure GATEWAYAPI_PROVIDER is set correctly.")
 })
 
 var _ = SynchronizedAfterSuite(func() {}, func() {

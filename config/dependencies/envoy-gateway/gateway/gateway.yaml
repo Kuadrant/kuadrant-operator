@@ -4,7 +4,7 @@ kind: Gateway
 metadata:
   name: eg
 spec:
-  gatewayClassName: eg
+  gatewayClassName: envoygateway
   listeners:
     - name: http
       protocol: HTTP

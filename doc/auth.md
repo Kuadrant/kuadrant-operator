@@ -331,11 +331,11 @@ Check out [Route selectors](reference/route-selectors.md) for a full description
 
 Use `when` conditions to conditionally activate policies and policy rules based on attributes that cannot be expressed in the HTTPRoutes' `spec.hostnames` and `spec.rules.matches` fields, or in general in AuthPolicies that target a Gateway.
 
-`when` conditions in an AuthPolicy are compatible with Authorino [conditions](https://docs.kuadrant.io/authorino/docs/features/#common-feature-conditions-when), thus supporting complex boolean expressions with AND and OR operators, as well as grouping.
+`when` conditions in an AuthPolicy are compatible with Authorino [conditions](https://docs.kuadrant.io/latest/authorino/docs/features/#common-feature-conditions-when), thus supporting complex boolean expressions with AND and OR operators, as well as grouping.
 
 The selectors within the `when` conditions of an AuthPolicy are a subset of Kuadrant's Well-known Attributes ([RFC 0002](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md)). Check out the reference for the full list of supported selectors.
 
-Authorino [JSON path string modifiers](https://docs.kuadrant.io/authorino/docs/features/#string-modifiers) can also be applied to the selectors within the `when` conditions of an AuthPolicy.
+Authorino [JSON path string modifiers](https://docs.kuadrant.io/latest/authorino/docs/features/#string-modifiers) can also be applied to the selectors within the `when` conditions of an AuthPolicy.
 
 ### Examples
 
@@ -433,7 +433,7 @@ To avoid these problems, use different hostnames in each route.
 
 ## Implementation details
 
-Under the hood, for each AuthPolicy, Kuadrant creates an Istio [`AuthorizationPolicy`](https://istio.io/latest/docs/reference/config/security/authorization-policy) and an Authorino [`AuthConfig`](https://docs.kuadrant.io/authorino/docs/architecture/#the-authorino-authconfig-custom-resource-definition-crd) custom resources.
+Under the hood, for each AuthPolicy, Kuadrant creates an Istio [`AuthorizationPolicy`](https://istio.io/latest/docs/reference/config/security/authorization-policy) and an Authorino [`AuthConfig`](https://docs.kuadrant.io/latest/authorino/docs/architecture/#the-authorino-authconfig-custom-resource-definition-crd) custom resources.
 
 Only requests that matches the rules in the Istio `AuthorizationPolicy` cause an authorization request to be sent to the external authorization service ("Authorino"), i.e., only requests directed to the HTTPRouteRules targeted by the AuthPolicy (directly or indirectly), according to the declared top-level route selectors (if present), or all requests for which a matching HTTPRouteRule exists (otherwise).
 

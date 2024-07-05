@@ -119,4 +119,4 @@ If you centrally aggregate logs using something like promtail and loki, you can 
 ![Trace and logs in Grafana UI](grafana_tracing_loki.png)
 
 Using a combination of tracing and logs, you can visualise and troubleshoot reuqest timing issues and drill down to specific services.
-This method becomes even more powerful when combined with [metrics](https://docs.kuadrant.io/kuadrant-operator/doc/observability/metrics/) and [dashboards](https://docs.kuadrant.io/kuadrant-operator/doc/observability/dashboards/) to get a more complete picture of your users traffic.
+This method becomes even more powerful when combined with [metrics](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/metrics/) and [dashboards](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/examples/) to get a more complete picture of your users traffic.

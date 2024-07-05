@@ -429,7 +429,7 @@ export gatewayNS=api-gateway
 
 You can generate Kuadrant and Gateway API resources directly from OAS documents by using an `x-kuadrant` extension.
 
-NOTE: For a more in-depth look at the OAS extension, see the [kuadrantctl documentation](https://docs.kuadrant.io/kuadrantctl/).
+NOTE: For a more in-depth look at the OAS extension, see the [kuadrantctl documentation](https://docs.kuadrant.io/latest/kuadrantctl/).
 
 You will use `kuadrantctl` to generate your `HTTPRoute`.
 
@@ -533,7 +533,7 @@ This section of the walkthrough uses the `kuadrantctl` tool to create an `AuthPo
 
 The platform engineer workflow established default policies for authentication and rate limiting at your Gateway. The new developer-defined policies, which you will create, are intended to target your HTTPRoute and will supersede the existing policies for requests to your API endpoints, similar to your previous API key example.
 
-The example OAS uses Kuadrant-based extensions. These extensions enable you to define routing and service protection requirements. For more details, see [OpenAPI Kuadrant extensions](https://docs.kuadrant.io/kuadrantctl/doc/openapi-kuadrant-extensions/).
+The example OAS uses Kuadrant-based extensions. These extensions enable you to define routing and service protection requirements. For more details, see [OpenAPI Kuadrant extensions](https://docs.kuadrant.io/latest/kuadrantctl/doc/openapi-kuadrant-extensions/).
 
 #### Prerequisites
 
@@ -603,7 +603,7 @@ You should see a `200` response code.
 
 ### Step 7 - Set up rate limiting
 
-Lastly, you can generate your `RateLimitPolicy` to add your rate limits, based on your OAS file. Rate limiting is simplified for this walkthrough and is based on either the bearer token or the API key value. There are more advanced examples in the How-to guides on the Kuadrant documentation site, for example: [Authenticated rate limiting with JWTs and Kubernetes RBAC](https://docs.kuadrant.io/kuadrant-operator/doc/user-guides/authenticated-rl-with-jwt-and-k8s-authnz/).
+Lastly, you can generate your `RateLimitPolicy` to add your rate limits, based on your OAS file. Rate limiting is simplified for this walkthrough and is based on either the bearer token or the API key value. There are more advanced examples in the How-to guides on the Kuadrant documentation site, for example: [Authenticated rate limiting with JWTs and Kubernetes RBAC](https://docs.kuadrant.io/latest/kuadrant-operator/doc/user-guides/authenticated-rl-with-jwt-and-k8s-authnz/).
 
  You can continue to use this sample OAS document, which includes both authentication and a rate limit:
 

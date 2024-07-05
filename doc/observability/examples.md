@@ -21,7 +21,7 @@ For more details on how to import dashboards into Grafana, visit the [import das
     - **ID** - Use the 'Import' feature in the Grafana UI to import via [Grafana.com](https://grafana.com/grafana/dashboards/) using a Dashboard ID. 
 - **ConfigMap Method:** Automate dashboard provisioning by adding files to a ConfigMap, which should be mounted at `/etc/grafana/provisioning/dashboards`.
 
-Datasources are configured as template variables, automatically integrating with your existing data sources. Metrics for these dashboards are sourced from [Prometheus](https://github.com/prometheus/prometheus). For more details on the metrics used, visit the [metrics](https://docs.kuadrant.io/kuadrant-operator/doc/observability/metrics/) documentation page.
+Datasources are configured as template variables, automatically integrating with your existing data sources. Metrics for these dashboards are sourced from [Prometheus](https://github.com/prometheus/prometheus). For more details on the metrics used, visit the [metrics](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/metrics/) documentation page.
 
 ## Alerts
 
@@ -29,4 +29,4 @@ Datasources are configured as template variables, automatically integrating with
 
 Integrate alerts into Prometheus using a `PrometheusRule` resource. Adjust alert thresholds to meet your specific operational needs.
 
-Further information on the metrics used for these alerts can be found on the [metrics](https://docs.kuadrant.io/kuadrant-operator/doc/observability/metrics/) page.
+Further information on the metrics used for these alerts can be found on the [metrics](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/metrics/) page.

@@ -108,7 +108,7 @@ If you have user workload monitoring enabled, it is best to configure remote wri
 - [OpenShift remote write configuration](https://docs.openshift.com/container-platform/latest/observability/monitoring/configuring-the-monitoring-stack.html#configuring_remote_write_storage_configuring-the-monitoring-stack)
 - [Kube Thanos](https://github.com/thanos-io/kube-thanos)
 
-The [example dashboards and alerts](https://docs.kuadrant.io/kuadrant-operator/doc/observability/examples/) for observing Kuadrant functionality use low-level CPU metrics and network metrics available from the user monitoring stack in OpenShift. They also use resource state metrics from Gateway API and Kuadrant resources. 
+The [example dashboards and alerts](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/examples/) for observing Kuadrant functionality use low-level CPU metrics and network metrics available from the user monitoring stack in OpenShift. They also use resource state metrics from Gateway API and Kuadrant resources. 
 
 To scrape these additional metrics, you can install a `kube-state-metrics instance`, with a custom resource configuration as follows:
 
@@ -123,7 +123,7 @@ To enable request metrics in Istio, you must create a `telemetry` resource as fo
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/config/observability/openshift/telemetry.yaml
 ```
 
-If you have Grafana installed in your cluster, you can import the [example dashboards and alerts](https://docs.kuadrant.io/kuadrant-operator/doc/observability/examples).
+If you have Grafana installed in your cluster, you can import the [example dashboards and alerts](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/examples).
 
 For example installation details, see [installing Grafana on OpenShift](https://cloud.redhat.com/experts/o11y/ocp-grafana/). When installed, you must add your Thanos instance as a data source to Grafana. Alternatively, if you are using only the user workload monitoring stack in your OpenShift cluster, and not writing metrics to an external Thanos instance, you can [set up a data source to the thanos-querier route in the OpenShift cluster](https://docs.openshift.com/container-platform/4.15/observability/monitoring/accessing-third-party-monitoring-apis.html#accessing-metrics-from-outside-cluster_accessing-monitoring-apis-by-using-the-cli).
 

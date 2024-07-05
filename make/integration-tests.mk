@@ -9,7 +9,7 @@ INTEGRATION_TEST_NUM_PROCESSES ?= 10
 test-bare-k8s-integration: clean-cov generate fmt vet ginkgo ## Requires only bare kubernetes cluster.
 	mkdir -p $(PROJECT_PATH)/coverage/bare-k8s-integration
 #	Check `ginkgo help run` for command line options. For example to filtering tests.
-	$(GINKGO) \
+	GATEWAYAPI_PROVIDER=$(GATEWAYAPI_PROVIDER) $(GINKGO) \
 		--coverpkg $(INTEGRATION_COVER_PKGS) \
 		--output-dir $(PROJECT_PATH)/coverage/bare-k8s-integration \
 		--coverprofile cover.out \
@@ -27,7 +27,7 @@ test-bare-k8s-integration: clean-cov generate fmt vet ginkgo ## Requires only ba
 test-gatewayapi-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes cluster with GatewayAPI installed.
 	mkdir -p $(PROJECT_PATH)/coverage/gatewayapi-integration
 #	Check `ginkgo help run` for command line options. For example to filtering tests.
-	$(GINKGO) \
+	GATEWAYAPI_PROVIDER=$(GATEWAYAPI_PROVIDER) $(GINKGO) \
 		--coverpkg $(INTEGRATION_COVER_PKGS) \
 		--output-dir $(PROJECT_PATH)/coverage/gatewayapi-integration \
 		--coverprofile cover.out \
@@ -45,7 +45,7 @@ test-gatewayapi-env-integration: clean-cov generate fmt vet ginkgo ## Requires k
 test-istio-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes cluster with GatewayAPI and Istio installed.
 	mkdir -p $(PROJECT_PATH)/coverage/istio-integration
 #	Check `ginkgo help run` for command line options. For example to filtering tests.
-	$(GINKGO) \
+	GATEWAYAPI_PROVIDER=$(GATEWAYAPI_PROVIDER) $(GINKGO) \
 		--coverpkg $(INTEGRATION_COVER_PKGS) \
 		--output-dir $(PROJECT_PATH)/coverage/istio-integration \
 		--coverprofile cover.out \
@@ -63,7 +63,7 @@ test-istio-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubern
 test-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes cluster with at least one GatewayAPI provider installed.
 	mkdir -p $(PROJECT_PATH)/coverage/integration
 #	Check `ginkgo help run` for command line options. For example to filtering tests.
-	$(GINKGO) \
+	GATEWAYAPI_PROVIDER=$(GATEWAYAPI_PROVIDER) $(GINKGO) \
 		--coverpkg $(INTEGRATION_COVER_PKGS) \
 		--output-dir $(PROJECT_PATH)/coverage/integration \
 		--coverprofile cover.out \

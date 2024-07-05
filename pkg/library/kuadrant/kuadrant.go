@@ -19,6 +19,7 @@ import (
 const (
 	KuadrantNamespaceAnnotation = "kuadrant.io/namespace"
 	ControllerName              = "kuadrant.io/policy-controller"
+	AuthorinoServiceName        = "authorino-authorino-authorization"
 )
 
 type Policy interface {

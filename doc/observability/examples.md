@@ -21,7 +21,7 @@ For more details on how to import dashboards into Grafana, visit the [import das
     - **ID** - Use the 'Import' feature in the Grafana UI to import via [Grafana.com](https://grafana.com/grafana/dashboards/) using a Dashboard ID. 
 - **ConfigMap Method:** Automate dashboard provisioning by adding files to a ConfigMap, which should be mounted at `/etc/grafana/provisioning/dashboards`.
 
-Datasources are configured as template variables, automatically integrating with your existing data sources. Metrics for these dashboards are sourced from [Prometheus](https://github.com/prometheus/prometheus). For more details on the metrics used, visit the [metrics](https://docs.kuadrant.io/kuadrant-operator/doc/observability/metrics/) documentation page.
+Datasources are configured as template variables, automatically integrating with your existing data sources. Metrics for these dashboards are sourced from [Prometheus](https://github.com/prometheus/prometheus). For more details on the metrics used, visit the [metrics](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/metrics/) documentation page.
 
 ## Alerts
 
@@ -31,4 +31,4 @@ You can integrate the [example alerts](https://github.com/Kuadrant/kuadrant-oper
 
 Additionally, [Service Level Objective (SLO)](https://sre.google/sre-book/service-level-objectives/) alerts generated with [Sloth](https://sloth.dev/) are included. A benefit of these alerts is the ability to integrate them with this [SLO dashboard](https://grafana.com/grafana/dashboards/14348-slo-detail/), which utilizes generated labels to comprehensively overview your SLOs.
 
-Further information on the metrics used for these alerts can be found on the [metrics](https://docs.kuadrant.io/kuadrant-operator/doc/observability/metrics/) page.
+Further information on the metrics used for these alerts can be found on the [metrics](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/metrics/) page.

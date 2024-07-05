@@ -285,7 +285,7 @@ EOF
 
   The example above is for non-resource URL Kubernetes roles. For using `Roles` and `RoleBindings` instead of
   `ClusterRoles` and `ClusterRoleBindings`, thus more flexible resource-based permissions to protect the API,
-  see the spec for [Kubernetes SubjectAccessReview authorization](https://docs.kuadrant.io/authorino/docs/features/#kubernetes-subjectaccessreview-authorizationkubernetessubjectaccessreview)
+  see the spec for [Kubernetes SubjectAccessReview authorization](https://docs.kuadrant.io/latest/authorino/docs/features/#kubernetes-subjectaccessreview-authorizationkubernetessubjectaccessreview)
   in the Authorino docs.
 </details>
 

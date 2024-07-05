@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
@@ -40,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
@@ -194,6 +196,30 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	Expect(err).NotTo(HaveOccurred())
 
+	authPolicyEnvoySecurityPolicyReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("authpolicy").WithName("securitypolicy"),
+		mgr.GetEventRecorderFor("AuthPolicyEnvoySecurityPolicy"),
+	)
+
+	err = (&AuthPolicyEnvoySecurityPolicyReconciler{
+		BaseReconciler: authPolicyEnvoySecurityPolicyReconciler,
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
+	envoySecurityPolicyReferenceGrantReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("authpolicy").WithName("referencegrant"),
+		mgr.GetEventRecorderFor("EnvoySecurityPolicyReferenceGrant"),
+	)
+
+	err = (&EnvoySecurityPolicyReferenceGrantReconciler{
+		BaseReconciler: envoySecurityPolicyReferenceGrantReconciler,
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		err = mgr.Start(ctrl.SetupSignalHandler())
@@ -226,6 +252,7 @@ func BootstrapScheme() *runtime.Scheme {
 		kuadrantv1beta1.AddToScheme,
 		kuadrantv1beta2.AddToScheme,
 		gatewayapiv1.Install,
+		gatewayapiv1beta1.Install,
 		authorinoopapi.AddToScheme,
 		authorinoapi.AddToScheme,
 		istioapis.AddToScheme,
@@ -236,6 +263,7 @@ func BootstrapScheme() *runtime.Scheme {
 		istioclientgoextensionv1alpha1.AddToScheme,
 		certmanv1.AddToScheme,
 		maistraapis.AddToScheme,
+		egv1alpha1.AddToScheme,
 	)
 
 	err := sb.AddToScheme(s)

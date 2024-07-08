@@ -2,16 +2,16 @@ name: Verify Dashboards and Alerts OK
 
 on: 
   push:
-    # branches: main
-    # paths:
-    #    # Dashboards
-    #    - examples/dashboards/app_developer.json
-    #    - examples/dashboards/business_user.json
-    #    - examples/dashboards/platform_engineer.json
-    #    # Alerts
-    #    - examples/alerts/prometheusrules_policies_missing.yaml
-    #    - examples/alerts/slo-availability.yaml
-    #    - examples/alerts/slo-latency.yaml
+    branches: main
+    paths:
+       # Dashboards
+       - examples/dashboards/app_developer.json
+       - examples/dashboards/business_user.json
+       - examples/dashboards/platform_engineer.json
+       # Alerts
+       - examples/alerts/prometheusrules_policies_missing.yaml
+       - examples/alerts/slo-availability.yaml
+       - examples/alerts/slo-latency.yaml
 jobs:
   verify-dashboards-alerts:
     name: Verify Dashboards and Alerts OK
@@ -49,20 +49,14 @@ jobs:
           # Port forward Grafana
           kubectl -n monitoring wait --for=condition=available deployment grafana --timeout=600s
           kubectl -n monitoring port-forward service/grafana 3000:3000 &
-          grafana_process_id=$!
           echo "Successfully port forwarded Grafana service."
-
-          echo 'GRAFANA_PID=$grafana_process_id' >> $GITHUB_ENV
 
       - name: Port forward Prometheus.
         run: |
           kubectl -n monitoring wait --for=condition=ready pod prometheus-k8s-0 --timeout=600s
           # Port forward Prometheus
           kubectl -n monitoring port-forward service/prometheus-k8s 9090:9090 &
-          prometheus_process_id=$!
           echo "Successfully port forwarded Prometheus service."
-
-          echo 'PROMETHEUS_PID=$prometheus_process_id' >> $GITHUB_ENV
 
       - name: Check if Grafana contains dashboards.
         run: |

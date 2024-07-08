@@ -12,10 +12,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
@@ -270,22 +270,28 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return nil
 	}
 
-	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httpRouteEventMapper")))
-	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
+	gatewayToPolicyEventMapper := mappers.NewGatewayToPolicyEventMapper(
+		kuadrantv1beta2.NewRateLimitPolicyType(),
+		mappers.WithLogger(r.Logger().WithName("gateway.mapper")),
+		mappers.WithClient(r.Client()),
+	)
+
+	routeToPolicyEventMapper := mappers.NewHTTPRouteToPolicyEventMapper(
+		kuadrantv1beta2.NewRateLimitPolicyType(),
+		mappers.WithLogger(r.Logger().WithName("httproute.mapper")),
+		mappers.WithClient(r.Client()),
+	)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.AuthPolicy{}).
 		Owns(&authorinoapi.AuthConfig{}).
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return httpRouteEventMapper.MapToPolicy(object, &api.AuthPolicy{})
-			}),
+			handler.EnqueueRequestsFromMapFunc(routeToPolicyEventMapper.Map),
 		).
-		Watches(&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return gatewayEventMapper.MapToPolicy(object, &api.AuthPolicy{})
-			}),
+		Watches(
+			&gatewayapiv1.Gateway{},
+			handler.EnqueueRequestsFromMapFunc(gatewayToPolicyEventMapper.Map),
 		).
 		Complete(r)
 }

@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -24,7 +23,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
+var _ = Describe("RateLimitPolicy controller", Serial, func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
@@ -509,11 +508,11 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 	})
 
 	Context("RLP accepted condition reasons", func() {
-		assertAcceptedConditionTrue := func(rlp *kuadrantv1beta2.RateLimitPolicy) func() bool {
+		assertAcceptedConditionTrue := func(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy) func() bool {
 			return func() bool {
 				rlpKey := client.ObjectKeyFromObject(rlp)
 				existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
-				err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
+				err := k8sClient.Get(ctx, rlpKey, existingRLP)
 				if err != nil {
 					return false
 				}
@@ -527,31 +526,19 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 				rlpKey := client.ObjectKeyFromObject(rlp)
 				existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
 				g.Expect(k8sClient.Get(ctx, rlpKey, existingRLP)).To(Succeed())
-
 				cond := meta.FindStatusCondition(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
 				g.Expect(cond).ToNot(BeNil())
-				g.Expect(cond.Status == metav1.ConditionFalse && cond.Reason == reason && cond.Message == message).To(BeTrue())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(cond.Reason).To(Equal(reason))
+				g.Expect(cond.Message).To(ContainSubstring(message))
 			}
 		}
 
-		// Accepted reason is already tested generally by the existing tests
-
-		FIt("Target not found reason", func(ctx SpecContext) {
+		It("Target not found reason", func(ctx SpecContext) {
 			rlp := policyFactory()
-			logf.Log.Info("==========================================================")
-			logf.Log.Info("==========================================================")
-			logf.Log.Info("==========================================================")
-			logf.Log.Info("=========== CREATE RLP ===============================================")
 			Expect(k8sClient.Create(ctx, rlp)).To(Succeed())
-
-			rlpList := &kuadrantv1beta2.RateLimitPolicyList{}
-			Expect(k8sClient.List(ctx, rlpList)).To(Succeed())
-			logf.Log.Info("==========================================================", "#rlp", len(rlpList.Items))
-			logf.Log.Info("==========================================================")
-			logf.Log.Info("==========================================================")
-
 			Eventually(assertAcceptedConditionFalse(ctx, rlp, string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
-				fmt.Sprintf("RateLimitPolicy target %s was not found", routeName)),
+				fmt.Sprintf("RateLimitPolicy target %s was not found: not found in gateway api topology", routeName)),
 			).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
@@ -564,7 +551,7 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 			Expect(k8sClient.Create(ctx, rlp)).To(Succeed())
 			Eventually(tests.RLPIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(rlp))).WithContext(ctx).Should(BeTrue())
 
-			Eventually(assertAcceptedConditionTrue(rlp), time.Minute, 5*time.Second).Should(BeTrue())
+			Eventually(assertAcceptedConditionTrue(ctx, rlp), time.Minute, 5*time.Second).Should(BeTrue())
 
 			rlp2 := policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
 				policy.Name = "conflicting-rlp"
@@ -973,13 +960,6 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 				g.Expect(err).ToNot(HaveOccurred())
 			}).WithContext(ctx).Should(Succeed())
 
-			// Check HTTPRoute A direct back reference to RLP B
-			Eventually(
-				tests.HTTPRouteWithPolicyReference(ctx, testClient(), routeAKey, kuadrantv1beta2.RateLimitPolicyGVK, rlpBKey),
-			).WithContext(ctx).Should(Succeed())
-
-			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpBKey)).WithContext(ctx).Should(BeTrue())
-
 			// Check HTTPRoute B direct back reference to RLP A
 			routeBKey := client.ObjectKey{Name: routeBName, Namespace: testNamespace}
 			Eventually(
@@ -987,6 +967,14 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 			).WithContext(ctx).Should(Succeed())
 
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpAKey)).WithContext(ctx).Should(BeTrue())
+
+			// Check HTTPRoute A direct back reference to RLP B
+			Eventually(
+				tests.HTTPRouteWithPolicyReference(ctx, testClient(), routeAKey, kuadrantv1beta2.RateLimitPolicyGVK, rlpBKey),
+			).WithContext(ctx).Should(Succeed())
+
+			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpBKey)).WithContext(ctx).Should(BeTrue())
+
 		}, testTimeOut)
 	})
 

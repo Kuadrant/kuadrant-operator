@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
@@ -113,14 +112,6 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 		}
 		logger.Error(err, "failed to get kuadrant object")
 		return ctrl.Result{}, err
-	}
-
-	if logger.V(1).Enabled() {
-		jsonData, err := json.MarshalIndent(kObj, "", "  ")
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		logger.V(1).Info(string(jsonData))
 	}
 
 	if kObj.GetDeletionTimestamp() != nil && controllerutil.ContainsFinalizer(kObj, kuadrantFinalizer) {

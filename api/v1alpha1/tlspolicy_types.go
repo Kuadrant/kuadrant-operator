@@ -17,11 +17,14 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
 	"fmt"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -33,6 +36,14 @@ import (
 const (
 	TLSPolicyBackReferenceAnnotationName   = "kuadrant.io/tlspolicies"
 	TLSPolicyDirectReferenceAnnotationName = "kuadrant.io/tlspolicy"
+)
+
+var (
+	TLSPolicyGVK schema.GroupVersionKind = schema.GroupVersionKind{
+		Group:   GroupVersion.Group,
+		Version: GroupVersion.Version,
+		Kind:    "TLSPolicy",
+	}
 )
 
 // TLSPolicySpec defines the desired state of TLSPolicy
@@ -239,4 +250,31 @@ func (p *TLSPolicy) WithTargetGateway(gwName string) *TLSPolicy {
 func (p *TLSPolicy) WithIssuerRef(issuerRef certmanmetav1.ObjectReference) *TLSPolicy {
 	p.Spec.IssuerRef = issuerRef
 	return p
+}
+
+type tlsPolicyType struct{}
+
+func NewTLSPolicyType() kuadrantgatewayapi.PolicyType {
+	return &tlsPolicyType{}
+}
+
+func (r tlsPolicyType) GetGVK() schema.GroupVersionKind {
+	return TLSPolicyGVK
+}
+func (r tlsPolicyType) GetInstance() client.Object {
+	return &TLSPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       TLSPolicyGVK.Kind,
+			APIVersion: GroupVersion.String(),
+		},
+	}
+}
+
+func (r tlsPolicyType) GetList(ctx context.Context, cl client.Client, listOpts ...client.ListOption) ([]kuadrantgatewayapi.Policy, error) {
+	list := &TLSPolicyList{}
+	err := cl.List(ctx, list, listOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return utils.Map(list.Items, func(p TLSPolicy) kuadrantgatewayapi.Policy { return &p }), nil
 }

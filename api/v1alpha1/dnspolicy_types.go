@@ -17,15 +17,26 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+)
+
+var (
+	DNSPolicyGVK schema.GroupVersionKind = schema.GroupVersionKind{
+		Group:   GroupVersion.Group,
+		Version: GroupVersion.Version,
+		Kind:    "DNSPolicy",
+	}
 )
 
 type RoutingStrategy string
@@ -247,10 +258,6 @@ type HealthCheckStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-func init() {
-	SchemeBuilder.Register(&DNSPolicy{}, &DNSPolicyList{})
-}
-
 //API Helpers
 
 func NewDNSPolicy(name, ns string) *DNSPolicy {
@@ -322,4 +329,35 @@ func (p *DNSPolicy) WithLoadBalancingFor(defaultWeight Weight, custom []*CustomW
 			DefaultGeo: defaultGeo,
 		},
 	})
+}
+
+type dnsPolicyType struct{}
+
+func NewDNSPolicyType() kuadrantgatewayapi.PolicyType {
+	return &dnsPolicyType{}
+}
+
+func (r dnsPolicyType) GetGVK() schema.GroupVersionKind {
+	return DNSPolicyGVK
+}
+func (r dnsPolicyType) GetInstance() client.Object {
+	return &DNSPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       DNSPolicyGVK.Kind,
+			APIVersion: GroupVersion.String(),
+		},
+	}
+}
+
+func (r dnsPolicyType) GetList(ctx context.Context, cl client.Client, listOpts ...client.ListOption) ([]kuadrantgatewayapi.Policy, error) {
+	list := &DNSPolicyList{}
+	err := cl.List(ctx, list, listOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return utils.Map(list.Items, func(p DNSPolicy) kuadrantgatewayapi.Policy { return &p }), nil
+}
+
+func init() {
+	SchemeBuilder.Register(&DNSPolicy{}, &DNSPolicyList{})
 }

@@ -18,13 +18,8 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"slices"
-	"sort"
 
 	"github.com/go-logr/logr"
-	"github.com/samber/lo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,6 +34,7 @@ import (
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
@@ -53,7 +49,7 @@ type RateLimitingLimitsReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.10.0/pkg/reconcile
 func (r *RateLimitingLimitsReconciler) Reconcile(eventCtx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := r.Logger().WithValues("Gateway", req.NamespacedName)
+	logger := r.Logger().WithValues("kuadrant", req.NamespacedName)
 	logger.Info("Reconciling rate limiting limits")
 	ctx := logr.NewContext(eventCtx, logger)
 
@@ -65,14 +61,6 @@ func (r *RateLimitingLimitsReconciler) Reconcile(eventCtx context.Context, req c
 		}
 		logger.Error(err, "failed to get kuadrant")
 		return ctrl.Result{}, err
-	}
-
-	if logger.V(1).Enabled() {
-		jsonData, err := json.MarshalIndent(kuadrantCR, "", "  ")
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		logger.V(1).Info(string(jsonData))
 	}
 
 	rateLimitIndex, err := r.buildRateLimitIndexFromTopology(ctx)
@@ -114,50 +102,53 @@ func (r *RateLimitingLimitsReconciler) buildRateLimitIndexFromTopology(ctx conte
 		return nil, err
 	}
 
-	gateways := lo.KeyBy(topology.Gateways(), func(gateway kuadrantgatewayapi.GatewayNode) string {
-		return client.ObjectKeyFromObject(gateway.Gateway).String()
-	})
-
-	// sort the gateways for deterministic output and consistent comparison against existing objects
-	gatewayNames := lo.Keys(gateways)
-	slices.Sort(gatewayNames)
-
 	rateLimitIndex := rlptools.NewRateLimitIndex()
 
-	for _, gatewayName := range gatewayNames {
-		gateway := gateways[gatewayName].Gateway
-		topologyWithOverrides, err := rlptools.ApplyOverrides(topology, gateway)
-		if err != nil {
-			logger.Error(err, "failed to apply overrides")
-			return nil, err
-		}
+	// filter out those policies that do not have any effect:
+	// * targeting a gateway without any route
+	// * targeting a gateway when all the routes already have another policy attached
+	for _, gateway := range topology.Gateways() {
+		gwLogger := logger.WithValues("gateway", client.ObjectKeyFromObject(gateway))
+		gwLogger.V(1).Info("gateway numRoutes", "#Routes", len(gateway.Routes()))
+		gwLogger.V(1).Info("gateway numPolicies", "#Policies", len(gateway.AttachedPolicies()))
+		for _, route := range gateway.Routes() {
+			routeLogger := gwLogger.WithValues("route", client.ObjectKeyFromObject(route))
+			routeLogger.V(1).Info("route numPolicies", "#Policies", len(route.AttachedPolicies()))
 
-		// sort the policies for deterministic output and consistent comparison against existing objects
-		indexes := kuadrantgatewayapi.NewTopologyIndexes(topologyWithOverrides)
-		policies := indexes.PoliciesFromGateway(gateway)
-		sort.Sort(kuadrantgatewayapi.PolicyByTargetRefKindAndCreationTimeStamp(policies))
+			routePolicies := route.AttachedPolicies()
 
-		logger.V(1).Info("new rate limit index",
-			"gateway", client.ObjectKeyFromObject(gateway),
-			"policies", lo.Map(policies, func(p kuadrantgatewayapi.Policy, _ int) string {
-				return client.ObjectKeyFromObject(p).String()
-			}))
-
-		for _, policy := range policies {
-			rlpKey := client.ObjectKeyFromObject(policy)
-			gatewayKey := client.ObjectKeyFromObject(gateway)
-			key := rlptools.RateLimitIndexKey{
-				RateLimitPolicyKey: rlpKey,
-				GatewayKey:         gatewayKey,
+			// gateway policies are default ones when missing at the route level
+			if len(routePolicies) == 0 {
+				routePolicies = gateway.AttachedPolicies()
 			}
-			if _, ok := rateLimitIndex.Get(key); ok { // should never happen
-				logger.Error(fmt.Errorf("unexpected duplicate rate limit policy key found"),
-					"failed do add rate limit policy to index",
-					"RateLimitPolicy", rlpKey.String(), "Gateway", gatewayKey)
-				continue
+
+			for _, policy := range routePolicies {
+				policyLogger := routeLogger.WithValues("policy", client.ObjectKeyFromObject(policy))
+
+				gwRLPs := utils.Map(gateway.AttachedPolicies(), func(p kuadrantgatewayapi.Policy) *kuadrantv1beta2.RateLimitPolicy {
+					return p.(*kuadrantv1beta2.RateLimitPolicy)
+				})
+
+				routePolicy := policy.(*kuadrantv1beta2.RateLimitPolicy)
+
+				effectivePolicy := rlptools.ApplyOverrides(routePolicy, gwRLPs, policyLogger)
+
+				if effectivePolicy == nil {
+					policyLogger.V(1).Info("effective policy is null")
+					continue
+				}
+
+				key := rlptools.RateLimitIndexKey{
+					RateLimitPolicyKey: client.ObjectKeyFromObject(effectivePolicy),
+					GatewayKey:         client.ObjectKeyFromObject(gateway.Gateway),
+				}
+				if _, ok := rateLimitIndex.Get(key); ok {
+					// multiple routes without attached policies can get the same effective policy
+					continue
+				}
+				policyLogger.V(1).Info("adding effective policy")
+				rateLimitIndex.Set(key, rlptools.LimitadorRateLimitsFromRLP(effectivePolicy))
 			}
-			rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)
-			rateLimitIndex.Set(key, rlptools.LimitadorRateLimitsFromRLP(rlp))
 		}
 	}
 

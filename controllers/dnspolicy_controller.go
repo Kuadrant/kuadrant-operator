@@ -26,7 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
@@ -187,7 +186,11 @@ func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return nil
 	}
 
-	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
+	gatewayToPolicyEventMapper := mappers.NewGatewayToPolicyEventMapper(
+		v1alpha1.NewDNSPolicyType(),
+		mappers.WithLogger(r.Logger().WithName("gateway.mapper")),
+		mappers.WithClient(r.Client()),
+	)
 
 	r.dnsHelper = dnsHelper{Client: r.Client()}
 	ctrlr := ctrl.NewControllerManagedBy(mgr).
@@ -195,9 +198,7 @@ func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&kuadrantdnsv1alpha1.DNSRecord{}).
 		Watches(
 			&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return gatewayEventMapper.MapToPolicy(object, &v1alpha1.DNSPolicy{})
-			}),
+			handler.EnqueueRequestsFromMapFunc(gatewayToPolicyEventMapper.Map),
 		)
 	return ctrlr.Complete(r)
 }

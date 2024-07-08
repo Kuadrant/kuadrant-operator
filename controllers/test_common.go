@@ -51,6 +51,8 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
@@ -68,57 +70,70 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	)
 	Expect(err).ToNot(HaveOccurred())
 
-	//authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("authpolicy"),
-	//	mgr.GetEventRecorderFor("AuthPolicy"),
-	//)
-
-	//err = (&AuthPolicyReconciler{
-	//	BaseReconciler:      authPolicyBaseReconciler,
-	//	TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-	//	AffectedPolicyMap:   kuadrant.NewAffectedPolicyMap(),
-	//}).SetupWithManager(mgr)
-	//Expect(err).NotTo(HaveOccurred())
-
-	rateLimitPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+	authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("ratelimitpolicy"),
+		log.Log.WithName("authpolicy"),
+		mgr.GetEventRecorderFor("AuthPolicy"),
+	)
+
+	err = (&AuthPolicyReconciler{
+		BaseReconciler:      authPolicyBaseReconciler,
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
+		AffectedPolicyMap:   kuadrant.NewAffectedPolicyMap(),
+	}).SetupWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
+	rlpStatusBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("status").WithName("accepted"),
 		mgr.GetEventRecorderFor("RateLimitPolicy"),
 	)
 
-	err = (&RateLimitPolicyReconciler{
-		BaseReconciler:      rateLimitPolicyBaseReconciler,
+	err = (&RateLimitPolicyStatusReconciler{
+		BaseReconciler: rlpStatusBaseReconciler,
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
+	// reconcile RLP backend references on HTTPRoutes
+	err = NewPolicyBackReferenceReconciler(
+		mgr, kuadrantv1beta2.NewRateLimitPolicyType(), kuadrantgatewayapi.NewGatewayType(),
+	).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
+	// reconcile RLP backend references on Gateways
+	err = NewPolicyBackReferenceReconciler(
+		mgr, kuadrantv1beta2.NewRateLimitPolicyType(), kuadrantgatewayapi.NewHTTPRouteType(),
+	).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
+	tlsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("tlspolicy"),
+		mgr.GetEventRecorderFor("TLSPolicy"),
+	)
+
+	err = (&TLSPolicyReconciler{
+		BaseReconciler:      tlsPolicyBaseReconciler,
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())
 
-	//tlsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("tlspolicy"),
-	//	mgr.GetEventRecorderFor("TLSPolicy"),
-	//)
+	dnsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("dnspolicy"),
+		mgr.GetEventRecorderFor("DNSPolicy"),
+	)
 
-	//err = (&TLSPolicyReconciler{
-	//	BaseReconciler:      tlsPolicyBaseReconciler,
-	//	TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-	//}).SetupWithManager(mgr)
+	err = (&DNSPolicyReconciler{
+		BaseReconciler:      dnsPolicyBaseReconciler,
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
+	}).SetupWithManager(mgr)
 
-	//Expect(err).NotTo(HaveOccurred())
-
-	//dnsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("dnspolicy"),
-	//	mgr.GetEventRecorderFor("DNSPolicy"),
-	//)
-
-	//err = (&DNSPolicyReconciler{
-	//	BaseReconciler:      dnsPolicyBaseReconciler,
-	//	TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-	//}).SetupWithManager(mgr)
-
-	//Expect(err).NotTo(HaveOccurred())
+	Expect(err).NotTo(HaveOccurred())
 
 	kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
@@ -169,40 +184,40 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	//Expect(err).NotTo(HaveOccurred())
 
-	//targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("targetstatus"),
-	//	mgr.GetEventRecorderFor("PolicyTargetStatus"),
-	//)
+	targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("targetstatus"),
+		mgr.GetEventRecorderFor("PolicyTargetStatus"),
+	)
 
-	//err = (&TargetStatusReconciler{
-	//	BaseReconciler: targetStatusBaseReconciler,
-	//}).SetupWithManager(mgr)
+	err = (&TargetStatusReconciler{
+		BaseReconciler: targetStatusBaseReconciler,
+	}).SetupWithManager(mgr)
 
-	//Expect(err).NotTo(HaveOccurred())
+	Expect(err).NotTo(HaveOccurred())
 
-	//policyStatusBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("ratelimitpolicy").WithName("status"),
-	//	mgr.GetEventRecorderFor("RateLimitPolicyStatus"),
-	//)
-	//err = (&RateLimitPolicyEnforcedStatusReconciler{
-	//	BaseReconciler: policyStatusBaseReconciler,
-	//}).SetupWithManager(mgr)
+	policyStatusBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("status").WithName("enforced"),
+		mgr.GetEventRecorderFor("RateLimitPolicyStatus"),
+	)
+	err = (&RateLimitPolicyEnforcedStatusReconciler{
+		BaseReconciler: policyStatusBaseReconciler,
+	}).SetupWithManager(mgr)
 
-	//Expect(err).NotTo(HaveOccurred())
+	Expect(err).NotTo(HaveOccurred())
 
-	//rateLimitingLimitsBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("ratelimitpolicy").WithName("limits"),
-	//	mgr.GetEventRecorderFor("RateLimitingLimits"),
-	//)
+	rateLimitingLimitsBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("limits"),
+		mgr.GetEventRecorderFor("RateLimitingLimits"),
+	)
 
-	//err = (&RateLimitingLimitsReconciler{
-	//	BaseReconciler: rateLimitingLimitsBaseReconciler,
-	//}).SetupWithManager(mgr)
+	err = (&RateLimitingLimitsReconciler{
+		BaseReconciler: rateLimitingLimitsBaseReconciler,
+	}).SetupWithManager(mgr)
 
-	//Expect(err).NotTo(HaveOccurred())
+	Expect(err).NotTo(HaveOccurred())
 
 	go func() {
 		defer GinkgoRecover()

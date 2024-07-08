@@ -13,24 +13,24 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
 type RateLimitPolicyEnforcedStatusReconciler struct {
@@ -52,7 +52,7 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) Reconcile(eventCtx context.Con
 		return ctrl.Result{}, err
 	}
 
-	topology, err := r.buildTopology(ctx, gw)
+	topology, err := rlptools.TopologyFromGateway(ctx, r.Client(), gw)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -159,53 +159,17 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) Reconcile(eventCtx context.Con
 		}
 
 		if err := r.setCondition(ctx, rlp, &conditions, *condition); err != nil {
+			// Ignore conflicts, resource might just be outdated.
+			if apierrors.IsConflict(err) {
+				logger.V(1).Info("Failed to update status: resource might just be outdated", "error", err)
+				return reconcile.Result{Requeue: true}, nil
+			}
 			return ctrl.Result{}, err
 		}
 	}
 
 	logger.Info("Policy status reconciled successfully")
 	return ctrl.Result{}, nil
-}
-
-func (r *RateLimitPolicyEnforcedStatusReconciler) buildTopology(ctx context.Context, gw *gatewayapiv1.Gateway) (*kuadrantgatewayapi.Topology, error) {
-	logger, err := logr.FromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	gatewayList := &gatewayapiv1.GatewayList{}
-	err = r.Client().List(ctx, gatewayList)
-	logger.V(1).Info("list gateways", "#gateways", len(gatewayList.Items), "err", err)
-	if err != nil {
-		return nil, err
-	}
-
-	routeList := &gatewayapiv1.HTTPRouteList{}
-	// Get all the routes having the gateway as parent
-	err = r.Client().List(
-		ctx,
-		routeList,
-		client.MatchingFields{
-			fieldindexers.HTTPRouteGatewayParentField: client.ObjectKeyFromObject(gw).String(),
-		})
-	logger.V(1).Info("list routes by gateway", "#routes", len(routeList.Items), "err", err)
-	if err != nil {
-		return nil, err
-	}
-
-	policyList := &kuadrantv1beta2.RateLimitPolicyList{}
-	err = r.Client().List(ctx, policyList)
-	logger.V(1).Info("list rate limit policies", "#policies", len(policyList.Items), "err", err)
-	if err != nil {
-		return nil, err
-	}
-
-	return kuadrantgatewayapi.NewTopology(
-		kuadrantgatewayapi.WithGateways(utils.Map(gatewayList.Items, ptr.To[gatewayapiv1.Gateway])),
-		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
-		kuadrantgatewayapi.WithPolicies(utils.Map(policyList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })),
-		kuadrantgatewayapi.WithLogger(logger),
-	)
 }
 
 func (r *RateLimitPolicyEnforcedStatusReconciler) hasErrCondOnSubResource(ctx context.Context, p *kuadrantv1beta2.RateLimitPolicy) *metav1.Condition {
@@ -242,11 +206,7 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) setCondition(ctx context.Conte
 	if idx == -1 {
 		meta.SetStatusCondition(conditions, cond)
 		p.Status.Conditions = *conditions
-		if err := r.Client().Status().Update(ctx, p); err != nil {
-			logger.Error(err, "failed to update policy status")
-			return err
-		}
-		return nil
+		return r.Client().Status().Update(ctx, p)
 	}
 
 	logger.V(1).Info("skipping policy enforced condition status update - already up to date")

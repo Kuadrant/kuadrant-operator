@@ -1,12 +1,15 @@
 package v1beta2
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -18,6 +21,14 @@ import (
 const (
 	AuthPolicyBackReferenceAnnotationName   = "kuadrant.io/authpolicies"
 	AuthPolicyDirectReferenceAnnotationName = "kuadrant.io/authpolicy"
+)
+
+var (
+	AuthPolicyGVK schema.GroupVersionKind = schema.GroupVersionKind{
+		Group:   GroupVersion.Group,
+		Version: GroupVersion.Version,
+		Kind:    "AuthPolicy",
+	}
 )
 
 type AuthSchemeSpec struct {
@@ -375,6 +386,33 @@ func (l *AuthPolicyList) GetItems() []kuadrant.Policy {
 	return utils.Map(l.Items, func(item AuthPolicy) kuadrant.Policy {
 		return &item
 	})
+}
+
+type authPolicyType struct{}
+
+func NewAuthPolicyType() kuadrantgatewayapi.PolicyType {
+	return &authPolicyType{}
+}
+
+func (r authPolicyType) GetGVK() schema.GroupVersionKind {
+	return AuthPolicyGVK
+}
+func (r authPolicyType) GetInstance() client.Object {
+	return &AuthPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       AuthPolicyGVK.Kind,
+			APIVersion: GroupVersion.String(),
+		},
+	}
+}
+
+func (r authPolicyType) GetList(ctx context.Context, cl client.Client, listOpts ...client.ListOption) ([]kuadrantgatewayapi.Policy, error) {
+	list := &AuthPolicyList{}
+	err := cl.List(ctx, list, listOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return utils.Map(list.Items, func(p AuthPolicy) kuadrantgatewayapi.Policy { return &p }), nil
 }
 
 func init() {

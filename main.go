@@ -51,6 +51,7 @@ import (
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
@@ -156,17 +157,32 @@ func main() {
 		os.Exit(1)
 	}
 
-	rateLimitPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+	rlpStatusBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("ratelimitpolicy"),
+		log.Log.WithName("ratelimitpolicy").WithName("status").WithName("accepted"),
 		mgr.GetEventRecorderFor("RateLimitPolicy"),
 	)
 
-	if err = (&controllers.RateLimitPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-		BaseReconciler:      rateLimitPolicyBaseReconciler,
+	if err = (&controllers.RateLimitPolicyStatusReconciler{
+		BaseReconciler: rlpStatusBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicy")
+		os.Exit(1)
+	}
+
+	// reconcile RLP backend references on HTTPRoutes
+	if err := controllers.NewPolicyBackReferenceReconciler(
+		mgr, kuadrantv1beta2.NewRateLimitPolicyType(), kuadrantgatewayapi.NewGatewayType(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PolicyBackendReconciler")
+		os.Exit(1)
+	}
+
+	// reconcile RLP backend references on Gateways
+	if err := controllers.NewPolicyBackReferenceReconciler(
+		mgr, kuadrantv1beta2.NewRateLimitPolicyType(), kuadrantgatewayapi.NewHTTPRouteType(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PolicyBackendReconciler")
 		os.Exit(1)
 	}
 
@@ -266,7 +282,7 @@ func main() {
 
 	policyStatusBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("ratelimitpolicy").WithName("status"),
+		log.Log.WithName("ratelimitpolicy").WithName("status").WithName("enforced"),
 		mgr.GetEventRecorderFor("RateLimitPolicyStatus"),
 	)
 	if err = (&controllers.RateLimitPolicyEnforcedStatusReconciler{

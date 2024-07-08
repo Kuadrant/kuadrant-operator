@@ -183,14 +183,28 @@ func (p policyDAGNode) ID() dag.NodeID {
 }
 
 type topologyOptions struct {
-	gateways []*gatewayapiv1.Gateway
-	routes   []*gatewayapiv1.HTTPRoute
-	policies []Policy
-	logger   logr.Logger
+	gateways               []*gatewayapiv1.Gateway
+	routes                 []*gatewayapiv1.HTTPRoute
+	policies               []Policy
+	logger                 logr.Logger
+	programmedGatewaysOnly bool
+	linkAcceptedRoutesOnly bool
 }
 
 // TopologyOpts allows to manipulate topologyOptions.
 type TopologyOpts func(*topologyOptions)
+
+func WithAcceptedRoutesLinkedOnly() TopologyOpts {
+	return func(o *topologyOptions) {
+		o.linkAcceptedRoutesOnly = true
+	}
+}
+
+func WithProgrammedGatewaysOnly(programmedGatewaysOnly bool) TopologyOpts {
+	return func(o *topologyOptions) {
+		o.programmedGatewaysOnly = programmedGatewaysOnly
+	}
+}
 
 func WithLogger(logger logr.Logger) TopologyOpts {
 	return func(o *topologyOptions) {
@@ -216,10 +230,22 @@ func WithPolicies(policies []Policy) TopologyOpts {
 	}
 }
 
-func NewTopology(opts ...TopologyOpts) (*Topology, error) {
+func NewValidTopology(opts ...TopologyOpts) (*Topology, error) {
+	newOpts := append(
+		[]TopologyOpts{
+			WithAcceptedRoutesLinkedOnly(),
+			WithProgrammedGatewaysOnly(true),
+		}, opts...)
+
+	return NewBasicTopology(newOpts...)
+}
+
+func NewBasicTopology(opts ...TopologyOpts) (*Topology, error) {
 	// defaults
 	o := &topologyOptions{
-		logger: logr.Discard(),
+		logger:                 logr.Discard(),
+		programmedGatewaysOnly: false,
+		linkAcceptedRoutesOnly: false,
 	}
 
 	for _, opt := range opts {
@@ -274,7 +300,7 @@ func NewTopology(opts ...TopologyOpts) (*Topology, error) {
 		}
 	}
 
-	edges := buildDAGEdges(gatewayDAGNodes, routeDAGNodes, policyDAGNodes)
+	edges := buildDAGEdges(o, gatewayDAGNodes, routeDAGNodes, policyDAGNodes)
 
 	for _, edge := range edges {
 		err := graph.AddEdge(edge.parent.ID(), edge.child.ID())
@@ -295,22 +321,33 @@ type edge struct {
 	child  dag.Node
 }
 
-func buildDAGEdges(gateways []gatewayDAGNode, routes []httpRouteDAGNode, policies []policyDAGNode) []edge {
-	// filter out not programmed gateways
-	programmedGateways := utils.Filter(gateways, func(g gatewayDAGNode) bool {
-		return meta.IsStatusConditionTrue(g.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed))
-	})
+func buildDAGEdges(opts *topologyOptions, gateways []gatewayDAGNode, routes []httpRouteDAGNode, policies []policyDAGNode) []edge {
+	effectiveGatewys := gateways
+
+	if opts.programmedGatewaysOnly {
+		// filter out not programmed gateways
+		effectiveGatewys = utils.Filter(gateways, func(g gatewayDAGNode) bool {
+			return meta.IsStatusConditionTrue(g.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed))
+		})
+	}
 
 	// internal index: key -> gateway for reference
-	gatewaysIndex := make(map[client.ObjectKey]gatewayDAGNode, len(programmedGateways))
-	for _, gateway := range programmedGateways {
+	gatewaysIndex := make(map[client.ObjectKey]gatewayDAGNode, len(effectiveGatewys))
+	for _, gateway := range effectiveGatewys {
 		gatewaysIndex[client.ObjectKeyFromObject(gateway.Gateway)] = gateway
 	}
 
 	edges := make([]edge, 0)
 
 	for _, route := range routes {
-		for _, parentKey := range GetRouteAcceptedGatewayParentKeys(route.HTTPRoute) {
+
+		gatewayParentKeys := GetGatewayParentKeys(route.HTTPRoute)
+
+		if opts.linkAcceptedRoutesOnly {
+			gatewayParentKeys = GetRouteAcceptedGatewayParentKeys(route.HTTPRoute)
+		}
+
+		for _, parentKey := range gatewayParentKeys {
 			// the parent gateway may not be in the available list of gateways
 			// or the gateway may not be valid
 			if gateway, ok := gatewaysIndex[parentKey]; ok {
@@ -337,7 +374,7 @@ func buildDAGEdges(gateways []gatewayDAGNode, routes []httpRouteDAGNode, policie
 
 	}
 
-	for _, g := range programmedGateways {
+	for _, g := range effectiveGatewys {
 		// Compute gateway's child (attached) policies
 		attachedPolicies := utils.Filter(policies, func(p policyDAGNode) bool {
 			group := p.GetTargetRef().Group

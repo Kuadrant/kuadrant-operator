@@ -27,7 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
@@ -196,15 +195,17 @@ func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return nil
 	}
 
-	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")))
+	gatewayToPolicyEventMapper := mappers.NewGatewayToPolicyEventMapper(
+		v1alpha1.NewTLSPolicyType(),
+		mappers.WithLogger(r.Logger().WithName("gateway.mapper")),
+		mappers.WithClient(r.Client()),
+	)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.TLSPolicy{}).
 		Watches(
 			&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return gatewayEventMapper.MapToPolicy(object, &v1alpha1.TLSPolicy{})
-			}),
+			handler.EnqueueRequestsFromMapFunc(gatewayToPolicyEventMapper.Map),
 		).
 		Complete(r)
 }

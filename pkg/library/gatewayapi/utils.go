@@ -117,6 +117,26 @@ func GetRouteAcceptedGatewayParentKeys(route *gatewayapiv1.HTTPRoute) []client.O
 	})
 }
 
+// GetGatewayParentKeys returns the object keys of all parent gateways
+func GetGatewayParentKeys(route *gatewayapiv1.HTTPRoute) []client.ObjectKey {
+	gatewayParentRefs := GetGatewayParentRefsFromRoute(route)
+
+	return utils.Map(gatewayParentRefs, func(p gatewayapiv1.ParentReference) client.ObjectKey {
+		return client.ObjectKey{
+			Name:      string(p.Name),
+			Namespace: string(ptr.Deref(p.Namespace, gatewayapiv1.Namespace(route.Namespace))),
+		}
+	})
+}
+
+// GetGatewayParentRefsFromRoute returns the list of parentRefs that are Gateway typed
+func GetGatewayParentRefsFromRoute(route *gatewayapiv1.HTTPRoute) []gatewayapiv1.ParentReference {
+	if route == nil {
+		return nil
+	}
+	return utils.Filter(route.Spec.ParentRefs, IsParentGateway)
+}
+
 // GetRouteAcceptedParentRefs returns the list of parentRefs for which a given route has the Accepted status condition
 func GetRouteAcceptedParentRefs(route *gatewayapiv1.HTTPRoute) []gatewayapiv1.ParentReference {
 	if route == nil {

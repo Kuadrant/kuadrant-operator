@@ -218,7 +218,7 @@ func (r *TargetStatusReconciler) buildTopology(ctx context.Context, gw *gatewaya
 		return nil, err
 	}
 
-	t, err := kuadrantgatewayapi.NewTopology(
+	t, err := kuadrantgatewayapi.NewValidTopology(
 		kuadrantgatewayapi.WithGateways([]*gatewayapiv1.Gateway{gw}),
 		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
 		kuadrantgatewayapi.WithPolicies(policies),

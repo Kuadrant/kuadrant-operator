@@ -17,12 +17,14 @@ limitations under the License.
 package v1beta2
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -323,6 +325,33 @@ func (r *RateLimitPolicySpec) CommonSpec() *RateLimitPolicyCommonSpec {
 	}
 
 	return &r.RateLimitPolicyCommonSpec
+}
+
+type rateLimitPolicyType struct{}
+
+func NewRateLimitPolicyType() kuadrantgatewayapi.PolicyType {
+	return &rateLimitPolicyType{}
+}
+
+func (r rateLimitPolicyType) GetGVK() schema.GroupVersionKind {
+	return RateLimitPolicyGVK
+}
+func (r rateLimitPolicyType) GetInstance() client.Object {
+	return &RateLimitPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       RateLimitPolicyGVK.Kind,
+			APIVersion: GroupVersion.String(),
+		},
+	}
+}
+
+func (r rateLimitPolicyType) GetList(ctx context.Context, cl client.Client, listOpts ...client.ListOption) ([]kuadrantgatewayapi.Policy, error) {
+	rlpList := &RateLimitPolicyList{}
+	err := cl.List(ctx, rlpList, listOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return utils.Map(rlpList.Items, func(p RateLimitPolicy) kuadrantgatewayapi.Policy { return &p }), nil
 }
 
 func init() {

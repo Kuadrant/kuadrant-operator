@@ -46,7 +46,7 @@ func Topology(ctx context.Context, cl client.Client) (*kuadrantgatewayapi.Topolo
 
 	policies := utils.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })
 
-	return kuadrantgatewayapi.NewTopology(
+	return kuadrantgatewayapi.NewValidTopology(
 		kuadrantgatewayapi.WithGateways(utils.Map(gwList.Items, ptr.To[gatewayapiv1.Gateway])),
 		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
 		kuadrantgatewayapi.WithPolicies(policies),
@@ -54,7 +54,7 @@ func Topology(ctx context.Context, cl client.Client) (*kuadrantgatewayapi.Topolo
 	)
 }
 
-func TopologyIndexesFromGateway(ctx context.Context, cl client.Client, gw *gatewayapiv1.Gateway) (*kuadrantgatewayapi.TopologyIndexes, error) {
+func TopologyFromGateway(ctx context.Context, cl client.Client, gw *gatewayapiv1.Gateway) (*kuadrantgatewayapi.Topology, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func TopologyIndexesFromGateway(ctx context.Context, cl client.Client, gw *gatew
 
 	policies := utils.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })
 
-	topology, err := kuadrantgatewayapi.NewTopology(
+	topology, err := kuadrantgatewayapi.NewValidTopology(
 		kuadrantgatewayapi.WithGateways([]*gatewayapiv1.Gateway{gw}),
 		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To)),
 		kuadrantgatewayapi.WithPolicies(policies),
@@ -98,10 +98,13 @@ func TopologyIndexesFromGateway(ctx context.Context, cl client.Client, gw *gatew
 		return nil, err
 	}
 
-	overriddenTopology, err := ApplyOverrides(topology, gw)
+	return topology, nil
+}
+
+func TopologyIndexesFromGateway(ctx context.Context, cl client.Client, gw *gatewayapiv1.Gateway) (*kuadrantgatewayapi.TopologyIndexes, error) {
+	topology, err := TopologyFromGateway(ctx, cl, gw)
 	if err != nil {
 		return nil, err
 	}
-
-	return kuadrantgatewayapi.NewTopologyIndexes(overriddenTopology), nil
+	return kuadrantgatewayapi.NewTopologyIndexes(topology), nil
 }

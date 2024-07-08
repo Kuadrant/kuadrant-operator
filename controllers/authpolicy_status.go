@@ -168,7 +168,7 @@ func (r *AuthPolicyReconciler) generateTopology(ctx context.Context) (*kuadrantg
 		return &p
 	})
 
-	return kuadrantgatewayapi.NewTopology(
+	return kuadrantgatewayapi.NewValidTopology(
 		kuadrantgatewayapi.WithGateways(utils.Map(gwList.Items, ptr.To[gatewayapiv1.Gateway])),
 		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
 		kuadrantgatewayapi.WithPolicies(policies),

@@ -23,6 +23,7 @@ import (
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,6 +48,7 @@ const TLSPolicyFinalizer = "kuadrant.io/tls-policy"
 type TLSPolicyReconciler struct {
 	*reconcilers.BaseReconciler
 	TargetRefReconciler reconcilers.TargetRefReconciler
+	RestMapper          meta.RESTMapper
 }
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=tlspolicies,verbs=get;list;watch;update;patch;delete
@@ -197,6 +199,15 @@ func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	if !ok {
 		r.Logger().Info("TLSPolicy controller disabled. GatewayAPI was not found")
+		return nil
+	}
+
+	ok, err = kuadrantgatewayapi.IsCertManagerInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("TLSPolicy controller disabled. CertManager was not found")
 		return nil
 	}
 

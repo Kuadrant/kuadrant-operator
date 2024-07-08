@@ -104,6 +104,7 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	err = (&TLSPolicyReconciler{
 		BaseReconciler:      tlsPolicyBaseReconciler,
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
+		RestMapper:          mgr.GetRESTMapper(),
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())

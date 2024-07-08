@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/cert-manager/cert-manager/pkg/apis/certmanager"
+	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -154,6 +156,22 @@ func IsGatewayAPIInstalled(restMapper meta.RESTMapper) (bool, error) {
 	_, err := restMapper.RESTMapping(
 		schema.GroupKind{Group: gatewayapiv1.GroupName, Kind: "HTTPRoute"},
 		gatewayapiv1.SchemeGroupVersion.Version,
+	)
+	if err == nil {
+		return true, nil
+	}
+
+	if meta.IsNoMatchError(err) {
+		return false, nil
+	}
+
+	return false, err
+}
+
+func IsCertManagerInstalled(restMapper meta.RESTMapper) (bool, error) {
+	_, err := restMapper.RESTMapping(
+		schema.GroupKind{Group: certmanager.GroupName, Kind: certmanv1.CertificateKind},
+		certmanv1.SchemeGroupVersion.Version,
 	)
 	if err == nil {
 		return true, nil

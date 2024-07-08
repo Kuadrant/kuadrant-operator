@@ -208,6 +208,7 @@ func main() {
 	if err = (&controllers.TLSPolicyReconciler{
 		BaseReconciler:      tlsPolicyBaseReconciler,
 		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
+		RestMapper:          mgr.GetRESTMapper(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TLSPolicy")
 		os.Exit(1)

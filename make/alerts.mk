@@ -21,7 +21,7 @@ container-runtime-tool:
                                             exit 1; \
                                         fi))
 
-alerts-tests: container-runtime-tool ## Test alerts using promtool 
+test-alerts: container-runtime-tool ## Test alerts using promtool 
 	$(CONTAINER_RUNTIME_BIN) run --rm -t \
 	-v $(AVAILABILITY_SLO_RULES):/prometheus/slo-availability.yaml \
 	-v $(LATENCY_SLO_RULES):/prometheus/slo-latency.yaml \

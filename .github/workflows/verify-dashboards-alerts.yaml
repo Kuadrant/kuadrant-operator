@@ -22,27 +22,24 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Set up dependencies
+      - name: Set up golang
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y golang expect
+          sudo apt-get install -y golang
 
-      - name: Run Quickstart
+      - name: Deploy observability stack (Grafana and Prometheus)
         run: |
-          export ISTIO_INSTALL_SAIL=true
+          kind create cluster
+          # Install Istio
+          kubectl apply -k config/dependencies/istio/sail
+          kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
+          kubectl apply -f config/dependencies/istio/sail/istio.yaml
 
-          cat << 'EOF' > automate_setup.expect
-          #!/usr/bin/expect -f
-          set timeout -1
-          spawn bash hack/quickstart-setup.sh
-          expect "Are you ready to begin? (y/n)"
-          send "y\r"
-          expect "Do you want to set up a DNS provider for use with Kuadrant's DNSPolicy API? (y/n)"
-          send "n\r"
-          expect "Thank you for using Kuadrant! If you have any questions or feedback, please reach out to our community."
-          EOF
-          chmod +x automate_setup.expect
-          ./automate_setup.expect
+          # Install Observability Stack (Grafana and Prometheus)
+          kubectl kustomize config/observability/ | docker run --rm -i ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
+          kubectl kustomize config/observability/ | docker run --rm -i ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -
+          kubectl kustomize examples/dashboards/ | kubectl apply --server-side -f -
+          kubectl kustomize examples/alerts/ | kubectl apply --server-side -f -
 
       - name: Port forward grafana
         run: |

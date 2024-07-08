@@ -5,7 +5,7 @@ metadata:
   labels:
     app: kuadrant
     control-plane: controller-manager
-  name: kuadrant-operator-controller-manager-metrics-service
+  name: kuadrant-operator-metrics
 spec:
   ports:
   - name: metrics

@@ -22,11 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Run Quickstart
+      - name: Set up dependencies
         run: |
           sudo apt-get update -y
           sudo apt-get install -y golang expect
 
+      - name: Run Quickstart
+        run: |
           export ISTIO_INSTALL_SAIL=true
 
           cat << 'EOF' > automate_setup.expect
@@ -42,7 +44,7 @@ jobs:
           chmod +x automate_setup.expect
           ./automate_setup.expect
 
-      - name: Port forward grafana and check if contains dashboards.
+      - name: Port forward grafana
         run: |
           # Port forward Grafana
           kubectl -n monitoring wait --for=condition=available deployment grafana --timeout=600s
@@ -50,8 +52,20 @@ jobs:
           grafana_process_id=$!
           echo "Successfully port forwarded Grafana service."
 
-          sleep 1
+          echo 'GRAFANA_PID=$grafana_process_id' >> $GITHUB_ENV
 
+      - name: Port forward Prometheus.
+        run: |
+          kubectl -n monitoring wait --for=condition=ready pod prometheus-k8s-0 --timeout=600s
+          # Port forward Prometheus
+          kubectl -n monitoring port-forward service/prometheus-k8s 9090:9090 &
+          prometheus_process_id=$!
+          echo "Successfully port forwarded Prometheus service."
+
+          echo 'PROMETHEUS_PID=$prometheus_process_id' >> $GITHUB_ENV
+
+      - name: Check if Grafana contains dashboards.
+        run: |
           # Make API Call and save response to variable.
           grafana_api_call=$(curl -u admin:admin http://127.0.0.1:3000/api/search)
 
@@ -85,20 +99,8 @@ jobs:
 
           echo "Grafana contains dashboards $app_developer, $business_user and $platform_engineer. Continuing to Prometheus..."
 
-          # Close Grafana port-forward.
-          kill $grafana_process_id
-          echo "Stoppped port forwarding Grafana."
-
-      - name: Port forward Prometheus and check if contains alert rules.
+      - name: Check if Prometheus contains alert rules.
         run: |
-          kubectl -n monitoring wait --for=condition=ready pod prometheus-k8s-0 --timeout=600s
-          # Port forward Prometheus
-          kubectl -n monitoring port-forward service/prometheus-k8s 9090:9090 &
-          prometheus_process_id=$!
-          echo "Successfully port forwarded Prometheus service."
-
-          sleep 1
-
           # Make API Call and save response to variable
           prometheus_api_call=$(curl http://localhost:9090/api/v1/rules)
 
@@ -127,7 +129,3 @@ jobs:
           fi
 
           echo "Prometheus has all alert rules."
-
-          # Close Prometheus port-forward
-          kill $prometheus_process_id
-          echo "Stopped port forwarding Prometheus."

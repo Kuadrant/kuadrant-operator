@@ -36,7 +36,8 @@ Here are the steps we will go through:
 
 You will need to set the `KUBECTL_CONTEXT` environment variable for the kubectl context of the cluster you are targeting.
 If you have followed the single cluster setup, it should be something like below.
-Adjust the name of the cluster accordingly if you have followed the multi cluster setup.
+Adjust the name of the cluster accordingly to match the kubernetes cluster you are targeting.
+You can get the current context with `kubectl config current-context`
 
 ```sh
 # Typical single cluster context
@@ -95,8 +96,6 @@ This is because currently there is not a TLS secret in place. Let's fix that by 
 
 ### ❸ Define the TLSPolicy
 
-> **Note:** For convenience, in the setup, we have created a self-signed CA as a cluster issuer in the Kubernetes cluster.
-
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
 apiVersion: kuadrant.io/v1alpha1
@@ -114,7 +113,24 @@ spec:
     kind: ClusterIssuer
     name: kuadrant-operator-glbc-ca
 EOF
+```
 
+> **Note:** You may have to create a cluster issuer in the Kubernetes cluster, depending on if one was created during your initial cluster setup or not. Here is an example of how to create a self-signed CA as a cluster issuer.
+
+```sh
+kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: kuadrant-operator-glbc-ca
+spec:
+  selfSigned: {}
+EOF
+```
+
+The TLSPolicy should eventually have an `Accepted` condition.
+
+```sh
 kubectl --context $KUBECTL_CONTEXT wait tlspolicy api-gateway-tls -n kuadrant-system --for=condition=accepted
 ```
 
@@ -252,7 +268,39 @@ curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST}  "https:/
 
 (Skip this step if you did not configure a DNS provider during the setup.)
 
-Now, we have our gateway protected and communications secured. We are ready to configure DNS, so it is easy for clients to connect and access the APIs we intend to expose via this gateway. Note that during the setup of this walk through, we created a DNS Provider secret and a ManagedZone resource.
+Now, we have our gateway protected and communications secured. We are ready to configure DNS, so it is easy for clients to connect and access the APIs we intend to expose via this gateway.
+
+> **Note:** You may need to create a ManagedZone resource depending on if one was created during your initial cluster setup or not. You should have a `aws-credentials` Secret already created in the `kuadrant-system` namespace as well. However, if either of these don't exist, you can follow these commands to create them:
+
+```sh
+export AWS_ACCESS_KEY_ID=xxxxxxx # Key ID from AWS with Route 53 access
+export AWS_SECRET_ACCESS_KEY=xxxxxxx # Access key from AWS with Route 53 access
+
+kubectl -n kuadrant-system create secret generic aws-credentials \
+  --type=kuadrant.io/aws \
+  --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+  --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+```
+
+```sh
+export AWS_DNS_PUBLIC_ZONE_ID=xxxxxx # DNS Zone ID in AWS Route 53
+
+kubectl apply -f - <<EOF
+apiVersion: kuadrant.io/v1alpha1
+kind: ManagedZone
+metadata:
+  name: my-mz
+  namespace: kuadrant-system
+spec:
+  id: ${AWS_DNS_PUBLIC_ZONE_ID}
+  domainName: ${KUADRANT_ZONE_ROOT_DOMAIN}
+  description: "My Managed Zone"
+  dnsProviderSecretRef:
+    name: aws-credentials
+EOF
+```
+
+Next, create the DNSPolicy:
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF

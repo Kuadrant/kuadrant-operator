@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -276,18 +277,16 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		mappers.WithClient(r.Client()),
 	)
 
-	routeToPolicyEventMapper := mappers.NewHTTPRouteToPolicyEventMapper(
-		kuadrantv1beta2.NewRateLimitPolicyType(),
-		mappers.WithLogger(r.Logger().WithName("httproute.mapper")),
-		mappers.WithClient(r.Client()),
-	)
+	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httpRouteEventMapper")), mappers.WithClient(mgr.GetClient()))
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.AuthPolicy{}).
 		Owns(&authorinoapi.AuthConfig{}).
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
-			handler.EnqueueRequestsFromMapFunc(routeToPolicyEventMapper.Map),
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
+				return httpRouteEventMapper.MapToPolicy(ctx, object, kuadrantv1beta2.NewAuthPolicyType())
+			}),
 		).
 		Watches(
 			&gatewayapiv1.Gateway{},

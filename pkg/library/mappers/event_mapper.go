@@ -1,16 +1,17 @@
 package mappers
 
 import (
+	"context"
+
 	"github.com/go-logr/logr"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 type EventMapper interface {
-	MapToPolicy(client.Object, kuadrant.Referrer) []reconcile.Request
+	MapToPolicy(context.Context, client.Object, kuadrantgatewayapi.Policy) []reconcile.Request
 }
 
 // options

@@ -45,7 +45,7 @@ test-gatewayapi-env-integration: clean-cov generate fmt vet ginkgo ## Requires k
 test-istio-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes cluster with GatewayAPI and Istio installed.
 	mkdir -p $(PROJECT_PATH)/coverage/istio-integration
 #	Check `ginkgo help run` for command line options. For example to filtering tests.
-	GATEWAYAPI_PROVIDER=$(GATEWAYAPI_PROVIDER) $(GINKGO) \
+	GATEWAYAPI_PROVIDER=istio $(GINKGO) \
 		--coverpkg $(INTEGRATION_COVER_PKGS) \
 		--output-dir $(PROJECT_PATH)/coverage/istio-integration \
 		--coverprofile cover.out \
@@ -58,6 +58,23 @@ test-istio-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubern
 		--keep-going \
 		--trace \
 		$(INTEGRATION_TESTS_EXTRA_ARGS) tests/istio/...
+
+test-envoygateway-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes cluster with GatewayAPI and EnvoyGateway installed.
+	mkdir -p $(PROJECT_PATH)/coverage/envoygateway-integration
+#	Check `ginkgo help run` for command line options. For example to filtering tests.
+	GATEWAYAPI_PROVIDER=envoygateway $(GINKGO) \
+		--coverpkg $(INTEGRATION_COVER_PKGS) \
+		--output-dir $(PROJECT_PATH)/coverage/envoygateway-integration \
+		--coverprofile cover.out \
+		-tags integration \
+		--compilers=$(INTEGRATION_TEST_NUM_CORES) \
+		--procs=$(INTEGRATION_TEST_NUM_PROCESSES) \
+		--randomize-all \
+		--randomize-suites \
+		--fail-on-pending \
+		--keep-going \
+		--trace \
+		$(INTEGRATION_TESTS_EXTRA_ARGS) tests/envoygateway/...
 
 .PHONY: test-integration
 test-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes cluster with at least one GatewayAPI provider installed.

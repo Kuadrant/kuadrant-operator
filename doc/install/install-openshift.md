@@ -31,6 +31,8 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 
 Before you can use Kuadrant, you must install cert-manager.
 
+> The minimum supported version of cert-manager is v1.12.1.
+
 Install one of the different flavours of the Cert-Manager.
 
 #### Install community version of the cert-manager

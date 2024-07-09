@@ -328,7 +328,6 @@ func buildDAGEdges(opts *topologyOptions, gateways []gatewayDAGNode, routes []ht
 	edges := make([]edge, 0)
 
 	for _, route := range routes {
-
 		gatewayParentKeys := GetGatewayParentKeys(route.HTTPRoute)
 
 		if opts.linkAcceptedRoutesOnly {
@@ -359,7 +358,6 @@ func buildDAGEdges(opts *topologyOptions, gateways []gatewayDAGNode, routes []ht
 		for _, attachedPolicy := range attachedPolicies {
 			edges = append(edges, edge{parent: route, child: attachedPolicy})
 		}
-
 	}
 
 	for _, g := range effectiveGatewys {

@@ -149,7 +149,7 @@ func TestGatewayAPITopology_GatewayNode_Routes(t *testing.T) {
 		assert.Equal(subT, len(gw2Node.Routes()), 0)
 	})
 
-	t.Run("routes targetting unprogrammed gateway are not linked", func(subT *testing.T) {
+	t.Run("routes targeting unprogrammed gateway are not linked", func(subT *testing.T) {
 		// routeA -> gw1 (unprogrammed)
 		invalidGateway := testInvalidGateway("gw1", NS)
 		gateways := []*gatewayapiv1.Gateway{invalidGateway}
@@ -166,7 +166,7 @@ func TestGatewayAPITopology_GatewayNode_Routes(t *testing.T) {
 
 		gws := topology.Gateways()
 		assert.Equal(subT, len(gws), 1, "not ready gateways should be added")
-		assert.Equal(subT, len(gws[0].Routes()), 0, "routes targetting invalid gateways should not be linked")
+		assert.Equal(subT, len(gws[0].Routes()), 0, "routes targeting invalid gateways should not be linked")
 	})
 }
 
@@ -268,7 +268,7 @@ func TestGatewayAPITopology_Policies(t *testing.T) {
 		assert.Assert(subT, len(topology.Policies()) == 0, "topology should not return any policy")
 	})
 
-	t.Run("policy targetting missing network objet is added as a topology node", func(subT *testing.T) {
+	t.Run("policy targeting missing network objet is added as a topology node", func(subT *testing.T) {
 		policies := make([]Policy, 0)
 		for _, pName := range []string{"p1", "p2", "p3"} {
 			policies = append(policies, testStandalonePolicy(pName, NS))
@@ -299,7 +299,7 @@ func TestGatewayAPITopology_Policies(t *testing.T) {
 }
 
 func TestGatewayAPITopology_Policies_TargetRef(t *testing.T) {
-	t.Run("policy targetting missing network objet does not return TargetRef", func(subT *testing.T) {
+	t.Run("policy targeting missing network objet does not return TargetRef", func(subT *testing.T) {
 		topology, err := NewTopology(
 			WithPolicies([]Policy{testStandalonePolicy("p", NS)}),
 			WithLogger(log.NewLogger()),
@@ -311,7 +311,7 @@ func TestGatewayAPITopology_Policies_TargetRef(t *testing.T) {
 		assert.Assert(subT, policyNodes[0].TargetRef() == nil, "standalone policies should not have target ref")
 	})
 
-	t.Run("targetting a httproute should return routenode", func(subT *testing.T) {
+	t.Run("targeting a httproute should return routenode", func(subT *testing.T) {
 		route := testBasicRoute("route", NS)
 		routes := []*gatewayapiv1.HTTPRoute{route}
 
@@ -333,7 +333,7 @@ func TestGatewayAPITopology_Policies_TargetRef(t *testing.T) {
 		assert.Equal(subT, targetRouteNode.ObjectKey(), client.ObjectKeyFromObject(route), "policy's target ref has unexpected key")
 	})
 
-	t.Run("targetting a gateway should return gatewaynode", func(subT *testing.T) {
+	t.Run("targeting a gateway should return gatewaynode", func(subT *testing.T) {
 		gw := testBasicGateway("gw", NS)
 		gateways := []*gatewayapiv1.Gateway{gw}
 

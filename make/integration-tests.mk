@@ -75,4 +75,4 @@ test-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes clust
 		--fail-on-pending \
 		--keep-going \
 		--trace \
-		$(INTEGRATION_TESTS_EXTRA_ARGS) tests/common/ratelimitpolicy
+		$(INTEGRATION_TESTS_EXTRA_ARGS) tests/common/...

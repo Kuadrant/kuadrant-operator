@@ -9,7 +9,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -30,12 +29,11 @@ func (m *GatewayToPolicyEventMapper) Map(ctx context.Context, obj client.Object)
 	logger := m.opts.Logger.WithValues("gateway", client.ObjectKeyFromObject(obj))
 	gateway, ok := obj.(*gatewayapiv1.Gateway)
 	if !ok {
-		logger.Info("cannot map gateway related event to kuadrant policy", "error", fmt.Sprintf("%T is not a *gatewayapiv1beta1.Gateway", obj))
+		logger.Info("cannot map gateway related event", "error", fmt.Sprintf("%T is not a *gatewayapiv1beta1.Gateway", obj))
 		return []reconcile.Request{}
 	}
 	routeList := &gatewayapiv1.HTTPRouteList{}
-	fields := client.MatchingFields{fieldindexers.HTTPRouteGatewayParentField: client.ObjectKeyFromObject(gateway).String()}
-	if err := m.opts.Client.List(ctx, routeList, fields); err != nil {
+	if err := m.opts.Client.List(ctx, routeList); err != nil {
 		logger.V(1).Error(err, "unable to list HTTPRoutes")
 		return []reconcile.Request{}
 	}

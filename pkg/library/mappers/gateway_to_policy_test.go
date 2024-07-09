@@ -20,7 +20,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
-func TestNewHTTPRouteToPolicyEventMapper(t *testing.T) {
+func TestNewGatewayToPolicyEventMapper(t *testing.T) {
 	testScheme := runtime.NewScheme()
 
 	err := appsv1.AddToScheme(testScheme)
@@ -47,33 +47,34 @@ func TestNewHTTPRouteToPolicyEventMapper(t *testing.T) {
 			Build()
 	}
 
-	t.Run("not http route related event", func(subT *testing.T) {
+	t.Run("not gateway related event", func(subT *testing.T) {
 		objs := []runtime.Object{}
 		cl := clientBuilder(objs)
-		em := NewHTTPRouteToPolicyEventMapper(kuadrantv1beta2.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
-		requests := em.Map(ctx, &gatewayapiv1.Gateway{})
-		assert.DeepEqual(subT, []reconcile.Request{}, requests)
-	})
-
-	t.Run("http route related event - no policies - no requests", func(subT *testing.T) {
-		objs := []runtime.Object{}
-		cl := clientBuilder(objs)
-		em := NewHTTPRouteToPolicyEventMapper(kuadrantv1beta2.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
+		em := NewGatewayToPolicyEventMapper(kuadrantv1beta2.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
 		requests := em.Map(ctx, &gatewayapiv1.HTTPRoute{})
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
 
-	t.Run("http related event - requests", func(subT *testing.T) {
+	t.Run("gateway related event - no policies - no requests", func(subT *testing.T) {
+		objs := []runtime.Object{}
+		cl := clientBuilder(objs)
+		em := NewGatewayToPolicyEventMapper(kuadrantv1beta2.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
+		requests := em.Map(ctx, &gatewayapiv1.Gateway{})
+		assert.DeepEqual(subT, []reconcile.Request{}, requests)
+	})
+
+	t.Run("gateway related event - requests", func(subT *testing.T) {
+		gw := gatewayFactory("ns-a", "gw-1")
 		route := routeFactory("ns-a", "route-1", gatewayapiv1.ParentReference{Name: "gw-1"})
 		p1 := policyFactory("ns-a", "p-1", gatewayapiv1alpha2.PolicyTargetReference{
 			Group: gatewayapiv1.GroupName,
 			Kind:  "HTTPRoute",
 			Name:  gatewayapiv1.ObjectName("route-1"),
 		})
-		objs := []runtime.Object{route, p1}
+		objs := []runtime.Object{gw, route, p1}
 		cl := clientBuilder(objs)
-		em := NewHTTPRouteToPolicyEventMapper(kuadrantv1beta2.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
-		requests := em.Map(ctx, route)
+		em := NewGatewayToPolicyEventMapper(kuadrantv1beta2.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
+		requests := em.Map(ctx, gw)
 		expected := []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: "ns-a", Name: "p-1"}}}
 		assert.DeepEqual(subT, expected, requests)
 	})

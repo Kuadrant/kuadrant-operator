@@ -107,6 +107,7 @@ func (r *RateLimitingLimitsReconciler) buildRateLimitIndexFromTopology(ctx conte
 	// filter out those policies that do not have any effect:
 	// * targeting a gateway without any route
 	// * targeting a gateway when all the routes already have another policy attached
+	// route level policies get gateway level overrides being applied
 	for _, gateway := range topology.Gateways() {
 		gwLogger := logger.WithValues("gateway", client.ObjectKeyFromObject(gateway))
 		gwLogger.V(1).Info("gateway numRoutes", "#Routes", len(gateway.Routes()))

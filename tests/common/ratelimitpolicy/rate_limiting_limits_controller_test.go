@@ -27,10 +27,8 @@ import (
 // Flagged as Serial, as all the tests are using same Limitador CR (from the kuadrant NS)
 var _ = Describe("Rate Limiting limits controller", Serial, func() {
 	const (
-		//testTimeOut       = SpecTimeout(2 * time.Minute)
-		testTimeOut = SpecTimeout(50 * time.Second)
-		//beforeEachTimeOut = NodeTimeout(2 * time.Minute)
-		beforeEachTimeOut = NodeTimeout(50 * time.Second)
+		testTimeOut       = SpecTimeout(2 * time.Minute)
+		beforeEachTimeOut = NodeTimeout(2 * time.Minute)
 		afterEachTimeOut  = NodeTimeout(3 * time.Minute)
 	)
 
@@ -965,7 +963,7 @@ var _ = Describe("Rate Limiting limits controller", Serial, func() {
 			})).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
-		FIt("Gateway atomic override - gateway defaults turned into overrides later on", func(ctx SpecContext) {
+		It("Gateway atomic override - gateway defaults turned into overrides later on", func(ctx SpecContext) {
 			// Create Route RLP
 			Expect(k8sClient.Create(ctx, routeRLP)).To(Succeed())
 			routeRLPKey := client.ObjectKeyFromObject(routeRLP)
@@ -976,8 +974,8 @@ var _ = Describe("Rate Limiting limits controller", Serial, func() {
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(TestGatewayName)
 				policy.Spec.Limits = nil
-				policy.Spec.Defaults = nil
-				policy.Spec.Overrides = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+				policy.Spec.Overrides = nil
+				policy.Spec.Defaults = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
 					Limits: map[string]kuadrantv1beta2.Limit{
 						"l1": {
 							Rates: []kuadrantv1beta2.Rate{

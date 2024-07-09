@@ -64,7 +64,7 @@ func TestRateLimitPolicyReconciler_calculateStatus(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(subT *testing.T) {
-			r := &RateLimitPolicyReconciler{}
+			r := &RateLimitPolicyStatusReconciler{}
 			got := r.calculateStatus(context.TODO(), tt.args.rlp, tt.args.topology)
 
 			if meta.IsStatusConditionTrue(

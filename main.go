@@ -257,6 +257,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	authPolicyIstioAuthorizationPolicyReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("authpolicy").WithName("istioauthorizationpolicy"),
+		mgr.GetEventRecorderFor("AuthPolicyIstioAuthorizationPolicy"),
+	)
+	if err = (&controllers.AuthPolicyIstioAuthorizationPolicyReconciler{
+		BaseReconciler: authPolicyIstioAuthorizationPolicyReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicyIstioAuthorizationPolicy")
+		os.Exit(1)
+	}
+
 	targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("targetstatus"),

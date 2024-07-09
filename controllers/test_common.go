@@ -173,6 +173,18 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	Expect(err).NotTo(HaveOccurred())
 
+	authPolicyIstioAuthorizationPolicyReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("authpolicy").WithName("istioauthorizationpolicy"),
+		mgr.GetEventRecorderFor("AuthPolicyIstioAuthorizationPolicy"),
+	)
+
+	err = (&AuthPolicyIstioAuthorizationPolicyReconciler{
+		BaseReconciler: authPolicyIstioAuthorizationPolicyReconciler,
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
 	targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("targetstatus"),

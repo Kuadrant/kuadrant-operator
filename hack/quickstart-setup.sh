@@ -351,21 +351,25 @@ postSetup() {
   esac
 }
 
-info "📘 Welcome to the Kuadrant Quick Start setup process"
+if [[ -z "$QUIET" ]]; then
+  info "📘 Welcome to the Kuadrant Quick Start setup process"
 
-info "This script will guide you through setting up a local Kubernetes cluster with the following components:"
-info "  - Docker or Podman (Container Runtime)"
-info "  - kind (Kubernetes IN Docker)"
-info "  - Kuadrant and its dependencies, including:"
-info "      * Gateway API"
-info "      * Istio"
-info "      * Cert-Manager"
-info "      * MetalLB"
-info "  - Optional DNS provider setup for Kuadrant's DNSPolicy API"
+  info "This script will guide you through setting up a local Kubernetes cluster with the following components:"
+  info "  - Docker or Podman (Container Runtime)"
+  info "  - kind (Kubernetes IN Docker)"
+  info "  - Kuadrant and its dependencies, including:"
+  info "      * Gateway API"
+  info "      * Istio"
+  info "      * Cert-Manager"
+  info "      * MetalLB"
+  info "  - Optional DNS provider setup for Kuadrant's DNSPolicy API"
 
-info "Please ensure you have an internet connection and local admin access to perform installations."
-
-read -r -p "Are you ready to begin? (y/n) " yn </dev/tty
+  info "Please ensure you have an internet connection and local admin access to perform installations."
+  read -r -p "Are you ready to begin? (y/n) " yn </dev/tty
+else 
+  yn="y"
+  info "QUIET flag detected. Proceeding without prompts in single cluster mode and without DNS Provider..."
+fi
 
 case $yn in
 [Yy]*)
@@ -388,41 +392,49 @@ check_dependencies
 
 info "Checking for existing Kubernetes clusters..."
 if cluster_exists "${KUADRANT_CLUSTER_NAME}"; then
-    echo "A cluster named '${KUADRANT_CLUSTER_NAME}' already exists."
-    echo "This will be treated as a 'hub' cluster, with any new clusters being workers."
-    read -r -p "Proceed with multi-cluster setup? (y/N): " proceed </dev/tty
-    if [[ $proceed =~ ^[Yy] ]]; then
-        # Find the highest numbered cluster and calculate the next number
-        existing_clusters=($(${KIND_BIN} get clusters -q | grep "^${KUADRANT_CLUSTER_NAME}-[0-9]*$" | sort -t '-' -k 2 -n))
-        if [ ${#existing_clusters[@]} -eq 0 ]; then
-            next_cluster_number=1
-        else
-            last_cluster_name=${existing_clusters[${#existing_clusters[@]} - 1]}
-            last_number=${last_cluster_name##*-}
-            next_cluster_number=$((last_number + 1))
-        fi
-        KUADRANT_CLUSTER_NAME="${KUADRANT_CLUSTER_NAME}-${next_cluster_number}"
-        SUBNET_OFFSET=$((SUBNET_OFFSET + 1))
-        HUB=0
-        echo "Next cluster number will be ${KUADRANT_CLUSTER_NAME}."
-        read -r -p "Is it okay to create the cluster '${KUADRANT_CLUSTER_NAME}'? (y/N): " confirm </dev/tty
-        if [[ $confirm =~ ^[Yy] ]]; then
-            info "Proceeding to create the new cluster."
-        else
-            echo "Multi-cluster setup aborted by user."
-            exit 0
-        fi
-    else
-        echo "Multi-cluster setup aborted by user."
-        exit 0
+    if [[ -z "$QUIET" ]]; then
+      echo "A cluster named '${KUADRANT_CLUSTER_NAME}' already exists."
+      echo "This will be treated as a 'hub' cluster, with any new clusters being workers."
+      read -r -p "Proceed with multi-cluster setup? (y/N): " proceed </dev/tty
+      if [[ $proceed =~ ^[Yy] ]]; then
+          # Find the highest numbered cluster and calculate the next number
+          existing_clusters=($(${KIND_BIN} get clusters -q | grep "^${KUADRANT_CLUSTER_NAME}-[0-9]*$" | sort -t '-' -k 2 -n))
+          if [ ${#existing_clusters[@]} -eq 0 ]; then
+              next_cluster_number=1
+          else
+              last_cluster_name=${existing_clusters[${#existing_clusters[@]} - 1]}
+              last_number=${last_cluster_name##*-}
+              next_cluster_number=$((last_number + 1))
+          fi
+          KUADRANT_CLUSTER_NAME="${KUADRANT_CLUSTER_NAME}-${next_cluster_number}"
+          SUBNET_OFFSET=$((SUBNET_OFFSET + 1))
+          HUB=0
+          echo "Next cluster number will be ${KUADRANT_CLUSTER_NAME}."
+          read -r -p "Is it okay to create the cluster '${KUADRANT_CLUSTER_NAME}'? (y/N): " confirm </dev/tty
+          if [[ $confirm =~ ^[Yy] ]]; then
+              info "Proceeding to create the new cluster."
+          else
+              echo "Multi-cluster setup aborted by user."
+              exit 0
+          fi
+      else
+          echo "Multi-cluster setup aborted by user."
+          exit 0
+      fi
+    else 
+      error "Aborting as single cluster already exists. Please delete the cluster first before running quickstart with QUIET flag."
+      exit 0
     fi
 else
     info "No existing cluster named '${KUADRANT_CLUSTER_NAME}' found. Proceeding with initial setup."
 fi
 
-
-echo "Do you want to set up a DNS provider for use with Kuadrant's DNSPolicy API? (y/n)"
-read -r SETUP_PROVIDER </dev/tty
+if [[ -z "$QUIET" ]]; then
+  echo "Do you want to set up a DNS provider for use with Kuadrant's DNSPolicy API? (y/n)"
+  read -r SETUP_PROVIDER </dev/tty
+else
+  SETUP_PROVIDER="n"
+fi
 
 case $SETUP_PROVIDER in
 [Yy]*)

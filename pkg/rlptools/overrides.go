@@ -9,6 +9,7 @@ import (
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // ApplyOverrides applies the overrides defined in the RateLimitPolicies attached to the gateway policies for a given
@@ -21,7 +22,8 @@ func ApplyOverrides(topology *kuadrantgatewayapi.Topology, gateway *gatewayapiv1
 		return topology, nil
 	}
 
-	overridePolicies := lo.FilterMap(gatewayNode.AttachedPolicies(), func(policy kuadrantgatewayapi.Policy, _ int) (*kuadrantv1beta2.RateLimitPolicy, bool) {
+	overridePolicies := lo.FilterMap(gatewayNode.AttachedPolicies(), func(pNode kuadrantgatewayapi.PolicyNode, _ int) (*kuadrantv1beta2.RateLimitPolicy, bool) {
+		policy := pNode.Policy
 		rlp, ok := policy.(*kuadrantv1beta2.RateLimitPolicy)
 		if !ok || rlp.Spec.Overrides == nil {
 			return nil, false
@@ -37,7 +39,8 @@ func ApplyOverrides(topology *kuadrantgatewayapi.Topology, gateway *gatewayapiv1
 
 	for _, route := range topology.Routes() {
 		if !slices.Contains(kuadrantgatewayapi.GetRouteAcceptedGatewayParentKeys(route.HTTPRoute), client.ObjectKeyFromObject(gateway)) {
-			overriddenPolicies = append(overriddenPolicies, route.AttachedPolicies()...)
+			routePolicies := utils.Map(route.AttachedPolicies(), func(pNode kuadrantgatewayapi.PolicyNode) kuadrantgatewayapi.Policy { return pNode.Policy })
+			overriddenPolicies = append(overriddenPolicies, routePolicies...)
 			continue
 		}
 
@@ -49,6 +52,8 @@ func ApplyOverrides(topology *kuadrantgatewayapi.Topology, gateway *gatewayapiv1
 	}
 
 	return kuadrantgatewayapi.NewTopology(
+		kuadrantgatewayapi.WithAcceptedRoutesLinkedOnly(),
+		kuadrantgatewayapi.WithProgrammedGatewaysOnly(true),
 		kuadrantgatewayapi.WithGateways(lo.Map(topology.Gateways(), func(g kuadrantgatewayapi.GatewayNode, _ int) *gatewayapiv1.Gateway { return g.Gateway })),
 		kuadrantgatewayapi.WithRoutes(lo.Map(topology.Routes(), func(r kuadrantgatewayapi.RouteNode, _ int) *gatewayapiv1.HTTPRoute { return r.HTTPRoute })),
 		kuadrantgatewayapi.WithPolicies(overriddenPolicies),

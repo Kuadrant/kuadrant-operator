@@ -200,6 +200,8 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) buildTopology(ctx context.Cont
 	}
 
 	return kuadrantgatewayapi.NewTopology(
+		kuadrantgatewayapi.WithAcceptedRoutesLinkedOnly(),
+		kuadrantgatewayapi.WithProgrammedGatewaysOnly(true),
 		kuadrantgatewayapi.WithGateways(utils.Map(gatewayList.Items, ptr.To[gatewayapiv1.Gateway])),
 		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
 		kuadrantgatewayapi.WithPolicies(utils.Map(policyList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })),

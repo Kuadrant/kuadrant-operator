@@ -191,3 +191,23 @@ func isCRDInstalled(restMapper meta.RESTMapper, group, kind, version string) (bo
 
 	return false, err
 }
+
+// GetGatewayParentRefsFromRoute returns the list of parentRefs that are Gateway typed
+func GetGatewayParentRefsFromRoute(route *gatewayapiv1.HTTPRoute) []gatewayapiv1.ParentReference {
+	if route == nil {
+		return nil
+	}
+	return utils.Filter(route.Spec.ParentRefs, IsParentGateway)
+}
+
+// GetGatewayParentKeys returns the object keys of all parent gateways
+func GetGatewayParentKeys(route *gatewayapiv1.HTTPRoute) []client.ObjectKey {
+	gatewayParentRefs := GetGatewayParentRefsFromRoute(route)
+
+	return utils.Map(gatewayParentRefs, func(p gatewayapiv1.ParentReference) client.ObjectKey {
+		return client.ObjectKey{
+			Name:      string(p.Name),
+			Namespace: string(ptr.Deref(p.Namespace, gatewayapiv1.Namespace(route.Namespace))),
+		}
+	})
+}

@@ -21,14 +21,14 @@ func TestGatewayAPITopology_Gateways(t *testing.T) {
 		assert.Assert(subT, len(topology.Gateways()) == 0, "topology should not return any gateway")
 	})
 
-	t.Run("invalid gateway is skipped", func(subT *testing.T) {
+	t.Run("invalid gateway is added as a topology node", func(subT *testing.T) {
 		invalidGateway := testInvalidGateway("gw1", NS)
 		gateways := []*gatewayapiv1.Gateway{invalidGateway}
 
 		topology, err := NewTopology(WithGateways(gateways), WithLogger(log.NewLogger()))
 		assert.NilError(subT, err)
 
-		assert.Assert(subT, len(topology.Gateways()) == 0, "not ready gateways should not be added")
+		assert.Equal(subT, len(topology.Gateways()), 1, "not ready gateways should be added")
 	})
 
 	t.Run("valid gateways are included", func(subT *testing.T) {
@@ -119,6 +119,7 @@ func TestGatewayAPITopology_GatewayNode_Routes(t *testing.T) {
 		routes := []*gatewayapiv1.HTTPRoute{routeA, routeB}
 
 		topology, err := NewTopology(
+			WithAcceptedRoutesLinkedOnly(),
 			WithGateways(gateways),
 			WithRoutes(routes),
 			WithLogger(log.NewLogger()),
@@ -146,6 +147,26 @@ func TestGatewayAPITopology_GatewayNode_Routes(t *testing.T) {
 		gw2Node, ok := gwIndex[client.ObjectKeyFromObject(gw2)]
 		assert.Assert(subT, ok, "expected gateway not found")
 		assert.Equal(subT, len(gw2Node.Routes()), 0)
+	})
+
+	t.Run("routes targetting unprogrammed gateway are not linked", func(subT *testing.T) {
+		// routeA -> gw1 (unprogrammed)
+		invalidGateway := testInvalidGateway("gw1", NS)
+		gateways := []*gatewayapiv1.Gateway{invalidGateway}
+		route := testBasicRoute("route", NS, invalidGateway)
+		routes := []*gatewayapiv1.HTTPRoute{route}
+
+		topology, err := NewTopology(
+			WithProgrammedGatewaysOnly(true),
+			WithGateways(gateways),
+			WithRoutes(routes),
+			WithLogger(log.NewLogger()),
+		)
+		assert.NilError(subT, err)
+
+		gws := topology.Gateways()
+		assert.Equal(subT, len(gws), 1, "not ready gateways should be added")
+		assert.Equal(subT, len(gws[0].Routes()), 0, "routes targetting invalid gateways should not be linked")
 	})
 }
 
@@ -238,4 +259,129 @@ func TestGatewayAPITopology_RouteNode_AttachedPolicies(t *testing.T) {
 	route2Node, ok := routeIndex[client.ObjectKeyFromObject(route2)]
 	assert.Assert(t, ok, "expected route not found")
 	assert.Equal(t, len(route2Node.AttachedPolicies()), 0)
+}
+
+func TestGatewayAPITopology_Policies(t *testing.T) {
+	t.Run("no policies", func(subT *testing.T) {
+		topology, err := NewTopology(WithLogger(log.NewLogger()))
+		assert.NilError(subT, err)
+		assert.Assert(subT, len(topology.Policies()) == 0, "topology should not return any policy")
+	})
+
+	t.Run("policy targetting missing network objet is added as a topology node", func(subT *testing.T) {
+		policies := make([]Policy, 0)
+		for _, pName := range []string{"p1", "p2", "p3"} {
+			policies = append(policies, testStandalonePolicy(pName, NS))
+		}
+
+		topology, err := NewTopology(WithPolicies(policies), WithLogger(log.NewLogger()))
+		assert.NilError(subT, err)
+
+		assert.Equal(subT, len(topology.Policies()), 3, "standalone policies should be added")
+	})
+
+	t.Run("happy path", func(subT *testing.T) {
+		route := testBasicRoute("route", NS)
+		routes := []*gatewayapiv1.HTTPRoute{route}
+
+		routePolicy := testBasicRoutePolicy("policy", NS, route)
+		policies := []Policy{routePolicy}
+
+		topology, err := NewTopology(
+			WithRoutes(routes),
+			WithPolicies(policies),
+			WithLogger(log.NewLogger()),
+		)
+		assert.NilError(subT, err)
+
+		assert.Equal(subT, len(topology.Policies()), 1, "expected policies not returned")
+	})
+}
+
+func TestGatewayAPITopology_Policies_TargetRef(t *testing.T) {
+	t.Run("policy targetting missing network objet does not return TargetRef", func(subT *testing.T) {
+		topology, err := NewTopology(
+			WithPolicies([]Policy{testStandalonePolicy("p", NS)}),
+			WithLogger(log.NewLogger()),
+		)
+		assert.NilError(subT, err)
+
+		policyNodes := topology.Policies()
+		assert.Equal(subT, len(policyNodes), 1, "standalone policies should be added")
+		assert.Assert(subT, policyNodes[0].TargetRef() == nil, "standalone policies should not have target ref")
+	})
+
+	t.Run("targetting a httproute should return routenode", func(subT *testing.T) {
+		route := testBasicRoute("route", NS)
+		routes := []*gatewayapiv1.HTTPRoute{route}
+
+		routePolicy := testBasicRoutePolicy("policy", NS, route)
+		policies := []Policy{routePolicy}
+
+		topology, err := NewTopology(
+			WithRoutes(routes),
+			WithPolicies(policies),
+			WithLogger(log.NewLogger()),
+		)
+		assert.NilError(subT, err)
+
+		policyNodes := topology.Policies()
+		assert.Equal(subT, len(policyNodes), 1, "expected policies not returned")
+		targetRefNode := policyNodes[0].TargetRef()
+		targetRouteNode, ok := targetRefNode.(*RouteNode)
+		assert.Assert(subT, ok, "policy's target ref is not routenode")
+		assert.Equal(subT, targetRouteNode.ObjectKey(), client.ObjectKeyFromObject(route), "policy's target ref has unexpected key")
+	})
+
+	t.Run("targetting a gateway should return gatewaynode", func(subT *testing.T) {
+		gw := testBasicGateway("gw", NS)
+		gateways := []*gatewayapiv1.Gateway{gw}
+
+		gwPolicy := testBasicGatewayPolicy("policy", NS, gw)
+		policies := []Policy{gwPolicy}
+
+		topology, err := NewTopology(
+			WithGateways(gateways),
+			WithPolicies(policies),
+			WithLogger(log.NewLogger()),
+		)
+		assert.NilError(subT, err)
+
+		policyNodes := topology.Policies()
+		assert.Equal(subT, len(policyNodes), 1, "expected policies not returned")
+		targetRefNode := policyNodes[0].TargetRef()
+		targetGatewayNode, ok := targetRefNode.(*GatewayNode)
+		assert.Assert(subT, ok, "policy's target ref is not gatewaynode")
+		assert.Equal(subT, targetGatewayNode.ObjectKey(), client.ObjectKeyFromObject(gw), "policy's target ref has unexpected key")
+	})
+}
+
+func TestGatewayAPITopology_GetPolicy(t *testing.T) {
+	t.Run("when ID is not found, returns not found", func(subT *testing.T) {
+		topology, err := NewTopology(
+			WithPolicies([]Policy{testStandalonePolicy("p", NS)}),
+			WithLogger(log.NewLogger()),
+		)
+		assert.NilError(subT, err)
+
+		_, ok := topology.GetPolicy(testStandalonePolicy("other", NS))
+		assert.Assert(subT, !ok, "'other' policy should not be found")
+	})
+
+	t.Run("when ID is found, returns the policy", func(subT *testing.T) {
+		policies := make([]Policy, 0)
+		for _, pName := range []string{"p1", "p2", "p3"} {
+			policies = append(policies, testStandalonePolicy(pName, NS))
+		}
+
+		topology, err := NewTopology(WithPolicies(policies), WithLogger(log.NewLogger()))
+		assert.NilError(subT, err)
+
+		policyNode, ok := topology.GetPolicy(testStandalonePolicy("p1", NS))
+		assert.Assert(subT, ok, "policy should be found")
+
+		assert.Equal(subT, client.ObjectKeyFromObject(policyNode), client.ObjectKey{
+			Name: "p1", Namespace: NS,
+		})
+	})
 }

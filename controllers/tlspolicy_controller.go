@@ -202,7 +202,7 @@ func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return nil
 	}
 
-	ok, err = kuadrantgatewayapi.IsCertManagerInstalled(mgr.GetRESTMapper())
+	ok, err = kuadrantgatewayapi.IsCertManagerInstalled(mgr.GetRESTMapper(), r.Logger())
 	if err != nil {
 		return err
 	}

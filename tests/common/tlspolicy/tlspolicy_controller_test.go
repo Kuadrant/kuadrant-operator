@@ -8,12 +8,11 @@ import (
 	"fmt"
 	"time"
 
+	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
-
-	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	k8certsv1 "k8s.io/api/certificates/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -415,12 +414,14 @@ var _ = Describe("TLSPolicy controller", func() {
 			//confirm a certificate has been deleted
 			Eventually(func() error {
 				certificateList := &certmanv1.CertificateList{}
-				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				if err := k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace}); err != nil {
+					return err
+				}
 				if len(certificateList.Items) != 2 {
 					return fmt.Errorf("expected 2 certificates, found: %v", len(certificateList.Items))
 				}
 				return nil
-			}, time.Second*120, time.Second).Should(BeNil())
+			}, tests.TimeoutMedium, time.Second).Should(BeNil())
 		})
 
 		It("should delete all tls certificates when tls policy is removed even if gateway is already removed", func() {

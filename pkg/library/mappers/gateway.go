@@ -49,6 +49,7 @@ func (m *gatewayEventMapper) MapToPolicy(ctx context.Context, obj client.Object,
 		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
 		kuadrantgatewayapi.WithPolicies(policies),
 		kuadrantgatewayapi.WithLogger(logger),
+		kuadrantgatewayapi.WithProgrammedGatewaysOnly(false),
 	)
 	if err != nil {
 		logger.V(1).Error(err, "unable to build topology for gateway")

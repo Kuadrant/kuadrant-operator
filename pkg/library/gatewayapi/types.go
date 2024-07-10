@@ -26,6 +26,7 @@ type Policy interface {
 	Kind() string
 	BackReferenceAnnotationName() string
 	DirectReferenceAnnotationName() string
+	TargetProgrammedGatewaysOnly() bool
 }
 
 type PolicyStatus interface {

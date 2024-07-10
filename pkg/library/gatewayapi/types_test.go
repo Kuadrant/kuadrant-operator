@@ -60,6 +60,9 @@ func (p *TestPolicy) GetStatus() PolicyStatus {
 	return &p.Status
 }
 
+func (p *TestPolicy) TargetProgrammedGatewaysOnly() bool {
+	return true
+}
 func (p *TestPolicy) DeepCopyObject() runtime.Object {
 	if c := p.DeepCopy(); c != nil {
 		return c

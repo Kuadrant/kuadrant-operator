@@ -288,6 +288,10 @@ func (r *RateLimitPolicy) List(ctx context.Context, c client.Client, namespace s
 	return policies
 }
 
+func (r *RateLimitPolicy) TargetProgrammedGatewaysOnly() bool {
+	return true
+}
+
 func (r *RateLimitPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
 	return kuadrantgatewayapi.InheritedPolicy
 }

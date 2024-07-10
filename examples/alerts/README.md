@@ -37,5 +37,7 @@ make sloth-generate
 There are also two matching unit tests to verify and test the alerts that Sloth has generated. These can be run using the make target:
 
 ```
-make alerts-tests
+make test-alerts
 ```
+
+Note: The prometheus unit tests will also run via Github actions when a change is made in the alerts file.

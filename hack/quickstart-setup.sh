@@ -351,7 +351,7 @@ postSetup() {
   esac
 }
 
-if [[ -z "$QUIET" ]]; then
+if [[ -z "$KUADRANT_QUIET" ]]; then
   info "📘 Welcome to the Kuadrant Quick Start setup process"
 
   info "This script will guide you through setting up a local Kubernetes cluster with the following components:"
@@ -368,7 +368,7 @@ if [[ -z "$QUIET" ]]; then
   read -r -p "Are you ready to begin? (y/n) " yn </dev/tty
 else 
   yn="y"
-  info "QUIET flag detected. Proceeding without prompts in single cluster mode and without DNS Provider..."
+  info "KUADRANT_QUIET flag detected. Proceeding without prompts in single cluster mode and without DNS Provider..."
 fi
 
 case $yn in
@@ -392,7 +392,7 @@ check_dependencies
 
 info "Checking for existing Kubernetes clusters..."
 if cluster_exists "${KUADRANT_CLUSTER_NAME}"; then
-    if [[ -z "$QUIET" ]]; then
+    if [[ -z "$KUADRANT_QUIET" ]]; then
       echo "A cluster named '${KUADRANT_CLUSTER_NAME}' already exists."
       echo "This will be treated as a 'hub' cluster, with any new clusters being workers."
       read -r -p "Proceed with multi-cluster setup? (y/N): " proceed </dev/tty
@@ -422,14 +422,14 @@ if cluster_exists "${KUADRANT_CLUSTER_NAME}"; then
           exit 0
       fi
     else 
-      error "Aborting as single cluster already exists. Please delete the cluster first before running quickstart with QUIET flag."
+      error "Aborting as single cluster already exists. Please delete the cluster first before running quickstart with KUADRANT_QUIET flag."
       exit 0
     fi
 else
     info "No existing cluster named '${KUADRANT_CLUSTER_NAME}' found. Proceeding with initial setup."
 fi
 
-if [[ -z "$QUIET" ]]; then
+if [[ -z "$KUADRANT_QUIET" ]]; then
   echo "Do you want to set up a DNS provider for use with Kuadrant's DNSPolicy API? (y/n)"
   read -r SETUP_PROVIDER </dev/tty
 else

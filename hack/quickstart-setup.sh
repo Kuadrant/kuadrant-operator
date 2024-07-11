@@ -154,12 +154,16 @@ generate_ip_address_pool() {
 }
 
 requiredENV() {
-  info "Configuring DNS provider environment variables... 🛰️"
-  info "You have chosen to set up a DNS provider, which is required for using Kuadrant's DNSPolicy API."
-  info "Supported DNS providers are AWS Route 53 and Google Cloud DNS."
+  if [[ -z "$KUADRANT_QUIET" ]]; then
+    info "Configuring DNS provider environment variables... 🛰️"
+    info "You have chosen to set up a DNS provider, which is required for using Kuadrant's DNSPolicy API."
+    info "Supported DNS providers are AWS Route 53 and Google Cloud DNS."
+  fi
 
-  # Read directly from the terminal, ensuring it can handle piped script execution
-  read -r -p "Please enter 'aws' for AWS Route 53, or 'gcp' for Google Cloud DNS: " DNS_PROVIDER </dev/tty
+  if [[ -z "$DNS_PROVIDER" ]]; then
+    # Read directly from the terminal, ensuring it can handle piped script execution
+    read -r -p "Please enter 'aws' for AWS Route 53, or 'gcp' for Google Cloud DNS: " DNS_PROVIDER </dev/tty
+  fi
 
   if [[ "$DNS_PROVIDER" =~ ^(aws|gcp)$ ]]; then
     info "You have selected the $DNS_PROVIDER DNS provider."
@@ -167,8 +171,12 @@ requiredENV() {
     error "Invalid input. Supported providers are 'aws' and 'gcp' only. Exiting."
     exit 1
   fi
-  export DNS_PROVIDER
 
+  if [[ -z "$DNS_PROVIDER" ]]; then
+    export DNS_PROVIDER
+  fi
+
+  # Opting to keep this part as is with QUIET mode as a friendly reminder to users who wish to run entirely in QUIET mode. If this is you, set the below env vars before running the script. :) 
   if [[ "$DNS_PROVIDER" == "aws" ]]; then
     if [[ -z "${KUADRANT_AWS_ACCESS_KEY_ID}" ]]; then
       echo "Enter an AWS access key ID for an account where you have access to AWS Route 53:"
@@ -368,7 +376,7 @@ if [[ -z "$KUADRANT_QUIET" ]]; then
   read -r -p "Are you ready to begin? (y/n) " yn </dev/tty
 else 
   yn="y"
-  info "KUADRANT_QUIET flag detected. Proceeding without prompts in single cluster mode and without DNS Provider..."
+  info "KUADRANT_QUIET flag detected. Proceeding without prompts..."
 fi
 
 case $yn in
@@ -433,7 +441,11 @@ if [[ -z "$KUADRANT_QUIET" ]]; then
   echo "Do you want to set up a DNS provider for use with Kuadrant's DNSPolicy API? (y/n)"
   read -r SETUP_PROVIDER </dev/tty
 else
-  SETUP_PROVIDER="n"
+  if [[ -z "$DNS_PROVIDER" ]]; then
+    SETUP_PROVIDER="n"
+  else
+    SETUP_PROVIDER="y"
+  fi
 fi
 
 case $SETUP_PROVIDER in

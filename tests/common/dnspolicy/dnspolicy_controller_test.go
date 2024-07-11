@@ -648,7 +648,27 @@ var _ = Describe("DNSPolicy controller", func() {
 			//}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(MatchError(ContainSubstring("not found")))
 
 		}, testTimeOut)
-
 	})
 
+	Context("cel validation", func() {
+		It("should error targeting invalid group", func(ctx SpecContext) {
+			p := v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+				WithTargetGateway("gateway")
+			p.Spec.TargetRef.Group = "not-gateway.networking.k8s.io"
+
+			err := k8sClient.Create(ctx, p)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"))
+		}, testTimeOut)
+
+		It("should error targeting invalid kind", func(ctx SpecContext) {
+			p := v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+				WithTargetGateway("gateway")
+			p.Spec.TargetRef.Kind = "TCPRoute"
+
+			err := k8sClient.Create(ctx, p)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("Invalid targetRef.kind. The only supported values are 'Gateway'"))
+		}, testTimeOut)
+	})
 })

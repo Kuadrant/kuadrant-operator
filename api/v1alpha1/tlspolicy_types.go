@@ -196,14 +196,6 @@ func (p *TLSPolicy) DirectReferenceAnnotationName() string {
 }
 
 func (p *TLSPolicy) Validate() error {
-	if p.Spec.TargetRef.Group != (gatewayapiv1.GroupName) {
-		return fmt.Errorf("invalid targetRef.Group %s. The only supported group is %s", p.Spec.TargetRef.Group, gatewayapiv1.GroupName)
-	}
-
-	if p.Spec.TargetRef.Kind != ("Gateway") {
-		return fmt.Errorf("invalid targetRef.Kind %s. The only supported kind is Gateway", p.Spec.TargetRef.Kind)
-	}
-
 	if p.Spec.TargetRef.Namespace != nil && string(*p.Spec.TargetRef.Namespace) != p.Namespace {
 		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *p.Spec.TargetRef.Namespace)
 	}

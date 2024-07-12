@@ -1,4 +1,54 @@
 {
+  "__requires": [
+    {
+      "type": "panel",
+      "id": "dashlist",
+      "name": "Dashboard list",
+      "version": ""
+    },
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "9.5.3"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "state-timeline",
+      "name": "State timeline",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "text",
+      "name": "Text",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
   "annotations": {
     "list": [
       {
@@ -26,6 +76,7 @@
   "fiscalYearStartMonth": 0,
   "gnetId": 7630,
   "graphTooltip": 1,
+  "id": null,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -2009,24 +2060,22 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PA454A88371DD8FEF"
+        "uid": "${datasource}"
       },
+      "description": "Total number of firing alerts, grouped by Alert Name. Note that there may be more than 1 instance of an alert active based on different labels (like pods or namespace). These will only be counted once here if the alertname is the same for each one.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "semi-dark-red",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           }
@@ -2034,8 +2083,8 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 4,
+        "h": 4,
+        "w": 3,
         "x": 0,
         "y": 48
       },
@@ -2059,23 +2108,26 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "PA454A88371DD8FEF"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(ALERTS{alertstate=\"firing\"})",
+          "exemplar": false,
+          "expr": "count(sum by(alertname, alertstate, severity, cluster_id) (ALERTS{alertstate=\"firing\"}))",
+          "instant": true,
           "legendFormat": "__auto",
-          "range": true,
+          "range": false,
           "refId": "A"
         }
       ],
-      "title": "Total Firing Alerts",
+      "title": "Total Firing",
       "type": "stat"
     },
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PA454A88371DD8FEF"
+        "uid": "${datasource}"
       },
+      "description": "Currently pending or firing alerts, grouped by Alert Name. Note that there may be more than 1 instance of an alert active based on different labels (like pods or namespace). The total number of instances of an alert in that state is shown in the '# Active` column. For further details on the individual alert instances, check your alerting system.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2086,6 +2138,7 @@
             "cellOptions": {
               "type": "auto"
             },
+            "filterable": true,
             "inspect": false
           },
           "mappings": [],
@@ -2095,10 +2148,6 @@
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           }
@@ -2111,89 +2160,40 @@
             },
             "properties": [
               {
-                "id": "custom.width",
-                "value": 94
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "receive"
-            },
-            "properties": [
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "firing": {
+                        "color": "semi-dark-red",
+                        "index": 1,
+                        "text": "Firing"
+                      },
+                      "pending": {
+                        "color": "orange",
+                        "index": 0,
+                        "text": "Pending"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
               {
-                "id": "custom.width",
-                "value": 74
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "prometheus"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 134
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "pod"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 174
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "namespace"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 126
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "cluster_id"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 143
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Time"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 194
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "color-background"
+                }
               }
             ]
           }
         ]
       },
       "gridPos": {
-        "h": 12,
-        "w": 12,
-        "x": 4,
+        "h": 8,
+        "w": 21,
+        "x": 3,
         "y": 48
       },
       "id": 157,
@@ -2215,11 +2215,11 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "PA454A88371DD8FEF"
+            "uid": "${datasource}"
           },
-          "editorMode": "builder",
+          "editorMode": "code",
           "exemplar": false,
-          "expr": "ALERTS{alertstate=\"firing\"} or ALERTS{alertstate=\"pending\"}",
+          "expr": "sum by(alertname, alertstate, severity, cluster_id) (ALERTS{alertstate=\"firing\"} or ALERTS{alertstate=\"pending\"})",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -2227,25 +2227,54 @@
           "refId": "A"
         }
       ],
-      "title": "All Pending/Firing Alerts Table",
+      "title": "Currently Active",
       "transformations": [
         {
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Value": true,
+              "Time": true,
+              "Value": false,
               "__name__": true,
               "container": true,
               "endpoint": true,
               "instance": true,
               "job": true,
+              "namespace": true,
+              "pod": true,
+              "prometheus": true,
+              "receive": true,
               "replica": true,
               "rule_group": true,
               "service": true,
               "tenant_id": true
             },
-            "indexByName": {},
-            "renameByName": {}
+            "indexByName": {
+              "Time": 0,
+              "Value": 2,
+              "alertname": 1,
+              "alertstate": 3,
+              "cluster_id": 4,
+              "severity": 5
+            },
+            "renameByName": {
+              "Value": "# Active",
+              "alertname": "Name",
+              "alertstate": "State",
+              "cluster_id": "Cluster ID",
+              "severity": "Severity"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "Name"
+              }
+            ]
           }
         }
       ],
@@ -2254,29 +2283,22 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "PA454A88371DD8FEF"
+        "uid": "${datasource}"
       },
+      "description": "Total number of pending alerts, grouped by Alert Name. Note that there may be more than 1 instance of an alert active based on different labels (like pods or namespace). These will only be counted once here if the alertname is the same for each one.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "custom": {
-            "fillOpacity": 70,
-            "lineWidth": 0,
-            "spanNulls": false
-          },
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "orange",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           }
@@ -2284,93 +2306,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 12,
-        "w": 8,
-        "x": 16,
-        "y": 48
-      },
-      "id": 158,
-      "options": {
-        "alignValue": "center",
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "mergeValues": true,
-        "rowHeight": 0.9,
-        "showValue": "never",
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PA454A88371DD8FEF"
-          },
-          "editorMode": "code",
-          "exemplar": false,
-          "expr": "ALERTS{alertstate=\"firing\"}",
-          "format": "time_series",
-          "instant": false,
-          "legendFormat": "{{alertname}} {{pod}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Alert State Timeline (Firing)",
-      "type": "state-timeline"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PA454A88371DD8FEF"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "A"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 4,
+        "h": 4,
+        "w": 3,
         "x": 0,
-        "y": 54
+        "y": 52
       },
       "id": 159,
       "options": {
@@ -2392,20 +2331,154 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "PA454A88371DD8FEF"
+            "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(ALERTS{alertstate=\"pending\"})",
+          "exemplar": false,
+          "expr": "count(sum by(alertname, alertstate, severity, cluster_id) (ALERTS{alertstate=\"pending\"}))",
+          "instant": true,
           "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Total Pending",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Historical state of any alerts that were pending or firing, grouped by Alert Name. Note that more than 1 instance of an alert may have been active based on different labels (like pods or namespace). For further details on the individual alert instances, check your alerting system.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 100,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "firing": {
+                  "color": "semi-dark-red",
+                  "index": 1,
+                  "text": "Firing"
+                },
+                "pending": {
+                  "color": "orange",
+                  "index": 0,
+                  "text": "Pending"
+                }
+              },
+              "type": "value"
+            },
+            {
+              "options": {
+                "match": "empty",
+                "result": {
+                  "color": "light-green",
+                  "index": 2,
+                  "text": "Inactive"
+                }
+              },
+              "type": "special"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "light-green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 21,
+        "x": 3,
+        "y": 56
+      },
+      "id": 158,
+      "options": {
+        "alignValue": "center",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "mergeValues": true,
+        "rowHeight": 0.9,
+        "showValue": "auto",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "sum by(alertname, alertstate, severity, cluster_id) (ALERTS{alertstate=\"firing\"} or ALERTS{alertstate=\"pending\"})",
+          "format": "table",
+          "instant": false,
+          "legendFormat": "{{alertname}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total Pending Alerts",
-      "type": "stat"
+      "title": "Active State Timeline",
+      "transformations": [
+        {
+          "id": "groupingToMatrix",
+          "options": {
+            "columnField": "alertname",
+            "emptyValue": "empty",
+            "rowField": "Time",
+            "valueField": "alertstate"
+          }
+        },
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "destinationType": "time",
+                "targetField": "Time\\alertname"
+              }
+            ],
+            "fields": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": false,
+                "field": "Time\\alertname"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "state-timeline"
     }
   ],
-  "refresh": false,
+  "refresh": "30s",
   "schemaVersion": 38,
   "style": "dark",
   "tags": [
@@ -2432,11 +2505,7 @@
         "type": "datasource"
       },
       {
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
@@ -2460,11 +2529,7 @@
         "type": "query"
       },
       {
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
@@ -2488,11 +2553,7 @@
         "type": "query"
       },
       {
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
@@ -2518,7 +2579,7 @@
     ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {

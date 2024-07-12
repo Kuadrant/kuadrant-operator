@@ -501,6 +501,16 @@ info "Installing cert-manager... 🛡️"
 kubectl apply -k ${KUADRANT_CERT_MANAGER_KUSTOMIZATION}
 info "Waiting for cert-manager deployments to be ready"
 kubectl -n cert-manager wait --for=condition=Available deployments --all --timeout=300s
+# Check to see if endpoint is available for cert-manager-webhook before setting up cluster issuer.
+while true; do
+  ENDPOINTS=$(kubectl get endpoints cert-manager-webhook -n cert-manager -o jsonpath='{.subsets[0].addresses}')
+  if [ "$ENDPOINTS" != "[]" ]; then
+    echo "cert-manager-webhook has endpoints available."
+    break
+  fi
+  echo "Waiting for endpoints to become available for cert-manager-webhook..."
+  sleep 2
+done
 setupClusterIssuer
 success "cert-manager installed successfully."
 

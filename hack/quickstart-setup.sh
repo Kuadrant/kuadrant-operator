@@ -400,7 +400,24 @@ check_dependencies
 
 info "Checking for existing Kubernetes clusters..."
 if cluster_exists "${KUADRANT_CLUSTER_NAME}"; then
-    if [[ -z "$KUADRANT_QUIET" ]]; then
+    if [[ -n "$MULTICLUSTER" ]]; then
+      # MULTICLUSTER is set, proceed with multi-cluster setup
+      echo "MULTICLUSTER is set. Proceeding with multi-cluster setup."
+      # Find the highest numbered cluster and calculate the next number
+      existing_clusters=($(${KIND_BIN} get clusters -q | grep "^${KUADRANT_CLUSTER_NAME}-[0-9]*$" | sort -t '-' -k 2 -n))
+      if [ ${#existing_clusters[@]} -eq 0 ]; then
+          next_cluster_number=1
+      else
+          last_cluster_name=${existing_clusters[${#existing_clusters[@]} - 1]}
+          last_number=${last_cluster_name##*-}
+          next_cluster_number=$((last_number + 1))
+      fi
+      KUADRANT_CLUSTER_NAME="${KUADRANT_CLUSTER_NAME}-${next_cluster_number}"
+      SUBNET_OFFSET=$((SUBNET_OFFSET + 1))
+      HUB=0
+      echo "Next cluster number will be ${KUADRANT_CLUSTER_NAME}."
+      info "Proceeding to create the new cluster."
+    elif [[ -z "$KUADRANT_QUIET" ]]; then
       echo "A cluster named '${KUADRANT_CLUSTER_NAME}' already exists."
       echo "This will be treated as a 'hub' cluster, with any new clusters being workers."
       read -r -p "Proceed with multi-cluster setup? (y/N): " proceed </dev/tty
@@ -501,16 +518,6 @@ info "Installing cert-manager... 🛡️"
 kubectl apply -k ${KUADRANT_CERT_MANAGER_KUSTOMIZATION}
 info "Waiting for cert-manager deployments to be ready"
 kubectl -n cert-manager wait --for=condition=Available deployments --all --timeout=300s
-# Check to see if endpoint is available for cert-manager-webhook before setting up cluster issuer.
-while true; do
-  ENDPOINTS=$(kubectl get endpoints cert-manager-webhook -n cert-manager -o jsonpath='{.subsets[0].addresses}')
-  if [ "$ENDPOINTS" != "[]" ]; then
-    echo "cert-manager-webhook has endpoints available."
-    break
-  fi
-  echo "Waiting for endpoints to become available for cert-manager-webhook..."
-  sleep 2
-done
 setupClusterIssuer
 success "cert-manager installed successfully."
 

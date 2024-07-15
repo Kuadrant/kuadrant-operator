@@ -440,29 +440,31 @@ func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadr
 
 	limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorOwnerRefsMutator)
 
-	if kObj.Spec.Limitador.Affinity != nil {
-		limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorAffinityMutator)
-	}
-	if kObj.Spec.Limitador.Replicas != nil {
-		limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorReplicasMutator)
-	}
-	if kObj.Spec.Limitador.Storage != nil {
-		limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorStorageMutator)
-	}
-	if kObj.Spec.Limitador.RateLimitHeaders != nil {
-		limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorRateLimitHeadersMutator)
-	}
-	if kObj.Spec.Limitador.Telemetry != nil {
-		limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorTelemetryMutator)
-	}
-	if kObj.Spec.Limitador.PodDisruptionBudget != nil {
-		limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorPodDisruptionBudgetMutator)
-	}
-	if kObj.Spec.Limitador.ResourceRequirements != nil {
-		limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorResourceRequirementsMutator)
-	}
-	if kObj.Spec.Limitador.Verbosity != nil {
-		limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorVerbosityMutator)
+	if kObj.Spec.Limitador != nil {
+		if kObj.Spec.Limitador.Affinity != nil {
+			limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorAffinityMutator)
+		}
+		if kObj.Spec.Limitador.Replicas != nil {
+			limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorReplicasMutator)
+		}
+		if kObj.Spec.Limitador.Storage != nil {
+			limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorStorageMutator)
+		}
+		if kObj.Spec.Limitador.RateLimitHeaders != nil {
+			limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorRateLimitHeadersMutator)
+		}
+		if kObj.Spec.Limitador.Telemetry != nil {
+			limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorTelemetryMutator)
+		}
+		if kObj.Spec.Limitador.PodDisruptionBudget != nil {
+			limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorPodDisruptionBudgetMutator)
+		}
+		if kObj.Spec.Limitador.ResourceRequirements != nil {
+			limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorResourceRequirementsMutator)
+		}
+		if kObj.Spec.Limitador.Verbosity != nil {
+			limitadorMutators = append(limitadorMutators, kuadranttools.LimitadorVerbosityMutator)
+		}
 	}
 
 	return r.ReconcileResource(ctx, &limitadorv1alpha1.Limitador{}, limitador, kuadranttools.LimitadorMutator(limitadorMutators...))

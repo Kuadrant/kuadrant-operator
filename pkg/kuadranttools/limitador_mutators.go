@@ -48,24 +48,10 @@ func LimitadorAffinityMutator(desired, existing *limitadorv1alpha1.Limitador) bo
 
 func LimitadorReplicasMutator(desired, existing *limitadorv1alpha1.Limitador) bool {
 	update := false
-
-	var existingReplicas = 1
-
-	if existing.Spec.Replicas != nil {
-		existingReplicas = *existing.Spec.Replicas
-	}
-
-	var desiredReplicas = 1
-
-	if desired.Spec.Replicas != nil {
-		desiredReplicas = *desired.Spec.Replicas
-	}
-
-	if desiredReplicas != existingReplicas {
-		existing.Spec.Replicas = &desiredReplicas
+	if !reflect.DeepEqual(existing.Spec.Replicas, desired.Spec.Replicas) {
+		existing.Spec.Replicas = desired.Spec.Replicas
 		update = true
 	}
-
 	return update
 }
 

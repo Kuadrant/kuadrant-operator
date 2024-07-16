@@ -1,0 +1,15 @@
+# Maintainers
+
+- Jason Madigan [@jasonmadigan](https://github.com/jasonmadigan)
+- Craig Brookes [@maleck13](https://github.com/maleck13)
+- Mike Nairn [@mikenairn](https://github.com/mikenairn)
+- Alex Snaps [@alexsnaps](https://github.com/alexsnaps)
+- Eguzki Astiz Lezaun [@eguzki](https://github.com/eguzki)
+- Guilherme Cassolato [@guicassolato](https://github.com/guicassolato)
+- Didier Di Cesare [@didierofrivia](https://github.com/didierofrivia)
+- David Martin [@david-martin](https://github.com/david-martin)
+- Adam Cattermole [@adam-cattermole](https://github.com/adam-cattermole)
+- Jim Fitzpatrick [@Boomatang](https://github.com/Boomatang)
+- Kevin Fan [@KevFan](https://github.com/KevFan)
+- Rachel Lawton [@R-Lawton](https://github.com/R-Lawton)
+- Phil Brookes [@philbrookes](https://github.com/philbrookes)

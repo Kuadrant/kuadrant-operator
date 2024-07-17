@@ -6,7 +6,7 @@ There are some example dashboards uploaded to [Grafana.com](https://grafana.com/
 
 | Name     | ID |
 | ----------- | ----------- |
-| [App Developer Dashboard](https://grafana.com/grafana/dashboards/20970)      | `20970`       |
+| [App Developer Dashboard](https://grafana.com/grafana/dashboards/20970)      | `21538`       |
 | [Business User Dashboard](https://grafana.com/grafana/dashboards/20981)   | `20981`        |
 | [Platform Engineer Dashboard](https://grafana.com/grafana/dashboards/20982) | `20982` |
 

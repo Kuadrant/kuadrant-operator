@@ -32,7 +32,7 @@ jobs:
           # Check and upload each dashboard if it has changed
           if [[ "$changed_files" == *"examples/dashboards/app_developer.json"* ]]; then
             echo "Uploading App Developer Dashboard"
-            curl -X POST -F "json=@./examples/dashboards/app_developer.json" -H 'Content-Type: multipart/form-data' -H "Authorization: Basic $auth" "https://www.grafana.com/api/dashboards/20970/revisions"
+            curl -X POST -F "json=@./examples/dashboards/app_developer.json" -H 'Content-Type: multipart/form-data' -H "Authorization: Basic $auth" "https://www.grafana.com/api/dashboards/21538/revisions"
           fi
 
           if [[ "$changed_files" == *"examples/dashboards/business_user.json"* ]]; then

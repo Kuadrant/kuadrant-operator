@@ -111,7 +111,7 @@ func envoySecurityPolicy(targetNetworkObject client.Object, kuadrantNamespace st
 	targetNetworkObjectGvk := targetNetworkObject.GetObjectKind().GroupVersionKind()
 	esp := &egv1alpha1.SecurityPolicy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("on-%s", targetNetworkObject.GetName()),
+			Name:      EnvoySecurityPolicyName(targetNetworkObject.GetName()),
 			Namespace: targetNetworkObject.GetNamespace(),
 			Labels: map[string]string{
 				kuadrant.KuadrantNamespaceAnnotation: kuadrantNamespace,
@@ -134,7 +134,7 @@ func envoySecurityPolicy(targetNetworkObject client.Object, kuadrantNamespace st
 					BackendRefs: []egv1alpha1.BackendRef{
 						{
 							BackendObjectReference: gatewayapiv1.BackendObjectReference{
-								Name:      "authorino-authorino-authorization",
+								Name:      kuadrant.AuthorinoServiceName,
 								Kind:      ptr.To[gatewayapiv1.Kind]("Service"),
 								Namespace: ptr.To(gatewayapiv1.Namespace(kuadrantNamespace)),
 								Port:      ptr.To(gatewayapiv1.PortNumber(50051)),
@@ -147,6 +147,10 @@ func envoySecurityPolicy(targetNetworkObject client.Object, kuadrantNamespace st
 	}
 	kuadrant.AnnotateObject(esp, kuadrantNamespace)
 	return esp
+}
+
+func EnvoySecurityPolicyName(targetName string) string {
+	return fmt.Sprintf("on-%s", targetName)
 }
 
 // SetupWithManager sets up the controller with the Manager.

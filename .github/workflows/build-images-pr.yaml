@@ -13,5 +13,3 @@ jobs:
     with:
       kuadrantOperatorVersion: ${{ github.event.pull_request.user.login }}-${{ github.event.pull_request.number }}
       kuadrantOperatorTag: ${{ github.event.pull_request.user.login }}-${{ github.event.pull_request.number }}
-
-  

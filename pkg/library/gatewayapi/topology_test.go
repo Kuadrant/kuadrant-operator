@@ -157,7 +157,7 @@ func TestGatewayAPITopology_GatewayNode_Routes(t *testing.T) {
 		routes := []*gatewayapiv1.HTTPRoute{route}
 
 		topology, err := NewTopology(
-			WithProgrammedGatewaysOnly(true),
+			WithProgrammedGatewaysOnly(),
 			WithGateways(gateways),
 			WithRoutes(routes),
 			WithLogger(log.NewLogger()),

@@ -53,7 +53,7 @@ func TestTopologyIndexes_PoliciesFromGateway(t *testing.T) {
 		policies := []Policy{gwPolicy, routePolicy}
 
 		t, err := NewTopology(
-			WithProgrammedGatewaysOnly(true),
+			WithProgrammedGatewaysOnly(),
 			WithGateways(gateways),
 			WithRoutes(routes),
 			WithPolicies(policies),

@@ -53,7 +53,7 @@ func ApplyOverrides(topology *kuadrantgatewayapi.Topology, gateway *gatewayapiv1
 
 	return kuadrantgatewayapi.NewTopology(
 		kuadrantgatewayapi.WithAcceptedRoutesLinkedOnly(),
-		kuadrantgatewayapi.WithProgrammedGatewaysOnly(true),
+		kuadrantgatewayapi.WithProgrammedGatewaysOnly(),
 		kuadrantgatewayapi.WithGateways(lo.Map(topology.Gateways(), func(g kuadrantgatewayapi.GatewayNode, _ int) *gatewayapiv1.Gateway { return g.Gateway })),
 		kuadrantgatewayapi.WithRoutes(lo.Map(topology.Routes(), func(r kuadrantgatewayapi.RouteNode, _ int) *gatewayapiv1.HTTPRoute { return r.HTTPRoute })),
 		kuadrantgatewayapi.WithPolicies(overriddenPolicies),

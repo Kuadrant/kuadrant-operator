@@ -50,7 +50,7 @@ func TopologyIndexesFromGateway(ctx context.Context, cl client.Client, gw *gatew
 
 	topology, err := kuadrantgatewayapi.NewTopology(
 		kuadrantgatewayapi.WithAcceptedRoutesLinkedOnly(),
-		kuadrantgatewayapi.WithProgrammedGatewaysOnly(true),
+		kuadrantgatewayapi.WithProgrammedGatewaysOnly(),
 		kuadrantgatewayapi.WithGateways([]*gatewayapiv1.Gateway{gw}),
 		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To)),
 		kuadrantgatewayapi.WithPolicies(policies),

@@ -222,9 +222,9 @@ func WithPolicies(policies []Policy) TopologyOpts {
 	}
 }
 
-func WithProgrammedGatewaysOnly(programmedGatewaysOnly bool) TopologyOpts {
+func WithProgrammedGatewaysOnly() TopologyOpts {
 	return func(o *topologyOptions) {
-		o.programmedGatewaysOnly = programmedGatewaysOnly
+		o.programmedGatewaysOnly = true
 	}
 }
 

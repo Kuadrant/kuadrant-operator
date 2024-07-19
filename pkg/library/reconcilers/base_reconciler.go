@@ -51,7 +51,7 @@ type StatusMutator interface {
 // StatusMutatorFunc is a function adaptor for StatusMutators.
 type StatusMutatorFunc func(client.Object) (bool, error)
 
-// StatusMutatorFunc adapts the MutatorFunc to fit through the StatusMutator interface.
+// Mutate adapts the MutatorFunc to fit through the StatusMutator interface.
 func (s StatusMutatorFunc) Mutate(o client.Object) (bool, error) {
 	if s == nil {
 		return false, nil

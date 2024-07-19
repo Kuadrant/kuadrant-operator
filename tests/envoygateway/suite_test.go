@@ -32,6 +32,11 @@ func TestAPIs(t *testing.T) {
 	RunSpecs(t, "Controller Suite on Envoy Gateway")
 }
 
+const (
+	TestGatewayName   = "test-placed-gateway"
+	TestHTTPRouteName = "toystore-route"
+)
+
 var _ = SynchronizedBeforeSuite(func() []byte {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
 

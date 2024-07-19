@@ -7,8 +7,8 @@ metadata:
     app: toystore
 spec:
   parentRefs:
-    - name: istio-ingressgateway
-      namespace: istio-system
+    - name: kuadrant-ingressgateway
+      namespace: gateway-system
   hostnames: ["*.toystore.com"]
   rules:
     - matches:

@@ -4,7 +4,7 @@
 ## Targets to help install and configure EG
 
 EG_CONFIG_DIR = config/dependencies/envoy-gateway
-EG_NAMESPACE = envoy-gateway-system
+EG_NAMESPACE = gateway-system
 
 # egctl tool
 EGCTL=$(PROJECT_PATH)/bin/egctl
@@ -50,17 +50,17 @@ envoy-gateway-enable-envoypatchpolicy: $(YQ)
 EG_VERSION ?= v1.1.0
 .PHONY: envoy-gateway-install
 envoy-gateway-install: kustomize $(HELM)
-	$(HELM) install eg oci://docker.io/envoyproxy/gateway-helm --version $(EG_VERSION) -n envoy-gateway-system --create-namespace
+	$(HELM) install eg oci://docker.io/envoyproxy/gateway-helm --version $(EG_VERSION) -n $(EG_NAMESPACE) --create-namespace
 	$(MAKE) envoy-gateway-enable-envoypatchpolicy
-	kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
+	kubectl wait --timeout=5m -n $(EG_NAMESPACE) deployment/envoy-gateway --for=condition=Available
 
 .PHONY: deploy-eg-gateway
 deploy-eg-gateway: kustomize ## Deploy Gateway API gateway
 	$(KUSTOMIZE) build $(EG_CONFIG_DIR)/gateway | kubectl apply -f -
-	kubectl wait --timeout=5m -n envoy-gateway-system gateway/eg --for=condition=Programmed
+	kubectl wait --timeout=5m -n $(EG_NAMESPACE) gateway/kuadrant-ingressgateway --for=condition=Programmed
 	@echo
 	@echo "-- Linux only -- Ingress gateway is exported using loadbalancer service in port 80"
-	@echo "export INGRESS_HOST=\$$(kubectl get gtw eg -n envoy-gateway-system -o jsonpath='{.status.addresses[0].value}')"
-	@echo "export INGRESS_PORT=\$$(kubectl get gtw eg -n envoy-gateway-system -o jsonpath='{.spec.listeners[?(@.name==\"http\")].port}')"
+	@echo "export INGRESS_HOST=\$$(kubectl get gtw kuadrant-ingressgateway -n $(EG_NAMESPACE) -o jsonpath='{.status.addresses[0].value}')"
+	@echo "export INGRESS_PORT=\$$(kubectl get gtw kuadrant-ingressgateway -n $(EG_NAMESPACE) -o jsonpath='{.spec.listeners[?(@.name==\"http\")].port}')"
 	@echo "Now you can hit the gateway:"
 	@echo "curl --verbose --resolve www.example.com:\$${INGRESS_PORT}:\$${INGRESS_HOST} http://www.example.com:\$${INGRESS_PORT}/get"

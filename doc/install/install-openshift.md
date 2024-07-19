@@ -5,7 +5,7 @@ NOTE: You must perform these steps on each OpenShift cluster that you want to us
 ## Prerequisites
 
 - OpenShift Container Platform 4.14.x or later with community Operator catalog available.
-- AWS account with Route 53 and zone. 
+- AWS account with Route 53 and zone.
 - Accessible Redis instance.
 
 
@@ -27,9 +27,29 @@ Before you can use Kuadrant, you must install Gateway API v1 as follows:
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
 ```
 
-### Step 3 - Install and configure Istio with the Sail Operator
+### Step 3 - Install cert-manager
 
-Kuadrant integrates with Istio as a Gateway API provider. You can set up an Istio-based Gateway API provider by using the Sail Operator. 
+Before you can use Kuadrant, you must install cert-manager.
+
+> The minimum supported version of cert-manager is v1.12.1.
+
+Install one of the different flavours of the Cert-Manager.
+
+#### Install community version of the cert-manager
+
+Consider [installing cert-manager via OperatorHub](https://cert-manager.io/docs/installation/operator-lifecycle-manager/),
+which you can do from the OpenShift web console.
+
+More installation options at [cert-manager.io](https://cert-manager.io/docs/installation/)
+
+#### Install cert-manager Operator for Red Hat OpenShift
+
+You can install the [cert-manager Operator for Red Hat OpenShift](https://docs.openshift.com/container-platform/4.16/security/cert_manager_operator/cert-manager-operator-install.html)
+by using the web console.
+
+### Step 4 - Install and configure Istio with the Sail Operator
+
+Kuadrant integrates with Istio as a Gateway API provider. You can set up an Istio-based Gateway API provider by using the Sail Operator.
 
 #### Install Istio
 
@@ -46,9 +66,9 @@ apiVersion: operators.coreos.com/v1
 metadata:
   name: sail
   namespace: istio-system
-spec: 
-  upgradeStrategy: Default  
----  
+spec:
+  upgradeStrategy: Default
+---
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
@@ -97,11 +117,11 @@ Wait for Istio to be ready as follows:
 kubectl wait istio/default -n istio-system --for="condition=Ready=true"
 ```
 
-### Step 4 - Optional: Configure observability and metrics
+### Step 5 - Optional: Configure observability and metrics
 
 Kuadrant provides a set of example dashboards that use known metrics exported by Kuadrant and Gateway components to provide insight into different components of your APIs and Gateways. While not essential, it is best to set up an OpenShift monitoring stack. This section provides links to OpenShift and Thanos documentation on configuring monitoring and metrics storage.
 
-You can set up user-facing monitoring by following the steps in the OpenShift documentation on [configuring the monitoring stack](https://docs.openshift.com/container-platform/latest/observability/monitoring/configuring-the-monitoring-stack.html). 
+You can set up user-facing monitoring by following the steps in the OpenShift documentation on [configuring the monitoring stack](https://docs.openshift.com/container-platform/latest/observability/monitoring/configuring-the-monitoring-stack.html).
 
 If you have user workload monitoring enabled, it is best to configure remote writes to a central storage system such as Thanos:
 
@@ -128,7 +148,7 @@ If you have Grafana installed in your cluster, you can import the [example dashb
 For example installation details, see [installing Grafana on OpenShift](https://cloud.redhat.com/experts/o11y/ocp-grafana/). When installed, you must add your Thanos instance as a data source to Grafana. Alternatively, if you are using only the user workload monitoring stack in your OpenShift cluster, and not writing metrics to an external Thanos instance, you can [set up a data source to the thanos-querier route in the OpenShift cluster](https://docs.openshift.com/container-platform/4.15/observability/monitoring/accessing-third-party-monitoring-apis.html#accessing-metrics-from-outside-cluster_accessing-monitoring-apis-by-using-the-cli).
 
 
-### Step 5 - Create secrets for your credentials 
+### Step 6 - Create secrets for your credentials
 
 Before installing the Kuadrant Operator, you must enter the following commands to set up secrets that you will use later:
 
@@ -153,8 +173,8 @@ spec:
   updateStrategy:
     registryPoll:
       interval: 45m
-EOF      
-```      
+EOF
+```
 
 #### AWS Route 53 credentials for TLS
 
@@ -173,8 +193,8 @@ Set the Redis credentials for shared multicluster counters for the Kuadrant Limi
 
 ```bash
 kubectl -n kuadrant-system create secret generic redis-config \
-  --from-literal=URL=$REDIS_URL  
-```  
+  --from-literal=URL=$REDIS_URL
+```
 
 #### AWS Route 53 credentials for DNS
 
@@ -189,9 +209,9 @@ kubectl -n ingress-gateway create secret generic aws-credentials \
   --type=kuadrant.io/aws \
   --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
   --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-```  
+```
 
-### Step 6 - Install the Kuadrant Operator 
+### Step 7 - Install the Kuadrant Operator
 
 To install the Kuadrant Operator, enter the following command:
 
@@ -214,10 +234,10 @@ apiVersion: operators.coreos.com/v1
 metadata:
   name: kuadrant
   namespace: kuadrant-system
-spec: 
+spec:
   upgradeStrategy: Default
 EOF
-```  
+```
 
 Wait for the Kuadrant Operators to be installed as follows:
 
@@ -227,7 +247,7 @@ kubectl get installplan -n kuadrant-system -o=jsonpath='{.items[0].status.phase}
 
 After some time, this command should return `complete`.
 
-### Step 7 - Configure Kuadrant
+### Step 8 - Configure Kuadrant
 
 To configure your Kuadrant deployment, enter the following command:
 
@@ -243,9 +263,9 @@ spec:
     storage:
       redis-cached:
         configSecretRef:
-          name: redis-config 
-EOF          
-```      
+          name: redis-config
+EOF
+```
 
 Wait for Kuadrant to be ready as follows:
 
@@ -255,5 +275,5 @@ kubectl wait kuadrant/kuadrant --for="condition=Ready=true" -n kuadrant-system -
 
 Kuadrant is now ready to use.
 
-## Next steps 
+## Next steps
 - [Secure, protect, and connect APIs with Kuadrant on OpenShift](../user-guides/secure-protect-connect-single-multi-cluster.md)

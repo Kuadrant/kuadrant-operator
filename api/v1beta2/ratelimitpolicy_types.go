@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -29,6 +30,7 @@ import (
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -157,9 +159,7 @@ type RateLimitPolicyCommonSpec struct {
 
 // RateLimitPolicyStatus defines the observed state of RateLimitPolicy
 type RateLimitPolicyStatus struct {
-	// ObservedGeneration reflects the generation of the most recently observed spec.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	reconcilers.StatusMeta `json:",inline"`
 
 	// Represents the observations of a foo's current state.
 	// Known .status.conditions.type are: "Available"
@@ -170,25 +170,33 @@ type RateLimitPolicyStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-func (s *RateLimitPolicyStatus) Equals(other *RateLimitPolicyStatus, logger logr.Logger) bool {
-	if s.ObservedGeneration != other.ObservedGeneration {
-		diff := cmp.Diff(s.ObservedGeneration, other.ObservedGeneration)
-		logger.V(1).Info("ObservedGeneration not equal", "difference", diff)
-		return false
-	}
-
-	// Marshalling sorts by condition type
-	currentMarshaledJSON, _ := kuadrant.ConditionMarshal(s.Conditions)
-	otherMarshaledJSON, _ := kuadrant.ConditionMarshal(other.Conditions)
-	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
-		if logger.V(1).Enabled() {
-			diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
-			logger.V(1).Info("Conditions not equal", "difference", diff)
+func RateLimitPolicyStatusMutator(desiredStatus *RateLimitPolicyStatus, logger logr.Logger) reconcilers.StatusMutatorFunc {
+	return func(obj client.Object) (bool, error) {
+		existingRLP, ok := obj.(*RateLimitPolicy)
+		if !ok {
+			return false, fmt.Errorf("unsupported object type %T", obj)
 		}
-		return false
-	}
 
-	return true
+		opts := cmp.Options{
+			cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime"),
+			cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
+				return k == "lastTransitionTime"
+			}),
+		}
+
+		if cmp.Equal(*desiredStatus, existingRLP.Status, opts) {
+			return false, nil
+		}
+
+		if logger.V(1).Enabled() {
+			diff := cmp.Diff(*desiredStatus, existingRLP.Status, opts)
+			logger.V(1).Info("status not equal", "difference", diff)
+		}
+
+		existingRLP.Status = *desiredStatus
+
+		return true, nil
+	}
 }
 
 func (s *RateLimitPolicyStatus) GetConditions() []metav1.Condition {
@@ -225,6 +233,9 @@ func (r *RateLimitPolicy) Validate() error {
 
 	return nil
 }
+
+func (r *RateLimitPolicy) GetObservedGeneration() int64  { return r.Status.GetObservedGeneration() }
+func (r *RateLimitPolicy) SetObservedGeneration(o int64) { r.Status.SetObservedGeneration(o) }
 
 //+kubebuilder:object:root=true
 

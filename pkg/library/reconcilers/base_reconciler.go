@@ -34,6 +34,32 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
+type StatusMeta struct {
+	// ObservedGeneration reflects the generation of the most recently observed spec.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+}
+
+func (meta *StatusMeta) GetObservedGeneration() int64  { return meta.ObservedGeneration }
+func (meta *StatusMeta) SetObservedGeneration(o int64) { meta.ObservedGeneration = o }
+
+// StatusMutator is an interface to hold mutator functions for status updates.
+type StatusMutator interface {
+	Mutate(obj client.Object) (bool, error)
+}
+
+// StatusMutatorFunc is a function adaptor for StatusMutators.
+type StatusMutatorFunc func(client.Object) (bool, error)
+
+// Mutate adapts the MutatorFunc to fit through the StatusMutator interface.
+func (s StatusMutatorFunc) Mutate(o client.Object) (bool, error) {
+	if s == nil {
+		return false, nil
+	}
+
+	return s(o)
+}
+
 // MutateFn is a function which mutates the existing object into it's desired state.
 type MutateFn func(existing, desired client.Object) (bool, error)
 
@@ -138,6 +164,36 @@ func (b *BaseReconciler) ReconcileResource(ctx context.Context, obj, desired cli
 
 	if update {
 		return b.UpdateResource(ctx, obj)
+	}
+
+	return nil
+}
+
+func (b *BaseReconciler) ReconcileResourceStatus(ctx context.Context, objKey client.ObjectKey, obj client.Object, mutator StatusMutator) error {
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := b.Client().Get(ctx, objKey, obj); err != nil {
+		return err
+	}
+
+	update, err := mutator.Mutate(obj)
+	if err != nil {
+		return err
+	}
+
+	if !update {
+		// Steady state, early return 🎉
+		logger.V(1).Info("status was not updated")
+		return nil
+	}
+
+	updateErr := b.Client().Status().Update(ctx, obj)
+	logger.V(1).Info("updating status", "err", updateErr)
+	if updateErr != nil {
+		return updateErr
 	}
 
 	return nil

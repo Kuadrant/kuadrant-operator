@@ -129,7 +129,7 @@ func buildGatewayPoliciesIndex(t *Topology) map[client.ObjectKey][]Policy {
 		// Consisting of:
 		// - Policy targeting directly the gateway
 		// - Policies targeting the descendant routes of the gateway
-		policies := make([]Policy, 0)
+		policies := make([]PolicyNode, 0)
 
 		policies = append(policies, gatewayNode.AttachedPolicies()...)
 
@@ -137,7 +137,9 @@ func buildGatewayPoliciesIndex(t *Topology) map[client.ObjectKey][]Policy {
 			policies = append(policies, routeNode.AttachedPolicies()...)
 		}
 
-		index[gatewayNode.ObjectKey()] = policies
+		index[gatewayNode.ObjectKey()] = utils.Map(policies, func(pNode PolicyNode) Policy {
+			return pNode.Policy
+		})
 	}
 
 	return index

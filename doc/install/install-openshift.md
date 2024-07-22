@@ -61,7 +61,7 @@ Kuadrant integrates with Istio as a Gateway API provider. You can set up an Isti
 To install the Istio Gateway provider, run the following commands:
 
 ```bash
-kubectl create ns istio-system
+kubectl create ns gateway-system
 ```
 
 ```bash
@@ -70,7 +70,7 @@ kind: OperatorGroup
 apiVersion: operators.coreos.com/v1
 metadata:
   name: sail
-  namespace: istio-system
+  namespace: gateway-system
 spec:
   upgradeStrategy: Default
 ---
@@ -78,7 +78,7 @@ apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
   name: sailoperator
-  namespace: istio-system
+  namespace: gateway-system
 spec:
   channel: 3.0-dp1
   installPlanApproval: Automatic
@@ -91,7 +91,7 @@ EOF
 Check the status of the installation as follows:
 
 ```bash
-kubectl get installplan -n istio-system -o=jsonpath='{.items[0].status.phase}'
+kubectl get installplan -n gateway-system -o=jsonpath='{.items[0].status.phase}'
 ```
 
 When ready, the status will change from `installing` to `complete`.
@@ -108,7 +108,7 @@ metadata:
   name: default
 spec:
   version: v1.21.0
-  namespace: istio-system
+  namespace: gateway-system
   # Disable autoscaling to reduce dev resources
   values:
     pilot:
@@ -119,7 +119,7 @@ EOF
 Wait for Istio to be ready as follows:
 
 ```bash
-kubectl wait istio/default -n istio-system --for="condition=Ready=true"
+kubectl wait istio/default -n gateway-system --for="condition=Ready=true"
 ```
 
 ### Step 5 - (Optional) Install Envoy Gateway as a Gateway API provider

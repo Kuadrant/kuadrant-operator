@@ -4,7 +4,7 @@ This user guide walks you through an example of how to configure rate limiting f
 
 <br/>
 
-In this guide, we will rate limit a sample REST API called **Toy Store**. In reality, this API is just an echo service that echoes back to the user whatever attributes it gets in the request. The API listens to requests at the hostname `api.toystore.com`, where it exposes the endpoints `GET /toys*` and `POST /toys`, respectively, to mimic a operations of reading and writing toy records.
+In this guide, we will rate limit a sample REST API called **Toy Store**. In reality, this API is just an echo service that echoes back to the user whatever attributes it gets in the request. The API listens to requests at the hostname `api.toystore.com`, where it exposes the endpoints `GET /toys*` and `POST /toys`, respectively, to mimic operations of reading and writing toy records.
 
 We will rate limit the `POST /toys` endpoint to a maximum of 5rp10s ("5 requests every 10 seconds").
 
@@ -63,8 +63,8 @@ metadata:
   name: toystore
 spec:
   parentRefs:
-  - name: istio-ingressgateway
-    namespace: istio-system
+  - name: kuadrant-ingressgateway
+    namespace: gateway-system
   hostnames:
   - api.toystore.com
   rules:
@@ -90,8 +90,8 @@ EOF
 Export the gateway hostname and port:
 
 ```sh
-export INGRESS_HOST=$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.status.addresses[0].value}')
-export INGRESS_PORT=$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
+export INGRESS_HOST=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.status.addresses[0].value}')
+export INGRESS_PORT=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
 export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
 ```
 
@@ -105,7 +105,7 @@ curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toys -i
 > **Note**: If the command above fails to hit the Toy Store API on your environment, try forwarding requests to the service and accessing over localhost:
 >
 > ```sh
-> kubectl port-forward -n istio-system service/istio-ingressgateway-istio 9080:80 >/dev/null 2>&1 &
+> kubectl port-forward -n gateway-system service/kuadrant-ingressgateway-istio 9080:80 >/dev/null 2>&1 &
 > export GATEWAY_URL=localhost:9080
 > ```
 > ```sh

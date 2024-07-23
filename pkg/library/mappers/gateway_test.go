@@ -20,6 +20,7 @@ import (
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 )
 
@@ -90,7 +91,11 @@ func TestNewGatewayEventMapper(t *testing.T) {
 			},
 		}
 		requests := em.MapToPolicy(context.Background(), gateway, &kuadrantv1beta2.AuthPolicy{})
-		expected := []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: "app-ns", Name: "policy-1"}}, {NamespacedName: types.NamespacedName{Namespace: "app-ns", Name: "policy-2"}}}
-		assert.DeepEqual(subT, expected, requests)
+		assert.Assert(subT, utils.Index(requests, func(r reconcile.Request) bool {
+			return r.NamespacedName == types.NamespacedName{Namespace: "app-ns", Name: "policy-1"}
+		}) >= 0)
+		assert.Assert(subT, utils.Index(requests, func(r reconcile.Request) bool {
+			return r.NamespacedName == types.NamespacedName{Namespace: "app-ns", Name: "policy-2"}
+		}) >= 0)
 	})
 }

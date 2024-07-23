@@ -23,11 +23,12 @@ import (
 	"slices"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/equality"
+	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -41,23 +42,23 @@ import (
 var NegativePolarityConditions []string
 
 func (r *DNSPolicyReconciler) reconcileStatus(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, specErr error) (ctrl.Result, error) {
+	logger, _ := logr.FromContext(ctx)
+
 	newStatus := r.calculateStatus(ctx, dnsPolicy, specErr)
 
-	equalStatus := equality.Semantic.DeepEqual(newStatus, dnsPolicy.Status)
-	if equalStatus && dnsPolicy.Generation == dnsPolicy.Status.ObservedGeneration {
-		return reconcile.Result{}, nil
-	}
-
-	newStatus.ObservedGeneration = dnsPolicy.Generation
-
-	dnsPolicy.Status = *newStatus
-	updateErr := r.Client().Status().Update(ctx, dnsPolicy)
-	if updateErr != nil {
+	if err := r.ReconcileResourceStatus(
+		ctx,
+		client.ObjectKeyFromObject(dnsPolicy),
+		&v1alpha1.DNSPolicy{},
+		v1alpha1.DNSPolicyStatusMutator(newStatus, logger),
+	); err != nil {
 		// Ignore conflicts, resource might just be outdated.
-		if apierrors.IsConflict(updateErr) {
-			return ctrl.Result{Requeue: true}, nil
+		if apierrors.IsConflict(err) {
+			logger.V(1).Info("Failed to update status: resource might just be outdated")
+			return reconcile.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{}, updateErr
+
+		return ctrl.Result{}, err
 	}
 
 	// policy updated in API, emit metrics based on status conditions
@@ -90,9 +91,10 @@ func (r *DNSPolicyReconciler) emitConditionMetrics(dnsPolicy *v1alpha1.DNSPolicy
 func (r *DNSPolicyReconciler) calculateStatus(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, specErr error) *v1alpha1.DNSPolicyStatus {
 	newStatus := &v1alpha1.DNSPolicyStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
-		Conditions:         slices.Clone(dnsPolicy.Status.Conditions),
-		ObservedGeneration: dnsPolicy.Status.ObservedGeneration,
+		Conditions: slices.Clone(dnsPolicy.Status.Conditions),
 	}
+
+	newStatus.SetObservedGeneration(dnsPolicy.GetGeneration())
 
 	acceptedCond := kuadrant.AcceptedCondition(dnsPolicy, specErr)
 	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)

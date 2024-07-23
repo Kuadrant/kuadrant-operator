@@ -18,7 +18,11 @@ package v1alpha1
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
+	"k8s.io/apimachinery/pkg/api/equality"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -31,6 +35,7 @@ import (
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -134,18 +139,13 @@ type LoadBalancingGeo struct {
 
 // DNSPolicyStatus defines the observed state of DNSPolicy
 type DNSPolicyStatus struct {
+	reconcilers.StatusMeta `json:",inline"`
+
 	// conditions are any conditions associated with the policy
 	//
 	// If configuring the policy fails, the "Failed" condition will be set with a
 	// reason and message describing the cause of the failure.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// observedGeneration is the most recently observed generation of the
-	// DNSPolicy.  When the DNSPolicy is updated, the controller updates the
-	// corresponding configuration. If an update fails, that failure is
-	// recorded in the status condition
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// +optional
 	HealthCheck *dnsv1alpha1.HealthCheckStatus `json:"healthCheck,omitempty"`
@@ -213,6 +213,28 @@ func (p *DNSPolicy) BackReferenceAnnotationName() string {
 
 func (p *DNSPolicy) DirectReferenceAnnotationName() string {
 	return NewDNSPolicyType().DirectReferenceAnnotationName()
+}
+
+func DNSPolicyStatusMutator(desiredStatus *DNSPolicyStatus, logger logr.Logger) reconcilers.StatusMutatorFunc {
+	return func(obj client.Object) (bool, error) {
+		existing, ok := obj.(*DNSPolicy)
+		if !ok {
+			return false, fmt.Errorf("unsupported object type %T", obj)
+		}
+
+		if equality.Semantic.DeepEqual(*desiredStatus, existing.Status) {
+			return false, nil
+		}
+
+		if logger.V(1).Enabled() {
+			diff := cmp.Diff(*desiredStatus, existing.Status)
+			logger.V(1).Info("status not equal", "difference", diff)
+		}
+
+		existing.Status = *desiredStatus
+
+		return true, nil
+	}
 }
 
 //+kubebuilder:object:root=true

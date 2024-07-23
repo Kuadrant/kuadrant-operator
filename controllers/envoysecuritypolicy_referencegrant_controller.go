@@ -64,6 +64,11 @@ func (r *EnvoySecurityPolicyReferenceGrantReconciler) Reconcile(eventCtx context
 		return ctrl.Result{}, err
 	}
 
+	if err := r.SetOwnerReference(kObj, rg); err != nil {
+		logger.Error(err, "failed to set owner reference on envoy SecurityPolicy ReferenceGrant resource")
+		return ctrl.Result{}, err
+	}
+
 	if err := r.ReconcileResource(ctx, &gatewayapiv1beta1.ReferenceGrant{}, rg, kuadrantenvoygateway.SecurityPolicyReferenceGrantMutator); err != nil && !apierrors.IsAlreadyExists(err) {
 		logger.Error(err, "failed to reconcile envoy SecurityPolicy ReferenceGrant resource")
 		return ctrl.Result{}, err

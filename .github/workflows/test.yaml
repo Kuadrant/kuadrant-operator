@@ -50,7 +50,7 @@ jobs:
           verbose: true
 
   controllers-integration-tests:
-    name: Integration Tests for github.com/kuadrant/kuadrant-operator/controllers
+    name: Integration Tests for kuadrant-operator/controllers
     strategy:
       matrix:
         include:
@@ -104,7 +104,7 @@ jobs:
           verbose: true
 
   bare-k8s-integration-tests:
-    name: Integration Tests for github.com/kuadrant/kuadrant-operator/tests/bare_k8s
+    name: Integration Tests for kuadrant-operator/tests/bare_k8s
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test
@@ -149,7 +149,7 @@ jobs:
           verbose: true
 
   gatewayapi-integration-tests:
-    name: Integration Tests for github.com/kuadrant/kuadrant-operator/tests/gatewayapi
+    name: Integration Tests for kuadrant-operator/tests/gatewayapi
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test
@@ -194,7 +194,7 @@ jobs:
           verbose: true
 
   gatewayapi-provider-integration-tests:
-    name: Integration Tests for github.com/kuadrant/kuadrant-operator/tests/<gatewayapi-provider>
+    name: Integration Tests for kuadrant-operator/tests/[gatewayapi-provider]
     strategy:
       matrix:
         gatewayapi-provider: [istio, envoygateway]

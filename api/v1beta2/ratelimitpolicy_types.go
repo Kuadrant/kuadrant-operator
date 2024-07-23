@@ -235,8 +235,6 @@ type RateLimitPolicy struct {
 
 var _ kuadrantgatewayapi.Policy = &RateLimitPolicy{}
 
-func (r *RateLimitPolicy) GetObservedGeneration() int64  { return r.Status.GetObservedGeneration() }
-func (r *RateLimitPolicy) SetObservedGeneration(o int64) { r.Status.SetObservedGeneration(o) }
 
 //+kubebuilder:object:root=true
 

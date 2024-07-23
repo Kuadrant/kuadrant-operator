@@ -2,12 +2,11 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"slices"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -36,43 +35,30 @@ func (r *KuadrantReconciler) reconcileStatus(ctx context.Context, kObj *kuadrant
 		return reconcile.Result{}, err
 	}
 
-	equalStatus := kObj.Status.Equals(newStatus, logger)
-	logger.V(1).Info("Status", "status is different", !equalStatus)
-	logger.V(1).Info("Status", "generation is different", kObj.Generation != kObj.Status.ObservedGeneration)
-	if equalStatus && kObj.Generation == kObj.Status.ObservedGeneration {
-		// Steady state
-		logger.V(1).Info("Status was not updated")
-		return reconcile.Result{}, nil
-	}
-
-	// Save the generation number we acted on, otherwise we might wrongfully indicate
-	// that we've seen a spec update when we retry.
-	// TODO: This can clobber an update if we allow multiple agents to write to the
-	// same status.
-	newStatus.ObservedGeneration = kObj.Generation
-
-	logger.V(1).Info("Updating Status", "sequence no:", fmt.Sprintf("sequence No: %v->%v", kObj.Status.ObservedGeneration, newStatus.ObservedGeneration))
-
-	kObj.Status = *newStatus
-	updateErr := r.Client().Status().Update(ctx, kObj)
-	if updateErr != nil {
+	if err := r.ReconcileResourceStatus(
+		ctx,
+		client.ObjectKeyFromObject(kObj),
+		&kuadrantv1beta1.Kuadrant{},
+		kuadrantv1beta1.KuadrantStatusMutator(newStatus, logger),
+	); err != nil {
 		// Ignore conflicts, resource might just be outdated.
-		if errors.IsConflict(updateErr) {
-			logger.Info("Failed to update status: resource might just be outdated")
+		if apierrors.IsConflict(err) {
+			logger.V(1).Info("Failed to update status: resource might just be outdated")
 			return reconcile.Result{Requeue: true}, nil
 		}
-
-		return reconcile.Result{}, fmt.Errorf("failed to update status: %w", updateErr)
+		return ctrl.Result{}, err
 	}
+
 	return ctrl.Result{}, nil
 }
 
 func (r *KuadrantReconciler) calculateStatus(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant, specErr error) (*kuadrantv1beta1.KuadrantStatus, error) {
 	newStatus := &kuadrantv1beta1.KuadrantStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
-		Conditions:         slices.Clone(kObj.Status.Conditions),
-		ObservedGeneration: kObj.Status.ObservedGeneration,
+		Conditions: slices.Clone(kObj.Status.Conditions),
 	}
+
+	newStatus.SetObservedGeneration(kObj.GetGeneration())
 
 	availableCond, err := r.readyCondition(ctx, kObj, specErr)
 	if err != nil {
@@ -140,11 +126,11 @@ func (r *KuadrantReconciler) checkLimitadorReady(ctx context.Context, kObj *kuad
 	limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kObj.Namespace}
 
 	err := r.Client().Get(ctx, limitadorKey, limitadorObj)
-	if err != nil && !errors.IsNotFound(err) {
+	if err != nil && !apierrors.IsNotFound(err) {
 		return nil, err
 	}
 
-	if errors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) {
 		reason := "Limitador not found"
 		return &reason, nil
 	}
@@ -165,11 +151,11 @@ func (r *KuadrantReconciler) checkAuthorinoAvailable(ctx context.Context, kObj *
 	authorino := &authorinov1beta1.Authorino{}
 	dKey := client.ObjectKey{Name: "authorino", Namespace: kObj.Namespace}
 	err := r.Client().Get(ctx, dKey, authorino)
-	if err != nil && !errors.IsNotFound(err) {
+	if err != nil && !apierrors.IsNotFound(err) {
 		return nil, err
 	}
 
-	if err != nil && errors.IsNotFound(err) {
+	if err != nil && apierrors.IsNotFound(err) {
 		tmp := err.Error()
 		return &tmp, nil
 	}

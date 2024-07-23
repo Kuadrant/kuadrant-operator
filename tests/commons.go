@@ -14,7 +14,6 @@ import (
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -25,6 +24,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -118,7 +120,7 @@ func ApplyKuadrantCR(ctx context.Context, cl client.Client, namespace string) {
 	ApplyKuadrantCRWithName(ctx, cl, namespace, "kuadrant-sample")
 }
 
-func ApplyKuadrantCRWithName(ctx context.Context, cl client.Client, namespace, name string) {
+func ApplyKuadrantCRWithName(ctx context.Context, cl client.Client, namespace, name string, mutateFns ...func(*kuadrantv1beta1.Kuadrant)) {
 	kuadrantCR := &kuadrantv1beta1.Kuadrant{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Kuadrant",
@@ -129,6 +131,11 @@ func ApplyKuadrantCRWithName(ctx context.Context, cl client.Client, namespace, n
 			Namespace: namespace,
 		},
 	}
+
+	for _, mutateFn := range mutateFns {
+		mutateFn(kuadrantCR)
+	}
+
 	err := cl.Create(ctx, kuadrantCR)
 	Expect(err).ToNot(HaveOccurred())
 }
@@ -628,5 +635,22 @@ func createSelfSignedIssuerSpec() certmanv1.IssuerSpec {
 		IssuerConfig: certmanv1.IssuerConfig{
 			SelfSigned: &certmanv1.SelfSignedIssuer{},
 		},
+	}
+}
+
+func LimitadorIsReady(ctx context.Context, cl client.Client, lKey client.ObjectKey) func(g Gomega) {
+	return func(g Gomega) {
+		existing := &limitadorv1alpha1.Limitador{}
+		g.Expect(cl.Get(ctx, lKey, existing)).To(Succeed())
+		g.Expect(meta.IsStatusConditionTrue(existing.Status.Conditions, limitadorv1alpha1.StatusConditionReady)).To(BeTrue())
+	}
+}
+
+func KuadrantIsReady(ctx context.Context, cl client.Client, key client.ObjectKey) func(g Gomega) {
+	return func(g Gomega) {
+		kuadrantCR := &kuadrantv1beta1.Kuadrant{}
+		err := cl.Get(ctx, key, kuadrantCR)
+		g.Expect(err).To(Succeed())
+		g.Expect(meta.IsStatusConditionTrue(kuadrantCR.Status.Conditions, "Ready")).To(BeTrue())
 	}
 }

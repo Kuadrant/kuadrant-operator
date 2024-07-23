@@ -182,6 +182,10 @@ func (r *AuthPolicyIstioAuthorizationPolicyReconciler) istioAuthorizationPolicy(
 		iap.Spec.Rules = rules
 	}
 
+	if err := r.SetOwnerReference(gateway, iap); err != nil {
+		return nil, err
+	}
+
 	return iap, nil
 }
 

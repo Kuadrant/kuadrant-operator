@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"sort"
 
@@ -20,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -83,7 +85,6 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) Reconcile(eventCtx context.Con
 		policy := policies[i]
 		rlpKey := client.ObjectKeyFromObject(policy)
 		rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)
-		conditions := rlp.GetStatus().GetConditions()
 
 		// skip policy if accepted condition is false
 		if meta.IsStatusConditionFalse(policy.GetStatus().GetConditions(), string(gatewayapiv1alpha2.PolicyConditionAccepted)) {
@@ -92,9 +93,21 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) Reconcile(eventCtx context.Con
 
 		// ensure no error on underlying subresource (i.e. Limitador)
 		if condition := r.hasErrCondOnSubResource(ctx, rlp); condition != nil {
-			if err := r.setCondition(ctx, rlp, &conditions, *condition); err != nil {
+			if err := r.ReconcileResourceStatus(
+				ctx,
+				client.ObjectKeyFromObject(rlp),
+				&kuadrantv1beta2.RateLimitPolicy{},
+				conditionStatusMutator(*condition),
+			); err != nil {
+				// Ignore conflicts, resource might just be outdated.
+				if apierrors.IsConflict(err) {
+					logger.V(1).Info("Failed to update status: resource might just be outdated")
+					return reconcile.Result{Requeue: true}, nil
+				}
+
 				return ctrl.Result{}, err
 			}
+
 			continue
 		}
 
@@ -157,7 +170,18 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) Reconcile(eventCtx context.Con
 			}
 		}
 
-		if err := r.setCondition(ctx, rlp, &conditions, *condition); err != nil {
+		if err := r.ReconcileResourceStatus(
+			ctx,
+			client.ObjectKeyFromObject(rlp),
+			&kuadrantv1beta2.RateLimitPolicy{},
+			conditionStatusMutator(*condition),
+		); err != nil {
+			// Ignore conflicts, resource might just be outdated.
+			if apierrors.IsConflict(err) {
+				logger.V(1).Info("Failed to update status: resource might just be outdated")
+				return reconcile.Result{Requeue: true}, nil
+			}
+
 			return ctrl.Result{}, err
 		}
 	}
@@ -229,28 +253,25 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) hasErrCondOnSubResource(ctx co
 	return nil
 }
 
-func (r *RateLimitPolicyEnforcedStatusReconciler) setCondition(ctx context.Context, p *kuadrantv1beta2.RateLimitPolicy, conditions *[]metav1.Condition, cond metav1.Condition) error {
-	logger, err := logr.FromContext(ctx)
-	logger.WithName("setCondition")
-	if err != nil {
-		logger = r.Logger()
-	}
-
-	idx := utils.Index(*conditions, func(c metav1.Condition) bool {
-		return c.Type == cond.Type && c.Status == cond.Status && c.Reason == cond.Reason && c.Message == cond.Message
-	})
-	if idx == -1 {
-		meta.SetStatusCondition(conditions, cond)
-		p.Status.Conditions = *conditions
-		if err := r.Client().Status().Update(ctx, p); err != nil {
-			logger.Error(err, "failed to update policy status")
-			return err
+func conditionStatusMutator(cond metav1.Condition) reconcilers.StatusMutatorFunc {
+	return func(obj client.Object) (bool, error) {
+		existing, ok := obj.(*kuadrantv1beta2.RateLimitPolicy)
+		if !ok {
+			return false, fmt.Errorf("unsupported object type %T", obj)
 		}
-		return nil
-	}
 
-	logger.V(1).Info("skipping policy enforced condition status update - already up to date")
-	return nil
+		idx := utils.Index(existing.Status.Conditions, func(c metav1.Condition) bool {
+			return c.Type == cond.Type && c.Status == cond.Status && c.Reason == cond.Reason && c.Message == cond.Message
+		})
+
+		if idx != -1 {
+			return false, nil
+		}
+
+		meta.SetStatusCondition(&existing.Status.Conditions, cond)
+
+		return true, nil
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -35,7 +35,7 @@ import (
 )
 
 type StatusMeta struct {
-	// ObservedGeneration reflects the generation of the most recently observed spec.
+	// observedGeneration is the most recently observed generation of the spec.
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }

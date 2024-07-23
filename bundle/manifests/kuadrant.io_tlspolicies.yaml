@@ -350,11 +350,8 @@ spec:
                   type: object
                 type: array
               observedGeneration:
-                description: |-
-                  observedGeneration is the most recently observed generation of the
-                  TLSPolicy.  When the TLSPolicy is updated, the controller updates the
-                  corresponding configuration. If an update fails, that failure is
-                  recorded in the status condition
+                description: observedGeneration is the most recently observed generation
+                  of the spec.
                 format: int64
                 type: integer
             type: object

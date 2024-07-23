@@ -235,7 +235,6 @@ type RateLimitPolicy struct {
 
 var _ kuadrantgatewayapi.Policy = &RateLimitPolicy{}
 
-
 //+kubebuilder:object:root=true
 
 // RateLimitPolicyList contains a list of RateLimitPolicy

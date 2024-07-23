@@ -12,7 +12,6 @@ import (
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
@@ -32,7 +31,7 @@ func (r *KuadrantReconciler) reconcileStatus(ctx context.Context, kObj *kuadrant
 	logger, _ := logr.FromContext(ctx)
 	newStatus, err := r.calculateStatus(ctx, kObj, specErr)
 	if err != nil {
-		return reconcile.Result{}, err
+		return ctrl.Result{}, err
 	}
 
 	if err := r.ReconcileResourceStatus(
@@ -44,7 +43,7 @@ func (r *KuadrantReconciler) reconcileStatus(ctx context.Context, kObj *kuadrant
 		// Ignore conflicts, resource might just be outdated.
 		if apierrors.IsConflict(err) {
 			logger.V(1).Info("Failed to update status: resource might just be outdated")
-			return reconcile.Result{Requeue: true}, nil
+			return ctrl.Result{Requeue: true}, nil
 		}
 		return ctrl.Result{}, err
 	}

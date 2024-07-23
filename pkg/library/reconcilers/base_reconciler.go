@@ -91,7 +91,7 @@ func NewBaseReconciler(
 }
 
 func (b *BaseReconciler) Reconcile(context.Context, ctrl.Request) (ctrl.Result, error) {
-	return reconcile.Result{}, nil
+	return ctrl.Result{}, nil
 }
 
 // Client returns a split client that reads objects from

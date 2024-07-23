@@ -29,7 +29,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
@@ -55,7 +54,7 @@ func (r *DNSPolicyReconciler) reconcileStatus(ctx context.Context, dnsPolicy *v1
 		// Ignore conflicts, resource might just be outdated.
 		if apierrors.IsConflict(err) {
 			logger.V(1).Info("Failed to update status: resource might just be outdated")
-			return reconcile.Result{Requeue: true}, nil
+			return ctrl.Result{Requeue: true}, nil
 		}
 
 		return ctrl.Result{}, err

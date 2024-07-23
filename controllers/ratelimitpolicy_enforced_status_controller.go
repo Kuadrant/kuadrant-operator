@@ -21,7 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -102,7 +101,7 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) Reconcile(eventCtx context.Con
 				// Ignore conflicts, resource might just be outdated.
 				if apierrors.IsConflict(err) {
 					logger.V(1).Info("Failed to update status: resource might just be outdated")
-					return reconcile.Result{Requeue: true}, nil
+					return ctrl.Result{Requeue: true}, nil
 				}
 
 				return ctrl.Result{}, err
@@ -179,7 +178,7 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) Reconcile(eventCtx context.Con
 			// Ignore conflicts, resource might just be outdated.
 			if apierrors.IsConflict(err) {
 				logger.V(1).Info("Failed to update status: resource might just be outdated")
-				return reconcile.Result{Requeue: true}, nil
+				return ctrl.Result{Requeue: true}, nil
 			}
 
 			return ctrl.Result{}, err

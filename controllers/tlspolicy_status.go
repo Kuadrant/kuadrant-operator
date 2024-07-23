@@ -29,7 +29,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
@@ -52,7 +51,7 @@ func (r *TLSPolicyReconciler) reconcileStatus(ctx context.Context, tlsPolicy *v1
 		// Ignore conflicts, resource might just be outdated.
 		if apierrors.IsConflict(err) {
 			logger.V(1).Info("Failed to update status: resource might just be outdated")
-			return reconcile.Result{Requeue: true}, nil
+			return ctrl.Result{Requeue: true}, nil
 		}
 
 		return ctrl.Result{}, err

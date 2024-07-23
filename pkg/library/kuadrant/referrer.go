@@ -20,8 +20,8 @@ type Referrer interface {
 }
 
 // BackReferencesFromObject returns the names of the policies listed in the annotations of a target ref object.
-func BackReferencesFromObject(obj client.Object, referrer Referrer) []client.ObjectKey {
-	backRefs, found := utils.ReadAnnotationsFromObject(obj)[referrer.BackReferenceAnnotationName()]
+func BackReferencesFromObject(obj client.Object, backrefAnnotation string) []client.ObjectKey {
+	backRefs, found := utils.ReadAnnotationsFromObject(obj)[backrefAnnotation]
 	if !found {
 		return make([]client.ObjectKey, 0)
 	}
@@ -36,12 +36,11 @@ func BackReferencesFromObject(obj client.Object, referrer Referrer) []client.Obj
 	return refs
 }
 
-func DirectReferencesFromObject(obj client.Object, referrer Referrer) (client.ObjectKey, error) {
+func DirectReferencesFromObject(obj client.Object, directAnnotation string) (client.ObjectKey, error) {
 	annotations := utils.ReadAnnotationsFromObject(obj)
-	key := referrer.DirectReferenceAnnotationName()
-	directRefs, found := annotations[key]
+	directRefs, found := annotations[directAnnotation]
 	if !found {
-		return client.ObjectKey{}, fmt.Errorf("annotation %s not found", key)
+		return client.ObjectKey{}, fmt.Errorf("annotation %s not found", directAnnotation)
 	}
 
 	parts := strings.Split(directRefs, "/")

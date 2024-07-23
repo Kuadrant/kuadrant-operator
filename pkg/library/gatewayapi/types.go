@@ -5,8 +5,10 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -22,11 +24,6 @@ type Policy interface {
 	PolicyClass() PolicyClass
 	GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference
 	GetStatus() PolicyStatus
-	List(context.Context, client.Client, string) []Policy
-	Kind() string
-	BackReferenceAnnotationName() string
-	DirectReferenceAnnotationName() string
-	TargetProgrammedGatewaysOnly() bool
 }
 
 type PolicyStatus interface {
@@ -111,4 +108,63 @@ func (a PolicyByTargetRefKindAndAcceptedStatus) Less(i, j int) bool {
 
 	//  The policy appearing first in alphabetical order by "{namespace}/{name}".
 	return client.ObjectKeyFromObject(a[i]).String() < client.ObjectKeyFromObject(a[j]).String()
+}
+
+type PolicyType interface {
+	GetGVK() schema.GroupVersionKind
+	GetInstance() client.Object
+	GetList(context.Context, client.Client, ...client.ListOption) ([]Policy, error)
+	BackReferenceAnnotationName() string
+	DirectReferenceAnnotationName() string
+}
+
+type Type interface {
+	GetGVK() schema.GroupVersionKind
+	GetInstance() client.Object
+}
+
+type gatewayType struct{}
+
+func (g gatewayType) GetGVK() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   gatewayapiv1.GroupName,
+		Version: gatewayapiv1.GroupVersion.Version,
+		Kind:    "Gateway",
+	}
+}
+
+func (g gatewayType) GetInstance() client.Object {
+	return &gatewayapiv1.Gateway{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Gateway",
+			APIVersion: gatewayapiv1.GroupVersion.String(),
+		},
+	}
+}
+
+func NewGatewayType() Type {
+	return &gatewayType{}
+}
+
+type httpRouteType struct{}
+
+func (h httpRouteType) GetGVK() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   gatewayapiv1.GroupName,
+		Version: gatewayapiv1.GroupVersion.Version,
+		Kind:    "HTTPRoute",
+	}
+}
+
+func (h httpRouteType) GetInstance() client.Object {
+	return &gatewayapiv1.HTTPRoute{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "HTTPRoute",
+			APIVersion: gatewayapiv1.GroupVersion.String(),
+		},
+	}
+}
+
+func NewHTTPRouteType() Type {
+	return &httpRouteType{}
 }

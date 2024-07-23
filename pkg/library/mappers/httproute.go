@@ -15,17 +15,15 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-func NewHTTPRouteEventMapper(o ...MapperOption) EventMapper {
-	return &httpRouteEventMapper{opts: Apply(o...)}
+func NewHTTPRouteEventMapper(o ...MapperOption) *HTTPRouteEventMapper {
+	return &HTTPRouteEventMapper{opts: Apply(o...)}
 }
 
-var _ EventMapper = &httpRouteEventMapper{}
-
-type httpRouteEventMapper struct {
+type HTTPRouteEventMapper struct {
 	opts MapperOptions
 }
 
-func (m *httpRouteEventMapper) MapToPolicy(ctx context.Context, obj client.Object, policyKind kuadrantgatewayapi.Policy) []reconcile.Request {
+func (m *HTTPRouteEventMapper) MapToPolicy(ctx context.Context, obj client.Object, policyType kuadrantgatewayapi.PolicyType) []reconcile.Request {
 	logger := m.opts.Logger.WithValues("httproute", client.ObjectKeyFromObject(obj))
 	requests := make([]reconcile.Request, 0)
 	httpRoute, ok := obj.(*gatewayapiv1.HTTPRoute)
@@ -50,7 +48,12 @@ func (m *httpRouteEventMapper) MapToPolicy(ctx context.Context, obj client.Objec
 			logger.Info("cannot list httproutes", "error", err)
 			continue
 		}
-		policies := policyKind.List(ctx, m.opts.Client, obj.GetNamespace())
+
+		policies, err := policyType.GetList(ctx, m.opts.Client, client.InNamespace(obj.GetNamespace()))
+		if err != nil {
+			logger.Error(err, "unable to list policies")
+			continue
+		}
 		if len(policies) == 0 {
 			logger.Info("no kuadrant policy possibly affected by the gateway related event")
 			continue
@@ -78,11 +81,12 @@ func (m *httpRouteEventMapper) MapToPolicy(ctx context.Context, obj client.Objec
 		return requests
 	}
 
-	policyKey, err := kuadrant.DirectReferencesFromObject(httpRoute, policyKind)
+	policyKey, err := kuadrant.DirectReferencesFromObject(httpRoute, policyType.DirectReferenceAnnotationName())
 	if err != nil {
 		logger.Info("could not create direct reference from object", "error", err)
 		return requests
 	}
 	requests = append(requests, reconcile.Request{NamespacedName: policyKey})
+
 	return requests
 }

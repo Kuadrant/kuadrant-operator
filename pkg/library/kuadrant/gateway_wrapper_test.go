@@ -162,7 +162,7 @@ func TestBackReferencesFromGatewayWrapper(t *testing.T) {
 		},
 		Referrer: &PolicyKindStub{},
 	}
-	refs := utils.Map(BackReferencesFromObject(gw.Gateway, gw.Referrer), func(ref client.ObjectKey) string { return ref.String() })
+	refs := utils.Map(BackReferencesFromObject(gw.Gateway, gw.BackReferenceAnnotationName()), func(ref client.ObjectKey) string { return ref.String() })
 	if !slices.Contains(refs, "app-ns/policy-1") {
 		t.Error("GatewayWrapper.PolicyRefs() should contain app-ns/policy-1")
 	}

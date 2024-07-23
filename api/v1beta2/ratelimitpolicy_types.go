@@ -24,6 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -36,6 +37,14 @@ import (
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+var (
+	RateLimitPolicyGVK schema.GroupVersionKind = schema.GroupVersionKind{
+		Group:   GroupVersion.Group,
+		Version: GroupVersion.Version,
+		Kind:    "RateLimitPolicy",
+	}
+)
 
 // ContextSelector defines one item from the well known attributes
 // Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
@@ -274,21 +283,7 @@ func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 }
 
 func (r *RateLimitPolicy) Kind() string {
-	return r.TypeMeta.Kind
-}
-
-func (r *RateLimitPolicy) List(ctx context.Context, c client.Client, namespace string) []kuadrantgatewayapi.Policy {
-	policyList := &RateLimitPolicyList{}
-	err := c.List(ctx, policyList, client.InNamespace(namespace))
-	if err != nil {
-		return []kuadrantgatewayapi.Policy{}
-	}
-	policies := make([]kuadrantgatewayapi.Policy, 0, len(policyList.Items))
-	for i := range policyList.Items {
-		policies = append(policies, &policyList.Items[i])
-	}
-
-	return policies
+	return NewRateLimitPolicyType().GetGVK().Kind
 }
 
 func (r *RateLimitPolicy) TargetProgrammedGatewaysOnly() bool {
@@ -300,11 +295,11 @@ func (r *RateLimitPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
 }
 
 func (r *RateLimitPolicy) BackReferenceAnnotationName() string {
-	return RateLimitPolicyBackReferenceAnnotationName
+	return NewRateLimitPolicyType().BackReferenceAnnotationName()
 }
 
 func (r *RateLimitPolicy) DirectReferenceAnnotationName() string {
-	return RateLimitPolicyDirectReferenceAnnotationName
+	return NewRateLimitPolicyType().DirectReferenceAnnotationName()
 }
 
 // CommonSpec returns the Default RateLimitPolicyCommonSpec if it is defined.
@@ -321,6 +316,41 @@ func (r *RateLimitPolicySpec) CommonSpec() *RateLimitPolicyCommonSpec {
 	}
 
 	return &r.RateLimitPolicyCommonSpec
+}
+
+type rateLimitPolicyType struct{}
+
+func NewRateLimitPolicyType() kuadrantgatewayapi.PolicyType {
+	return &rateLimitPolicyType{}
+}
+
+func (r rateLimitPolicyType) GetGVK() schema.GroupVersionKind {
+	return RateLimitPolicyGVK
+}
+func (r rateLimitPolicyType) GetInstance() client.Object {
+	return &RateLimitPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       RateLimitPolicyGVK.Kind,
+			APIVersion: GroupVersion.String(),
+		},
+	}
+}
+
+func (r rateLimitPolicyType) GetList(ctx context.Context, cl client.Client, listOpts ...client.ListOption) ([]kuadrantgatewayapi.Policy, error) {
+	rlpList := &RateLimitPolicyList{}
+	err := cl.List(ctx, rlpList, listOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return utils.Map(rlpList.Items, func(p RateLimitPolicy) kuadrantgatewayapi.Policy { return &p }), nil
+}
+
+func (r rateLimitPolicyType) BackReferenceAnnotationName() string {
+	return RateLimitPolicyBackReferenceAnnotationName
+}
+
+func (r rateLimitPolicyType) DirectReferenceAnnotationName() string {
+	return RateLimitPolicyDirectReferenceAnnotationName
 }
 
 func init() {

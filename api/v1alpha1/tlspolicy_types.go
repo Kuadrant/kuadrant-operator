@@ -22,6 +22,7 @@ import (
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -29,6 +30,14 @@ import (
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+)
+
+var (
+	TLSPolicyGVK schema.GroupVersionKind = schema.GroupVersionKind{
+		Group:   GroupVersion.Group,
+		Version: GroupVersion.Version,
+		Kind:    "TLSPolicy",
+	}
 )
 
 const (
@@ -145,21 +154,8 @@ type TLSPolicy struct {
 	Status TLSPolicyStatus `json:"status,omitempty"`
 }
 
-func (p *TLSPolicy) Kind() string { return p.TypeMeta.Kind }
-
-func (p *TLSPolicy) List(ctx context.Context, c client.Client, namespace string) []kuadrantgatewayapi.Policy {
-	policyList := &TLSPolicyList{}
-	listOptions := &client.ListOptions{Namespace: namespace}
-	err := c.List(ctx, policyList, listOptions)
-	if err != nil {
-		return []kuadrantgatewayapi.Policy{}
-	}
-	policies := make([]kuadrantgatewayapi.Policy, 0, len(policyList.Items))
-	for i := range policyList.Items {
-		policies = append(policies, &policyList.Items[i])
-	}
-
-	return policies
+func (p *TLSPolicy) Kind() string {
+	return NewTLSPolicyType().GetGVK().Kind
 }
 
 func (p *TLSPolicy) TargetProgrammedGatewaysOnly() bool {
@@ -187,11 +183,11 @@ func (p *TLSPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
 }
 
 func (p *TLSPolicy) BackReferenceAnnotationName() string {
-	return TLSPolicyBackReferenceAnnotationName
+	return NewTLSPolicyType().BackReferenceAnnotationName()
 }
 
 func (p *TLSPolicy) DirectReferenceAnnotationName() string {
-	return TLSPolicyDirectReferenceAnnotationName
+	return NewTLSPolicyType().DirectReferenceAnnotationName()
 }
 
 //+kubebuilder:object:root=true
@@ -241,4 +237,39 @@ func (p *TLSPolicy) WithTargetGateway(gwName string) *TLSPolicy {
 func (p *TLSPolicy) WithIssuerRef(issuerRef certmanmetav1.ObjectReference) *TLSPolicy {
 	p.Spec.IssuerRef = issuerRef
 	return p
+}
+
+type tlsPolicyType struct{}
+
+func NewTLSPolicyType() kuadrantgatewayapi.PolicyType {
+	return &tlsPolicyType{}
+}
+
+func (t tlsPolicyType) GetGVK() schema.GroupVersionKind {
+	return TLSPolicyGVK
+}
+func (t tlsPolicyType) GetInstance() client.Object {
+	return &TLSPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       TLSPolicyGVK.Kind,
+			APIVersion: GroupVersion.String(),
+		},
+	}
+}
+
+func (t tlsPolicyType) GetList(ctx context.Context, cl client.Client, listOpts ...client.ListOption) ([]kuadrantgatewayapi.Policy, error) {
+	list := &TLSPolicyList{}
+	err := cl.List(ctx, list, listOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return utils.Map(list.Items, func(p TLSPolicy) kuadrantgatewayapi.Policy { return &p }), nil
+}
+
+func (t tlsPolicyType) BackReferenceAnnotationName() string {
+	return TLSPolicyBackReferenceAnnotationName
+}
+
+func (t tlsPolicyType) DirectReferenceAnnotationName() string {
+	return TLSPolicyDirectReferenceAnnotationName
 }

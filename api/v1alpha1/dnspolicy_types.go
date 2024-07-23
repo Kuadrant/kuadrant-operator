@@ -20,6 +20,7 @@ import (
 	"context"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -30,6 +31,14 @@ import (
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+)
+
+var (
+	DNSPolicyGVK schema.GroupVersionKind = schema.GroupVersionKind{
+		Group:   GroupVersion.Group,
+		Version: GroupVersion.Version,
+		Kind:    "DNSPolicy",
+	}
 )
 
 type RoutingStrategy string
@@ -180,21 +189,8 @@ func (p *DNSPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
 	return &p.Status
 }
 
-func (p *DNSPolicy) Kind() string { return p.TypeMeta.Kind }
-
-func (p *DNSPolicy) List(ctx context.Context, c client.Client, namespace string) []kuadrantgatewayapi.Policy {
-	policyList := &DNSPolicyList{}
-	listOptions := &client.ListOptions{Namespace: namespace}
-	err := c.List(ctx, policyList, listOptions)
-	if err != nil {
-		return []kuadrantgatewayapi.Policy{}
-	}
-	policies := make([]kuadrantgatewayapi.Policy, 0, len(policyList.Items))
-	for i := range policyList.Items {
-		policies = append(policies, &policyList.Items[i])
-	}
-
-	return policies
+func (p *DNSPolicy) Kind() string {
+	return NewDNSPolicyType().GetGVK().Kind
 }
 
 func (p *DNSPolicy) TargetProgrammedGatewaysOnly() bool {
@@ -206,11 +202,11 @@ func (p *DNSPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
 }
 
 func (p *DNSPolicy) BackReferenceAnnotationName() string {
-	return DNSPolicyBackReferenceAnnotationName
+	return NewDNSPolicyType().BackReferenceAnnotationName()
 }
 
 func (p *DNSPolicy) DirectReferenceAnnotationName() string {
-	return DNSPolicyDirectReferenceAnnotationName
+	return NewDNSPolicyType().DirectReferenceAnnotationName()
 }
 
 //+kubebuilder:object:root=true
@@ -301,4 +297,40 @@ func (p *DNSPolicy) WithLoadBalancingFor(defaultWeight Weight, custom []*CustomW
 			DefaultGeo: defaultGeo,
 		},
 	})
+}
+
+type dnsPolicyType struct{}
+
+func NewDNSPolicyType() kuadrantgatewayapi.PolicyType {
+	return &dnsPolicyType{}
+}
+
+func (d dnsPolicyType) GetGVK() schema.GroupVersionKind {
+	return DNSPolicyGVK
+}
+
+func (d dnsPolicyType) GetInstance() client.Object {
+	return &DNSPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       DNSPolicyGVK.Kind,
+			APIVersion: GroupVersion.String(),
+		},
+	}
+}
+
+func (d dnsPolicyType) GetList(ctx context.Context, cl client.Client, listOpts ...client.ListOption) ([]kuadrantgatewayapi.Policy, error) {
+	list := &DNSPolicyList{}
+	err := cl.List(ctx, list, listOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return utils.Map(list.Items, func(p DNSPolicy) kuadrantgatewayapi.Policy { return &p }), nil
+}
+
+func (d dnsPolicyType) BackReferenceAnnotationName() string {
+	return DNSPolicyBackReferenceAnnotationName
+}
+
+func (d dnsPolicyType) DirectReferenceAnnotationName() string {
+	return DNSPolicyDirectReferenceAnnotationName
 }

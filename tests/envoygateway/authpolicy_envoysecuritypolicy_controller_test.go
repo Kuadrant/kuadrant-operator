@@ -163,19 +163,19 @@ var _ = Describe("Auth Envoy SecurityPolicy controller", func() {
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
-		//It("Deletes security policy if gateway is deleted", func(ctx SpecContext) {
-		//	err := k8sClient.Delete(ctx, gateway)
-		//	logf.Log.V(1).Info("Deleting Gateway", "key", client.ObjectKeyFromObject(gateway).String(), "error", err)
-		//	Expect(err).ToNot(HaveOccurred())
-		//
-		//	spKey := types.NamespacedName{Name: controllers.EnvoySecurityPolicyName(TestGatewayName), Namespace: testNamespace}
-		//	sp := &egv1alpha1.SecurityPolicy{}
-		//	Eventually(func() bool {
-		//		err := k8sClient.Get(ctx, spKey, sp)
-		//		logf.Log.V(1).Info("Fetching envoy SecurityPolicy", "key", spKey.String(), "error", err)
-		//		return apierrors.IsNotFound(err)
-		//	}).WithContext(ctx).Should(BeTrue())
-		//}, testTimeOut)
+		It("Deletes security policy if gateway is deleted", func(ctx SpecContext) {
+			err := k8sClient.Delete(ctx, gateway)
+			logf.Log.V(1).Info("Deleting Gateway", "key", client.ObjectKeyFromObject(gateway).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			spKey := types.NamespacedName{Name: controllers.EnvoySecurityPolicyName(TestGatewayName), Namespace: testNamespace}
+			sp := &egv1alpha1.SecurityPolicy{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, spKey, sp)
+				logf.Log.V(1).Info("Fetching envoy SecurityPolicy", "key", spKey.String(), "error", err)
+				return apierrors.IsNotFound(err)
+			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 	})
 
 	Context("Auth Policy attached to the route", func() {
@@ -258,18 +258,18 @@ var _ = Describe("Auth Envoy SecurityPolicy controller", func() {
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 
-		//It("Deletes security policy if route is deleted", func(ctx SpecContext) {
-		//	err := k8sClient.Delete(ctx, gwRoute)
-		//	logf.Log.V(1).Info("Deleting AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
-		//	Expect(err).ToNot(HaveOccurred())
-		//
-		//	spKey := types.NamespacedName{Name: controllers.EnvoySecurityPolicyName(TestHTTPRouteName), Namespace: testNamespace}
-		//	sp := &egv1alpha1.SecurityPolicy{}
-		//	Eventually(func() bool {
-		//		err := k8sClient.Get(ctx, spKey, sp)
-		//		logf.Log.V(1).Info("Fetching envoy SecurityPolicy", "key", spKey.String(), "error", err)
-		//		return apierrors.IsNotFound(err)
-		//	}).WithContext(ctx).Should(BeTrue())
-		//}, testTimeOut)
+		It("Deletes security policy if route is deleted", func(ctx SpecContext) {
+			err := k8sClient.Delete(ctx, gwRoute)
+			logf.Log.V(1).Info("Deleting AuthPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			spKey := types.NamespacedName{Name: controllers.EnvoySecurityPolicyName(TestHTTPRouteName), Namespace: testNamespace}
+			sp := &egv1alpha1.SecurityPolicy{}
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, spKey, sp)
+				logf.Log.V(1).Info("Fetching envoy SecurityPolicy", "key", spKey.String(), "error", err)
+				return apierrors.IsNotFound(err)
+			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
 	})
 })

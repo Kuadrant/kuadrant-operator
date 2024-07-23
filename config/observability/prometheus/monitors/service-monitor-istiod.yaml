@@ -5,7 +5,7 @@ metadata:
 spec:
   namespaceSelector:
     matchNames:
-    - istio-system
+    - gateway-system
   selector:
     matchLabels:
       app: istiod

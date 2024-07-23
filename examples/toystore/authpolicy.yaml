@@ -37,12 +37,12 @@ apiVersion: kuadrant.io/v1beta1
 kind: AuthPolicy
 metadata:
   name: toystore
-  namespace: istio-system
+  namespace: gateway-system
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: istio-ingressgateway
+    name: kuadrant-ingressgateway
   rules:
     authentication:
       "apikey":

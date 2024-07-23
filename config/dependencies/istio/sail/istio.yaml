@@ -4,12 +4,12 @@ metadata:
   name: default
 spec:
   version: v1.20.0
-  namespace: istio-system
+  namespace: gateway-system
   # Disable autoscaling to reduce dev resources
   values:
     pilot:
       autoscaleEnabled: false
   rawValues:
     gateways:
-      istio-ingressgateway:
+      kuadrant-ingressgateway:
         autoscaleEnabled: false

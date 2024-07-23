@@ -22,7 +22,7 @@ apiVersion: telemetry.istio.io/v1alpha1
 kind: Telemetry
 metadata:
   name: mesh-default
-  namespace: istio-system
+  namespace: gateway-system
 spec:
   tracing:
   - providers:
@@ -34,7 +34,7 @@ kind: Istio
 metadata:
   name: default
 spec:
-  namespace: istio-system
+  namespace: gateway-system
   values:
     meshConfig:
       defaultConfig:

@@ -7,7 +7,7 @@ Two AuthPolicies will be declared:
 | Use case                       | AuthPolicy                                                                                                                                                                                                                                                                                |
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **App developer**              | 1 AuthPolicy targeting a HTTPRoute that routes traffic to a sample Toy Store application, and enforces API key authentication to all requests in this route, as well as requires API key owners to be mapped to `groups:admins` metadata to access a specific HTTPRouteRule of the route. |
-| **Platform engineer use-case** | 1 AuthPolicy targeting the `istio-ingressgateway` Gateway that enforces a trivial "deny-all" policy that locks down any other HTTPRoute attached to the Gateway.                                                                                                                          |
+| **Platform engineer use-case** | 1 AuthPolicy targeting the `kuadrant-ingressgateway` Gateway that enforces a trivial "deny-all" policy that locks down any other HTTPRoute attached to the Gateway.                                                                                                                       |
 
 Topology:
 
@@ -18,19 +18,19 @@ Topology:
                    └───────┬───────┘
                            │
                            ▼
-                ┌──────────────────────┐
-                │     (Gateway)        │
-                │ istio-ingressgateway │
-          ┌────►│                      │◄───┐
-          │     │          *           │    │
-          │     └──────────────────────┘    │
-          │                                 │
- ┌────────┴─────────┐              ┌────────┴─────────┐
- │   (HTTPRoute)    │              │   (HTTPRoute)    │
- │    toystore      │              │      other       │
- │                  │              │                  │
- │ api.toystore.com │              │ *.other-apps.com │
- └──────────────────┘              └──────────────────┘
+                ┌─────────────────────────┐
+                │        (Gateway)        │
+                │ kuadrant-ingressgateway │
+          ┌────►│                         │◄───┐
+          │     │            *            │    │
+          │     └─────────────────────────┘    │
+          │                                    │
+ ┌────────┴─────────┐                 ┌────────┴─────────┐
+ │   (HTTPRoute)    │                 │   (HTTPRoute)    │
+ │    toystore      │                 │      other       │
+ │                  │                 │                  │
+ │ api.toystore.com │                 │ *.other-apps.com │
+ └──────────────────┘                 └──────────────────┘
           ▲
           │
   ┌───────┴───────┐
@@ -83,8 +83,8 @@ metadata:
   name: toystore
 spec:
   parentRefs:
-  - name: istio-ingressgateway
-    namespace: istio-system
+  - name: kuadrant-ingressgateway
+    namespace: gateway-system
   hostnames:
   - api.toystore.com
   rules:
@@ -113,8 +113,8 @@ EOF
 Export the gateway hostname and port:
 
 ```sh
-export INGRESS_HOST=$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.status.addresses[0].value}')
-export INGRESS_PORT=$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
+export INGRESS_HOST=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.status.addresses[0].value}')
+export INGRESS_PORT=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
 export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
 ```
 
@@ -231,7 +231,7 @@ curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamanadmin' http://$G
 Create the policy:
 
 ```sh
-kubectl -n istio-system apply -f - <<EOF
+kubectl -n gateway-system apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta2
 kind: AuthPolicy
 metadata:
@@ -240,7 +240,7 @@ spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: istio-ingressgateway
+    name: kuadrant-ingressgateway
   rules:
     authorization:
       deny-all:
@@ -272,8 +272,8 @@ metadata:
   name: other
 spec:
   parentRefs:
-  - name: istio-ingressgateway
-    namespace: istio-system
+  - name: kuadrant-ingressgateway
+    namespace: gateway-system
   hostnames:
   - "*.other-apps.com"
 EOF

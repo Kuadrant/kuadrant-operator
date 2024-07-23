@@ -18,9 +18,13 @@ package v1alpha1
 
 import (
 	"context"
+	"fmt"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,6 +33,7 @@ import (
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -115,18 +120,13 @@ type CertificateSpec struct {
 
 // TLSPolicyStatus defines the observed state of TLSPolicy
 type TLSPolicyStatus struct {
+	reconcilers.StatusMeta `json:",inline"`
+
 	// conditions are any conditions associated with the policy
 	//
 	// If configuring the policy fails, the "Failed" condition will be set with a
 	// reason and message describing the cause of the failure.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// observedGeneration is the most recently observed generation of the
-	// TLSPolicy.  When the TLSPolicy is updated, the controller updates the
-	// corresponding configuration. If an update fails, that failure is
-	// recorded in the status condition
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 func (s *TLSPolicyStatus) GetConditions() []metav1.Condition {
@@ -188,6 +188,28 @@ func (p *TLSPolicy) BackReferenceAnnotationName() string {
 
 func (p *TLSPolicy) DirectReferenceAnnotationName() string {
 	return NewTLSPolicyType().DirectReferenceAnnotationName()
+}
+
+func TLSPolicyStatusMutator(desiredStatus *TLSPolicyStatus, logger logr.Logger) reconcilers.StatusMutatorFunc {
+	return func(obj client.Object) (bool, error) {
+		existing, ok := obj.(*TLSPolicy)
+		if !ok {
+			return false, fmt.Errorf("unsupported object type %T", obj)
+		}
+
+		if equality.Semantic.DeepEqual(*desiredStatus, existing.Status) {
+			return false, nil
+		}
+
+		if logger.V(1).Enabled() {
+			diff := cmp.Diff(*desiredStatus, existing.Status)
+			logger.V(1).Info("status not equal", "difference", diff)
+		}
+
+		existing.Status = *desiredStatus
+
+		return true, nil
+	}
 }
 
 //+kubebuilder:object:root=true

@@ -4,12 +4,26 @@ on:
   pull_request_target:
     types: [labeled, opened, synchronize, reopened]
 
+concurrency:
+  group: pr-conditional-build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   workflow-build:
-    if: ${{ github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'forked_image_approved') }}
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'forked_image_approved') }}
     name: Calls build-images-base workflow
     uses: ./.github/workflows/build-images-base.yaml
     secrets: inherit
     with:
       kuadrantOperatorVersion: ${{ github.event.pull_request.user.login }}-${{ github.event.pull_request.number }}
       kuadrantOperatorTag: ${{ github.event.pull_request.user.login }}-${{ github.event.pull_request.number }}
+
+  remove-label:
+    runs-on: ubuntu-latest
+    needs: workflow-build
+    steps:
+      - name: Remove forked_image_approved label
+      - uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: forked_image_approved
+          repo-token: ${{ secrets.GITHUB_TOKEN }}

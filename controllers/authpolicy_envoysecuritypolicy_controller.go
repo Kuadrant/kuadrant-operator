@@ -99,6 +99,10 @@ func (r *AuthPolicyEnvoySecurityPolicyReconciler) reconcileSecurityPolicy(ctx co
 		utils.TagObjectToDelete(esp)
 	}
 
+	if err := r.SetOwnerReference(targetable.GetObject(), esp); err != nil {
+		return err
+	}
+
 	if err := r.ReconcileResource(ctx, &egv1alpha1.SecurityPolicy{}, esp, kuadrantenvoygateway.EnvoySecurityPolicyMutator); err != nil && !apierrors.IsAlreadyExists(err) {
 		logger.Error(err, "failed to reconcile envoy SecurityPolicy resource")
 		return err

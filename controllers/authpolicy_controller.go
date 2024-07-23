@@ -185,17 +185,11 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 			if policy.GetUID() == ap.GetUID() {
 				continue
 			}
-
-			ref := &api.AuthPolicy{}
-			err = r.Client().Get(ctx, policyKey, ref)
-			if err != nil {
-				return err
+			p, okay := policy.(*api.AuthPolicy)
+			if !okay {
+				return fmt.Errorf("connot cast policy to AuthPolicy %T", policy)
 			}
 
-			refNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), ref.GetTargetRef(), ref.Namespace, ap.TargetProgrammedGatewaysOnly())
-			if err != nil {
-				return err
-			}
 			policyHTTPRoute := getAttachedRoute(topology, p)
 			if err = r.reconcileAuthConfigs(ctx, p, policyHTTPRoute, topology); err != nil {
 				return err

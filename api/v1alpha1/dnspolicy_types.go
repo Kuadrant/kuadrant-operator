@@ -53,7 +53,7 @@ type DNSPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'Gateway'"
-	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
+	TargetRef gatewayapiv1alpha2.NamespacedPolicyTargetReference `json:"targetRef"`
 
 	// +optional
 	HealthCheck *v1alpha1.HealthCheckSpec `json:"healthCheck,omitempty"`
@@ -173,7 +173,7 @@ func (p *DNSPolicy) GetRulesHostnames() []string {
 	return make([]string, 0)
 }
 
-func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
+func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.NamespacedPolicyTargetReference {
 	return p.Spec.TargetRef
 }
 
@@ -259,7 +259,7 @@ func NewDNSPolicy(name, ns string) *DNSPolicy {
 	}
 }
 
-func (p *DNSPolicy) WithTargetRef(targetRef gatewayapiv1alpha2.PolicyTargetReference) *DNSPolicy {
+func (p *DNSPolicy) WithTargetRef(targetRef gatewayapiv1alpha2.NamespacedPolicyTargetReference) *DNSPolicy {
 	p.Spec.TargetRef = targetRef
 	return p
 }
@@ -283,7 +283,7 @@ func (p *DNSPolicy) WithRoutingStrategy(strategy RoutingStrategy) *DNSPolicy {
 
 func (p *DNSPolicy) WithTargetGateway(gwName string) *DNSPolicy {
 	typedNamespace := gatewayapiv1.Namespace(p.GetNamespace())
-	return p.WithTargetRef(gatewayapiv1alpha2.PolicyTargetReference{
+	return p.WithTargetRef(gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 		Group:     gatewayapiv1.GroupName,
 		Kind:      "Gateway",
 		Name:      gatewayapiv1.ObjectName(gwName),

@@ -725,7 +725,7 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 						Namespace: "my-ns",
 					},
 				},
-				targetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				targetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 					Group:     gatewayapiv1.GroupName,
 					Kind:      "HTTPRoute",
 					Name:      "my-httproute",
@@ -768,7 +768,7 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 						Namespace: "my-ns",
 					},
 				},
-				targetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				targetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  "my-httproute",
@@ -809,7 +809,7 @@ func TestGetKuadrantNamespaceFromPolicyTargetRef(t *testing.T) {
 						Namespace: "my-ns",
 					},
 				},
-				targetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				targetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  "my-httproute",

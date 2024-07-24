@@ -71,7 +71,7 @@ func TestAuthPolicyGetRulesHostnames(t *testing.T) {
 			Namespace: "my-namespace",
 		},
 		Spec: AuthPolicySpec{
-			TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+			TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 				Group: gatewayapiv1.GroupName,
 				Kind:  "HTTPRoute",
 				Name:  "my-route",
@@ -228,7 +228,7 @@ func TestAuthPolicyValidate(t *testing.T) {
 					Namespace: "my-namespace",
 				},
 				Spec: AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 						Group:     gatewayapiv1.GroupName,
 						Kind:      "HTTPRoute",
 						Name:      "my-route",

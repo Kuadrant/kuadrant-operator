@@ -93,7 +93,7 @@ var _ = Describe("AuthPolicy controller (Serial)", Serial, func() {
 					Namespace: testNamespace,
 				},
 				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 						Group:     gatewayapiv1.GroupName,
 						Kind:      "HTTPRoute",
 						Name:      TestHTTPRouteName,
@@ -175,7 +175,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				Namespace: testNamespace,
 			},
 			Spec: api.AuthPolicySpec{
-				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 					Group:     gatewayapiv1.GroupName,
 					Kind:      "HTTPRoute",
 					Name:      TestHTTPRouteName,
@@ -380,9 +380,9 @@ var _ = Describe("AuthPolicy controller", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Spec.CommonSpec().RouteSelectors = []api.RouteSelector{
 					{ // does not select any HTTPRouteRule
-						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+						Matches: []gatewayapiv1.HTTPRouteMatch{
 							{
-								Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
+								Method: ptr.To(gatewayapiv1.HTTPMethod("DELETE")),
 							},
 						},
 					},
@@ -417,9 +417,9 @@ var _ = Describe("AuthPolicy controller", func() {
 			config := policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"]
 			config.RouteSelectors = []api.RouteSelector{
 				{ // does not select any HTTPRouteRule
-					Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+					Matches: []gatewayapiv1.HTTPRouteMatch{
 						{
-							Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
+							Method: ptr.To(gatewayapiv1.HTTPMethod("DELETE")),
 						},
 					},
 				},
@@ -779,10 +779,10 @@ var _ = Describe("AuthPolicy controller", func() {
 			policy := policyFactory(func(policy *api.AuthPolicy) {
 				policy.Spec.CommonSpec().RouteSelectors = []api.RouteSelector{
 					{ // Selects: POST|DELETE *.admin.toystore.com/admin*
-						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+						Matches: []gatewayapiv1.HTTPRouteMatch{
 							{
-								Path: &gatewayapiv1alpha2.HTTPPathMatch{
-									Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+								Path: &gatewayapiv1.HTTPPathMatch{
+									Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
 									Value: ptr.To("/admin"),
 								},
 							},
@@ -790,10 +790,10 @@ var _ = Describe("AuthPolicy controller", func() {
 						Hostnames: []gatewayapiv1.Hostname{gatewayapiv1.Hostname(host2)},
 					},
 					{ // Selects: GET /private*
-						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+						Matches: []gatewayapiv1.HTTPRouteMatch{
 							{
-								Path: &gatewayapiv1alpha2.HTTPPathMatch{
-									Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+								Path: &gatewayapiv1.HTTPPathMatch{
+									Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
 									Value: ptr.To("/private"),
 								},
 							},
@@ -856,10 +856,10 @@ var _ = Describe("AuthPolicy controller", func() {
 				config := policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"]
 				config.RouteSelectors = []api.RouteSelector{
 					{ // Selects: POST|DELETE *.admin.toystore.com/admin*
-						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+						Matches: []gatewayapiv1.HTTPRouteMatch{
 							{
-								Path: &gatewayapiv1alpha2.HTTPPathMatch{
-									Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+								Path: &gatewayapiv1.HTTPPathMatch{
+									Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
 									Value: ptr.To("/admin"),
 								},
 							},
@@ -1423,7 +1423,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 				Namespace: testNamespace,
 			},
 			Spec: api.AuthPolicySpec{
-				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  "my-target",
@@ -1582,7 +1582,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 					Namespace: testNamespace,
 				},
 				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  "my-gw",

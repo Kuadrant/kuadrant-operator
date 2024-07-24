@@ -28,8 +28,8 @@ type TestPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
-	Status    FakePolicyStatus                         `json:"status"`
+	TargetRef gatewayapiv1alpha2.NamespacedPolicyTargetReference `json:"targetRef"`
+	Status    FakePolicyStatus                                   `json:"status"`
 }
 
 func (p *TestPolicy) Kind() string {
@@ -52,7 +52,7 @@ func (p *TestPolicy) PolicyClass() PolicyClass {
 	return DirectPolicy
 }
 
-func (p *TestPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
+func (p *TestPolicy) GetTargetRef() gatewayapiv1alpha2.NamespacedPolicyTargetReference {
 	return p.TargetRef
 }
 
@@ -291,7 +291,7 @@ func createTestPolicy(name string, creationTime time.Time, mutateFn ...func(p *T
 
 func withTargetRefKind(targetRefKind string) func(p *TestPolicy) {
 	return func(p *TestPolicy) {
-		p.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{Kind: gatewayapiv1.Kind(targetRefKind)}
+		p.TargetRef = gatewayapiv1alpha2.NamespacedPolicyTargetReference{Kind: gatewayapiv1.Kind(targetRefKind)}
 	}
 }
 

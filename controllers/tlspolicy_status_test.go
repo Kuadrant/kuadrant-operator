@@ -55,7 +55,7 @@ func TestTLSPolicyReconciler_enforcedCondition(t *testing.T) {
 						Name: issuerName,
 					},
 				},
-				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+				TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 					Name: gwName,
 				},
 			},

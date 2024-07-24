@@ -41,7 +41,7 @@ func TestNewHTTPRouteEventMapper(t *testing.T) {
 	}
 
 	spec := kuadrantv1beta2.AuthPolicySpec{
-		TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+		TargetRef: gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 			Group: "gateway.networking.k8s.io",
 			Kind:  "HTTPRoute",
 			Name:  "test-route",
@@ -59,7 +59,7 @@ func TestNewHTTPRouteEventMapper(t *testing.T) {
 	}}
 	gateway := &gatewayapiv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-gw", Namespace: "app-ns"},
-		Status: gatewayapiv1alpha2.GatewayStatus{
+		Status: gatewayapiv1.GatewayStatus{
 			Conditions: []metav1.Condition{
 				{
 					Type:   "Programmed",

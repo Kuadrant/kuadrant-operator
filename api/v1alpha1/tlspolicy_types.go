@@ -42,7 +42,7 @@ type TLSPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'Gateway'"
-	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
+	TargetRef gatewayapiv1alpha2.NamespacedPolicyTargetReference `json:"targetRef"`
 
 	CertificateSpec `json:",inline"`
 }
@@ -179,7 +179,7 @@ func (p *TLSPolicy) GetRulesHostnames() []string {
 	return make([]string, 0)
 }
 
-func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
+func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.NamespacedPolicyTargetReference {
 	return p.Spec.TargetRef
 }
 
@@ -240,7 +240,7 @@ func NewTLSPolicy(policyName, ns string) *TLSPolicy {
 
 func (p *TLSPolicy) WithTargetGateway(gwName string) *TLSPolicy {
 	typedNamespace := gatewayapiv1.Namespace(p.GetNamespace())
-	p.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
+	p.Spec.TargetRef = gatewayapiv1alpha2.NamespacedPolicyTargetReference{
 		Group:     gatewayapiv1.GroupName,
 		Kind:      "Gateway",
 		Name:      gatewayapiv1.ObjectName(gwName),

@@ -13,7 +13,7 @@ import (
 )
 
 // FetchTargetRefObject fetches the target reference object and checks the status is valid
-func FetchTargetRefObject(ctx context.Context, k8sClient client.Reader, targetRef gatewayapiv1alpha2.PolicyTargetReference, defaultNs string, fetchOnlyProgrammedGateways bool) (client.Object, error) {
+func FetchTargetRefObject(ctx context.Context, k8sClient client.Reader, targetRef gatewayapiv1alpha2.NamespacedPolicyTargetReference, defaultNs string, fetchOnlyProgrammedGateways bool) (client.Object, error) {
 	ns := defaultNs
 	if targetRef.Namespace != nil {
 		ns = string(*targetRef.Namespace)

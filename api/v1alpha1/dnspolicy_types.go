@@ -21,9 +21,12 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -53,7 +56,7 @@ type DNSPolicySpec struct {
 	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
 
 	// +optional
-	HealthCheck *HealthCheckSpec `json:"healthCheck,omitempty"`
+	HealthCheck *v1alpha1.HealthCheckSpec `json:"healthCheck,omitempty"`
 
 	// +optional
 	LoadBalancing *LoadBalancingSpec `json:"loadBalancing,omitempty"`
@@ -131,7 +134,7 @@ type DNSPolicyStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// +optional
-	HealthCheck *HealthCheckStatus `json:"healthCheck,omitempty"`
+	HealthCheck *v1alpha1.HealthCheckStatus `json:"healthCheck,omitempty"`
 
 	// +optional
 	RecordConditions map[string][]metav1.Condition `json:"recordConditions,omitempty"`
@@ -236,30 +239,6 @@ func (l *DNSPolicyList) GetItems() []kuadrant.Policy {
 	})
 }
 
-// HealthCheckSpec configures health checks in the DNS provider.
-// By default, this health check will be applied to each unique DNS A Record for
-// the listeners assigned to the target gateway
-type HealthCheckSpec struct {
-	// Endpoint is the path to append to the host to reach the expected health check.
-	// For example "/" or "/healthz" are common
-	// +kubebuilder:example:=/
-	Endpoint string `json:"endpoint"`
-	// Port to connect to the host on
-	// +kubebuilder:validation:Minimum:=1
-	Port int `json:"port"`
-	// Protocol to use when connecting to the host, valid values are "HTTP" or "HTTPS"
-	// +kubebuilder:validation:Enum:=HTTP;HTTPS
-	Protocol string `json:"protocol"`
-	// FailureThreshold is a limit of consecutive failures that must occur for a host
-	// to be considered unhealthy
-	// +kubebuilder:validation:Minimum:=1
-	FailureThreshold int `json:"failureThreshold"`
-}
-
-type HealthCheckStatus struct {
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-}
-
 func init() {
 	SchemeBuilder.Register(&DNSPolicy{}, &DNSPolicyList{})
 }
@@ -285,7 +264,7 @@ func (p *DNSPolicy) WithTargetRef(targetRef gatewayapiv1alpha2.PolicyTargetRefer
 	return p
 }
 
-func (p *DNSPolicy) WithHealthCheck(healthCheck HealthCheckSpec) *DNSPolicy {
+func (p *DNSPolicy) WithHealthCheck(healthCheck v1alpha1.HealthCheckSpec) *DNSPolicy {
 	p.Spec.HealthCheck = &healthCheck
 	return p
 }
@@ -315,11 +294,11 @@ func (p *DNSPolicy) WithTargetGateway(gwName string) *DNSPolicy {
 //HealthCheck
 
 func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port int, protocol string, failureThreshold int) *DNSPolicy {
-	return p.WithHealthCheck(HealthCheckSpec{
+	return p.WithHealthCheck(v1alpha1.HealthCheckSpec{
 		Endpoint:         endpoint,
-		Port:             port,
-		Protocol:         protocol,
-		FailureThreshold: failureThreshold,
+		Port:             &port,
+		Protocol:         ptr.To(v1alpha1.HealthProtocol(protocol)),
+		FailureThreshold: &failureThreshold,
 	})
 }
 

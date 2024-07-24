@@ -39,7 +39,7 @@ $(EGCTL):
 .PHONY: egctl
 egctl: $(EGCTL) ## Download egctl locally if necessary.
 
-EG_VERSION ?= v1.0.1
+EG_VERSION ?= v1.1.0
 .PHONY: envoy-gateway-install
 envoy-gateway-install: kustomize $(HELM)
 	$(HELM) install eg oci://docker.io/envoyproxy/gateway-helm --version $(EG_VERSION) -n envoy-gateway-system --create-namespace

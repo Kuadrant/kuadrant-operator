@@ -1,6 +1,6 @@
 module github.com/kuadrant/kuadrant-operator
 
-go 1.21
+go 1.22
 
 require (
 	github.com/cert-manager/cert-manager v1.12.1

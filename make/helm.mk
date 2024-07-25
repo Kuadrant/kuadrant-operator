@@ -34,6 +34,11 @@ helm-package: $(HELM) ## Package the helm chart
 	# Package the helm chart
 	$(HELM) package charts/$(REPO)
 
+.PHONY: helm-dependency-build
+helm-dependency-build: $(HELM) ## Fetch and build chart dependencies
+	# Gets the dependencies listed in Chart.yaml, downloads the charts .tgz and builds/updates the Chart.lock
+	$(HELM) dependency build charts/$(REPO)
+
 # GitHub Token with permissions to upload to the release assets
 HELM_WORKFLOWS_TOKEN ?= <YOUR-TOKEN>
 # GitHub Release Asset Browser Download URL, it can be find in the output of the uploaded asset

@@ -22,7 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
-	"k8s.io/apimachinery/pkg/api/equality"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -222,7 +222,14 @@ func DNSPolicyStatusMutator(desiredStatus *DNSPolicyStatus, logger logr.Logger) 
 			return false, fmt.Errorf("unsupported object type %T", obj)
 		}
 
-		if equality.Semantic.DeepEqual(*desiredStatus, existing.Status) {
+		opts := cmp.Options{
+			cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime"),
+			cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
+				return k == "lastTransitionTime"
+			}),
+		}
+
+		if cmp.Equal(*desiredStatus, existing.Status, opts) {
 			return false, nil
 		}
 

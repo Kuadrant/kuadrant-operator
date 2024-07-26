@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: workflow-build
     steps:
-      - name: Remove forked_image_approved label
+      - name: Remove forked_image_approved label after workflow is triggered
       - uses: actions-ecosystem/action-remove-labels@v1
         with:
           labels: forked_image_approved

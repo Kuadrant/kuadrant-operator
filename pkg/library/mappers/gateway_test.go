@@ -39,7 +39,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 	}
 
 	spec := kuadrantv1beta2.AuthPolicySpec{
-		TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+		TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 			Group: "gateway.networking.k8s.io",
 			Kind:  "Gateway",
 			Name:  "test-gw",
@@ -81,7 +81,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 	t.Run("gateway related event - requests", func(subT *testing.T) {
 		gateway := &gatewayapiv1.Gateway{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-gw", Namespace: "app-ns"},
-			Status: gatewayapiv1alpha2.GatewayStatus{
+			Status: gatewayapiv1.GatewayStatus{
 				Conditions: []metav1.Condition{
 					{
 						Type:   "Programmed",

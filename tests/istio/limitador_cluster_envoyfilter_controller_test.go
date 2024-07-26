@@ -89,7 +89,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(TestGatewayName),

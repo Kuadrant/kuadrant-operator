@@ -6,7 +6,6 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -35,17 +34,14 @@ func (k *PolicyToParentGatewaysEventMapper) Map(ctx context.Context, obj client.
 	}
 
 	if kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef()) {
-		namespace := string(ptr.Deref(policy.GetTargetRef().Namespace, gatewayapiv1.Namespace(policy.GetNamespace())))
-
-		nn := types.NamespacedName{Name: string(policy.GetTargetRef().Name), Namespace: namespace}
+		nn := types.NamespacedName{Name: string(policy.GetTargetRef().Name), Namespace: policy.GetNamespace()}
 		logger.V(1).Info("map", " gateway", nn)
 
 		return []reconcile.Request{{NamespacedName: nn}}
 	}
 
 	if kuadrantgatewayapi.IsTargetRefHTTPRoute(policy.GetTargetRef()) {
-		namespace := string(ptr.Deref(policy.GetTargetRef().Namespace, gatewayapiv1.Namespace(policy.GetNamespace())))
-		routeKey := client.ObjectKey{Name: string(policy.GetTargetRef().Name), Namespace: namespace}
+		routeKey := client.ObjectKey{Name: string(policy.GetTargetRef().Name), Namespace: policy.GetNamespace()}
 		route := &gatewayapiv1.HTTPRoute{}
 		if err := k.opts.Client.Get(ctx, routeKey, route); err != nil {
 			if apierrors.IsNotFound(err) {

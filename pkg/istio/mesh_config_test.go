@@ -149,14 +149,6 @@ func getStubbedMeshConfigStruct() *structpb.Struct {
 	}
 }
 
-func getInvalidStubbedMeshConfigStruct() *structpb.Struct {
-	return &structpb.Struct{
-		Fields: map[string]*structpb.Value{
-			"invalid-field": {},
-		},
-	}
-}
-
 func TestOperatorWrapper_GetConfigObject(t *testing.T) {
 	config := &iopv1alpha1.IstioOperator{}
 	wrapper := NewOperatorWrapper(config)
@@ -301,23 +293,6 @@ func TestSailWrapper_GetMeshConfig(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, "custom-authorizer")
 	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().GetPort(), uint32(50051))
-}
-
-func TestSailWrapper_GetMeshConfigInvalid(t *testing.T) {
-	structConfig := getInvalidStubbedMeshConfigStruct()
-	values := helm.HelmValues{}
-	if err := values.Set("meshConfig", structConfig.AsMap()); err != nil {
-		assert.NilError(t, err)
-	}
-	config := &istiov1alpha1.Istio{}
-	if err := config.Spec.SetValues(values); err != nil {
-		assert.NilError(t, err)
-	}
-	wrapper := NewSailWrapper(config)
-
-	meshConfig, err := wrapper.GetMeshConfig()
-	assert.Check(t, err != nil)
-	assert.Check(t, meshConfig == nil)
 }
 
 func TestSailWrapper_SetMeshConfig(t *testing.T) {

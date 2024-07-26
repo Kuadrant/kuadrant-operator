@@ -2,7 +2,6 @@ package v1beta2
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
@@ -163,7 +162,7 @@ type AuthPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
-	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
+	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReference `json:"targetRef"`
 
 	// Defaults define explicit default values for this policy and for policies inheriting this policy.
 	// Defaults are mutually exclusive with implicit defaults defined by AuthPolicyCommonSpec.
@@ -273,15 +272,7 @@ func (ap *AuthPolicy) IsAtomicOverride() bool {
 	return ap.Spec.Overrides != nil
 }
 
-func (ap *AuthPolicy) Validate() error {
-	if ap.Spec.TargetRef.Namespace != nil && string(*ap.Spec.TargetRef.Namespace) != ap.Namespace {
-		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *ap.Spec.TargetRef.Namespace)
-	}
-
-	return nil
-}
-
-func (ap *AuthPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
+func (ap *AuthPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
 	return ap.Spec.TargetRef
 }
 

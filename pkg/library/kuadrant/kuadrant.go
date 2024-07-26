@@ -45,12 +45,12 @@ func IsKuadrantManaged(obj client.Object) bool {
 
 func GetKuadrantNamespaceFromPolicyTargetRef(ctx context.Context, cli client.Client, policy Policy) (string, error) {
 	targetRef := policy.GetTargetRef()
-	gwNamespacedName := types.NamespacedName{Namespace: string(ptr.Deref(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)}
+	gwNamespacedName := types.NamespacedName{Namespace: policy.GetNamespace(), Name: string(targetRef.Name)}
 	if kuadrantgatewayapi.IsTargetRefHTTPRoute(targetRef) {
 		route := &gatewayapiv1.HTTPRoute{}
 		if err := cli.Get(
 			ctx,
-			types.NamespacedName{Namespace: string(ptr.Deref(targetRef.Namespace, policy.GetWrappedNamespace())), Name: string(targetRef.Name)},
+			types.NamespacedName{Namespace: policy.GetNamespace(), Name: string(targetRef.Name)},
 			route,
 		); err != nil {
 			return "", err

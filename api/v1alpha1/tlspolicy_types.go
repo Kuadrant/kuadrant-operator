@@ -18,7 +18,6 @@ package v1alpha1
 
 import (
 	"context"
-	"fmt"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
@@ -42,7 +41,7 @@ type TLSPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'Gateway'"
-	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
+	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReference `json:"targetRef"`
 
 	CertificateSpec `json:",inline"`
 }
@@ -179,7 +178,7 @@ func (p *TLSPolicy) GetRulesHostnames() []string {
 	return make([]string, 0)
 }
 
-func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
+func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
 	return p.Spec.TargetRef
 }
 
@@ -193,14 +192,6 @@ func (p *TLSPolicy) BackReferenceAnnotationName() string {
 
 func (p *TLSPolicy) DirectReferenceAnnotationName() string {
 	return TLSPolicyDirectReferenceAnnotationName
-}
-
-func (p *TLSPolicy) Validate() error {
-	if p.Spec.TargetRef.Namespace != nil && string(*p.Spec.TargetRef.Namespace) != p.Namespace {
-		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *p.Spec.TargetRef.Namespace)
-	}
-
-	return nil
 }
 
 //+kubebuilder:object:root=true
@@ -239,12 +230,10 @@ func NewTLSPolicy(policyName, ns string) *TLSPolicy {
 }
 
 func (p *TLSPolicy) WithTargetGateway(gwName string) *TLSPolicy {
-	typedNamespace := gatewayapiv1.Namespace(p.GetNamespace())
-	p.Spec.TargetRef = gatewayapiv1alpha2.PolicyTargetReference{
-		Group:     gatewayapiv1.GroupName,
-		Kind:      "Gateway",
-		Name:      gatewayapiv1.ObjectName(gwName),
-		Namespace: &typedNamespace,
+	p.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
+		Group: gatewayapiv1.GroupName,
+		Kind:  "Gateway",
+		Name:  gatewayapiv1.ObjectName(gwName),
 	}
 	return p
 }

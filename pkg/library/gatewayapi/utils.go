@@ -20,11 +20,11 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-func IsTargetRefHTTPRoute(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool {
+func IsTargetRefHTTPRoute(targetRef gatewayapiv1alpha2.LocalPolicyTargetReference) bool {
 	return targetRef.Group == (gatewayapiv1.GroupName) && targetRef.Kind == ("HTTPRoute")
 }
 
-func IsTargetRefGateway(targetRef gatewayapiv1alpha2.PolicyTargetReference) bool {
+func IsTargetRefGateway(targetRef gatewayapiv1alpha2.LocalPolicyTargetReference) bool {
 	return targetRef.Group == (gatewayapiv1.GroupName) && targetRef.Kind == ("Gateway")
 }
 

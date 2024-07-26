@@ -18,7 +18,6 @@ package v1alpha1
 
 import (
 	"context"
-	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -53,7 +52,7 @@ type DNSPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'Gateway'"
-	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
+	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReference `json:"targetRef"`
 
 	// +optional
 	HealthCheck *v1alpha1.HealthCheckSpec `json:"healthCheck,omitempty"`
@@ -173,7 +172,7 @@ func (p *DNSPolicy) GetRulesHostnames() []string {
 	return make([]string, 0)
 }
 
-func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
+func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
 	return p.Spec.TargetRef
 }
 
@@ -214,16 +213,6 @@ func (p *DNSPolicy) DirectReferenceAnnotationName() string {
 	return DNSPolicyDirectReferenceAnnotationName
 }
 
-// Validate ensures the resource is valid. Compatible with the validating interface
-// used by webhooks
-func (p *DNSPolicy) Validate() error {
-	if p.Spec.TargetRef.Namespace != nil && string(*p.Spec.TargetRef.Namespace) != p.Namespace {
-		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *p.Spec.TargetRef.Namespace)
-	}
-
-	return nil
-}
-
 //+kubebuilder:object:root=true
 
 // DNSPolicyList contains a list of DNSPolicy
@@ -259,7 +248,7 @@ func NewDNSPolicy(name, ns string) *DNSPolicy {
 	}
 }
 
-func (p *DNSPolicy) WithTargetRef(targetRef gatewayapiv1alpha2.PolicyTargetReference) *DNSPolicy {
+func (p *DNSPolicy) WithTargetRef(targetRef gatewayapiv1alpha2.LocalPolicyTargetReference) *DNSPolicy {
 	p.Spec.TargetRef = targetRef
 	return p
 }
@@ -282,12 +271,10 @@ func (p *DNSPolicy) WithRoutingStrategy(strategy RoutingStrategy) *DNSPolicy {
 //TargetRef
 
 func (p *DNSPolicy) WithTargetGateway(gwName string) *DNSPolicy {
-	typedNamespace := gatewayapiv1.Namespace(p.GetNamespace())
-	return p.WithTargetRef(gatewayapiv1alpha2.PolicyTargetReference{
-		Group:     gatewayapiv1.GroupName,
-		Kind:      "Gateway",
-		Name:      gatewayapiv1.ObjectName(gwName),
-		Namespace: &typedNamespace,
+	return p.WithTargetRef(gatewayapiv1alpha2.LocalPolicyTargetReference{
+		Group: gatewayapiv1.GroupName,
+		Kind:  "Gateway",
+		Name:  gatewayapiv1.ObjectName(gwName),
 	})
 }
 

@@ -65,11 +65,10 @@ var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1beta2.AuthPolicySpec{
-				TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
-					Group:     gatewayapiv1.GroupName,
-					Kind:      "HTTPRoute",
-					Name:      TestHTTPRouteName,
-					Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace)),
+				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
+					Group: gatewayapiv1.GroupName,
+					Kind:  "HTTPRoute",
+					Name:  TestHTTPRouteName,
 				},
 				Defaults: &kuadrantv1beta2.AuthPolicyCommonSpec{
 					AuthScheme: testBasicAuthScheme(),
@@ -125,6 +124,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 			}).WithContext(ctx).Should(BeTrue())
 
 			// has the correct target ref
+			Expect(iap.Spec.TargetRef).To(Not(BeNil()))
 			Expect(iap.Spec.TargetRef.Group).To(Equal("gateway.networking.k8s.io"))
 			Expect(iap.Spec.TargetRef.Kind).To(Equal("Gateway"))
 			Expect(iap.Spec.TargetRef.Name).To(Equal(TestGatewayName))
@@ -174,6 +174,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 			}).WithContext(ctx).Should(BeTrue())
 
 			// has the correct target ref
+			Expect(iap.Spec.TargetRef).To(Not(BeNil()))
 			Expect(iap.Spec.TargetRef.Group).To(Equal("gateway.networking.k8s.io"))
 			Expect(iap.Spec.TargetRef.Kind).To(Equal("Gateway"))
 			Expect(iap.Spec.TargetRef.Name).To(Equal(TestGatewayName))
@@ -298,9 +299,9 @@ var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 				policy.Spec.TargetRef.Name = TestHTTPRouteName
 				policy.Spec.CommonSpec().RouteSelectors = []kuadrantv1beta2.RouteSelector{
 					{ // does not select any HTTPRouteRule
-						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+						Matches: []gatewayapiv1.HTTPRouteMatch{
 							{
-								Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
+								Method: ptr.To(gatewayapiv1.HTTPMethod("DELETE")),
 							},
 						},
 					},
@@ -355,9 +356,9 @@ var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 				config := policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"]
 				config.RouteSelectors = []kuadrantv1beta2.RouteSelector{
 					{ // does not select any HTTPRouteRule
-						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+						Matches: []gatewayapiv1.HTTPRouteMatch{
 							{
-								Method: ptr.To(gatewayapiv1alpha2.HTTPMethod("DELETE")),
+								Method: ptr.To(gatewayapiv1.HTTPMethod("DELETE")),
 							},
 						},
 					},
@@ -452,10 +453,10 @@ var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 			policy := policyFactory(func(policy *kuadrantv1beta2.AuthPolicy) {
 				policy.Spec.CommonSpec().RouteSelectors = []kuadrantv1beta2.RouteSelector{
 					{ // Selects: POST|DELETE *.admin.toystore.com/admin*
-						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+						Matches: []gatewayapiv1.HTTPRouteMatch{
 							{
-								Path: &gatewayapiv1alpha2.HTTPPathMatch{
-									Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+								Path: &gatewayapiv1.HTTPPathMatch{
+									Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
 									Value: ptr.To("/admin"),
 								},
 							},
@@ -463,10 +464,10 @@ var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 						Hostnames: []gatewayapiv1.Hostname{gatewayapiv1.Hostname(routeHost2)},
 					},
 					{ // Selects: GET /private*
-						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+						Matches: []gatewayapiv1.HTTPRouteMatch{
 							{
-								Path: &gatewayapiv1alpha2.HTTPPathMatch{
-									Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+								Path: &gatewayapiv1.HTTPPathMatch{
+									Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
 									Value: ptr.To("/private"),
 								},
 							},
@@ -515,10 +516,10 @@ var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 				config := policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"]
 				config.RouteSelectors = []kuadrantv1beta2.RouteSelector{
 					{ // Selects: POST|DELETE *.admin.toystore.com/admin*
-						Matches: []gatewayapiv1alpha2.HTTPRouteMatch{
+						Matches: []gatewayapiv1.HTTPRouteMatch{
 							{
-								Path: &gatewayapiv1alpha2.HTTPPathMatch{
-									Type:  ptr.To(gatewayapiv1alpha2.PathMatchType("PathPrefix")),
+								Path: &gatewayapiv1.HTTPPathMatch{
+									Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
 									Value: ptr.To("/admin"),
 								},
 							},

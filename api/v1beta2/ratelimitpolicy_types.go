@@ -132,7 +132,7 @@ type RateLimitPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
-	TargetRef gatewayapiv1alpha2.PolicyTargetReference `json:"targetRef"`
+	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReference `json:"targetRef"`
 
 	// Defaults define explicit default values for this policy and for policies inheriting this policy.
 	// Defaults are mutually exclusive with implicit defaults defined by RateLimitPolicyCommonSpec.
@@ -226,14 +226,6 @@ type RateLimitPolicy struct {
 
 var _ kuadrantgatewayapi.Policy = &RateLimitPolicy{}
 
-func (r *RateLimitPolicy) Validate() error {
-	if r.Spec.TargetRef.Namespace != nil && string(*r.Spec.TargetRef.Namespace) != r.Namespace {
-		return fmt.Errorf("invalid targetRef.Namespace %s. Currently only supporting references to the same namespace", *r.Spec.TargetRef.Namespace)
-	}
-
-	return nil
-}
-
 func (r *RateLimitPolicy) GetObservedGeneration() int64  { return r.Status.GetObservedGeneration() }
 func (r *RateLimitPolicy) SetObservedGeneration(o int64) { r.Status.SetObservedGeneration(o) }
 
@@ -252,7 +244,7 @@ func (l *RateLimitPolicyList) GetItems() []kuadrant.Policy {
 	})
 }
 
-func (r *RateLimitPolicy) GetTargetRef() gatewayapiv1alpha2.PolicyTargetReference {
+func (r *RateLimitPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
 	return r.Spec.TargetRef
 }
 

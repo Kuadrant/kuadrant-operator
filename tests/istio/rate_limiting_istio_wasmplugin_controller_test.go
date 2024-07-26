@@ -88,7 +88,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
@@ -121,6 +121,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
 			// has the correct target ref
+			Expect(existingWasmPlugin.Spec.TargetRef).To(Not(BeNil()))
 			Expect(existingWasmPlugin.Spec.TargetRef.Group).To(Equal("gateway.networking.k8s.io"))
 			Expect(existingWasmPlugin.Spec.TargetRef.Kind).To(Equal("Gateway"))
 			Expect(existingWasmPlugin.Spec.TargetRef.Name).To(Equal(gateway.Name))
@@ -215,7 +216,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
@@ -395,7 +396,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -495,7 +496,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -563,7 +564,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
@@ -637,7 +638,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpAName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -689,7 +690,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpBName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeCName),
@@ -835,7 +836,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -1044,7 +1045,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
@@ -1341,7 +1342,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeAName),
@@ -1576,7 +1577,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlp1Name, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -1680,7 +1681,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlp2Name, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeAName),
@@ -1839,7 +1840,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlp1Name, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -1870,7 +1871,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlp2Name, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeAName),
@@ -2127,7 +2128,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),
@@ -2284,7 +2285,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: gwRLPName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(TestGatewayName),
@@ -2325,7 +2326,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: routeRLPName, Namespace: testNamespace},
 				Spec: kuadrantv1beta2.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.PolicyTargetReference{
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(routeName),

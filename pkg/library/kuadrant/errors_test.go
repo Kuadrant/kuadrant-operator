@@ -17,7 +17,7 @@ func TestIsTargetNotFound(t *testing.T) {
 	}{
 		{
 			name: "err is NewErrTargetNotFound",
-			err:  NewErrTargetNotFound("foo", gatewayapiv1alpha2.PolicyTargetReference{}, errors.New("bar")),
+			err:  NewErrTargetNotFound("foo", gatewayapiv1alpha2.LocalPolicyTargetReference{}, errors.New("bar")),
 			want: true,
 		},
 		{

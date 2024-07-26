@@ -89,6 +89,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-user-static
+      - name: Set IMG_TAG to lower case
+        id: lower-img-tag
+        run: echo "IMG_TAGS=${IMG_TAGS@L}" >> $GITHUB_ENV
       - name: Build Image
         id: build-image
         uses: redhat-actions/buildah-build@v2

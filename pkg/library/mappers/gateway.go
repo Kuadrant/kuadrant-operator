@@ -14,21 +14,23 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-func NewGatewayEventMapper(o ...MapperOption) EventMapper {
-	return &gatewayEventMapper{opts: Apply(o...)}
+func NewGatewayEventMapper(policyType kuadrantgatewayapi.PolicyType, o ...MapperOption) *GatewayEventMapper {
+	return &GatewayEventMapper{
+		policyType: policyType,
+		opts:       Apply(o...),
+	}
 }
 
-var _ EventMapper = &gatewayEventMapper{}
-
-type gatewayEventMapper struct {
-	opts MapperOptions
+type GatewayEventMapper struct {
+	opts       MapperOptions
+	policyType kuadrantgatewayapi.PolicyType
 }
 
-func (m *gatewayEventMapper) MapToPolicy(ctx context.Context, obj client.Object, policyKind kuadrantgatewayapi.Policy) []reconcile.Request {
+func (m *GatewayEventMapper) Map(ctx context.Context, obj client.Object) []reconcile.Request {
 	logger := m.opts.Logger.WithValues("gateway", client.ObjectKeyFromObject(obj))
 	gateway, ok := obj.(*gatewayapiv1.Gateway)
 	if !ok {
-		logger.Info("cannot map gateway related event to kuadrant policy", "error", fmt.Sprintf("%T is not a *gatewayapiv1beta1.Gateway", obj))
+		logger.Info("cannot map gateway related event", "error", fmt.Sprintf("%T is not a *gatewayapiv1beta1.Gateway", obj))
 		return []reconcile.Request{}
 	}
 	routeList := &gatewayapiv1.HTTPRouteList{}
@@ -38,7 +40,12 @@ func (m *gatewayEventMapper) MapToPolicy(ctx context.Context, obj client.Object,
 		return []reconcile.Request{}
 	}
 
-	policies := policyKind.List(ctx, m.opts.Client, obj.GetNamespace())
+	policies, err := m.policyType.GetList(ctx, m.opts.Client)
+	if err != nil {
+		logger.V(1).Error(err, "unable to list policies")
+		return []reconcile.Request{}
+	}
+
 	if len(policies) == 0 {
 		logger.V(1).Info("no kuadrant policy possibly affected by the gateway related event")
 		return []reconcile.Request{}
@@ -58,7 +65,7 @@ func (m *gatewayEventMapper) MapToPolicy(ctx context.Context, obj client.Object,
 	index := kuadrantgatewayapi.NewTopologyIndexes(topology)
 	return utils.Map(index.PoliciesFromGateway(gateway), func(p kuadrantgatewayapi.Policy) reconcile.Request {
 		policyKey := client.ObjectKeyFromObject(p)
-		logger.V(1).Info("kuadrant policy possibly affected by the gateway related event found")
+		logger.V(1).Info("new request", "policy key", policyKey)
 		return reconcile.Request{NamespacedName: policyKey}
 	})
 }

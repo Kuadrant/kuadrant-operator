@@ -36,7 +36,7 @@ func (g GatewayWrapper) PolicyRefs() []client.ObjectKey {
 		return make([]client.ObjectKey, 0)
 	}
 
-	refs := BackReferencesFromObject(g.Gateway, g.Referrer)
+	refs := BackReferencesFromObject(g.Gateway, g.BackReferenceAnnotationName())
 
 	err := json.Unmarshal([]byte(val), &refs)
 	if err != nil {
@@ -50,7 +50,7 @@ func (g GatewayWrapper) ContainsPolicy(policyKey client.ObjectKey) bool {
 	if g.Gateway == nil {
 		return false
 	}
-	refs := BackReferencesFromObject(g.Gateway, g.Referrer)
+	refs := BackReferencesFromObject(g.Gateway, g.BackReferenceAnnotationName())
 	return slices.Contains(refs, policyKey)
 }
 
@@ -82,7 +82,7 @@ func (g GatewayWrapper) AddPolicy(policyKey client.ObjectKey) bool {
 	}
 
 	// annotation exists and does not contain a back reference to the policy → add the policy to it
-	refs := append(BackReferencesFromObject(g.Gateway, g.Referrer), policyKey)
+	refs := append(BackReferencesFromObject(g.Gateway, g.BackReferenceAnnotationName()), policyKey)
 	serialized, err := json.Marshal(refs)
 	if err != nil {
 		return false

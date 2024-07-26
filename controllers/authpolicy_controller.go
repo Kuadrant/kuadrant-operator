@@ -266,8 +266,12 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return nil
 	}
 
-	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httpRouteEventMapper")), mappers.WithClient(mgr.GetClient()))
-	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")), mappers.WithClient(mgr.GetClient()))
+	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httproute.mapper")), mappers.WithClient(mgr.GetClient()))
+	gatewayEventMapper := mappers.NewGatewayEventMapper(
+		api.NewAuthPolicyType(),
+		mappers.WithLogger(r.Logger().WithName("gateway.mapper")),
+		mappers.WithClient(mgr.GetClient()),
+	)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.AuthPolicy{}).
@@ -275,13 +279,9 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return httpRouteEventMapper.MapToPolicy(ctx, object, &api.AuthPolicy{})
+				return httpRouteEventMapper.MapToPolicy(ctx, object, api.NewAuthPolicyType())
 			}),
 		).
-		Watches(&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return gatewayEventMapper.MapToPolicy(ctx, object, &api.AuthPolicy{})
-			}),
-		).
+		Watches(&gatewayapiv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.Map)).
 		Complete(r)
 }

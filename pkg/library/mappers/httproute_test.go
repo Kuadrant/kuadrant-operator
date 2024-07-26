@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"gotest.tools/assert"
-	"istio.io/client-go/pkg/clientset/versioned/scheme"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,15 +26,17 @@ import (
 )
 
 func TestNewHTTPRouteEventMapper(t *testing.T) {
-	err := appsv1.AddToScheme(scheme.Scheme)
+	testScheme := runtime.NewScheme()
+
+	err := appsv1.AddToScheme(testScheme)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = gatewayapiv1.AddToScheme(scheme.Scheme)
+	err = gatewayapiv1.AddToScheme(testScheme)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = kuadrantv1beta2.AddToScheme(scheme.Scheme)
+	err = kuadrantv1beta2.AddToScheme(testScheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,18 +70,18 @@ func TestNewHTTPRouteEventMapper(t *testing.T) {
 		},
 	}
 	objs := []runtime.Object{routeList, authPolicyList, gateway}
-	cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(objs...).WithIndex(&gatewayapiv1.HTTPRoute{}, fieldindexers.HTTPRouteGatewayParentField, func(rawObj client.Object) []string {
+	cl := fake.NewClientBuilder().WithScheme(testScheme).WithRuntimeObjects(objs...).WithIndex(&gatewayapiv1.HTTPRoute{}, fieldindexers.HTTPRouteGatewayParentField, func(rawObj client.Object) []string {
 		return nil
 	}).Build()
 	em := NewHTTPRouteEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 	t.Run("not http route related event", func(subT *testing.T) {
-		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.Gateway{}, &kuadrantv1beta2.AuthPolicy{})
+		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.Gateway{}, kuadrantv1beta2.NewAuthPolicyType())
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
 
 	t.Run("http route related event - no requests", func(subT *testing.T) {
-		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.HTTPRoute{}, &kuadrantv1beta2.AuthPolicy{})
+		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.HTTPRoute{}, kuadrantv1beta2.NewAuthPolicyType())
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
 
@@ -118,7 +119,7 @@ func TestNewHTTPRouteEventMapper(t *testing.T) {
 		}
 
 		objs = []runtime.Object{routeList, authPolicyList, gateway, httpRoute}
-		cl = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithRuntimeObjects(objs...).WithIndex(&gatewayapiv1.HTTPRoute{}, fieldindexers.HTTPRouteGatewayParentField, func(rawObj client.Object) []string {
+		cl = fake.NewClientBuilder().WithScheme(testScheme).WithRuntimeObjects(objs...).WithIndex(&gatewayapiv1.HTTPRoute{}, fieldindexers.HTTPRouteGatewayParentField, func(rawObj client.Object) []string {
 			route, assertionOk := rawObj.(*gatewayapiv1.HTTPRoute)
 			if !assertionOk {
 				return nil
@@ -129,7 +130,7 @@ func TestNewHTTPRouteEventMapper(t *testing.T) {
 			})
 		}).Build()
 		em = NewHTTPRouteEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
-		requests := em.MapToPolicy(context.Background(), httpRoute, &kuadrantv1beta2.AuthPolicy{})
+		requests := em.MapToPolicy(context.Background(), httpRoute, kuadrantv1beta2.NewAuthPolicyType())
 		expected := []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: "app-ns", Name: "policy-1"}}}
 		assert.DeepEqual(subT, expected, requests)
 	})

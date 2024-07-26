@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -14,6 +15,14 @@ import (
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+)
+
+var (
+	AuthPolicyGVK schema.GroupVersionKind = schema.GroupVersionKind{
+		Group:   GroupVersion.Group,
+		Version: GroupVersion.Version,
+		Kind:    "AuthPolicy",
+	}
 )
 
 const (
@@ -328,22 +337,7 @@ func (ap *AuthPolicy) GetRulesHostnames() (ruleHosts []string) {
 }
 
 func (ap *AuthPolicy) Kind() string {
-	return ap.TypeMeta.Kind
-}
-
-func (ap *AuthPolicy) List(ctx context.Context, c client.Client, namespace string) []kuadrantgatewayapi.Policy {
-	policyList := &AuthPolicyList{}
-	listOptions := &client.ListOptions{Namespace: namespace}
-	err := c.List(ctx, policyList, listOptions)
-	if err != nil {
-		return []kuadrantgatewayapi.Policy{}
-	}
-	policies := make([]kuadrantgatewayapi.Policy, 0, len(policyList.Items))
-	for i := range policyList.Items {
-		policies = append(policies, &policyList.Items[i])
-	}
-
-	return policies
+	return NewAuthPolicyType().GetGVK().Kind
 }
 
 func (ap *AuthPolicy) TargetProgrammedGatewaysOnly() bool {
@@ -355,11 +349,11 @@ func (ap *AuthPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
 }
 
 func (ap *AuthPolicy) BackReferenceAnnotationName() string {
-	return AuthPolicyBackReferenceAnnotationName
+	return NewAuthPolicyType().BackReferenceAnnotationName()
 }
 
 func (ap *AuthPolicy) DirectReferenceAnnotationName() string {
-	return AuthPolicyDirectReferenceAnnotationName
+	return NewAuthPolicyType().DirectReferenceAnnotationName()
 }
 
 func (ap *AuthPolicySpec) CommonSpec() *AuthPolicyCommonSpec {
@@ -387,6 +381,41 @@ func (l *AuthPolicyList) GetItems() []kuadrant.Policy {
 	return utils.Map(l.Items, func(item AuthPolicy) kuadrant.Policy {
 		return &item
 	})
+}
+
+type authPolicyType struct{}
+
+func NewAuthPolicyType() kuadrantgatewayapi.PolicyType {
+	return &authPolicyType{}
+}
+
+func (a authPolicyType) GetGVK() schema.GroupVersionKind {
+	return AuthPolicyGVK
+}
+func (a authPolicyType) GetInstance() client.Object {
+	return &AuthPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       AuthPolicyGVK.Kind,
+			APIVersion: GroupVersion.String(),
+		},
+	}
+}
+
+func (a authPolicyType) GetList(ctx context.Context, cl client.Client, listOpts ...client.ListOption) ([]kuadrantgatewayapi.Policy, error) {
+	list := &AuthPolicyList{}
+	err := cl.List(ctx, list, listOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return utils.Map(list.Items, func(p AuthPolicy) kuadrantgatewayapi.Policy { return &p }), nil
+}
+
+func (a authPolicyType) BackReferenceAnnotationName() string {
+	return AuthPolicyBackReferenceAnnotationName
+}
+
+func (a authPolicyType) DirectReferenceAnnotationName() string {
+	return AuthPolicyDirectReferenceAnnotationName
 }
 
 func init() {

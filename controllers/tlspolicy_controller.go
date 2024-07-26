@@ -205,7 +205,11 @@ func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return nil
 	}
 
-	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")), mappers.WithClient(mgr.GetClient()))
+	gatewayEventMapper := mappers.NewGatewayEventMapper(
+		v1alpha1.NewTLSPolicyType(),
+		mappers.WithLogger(r.Logger().WithName("gateway.mapper")),
+		mappers.WithClient(mgr.GetClient()),
+	)
 
 	issuerStatusChangedPredicate := predicate.Funcs{
 		UpdateFunc: func(ev event.UpdateEvent) bool {
@@ -226,12 +230,7 @@ func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.TLSPolicy{}).
 		Owns(&certmanagerv1.Certificate{}).
-		Watches(
-			&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return gatewayEventMapper.MapToPolicy(ctx, object, &v1alpha1.TLSPolicy{})
-			}),
-		).
+		Watches(&gatewayapiv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.Map)).
 		Watches(
 			&certmanagerv1.Issuer{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {

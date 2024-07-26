@@ -231,24 +231,23 @@ func (r *RateLimitPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return nil
 	}
 
-	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httpRouteEventMapper")), mappers.WithClient(mgr.GetClient()))
-	gatewayEventMapper := mappers.NewGatewayEventMapper(mappers.WithLogger(r.Logger().WithName("gatewayEventMapper")), mappers.WithClient(mgr.GetClient()))
+	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httproute.mapper")), mappers.WithClient(mgr.GetClient()))
+	gatewayEventMapper := mappers.NewGatewayEventMapper(
+		kuadrantv1beta2.NewRateLimitPolicyType(),
+		mappers.WithLogger(r.Logger().WithName("gateway.mapper")),
+		mappers.WithClient(mgr.GetClient()),
+	)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta2.RateLimitPolicy{}).
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return httpRouteEventMapper.MapToPolicy(ctx, object, &kuadrantv1beta2.RateLimitPolicy{})
+				return httpRouteEventMapper.MapToPolicy(ctx, object, kuadrantv1beta2.NewRateLimitPolicyType())
 			}),
 		).
 		// Currently the purpose is to generate events when rlp references change in gateways
 		// so the status of the rlps targeting a route can be keep in sync
-		Watches(
-			&gatewayapiv1.Gateway{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return gatewayEventMapper.MapToPolicy(ctx, object, &kuadrantv1beta2.RateLimitPolicy{})
-			}),
-		).
+		Watches(&gatewayapiv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.Map)).
 		Complete(r)
 }

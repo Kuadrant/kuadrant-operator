@@ -302,9 +302,12 @@ clean-cov: ## Remove coverage reports
 ifdef TEST_NAME
 test-unit: TEST_PATTERN := --run $(TEST_NAME)
 endif
+ifdef VERBOSE
+test-unit: VERBOSE_FLAG = -v
+endif
 test-unit: clean-cov generate fmt vet ## Run Unit tests.
 	mkdir -p $(PROJECT_PATH)/coverage/unit
-	go test $(UNIT_DIRS) -coverprofile $(PROJECT_PATH)/coverage/unit/cover.out -tags unit -v -timeout 0 $(TEST_PATTERN)
+	go test $(UNIT_DIRS) -coverprofile $(PROJECT_PATH)/coverage/unit/cover.out -tags unit $(VERBOSE_FLAG) -timeout 0 $(TEST_PATTERN)
 
 ##@ Build
 

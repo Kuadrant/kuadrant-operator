@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewatapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
@@ -22,13 +23,13 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
+func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, topology *kuadrantgatewayapi.Topology) error {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return err
 	}
 
-	authConfig, err := r.desiredAuthConfig(ctx, ap, targetNetworkObject)
+	authConfig, err := r.desiredAuthConfig(ctx, ap, targetNetworkObject, topology)
 	if err != nil {
 		return err
 	}
@@ -46,7 +47,7 @@ func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api
 	return nil
 }
 
-func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) (*authorinoapi.AuthConfig, error) {
+func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, topology *kuadrantgatewayapi.Topology) (*authorinoapi.AuthConfig, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("desiredAuthConfig")
 
@@ -64,16 +65,11 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 
 	var route *gatewayapiv1.HTTPRoute
 	var hosts []string
+	var err error
 
 	switch obj := targetNetworkObject.(type) {
 	case *gatewayapiv1.HTTPRoute:
-		t, err := r.generateTopology(ctx)
-		if err != nil {
-			logger.V(1).Info("Failed to generate topology", "error", err)
-			return nil, err
-		}
-
-		overrides := routeGatewayAuthOverrides(t, ap)
+		overrides := routeGatewayAuthOverrides(topology, ap)
 		if len(overrides) != 0 {
 			logger.V(1).Info("targeted gateway has authpolicy with atomic overrides, skipping authorino authconfig for the HTTPRoute authpolicy")
 			utils.TagObjectToDelete(authConfig)
@@ -96,7 +92,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 		hosts = utils.HostnamesToStrings(gwHostnames)
 
 		rules := make([]gatewayapiv1.HTTPRouteRule, 0)
-		routes := r.TargetRefReconciler.FetchAcceptedGatewayHTTPRoutes(ctx, obj)
+		routes := getAttachedHTTPRoutes(topology, gw)
 		for idx := range routes {
 			route := routes[idx]
 			// skip routes that have an authpolicy of its own and Gateway authpolicy does not define atomic overrides
@@ -233,6 +229,41 @@ func getAffectedPolicies(t *kuadrantgatewayapi.Topology, ap *api.AuthPolicy) []k
 	}
 
 	return affectedPolicies
+}
+
+func getAttachedHTTPRoutes(t *kuadrantgatewayapi.Topology, gw kuadrant.GatewayWrapper) []*gatewayapiv1.HTTPRoute {
+	httpRouteList := make([]*gatewayapiv1.HTTPRoute, 0)
+
+	for _, gateway := range t.Gateways() {
+		if gateway.GetUID() == gw.GetUID() {
+			routeList := gateway.Routes()
+			for _, route := range routeList {
+				httpRouteList = append(httpRouteList, route.Route())
+			}
+		}
+	}
+
+	return httpRouteList
+}
+
+func isRouteReference(route kuadrantgatewayapi.RouteNode, targetRef gatewatapiv1alpha2.PolicyTargetReference) bool {
+	return gatewayapiv1.Namespace(route.Namespace) == *targetRef.Namespace && gatewayapiv1.ObjectName(route.Name) == targetRef.Name
+}
+
+func getAttachedRoute(t *kuadrantgatewayapi.Topology, ap *api.AuthPolicy) *gatewayapiv1.HTTPRoute {
+	targetRef := ap.GetTargetRef()
+	if targetRef.Namespace == nil {
+		ns := gatewayapiv1.Namespace(ap.GetNamespace())
+		targetRef.Namespace = &ns
+	}
+
+	for _, route := range t.Routes() {
+		if isRouteReference(route, targetRef) {
+			return route.Route()
+		}
+	}
+
+	return nil
 }
 
 // AuthConfigName returns the name of Authorino AuthConfig CR.

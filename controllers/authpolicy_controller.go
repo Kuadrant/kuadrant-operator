@@ -151,50 +151,50 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 		return err
 	}
 
+	// build topology
+	topology, err := r.generateTopology(ctx)
+	if err != nil {
+		r.Logger().Info("Error generating topology", "error", err)
+		return err
+	}
+
 	// reconcile based on gateway diffs
-	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
+	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffsDAG(ctx, ap, targetNetworkObject, topology)
 	if err != nil {
 		return err
 	}
 
-	if err := r.reconcileIstioAuthorizationPolicies(ctx, ap, targetNetworkObject, gatewayDiffObj); err != nil {
+	if err = r.reconcileIstioAuthorizationPolicies(ctx, ap, targetNetworkObject, gatewayDiffObj); err != nil {
 		return fmt.Errorf("reconcile AuthorizationPolicy error %w", err)
 	}
 
-	if err := r.reconcileAuthConfigs(ctx, ap, targetNetworkObject); err != nil {
+	if err = r.reconcileAuthConfigs(ctx, ap, targetNetworkObject, topology); err != nil {
 		return fmt.Errorf("reconcile AuthConfig error %w", err)
 	}
 
 	// if the AuthPolicy(ap) targets a Gateway then all policies attached to that Gateway need to be checked.
 	// this is due to not knowing if the Gateway AuthPolicy was updated to include or remove the overrides section.
-	switch obj := targetNetworkObject.(type) {
+	switch targetNetworkObject.(type) {
 	case *gatewayapiv1.Gateway:
-		gw := kuadrant.GatewayWrapper{Gateway: obj, Referrer: ap}
-		apKey := client.ObjectKeyFromObject(ap)
-		for _, policyKey := range gw.PolicyRefs() {
-			if policyKey == apKey {
+		policies := getAffectedPolicies(topology, ap)
+		for _, policy := range policies {
+			if policy.GetUID() == ap.GetUID() {
 				continue
 			}
-
-			ref := &api.AuthPolicy{}
-			err = r.Client().Get(ctx, policyKey, ref)
-			if err != nil {
-				return err
+			p, okay := policy.(*api.AuthPolicy)
+			if !okay {
+				return fmt.Errorf("connot cast policy to AuthPolicy %T", policy)
 			}
 
-			refNetworkObject, err := reconcilers.FetchTargetRefObject(ctx, r.Client(), ref.GetTargetRef(), ref.Namespace, ap.TargetProgrammedGatewaysOnly())
-			if err != nil {
-				return err
-			}
-
-			if err = r.reconcileAuthConfigs(ctx, ref, refNetworkObject); err != nil {
+			policyHTTPRoute := getAttachedRoute(topology, p)
+			if err = r.reconcileAuthConfigs(ctx, p, policyHTTPRoute, topology); err != nil {
 				return err
 			}
 		}
 	}
 
 	// set direct back ref - i.e. claim the target network object as taken asap
-	if err := r.reconcileNetworkResourceDirectBackReference(ctx, ap, targetNetworkObject); err != nil {
+	if err := r.reconcileNetworkResourceDirectBackReference(ctx, ap, targetNetworkObject, topology); err != nil {
 		return fmt.Errorf("reconcile TargetBackReference error %w", err)
 	}
 
@@ -207,8 +207,15 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 }
 
 func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
+	// build topology
+	topology, err := r.generateTopology(ctx)
+	if err != nil {
+		r.Logger().Info("Error generating topology", "error", err)
+		return err
+	}
+
 	// delete based on gateway diffs
-	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
+	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffsDAG(ctx, ap, targetNetworkObject, topology)
 	if err != nil {
 		return err
 	}
@@ -229,8 +236,8 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 }
 
 // Ensures only one RLP targets the network resource
-func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
-	return r.TargetRefReconciler.ReconcileTargetBackReference(ctx, ap, targetNetworkObject, ap.DirectReferenceAnnotationName())
+func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, topology *kuadrantgatewayapi.Topology) error {
+	return r.TargetRefReconciler.ReconcileTargetBackReferenceDAG(ctx, ap, targetNetworkObject, ap.DirectReferenceAnnotationName(), topology)
 }
 
 func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object, ap *api.AuthPolicy) error {

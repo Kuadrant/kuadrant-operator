@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
@@ -18,12 +19,88 @@ type GatewayDiffs struct {
 	GatewaysWithInvalidPolicyRef []kuadrant.GatewayWrapper
 }
 
+// ComputeGatewayDiffsDAG computes all the differences to reconcile regarding the gateways whose behaviors should/should not be extended by the policy.
+// These include gateways directly referenced by the policy and gateways indirectly referenced through the policy's target network objects.
+// * list of gateways to which the policy applies for the first time
+// * list of gateways to which the policy no longer applies
+// * list of gateways to which the policy still applies
+func ComputeGatewayDiffsDAG(ctx context.Context, policy, targetNetworkObject client.Object, topology *kuadrantgatewayapi.Topology) (*GatewayDiffs, error) {
+	logger, _ := logr.FromContext(ctx)
+
+	var gwKeys []client.ObjectKey
+	if policy.GetDeletionTimestamp() == nil {
+		gwKeys = targetedGatewayKeys(targetNetworkObject)
+	}
+
+	gatewayNodeList := topology.Gateways()
+
+	policyKind, ok := policy.(kuadrant.Referrer)
+	if !ok {
+		return nil, fmt.Errorf("policy %s is not a referrer", policy.GetObjectKind().GroupVersionKind())
+	}
+
+	gwDiff := &GatewayDiffs{
+		GatewaysMissingPolicyRef:     gatewaysMissingPolicyRefDAG(gatewayNodeList, client.ObjectKeyFromObject(policy), gwKeys, policyKind),
+		GatewaysWithValidPolicyRef:   gatewaysWithValidPolicyRefDAG(gatewayNodeList, client.ObjectKeyFromObject(policy), gwKeys, policyKind),
+		GatewaysWithInvalidPolicyRef: gatewaysWithInvalidPolicyRefDAG(gatewayNodeList, client.ObjectKeyFromObject(policy), gwKeys, policyKind),
+	}
+
+	logger.V(1).Info("ComputeGatewayDiffs",
+		"missing-policy-ref", len(gwDiff.GatewaysMissingPolicyRef),
+		"valid-policy-ref", len(gwDiff.GatewaysWithValidPolicyRef),
+		"invalid-policy-ref", len(gwDiff.GatewaysWithInvalidPolicyRef),
+	)
+
+	return gwDiff, nil
+}
+
+// gatewaysMissingPolicyRefDAG returns gateways referenced by the policy but that miss the reference to it the annotations
+func gatewaysMissingPolicyRefDAG(gwList []kuadrantgatewayapi.GatewayNode, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, policyKind kuadrant.Referrer) []kuadrant.GatewayWrapper {
+	gateways := make([]kuadrant.GatewayWrapper, 0)
+	for i := range gwList {
+		gateway := gwList[i].Gateway
+		gw := kuadrant.GatewayWrapper{Gateway: gateway, Referrer: policyKind}
+		if slices.Contains(policyGwKeys, client.ObjectKeyFromObject(gateway)) && !gw.ContainsPolicy(policyKey) {
+			gateways = append(gateways, gw)
+		}
+	}
+	return gateways
+}
+
+// gatewaysWithValidPolicyRefDAG returns gateways referenced by the policy that also have the reference in the annotations
+func gatewaysWithValidPolicyRefDAG(gwList []kuadrantgatewayapi.GatewayNode, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, policyKind kuadrant.Referrer) []kuadrant.GatewayWrapper {
+	gateways := make([]kuadrant.GatewayWrapper, 0)
+	for i := range gwList {
+		gateway := gwList[i].Gateway
+		gw := kuadrant.GatewayWrapper{Gateway: gateway, Referrer: policyKind}
+		if slices.Contains(policyGwKeys, client.ObjectKeyFromObject(gateway)) && gw.ContainsPolicy(policyKey) {
+			gateways = append(gateways, gw)
+		}
+	}
+	return gateways
+}
+
+// gatewaysWithInvalidPolicyRefDAG returns gateways not referenced by the policy that still have the reference in the annotations
+func gatewaysWithInvalidPolicyRefDAG(gwList []kuadrantgatewayapi.GatewayNode, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, policyKind kuadrant.Referrer) []kuadrant.GatewayWrapper {
+	gateways := make([]kuadrant.GatewayWrapper, 0)
+	for i := range gwList {
+		gateway := gwList[i].Gateway
+		gw := kuadrant.GatewayWrapper{Gateway: gateway, Referrer: policyKind}
+		if !slices.Contains(policyGwKeys, client.ObjectKeyFromObject(gateway)) && gw.ContainsPolicy(policyKey) {
+			gateways = append(gateways, gw)
+		}
+	}
+	return gateways
+}
+
 // ComputeGatewayDiffs computes all the differences to reconcile regarding the gateways whose behaviors should/should not be extended by the policy.
 // These include gateways directly referenced by the policy and gateways indirectly referenced through the policy's target network objects.
 // * list of gateways to which the policy applies for the first time
 // * list of gateways to which the policy no longer applies
 // * list of gateways to which the policy still applies
 // TODO(@guicassolato): unit test
+// Deprecated: This is being improved with use of the DAG, but as it cross multiple controller not every instances is ready to use the DAG.
+// Try use ComputeGatewayDiffsDAG is possible.
 func ComputeGatewayDiffs(ctx context.Context, k8sClient client.Reader, policy, targetNetworkObject client.Object) (*GatewayDiffs, error) {
 	logger, _ := logr.FromContext(ctx)
 
@@ -60,6 +137,8 @@ func ComputeGatewayDiffs(ctx context.Context, k8sClient client.Reader, policy, t
 }
 
 // gatewaysMissingPolicyRef returns gateways referenced by the policy but that miss the reference to it the annotations
+// Deprecated: This is being improved with use of the DAG, but as it cross multiple controller not every instance is ready to use the DAG.
+// Try use gatewaysMissingPolicyRefDAG is possible.
 func gatewaysMissingPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, policyKind kuadrant.Referrer) []kuadrant.GatewayWrapper {
 	gateways := make([]kuadrant.GatewayWrapper, 0)
 	for i := range gwList.Items {
@@ -73,6 +152,8 @@ func gatewaysMissingPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client
 }
 
 // gatewaysWithValidPolicyRef returns gateways referenced by the policy that also have the reference in the annotations
+// Deprecated: This is being improved with use of the DAG, but as it cross multiple controller not every instance is ready to use the DAG.
+// Try use gatewaysWithValidPolicyRefDAG is possible.
 func gatewaysWithValidPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, policyKind kuadrant.Referrer) []kuadrant.GatewayWrapper {
 	gateways := make([]kuadrant.GatewayWrapper, 0)
 	for i := range gwList.Items {
@@ -86,6 +167,8 @@ func gatewaysWithValidPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey clie
 }
 
 // gatewaysWithInvalidPolicyRef returns gateways not referenced by the policy that still have the reference in the annotations
+// Deprecated: This is being improved with use of the DAG, but as it cross multiple controller not every instance is ready to use the DAG.
+// Try use gatewaysWithInvalidPolicyRefDAG is possible.
 func gatewaysWithInvalidPolicyRef(gwList *gatewayapiv1.GatewayList, policyKey client.ObjectKey, policyGwKeys []client.ObjectKey, policyKind kuadrant.Referrer) []kuadrant.GatewayWrapper {
 	gateways := make([]kuadrant.GatewayWrapper, 0)
 	for i := range gwList.Items {

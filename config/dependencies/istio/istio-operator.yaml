@@ -21,6 +21,9 @@ spec:
     pilot:
       enabled: true
       k8s:
+        env:
+        - name: PILOT_ENABLE_ALPHA_GATEWAY_API
+          value: "true"
         resources:
           requests:
             cpu: "0"

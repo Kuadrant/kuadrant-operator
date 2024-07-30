@@ -27,7 +27,7 @@ func TopologyFromGateway(ctx context.Context, cl client.Client, gw *gatewayapiv1
 		client.MatchingFields{
 			fieldindexers.HTTPRouteGatewayParentField: client.ObjectKeyFromObject(gw).String(),
 		})
-	logger.V(1).Info("topologyIndexesFromGateway: list httproutes from gateway",
+	logger.V(1).Info("TopologyFromGateway: list httproutes from gateway",
 		"gateway", client.ObjectKeyFromObject(gw),
 		"#HTTPRoutes", len(routeList.Items),
 		"err", err)
@@ -37,12 +37,53 @@ func TopologyFromGateway(ctx context.Context, cl client.Client, gw *gatewayapiv1
 
 	// Get all the policyKind policies
 	policies := policyKind.List(ctx, cl, "")
-	logger.V(1).Info("topologyIndexesFromGateway: list policies",
+	logger.V(1).Info("TopologyFromGateway: list policies",
 		"#policies", len(policies),
 		"err", err)
 
 	return kuadrantgatewayapi.NewTopology(
 		kuadrantgatewayapi.WithGateways([]*gatewayapiv1.Gateway{gw}),
+		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
+		kuadrantgatewayapi.WithPolicies(policies),
+		kuadrantgatewayapi.WithLogger(logger),
+	)
+}
+
+func TopologyForPolicies(ctx context.Context, cl client.Client, policyKind kuadrantgatewayapi.Policy) (*kuadrantgatewayapi.Topology, error) {
+	logger, err := logr.FromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	gatewayList := &gatewayapiv1.GatewayList{}
+	err = cl.List(
+		ctx,
+		gatewayList)
+	logger.V(1).Info("TopologyForPolicies: list all gateways",
+		"#Gateways", len(gatewayList.Items),
+		"err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	routeList := &gatewayapiv1.HTTPRouteList{}
+	err = cl.List(
+		ctx,
+		routeList)
+	logger.V(1).Info("TopologyForPolicies: list all httproutes",
+		"#HTTPRoutes", len(routeList.Items),
+		"err", err)
+	if err != nil {
+		return nil, err
+	}
+
+	policies := policyKind.List(ctx, cl, "")
+	logger.V(1).Info("TopologyForPolicies: list policies",
+		"#policies", len(policies),
+		"err", err)
+
+	return kuadrantgatewayapi.NewTopology(
+		kuadrantgatewayapi.WithGateways(utils.Map(gatewayList.Items, ptr.To[gatewayapiv1.Gateway])),
 		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
 		kuadrantgatewayapi.WithPolicies(policies),
 		kuadrantgatewayapi.WithLogger(logger),

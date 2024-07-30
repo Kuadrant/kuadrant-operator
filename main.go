@@ -23,6 +23,7 @@ import (
 	"runtime"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	sailv1alpha1 "github.com/istio-ecosystem/sail-operator/api/v1alpha1"
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
@@ -39,7 +40,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/utils/env"
-	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -75,12 +75,11 @@ func init() {
 	utilruntime.Must(authorinoapi.AddToScheme(scheme))
 	utilruntime.Must(istionetworkingv1alpha3.AddToScheme(scheme))
 	utilruntime.Must(istiosecurityv1beta1.AddToScheme(scheme))
-	utilruntime.Must(istiov1alpha1.AddToScheme(scheme))
 	utilruntime.Must(gatewayapiv1.Install(scheme))
 	utilruntime.Must(istioextensionv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(apiextv1.AddToScheme(scheme))
 	utilruntime.Must(istioapis.AddToScheme(scheme))
-	utilruntime.Must(istiov1alpha1.AddToScheme(scheme))
+	utilruntime.Must(sailv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(maistraapis.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta1.AddToScheme(scheme))

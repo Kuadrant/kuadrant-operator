@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	sailv1alpha1 "github.com/istio-ecosystem/sail-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
@@ -35,7 +36,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -229,7 +229,7 @@ func BootstrapScheme() *runtime.Scheme {
 		authorinoopapi.AddToScheme,
 		authorinoapi.AddToScheme,
 		istioapis.AddToScheme,
-		istiov1alpha1.AddToScheme,
+		sailv1alpha1.AddToScheme,
 		istiosecurityv1beta1.AddToScheme,
 		limitadorv1alpha1.AddToScheme,
 		istioclientnetworkingv1alpha3.AddToScheme,

@@ -7,6 +7,7 @@ import (
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
@@ -15,7 +16,9 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/samber/lo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,55 +36,35 @@ type AuthPolicyEnvoySecurityPolicyReconciler struct {
 //+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=securitypolicies,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AuthPolicyEnvoySecurityPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := r.Logger().WithValues("Gateway", req.NamespacedName)
+	logger := r.Logger().WithValues("Kuadrant", req.NamespacedName)
 	logger.Info("Reconciling auth SecurityPolicy")
 	ctx := logr.NewContext(eventCtx, logger)
 
-	gw := &gatewayapiv1.Gateway{}
-	if err := r.Client().Get(ctx, req.NamespacedName, gw); err != nil {
+	kObj := &kuadrantv1beta1.Kuadrant{}
+	if err := r.Client().Get(ctx, req.NamespacedName, kObj); err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("no gateway found")
+			logger.Info("no kuadrant object found")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "failed to get gateway")
+		logger.Error(err, "failed to get kuadrant object")
 		return ctrl.Result{}, err
 	}
 
 	if logger.V(1).Enabled() {
-		jsonData, err := json.MarshalIndent(gw, "", "  ")
+		jsonData, err := json.MarshalIndent(kObj, "", "  ")
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		logger.V(1).Info(string(jsonData))
 	}
 
-	if !kuadrant.IsKuadrantManaged(gw) {
-		return ctrl.Result{}, nil
-	}
-
-	topology, err := kuadranttools.TopologyFromGateway(ctx, r.Client(), gw, &kuadrantv1beta2.AuthPolicy{})
+	topology, err := kuadranttools.TopologyForPolicies(ctx, r.Client(), &kuadrantv1beta2.AuthPolicy{})
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	kuadrantNamespace, err := kuadrant.GetKuadrantNamespace(gw)
-	if err != nil {
-		logger.Error(err, "failed to get kuadrant namespace")
-		return ctrl.Result{}, err
-	}
-
-	// reconcile security policies for gateways
-	for _, gwNode := range topology.Gateways() {
-		node := gwNode
-		err := r.reconcileSecurityPolicy(ctx, &node, kuadrantNamespace)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-	// reconcile security policies for routes
-	for _, routeNode := range topology.Routes() {
-		node := routeNode
-		err := r.reconcileSecurityPolicy(ctx, &node, kuadrantNamespace)
+	for _, policy := range topology.Policies() {
+		err := r.reconcileSecurityPolicy(ctx, policy, kObj.Namespace)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -90,17 +73,27 @@ func (r *AuthPolicyEnvoySecurityPolicyReconciler) Reconcile(eventCtx context.Con
 	return ctrl.Result{}, nil
 }
 
-func (r *AuthPolicyEnvoySecurityPolicyReconciler) reconcileSecurityPolicy(ctx context.Context, targetable kuadrantgatewayapi.PolicyTargetNode, kuadrantNamespace string) error {
+func (r *AuthPolicyEnvoySecurityPolicyReconciler) reconcileSecurityPolicy(ctx context.Context, policy kuadrantgatewayapi.PolicyNode, kuadrantNamespace string) error {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("reconcileSecurityPolicy")
 
-	esp := envoySecurityPolicy(targetable.GetObject(), kuadrantNamespace)
-	if len(targetable.AttachedPolicies()) == 0 {
-		utils.TagObjectToDelete(esp)
+	targetRef := policy.TargetRef()
+	if policy.TargetRef() == nil {
+		return nil
 	}
 
-	if err := r.SetOwnerReference(targetable.GetObject(), esp); err != nil {
+	esp := envoySecurityPolicy(targetRef.GetObject(), kuadrantNamespace)
+	if err := r.SetOwnerReference(policy.Policy, esp); err != nil {
 		return err
+	}
+
+	// if gateway target and not programmed, or route target which is not accepted by any parent
+	// tag for deletion
+	if (targetRef.GetGatewayNode() != nil && meta.IsStatusConditionFalse(targetRef.GetGatewayNode().Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed))) ||
+		(targetRef.GetRouteNode() != nil && !lo.ContainsBy(targetRef.GetRouteNode().Status.Parents, func(p gatewayapiv1.RouteParentStatus) bool {
+			return meta.IsStatusConditionTrue(p.Conditions, string(gatewayapiv1.RouteConditionAccepted))
+		})) {
+		utils.TagObjectToDelete(esp)
 	}
 
 	if err := r.ReconcileResource(ctx, &egv1alpha1.SecurityPolicy{}, esp, kuadrantenvoygateway.EnvoySecurityPolicyMutator); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -177,24 +170,39 @@ func (r *AuthPolicyEnvoySecurityPolicyReconciler) SetupWithManager(mgr ctrl.Mana
 		return nil
 	}
 
-	httpRouteToParentGatewaysEventMapper := mappers.NewHTTPRouteToParentGatewaysEventMapper(
-		mappers.WithLogger(r.Logger().WithName("httpRouteToParentGatewaysEventMapper")),
-	)
-	apToParentGatewaysEventMapper := mappers.NewPolicyToParentGatewaysEventMapper(
-		mappers.WithLogger(r.Logger().WithName("authpolicyToParentGatewaysEventMapper")),
+	securityPolicyToKuadrantEventMapper := mappers.NewSecurityPolicyToKuadrantEventMapper(
+		mappers.WithLogger(r.Logger().WithName("securityPolicyToKuadrantEventMapper")),
 		mappers.WithClient(r.Client()),
 	)
-
+	policyToKuadrantEventMapper := mappers.NewPolicyToKuadrantEventMapper(
+		mappers.WithLogger(r.Logger().WithName("policyToKuadrantEventMapper")),
+		mappers.WithClient(r.Client()),
+	)
+	gatewayToKuadrantEventMapper := mappers.NewGatewayToKuadrantEventMapper(
+		mappers.WithLogger(r.Logger().WithName("gatewayToKuadrantEventMapper")),
+		mappers.WithClient(r.Client()),
+	)
+	httpRouteToKuadrantEventMapper := mappers.NewHTTPRouteToKuadrantEventMapper(
+		mappers.WithLogger(r.Logger().WithName("httpRouteToKuadrantEventMapper")),
+		mappers.WithClient(r.Client()),
+	)
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&gatewayapiv1.Gateway{}).
-		Owns(&egv1alpha1.SecurityPolicy{}).
+		For(&kuadrantv1beta1.Kuadrant{}).
 		Watches(
-			&gatewayapiv1.HTTPRoute{},
-			handler.EnqueueRequestsFromMapFunc(httpRouteToParentGatewaysEventMapper.Map),
+			&egv1alpha1.SecurityPolicy{},
+			handler.EnqueueRequestsFromMapFunc(securityPolicyToKuadrantEventMapper.Map),
 		).
 		Watches(
 			&kuadrantv1beta2.AuthPolicy{},
-			handler.EnqueueRequestsFromMapFunc(apToParentGatewaysEventMapper.Map),
+			handler.EnqueueRequestsFromMapFunc(policyToKuadrantEventMapper.Map),
+		).
+		Watches(
+			&gatewayapiv1.Gateway{},
+			handler.EnqueueRequestsFromMapFunc(gatewayToKuadrantEventMapper.Map),
+		).
+		Watches(
+			&gatewayapiv1.HTTPRoute{},
+			handler.EnqueueRequestsFromMapFunc(httpRouteToKuadrantEventMapper.Map),
 		).
 		Complete(r)
 }

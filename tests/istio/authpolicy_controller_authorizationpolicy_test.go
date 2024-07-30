@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	secv1beta1resources "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -71,7 +70,7 @@ var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 					Name:  TestHTTPRouteName,
 				},
 				Defaults: &kuadrantv1beta2.AuthPolicyCommonSpec{
-					AuthScheme: testBasicAuthScheme(),
+					AuthScheme: tests.BuildBasicAuthScheme(),
 				},
 			},
 		}
@@ -566,28 +565,3 @@ var _ = Describe("AuthPolicy controller managing authorization policy", func() {
 		}, testTimeOut)
 	})
 })
-
-func testBasicAuthScheme() *kuadrantv1beta2.AuthSchemeSpec {
-	return &kuadrantv1beta2.AuthSchemeSpec{
-		Authentication: map[string]kuadrantv1beta2.AuthenticationSpec{
-			"apiKey": {
-				AuthenticationSpec: authorinoapi.AuthenticationSpec{
-					AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-						ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
-							Selector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{
-									"app": "toystore",
-								},
-							},
-						},
-					},
-					Credentials: authorinoapi.Credentials{
-						AuthorizationHeader: &authorinoapi.Prefixed{
-							Prefix: "APIKEY",
-						},
-					},
-				},
-			},
-		},
-	}
-}

@@ -23,6 +23,8 @@ const (
 type PolicyTargetNode interface {
 	GetGatewayNode() *GatewayNode
 	GetRouteNode() *RouteNode
+	GetObject() client.Object
+	AttachedPolicies() []PolicyNode
 }
 
 type PolicyNode struct {
@@ -81,6 +83,10 @@ func (r *RouteNode) ObjectKey() client.ObjectKey {
 	return client.ObjectKeyFromObject(r.HTTPRoute)
 }
 
+func (r *RouteNode) GetObject() client.Object {
+	return r.Route()
+}
+
 func (r *RouteNode) GetGatewayNode() *GatewayNode {
 	return nil
 }
@@ -128,6 +134,10 @@ func (g *GatewayNode) Routes() []RouteNode {
 
 func (g *GatewayNode) ObjectKey() client.ObjectKey {
 	return client.ObjectKeyFromObject(g.Gateway)
+}
+
+func (g *GatewayNode) GetObject() client.Object {
+	return g.GetGateway()
 }
 
 func (g *GatewayNode) GetGatewayNode() *GatewayNode {
@@ -309,18 +319,18 @@ type edge struct {
 }
 
 func buildDAGEdges(opts *topologyOptions, gateways []gatewayDAGNode, routes []httpRouteDAGNode, policies []policyDAGNode) []edge {
-	effectiveGatewys := gateways
+	effectiveGateways := gateways
 
 	if opts.programmedGatewaysOnly {
 		// filter out not programmed gateways
-		effectiveGatewys = utils.Filter(gateways, func(g gatewayDAGNode) bool {
+		effectiveGateways = utils.Filter(gateways, func(g gatewayDAGNode) bool {
 			return meta.IsStatusConditionTrue(g.Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed))
 		})
 	}
 
 	// internal index: key -> gateway for reference
-	gatewaysIndex := make(map[client.ObjectKey]gatewayDAGNode, len(effectiveGatewys))
-	for _, gateway := range effectiveGatewys {
+	gatewaysIndex := make(map[client.ObjectKey]gatewayDAGNode, len(effectiveGateways))
+	for _, gateway := range effectiveGateways {
 		gatewaysIndex[client.ObjectKeyFromObject(gateway.Gateway)] = gateway
 	}
 
@@ -359,7 +369,7 @@ func buildDAGEdges(opts *topologyOptions, gateways []gatewayDAGNode, routes []ht
 		}
 	}
 
-	for _, g := range effectiveGatewys {
+	for _, g := range effectiveGateways {
 		// Compute gateway's child (attached) policies
 		attachedPolicies := utils.Filter(policies, func(p policyDAGNode) bool {
 			group := p.GetTargetRef().Group

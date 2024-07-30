@@ -50,15 +50,16 @@ jobs:
           verbose: true
 
   controllers-integration-tests:
-    name: Integration Tests for github.com/kuadrant/kuadrant-operator/controllers
+    name: Integration Tests for kuadrant-operator/controllers
     strategy:
       matrix:
-        gatewayapi-provider: [istio]
         include:
-          # - istio-type: sail
-          #   gatewayapi-provider: istio
-          - istio-type: istioctl
-            gatewayapi-provider: istio
+          - gatewayapi-provider: istio
+            istio-type: istioctl
+#          - gatewayapi-provider: istio
+#            istio-type: sail
+          - gatewayapi-provider: envoygateway
+      fail-fast: false
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test
@@ -89,7 +90,7 @@ jobs:
           make env-setup GATEWAYAPI_PROVIDER=${{ matrix.gatewayapi-provider }} ISTIO_INSTALL_SAIL=${{ matrix.istio-type == 'sail' && true || false }}
       - name: Run integration tests
         run: |
-          make test-integration
+          make test-integration GATEWAYAPI_PROVIDER=${{ matrix.gatewayapi-provider }}
       - name: Upload integration-test coverage reports to CodeCov
         # more at https://github.com/codecov/codecov-action
         # Only run if the feature branch is in your repo (not in a fork)
@@ -103,7 +104,7 @@ jobs:
           verbose: true
 
   bare-k8s-integration-tests:
-    name: Integration Tests for github.com/kuadrant/kuadrant-operator/tests/bare_k8s
+    name: Integration Tests for kuadrant-operator/tests/bare_k8s
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test
@@ -148,7 +149,7 @@ jobs:
           verbose: true
 
   gatewayapi-integration-tests:
-    name: Integration Tests for github.com/kuadrant/kuadrant-operator/tests/gatewayapi
+    name: Integration Tests for kuadrant-operator/tests/gatewayapi
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test
@@ -192,8 +193,12 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
-  istio-integration-tests:
-    name: Integration Tests for github.com/kuadrant/kuadrant-operator/tests/istio
+  gatewayapi-provider-integration-tests:
+    name: Integration Tests for kuadrant-operator/tests/[gatewayapi-provider]
+    strategy:
+      matrix:
+        gatewayapi-provider: [istio, envoygateway]
+      fail-fast: false
     runs-on: ubuntu-latest
     env:
       KIND_CLUSTER_NAME: kuadrant-test
@@ -219,12 +224,12 @@ jobs:
       - name: Check cluster info
         run: |
           kubectl cluster-info dump
-      - name: Run make istio-env-setup
+      - name: Run make ${{ matrix.gatewayapi-provider }}-env-setup
         run: |
-          make istio-env-setup
+          make ${{ matrix.gatewayapi-provider }}-env-setup
       - name: Run integration tests
         run: |
-          make test-istio-env-integration
+          make test-${{ matrix.gatewayapi-provider }}-env-integration
       - name: Upload integration-test coverage reports to CodeCov
         # more at https://github.com/codecov/codecov-action
         # Only run if the feature branch is in your repo (not in a fork)
@@ -233,7 +238,7 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          flags: istio-integration
+          flags: ${{ matrix.gatewayapi-provider }}-integration
           fail_ci_if_error: false
           verbose: true
 

@@ -10,7 +10,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/rand"
 	externaldns "sigs.k8s.io/external-dns/endpoint"
 
@@ -36,7 +35,6 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 
 	var gatewayClass *gatewayapiv1.GatewayClass
 	var dnsProviderSecret *corev1.Secret
-	var managedZone *kuadrantdnsv1alpha1.ManagedZone
 	var testNamespace string
 	var gateway *gatewayapiv1.Gateway
 	var dnsPolicy *v1alpha1.DNSPolicy
@@ -53,21 +51,8 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		gatewayClass = tests.BuildGatewayClass("gwc-"+testNamespace, "default", "kuadrant.io/bar")
 		Expect(k8sClient.Create(ctx, gatewayClass)).To(Succeed())
 
-		dnsProviderSecret = tests.BuildInMemoryCredentialsSecret("inmemory-credentials", testNamespace)
-		managedZone = tests.BuildManagedZone("mz-example-com", testNamespace, domain, dnsProviderSecret.Name)
+		dnsProviderSecret = tests.BuildInMemoryCredentialsSecret("inmemory-credentials", testNamespace, domain)
 		Expect(k8sClient.Create(ctx, dnsProviderSecret)).To(Succeed())
-		Expect(k8sClient.Create(ctx, managedZone)).To(Succeed())
-		Eventually(func(g Gomega) {
-			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(managedZone), managedZone)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(managedZone.Status.Conditions).To(
-				ContainElement(MatchFields(IgnoreExtras, Fields{
-					"Type":               Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
-					"Status":             Equal(metav1.ConditionTrue),
-					"ObservedGeneration": Equal(managedZone.Generation),
-				})),
-			)
-		}, tests.TimeoutMedium, time.Second).Should(Succeed())
 
 		gateway = tests.NewGatewayBuilder(tests.GatewayName, gatewayClass.Name, testNamespace).
 			WithHTTPListener("foo", fmt.Sprintf("foo.%s", domain)).
@@ -130,7 +115,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		if dnsPolicy != nil {
 			err := k8sClient.Delete(ctx, dnsPolicy)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
-			// Wait until dns records are finished deleting since it can't finish deleting without managed zone
+			// Wait until dns records are finished deleting since it can't finish deleting without the DNS provider secret
 			Eventually(func(g Gomega) {
 				dnsRecords := &kuadrantdnsv1alpha1.DNSRecordList{}
 				err := k8sClient.List(ctx, dnsRecords, client.InNamespace(testNamespace))
@@ -138,15 +123,6 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 				g.Expect(dnsRecords.Items).To(HaveLen(0))
 			}).WithContext(ctx).Should(Succeed())
 
-		}
-		if managedZone != nil {
-			err := k8sClient.Delete(ctx, managedZone)
-			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
-			// Wait until managed zone is delete before deleting the provider secret
-			Eventually(func(g Gomega) {
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(managedZone), managedZone)
-				g.Expect(k8serrors.IsNotFound(err)).To(BeTrue())
-			}).WithContext(ctx).Should(Succeed())
 		}
 		if dnsProviderSecret != nil {
 			err := k8sClient.Delete(ctx, dnsProviderSecret)
@@ -163,6 +139,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 
 		BeforeEach(func(ctx SpecContext) {
 			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway(tests.GatewayName).
 				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
@@ -184,7 +161,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 
 				g.Expect(dnsRecord.Name).To(Equal(recordName))
-				g.Expect(dnsRecord.Spec.ManagedZoneRef.Name).To(Equal("mz-example-com"))
+				g.Expect(dnsRecord.Spec.ProviderRef.Name).To(Equal(dnsProviderSecret.Name))
 				g.Expect(dnsRecord.Spec.Endpoints).To(ConsistOf(
 					PointTo(MatchFields(IgnoreExtras, Fields{
 						"DNSName":       Equal(tests.HostOne(domain)),
@@ -199,7 +176,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 				g.Expect(tests.EndpointsTraversable(dnsRecord.Spec.Endpoints, tests.HostOne(domain), []string{tests.IPAddressOne, tests.IPAddressTwo})).To(BeTrue())
 
 				g.Expect(wildcardDnsRecord.Name).To(Equal(wildcardRecordName))
-				g.Expect(wildcardDnsRecord.Spec.ManagedZoneRef.Name).To(Equal("mz-example-com"))
+				g.Expect(wildcardDnsRecord.Spec.ProviderRef.Name).To(Equal(dnsProviderSecret.Name))
 				g.Expect(wildcardDnsRecord.Spec.Endpoints).To(ConsistOf(
 					PointTo(MatchFields(IgnoreExtras, Fields{
 						"DNSName":       Equal(tests.HostWildcard(domain)),
@@ -221,6 +198,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 
 		BeforeEach(func(ctx SpecContext) {
 			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway(tests.GatewayName).
 				WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
 				WithLoadBalancingFor(120, nil, "IE")
@@ -243,7 +221,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 
 				g.Expect(dnsRecord.Name).To(Equal(recordName))
-				g.Expect(dnsRecord.Spec.ManagedZoneRef.Name).To(Equal("mz-example-com"))
+				g.Expect(dnsRecord.Spec.ProviderRef.Name).To(Equal(dnsProviderSecret.Name))
 				g.Expect(dnsRecord.Spec.Endpoints).To(ConsistOf(
 					PointTo(MatchFields(IgnoreExtras, Fields{
 						"DNSName":       Equal(clusterHash + "-" + gwHash + "." + "klb.test." + domain),
@@ -289,7 +267,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 				g.Expect(tests.EndpointsTraversable(dnsRecord.Spec.Endpoints, tests.HostOne(domain), []string{tests.IPAddressOne, tests.IPAddressTwo})).To(BeTrue())
 
 				g.Expect(wildcardDnsRecord.Name).To(Equal(wildcardRecordName))
-				g.Expect(wildcardDnsRecord.Spec.ManagedZoneRef.Name).To(Equal("mz-example-com"))
+				g.Expect(wildcardDnsRecord.Spec.ProviderRef.Name).To(Equal(dnsProviderSecret.Name))
 				g.Expect(wildcardDnsRecord.Spec.Endpoints).To(ContainElements(
 					PointTo(MatchFields(IgnoreExtras, Fields{
 						"DNSName":       Equal(clusterHash + "-" + gwHash + "." + "klb." + domain),

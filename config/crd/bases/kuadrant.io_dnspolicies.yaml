@@ -200,6 +200,20 @@ spec:
                 - geo
                 - weighted
                 type: object
+              providerRefs:
+                description: providerRefS is a list of references to provider secrets.
+                  Max is one but intention is to allow this to be more in the future
+                items:
+                  properties:
+                    name:
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  type: object
+                maxItems: 1
+                minItems: 1
+                type: array
               routingStrategy:
                 default: loadbalanced
                 enum:
@@ -210,7 +224,7 @@ spec:
                 - message: RoutingStrategy is immutable
                   rule: self == oldSelf
               targetRef:
-                description: TargetRef identifies an API object to apply policy to.
+                description: targetRef identifies an API object to apply policy to.
                 properties:
                   group:
                     description: Group is the group of the target resource.
@@ -239,6 +253,7 @@ spec:
                 - message: Invalid targetRef.kind. The only supported values are 'Gateway'
                   rule: self.kind == 'Gateway'
             required:
+            - providerRefs
             - routingStrategy
             - targetRef
             type: object

@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	"context"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
@@ -26,7 +27,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/dns-operator/api/v1alpha1"
+	dnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -58,13 +59,13 @@ const (
 // DNSPolicySpec defines the desired state of DNSPolicy
 // +kubebuilder:validation:XValidation:rule="!(self.routingStrategy == 'loadbalanced' && !has(self.loadBalancing))",message="spec.loadBalancing is a required field when spec.routingStrategy == 'loadbalanced'"
 type DNSPolicySpec struct {
-	// TargetRef identifies an API object to apply policy to.
+	// targetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'Gateway'"
 	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReference `json:"targetRef"`
 
 	// +optional
-	HealthCheck *v1alpha1.HealthCheckSpec `json:"healthCheck,omitempty"`
+	HealthCheck *dnsv1alpha1.HealthCheckSpec `json:"healthCheck,omitempty"`
 
 	// +optional
 	LoadBalancing *LoadBalancingSpec `json:"loadBalancing,omitempty"`
@@ -73,6 +74,11 @@ type DNSPolicySpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="RoutingStrategy is immutable"
 	// +kubebuilder:default=loadbalanced
 	RoutingStrategy RoutingStrategy `json:"routingStrategy"`
+
+	// providerRefS is a list of references to provider secrets. Max is one but intention is to allow this to be more in the future
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=1
+	ProviderRefs []dnsv1alpha1.ProviderRef `json:"providerRefs"`
 }
 
 type LoadBalancingSpec struct {
@@ -142,7 +148,7 @@ type DNSPolicyStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// +optional
-	HealthCheck *v1alpha1.HealthCheckStatus `json:"healthCheck,omitempty"`
+	HealthCheck *dnsv1alpha1.HealthCheckStatus `json:"healthCheck,omitempty"`
 
 	// +optional
 	RecordConditions map[string][]metav1.Condition `json:"recordConditions,omitempty"`
@@ -249,7 +255,7 @@ func (p *DNSPolicy) WithTargetRef(targetRef gatewayapiv1alpha2.LocalPolicyTarget
 	return p
 }
 
-func (p *DNSPolicy) WithHealthCheck(healthCheck v1alpha1.HealthCheckSpec) *DNSPolicy {
+func (p *DNSPolicy) WithHealthCheck(healthCheck dnsv1alpha1.HealthCheckSpec) *DNSPolicy {
 	p.Spec.HealthCheck = &healthCheck
 	return p
 }
@@ -262,6 +268,19 @@ func (p *DNSPolicy) WithLoadBalancing(loadBalancing LoadBalancingSpec) *DNSPolic
 func (p *DNSPolicy) WithRoutingStrategy(strategy RoutingStrategy) *DNSPolicy {
 	p.Spec.RoutingStrategy = strategy
 	return p
+}
+
+func (p *DNSPolicy) WithProviderRef(providerRef dnsv1alpha1.ProviderRef) *DNSPolicy {
+	p.Spec.ProviderRefs = append(p.Spec.ProviderRefs, providerRef)
+	return p
+}
+
+//ProviderRef
+
+func (p *DNSPolicy) WithProviderSecret(s corev1.Secret) *DNSPolicy {
+	return p.WithProviderRef(dnsv1alpha1.ProviderRef{
+		Name: s.Name,
+	})
 }
 
 //TargetRef
@@ -277,10 +296,10 @@ func (p *DNSPolicy) WithTargetGateway(gwName string) *DNSPolicy {
 //HealthCheck
 
 func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port int, protocol string, failureThreshold int) *DNSPolicy {
-	return p.WithHealthCheck(v1alpha1.HealthCheckSpec{
+	return p.WithHealthCheck(dnsv1alpha1.HealthCheckSpec{
 		Endpoint:         endpoint,
 		Port:             &port,
-		Protocol:         ptr.To(v1alpha1.HealthProtocol(protocol)),
+		Protocol:         ptr.To(dnsv1alpha1.HealthProtocol(protocol)),
 		FailureThreshold: &failureThreshold,
 	})
 }

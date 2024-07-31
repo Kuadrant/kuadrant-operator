@@ -39,9 +39,9 @@ export AWS_HOSTED_ZONE_ID=<AWS_HOSTED_ZONE_ID>
 
 > **Note:** ROOT_DOMAIN and AWS_HOSTED_ZONE_ID should be set to your AWS hosted zone *name* and *id* respectively.
 
-### Create a ManagedZone
+### Create a dns provider secret
 
-Create AWS credentials secret
+Create AWS provider secret
 ```shell
 export AWS_ACCESS_KEY_ID=<AWS_ACCESS_KEY_ID> AWS_SECRET_ACCESS_KEY=<AWS_SECRET_ACCESS_KEY>
 
@@ -49,27 +49,8 @@ kubectl -n my-gateways create secret generic aws-credentials \
   --type=kuadrant.io/aws \
   --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
   --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-```
-
-Create a ManagedZone
-```sh
-kubectl -n my-gateways apply -f - <<EOF
-apiVersion: kuadrant.io/v1alpha1
-kind: ManagedZone
-metadata:
-  name: $ROOT_DOMAIN
-spec:
-  id: $AWS_HOSTED_ZONE_ID
-  domainName: $ROOT_DOMAIN
-  description: "my managed zone"
-  dnsProviderSecretRef:
-    name: aws-credentials
-EOF
-```
-
-Check it's ready
-```shell
-kubectl get managedzones -n my-gateways
+  --from-literal=ZONE_ID_FILTER=$AWS_HOSTED_ZONE_ID
+  --from-literal=ZONE_DOMAIN_FILTER=$ROOT_DOMAIN
 ```
 
 ### Create an ingress gateway

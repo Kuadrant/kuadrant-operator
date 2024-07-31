@@ -14,7 +14,6 @@ keywords:
   - limitador
   - rate limiting
   - dns
-  - managed zones
   - kubernetes
 sources:
   - https://github.com/Kuadrant/kuadrant-operator/
@@ -30,7 +29,7 @@ dependencies:
     version: 0.0.0
     repository: https://kuadrant.io/helm-charts/
   - name: dns-operator
-    version: 0.0.0
+    version: remove_managed_zone_api
     repository: https://kuadrant.io/helm-charts/
 maintainers:
   - email: acatterm@redhat.com

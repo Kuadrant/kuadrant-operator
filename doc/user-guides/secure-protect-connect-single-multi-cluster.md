@@ -54,50 +54,26 @@ export clusterIssuerName=lets-encrypt
 export EMAIL=foo@example.com
 ```
 
-### Step 2 - Set up a managed DNS zone
+### Step 2 - Set up a DNS Provider
 
-The managed DNS zone declares a zone and credentials to access the zone that Kuadrant can use to set up DNS configuration.
+The DNS provider declares a credential to access the zone(s) that Kuadrant can use to set up DNS configuration. You should ensure that this credential only has access to the zones you want manged.
 
-#### Create the ManagedZone resource
+#### Create the DNS Provider Secret resource
 
-Apply the following `ManagedZone` resource and AWS credentials to each cluster. Alternatively, if you are adding an additional cluster, add it to the new cluster:
+Apply the following `Secret` resource to each cluster. Alternatively, if you are adding an additional cluster, add it to the new cluster:
 
 ```bash
 kubectl create ns ${gatewayNS}
 ```
 
-Create the zone credentials as follows:
+Create the secret credentials as follows:
 
 ```
 kubectl -n ${gatewayNS} create secret generic aws-credentials \
   --type=kuadrant.io/aws \
   --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
   --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-
-```
-
-Then create a `ManagedZone` as follows:
-
-```bash
-kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1alpha1
-kind: ManagedZone
-metadata:
-  name: managedzone
-  namespace: ${gatewayNS}
-spec:
-  id: ${zid}
-  domainName: ${rootDomain}
-  description: "Kuadrant managed zone"
-  dnsProviderSecretRef:
-    name: aws-credentials
-EOF
-```
-
-Wait for the `ManagedZone` to be ready in each cluster as follows:
-
-```bash
-kubectl wait managedzone/managedzone --for=condition=ready=true -n ${gatewayNS}
+  --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
 ```
 
 ### Step 3 - Add a TLS issuer
@@ -308,10 +284,12 @@ spec:
     name: ${gatewayName}
     group: gateway.networking.k8s.io
     kind: Gateway
+  providerRefs:
+    - name: aws-credentials
 EOF
 ```    
 
-NOTE:  The `DNSPolicy` will leverage the `ManagedZone` that you defined earlier based on the listener hosts defined in the Gateway.
+NOTE:  The `DNSPolicy` will use the DNS Provider `Secret` that you defined earlier.
 
 Check that your `DNSPolicy` has been accepted as follows:
 

@@ -35,7 +35,12 @@ spec:
     group: gateway.networking.k8s.io
     kind: Gateway
     name: mygateway
-   
+    
+ # reference to an existing secret resource containing provider credentials and configuration
+ # it can only refer to Secrets in the same namespace as the DNSPolicy that have the type kuadrant.io/(provider) e.g kuadrant.io/aws
+  providerRefs:
+   - name: my-aws-credentials
+ 
   # (optional) routing strategy to use when creating DNS records, defaults to `loadbalanced`
   # determines what DNS records are created in the DNS provider
   # check out Kuadrant RFC 0005 https://github.com/Kuadrant/architecture/blob/main/rfcs/0005-single-cluster-dnspolicy.md to learn more about the Routing Strategy field
@@ -82,11 +87,12 @@ Check out the [API reference](reference/dnspolicy.md) for a full specification o
 
 ## Using the DNSPolicy
 
-### DNS Provider and ManagedZone Setup
+### DNS Provider Setup
 
 A DNSPolicy acts against a target Gateway by processing its listeners for hostnames that it can create dns records for. 
 In order for it to do this, it must know about dns providers, and what domains these dns providers are currently hosting.
-This is done through the creation of ManagedZones and dns provider secrets containing the credentials for the dns provider account.
+This is done through the creation of dns provider secrets containing the credentials and configuration for the dns provider 
+ account.
 
 If for example a Gateway is created with a listener with a hostname of `echo.apps.hcpapps.net`:
 ```yaml
@@ -105,38 +111,26 @@ spec:
       protocol: HTTP
 ```
 
-In order for the DNSPolicy to act upon that listener, a ManagedZone must exist for that hostnames' domain.
-
-```yaml
-apiVersion: kuadrant.io/v1alpha1
-kind: ManagedZone
-metadata:
-  name: apps.hcpapps.net
-spec:
-  domainName: apps.hcpapps.net
-  description: "apps.hcpapps.net managed domain"
-  dnsProviderSecretRef:
-    name: my-aws-credentials
-```
-
-The managed zone references a secret containing the external DNS provider services credentials.
+In order for the DNSPolicy to act upon that listener, a DNS provider Secret must exist for that hostnames' domain.
 
 ```yaml
 apiVersion: v1
 kind: Secret
 metadata:
   name: my-aws-credentials
-  namespace: <ManagedZone Namespace>
+  namespace: <Gateway Namespace>
 data:
   AWS_ACCESS_KEY_ID: <AWS_ACCESS_KEY_ID>
   AWS_REGION: <AWS_REGION>
   AWS_SECRET_ACCESS_KEY: <AWS_SECRET_ACCESS_KEY>
+  ZONE_ID_FILTER: <MY_ZONE_ID>
+  ZONE_DOMAIN_FILTER: apps.hcpapps.net
 type: kuadrant.io/aws
 ```
 
 ### Targeting a Gateway networking resource
 
-When a DNSPolicy targets a Gateway, the policy will be enforced on all gateway listeners that have a matching ManagedZone.
+When a DNSPolicy targets a Gateway, the policy will be enforced on all gateway listeners.
 
 Target a Gateway by setting the `spec.targetRef` field of the DNSPolicy as follows:
 
@@ -154,7 +148,7 @@ spec:
 
 ### DNSRecord Resource
 
-The DNSPolicy will create a DNSRecord resource for each listener hostname with a suitable ManagedZone configured. The DNSPolicy resource uses the status of the Gateway to determine what dns records need to be created based on the clusters it has been placed onto.
+The DNSPolicy will create a DNSRecord resource for each listener hostname. The DNSPolicy resource uses the status of the Gateway to determine what dns records need to be created based on the clusters it has been placed onto.
 
 Given the following multi cluster gateway status:
 ```yaml
@@ -228,8 +222,8 @@ spec:
       recordType: A
       targets:
         - 172.31.201.1
-  managedZone:
-    name: apps.hcpapps.net   
+  providerRefs:
+    - name: my-aws-credentials
 ```
 
 After DNSRecord reconciliation the listener hostname should be resolvable through dns:
@@ -257,8 +251,8 @@ spec:
       targets:
         - 172.31.201.1
         - 172.31.202.1
-  managedZone:
-    name: apps.hcpapps.net   
+  providerRefs:
+   - name: my-aws-credentials 
 ```
 
 After DNSRecord reconciliation the listener hostname should be resolvable through dns:
@@ -267,13 +261,6 @@ After DNSRecord reconciliation the listener hostname should be resolvable throug
 dig echo.apps.hcpapps.net +short
 172.31.201.1
 ```
-
-### Examples
-
-Check out the following user guides for examples of using the Kuadrant DNSPolicy:
-
-[//]: # (ToDo mnairn)
-[//]: # (* [Multicluster LoadBalanced DNSPolicy]&#40;../how-to/multicluster-loadbalanced-dnspolicy.md&#41;)
 
 ### Known limitations
 

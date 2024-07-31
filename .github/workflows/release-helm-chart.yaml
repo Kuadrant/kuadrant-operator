@@ -27,6 +27,8 @@ jobs:
 
       - name: Package Helm Chart
         run: |
+          make helm-add-kuadrant-repo
+          make helm-dependency-build
           make helm-package
 
       - name: Parse Tag

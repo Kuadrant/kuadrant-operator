@@ -39,6 +39,10 @@ helm-dependency-build: $(HELM) ## Build the chart dependencies
 	# Fetch and builds dependencies in Chart.yaml, updates the Chart.lock and downloads the charts .tgz
 	$(HELM) dependency build charts/$(REPO)
 
+.PHONY: helm-add-kuadrant-repo
+helm-add-kuadrant-repo: $(HELM) ## Add the Kuadrant charts repo and force update it
+	$(HELM) repo add kuadrant https://kuadrant.io/helm-charts --force-update
+
 # GitHub Token with permissions to upload to the release assets
 HELM_WORKFLOWS_TOKEN ?= <YOUR-TOKEN>
 # GitHub Release Asset Browser Download URL, it can be find in the output of the uploaded asset

@@ -29,42 +29,30 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *api.Auth
 	logger.V(1).Info("Reconciling AuthPolicy status", "spec error", specErr)
 
 	newStatus := r.calculateStatus(ctx, ap, specErr)
-
-	equalStatus := ap.Status.Equals(newStatus, logger)
-	logger.V(1).Info("Status", "status is different", !equalStatus)
-	logger.V(1).Info("Status", "generation is different", ap.Generation != ap.Status.ObservedGeneration)
-	if equalStatus && ap.Generation == ap.Status.ObservedGeneration {
-		logger.V(1).Info("Status up-to-date. No changes required.")
-		return ctrl.Result{}, nil
-	}
-
-	// Save the generation number we acted on, otherwise we might wrongfully indicate
-	// that we've seen a spec update when we retry.
-	// TODO: This can clobber an update if we allow multiple agents to write to the
-	// same status.
-	newStatus.ObservedGeneration = ap.Generation
-
-	logger.V(1).Info("Updating Status", "sequence no:", fmt.Sprintf("sequence No: %v->%v", ap.Status.ObservedGeneration, newStatus.ObservedGeneration))
-
-	ap.Status = *newStatus
-	updateErr := r.Client().Status().Update(ctx, ap)
-	if updateErr != nil {
+	if err := r.ReconcileResourceStatus(
+		ctx,
+		client.ObjectKeyFromObject(ap),
+		&api.AuthPolicy{},
+		api.AuthPolicyStatusMutator(newStatus, logger),
+	); err != nil {
 		// Ignore conflicts, resource might just be outdated.
-		if apierrors.IsConflict(updateErr) {
-			logger.Info("Failed to update status: resource might just be outdated")
+		if apierrors.IsConflict(err) {
+			logger.V(1).Info("Failed to update status: resource might just be outdated")
 			return ctrl.Result{Requeue: true}, nil
 		}
 
-		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", updateErr)
+		return ctrl.Result{}, err
 	}
+
 	return ctrl.Result{}, nil
 }
 
 func (r *AuthPolicyReconciler) calculateStatus(ctx context.Context, ap *api.AuthPolicy, specErr error) *api.AuthPolicyStatus {
 	newStatus := &api.AuthPolicyStatus{
-		Conditions:         slices.Clone(ap.Status.Conditions),
-		ObservedGeneration: ap.Status.ObservedGeneration,
+		Conditions: slices.Clone(ap.Status.Conditions),
 	}
+
+	newStatus.SetObservedGeneration(ap.GetGeneration())
 
 	acceptedCond := r.acceptedCondition(ap, specErr)
 	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)

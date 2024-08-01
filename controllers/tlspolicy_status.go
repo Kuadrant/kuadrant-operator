@@ -23,13 +23,12 @@ import (
 	"slices"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
+	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
@@ -39,23 +38,23 @@ import (
 )
 
 func (r *TLSPolicyReconciler) reconcileStatus(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy, targetNetworkObject client.Object, specErr error) (ctrl.Result, error) {
+	logger, _ := logr.FromContext(ctx)
+
 	newStatus := r.calculateStatus(ctx, tlsPolicy, targetNetworkObject, specErr)
 
-	equalStatus := equality.Semantic.DeepEqual(newStatus, tlsPolicy.Status)
-	if equalStatus && tlsPolicy.Generation == tlsPolicy.Status.ObservedGeneration {
-		return reconcile.Result{}, nil
-	}
-
-	newStatus.ObservedGeneration = tlsPolicy.Generation
-
-	tlsPolicy.Status = *newStatus
-	updateErr := r.Client().Status().Update(ctx, tlsPolicy)
-	if updateErr != nil {
+	if err := r.ReconcileResourceStatus(
+		ctx,
+		client.ObjectKeyFromObject(tlsPolicy),
+		&v1alpha1.TLSPolicy{},
+		v1alpha1.TLSPolicyStatusMutator(newStatus, logger),
+	); err != nil {
 		// Ignore conflicts, resource might just be outdated.
-		if apierrors.IsConflict(updateErr) {
+		if apierrors.IsConflict(err) {
+			logger.V(1).Info("Failed to update status: resource might just be outdated")
 			return ctrl.Result{Requeue: true}, nil
 		}
-		return ctrl.Result{}, updateErr
+
+		return ctrl.Result{}, err
 	}
 
 	if kuadrant.IsTargetNotFound(specErr) {
@@ -68,9 +67,10 @@ func (r *TLSPolicyReconciler) reconcileStatus(ctx context.Context, tlsPolicy *v1
 func (r *TLSPolicyReconciler) calculateStatus(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy, targetNetworkObject client.Object, specErr error) *v1alpha1.TLSPolicyStatus {
 	newStatus := &v1alpha1.TLSPolicyStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
-		Conditions:         slices.Clone(tlsPolicy.Status.Conditions),
-		ObservedGeneration: tlsPolicy.Status.ObservedGeneration,
+		Conditions: slices.Clone(tlsPolicy.Status.Conditions),
 	}
+
+	newStatus.SetObservedGeneration(tlsPolicy.GetGeneration())
 
 	acceptedCond := kuadrant.AcceptedCondition(tlsPolicy, specErr)
 	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)

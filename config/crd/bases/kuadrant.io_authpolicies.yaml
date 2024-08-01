@@ -13158,8 +13158,8 @@ spec:
                 - type
                 x-kubernetes-list-type: map
               observedGeneration:
-                description: ObservedGeneration reflects the generation of the most
-                  recently observed spec.
+                description: observedGeneration is the most recently observed generation
+                  of the spec.
                 format: int64
                 type: integer
             type: object

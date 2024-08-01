@@ -2,9 +2,11 @@ package v1beta2
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -14,6 +16,7 @@ import (
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -220,9 +223,7 @@ func (c AuthPolicyCommonSpec) GetRouteSelectors() []RouteSelector {
 }
 
 type AuthPolicyStatus struct {
-	// ObservedGeneration reflects the generation of the most recently observed spec.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	reconcilers.StatusMeta `json:",inline"`
 
 	// Represents the observations of a foo's current state.
 	// Known .status.conditions.type are: "Available"
@@ -233,23 +234,33 @@ type AuthPolicyStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-func (s *AuthPolicyStatus) Equals(other *AuthPolicyStatus, logger logr.Logger) bool {
-	if s.ObservedGeneration != other.ObservedGeneration {
-		diff := cmp.Diff(s.ObservedGeneration, other.ObservedGeneration)
-		logger.V(1).Info("ObservedGeneration not equal", "difference", diff)
-		return false
-	}
+func AuthPolicyStatusMutator(desiredStatus *AuthPolicyStatus, logger logr.Logger) reconcilers.StatusMutatorFunc {
+	return func(obj client.Object) (bool, error) {
+		existing, ok := obj.(*AuthPolicy)
+		if !ok {
+			return false, fmt.Errorf("unsupported object type %T", obj)
+		}
 
-	// Marshalling sorts by condition type
-	currentMarshaledJSON, _ := kuadrant.ConditionMarshal(s.Conditions)
-	otherMarshaledJSON, _ := kuadrant.ConditionMarshal(other.Conditions)
-	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
-		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
-		logger.V(1).Info("Conditions not equal", "difference", diff)
-		return false
-	}
+		opts := cmp.Options{
+			cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime"),
+			cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
+				return k == "lastTransitionTime"
+			}),
+		}
 
-	return true
+		if cmp.Equal(*desiredStatus, existing.Status, opts) {
+			return false, nil
+		}
+
+		if logger.V(1).Enabled() {
+			diff := cmp.Diff(*desiredStatus, existing.Status, opts)
+			logger.V(1).Info("status not equal", "difference", diff)
+		}
+
+		existing.Status = *desiredStatus
+
+		return true, nil
+	}
 }
 
 func (s *AuthPolicyStatus) GetConditions() []metav1.Condition {

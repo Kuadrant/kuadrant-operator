@@ -1,0 +1,84 @@
+name: Release Operator
+
+on:
+  workflow_dispatch:
+    inputs:
+      gitRef:
+        description: Commit SHA, tag or branch name
+        required: true
+      kuadrantOperatorVersion:
+        description: Kuadrant Operator version
+        default: 0.0.0
+        type: string
+      authorinoOperatorVersion:
+        description: Authorino Operator bundle version
+        default: latest
+        type: string
+      limitadorOperatorVersion:
+        description: Limitador Operator bundle version
+        default: latest
+        type: string
+      dnsOperatorVersion:
+        description: DNS Operator bundle version
+        default: latest
+        type: string
+      wasmShimVersion:
+        description: WASM Shim version
+        default: latest
+        type: string
+      replacesVersion:
+        description: Kuadrant Operator replaced version
+        default: 0.0.0-alpha
+        type: string
+      channels:
+        description: Bundle and catalog channels, comma separated
+        default: preview
+        type: string
+
+jobs:
+  build:
+    name: Release operator
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Install gettext-base
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext-base
+      - name: Set up Go 1.21.x
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.21.x
+        id: go
+      - name: Checkout code at git ref
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ inputs.gitRef }}
+      - name: Create release branch
+        if: ${{ !startsWith(inputs.gitRef, 'release-v') }}
+        run: |
+          git checkout -b release-v${{ inputs.kuadrantOperatorVersion }}
+      - name: Prepare release
+        run: |
+          VERSION=${{ inputs.kuadrantOperatorVersion }} \
+          AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
+          LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
+          DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
+          WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
+          REPLACES_VERSION=${{ inputs.replacesVersion }} \
+          CHANNELS=${{ inputs.channels }}
+          make prepare-release
+      - name: Commit and push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A && git commit -m "Prepared release v${{ inputs.kuadrantOperatorVersion }}"
+          git push origin release-v${{ inputs.kuadrantOperatorVersion }}
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: v${{ inputs.kuadrantOperatorVersion }}
+          tag_name: v${{ inputs.kuadrantOperatorVersion }}
+          body: "**This release enables installations of Authorino Operator v${{ inputs.authorinoOperatorVersion }}, Limitador Operator v${{ inputs.limitadorOperatorVersion }}, DNS Operator v${{ inputs.dnsOperatorVersion }} and WASM Shim v${{ inputs.wasmShimVersion }}**"
+          generate_release_notes: true
+          target_commitish: release-v${{ github.event.inputs.operatorVersion }}
+          prerelease: ${{ github.event.inputs.prerelease }}

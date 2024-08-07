@@ -4,6 +4,8 @@ metadata:
   name: prod-web
   namespace: ${DNSPOLICY_NAMESPACE}
 spec:
+  providerRef:
+    name: aws-credentials
   targetRef:
     name: prod-web-istio
     group: gateway.networking.k8s.io

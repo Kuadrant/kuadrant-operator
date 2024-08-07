@@ -13379,6 +13379,18 @@ spec:
                 - geo
                 - weighted
                 type: object
+              providerRefs:
+                description: providerRef is a reference to a provider secret.
+                items:
+                  properties:
+                    name:
+                      type: string
+                  required:
+                  - name
+                  type: object
+                maxItems: 1
+                minItems: 1
+                type: array
               routingStrategy:
                 default: loadbalanced
                 enum:
@@ -13389,7 +13401,7 @@ spec:
                 - message: RoutingStrategy is immutable
                   rule: self == oldSelf
               targetRef:
-                description: TargetRef identifies an API object to apply policy to.
+                description: targetRef identifies an API object to apply policy to.
                 properties:
                   group:
                     description: Group is the group of the target resource.
@@ -13418,6 +13430,7 @@ spec:
                 - message: Invalid targetRef.kind. The only supported values are 'Gateway'
                   rule: self.kind == 'Gateway'
             required:
+            - providerRefs
             - routingStrategy
             - targetRef
             type: object
@@ -17093,14 +17106,6 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - kuadrant.io
-  resources:
-  - managedzones
-  verbs:
-  - get
-  - list
-  - watch
 - apiGroups:
   - kuadrant.io
   resources:

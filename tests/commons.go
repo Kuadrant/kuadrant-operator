@@ -25,9 +25,9 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -457,29 +457,15 @@ func ObjectDoesNotExist(k8sClient client.Client, obj client.Object) func() bool 
 
 // DNS
 
-func BuildManagedZone(name, ns, domainName, secretName string) *kuadrantdnsv1alpha1.ManagedZone {
-	return &kuadrantdnsv1alpha1.ManagedZone{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ns,
-		},
-		Spec: kuadrantdnsv1alpha1.ManagedZoneSpec{
-			DomainName:  domainName,
-			Description: domainName,
-			SecretRef: kuadrantdnsv1alpha1.ProviderRef{
-				Name: secretName,
-			},
-		},
-	}
-}
-
-func BuildInMemoryCredentialsSecret(name, ns string) *corev1.Secret {
+func BuildInMemoryCredentialsSecret(name, ns, initDomain string) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 		},
-		Data: map[string][]byte{},
+		StringData: map[string]string{
+			kuadrantdnsv1alpha1.InmemInitZonesKey: initDomain,
+		},
 		Type: "kuadrant.io/inmemory",
 	}
 }

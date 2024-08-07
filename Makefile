@@ -140,7 +140,8 @@ endif
 LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LIMITADOR_OPERATOR_BUNDLE_IMG_TAG)
 
 ## dns
-DNS_OPERATOR_VERSION ?= main
+# ToDo mnairn: revert before merge
+DNS_OPERATOR_VERSION ?= remove_managed_zone_api
 
 kuadrantdns_bundle_is_semantic := $(call is_semantic_version,$(DNS_OPERATOR_VERSION))
 ifeq (latest,$(DNS_OPERATOR_VERSION))

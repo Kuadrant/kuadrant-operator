@@ -59,8 +59,6 @@ type DNSPolicyReconciler struct {
 //+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords/status,verbs=get
 
-//+kubebuilder:rbac:groups=kuadrant.io,resources=managedzones,verbs=get;list;watch
-
 func (r *DNSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Logger().WithValues("DNSPolicy", req.NamespacedName)
 	log.Info("Reconciling DNSPolicy")

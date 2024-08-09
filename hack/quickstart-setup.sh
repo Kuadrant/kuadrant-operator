@@ -55,13 +55,6 @@ fi
 if [ -z $KUADRANT_REF ]; then
   KUADRANT_REF=${KUADRANT_REF:="main"}
 fi
-if [ -z $MGC_REF ]; then
-  MGC_REF=${MGC_REF:="main"}
-fi
-
-if [ -z $ISTIO_INSTALL_SAIL ]; then
-  ISTIO_INSTALL_SAIL=${ISTIO_INSTALL_SAIL:=false}
-fi
 
 export TOOLS_IMAGE=quay.io/kuadrant/mgc-tools:latest
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -86,8 +79,6 @@ KUADARNT_THANOS_KUSTOMIZATION="${KUADRANT_REPO}/config/thanos?ref=${KUADRANT_REF
 KUADARNT_OBSERVABILITY_KUSTOMIZATION="${KUADRANT_REPO}/config/observability?ref=${KUADRANT_REF}"
 KUADRANT_DASHBOARDS_KUSTOMIZATION="${KUADRANT_REPO}/examples/dashboards?ref=${KUADRANT_REF}"
 KUADRANT_ALERTS_KUSTOMIZATION="${KUADRANT_REPO}/examples/alerts?ref=${KUADRANT_REF}"
-MGC_REPO="github.com/${KUADRANT_ORG}/multicluster-gateway-controller.git"
-MGC_ISTIO_KUSTOMIZATION="${MGC_REPO}/config/istio?ref=${MGC_REF}"
 
 # Make temporary directory
 mkdir -p ${TMP_DIR}
@@ -455,21 +446,10 @@ success "Gateway API installed successfully."
 
 # Install istio
 info "Installing Istio as a Gateway API provider... 🛫"
-if [ "$ISTIO_INSTALL_SAIL" = true ]; then
-  info "Installing Istio via Sail"
-  kubectl apply -k ${KUADRANT_ISTIO_KUSTOMIZATION}
-  kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
-  kubectl apply -f ${KUADRANT_REPO_RAW}/config/dependencies/istio/sail/istio.yaml
-else
-  # Create CRD first to prevent race condition with creating CR
-  info "Generating Istio configuration... 🛠️"
-  kubectl kustomize ${MGC_ISTIO_KUSTOMIZATION} >${TMP_DIR}/doctmp
-  success "Istio configuration generated."
-  ${YQ_BIN} 'select(.kind == "CustomResourceDefinition")' ${TMP_DIR}/doctmp | kubectl apply -f -
-  kubectl -n istio-system wait --for=condition=established crd/istiooperators.install.istio.io --timeout=60s
-  cat ${TMP_DIR}/doctmp | kubectl apply -f -
-  kubectl -n istio-operator wait --for=condition=Available deployment istio-operator --timeout=300s
-fi
+info "Installing Istio via Sail"
+kubectl apply -k ${KUADRANT_ISTIO_KUSTOMIZATION}
+kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
+kubectl apply -f ${KUADRANT_REPO_RAW}/config/dependencies/istio/sail/istio.yaml
 success "Istio installed successfully."
 
 # Install cert-manager
@@ -534,7 +514,7 @@ info "Here's what has been configured:"
 info "  - Kubernetes cluster with name '${KUADRANT_CLUSTER_NAME}'"
 info "  - a Kuadrant namespace 'kuadrant-system'"
 info "  - Gateway API"
-info "  - Istio installed $([ "$ISTIO_INSTALL_SAIL" = true ] && echo "via Sail" || echo "without Sail") as a Gateway API provider"
+info "  - Istio installed as a Gateway API provider"
 info "  - cert-manager"
 info "  - MetalLB with configured IP address pool"
 info "  - Kuadrant components and a sample configuration"

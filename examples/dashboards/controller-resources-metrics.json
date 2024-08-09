@@ -232,7 +232,6 @@
   "style": "dark",
   "tags": [],
   "templating": {
-    
     "list": [
       {
         "current": {
@@ -253,7 +252,7 @@
         "skipUrlSync": false,
         "type": "datasource"
       },
-            {
+      {
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"
@@ -287,7 +286,7 @@
         "definition": "label_values(controller_runtime_reconcile_total, namespace)",
         "hide": 0,
         "includeAll": false,
-                "multi": false,
+        "multi": false,
         "name": "namespace",
         "options": [],
         "query": {

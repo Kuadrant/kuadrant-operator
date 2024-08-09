@@ -19,8 +19,6 @@ package v1beta1
 import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -31,36 +29,6 @@ import (
 
 // KuadrantSpec defines the desired state of Kuadrant
 type KuadrantSpec struct {
-	// +optional
-	Limitador *LimitadorSpec `json:"limitador,omitempty"`
-}
-
-type LimitadorSpec struct {
-
-	// +optional
-	Affinity *corev1.Affinity `json:"affinity,omitempty"`
-
-	// +optional
-	Replicas *int `json:"replicas,omitempty"`
-
-	// +optional
-	Storage *limitadorv1alpha1.Storage `json:"storage,omitempty"`
-
-	// +optional
-	RateLimitHeaders *limitadorv1alpha1.RateLimitHeadersType `json:"rateLimitHeaders,omitempty"`
-
-	// +optional
-	Telemetry *limitadorv1alpha1.Telemetry `json:"telemetry,omitempty"`
-
-	// +optional
-	PodDisruptionBudget *limitadorv1alpha1.PodDisruptionBudgetType `json:"pdb,omitempty"`
-
-	// +optional
-	ResourceRequirements *corev1.ResourceRequirements `json:"resourceRequirements,omitempty"`
-
-	// Sets the level of verbosity
-	// +optional
-	Verbosity *limitadorv1alpha1.VerbosityLevel `json:"verbosity,omitempty"`
 }
 
 // KuadrantStatus defines the observed state of Kuadrant

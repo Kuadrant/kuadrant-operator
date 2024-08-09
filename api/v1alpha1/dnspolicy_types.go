@@ -41,11 +41,11 @@ var (
 	}
 )
 
-type RoutingStrategy string
+//type RoutingStrategy string
 
 const (
-	SimpleRoutingStrategy       RoutingStrategy = "simple"
-	LoadBalancedRoutingStrategy RoutingStrategy = "loadbalanced"
+	//SimpleRoutingStrategy       RoutingStrategy = "simple"
+	//LoadBalancedRoutingStrategy RoutingStrategy = "loadbalanced"
 
 	DefaultWeight Weight  = 120
 	DefaultGeo    GeoCode = "default"
@@ -69,10 +69,10 @@ type DNSPolicySpec struct {
 	// +optional
 	LoadBalancing *LoadBalancingSpec `json:"loadBalancing,omitempty"`
 
-	// +kubebuilder:validation:Enum=simple;loadbalanced
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="RoutingStrategy is immutable"
-	// +kubebuilder:default=loadbalanced
-	RoutingStrategy RoutingStrategy `json:"routingStrategy"`
+	//// +kubebuilder:validation:Enum=simple;loadbalanced
+	//// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="RoutingStrategy is immutable"
+	//// +kubebuilder:default=loadbalanced
+	RoutingStrategy v1alpha1.RoutingStrategy `json:"routingStrategy"`
 }
 
 type LoadBalancingSpec struct {
@@ -259,7 +259,7 @@ func (p *DNSPolicy) WithLoadBalancing(loadBalancing LoadBalancingSpec) *DNSPolic
 	return p
 }
 
-func (p *DNSPolicy) WithRoutingStrategy(strategy RoutingStrategy) *DNSPolicy {
+func (p *DNSPolicy) WithRoutingStrategy(strategy v1alpha1.RoutingStrategy) *DNSPolicy {
 	p.Spec.RoutingStrategy = strategy
 	return p
 }

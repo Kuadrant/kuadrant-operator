@@ -17,7 +17,6 @@ import (
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
-	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
 func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, gwDiffObj *reconcilerutils.GatewayDiffs) error {
@@ -41,58 +40,47 @@ func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy
 	return nil
 }
 
-func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) error {
+func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) error {
 	log := crlog.FromContext(ctx)
 	clusterID, err := utils.GetClusterUID(ctx, r.Client())
 	if err != nil {
 		return fmt.Errorf("failed to generate cluster ID: %w", err)
 	}
-	gatewayWrapper := multicluster.NewGatewayWrapper(gw, clusterID)
-	if err := gatewayWrapper.Validate(); err != nil {
-		return err
-	}
 
-	if err := r.dnsHelper.removeDNSForDeletedListeners(ctx, gatewayWrapper.Gateway); err != nil {
+	if err = r.dnsHelper.removeDNSForDeletedListeners(ctx, gateway); err != nil {
 		log.V(3).Info("error removing DNS for deleted listeners")
 		return err
 	}
 
-	clusterGateways := gatewayWrapper.GetClusterGateways()
+	log.V(3).Info("checking gateway for attached routes ", "gateway", gateway.Name)
 
-	log.V(3).Info("checking gateway for attached routes ", "gateway", gatewayWrapper.Name, "clusterGateways", clusterGateways)
-
-	for _, listener := range gatewayWrapper.Spec.Listeners {
-		var mz, err = r.dnsHelper.getManagedZoneForListener(ctx, gatewayWrapper.Namespace, listener)
+	for _, listener := range gateway.Spec.Listeners {
+		var mz, err = r.dnsHelper.getManagedZoneForListener(ctx, gateway.Namespace, listener)
 		if err != nil {
 			return err
 		}
 		listenerHost := *listener.Hostname
 		if listenerHost == "" {
-			log.Info("skipping listener no hostname assigned", listener.Name, "in ns ", gatewayWrapper.Namespace)
+			log.Info("skipping listener no hostname assigned", listener.Name, "in ns ", gateway.Namespace)
 			continue
 		}
-
-		listenerGateways := utils.Filter(clusterGateways, func(cgw multicluster.ClusterGateway) bool {
-			hasAttachedRoute := false
-			for _, statusListener := range cgw.Status.Listeners {
-				if string(statusListener.Name) == string(listener.Name) {
-					hasAttachedRoute = int(statusListener.AttachedRoutes) > 0
-					break
-				}
+		hasAttachedRoute := false
+		for _, statusListener := range gateway.Status.Listeners {
+			if string(listener.Name) == string(statusListener.Name) {
+				hasAttachedRoute = statusListener.AttachedRoutes > 0
 			}
-			return hasAttachedRoute
-		})
+		}
 
-		if len(listenerGateways) == 0 {
+		if !hasAttachedRoute {
 			// delete record
 			log.V(1).Info("no cluster gateways, deleting DNS record", " for listener ", listener.Name)
-			if err := r.dnsHelper.deleteDNSRecordForListener(ctx, gatewayWrapper, listener); client.IgnoreNotFound(err) != nil {
+			if err := r.dnsHelper.deleteDNSRecordForListener(ctx, gateway, listener); client.IgnoreNotFound(err) != nil {
 				return fmt.Errorf("failed to delete dns record for listener %s : %w", listener.Name, err)
 			}
 			continue
 		}
 
-		dnsRecord, err := r.desiredDNSRecord(gatewayWrapper, dnsPolicy, listener, listenerGateways, mz)
+		dnsRecord, err := r.desiredDNSRecord(gateway, clusterID, dnsPolicy, listener, mz)
 		if err != nil {
 			return err
 		}
@@ -111,7 +99,7 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 	return nil
 }
 
-func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *multicluster.GatewayWrapper, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener, clusterGateways []multicluster.ClusterGateway, managedZone *kuadrantdnsv1alpha1.ManagedZone) (*kuadrantdnsv1alpha1.DNSRecord, error) {
+func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener, managedZone *kuadrantdnsv1alpha1.ManagedZone) (*kuadrantdnsv1alpha1.DNSRecord, error) {
 	rootHost := string(*targetListener.Hostname)
 	var healthCheckSpec *kuadrantdnsv1alpha1.HealthCheckSpec
 
@@ -139,15 +127,11 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *multicluster.GatewayWrap
 	}
 	dnsRecord.Labels[LabelListenerReference] = string(targetListener.Name)
 
-	mcgTarget, err := multicluster.NewGatewayTarget(gateway.Gateway, clusterGateways, dnsPolicy.Spec.LoadBalancing)
+	endpoints, err := kuadrantdnsv1alpha1.GenerateEndpoints(gateway, dnsRecord, targetListener, buildRouting(clusterID, dnsPolicy))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create multi cluster gateway target for listener %s : %w", targetListener.Name, err)
+		return nil, fmt.Errorf("failed to generate dns record for a gateway %s in %s ns: %w", gateway.Name, gateway.Namespace, err)
 	}
-
-	if err = r.dnsHelper.setEndpoints(mcgTarget, dnsRecord, targetListener, dnsPolicy.Spec.RoutingStrategy); err != nil {
-		return nil, fmt.Errorf("failed to add dns record dnsTargets %w %v", err, mcgTarget)
-	}
-
+	dnsRecord.Spec.Endpoints = endpoints
 	return dnsRecord, nil
 }
 
@@ -194,4 +178,20 @@ func dnsRecordBasicMutator(existingObj, desiredObj client.Object) (bool, error) 
 	existing.Spec = desired.Spec
 
 	return true, nil
+}
+
+func buildRouting(clusterID string, policy *v1alpha1.DNSPolicy) kuadrantdnsv1alpha1.Routing {
+	customWeights := make([]kuadrantdnsv1alpha1.CustomWeight, 0)
+	for _, weight := range policy.Spec.LoadBalancing.Weighted.Custom {
+		customWeights = append(customWeights, kuadrantdnsv1alpha1.CustomWeight{
+			Weight:   int(weight.Weight),
+			Selector: *weight.Selector,
+		})
+	}
+	return *kuadrantdnsv1alpha1.NewRouting(
+		policy.Spec.RoutingStrategy,
+		policy.Spec.LoadBalancing.Geo.DefaultGeo,
+		int(policy.Spec.LoadBalancing.Weighted.DefaultWeight),
+		customWeights,
+		clusterID)
 }

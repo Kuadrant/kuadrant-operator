@@ -34,6 +34,10 @@ on:
         description: Bundle and catalog channels, comma separated
         default: preview
         type: string
+      prerelease:
+        description: Is the release a pre-release?
+        required: false
+        type: boolean
 
 jobs:
   build:
@@ -80,5 +84,5 @@ jobs:
           tag_name: v${{ inputs.kuadrantOperatorVersion }}
           body: "**This release enables installations of Authorino Operator v${{ inputs.authorinoOperatorVersion }}, Limitador Operator v${{ inputs.limitadorOperatorVersion }}, DNS Operator v${{ inputs.dnsOperatorVersion }} and WASM Shim v${{ inputs.wasmShimVersion }}**"
           generate_release_notes: true
-          target_commitish: release-v${{ github.event.inputs.operatorVersion }}
+          target_commitish: release-v${{ github.event.inputs.kuadrantOperatorVersion }}
           prerelease: ${{ github.event.inputs.prerelease }}

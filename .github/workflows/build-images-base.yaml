@@ -194,4 +194,4 @@ jobs:
           tags: |
             ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog:${{ env.IMG_TAGS }}
       - name: Print Catalog Image URL
-        run: echo "Catalog image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog:${{ env.IMG_TAGS }}"
+        run: echo "Catalog image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog:${{ env.IMG_TAGS }}"        

@@ -85,6 +85,9 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v3
+      - name: Set IMG_TAG to lower case
+        id: lower-img-tag
+        run: echo "IMG_TAGS=${IMG_TAGS@L}" >> $GITHUB_ENV
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to container registry
@@ -119,11 +122,14 @@ jobs:
         id: go
       - name: Check out code
         uses: actions/checkout@v3
+      - name: Set IMG_TAG to lower case
+        id: lower-img-tag
+        run: echo "IMG_TAGS=${IMG_TAGS@L}" >> $GITHUB_ENV
       - name: Run make bundle
         id: make-bundle
         run: |
           make bundle REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} \
-            VERSION=${{ env.VERSION }} IMAGE_TAG=${{ inputs.kuadrantOperatorTag }} \
+            VERSION=${{ env.VERSION }} IMAGE_TAG=${{ env.IMG_TAGS }} \
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
             DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
@@ -164,10 +170,13 @@ jobs:
         id: go
       - name: Check out code
         uses: actions/checkout@v3
+      - name: Set IMG_TAG to lower case
+        id: lower-img-tag
+        run: echo "IMG_TAGS=${IMG_TAGS@L}" >> $GITHUB_ENV
       - name: Generate Catalog Content
         run: |
           make catalog REGISTRY=${{ env.IMG_REGISTRY_HOST }} ORG=${{ env.IMG_REGISTRY_ORG }} \
-            VERSION=${{ env.VERSION }} IMAGE_TAG=${{ inputs.kuadrantOperatorTag }} \
+            VERSION=${{ env.VERSION }} IMAGE_TAG=${{ env.IMG_TAGS }} \
             AUTHORINO_OPERATOR_VERSION=${{ inputs.authorinoOperatorVersion }} \
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
             DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \

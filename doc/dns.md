@@ -90,9 +90,8 @@ Check out the [API reference](reference/dnspolicy.md) for a full specification o
 ### DNS Provider Setup
 
 A DNSPolicy acts against a target Gateway by processing its listeners for hostnames that it can create dns records for. 
-In order for it to do this, it must know about dns providers, and what domains these dns providers are currently hosting.
-This is done through the creation of dns provider secrets containing the credentials and configuration for the dns provider 
- account.
+In order for it to do this, it must know about the dns provider.
+This is done through the creation of dns provider secrets containing the credentials and configuration for the dns provider account.
 
 If for example a Gateway is created with a listener with a hostname of `echo.apps.hcpapps.net`:
 ```yaml
@@ -123,10 +122,57 @@ data:
   AWS_ACCESS_KEY_ID: <AWS_ACCESS_KEY_ID>
   AWS_REGION: <AWS_REGION>
   AWS_SECRET_ACCESS_KEY: <AWS_SECRET_ACCESS_KEY>
-  ZONE_ID_FILTER: <MY_ZONE_ID>
-  ZONE_DOMAIN_FILTER: apps.hcpapps.net
 type: kuadrant.io/aws
 ```
+
+By default, Kuadrant will list the available zones and find the matching zone based on the listener host in the gateway listener. If it finds more than one matching zone for a given listener host, it will not update any of those zones. 
+When providing a credential you should limit that credential down to just have write access to the zones you want Kuadrant to manage. Below is an example of a an AWS policy for doing this type of thing:
+
+```
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+                "route53:ListTagsForResources",
+                "route53:GetHealthCheckLastFailureReason",
+                "route53:GetHealthCheckStatus",
+                "route53:GetChange",
+                "route53:GetHostedZone",
+                "route53:ChangeResourceRecordSets",
+                "route53:ListResourceRecordSets",
+                "route53:GetHealthCheck",
+                "route53:UpdateHostedZoneComment",
+                "route53:UpdateHealthCheck",
+                "route53:CreateHealthCheck",
+                "route53:DeleteHealthCheck",
+                "route53:ListTagsForResource",
+                "route53:ListHealthChecks",
+                "route53:GetGeoLocation",
+                "route53:ListGeoLocations",
+                "route53:ListHostedZonesByName",
+                "route53:GetHealthCheckCount"
+            ],
+            "Resource": [
+                "arn:aws:route53:::hostedzone/Z08187901Y93585DDGM6K",
+                "arn:aws:route53:::healthcheck/*",
+                "arn:aws:route53:::change/*"
+            ]
+        },
+        {
+            "Sid": "VisualEditor1",
+            "Effect": "Allow",
+            "Action": [
+                "route53:ListHostedZones"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+
 
 ### Targeting a Gateway networking resource
 

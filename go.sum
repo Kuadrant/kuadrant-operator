@@ -240,8 +240,10 @@ github.com/kuadrant/authorino v0.17.2 h1:UgWH4NY/n36IhoaU+ELUkoujaly1/9sx5mHY5vU
 github.com/kuadrant/authorino v0.17.2/go.mod h1:al71fN0FX6c9Orrhk9GR4CtjtC+CD/lUHJCs7drlRNM=
 github.com/kuadrant/authorino-operator v0.11.1 h1:jndTZhiHMU+2Dk0NU+KP2+MUSfvclrn+YtTCQDJj+1s=
 github.com/kuadrant/authorino-operator v0.11.1/go.mod h1:TeFFdX477vUTMushCojaHpvwPLga4DpErGI2oQbqFIs=
-github.com/kuadrant/dns-operator v0.0.0-20240628144227-b2b1f9409766 h1:/5894tTfNlGy0qZuuLr984ZQILjWd7QGq+ge6yT9aF4=
-github.com/kuadrant/dns-operator v0.0.0-20240628144227-b2b1f9409766/go.mod h1:XquyzShT4VAew+2Kfg7zuQ1SrhbohyGgXIFZh2udTa0=
+github.com/kuadrant/dns-operator v0.0.0-20240731163454-777df870df90 h1:T08iFChpKyulZ/umDEuYBLvYgJBuv/9nli3W0wjr8OA=
+github.com/kuadrant/dns-operator v0.0.0-20240731163454-777df870df90/go.mod h1:Aq4LYFwhBzQYUew71KjtWPKr+e0jzgraX10Ki8wIKCY=
+github.com/kuadrant/dns-operator v0.0.0-20240809151102-e79ebbca8f70 h1:Jiq7dZWaepPZAVrG3QsDfVAIyR3qdgTdqN5v2lTvO8k=
+github.com/kuadrant/dns-operator v0.0.0-20240809151102-e79ebbca8f70/go.mod h1:Aq4LYFwhBzQYUew71KjtWPKr+e0jzgraX10Ki8wIKCY=
 github.com/kuadrant/limitador-operator v0.9.0 h1:hTQ6CFPayf/sL7cIzwWjCoU8uTn6fzWdsJgKbDlnFts=
 github.com/kuadrant/limitador-operator v0.9.0/go.mod h1:DQOlg9qFOcnWPrwO529JRCMLLOEXJQxkmOes952S/Hw=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=

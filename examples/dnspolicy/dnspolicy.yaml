@@ -8,6 +8,8 @@ spec:
     name: prod-web-istio
     group: gateway.networking.k8s.io
     kind: Gateway
+  providerRefs:
+    - name: aws-credentials
   routingStrategy: loadbalanced
   loadBalancing:
     weighted:

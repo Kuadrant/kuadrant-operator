@@ -2,6 +2,7 @@
 
 - [DNSPolicy](#DNSPolicy)
 - [DNSPolicySpec](#dnspolicyspec)
+    - [ProviderRefs](#providerRefs)
     - [HealthCheckSpec](#healthcheckspec)
     - [LoadBalancingSpec](#loadbalancingspec)
       - [LoadBalancingWeighted](#loadbalancingweighted)
@@ -25,6 +26,20 @@
 | `healthCheck`     | [HealthCheckSpec](#healthcheckspec)                                                                                               |           No           | HealthCheck spec                                                          |
 | `loadBalancing`   | [LoadBalancingSpec](#loadbalancingspec)                                                                                           | Yes(loadbalanced only) | LoadBalancing Spec, required when routingStrategy is "loadbalanced"       |
 | `routingStrategy` | String (immutable)                                                                                                                |          Yes           | **Immutable!** Routing Strategy to use, one of "simple" or "loadbalanced" |
+| `providerRefs` | [ProviderRefs](#providerrefs)                                                                                                         |          Yes           | array of references to providers. (currently limited to max 1) |
+
+## ProviderRefs
+
+| **Field**          | **Type**                          | **Required** | **Description**                                                                                           |
+|--------------------|-----------------------------------|:------------:|-----------------------------------------------------------------------------------------------------------|
+| `providerRefs`     | [][ProviderRef](#providerref)     |     Yes      | max 1 reference. This is an array of providerRef that points to a local secret(s) that contains the required provider auth values
+
+## ProviderRef
+
+| **Field**  | **Type** | **Required** | **Description**                                                                        |
+|------------|----------|:------------:|----------------------------------------------------------------------------------------|
+| `name`     | String   |     Yes      | Name of the secret in the same namespace that contains the provider credentials
+
 
 ## HealthCheckSpec
 

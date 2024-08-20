@@ -7,17 +7,14 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/net/publicsuffix"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	externaldns "sigs.k8s.io/external-dns/endpoint"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 )
 
@@ -32,48 +29,10 @@ const (
 
 var (
 	ErrUnknownRoutingStrategy = fmt.Errorf("unknown routing strategy")
-	ErrNoManagedZoneForHost   = fmt.Errorf("no managed zone for host")
 )
 
 type dnsHelper struct {
 	client.Client
-}
-
-func findMatchingManagedZone(originalHost, host string, zones []kuadrantdnsv1alpha1.ManagedZone) (*kuadrantdnsv1alpha1.ManagedZone, string, error) {
-	if len(zones) == 0 {
-		return nil, "", fmt.Errorf("%w : %s", ErrNoManagedZoneForHost, host)
-	}
-	host = strings.ToLower(host)
-	//get the TLD from this host
-	tld, _ := publicsuffix.PublicSuffix(host)
-
-	//The host is a TLD, so we now know `originalHost` can't possibly have a valid `ManagedZone` available.
-	if host == tld {
-		return nil, "", fmt.Errorf("no valid zone found for host: %v", originalHost)
-	}
-
-	hostParts := strings.SplitN(host, ".", 2)
-	if len(hostParts) < 2 {
-		return nil, "", fmt.Errorf("no valid zone found for host: %s", originalHost)
-	}
-	parentDomain := hostParts[1]
-
-	// We do not currently support creating records for Apex domains, and a ManagedZone represents an Apex domain, as such
-	// we should never be trying to find a managed zone that matches the `originalHost` exactly. Instead, we just continue
-	// on to the next possible valid host to try i.e. the parent domain.
-	if host == originalHost {
-		return findMatchingManagedZone(originalHost, parentDomain, zones)
-	}
-
-	zone, ok := utils.Find(zones, func(zone kuadrantdnsv1alpha1.ManagedZone) bool {
-		return strings.ToLower(zone.Spec.DomainName) == host
-	})
-
-	if ok {
-		subdomain := strings.Replace(strings.ToLower(originalHost), "."+strings.ToLower(zone.Spec.DomainName), "", 1)
-		return zone, subdomain, nil
-	}
-	return findMatchingManagedZone(originalHost, parentDomain, zones)
 }
 
 func commonDNSRecordLabels(gwKey client.ObjectKey, p *v1alpha1.DNSPolicy) map[string]string {
@@ -308,17 +267,6 @@ func (dh *dnsHelper) removeDNSForDeletedListeners(ctx context.Context, upstreamG
 		}
 	}
 	return nil
-}
-
-func (dh *dnsHelper) getManagedZoneForListener(ctx context.Context, ns string, listener gatewayapiv1.Listener) (*kuadrantdnsv1alpha1.ManagedZone, error) {
-	var managedZones kuadrantdnsv1alpha1.ManagedZoneList
-	if err := dh.List(ctx, &managedZones, client.InNamespace(ns)); err != nil {
-		log.FromContext(ctx).Error(err, "unable to list managed zones for gateway ", "in ns", ns)
-		return nil, err
-	}
-	host := string(*listener.Hostname)
-	mz, _, err := findMatchingManagedZone(host, host, managedZones.Items)
-	return mz, err
 }
 
 func dnsRecordName(gatewayName, listenerName string) string {

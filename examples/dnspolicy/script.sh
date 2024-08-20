@@ -1,6 +1,6 @@
 export DNSPOLICY_NAMESPACE=gateway
 kubectl create ns gateway
-envsubst < examples/dnspolicy/managedzone.yaml | kubectl apply -f -
+envsubst < examples/dnspolicy/aws-dns-provider-secret.yaml | kubectl apply -f -
 envsubst < examples/dnspolicy/gateway.yaml | kubectl apply -f -
 envsubst < examples/dnspolicy/dnspolicy.yaml | kubectl apply -f -
 envsubst < examples/dnspolicy/application.yaml | kubectl apply -f -
@@ -8,7 +8,7 @@ envsubst < examples/dnspolicy/application.yaml | kubectl apply -f -
 read -r -p "press enter to cause conflict"
 export DNSPOLICY_NAMESPACE=gateway-2
 kubectl create ns gateway-2
-envsubst < examples/dnspolicy/managedzone.yaml | kubectl apply -f -
+envsubst < examples/dnspolicy/aws-dns-provider-secret.yaml | kubectl apply -f -
 envsubst < examples/dnspolicy/gateway.yaml | kubectl apply -f -
 envsubst < examples/dnspolicy/dnspolicy-bad-strategy.yaml | kubectl apply -f -
 envsubst < examples/dnspolicy/application.yaml | kubectl apply -f -

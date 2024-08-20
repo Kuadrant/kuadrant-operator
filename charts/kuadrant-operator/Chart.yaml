@@ -14,7 +14,6 @@ keywords:
   - limitador
   - rate limiting
   - dns
-  - managed zones
   - kubernetes
 sources:
   - https://github.com/Kuadrant/kuadrant-operator/

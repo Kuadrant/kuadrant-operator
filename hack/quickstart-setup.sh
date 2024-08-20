@@ -188,12 +188,6 @@ requiredENV() {
       echo "export KUADRANT_AWS_REGION for future executions of the script to skip this step"
     fi
 
-    if [[ -z "${KUADRANT_AWS_DNS_PUBLIC_ZONE_ID}" ]]; then
-      echo "Enter the Public Zone ID of your Route53 zone:"
-      read -r KUADRANT_AWS_DNS_PUBLIC_ZONE_ID </dev/tty
-      echo "export KUADRANT_AWS_DNS_PUBLIC_ZONE_ID for future executions of the script to skip this step"
-    fi
-
     if [[ -z "${KUADRANT_ZONE_ROOT_DOMAIN}" ]]; then
       echo "Enter the root domain of your Route53 hosted zone (e.g. www.example.com):"
       read -r KUADRANT_ZONE_ROOT_DOMAIN </dev/tty
@@ -221,12 +215,6 @@ requiredENV() {
       read -r ZONE_DNS_NAME </dev/tty
       echo "export ZONE_DNS_NAME for future executions of the script to skip this step"
     fi
-
-    if [[ -z "${ZONE_NAME}" ]]; then
-      echo "Enter the Zone name for your GCP Cloud DNS:"
-      read -r ZONE_NAME </dev/tty
-      echo "export ZONE_NAME for future executions of the script to skip this step"
-    fi
   fi
 }
 
@@ -251,28 +239,6 @@ stringData:
   AWS_ACCESS_KEY_ID: ${KUADRANT_AWS_ACCESS_KEY_ID}
   AWS_SECRET_ACCESS_KEY: ${KUADRANT_AWS_SECRET_ACCESS_KEY}
   AWS_REGION: ${KUADRANT_AWS_REGION}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ${KIND_CLUSTER_PREFIX}controller-config
-  namespace: ${namespace}
-data:
-  AWS_DNS_PUBLIC_ZONE_ID: ${KUADRANT_AWS_DNS_PUBLIC_ZONE_ID}
-  ZONE_ROOT_DOMAIN: ${KUADRANT_ZONE_ROOT_DOMAIN}
-  LOG_LEVEL: "${LOG_LEVEL}"
----
-apiVersion: kuadrant.io/v1alpha1
-kind: ManagedZone
-metadata:
-  name: ${KIND_CLUSTER_PREFIX}dev-mz
-  namespace: ${namespace}
-spec:
-  id: ${KUADRANT_AWS_DNS_PUBLIC_ZONE_ID}
-  domainName: ${KUADRANT_ZONE_ROOT_DOMAIN}
-  description: "Dev Managed Zone"
-  dnsProviderSecretRef:
-    name: ${KIND_CLUSTER_PREFIX}aws-credentials
 EOF
 }
 
@@ -291,28 +257,6 @@ type: "kuadrant.io/gcp"
 stringData:
   GOOGLE: '${GOOGLE}'
   PROJECT_ID: ${PROJECT_ID}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ${KIND_CLUSTER_PREFIX}controller-config
-  namespace: ${namespace}
-data:
-  ZONE_DNS_NAME: ${ZONE_DNS_NAME}
-  ZONE_NAME: ${ZONE_NAME}
-  LOG_LEVEL: "${LOG_LEVEL}"
----
-apiVersion: kuadrant.io/v1alpha1
-kind: ManagedZone
-metadata:
-  name: ${KIND_CLUSTER_PREFIX}dev-mz
-  namespace: ${namespace}
-spec:
-  id: ${ZONE_NAME}
-  domainName: ${ZONE_DNS_NAME}
-  description: "Dev Managed Zone"
-  dnsProviderSecretRef:
-    name: ${KIND_CLUSTER_PREFIX}gcp-credentials
 EOF
 }
 
@@ -497,7 +441,7 @@ info "Installing Kuadrant in ${KUADRANT_CLUSTER_NAME}..."
   kubectl apply -k ${KUADRANT_DEPLOY_KUSTOMIZATION} --server-side --validate=false 2>&1
 } | grep -v "Warning: .* deprecated" || true
 
-info "Kuadrant installation applied, configuring ManagedZone if DNS provider is set..."
+info "Kuadrant installation applied, configuring DNS provider if set..."
 if [ ! -z "$DNS_PROVIDER" ]; then
   postSetup ${KUADRANT_CLUSTER_NAME} ${KUADRANT_NAMESPACE}
 fi

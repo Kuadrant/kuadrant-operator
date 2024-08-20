@@ -62,10 +62,6 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 	log.V(3).Info("checking gateway for attached routes ", "gateway", gatewayWrapper.Name, "clusterGateways", clusterGateways)
 
 	for _, listener := range gatewayWrapper.Spec.Listeners {
-		var mz, err = r.dnsHelper.getManagedZoneForListener(ctx, gatewayWrapper.Namespace, listener)
-		if err != nil {
-			return err
-		}
 		listenerHost := *listener.Hostname
 		if listenerHost == "" {
 			log.Info("skipping listener no hostname assigned", listener.Name, "in ns ", gatewayWrapper.Namespace)
@@ -92,7 +88,7 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 			continue
 		}
 
-		dnsRecord, err := r.desiredDNSRecord(gatewayWrapper, dnsPolicy, listener, listenerGateways, mz)
+		dnsRecord, err := r.desiredDNSRecord(gatewayWrapper, dnsPolicy, listener, listenerGateways)
 		if err != nil {
 			return err
 		}
@@ -111,7 +107,7 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gw
 	return nil
 }
 
-func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *multicluster.GatewayWrapper, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener, clusterGateways []multicluster.ClusterGateway, managedZone *kuadrantdnsv1alpha1.ManagedZone) (*kuadrantdnsv1alpha1.DNSRecord, error) {
+func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *multicluster.GatewayWrapper, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener, clusterGateways []multicluster.ClusterGateway) (*kuadrantdnsv1alpha1.DNSRecord, error) {
 	rootHost := string(*targetListener.Hostname)
 	var healthCheckSpec *kuadrantdnsv1alpha1.HealthCheckSpec
 
@@ -126,13 +122,14 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *multicluster.GatewayWrap
 	dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      dnsRecordName(gateway.Name, string(targetListener.Name)),
-			Namespace: managedZone.Namespace,
+			Namespace: dnsPolicy.Namespace,
 			Labels:    commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy),
 		},
 		Spec: kuadrantdnsv1alpha1.DNSRecordSpec{
 			RootHost: rootHost,
-			ManagedZoneRef: &kuadrantdnsv1alpha1.ManagedZoneReference{
-				Name: managedZone.Name,
+			ProviderRef: kuadrantdnsv1alpha1.ProviderRef{
+				// Currently we only allow a single providerRef to be added. When that changes, we will need to update this to deal with multiple records.
+				Name: dnsPolicy.Spec.ProviderRefs[0].Name,
 			},
 			HealthCheck: healthCheckSpec,
 		},

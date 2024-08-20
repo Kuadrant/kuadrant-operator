@@ -270,7 +270,7 @@ curl -k --resolve api.${KUADRANT_ZONE_ROOT_DOMAIN}:443:${INGRESS_HOST}  "https:/
 
 Now, we have our gateway protected and communications secured. We are ready to configure DNS, so it is easy for clients to connect and access the APIs we intend to expose via this gateway.
 
-> **Note:** You may need to create a ManagedZone resource depending on if one was created during your initial cluster setup or not. You should have a `aws-credentials` Secret already created in the `kuadrant-system` namespace as well. However, if either of these don't exist, you can follow these commands to create them:
+> **Note:** You may need to create a DNS Provider Secret resource depending on if one was created during your initial cluster setup or not. You should have an `aws-credentials` Secret already created in the `kuadrant-system` namespace. However, if it doesn't exist, you can follow these commands to create one:
 
 ```sh
 export AWS_ACCESS_KEY_ID=xxxxxxx # Key ID from AWS with Route 53 access
@@ -280,24 +280,6 @@ kubectl -n kuadrant-system create secret generic aws-credentials \
   --type=kuadrant.io/aws \
   --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
   --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-```
-
-```sh
-export AWS_DNS_PUBLIC_ZONE_ID=xxxxxx # DNS Zone ID in AWS Route 53
-
-kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1alpha1
-kind: ManagedZone
-metadata:
-  name: my-mz
-  namespace: kuadrant-system
-spec:
-  id: ${AWS_DNS_PUBLIC_ZONE_ID}
-  domainName: ${KUADRANT_ZONE_ROOT_DOMAIN}
-  description: "My Managed Zone"
-  dnsProviderSecretRef:
-    name: aws-credentials
-EOF
 ```
 
 Next, create the DNSPolicy:
@@ -315,6 +297,8 @@ spec:
     name: api-gateway
     group: gateway.networking.k8s.io
     kind: Gateway
+  providerRefs:
+  - name: aws-credentials
 EOF
 
 kubectl --context $KUBECTL_CONTEXT wait dnspolicy simple-dnspolicy -n kuadrant-system --for=condition=enforced

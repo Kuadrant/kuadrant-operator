@@ -8,15 +8,12 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	. "github.com/onsi/gomega/gstruct"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -516,45 +513,28 @@ var _ = Describe("Target status reconciler", func() {
 		}
 
 		var dnsProviderSecret *corev1.Secret
-		var managedZone *kuadrantdnsv1alpha1.ManagedZone
 
 		BeforeEach(func(ctx SpecContext) {
-			dnsProviderSecret = tests.BuildInMemoryCredentialsSecret("inmemory-credentials", testNamespace)
-			managedZone = tests.BuildManagedZone("mz-toystore-com", testNamespace, strings.Replace(gwHost, "*.", "", 1), dnsProviderSecret.Name)
+			dnsProviderSecret = tests.BuildInMemoryCredentialsSecret("inmemory-credentials", testNamespace, strings.Replace(gwHost, "*.", "", 1))
 			Expect(k8sClient.Create(ctx, dnsProviderSecret)).To(Succeed())
-			Expect(k8sClient.Create(ctx, managedZone)).To(Succeed())
-			Eventually(func(g Gomega) {
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(managedZone), managedZone)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(managedZone.Status.Conditions).To(
-					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":               Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
-						"Status":             Equal(metav1.ConditionTrue),
-						"ObservedGeneration": Equal(managedZone.Generation),
-					})),
-				)
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		})
 
 		AfterEach(func(ctx SpecContext) {
-			// Wait until dns records are finished deleting since it can't finish deleting without managed zone
+			// Wait until dns records are finished deleting since it can't finish deleting without the DNS provider secret
 			Eventually(func(g Gomega) {
 				dnsRecords := &kuadrantdnsv1alpha1.DNSRecordList{}
 				err := k8sClient.List(ctx, dnsRecords, client.InNamespace(testNamespace))
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsRecords.Items).To(HaveLen(0))
 			}).WithContext(ctx).Should(Succeed())
-			Expect(k8sClient.Delete(ctx, managedZone)).To(Succeed())
-			// Wait until managed zone is delete before deleting the provider secret
-			Eventually(func(g Gomega) {
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(managedZone), managedZone)
-				g.Expect(k8serrors.IsNotFound(err)).To(BeTrue())
-			}).WithContext(ctx).Should(Succeed())
 		}, afterEachTimeOut)
 
 		It("adds PolicyAffected status condition to the targeted gateway", func(ctx SpecContext) {
-			policy := policyFactory()
+			policy := policyFactory(func(policy *v1alpha1.DNSPolicy) {
+				policy.Spec.ProviderRefs = append(policy.Spec.ProviderRefs, kuadrantdnsv1alpha1.ProviderRef{
+					Name: dnsProviderSecret.Name,
+				})
+			})
 			defer k8sClient.Delete(ctx, policy)
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 			// policy should not be enforced since DNS Record is not ready because of the missing secret on the MZ
@@ -563,7 +543,11 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("removes PolicyAffected status condition from the targeted gateway when the policy is deleted", func(ctx SpecContext) {
-			policy := policyFactory()
+			policy := policyFactory(func(policy *v1alpha1.DNSPolicy) {
+				policy.Spec.ProviderRefs = append(policy.Spec.ProviderRefs, kuadrantdnsv1alpha1.ProviderRef{
+					Name: dnsProviderSecret.Name,
+				})
+			})
 			defer k8sClient.Delete(ctx, policy)
 			policyKey := client.ObjectKeyFromObject(policy)
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())

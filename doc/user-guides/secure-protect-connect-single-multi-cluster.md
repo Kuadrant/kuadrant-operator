@@ -56,7 +56,7 @@ export EMAIL=foo@example.com
 
 ### Step 2 - Set up a DNS Provider
 
-The DNS provider declares a credential to access the zone(s) that Kuadrant can use to set up DNS configuration. You should ensure that this credential only has access to the zones you want manged.
+The DNS provider declares a credential to access the zone(s) that Kuadrant can use to set up DNS configuration. You should ensure that this credential only has access to the zones you want managed.
 
 #### Create the DNS Provider Secret resource
 
@@ -72,7 +72,6 @@ Create the secret credentials as follows:
 kubectl -n ${gatewayNS} create secret generic aws-credentials \
   --type=kuadrant.io/aws \
   --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-  --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
   --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
 ```
 
@@ -285,7 +284,7 @@ spec:
     group: gateway.networking.k8s.io
     kind: Gateway
   providerRefs:
-    - name: aws-credentials
+  - name: aws-credentials
 EOF
 ```    
 

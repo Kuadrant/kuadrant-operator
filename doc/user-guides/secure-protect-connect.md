@@ -298,7 +298,7 @@ spec:
     group: gateway.networking.k8s.io
     kind: Gateway
   providerRefs:
-    - name: aws-credentials
+  - name: aws-credentials
 EOF
 
 kubectl --context $KUBECTL_CONTEXT wait dnspolicy simple-dnspolicy -n kuadrant-system --for=condition=enforced

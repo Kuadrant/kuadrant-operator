@@ -75,9 +75,9 @@ type DNSPolicySpec struct {
 	// +kubebuilder:default=loadbalanced
 	RoutingStrategy RoutingStrategy `json:"routingStrategy"`
 
-	// providerRefS is a list of references to provider secrets. Max is one but intention is to allow this to be more in the future
-	// +kubebuilder:validation:MinItems=1
+	// providerRefs is a list of references to provider secrets. Max is one but intention is to allow this to be more in the future
 	// +kubebuilder:validation:MaxItems=1
+	// +kubebuilder:validation:MinItems=1
 	ProviderRefs []dnsv1alpha1.ProviderRef `json:"providerRefs"`
 }
 

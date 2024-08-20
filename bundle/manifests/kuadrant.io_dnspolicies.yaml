@@ -202,7 +202,7 @@ spec:
                 - weighted
                 type: object
               providerRefs:
-                description: providerRefS is a list of references to provider secrets.
+                description: providerRefs is a list of references to provider secrets.
                   Max is one but intention is to allow this to be more in the future
                 items:
                   properties:

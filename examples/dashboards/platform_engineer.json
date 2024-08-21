@@ -2134,7 +2134,7 @@
             "mode": "thresholds"
           },
           "custom": {
-            "align": "auto",
+            "align": "center",
             "cellOptions": {
               "type": "auto"
             },
@@ -2403,8 +2403,8 @@
       },
       "gridPos": {
         "h": 10,
-        "w": 21,
-        "x": 3,
+        "w": 24,
+        "x": 0,
         "y": 56
       },
       "id": 158,
@@ -2505,7 +2505,11 @@
         "type": "datasource"
       },
       {
-        "current": {},
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": {
           "type": "prometheus",
           "uid": "${datasource}"

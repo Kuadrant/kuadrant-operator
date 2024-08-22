@@ -51,6 +51,9 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	//+kubebuilder:scaffold:imports
 )
@@ -132,156 +135,156 @@ func main() {
 		os.Exit(1)
 	}
 
-	//if err := fieldindexers.HTTPRouteIndexByGateway(
-	//	mgr,
-	//	log.Log.WithName("kuadrant").WithName("indexer").WithName("routeIndexByGateway"),
-	//); err != nil {
-	//	setupLog.Error(err, "unable to add indexer")
-	//	os.Exit(1)
-	//}
-	//
-	//kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("kuadrant"),
-	//	mgr.GetEventRecorderFor("Kuadrant"),
-	//)
-	//
-	//if err = (&controllers.KuadrantReconciler{
-	//	BaseReconciler: kuadrantBaseReconciler,
-	//	RestMapper:     mgr.GetRESTMapper(),
-	//}).SetupWithManager(mgr); err != nil {
-	//	setupLog.Error(err, "unable to create controller", "controller", "Kuadrant")
-	//	os.Exit(1)
-	//}
-	//
-	//rateLimitPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("ratelimitpolicy"),
-	//	mgr.GetEventRecorderFor("RateLimitPolicy"),
-	//)
-	//
-	//if err = (&controllers.RateLimitPolicyReconciler{
-	//	TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-	//	BaseReconciler:      rateLimitPolicyBaseReconciler,
-	//}).SetupWithManager(mgr); err != nil {
-	//	setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicy")
-	//	os.Exit(1)
-	//}
-	//
-	//authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("authpolicy"),
-	//	mgr.GetEventRecorderFor("AuthPolicy"),
-	//)
-	//
-	//if err = (&controllers.AuthPolicyReconciler{
-	//	TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-	//	BaseReconciler:      authPolicyBaseReconciler,
-	//	AffectedPolicyMap:   kuadrant.NewAffectedPolicyMap(),
-	//}).SetupWithManager(mgr); err != nil {
-	//	setupLog.Error(err, "unable to create controller", "controller", "AuthPolicy")
-	//	os.Exit(1)
-	//}
-	//
-	//dnsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("dnspolicy"),
-	//	mgr.GetEventRecorderFor("DNSPolicy"),
-	//)
-	//
-	//if err = (&controllers.DNSPolicyReconciler{
-	//	BaseReconciler:      dnsPolicyBaseReconciler,
-	//	TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-	//}).SetupWithManager(mgr); err != nil {
-	//	setupLog.Error(err, "unable to create controller", "controller", "DNSPolicy")
-	//	os.Exit(1)
-	//}
-	//
-	//tlsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("tlspolicy"),
-	//	mgr.GetEventRecorderFor("TLSPolicy"),
-	//)
-	//
-	//if err = (&controllers.TLSPolicyReconciler{
-	//	BaseReconciler:      tlsPolicyBaseReconciler,
-	//	TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-	//	RestMapper:          mgr.GetRESTMapper(),
-	//}).SetupWithManager(mgr); err != nil {
-	//	setupLog.Error(err, "unable to create controller", "controller", "TLSPolicy")
-	//	os.Exit(1)
-	//}
-	//
-	//limitadorClusterEnvoyFilterBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("ratelimitpolicy").WithName("envoyfilter"),
-	//	mgr.GetEventRecorderFor("LimitadorClusterEnvoyFilter"),
-	//)
-	//
-	//if err = (&controllers.LimitadorClusterEnvoyFilterReconciler{
-	//	BaseReconciler: limitadorClusterEnvoyFilterBaseReconciler,
-	//}).SetupWithManager(mgr); err != nil {
-	//	setupLog.Error(err, "unable to create controller", "controller", "EnvoyFilter")
-	//	os.Exit(1)
-	//}
-	//
-	//gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("kuadrant").WithName("gateway"),
-	//	mgr.GetEventRecorderFor("GatewayKuadrant"),
-	//)
-	//
-	//if err = (&controllers.GatewayKuadrantReconciler{
-	//	BaseReconciler: gatewayKuadrantBaseReconciler,
-	//}).SetupWithManager(mgr); err != nil {
-	//	setupLog.Error(err, "unable to create controller", "controller", "GatewayKuadrant")
-	//	os.Exit(1)
-	//}
-	//
-	//rateLimitingIstioWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("ratelimitpolicy").WithName("wasmplugin"),
-	//	mgr.GetEventRecorderFor("RateLimitingIstioWASMPlugin"),
-	//)
-	//
-	//if err = (&controllers.RateLimitingIstioWASMPluginReconciler{
-	//	BaseReconciler: rateLimitingIstioWASMPluginBaseReconciler,
-	//}).SetupWithManager(mgr); err != nil {
-	//	setupLog.Error(err, "unable to create controller", "controller", "RateLimitingIstioWASMPlugin")
-	//	os.Exit(1)
-	//}
-	//
-	//targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("targetstatus"),
-	//	mgr.GetEventRecorderFor("PolicyTargetStatus"),
-	//)
-	//if err = (&controllers.TargetStatusReconciler{
-	//	BaseReconciler: targetStatusBaseReconciler,
-	//}).SetupWithManager(mgr); err != nil {
-	//	setupLog.Error(err, "unable to create controller", "controller", "TargetStatusReconciler")
-	//	os.Exit(1)
-	//}
-	//
-	//policyStatusBaseReconciler := reconcilers.NewBaseReconciler(
-	//	mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-	//	log.Log.WithName("ratelimitpolicy").WithName("status"),
-	//	mgr.GetEventRecorderFor("RateLimitPolicyStatus"),
-	//)
-	//if err = (&controllers.RateLimitPolicyEnforcedStatusReconciler{
-	//	BaseReconciler: policyStatusBaseReconciler,
-	//}).SetupWithManager(mgr); err != nil {
-	//	setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicyEnforcedStatusReconciler")
-	//	os.Exit(1)
-	//}
-	//
+	if err = fieldindexers.HTTPRouteIndexByGateway(
+		mgr,
+		log.Log.WithName("kuadrant").WithName("indexer").WithName("routeIndexByGateway"),
+	); err != nil {
+		setupLog.Error(err, "unable to add indexer")
+		os.Exit(1)
+	}
+
+	kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("kuadrant"),
+		mgr.GetEventRecorderFor("Kuadrant"),
+	)
+
+	if err = (&controllers.KuadrantReconciler{
+		BaseReconciler: kuadrantBaseReconciler,
+		RestMapper:     mgr.GetRESTMapper(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Kuadrant")
+		os.Exit(1)
+	}
+
+	rateLimitPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy"),
+		mgr.GetEventRecorderFor("RateLimitPolicy"),
+	)
+
+	if err = (&controllers.RateLimitPolicyReconciler{
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
+		BaseReconciler:      rateLimitPolicyBaseReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicy")
+		os.Exit(1)
+	}
+
+	authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("authpolicy"),
+		mgr.GetEventRecorderFor("AuthPolicy"),
+	)
+
+	if err = (&controllers.AuthPolicyReconciler{
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
+		BaseReconciler:      authPolicyBaseReconciler,
+		AffectedPolicyMap:   kuadrant.NewAffectedPolicyMap(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicy")
+		os.Exit(1)
+	}
+
+	dnsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("dnspolicy"),
+		mgr.GetEventRecorderFor("DNSPolicy"),
+	)
+
+	if err = (&controllers.DNSPolicyReconciler{
+		BaseReconciler:      dnsPolicyBaseReconciler,
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "DNSPolicy")
+		os.Exit(1)
+	}
+
+	tlsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("tlspolicy"),
+		mgr.GetEventRecorderFor("TLSPolicy"),
+	)
+
+	if err = (&controllers.TLSPolicyReconciler{
+		BaseReconciler:      tlsPolicyBaseReconciler,
+		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
+		RestMapper:          mgr.GetRESTMapper(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "TLSPolicy")
+		os.Exit(1)
+	}
+
+	limitadorClusterEnvoyFilterBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("envoyfilter"),
+		mgr.GetEventRecorderFor("LimitadorClusterEnvoyFilter"),
+	)
+
+	if err = (&controllers.LimitadorClusterEnvoyFilterReconciler{
+		BaseReconciler: limitadorClusterEnvoyFilterBaseReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "EnvoyFilter")
+		os.Exit(1)
+	}
+
+	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("kuadrant").WithName("gateway"),
+		mgr.GetEventRecorderFor("GatewayKuadrant"),
+	)
+
+	if err = (&controllers.GatewayKuadrantReconciler{
+		BaseReconciler: gatewayKuadrantBaseReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GatewayKuadrant")
+		os.Exit(1)
+	}
+
+	rateLimitingIstioWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("wasmplugin"),
+		mgr.GetEventRecorderFor("RateLimitingIstioWASMPlugin"),
+	)
+
+	if err = (&controllers.RateLimitingIstioWASMPluginReconciler{
+		BaseReconciler: rateLimitingIstioWASMPluginBaseReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RateLimitingIstioWASMPlugin")
+		os.Exit(1)
+	}
+
+	targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("targetstatus"),
+		mgr.GetEventRecorderFor("PolicyTargetStatus"),
+	)
+	if err = (&controllers.TargetStatusReconciler{
+		BaseReconciler: targetStatusBaseReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "TargetStatusReconciler")
+		os.Exit(1)
+	}
+
+	policyStatusBaseReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("ratelimitpolicy").WithName("status"),
+		mgr.GetEventRecorderFor("RateLimitPolicyStatus"),
+	)
+	if err = (&controllers.RateLimitPolicyEnforcedStatusReconciler{
+		BaseReconciler: policyStatusBaseReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicyEnforcedStatusReconciler")
+		os.Exit(1)
+	}
+
 	//+kubebuilder:scaffold:builder
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	if err = mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
@@ -292,15 +295,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	sow := controllers.SetupWithManagerA(mgr, client)
-	if err = sow.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "unable to start sow controller")
+	sateOfTheWorld := controllers.SetupWithManagerA(mgr, client)
+	if err = sateOfTheWorld.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "unable to start sateOfTheWorld controller")
 		os.Exit(1)
 	}
-
-	//setupLog.Info("starting manager")
-	//if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-	//	setupLog.Error(err, "problem running manager")
-	//	os.Exit(1)
-	//}
 }

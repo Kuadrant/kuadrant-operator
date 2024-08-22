@@ -27,6 +27,7 @@ import (
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	"gitlab.com/linuxfreak003/ballistic"
 	istioextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -103,6 +104,9 @@ func printControllerMetaInfo() {
 
 func main() {
 	printControllerMetaInfo()
+
+	solver := &ballistic.Solver{}
+	solver.SolveFor(5)
 
 	setupLog := log.Log
 

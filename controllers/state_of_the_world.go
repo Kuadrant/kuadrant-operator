@@ -2,13 +2,16 @@ package controllers
 
 import (
 	"context"
-	"os"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	istiov1 "istio.io/client-go/pkg/apis/security/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
@@ -49,6 +52,7 @@ func buildWatcher[T controller.Object](obj T, resource schema.GroupVersionResour
 
 func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
 	effectivePolicesReconciler := EffectivePolicesReconciler{Client: client}
+	topologyFileReconciler := TopologyFileReconciler{Client: client}
 
 	commonAuthPolicyResourceEventMatchers := []controller.ResourceEventMatcher{
 		{Kind: ptr.To(controller.GatewayClassKind)},
@@ -92,7 +96,7 @@ func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
 			}
 		},
 		Tasks: []controller.ReconcileFunc{
-			(&TopologyFileReconciler{}).Reconcile,
+			topologyFileReconciler.Reconcile,
 			effectivePolicesReconciler.Reconcile,
 		},
 	}
@@ -110,23 +114,37 @@ func (r *EffectivePolicesReconciler) Reconcile(ctx context.Context, _ []controll
 	logger.Info("reconciling effective polices reconciler")
 }
 
-const topologyFile = "topology.dot"
-
-type TopologyFileReconciler struct{}
+type TopologyFileReconciler struct {
+	Client *dynamic.DynamicClient
+}
 
 func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology) {
 	logger := controller.LoggerFromContext(ctx).WithName("topology file")
-
-	file, err := os.Create(topologyFile)
-	if err != nil {
-		logger.Error(err, "failed to create topology file")
-		return
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "topology",
+			Namespace: "kuadrant-system",
+		},
+		Data: map[string]string{
+			"topology": topology.ToDot(),
+		},
 	}
-	defer file.Close()
-	_, err = file.WriteString(topology.ToDot())
+
+	configMapRes := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
+	unstructuredMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cm)
 	if err != nil {
-		logger.Error(err, "failed to write to topology file")
-		return
+		panic(err.Error())
+	}
+	unstructuredCM := &unstructured.Unstructured{
+		Object: unstructuredMap,
+	}
+
+	_, err = r.Client.Resource(configMapRes).Namespace(cm.Namespace).Update(context.TODO(), unstructuredCM, metav1.UpdateOptions{})
+	if errors.IsNotFound(err) {
+		_, err = r.Client.Resource(configMapRes).Namespace(cm.Namespace).Create(context.TODO(), unstructuredCM, metav1.CreateOptions{})
+	}
+	if err != nil {
+		logger.Error(err, "failed to write topology configmap")
 	}
 }
 

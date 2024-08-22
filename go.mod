@@ -3,6 +3,7 @@ module github.com/kuadrant/kuadrant-operator
 go 1.22.0
 
 require (
+	github.com/Ianvdl/mlgo v0.0.0-20151205180659-9bff13d724b9
 	github.com/cert-manager/cert-manager v1.12.1
 	github.com/elliotchance/orderedmap/v2 v2.2.0
 	github.com/go-logr/logr v1.4.1

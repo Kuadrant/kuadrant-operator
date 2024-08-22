@@ -22,6 +22,7 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/Ianvdl/mlgo"
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
@@ -107,6 +108,8 @@ func main() {
 
 	solver := &ballistic.Solver{}
 	solver.SolveFor(5)
+
+	fmt.Println(mlgo.MaxValue)
 
 	setupLog := log.Log
 

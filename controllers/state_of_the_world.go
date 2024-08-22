@@ -19,6 +19,7 @@ import (
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
 
@@ -28,6 +29,8 @@ func SetupWithManagerA(manager ctrlruntime.Manager, client *dynamic.DynamicClien
 		controller.ManagedBy(manager),
 		controller.WithLogger(logger),
 		controller.WithClient(client),
+		controller.WithRunnable("kuadrant watcher", buildWatcher(&kuadrantv1beta1.Kuadrant{}, kuadrantv1beta1.KuadrantResource, metav1.NamespaceAll)),
+		controller.WithRunnable("gatewayclass watcher", buildWatcher(&gwapiv1.GatewayClass{}, controller.GatewayClassesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("gateway watcher", buildWatcher(&gwapiv1.Gateway{}, controller.GatewaysResource, metav1.NamespaceAll)),
 		controller.WithRunnable("httproute watcher", buildWatcher(&gwapiv1.HTTPRoute{}, controller.HTTPRoutesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("dnspolicy watcher", buildWatcher(&kuadrantv1alpha1.DNSPolicy{}, kuadrantv1alpha1.DNSPoliciesResource, metav1.NamespaceAll)),
@@ -40,6 +43,8 @@ func SetupWithManagerA(manager ctrlruntime.Manager, client *dynamic.DynamicClien
 			kuadrantv1beta2.AuthPolicyKind,
 			kuadrantv1beta2.RateLimitPolicyKind,
 		),
+		controller.WithObjectKinds(kuadrantv1beta1.KuadrantKind),
+		controller.WithObjectLinks(kuadrantv1beta1.LinkKuadrantToGatewayClasses),
 		controller.WithReconcile(buildReconciler(client)),
 	}
 

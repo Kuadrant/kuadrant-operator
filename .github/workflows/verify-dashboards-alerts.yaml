@@ -34,6 +34,7 @@ jobs:
           kubectl apply -k config/dependencies/istio/sail
           kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
           kubectl apply -f config/dependencies/istio/sail/istio.yaml
+          kubectl create ns kuadrant-system
 
           # Install Observability Stack (Grafana and Prometheus)
           kubectl kustomize config/observability/ | docker run --rm -i ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -

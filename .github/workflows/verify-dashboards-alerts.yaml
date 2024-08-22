@@ -2,17 +2,7 @@ name: Verify Dashboards and Alerts OK
 
 on: 
   push:
-    branches: main
-    paths:
-       # Dashboards
-       - examples/dashboards/app_developer.json
-       - examples/dashboards/business_user.json
-       - examples/dashboards/platform_engineer.json
-       # Alerts
-       - examples/alerts/prometheusrules_policies_missing.yaml
-       - examples/alerts/slo-availability.yaml
-       - examples/alerts/slo-latency.yaml
-  workflow_dispatch:
+    
 jobs:
   verify-dashboards-alerts:
     name: Verify Dashboards and Alerts OK

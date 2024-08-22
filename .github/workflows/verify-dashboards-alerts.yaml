@@ -12,6 +12,7 @@ on:
        - examples/alerts/prometheusrules_policies_missing.yaml
        - examples/alerts/slo-availability.yaml
        - examples/alerts/slo-latency.yaml
+  workflow_dispatch:
 jobs:
   verify-dashboards-alerts:
     name: Verify Dashboards and Alerts OK

@@ -20,7 +20,6 @@ import (
 	"context"
 
 	dnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
-	"github.com/kuadrant/policy-machinery/machinery"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -40,8 +39,6 @@ var (
 		Version: GroupVersion.Version,
 		Kind:    "DNSPolicy",
 	}
-	DNSPoliciesResource = GroupVersion.WithResource("dnspolicies")
-	DNSPolicyKind       = schema.GroupKind{Group: GroupVersion.Group, Kind: "DNSPolicy"}
 )
 
 type RoutingStrategy string
@@ -162,7 +159,6 @@ func (s *DNSPolicyStatus) GetConditions() []metav1.Condition {
 
 var _ kuadrant.Policy = &DNSPolicy{}
 var _ kuadrant.Referrer = &DNSPolicy{}
-var _ machinery.Policy = &DNSPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -216,29 +212,6 @@ func (p *DNSPolicy) BackReferenceAnnotationName() string {
 
 func (p *DNSPolicy) DirectReferenceAnnotationName() string {
 	return NewDNSPolicyType().DirectReferenceAnnotationName()
-}
-
-func (p *DNSPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
-	return []machinery.PolicyTargetReference{
-		machinery.LocalPolicyTargetReference{
-			LocalPolicyTargetReference: p.Spec.TargetRef,
-			PolicyNamespace:            p.Namespace,
-		},
-	}
-}
-
-func (p *DNSPolicy) GetMergeStrategy() machinery.MergeStrategy {
-	return func(policy machinery.Policy, _ machinery.Policy) machinery.Policy {
-		return policy
-	}
-}
-
-func (p *DNSPolicy) Merge(other machinery.Policy) machinery.Policy {
-	return other
-}
-
-func (p *DNSPolicy) GetURL() string {
-	return machinery.UrlFromObject(p)
 }
 
 //+kubebuilder:object:root=true

@@ -21,7 +21,6 @@ import (
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,8 +38,6 @@ var (
 		Version: GroupVersion.Version,
 		Kind:    "TLSPolicy",
 	}
-	TLSPoliciesResource = GroupVersion.WithResource("tlspolicies")
-	TLSPolicyKind       = schema.GroupKind{Group: GroupVersion.Group, Kind: "TLSPolicy"}
 )
 
 const (
@@ -138,7 +135,6 @@ func (s *TLSPolicyStatus) GetConditions() []metav1.Condition {
 
 var _ kuadrant.Policy = &TLSPolicy{}
 var _ kuadrant.Referrer = &TLSPolicy{}
-var _ machinery.Policy = &TLSPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -192,29 +188,6 @@ func (p *TLSPolicy) BackReferenceAnnotationName() string {
 
 func (p *TLSPolicy) DirectReferenceAnnotationName() string {
 	return NewTLSPolicyType().DirectReferenceAnnotationName()
-}
-
-func (p *TLSPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
-	return []machinery.PolicyTargetReference{
-		machinery.LocalPolicyTargetReference{
-			LocalPolicyTargetReference: p.Spec.TargetRef,
-			PolicyNamespace:            p.Namespace,
-		},
-	}
-}
-
-func (p *TLSPolicy) GetMergeStrategy() machinery.MergeStrategy {
-	return func(policy machinery.Policy, _ machinery.Policy) machinery.Policy {
-		return policy
-	}
-}
-
-func (p *TLSPolicy) Merge(other machinery.Policy) machinery.Policy {
-	return other
-}
-
-func (p *TLSPolicy) GetURL() string {
-	return machinery.UrlFromObject(p)
 }
 
 //+kubebuilder:object:root=true

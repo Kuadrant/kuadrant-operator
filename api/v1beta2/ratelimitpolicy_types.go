@@ -23,6 +23,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -44,6 +45,8 @@ var (
 		Version: GroupVersion.Version,
 		Kind:    "RateLimitPolicy",
 	}
+	RateLimitPoliciesResource = GroupVersion.WithResource("ratelimitpolicies")
+	RateLimitPolicyKind       = schema.GroupKind{Group: GroupVersion.Group, Kind: "RateLimitPolicy"}
 )
 
 // ContextSelector defines one item from the well known attributes
@@ -214,6 +217,8 @@ func (s *RateLimitPolicyStatus) GetConditions() []metav1.Condition {
 
 var _ kuadrant.Policy = &RateLimitPolicy{}
 var _ kuadrant.Referrer = &RateLimitPolicy{}
+var _ kuadrantgatewayapi.Policy = &RateLimitPolicy{}
+var _ machinery.Policy = &RateLimitPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -232,8 +237,6 @@ type RateLimitPolicy struct {
 	Spec   RateLimitPolicySpec   `json:"spec,omitempty"`
 	Status RateLimitPolicyStatus `json:"status,omitempty"`
 }
-
-var _ kuadrantgatewayapi.Policy = &RateLimitPolicy{}
 
 func (r *RateLimitPolicy) GetObservedGeneration() int64  { return r.Status.GetObservedGeneration() }
 func (r *RateLimitPolicy) SetObservedGeneration(o int64) { r.Status.SetObservedGeneration(o) }
@@ -300,6 +303,29 @@ func (r *RateLimitPolicy) BackReferenceAnnotationName() string {
 
 func (r *RateLimitPolicy) DirectReferenceAnnotationName() string {
 	return NewRateLimitPolicyType().DirectReferenceAnnotationName()
+}
+
+func (r *RateLimitPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
+	return []machinery.PolicyTargetReference{
+		machinery.LocalPolicyTargetReference{
+			LocalPolicyTargetReference: r.Spec.TargetRef,
+			PolicyNamespace:            r.Namespace,
+		},
+	}
+}
+
+func (r *RateLimitPolicy) GetMergeStrategy() machinery.MergeStrategy {
+	return func(policy machinery.Policy, _ machinery.Policy) machinery.Policy {
+		return policy
+	}
+}
+
+func (r *RateLimitPolicy) Merge(other machinery.Policy) machinery.Policy {
+	return other
+}
+
+func (r *RateLimitPolicy) GetURL() string {
+	return machinery.UrlFromObject(r)
 }
 
 // CommonSpec returns the Default RateLimitPolicyCommonSpec if it is defined.

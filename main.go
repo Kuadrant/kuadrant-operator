@@ -35,12 +35,12 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/utils/env"
 	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -50,9 +50,6 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	//+kubebuilder:scaffold:imports
 )
@@ -288,45 +285,15 @@ func main() {
 	//	os.Exit(1)
 	//}
 
-	if err = (&controllers.RateLimitingIstioWASMPluginReconciler{
-		BaseReconciler: rateLimitingIstioWASMPluginBaseReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "RateLimitingIstioWASMPlugin")
+	client, err := dynamic.NewForConfig(ctrl.GetConfigOrDie())
+	if err != nil {
+		setupLog.Error(err, "unable to create client")
 		os.Exit(1)
 	}
 
-	targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("targetstatus"),
-		mgr.GetEventRecorderFor("PolicyTargetStatus"),
-	)
-	if err = (&controllers.TargetStatusReconciler{
-		BaseReconciler: targetStatusBaseReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "TargetStatusReconciler")
-		os.Exit(1)
-	}
-
-	policyStatusBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("ratelimitpolicy").WithName("status"),
-		mgr.GetEventRecorderFor("RateLimitPolicyStatus"),
-	)
-	if err = (&controllers.RateLimitPolicyEnforcedStatusReconciler{
-		BaseReconciler: policyStatusBaseReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicyEnforcedStatusReconciler")
-		os.Exit(1)
-	}
-
-	//+kubebuilder:scaffold:builder
-
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
-		os.Exit(1)
-	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
+	sow := controllers.SetupWithManagerA(mgr, client)
+	if err = sow.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "unable to start sow controller")
 		os.Exit(1)
 	}
 

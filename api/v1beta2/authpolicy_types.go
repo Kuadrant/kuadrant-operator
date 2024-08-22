@@ -6,6 +6,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,6 +24,8 @@ var (
 		Version: GroupVersion.Version,
 		Kind:    "AuthPolicy",
 	}
+	AuthPoliciesResource = GroupVersion.WithResource("authpolicies")
+	AuthPolicyKind       = schema.GroupKind{Group: GroupVersion.Group, Kind: "AuthPolicy"}
 )
 
 const (
@@ -258,6 +261,7 @@ func (s *AuthPolicyStatus) GetConditions() []metav1.Condition {
 
 var _ kuadrant.Policy = &AuthPolicy{}
 var _ kuadrant.Referrer = &AuthPolicy{}
+var _ machinery.Policy = &AuthPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -354,6 +358,29 @@ func (ap *AuthPolicy) BackReferenceAnnotationName() string {
 
 func (ap *AuthPolicy) DirectReferenceAnnotationName() string {
 	return NewAuthPolicyType().DirectReferenceAnnotationName()
+}
+
+func (ap *AuthPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
+	return []machinery.PolicyTargetReference{
+		machinery.LocalPolicyTargetReference{
+			LocalPolicyTargetReference: ap.Spec.TargetRef,
+			PolicyNamespace:            ap.Namespace,
+		},
+	}
+}
+
+func (ap *AuthPolicy) GetMergeStrategy() machinery.MergeStrategy {
+	return func(policy machinery.Policy, _ machinery.Policy) machinery.Policy {
+		return policy
+	}
+}
+
+func (ap *AuthPolicy) Merge(other machinery.Policy) machinery.Policy {
+	return other
+}
+
+func (ap *AuthPolicy) GetURL() string {
+	return machinery.UrlFromObject(ap)
 }
 
 func (ap *AuthPolicySpec) CommonSpec() *AuthPolicyCommonSpec {

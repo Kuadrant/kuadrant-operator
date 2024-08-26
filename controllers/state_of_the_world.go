@@ -23,6 +23,8 @@ import (
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
 
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
+
 func SetupWithManagerA(manager ctrlruntime.Manager, client *dynamic.DynamicClient) *controller.Controller {
 	logger := controller.CreateAndSetLogger()
 	controllerOpts := []controller.ControllerOption{

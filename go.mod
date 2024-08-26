@@ -14,7 +14,7 @@ require (
 	github.com/kuadrant/authorino-operator v0.11.1
 	github.com/kuadrant/dns-operator v0.0.0-20240809151102-e79ebbca8f70
 	github.com/kuadrant/limitador-operator v0.9.0
-	github.com/kuadrant/policy-machinery v0.0.0-20240816150600-5fffd8edfbef
+	github.com/kuadrant/policy-machinery v0.0.0-20240822084212-e963418c9566
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/onsi/ginkgo/v2 v2.17.2
 	github.com/onsi/gomega v1.33.1

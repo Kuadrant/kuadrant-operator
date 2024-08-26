@@ -62,10 +62,10 @@ func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
 	topologyFileReconciler := TopologyFileReconciler{Client: client}
 
 	commonAuthPolicyResourceEventMatchers := []controller.ResourceEventMatcher{
-		{Kind: ptr.To(controller.GatewayClassKind)},
-		{Kind: ptr.To(controller.GatewayKind), EventType: ptr.To(controller.CreateEvent)},
-		{Kind: ptr.To(controller.GatewayKind), EventType: ptr.To(controller.UpdateEvent)},
-		{Kind: ptr.To(controller.HTTPRouteKind)},
+		{Kind: ptr.To(machinery.GatewayClassGroupKind)},
+		{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.CreateEvent)},
+		{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.UpdateEvent)},
+		{Kind: ptr.To(machinery.HTTPRouteGroupKind)},
 		{Kind: ptr.To(kuadrantv1beta2.AuthPolicyKind)},
 	}
 
@@ -77,7 +77,7 @@ func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
 	effectivePolicesReconciler.ReconcileFuncs = append(effectivePolicesReconciler.ReconcileFuncs, (&controller.Subscription{
 		ReconcileFunc: istioGatewayProvider.Sample,
 		Events: []controller.ResourceEventMatcher{
-			{Kind: ptr.To(controller.GatewayKind), EventType: ptr.To(controller.DeleteEvent)},
+			{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.DeleteEvent)},
 		},
 	}).Reconcile)
 

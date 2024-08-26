@@ -356,6 +356,18 @@ func (ap *AuthPolicy) DirectReferenceAnnotationName() string {
 	return NewAuthPolicyType().DirectReferenceAnnotationName()
 }
 
+func (ap *AuthPolicySpec) CommonSpec() *AuthPolicyCommonSpec {
+	if ap.Defaults != nil {
+		return ap.Defaults
+	}
+
+	if ap.Overrides != nil {
+		return ap.Overrides
+	}
+
+	return &ap.AuthPolicyCommonSpec
+}
+
 //+kubebuilder:object:root=true
 
 // AuthPolicyList contains a list of AuthPolicy

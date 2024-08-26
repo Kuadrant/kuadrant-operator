@@ -39,18 +39,6 @@ func (ap *AuthPolicy) GetURL() string {
 	return machinery.UrlFromObject(ap)
 }
 
-func (ap *AuthPolicySpec) CommonSpec() *AuthPolicyCommonSpec {
-	if ap.Defaults != nil {
-		return ap.Defaults
-	}
-
-	if ap.Overrides != nil {
-		return ap.Overrides
-	}
-
-	return &ap.AuthPolicyCommonSpec
-}
-
 var _ machinery.Policy = &RateLimitPolicy{}
 
 func (r *RateLimitPolicy) GetTargetRefs() []machinery.PolicyTargetReference {

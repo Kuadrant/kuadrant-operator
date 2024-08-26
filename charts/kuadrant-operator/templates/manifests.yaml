@@ -13380,7 +13380,8 @@ spec:
                 - weighted
                 type: object
               providerRefs:
-                description: providerRefS is a list of references to provider secrets.
+                description: providerRefs is a list of references to provider secrets.
+                  Max is one but intention is to allow this to be more in the future
                 items:
                   properties:
                     name:
@@ -16193,7 +16194,7 @@ spec:
         env:
         - name: RELATED_IMAGE_WASMSHIM
           value: oci://quay.io/kuadrant/wasm-shim:latest
-        image: quay.io/kuadrant/kuadrant-operator:remove_managed_zone_api
+        image: quay.io/kuadrant/kuadrant-operator:latest
         livenessProbe:
           httpGet:
             path: /healthz

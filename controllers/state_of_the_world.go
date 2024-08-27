@@ -18,7 +18,7 @@ import (
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
 
-var kuadrant_namespace = "kuadrant-system"
+var kuadrantNamespace = "kuadrant-system"
 
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
 
@@ -36,7 +36,7 @@ func SetupWithManagerA(manager ctrlruntime.Manager, client *dynamic.DynamicClien
 		controller.WithRunnable("tlspolicy watcher", buildWatcher(&kuadrantv1alpha1.TLSPolicy{}, kuadrantv1alpha1.TLSPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("authpolicy watcher", buildWatcher(&kuadrantv1beta2.AuthPolicy{}, kuadrantv1beta2.AuthPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("ratelimitpolicy watcher", buildWatcher(&kuadrantv1beta2.RateLimitPolicy{}, kuadrantv1beta2.RateLimitPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("configmap watcher", buildWatcher(&corev1.ConfigMap{}, controller.ConfigMapsResource, kuadrant_namespace)),
+		controller.WithRunnable("configmap watcher", buildWatcher(&corev1.ConfigMap{}, controller.ConfigMapsResource, kuadrantNamespace)),
 		controller.WithPolicyKinds(
 			kuadrantv1alpha1.DNSPolicyKind,
 			kuadrantv1alpha1.TLSPolicyKind,
@@ -101,7 +101,7 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "topology",
-			Namespace: kuadrant_namespace,
+			Namespace: kuadrantNamespace,
 		},
 		Data: map[string]string{
 			"topology": topology.ToDot(),

@@ -4,6 +4,7 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
@@ -31,6 +32,25 @@ func LinkKuadrantToGatewayClasses(objs controller.Store) machinery.LinkFunc {
 				parents = append(parents, parent)
 			}
 			return parents
+		},
+	}
+}
+
+func LinkKuadrantToTopologyConfigMap(objs controller.Store) machinery.LinkFunc {
+	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantKind), controller.ObjectAs[*Kuadrant])
+
+	return machinery.LinkFunc{
+		From: KuadrantKind,
+		To:   schema.GroupKind{Group: corev1.SchemeGroupVersion.Group, Kind: "ConfigMap"},
+		Func: func(child machinery.Object) []machinery.Object {
+			o := child.(*controller.RuntimeObject)
+			cm := o.Object.(*corev1.ConfigMap)
+			return lo.FilterMap(kuadrants, func(kuadrant *Kuadrant, _ int) (machinery.Object, bool) {
+				if cm.Name == "topology" {
+					return kuadrant, true
+				}
+				return nil, false
+			})
 		},
 	}
 }

@@ -7,10 +7,7 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
@@ -20,6 +17,8 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 )
+
+var kuadrant_namespace = "kuadrant-system"
 
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
 
@@ -37,14 +36,20 @@ func SetupWithManagerA(manager ctrlruntime.Manager, client *dynamic.DynamicClien
 		controller.WithRunnable("tlspolicy watcher", buildWatcher(&kuadrantv1alpha1.TLSPolicy{}, kuadrantv1alpha1.TLSPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("authpolicy watcher", buildWatcher(&kuadrantv1beta2.AuthPolicy{}, kuadrantv1beta2.AuthPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("ratelimitpolicy watcher", buildWatcher(&kuadrantv1beta2.RateLimitPolicy{}, kuadrantv1beta2.RateLimitPoliciesResource, metav1.NamespaceAll)),
+		controller.WithRunnable("configmap watcher", buildWatcher(&corev1.ConfigMap{}, controller.ConfigMapsResource, kuadrant_namespace)),
 		controller.WithPolicyKinds(
 			kuadrantv1alpha1.DNSPolicyKind,
 			kuadrantv1alpha1.TLSPolicyKind,
 			kuadrantv1beta2.AuthPolicyKind,
 			kuadrantv1beta2.RateLimitPolicyKind,
 		),
-		controller.WithObjectKinds(kuadrantv1beta1.KuadrantKind),
-		controller.WithObjectLinks(kuadrantv1beta1.LinkKuadrantToGatewayClasses),
+		controller.WithObjectKinds(
+			kuadrantv1beta1.KuadrantKind,
+			schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}),
+		controller.WithObjectLinks(
+			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
+			kuadrantv1beta1.LinkKuadrantToTopologyConfigMap,
+		),
 		controller.WithReconcile(buildReconciler(client)),
 	}
 
@@ -96,7 +101,7 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "topology",
-			Namespace: "kuadrant-system",
+			Namespace: kuadrant_namespace,
 		},
 		Data: map[string]string{
 			"topology": topology.ToDot(),
@@ -104,19 +109,24 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 	}
 
 	configMapRes := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
-	unstructuredMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(cm)
-	if err != nil {
-		panic(err.Error())
-	}
-	unstructuredCM := &unstructured.Unstructured{
-		Object: unstructuredMap,
-	}
+	unstructuredCM, _ := controller.Destruct(cm)
 
-	_, err = r.Client.Resource(configMapRes).Namespace(cm.Namespace).Update(context.TODO(), unstructuredCM, metav1.UpdateOptions{})
-	if errors.IsNotFound(err) {
-		_, err = r.Client.Resource(configMapRes).Namespace(cm.Namespace).Create(context.TODO(), unstructuredCM, metav1.CreateOptions{})
+	targets := topology.Objects().Items(func(object machinery.Object) bool {
+		if object.GetName() == cm.GetName() && object.GetNamespace() == cm.GetNamespace() {
+			return true
+		}
+		return false
+	})
+
+	if len(targets) == 0 {
+		_, err := r.Client.Resource(configMapRes).Namespace(cm.Namespace).Create(context.TODO(), unstructuredCM, metav1.CreateOptions{})
+		if err != nil {
+			logger.Error(err, "failed to write topology configmap")
+		}
+		return
 	}
+	_, err := r.Client.Resource(configMapRes).Namespace(cm.Namespace).Update(context.TODO(), unstructuredCM, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Error(err, "failed to write topology configmap")
+		logger.Error(err, "failed to update topology configmap")
 	}
 }

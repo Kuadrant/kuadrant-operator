@@ -289,7 +289,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	client, err := dynamic.NewForConfig(ctrl.GetConfigOrDie())
+	client, err := dynamic.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		setupLog.Error(err, "unable to create client")
 		os.Exit(1)

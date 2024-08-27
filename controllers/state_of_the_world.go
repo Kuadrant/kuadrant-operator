@@ -6,7 +6,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
-	istiov1 "istio.io/client-go/pkg/apis/security/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/utils/ptr"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -58,28 +56,7 @@ func buildWatcher[T controller.Object](obj T, resource schema.GroupVersionResour
 }
 
 func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
-	effectivePolicesReconciler := EffectivePolicesReconciler{Client: client}
 	topologyFileReconciler := TopologyFileReconciler{Client: client}
-
-	commonAuthPolicyResourceEventMatchers := []controller.ResourceEventMatcher{
-		{Kind: ptr.To(machinery.GatewayClassGroupKind)},
-		{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.CreateEvent)},
-		{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.UpdateEvent)},
-		{Kind: ptr.To(machinery.HTTPRouteGroupKind)},
-		{Kind: ptr.To(kuadrantv1beta2.AuthPolicyKind)},
-	}
-
-	istioGatewayProvider := &IstioGatewayProvider{Client: client}
-	effectivePolicesReconciler.ReconcileFuncs = append(effectivePolicesReconciler.ReconcileFuncs, (&controller.Subscription{
-		ReconcileFunc: istioGatewayProvider.Sample,
-		Events:        append(commonAuthPolicyResourceEventMatchers, controller.ResourceEventMatcher{Kind: ptr.To(IstioAuthorizationPolicyKind)}),
-	}).Reconcile)
-	effectivePolicesReconciler.ReconcileFuncs = append(effectivePolicesReconciler.ReconcileFuncs, (&controller.Subscription{
-		ReconcileFunc: istioGatewayProvider.Sample,
-		Events: []controller.ResourceEventMatcher{
-			{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.DeleteEvent)},
-		},
-	}).Reconcile)
 
 	reconciler := &controller.Workflow{
 		Precondition: func(ctx context.Context, resourceEvents []controller.ResourceEvent, _ *machinery.Topology) {
@@ -104,21 +81,10 @@ func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
 		},
 		Tasks: []controller.ReconcileFunc{
 			topologyFileReconciler.Reconcile,
-			effectivePolicesReconciler.Reconcile,
 		},
 	}
 
 	return reconciler.Run
-}
-
-type EffectivePolicesReconciler struct {
-	Client         *dynamic.DynamicClient
-	ReconcileFuncs []controller.ReconcileFunc
-}
-
-func (r *EffectivePolicesReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, _ *machinery.Topology) {
-	logger := controller.LoggerFromContext(ctx).WithName("effective polices reconciler")
-	logger.Info("reconciling effective polices reconciler")
 }
 
 type TopologyFileReconciler struct {
@@ -153,18 +119,4 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 	if err != nil {
 		logger.Error(err, "failed to write topology configmap")
 	}
-}
-
-var (
-	IstioAuthorizationPolicyKind       = schema.GroupKind{Group: istiov1.GroupName, Kind: "AuthorizationPolicy"}
-	IstioAuthorizationPoliciesResource = istiov1.SchemeGroupVersion.WithResource("authorizationpolicies")
-)
-
-type IstioGatewayProvider struct {
-	Client *dynamic.DynamicClient
-}
-
-func (r IstioGatewayProvider) Sample(ctx context.Context, _ []controller.ResourceEvent, _ *machinery.Topology) {
-	logger := controller.LoggerFromContext(ctx).WithName("istio gateway provider")
-	logger.Info("Sample function ran as expected")
 }

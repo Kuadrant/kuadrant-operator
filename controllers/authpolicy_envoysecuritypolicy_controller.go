@@ -57,7 +57,7 @@ func (r *AuthPolicyEnvoySecurityPolicyReconciler) Reconcile(eventCtx context.Con
 		logger.V(1).Info(string(jsonData))
 	}
 
-	topology, err := kuadranttools.TopologyForPolicies(ctx, r.Client(), &kuadrantv1beta2.AuthPolicy{})
+	topology, err := kuadranttools.TopologyForPolicies(ctx, r.Client(), kuadrantv1beta2.NewAuthPolicyType())
 	if err != nil {
 		return ctrl.Result{}, err
 	}

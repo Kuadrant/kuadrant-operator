@@ -111,7 +111,7 @@ var _ = Describe("Auth Envoy SecurityPolicy controller", func() {
 		})
 
 		It("Creates security policy", func(ctx SpecContext) {
-			spKey := types.NamespacedName{Name: controllers.EnvoySecurityPolicyName(TestGatewayName), Namespace: testNamespace}
+			spKey := types.NamespacedName{Name: controllers.EnvoySecurityPolicyName(gwPolicy.GetName()), Namespace: testNamespace}
 			sp := &egv1alpha1.SecurityPolicy{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, spKey, sp)
@@ -206,7 +206,7 @@ var _ = Describe("Auth Envoy SecurityPolicy controller", func() {
 		})
 
 		It("Creates security policy", func(ctx SpecContext) {
-			spKey := types.NamespacedName{Name: controllers.EnvoySecurityPolicyName(TestHTTPRouteName), Namespace: testNamespace}
+			spKey := types.NamespacedName{Name: controllers.EnvoySecurityPolicyName(routePolicy.GetName()), Namespace: testNamespace}
 			sp := &egv1alpha1.SecurityPolicy{}
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, spKey, sp)

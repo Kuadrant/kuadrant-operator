@@ -37,7 +37,7 @@ func LinkKuadrantToGatewayClasses(objs controller.Store) machinery.LinkFunc {
 }
 
 func LinkKuadrantToTopologyConfigMap(objs controller.Store) machinery.LinkFunc {
-	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantKind), controller.ObjectAs[*Kuadrant])
+	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantKind), controller.ObjectAs[machinery.Object])
 
 	return machinery.LinkFunc{
 		From: KuadrantKind,
@@ -45,12 +45,10 @@ func LinkKuadrantToTopologyConfigMap(objs controller.Store) machinery.LinkFunc {
 		Func: func(child machinery.Object) []machinery.Object {
 			o := child.(*controller.RuntimeObject)
 			cm := o.Object.(*corev1.ConfigMap)
-			return lo.FilterMap(kuadrants, func(kuadrant *Kuadrant, _ int) (machinery.Object, bool) {
-				if cm.Name == "topology" {
-					return kuadrant, true
-				}
-				return nil, false
-			})
+			if _, found := cm.Labels["kuadrant.io/topology"]; found && cm.Name == "topology" {
+				return kuadrants
+			}
+			return nil
 		},
 	}
 }

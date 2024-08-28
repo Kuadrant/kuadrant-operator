@@ -295,9 +295,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	sateOfTheWorld := controllers.SetupWithManagerA(mgr, client)
-	if err = sateOfTheWorld.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "unable to start sateOfTheWorld controller")
+	stateOfTheWorld := controllers.SetupWithManager(mgr, client)
+	if err = stateOfTheWorld.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "unable to start stateOfTheWorld controller")
 		os.Exit(1)
 	}
 }

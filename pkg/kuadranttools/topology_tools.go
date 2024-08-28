@@ -13,7 +13,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-func TopologyFromGateway(ctx context.Context, cl client.Client, gw *gatewayapiv1.Gateway, policyKind kuadrantgatewayapi.Policy) (*kuadrantgatewayapi.Topology, error) {
+func TopologyFromGateway(ctx context.Context, cl client.Client, gw *gatewayapiv1.Gateway, policyType kuadrantgatewayapi.PolicyType) (*kuadrantgatewayapi.Topology, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -36,10 +36,13 @@ func TopologyFromGateway(ctx context.Context, cl client.Client, gw *gatewayapiv1
 	}
 
 	// Get all the policyKind policies
-	policies := policyKind.List(ctx, cl, "")
+	policies, err := policyType.GetList(ctx, cl)
 	logger.V(1).Info("TopologyFromGateway: list policies",
 		"#policies", len(policies),
 		"err", err)
+	if err != nil {
+		return nil, err
+	}
 
 	return kuadrantgatewayapi.NewTopology(
 		kuadrantgatewayapi.WithGateways([]*gatewayapiv1.Gateway{gw}),
@@ -49,7 +52,7 @@ func TopologyFromGateway(ctx context.Context, cl client.Client, gw *gatewayapiv1
 	)
 }
 
-func TopologyForPolicies(ctx context.Context, cl client.Client, policyKind kuadrantgatewayapi.Policy) (*kuadrantgatewayapi.Topology, error) {
+func TopologyForPolicies(ctx context.Context, cl client.Client, policyType kuadrantgatewayapi.PolicyType) (*kuadrantgatewayapi.Topology, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -77,10 +80,13 @@ func TopologyForPolicies(ctx context.Context, cl client.Client, policyKind kuadr
 		return nil, err
 	}
 
-	policies := policyKind.List(ctx, cl, "")
+	policies, err := policyType.GetList(ctx, cl)
 	logger.V(1).Info("TopologyForPolicies: list policies",
 		"#policies", len(policies),
 		"err", err)
+	if err != nil {
+		return nil, err
+	}
 
 	return kuadrantgatewayapi.NewTopology(
 		kuadrantgatewayapi.WithGateways(utils.Map(gatewayList.Items, ptr.To[gatewayapiv1.Gateway])),

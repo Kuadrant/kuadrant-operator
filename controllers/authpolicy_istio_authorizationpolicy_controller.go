@@ -66,7 +66,7 @@ func (r *AuthPolicyIstioAuthorizationPolicyReconciler) Reconcile(eventCtx contex
 		return ctrl.Result{}, nil
 	}
 
-	topology, err := kuadranttools.TopologyFromGateway(ctx, r.Client(), gw, &kuadrantv1beta2.AuthPolicy{})
+	topology, err := kuadranttools.TopologyFromGateway(ctx, r.Client(), gw, kuadrantv1beta2.NewAuthPolicyType())
 	if err != nil {
 		return ctrl.Result{}, err
 	}

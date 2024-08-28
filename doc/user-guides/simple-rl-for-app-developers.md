@@ -105,7 +105,7 @@ curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toys -i
 > **Note**: If the command above fails to hit the Toy Store API on your environment, try forwarding requests to the service and accessing over localhost:
 >
 > ```sh
-> kubectl port-forward -n istio-system service/istio-ingressgateway-istio 9080:80 2>&1 >/dev/null &
+> kubectl port-forward -n istio-system service/istio-ingressgateway-istio 9080:80 >/dev/null 2>&1 &
 > export GATEWAY_URL=localhost:9080
 > ```
 > ```sh

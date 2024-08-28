@@ -22,7 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -77,23 +76,9 @@ func (r *AuthPolicyEnvoySecurityPolicyReconciler) reconcileSecurityPolicy(ctx co
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("reconcileSecurityPolicy")
 
-	targetRef := policy.TargetRef()
-	if policy.TargetRef() == nil {
-		return nil
-	}
-
-	esp := envoySecurityPolicy(targetRef.GetObject(), kuadrantNamespace)
+	esp := envoySecurityPolicy(policy, kuadrantNamespace)
 	if err := r.SetOwnerReference(policy.Policy, esp); err != nil {
 		return err
-	}
-
-	// if gateway target and not programmed, or route target which is not accepted by any parent
-	// tag for deletion
-	if (targetRef.GetGatewayNode() != nil && meta.IsStatusConditionFalse(targetRef.GetGatewayNode().Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed))) ||
-		(targetRef.GetRouteNode() != nil && !lo.ContainsBy(targetRef.GetRouteNode().Status.Parents, func(p gatewayapiv1.RouteParentStatus) bool {
-			return meta.IsStatusConditionTrue(p.Conditions, string(gatewayapiv1.RouteConditionAccepted))
-		})) {
-		utils.TagObjectToDelete(esp)
 	}
 
 	if err := r.ReconcileResource(ctx, &egv1alpha1.SecurityPolicy{}, esp, kuadrantenvoygateway.EnvoySecurityPolicyMutator); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -104,27 +89,19 @@ func (r *AuthPolicyEnvoySecurityPolicyReconciler) reconcileSecurityPolicy(ctx co
 	return nil
 }
 
-func envoySecurityPolicy(targetNetworkObject client.Object, kuadrantNamespace string) *egv1alpha1.SecurityPolicy {
-	targetNetworkObjectGvk := targetNetworkObject.GetObjectKind().GroupVersionKind()
+func envoySecurityPolicy(policy kuadrantgatewayapi.PolicyNode, kuadrantNamespace string) *egv1alpha1.SecurityPolicy {
+
 	esp := &egv1alpha1.SecurityPolicy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      EnvoySecurityPolicyName(targetNetworkObject.GetName()),
-			Namespace: targetNetworkObject.GetNamespace(),
+			Name:      EnvoySecurityPolicyName(policy.GetName()),
+			Namespace: policy.GetNamespace(),
 			Labels: map[string]string{
 				kuadrant.KuadrantNamespaceAnnotation: kuadrantNamespace,
 			},
 		},
 		Spec: egv1alpha1.SecurityPolicySpec{
 			PolicyTargetReferences: egv1alpha1.PolicyTargetReferences{
-				TargetRefs: []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					{
-						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
-							Group: gatewayapiv1.Group(targetNetworkObjectGvk.Group),
-							Kind:  gatewayapiv1.Kind(targetNetworkObjectGvk.Kind),
-							Name:  gatewayapiv1.ObjectName(targetNetworkObject.GetName()),
-						},
-					},
-				},
+				TargetRefs: []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{},
 			},
 			ExtAuth: &egv1alpha1.ExtAuth{
 				GRPC: &egv1alpha1.GRPCExtAuthService{
@@ -143,11 +120,35 @@ func envoySecurityPolicy(targetNetworkObject client.Object, kuadrantNamespace st
 		},
 	}
 	kuadrant.AnnotateObject(esp, kuadrantNamespace)
+
+	// if targetref has been deleted, or
+	// if gateway target and not programmed, or
+	// route target which is not accepted by any parent;
+	// tag for deletion
+	targetRef := policy.TargetRef()
+	if (targetRef == nil || targetRef.GetGatewayNode() != nil && meta.IsStatusConditionFalse(targetRef.GetGatewayNode().Status.Conditions, string(gatewayapiv1.GatewayConditionProgrammed))) ||
+		(targetRef.GetRouteNode() != nil && !lo.ContainsBy(targetRef.GetRouteNode().Status.Parents, func(p gatewayapiv1.RouteParentStatus) bool {
+			return meta.IsStatusConditionTrue(p.Conditions, string(gatewayapiv1.RouteConditionAccepted))
+		})) {
+		utils.TagObjectToDelete(esp)
+		return esp
+	}
+
+	targetNetworkObjectGvk := targetRef.GetObject().GetObjectKind().GroupVersionKind()
+	esp.Spec.PolicyTargetReferences.TargetRefs = append(esp.Spec.PolicyTargetReferences.TargetRefs,
+		gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+				Group: gatewayapiv1.Group(targetNetworkObjectGvk.Group),
+				Kind:  gatewayapiv1.Kind(targetNetworkObjectGvk.Kind),
+				Name:  gatewayapiv1.ObjectName(targetRef.GetObject().GetName()),
+			},
+		})
+
 	return esp
 }
 
 func EnvoySecurityPolicyName(targetName string) string {
-	return fmt.Sprintf("on-%s", targetName)
+	return fmt.Sprintf("for-%s", targetName)
 }
 
 // SetupWithManager sets up the controller with the Manager.

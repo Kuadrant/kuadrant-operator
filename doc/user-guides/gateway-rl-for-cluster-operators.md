@@ -181,8 +181,8 @@ EOF
 Expose the gateways, respectively at the port numbers `9081` and `9082` of the local host:
 
 ```sh
-kubectl port-forward -n istio-system service/external-istio 9081:80 2>&1 >/dev/null &
-kubectl port-forward -n istio-system service/internal-istio 9082:80 2>&1 >/dev/null &
+kubectl port-forward -n istio-system service/external-istio 9081:80 >/dev/null 2>&1 &
+kubectl port-forward -n istio-system service/internal-istio 9082:80 >/dev/null 2>&1 &
 ```
 
 Up to 5 successful (`200 OK`) requests every 10 seconds through the `external` ingress gateway (`*.io`), then `429 Too Many Requests`:

@@ -1404,7 +1404,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Name:       rlptools.LimitsNameFromRLP(rlpGatewayB),
 				},
 			)).WithContext(ctx).Should(Succeed())
-		})
+		}, testTimeOut)
 	})
 })
 

@@ -39,16 +39,21 @@ istioctl-uninstall: istioctl ## Uninstall istio.
 istioctl-verify-install: istioctl ## Verify istio installation.
 	$(ISTIOCTL) verify-install -i $(ISTIO_NAMESPACE)
 
+SAIL_VERSION = 0.1.0-rc.1
 .PHONY: sail-install
-sail-install: kustomize
-	$(KUSTOMIZE) build $(ISTIO_INSTALL_DIR)/sail | kubectl apply -f -
-	kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
+sail-install: helm
+	$(HELM) install sail-operator \
+		--create-namespace \
+		--namespace $(ISTIO_NAMESPACE) \
+		--wait \
+		--timeout=300s \
+		https://github.com/istio-ecosystem/sail-operator/releases/download/$(SAIL_VERSION)/sail-operator-$(SAIL_VERSION).tgz
 	kubectl apply -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
 
 .PHONY: sail-uninstall
-sail-uninstall: kustomize
+sail-uninstall: helm
 	kubectl delete -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
-	$(KUSTOMIZE) build $(ISTIO_INSTALL_DIR)/sail | kubectl delete -f -
+	$(HELM) uninstall sail-operator
 
 .PHONY: istio-install
 istio-install:

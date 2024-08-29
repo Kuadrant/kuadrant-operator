@@ -1,15 +1,12 @@
-apiVersion: operator.istio.io/v1alpha1
+apiVersion: sailoperator.io/v1alpha1
 kind: Istio
 metadata:
   name: default
 spec:
-  version: v1.20.0
+  # Supported values v1.22.4|v1.23.0
+  version: v1.22.4
   namespace: istio-system
   # Disable autoscaling to reduce dev resources
   values:
     pilot:
       autoscaleEnabled: false
-  rawValues:
-    gateways:
-      istio-ingressgateway:
-        autoscaleEnabled: false

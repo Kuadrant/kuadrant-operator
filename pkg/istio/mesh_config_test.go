@@ -3,6 +3,7 @@
 package istio
 
 import (
+	"math"
 	"testing"
 
 	sailv1alpha1 "github.com/istio-ecosystem/sail-operator/api/v1alpha1"
@@ -293,6 +294,21 @@ func TestSailWrapper_GetMeshConfig(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, "custom-authorizer")
 	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().GetPort(), uint32(50051))
+
+	// additional test branches for sailMeshConfigFromStruct
+	sailMeshConfig, err = sailMeshConfigFromStruct(nil)
+	assert.NilError(t, err)
+	assert.DeepEqual(t, sailMeshConfig, &sailv1alpha1.MeshConfig{})
+
+	invalidStruct := &structpb.Struct{
+		Fields: map[string]*structpb.Value{
+			"invalid": {},
+		},
+	}
+
+	sailMeshConfig, err = sailMeshConfigFromStruct(invalidStruct)
+	assert.Check(t, err != nil)
+	assert.Check(t, sailMeshConfig == nil)
 }
 
 func TestSailWrapper_SetMeshConfig(t *testing.T) {
@@ -307,4 +323,16 @@ func TestSailWrapper_SetMeshConfig(t *testing.T) {
 
 	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, stubbedMeshConfig.ExtensionProviders[0].Name)
 	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().GetPort(), uint32(50051))
+
+	// additional test branches for sailMeshConfigToStruct
+	invalidSailMeshConfig := &sailv1alpha1.MeshConfig{
+		DefaultConfig: &sailv1alpha1.MeshConfigProxyConfig{
+			Tracing: &sailv1alpha1.Tracing{
+				Sampling: math.NaN(),
+			},
+		},
+	}
+	structConfig, err := sailMeshConfigToStruct(invalidSailMeshConfig)
+	assert.Check(t, err != nil)
+	assert.Check(t, structConfig == nil)
 }

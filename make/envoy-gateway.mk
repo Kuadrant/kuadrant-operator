@@ -8,7 +8,7 @@ EG_NAMESPACE = envoy-gateway-system
 
 # egctl tool
 EGCTL=$(PROJECT_PATH)/bin/egctl
-EGCTL_VERSION ?= v1.0.0
+EGCTL_VERSION ?= v1.1.0
 
 ifeq ($(ARCH),x86_64)
 	EG_ARCH = amd64

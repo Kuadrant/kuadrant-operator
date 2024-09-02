@@ -2,92 +2,107 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 
 	"github.com/go-logr/logr"
-	istiosecurity "istio.io/api/security/v1beta1"
-	istio "istio.io/client-go/pkg/apis/security/v1beta1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/utils/env"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/google/uuid"
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/samber/lo"
+	istiosecurity "istio.io/api/security/v1beta1"
+	istiov1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/env"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 var KuadrantExtAuthProviderName = env.GetString("AUTH_PROVIDER", "kuadrant-authorization")
 
-// reconcileIstioAuthorizationPolicies translates and reconciles `AuthRules` into an Istio AuthorizationPoilcy containing them.
-func (r *AuthPolicyReconciler) reconcileIstioAuthorizationPolicies(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, gwDiffObj *reconcilers.GatewayDiffs) error {
-	if err := r.deleteIstioAuthorizationPolicies(ctx, ap, gwDiffObj); err != nil {
-		return err
+// AuthPolicyIstioAuthorizationPolicyReconciler reconciles IstioAuthorizationPolicy objects for auth
+type AuthPolicyIstioAuthorizationPolicyReconciler struct {
+	*reconcilers.BaseReconciler
+}
+
+//+kubebuilder:rbac:groups=security.istio.io,resources=authorizationpolicies,verbs=get;list;watch;create;update;patch;delete
+
+func (r *AuthPolicyIstioAuthorizationPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := r.Logger().WithValues("Gateway", req.NamespacedName, "request id", uuid.NewString())
+	logger.Info("Reconciling istio AuthorizationPolicy")
+	ctx := logr.NewContext(eventCtx, logger)
+
+	gw := &gatewayapiv1.Gateway{}
+	if err := r.Client().Get(ctx, req.NamespacedName, gw); err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("no gateway found")
+			return ctrl.Result{}, nil
+		}
+		logger.Error(err, "failed to get gateway")
+		return ctrl.Result{}, err
 	}
 
-	logger, err := logr.FromContext(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Create IstioAuthorizationPolicy for each gateway directly or indirectly referred by the policy (existing and new)
-	for _, gw := range append(gwDiffObj.GatewaysWithValidPolicyRef, gwDiffObj.GatewaysMissingPolicyRef...) {
-		iap, err := r.istioAuthorizationPolicy(ctx, ap, targetNetworkObject, gw)
+	if logger.V(1).Enabled() {
+		jsonData, err := json.MarshalIndent(gw, "", "  ")
 		if err != nil {
-			return err
+			return ctrl.Result{}, err
 		}
-		if err := r.ReconcileResource(ctx, &istio.AuthorizationPolicy{}, iap, alwaysUpdateAuthPolicy); err != nil && !apierrors.IsAlreadyExists(err) {
-			logger.Error(err, "failed to reconcile IstioAuthorizationPolicy resource")
-			return err
-		}
+		logger.V(1).Info(string(jsonData))
 	}
 
-	return nil
-}
+	if !kuadrant.IsKuadrantManaged(gw) {
+		return ctrl.Result{}, nil
+	}
 
-// deleteIstioAuthorizationPolicies deletes IstioAuthorizationPolicies previously created for gateways no longer targeted by the policy (directly or indirectly)
-func (r *AuthPolicyReconciler) deleteIstioAuthorizationPolicies(ctx context.Context, ap *api.AuthPolicy, gwDiffObj *reconcilers.GatewayDiffs) error {
-	logger, err := logr.FromContext(ctx)
+	topology, err := kuadranttools.TopologyFromGateway(ctx, r.Client(), gw, kuadrantv1beta2.NewAuthPolicyType())
 	if err != nil {
-		return err
+		return ctrl.Result{}, err
 	}
+	topologyIndex := kuadrantgatewayapi.NewTopologyIndexes(topology)
+	policies := lo.FilterMap(topologyIndex.PoliciesFromGateway(gw), func(policy kuadrantgatewayapi.Policy, _ int) (*kuadrantv1beta2.AuthPolicy, bool) {
+		ap, ok := policy.(*kuadrantv1beta2.AuthPolicy)
+		if !ok {
+			return nil, false
+		}
+		return ap, true
+	})
 
-	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
-		listOptions := &client.ListOptions{LabelSelector: labels.SelectorFromSet(istioAuthorizationPolicyLabels(client.ObjectKeyFromObject(gw.Gateway), client.ObjectKeyFromObject(ap)))}
-		iapList := &istio.AuthorizationPolicyList{}
-		if err := r.Client().List(ctx, iapList, listOptions); err != nil {
-			return err
+	for _, policy := range policies {
+		iap, err := r.istioAuthorizationPolicy(ctx, gw, policy, topologyIndex, topology)
+		if err != nil {
+			return ctrl.Result{}, err
 		}
 
-		for _, iap := range iapList.Items {
-			// it's OK to just go ahead and delete because we only create one IAP per target network object,
-			// and a network object can be targeted by no more than one AuthPolicy
-			if err := r.DeleteResource(ctx, iap); err != nil && !apierrors.IsNotFound(err) {
-				logger.Error(err, "failed to delete IstioAuthorizationPolicy")
-				return err
-			}
+		if policy.GetDeletionTimestamp() != nil {
+			utils.TagObjectToDelete(iap)
+		}
+
+		if err := r.ReconcileResource(ctx, &istiov1beta1.AuthorizationPolicy{}, iap, kuadrantistioutils.AuthorizationPolicyMutator); err != nil && !apierrors.IsAlreadyExists(err) {
+			logger.Error(err, "failed to reconcile IstioAuthorizationPolicy resource")
+			return ctrl.Result{}, err
 		}
 	}
 
-	return nil
+	return ctrl.Result{}, nil
 }
 
-func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object, gw kuadrant.GatewayWrapper) (*istio.AuthorizationPolicy, error) {
+func (r *AuthPolicyIstioAuthorizationPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, gateway *gatewayapiv1.Gateway, ap *kuadrantv1beta2.AuthPolicy, topologyIndex *kuadrantgatewayapi.TopologyIndexes, topology *kuadrantgatewayapi.Topology) (*istiov1beta1.AuthorizationPolicy, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("istioAuthorizationPolicy")
 
-	gateway := gw.Gateway
-
-	iap := &istio.AuthorizationPolicy{
+	iap := &istiov1beta1.AuthorizationPolicy{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      IstioAuthorizationPolicyName(gateway.Name, ap.GetTargetRef()),
 			Namespace: gateway.Namespace,
@@ -104,13 +119,14 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 		},
 	}
 
-	var route *gatewayapiv1.HTTPRoute
-
-	gwHostnames := gw.Hostnames()
+	gwHostnames := kuadrantgatewayapi.GatewayHostnames(gateway)
 	if len(gwHostnames) == 0 {
 		gwHostnames = []gatewayapiv1.Hostname{"*"}
 	}
+
+	var route *gatewayapiv1.HTTPRoute
 	var routeHostnames []gatewayapiv1.Hostname
+	targetNetworkObject := topologyIndex.GetPolicyTargetObject(ap)
 
 	switch obj := targetNetworkObject.(type) {
 	case *gatewayapiv1.HTTPRoute:
@@ -124,9 +140,9 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 		// fake a single httproute with all rules from all httproutes accepted by the gateway,
 		// that do not have an authpolicy of its own, so we can generate wasm rules for those cases
 		rules := make([]gatewayapiv1.HTTPRouteRule, 0)
-		routes := r.TargetRefReconciler.FetchAcceptedGatewayHTTPRoutes(ctx, obj)
+		routes := topology.Routes()
 		for idx := range routes {
-			route := routes[idx]
+			route := routes[idx].Route()
 			// skip routes that have an authpolicy of its own
 			if route.GetAnnotations()[common.AuthPolicyBackRefAnnotation] != "" {
 				continue
@@ -166,7 +182,53 @@ func (r *AuthPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, ap 
 		iap.Spec.Rules = rules
 	}
 
+	if err := r.SetOwnerReference(gateway, iap); err != nil {
+		return nil, err
+	}
+
 	return iap, nil
+}
+
+func (r *AuthPolicyIstioAuthorizationPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	ok, err := kuadrantistioutils.IsAuthorizationPolicyInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("Istio AuthorizationPolicy controller disabled. Istio was not found")
+		return nil
+	}
+
+	ok, err = kuadrantgatewayapi.IsGatewayAPIInstalled(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.Logger().Info("Istio AuthorizationPolicy controller disabled. GatewayAPI was not found")
+		return nil
+	}
+
+	httpRouteToParentGatewaysEventMapper := mappers.NewHTTPRouteToParentGatewaysEventMapper(
+		mappers.WithLogger(r.Logger().WithName("httpRouteToParentGatewaysEventMapper")),
+	)
+
+	apToParentGatewaysEventMapper := mappers.NewPolicyToParentGatewaysEventMapper(
+		mappers.WithLogger(r.Logger().WithName("authPolicyToParentGatewaysEventMapper")),
+		mappers.WithClient(r.Client()),
+	)
+
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&gatewayapiv1.Gateway{}).
+		Owns(&istiov1beta1.AuthorizationPolicy{}).
+		Watches(
+			&gatewayapiv1.HTTPRoute{},
+			handler.EnqueueRequestsFromMapFunc(httpRouteToParentGatewaysEventMapper.Map),
+		).
+		Watches(
+			&kuadrantv1beta2.AuthPolicy{},
+			handler.EnqueueRequestsFromMapFunc(apToParentGatewaysEventMapper.Map),
+		).
+		Complete(r)
 }
 
 // IstioAuthorizationPolicyName generates the name of an AuthorizationPolicy.
@@ -193,7 +255,7 @@ func istioAuthorizationPolicyLabels(gwKey, apKey client.ObjectKey) map[string]st
 // These rules are the conditions that, when matched, will make the gateway to call external authorization.
 // If no rules are specified, the gateway will call external authorization for all requests.
 // If the route selectors specified in the policy do not match any route rules, an error is returned.
-func istioAuthorizationPolicyRules(ap *api.AuthPolicy, route *gatewayapiv1.HTTPRoute) ([]*istiosecurity.Rule, error) {
+func istioAuthorizationPolicyRules(ap *kuadrantv1beta2.AuthPolicy, route *gatewayapiv1.HTTPRoute) ([]*istiosecurity.Rule, error) {
 	commonSpec := ap.Spec.CommonSpec()
 	// use only the top level route selectors if defined
 	if topLevelRouteSelectors := commonSpec.RouteSelectors; len(topLevelRouteSelectors) > 0 {
@@ -204,7 +266,7 @@ func istioAuthorizationPolicyRules(ap *api.AuthPolicy, route *gatewayapiv1.HTTPR
 
 // istioAuthorizationPolicyRulesFromRouteSelectors builds a list of Istio AuthorizationPolicy rules from an HTTPRoute,
 // filtered to the HTTPRouteRules and hostnames selected by the route selectors.
-func istioAuthorizationPolicyRulesFromRouteSelectors(route *gatewayapiv1.HTTPRoute, routeSelectors []api.RouteSelector) ([]*istiosecurity.Rule, error) {
+func istioAuthorizationPolicyRulesFromRouteSelectors(route *gatewayapiv1.HTTPRoute, routeSelectors []kuadrantv1beta2.RouteSelector) ([]*istiosecurity.Rule, error) {
 	istioRules := []*istiosecurity.Rule{}
 
 	if len(routeSelectors) > 0 {
@@ -230,7 +292,7 @@ func istioAuthorizationPolicyRulesFromRouteSelectors(route *gatewayapiv1.HTTPRou
 func istioAuthorizationPolicyRulesFromHTTPRoute(route *gatewayapiv1.HTTPRoute) []*istiosecurity.Rule {
 	istioRules := []*istiosecurity.Rule{}
 
-	hostnamesForConditions := (&api.RouteSelector{}).HostnamesForConditions(route)
+	hostnamesForConditions := (&kuadrantv1beta2.RouteSelector{}).HostnamesForConditions(route)
 	for _, rule := range route.Spec.Rules {
 		istioRules = append(istioRules, istioAuthorizationPolicyRulesFromHTTPRouteRule(rule, hostnamesForConditions)...)
 	}
@@ -343,44 +405,4 @@ func istioAuthorizationPolicyRulesFromHTTPRouteRule(rule gatewayapiv1.HTTPRouteR
 		istioRules = append(istioRules, istioRule)
 	}
 	return
-}
-
-func alwaysUpdateAuthPolicy(existingObj, desiredObj client.Object) (bool, error) {
-	existing, ok := existingObj.(*istio.AuthorizationPolicy)
-	if !ok {
-		return false, fmt.Errorf("%T is not an *istio.AuthorizationPolicy", existingObj)
-	}
-	desired, ok := desiredObj.(*istio.AuthorizationPolicy)
-	if !ok {
-		return false, fmt.Errorf("%T is not an *istio.AuthorizationPolicy", desiredObj)
-	}
-
-	var update bool
-
-	if !reflect.DeepEqual(existing.Spec.Action, desired.Spec.Action) {
-		update = true
-		existing.Spec.Action = desired.Spec.Action
-	}
-
-	if !reflect.DeepEqual(existing.Spec.ActionDetail, desired.Spec.ActionDetail) {
-		update = true
-		existing.Spec.ActionDetail = desired.Spec.ActionDetail
-	}
-
-	if !reflect.DeepEqual(existing.Spec.Rules, desired.Spec.Rules) {
-		update = true
-		existing.Spec.Rules = desired.Spec.Rules
-	}
-
-	if !reflect.DeepEqual(existing.Spec.Selector, desired.Spec.Selector) {
-		update = true
-		existing.Spec.Selector = desired.Spec.Selector
-	}
-
-	if !reflect.DeepEqual(existing.Annotations, desired.Annotations) {
-		update = true
-		existing.Annotations = desired.Annotations
-	}
-
-	return update, nil
 }

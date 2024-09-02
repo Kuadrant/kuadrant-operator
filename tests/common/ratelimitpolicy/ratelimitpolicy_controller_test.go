@@ -1295,8 +1295,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			gatewayParentsFunc := func(r *gatewayapiv1.HTTPRoute) {
 				r.Spec.ParentRefs = []gatewayapiv1.ParentReference{
-					{Name: gatewayapiv1.ObjectName(gatewayAName)},
-					{Name: gatewayapiv1.ObjectName(gatewayBName)},
+					{Name: gatewayapiv1.ObjectName(gatewayAName), Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace))},
+					{Name: gatewayapiv1.ObjectName(gatewayBName), Namespace: ptr.To(gatewayapiv1.Namespace(testNamespace))},
 				}
 			}
 

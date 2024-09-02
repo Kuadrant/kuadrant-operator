@@ -170,6 +170,9 @@ else
 RELATED_IMAGE_WASMSHIM ?= oci://quay.io/kuadrant/wasm-shim:$(WASM_SHIM_VERSION)
 endif
 
+## gatewayapi-provider
+GATEWAYAPI_PROVIDER ?= istio
+
 all: build
 
 ##@ General

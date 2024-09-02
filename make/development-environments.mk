@@ -1,7 +1,5 @@
 ##@ Deployment
 
-GATEWAYAPI_PROVIDER = istio
-
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	# Use server side apply, otherwise will hit into this issue https://medium.com/pareture/kubectl-install-crd-failed-annotations-too-long-2ebc91b40c7d
 	$(KUSTOMIZE) build config/crd | kubectl apply --server-side -f -

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/external-dns/endpoint"
 
@@ -51,6 +52,8 @@ const (
 	HTTPRouteName        = "toystore-route"
 )
 
+var GatewayClassName string
+
 func HostWildcard(domain string) string {
 	return fmt.Sprintf("*.%s", domain)
 }
@@ -76,7 +79,7 @@ func BuildBasicGateway(gwName, ns string, mutateFns ...func(*gatewayapiv1.Gatewa
 			Annotations: map[string]string{"networking.istio.io/service-type": string(corev1.ServiceTypeClusterIP)},
 		},
 		Spec: gatewayapiv1.GatewaySpec{
-			GatewayClassName: "istio",
+			GatewayClassName: gatewayapiv1.ObjectName(GatewayClassName),
 			Listeners: []gatewayapiv1.Listener{
 				{
 					Name:     "default",
@@ -633,5 +636,30 @@ func KuadrantIsReady(ctx context.Context, cl client.Client, key client.ObjectKey
 		err := cl.Get(ctx, key, kuadrantCR)
 		g.Expect(err).To(Succeed())
 		g.Expect(meta.IsStatusConditionTrue(kuadrantCR.Status.Conditions, "Ready")).To(BeTrue())
+	}
+}
+
+func BuildBasicAuthScheme() *kuadrantv1beta2.AuthSchemeSpec {
+	return &kuadrantv1beta2.AuthSchemeSpec{
+		Authentication: map[string]kuadrantv1beta2.AuthenticationSpec{
+			"apiKey": {
+				AuthenticationSpec: authorinoapi.AuthenticationSpec{
+					AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+						ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+							Selector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app": "toystore",
+								},
+							},
+						},
+					},
+					Credentials: authorinoapi.Credentials{
+						AuthorizationHeader: &authorinoapi.Prefixed{
+							Prefix: "APIKEY",
+						},
+					},
+				},
+			},
+		},
 	}
 }

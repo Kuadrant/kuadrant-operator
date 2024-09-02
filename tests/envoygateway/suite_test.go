@@ -1,22 +1,6 @@
 //go:build integration
 
-/*
-Copyright 2021.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
-package istio_test
+package envoygateway_test
 
 import (
 	"context"
@@ -36,11 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-// These tests use Ginkgo (BDD-style Go testing framework). Refer to
-// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
-
-// This test suite will be run on k8s env with GatewayAPI CRDs, Istio and Kuadrant CRDs installed
-
 var k8sClient client.Client
 var testEnv *envtest.Environment
 var kuadrantInstallationNS string
@@ -50,7 +29,7 @@ func testClient() client.Client { return k8sClient }
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecs(t, "Controller Suite on Istio")
+	RunSpecs(t, "Controller Suite on Envoy Gateway")
 }
 
 const (
@@ -112,7 +91,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	Expect(k8sClient).NotTo(BeNil())
 
 	tests.GatewayClassName = os.Getenv("GATEWAYAPI_PROVIDER")
-	Expect(tests.GatewayClassName).To(Equal("istio"), "Please make sure GATEWAYAPI_PROVIDER is set correctly.")
+	Expect(tests.GatewayClassName).To(Equal("envoygateway"), "Please make sure GATEWAYAPI_PROVIDER is set correctly.")
 })
 
 var _ = SynchronizedAfterSuite(func() {}, func() {
@@ -127,7 +106,7 @@ func TestMain(m *testing.M) {
 		log.SetLevel(log.DebugLevel),
 		log.SetMode(log.ModeDev),
 		log.WriteTo(GinkgoWriter),
-	).WithName("istio_controller_test")
+	).WithName("envoygateway_controller_test")
 	log.SetLogger(logger)
 	os.Exit(m.Run())
 }

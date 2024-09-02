@@ -20,6 +20,7 @@ const (
 	KuadrantNamespaceAnnotation = "kuadrant.io/namespace"
 	TopologyLabel               = "kuadrant.io/topology"
 	ControllerName              = "kuadrant.io/policy-controller"
+	AuthorinoServiceName        = "authorino-authorino-authorization"
 )
 
 type Policy interface {

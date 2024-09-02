@@ -35,8 +35,8 @@ func (ap *AuthPolicy) Merge(other machinery.Policy) machinery.Policy {
 	return other
 }
 
-func (ap *AuthPolicy) GetURL() string {
-	return machinery.UrlFromObject(ap)
+func (ap *AuthPolicy) GetLocator() string {
+	return machinery.LocatorFromObject(ap)
 }
 
 var _ machinery.Policy = &RateLimitPolicy{}
@@ -60,6 +60,6 @@ func (r *RateLimitPolicy) Merge(other machinery.Policy) machinery.Policy {
 	return other
 }
 
-func (r *RateLimitPolicy) GetURL() string {
-	return machinery.UrlFromObject(r)
+func (r *RateLimitPolicy) GetLocator() string {
+	return machinery.LocatorFromObject(r)
 }

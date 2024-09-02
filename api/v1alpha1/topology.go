@@ -35,8 +35,8 @@ func (p *DNSPolicy) Merge(other machinery.Policy) machinery.Policy {
 	return other
 }
 
-func (p *DNSPolicy) GetURL() string {
-	return machinery.UrlFromObject(p)
+func (p *DNSPolicy) GetLocator() string {
+	return machinery.LocatorFromObject(p)
 }
 
 var _ machinery.Policy = &TLSPolicy{}
@@ -60,6 +60,6 @@ func (p *TLSPolicy) Merge(other machinery.Policy) machinery.Policy {
 	return other
 }
 
-func (p *TLSPolicy) GetURL() string {
-	return machinery.UrlFromObject(p)
+func (p *TLSPolicy) GetLocator() string {
+	return machinery.LocatorFromObject(p)
 }

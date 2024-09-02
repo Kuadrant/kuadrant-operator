@@ -16,8 +16,8 @@ var (
 
 var _ machinery.Object = &Kuadrant{}
 
-func (p *Kuadrant) GetURL() string {
-	return machinery.UrlFromObject(p)
+func (p *Kuadrant) GetLocator() string {
+	return machinery.LocatorFromObject(p)
 }
 
 func LinkKuadrantToGatewayClasses(objs controller.Store) machinery.LinkFunc {

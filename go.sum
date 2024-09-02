@@ -248,8 +248,8 @@ github.com/kuadrant/dns-operator v0.0.0-20240809151102-e79ebbca8f70 h1:Jiq7dZWae
 github.com/kuadrant/dns-operator v0.0.0-20240809151102-e79ebbca8f70/go.mod h1:Aq4LYFwhBzQYUew71KjtWPKr+e0jzgraX10Ki8wIKCY=
 github.com/kuadrant/limitador-operator v0.9.0 h1:hTQ6CFPayf/sL7cIzwWjCoU8uTn6fzWdsJgKbDlnFts=
 github.com/kuadrant/limitador-operator v0.9.0/go.mod h1:DQOlg9qFOcnWPrwO529JRCMLLOEXJQxkmOes952S/Hw=
-github.com/kuadrant/policy-machinery v0.0.0-20240822084212-e963418c9566 h1:tSj58J026BECE/1AuFBWvhuSvKEwfjq2C4icPmiMaAU=
-github.com/kuadrant/policy-machinery v0.0.0-20240822084212-e963418c9566/go.mod h1:fbBqBlh7iyFdU6dRCzaPadypaI/BSHWKiUVl5kesrYY=
+github.com/kuadrant/policy-machinery v0.0.0-20240902112532-c4c99ba6f9e9 h1://x6RpahmoC1Dx8L7F510W4z8uSBfXbGJhJFXNBpd3k=
+github.com/kuadrant/policy-machinery v0.0.0-20240902112532-c4c99ba6f9e9/go.mod h1:fbBqBlh7iyFdU6dRCzaPadypaI/BSHWKiUVl5kesrYY=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 h1:SOEGU9fKiNWd/HOJuq6+3iTQz8KNCLtVX6idSoTLdUw=

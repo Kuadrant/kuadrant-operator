@@ -644,6 +644,128 @@ var _ = Describe("DNSPolicy controller", func() {
 			}, time.Second*10, time.Second).Should(BeNil())
 		}, testTimeOut)
 
+		It("should re-create dns record when listener hostname changes", func(ctx SpecContext) {
+			//get the current dnsrecord and wildcard dnsrecord
+			currentRec := &kuadrantdnsv1alpha1.DNSRecord{}
+			currentWildcardRec := &kuadrantdnsv1alpha1.DNSRecord{}
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, currentRec)).To(Succeed())
+				g.Expect(currentRec.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
+							"Status": Equal(metav1.ConditionTrue),
+						})),
+				)
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, currentWildcardRec)).To(Succeed())
+				g.Expect(currentRec.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
+							"Status": Equal(metav1.ConditionTrue),
+						})),
+				)
+			}, tests.TimeoutLong, time.Second).Should(BeNil())
+
+			//get the gateway and change the hostname of the listener that corresponds to the dnsrecord
+			newHostname := gatewayapiv1.Hostname(tests.HostTwo(domain))
+			Eventually(func() error {
+				existingGateway := &gatewayapiv1.Gateway{}
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), existingGateway); err != nil {
+					return err
+				}
+				newListeners := []gatewayapiv1.Listener{}
+				for _, existing := range existingGateway.Spec.Listeners {
+					if existing.Name == tests.ListenerNameOne {
+						existing.Hostname = &newHostname
+					}
+					newListeners = append(newListeners, existing)
+				}
+				patch := client.MergeFrom(existingGateway.DeepCopy())
+				existingGateway.Spec.Listeners = newListeners
+				return k8sClient.Patch(ctx, existingGateway, patch)
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+
+			//get the dnsrecord again and verify it's no longer the same DNSRecord resource and the rootHost has changed
+			//get the wildcard dnsrecord again and verify the DNSRecord resource is unchanged
+			Eventually(func(g Gomega) {
+				newRec := &kuadrantdnsv1alpha1.DNSRecord{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, newRec)).To(Succeed())
+				g.Expect(newRec.Spec.RootHost).To(Equal(string(newHostname)))
+				g.Expect(newRec.Spec.RootHost).ToNot(Equal(currentRec.Spec.RootHost))
+				g.Expect(newRec.UID).ToNot(Equal(currentRec.UID))
+				g.Expect(newRec.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
+							"Status": Equal(metav1.ConditionTrue),
+						})),
+				)
+				newWildcardRec := &kuadrantdnsv1alpha1.DNSRecord{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, newWildcardRec)).To(Succeed())
+				g.Expect(newWildcardRec.Spec.RootHost).To(Equal(currentWildcardRec.Spec.RootHost))
+				g.Expect(newWildcardRec.UID).To(Equal(currentWildcardRec.UID))
+				g.Expect(newWildcardRec.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
+							"Status": Equal(metav1.ConditionTrue),
+						})),
+				)
+				currentRec = newRec
+				currentWildcardRec = newWildcardRec
+			}, tests.TimeoutLong, time.Second).Should(BeNil())
+
+			//get the gateway and change the hostname of the listener that corresponds to the wildcard dnsrecord
+			newWildcardHostname := gatewayapiv1.Hostname(tests.HostWildcard(tests.HostTwo(domain)))
+			Eventually(func() error {
+				existingGateway := &gatewayapiv1.Gateway{}
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), existingGateway); err != nil {
+					return err
+				}
+				newListeners := []gatewayapiv1.Listener{}
+				for _, existing := range existingGateway.Spec.Listeners {
+					if existing.Name == tests.ListenerNameWildcard {
+						existing.Hostname = &newWildcardHostname
+					}
+					newListeners = append(newListeners, existing)
+				}
+				patch := client.MergeFrom(existingGateway.DeepCopy())
+				existingGateway.Spec.Listeners = newListeners
+				return k8sClient.Patch(ctx, existingGateway, patch)
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+
+			//get the dnsrecord again and verify the DNSRecord resource is unchanged
+			//get the wildcard dnsrecord again and verify it's no longer the same DNSRecord resource and the rootHost has changed
+			Eventually(func(g Gomega) {
+				newRec := &kuadrantdnsv1alpha1.DNSRecord{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, newRec)).To(Succeed())
+				g.Expect(newRec.Spec.RootHost).To(Equal(currentRec.Spec.RootHost))
+				g.Expect(newRec.UID).To(Equal(currentRec.UID))
+				g.Expect(newRec.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
+							"Status": Equal(metav1.ConditionTrue),
+						})),
+				)
+				newWildcardRec := &kuadrantdnsv1alpha1.DNSRecord{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, newWildcardRec)).To(Succeed())
+				g.Expect(newWildcardRec.Spec.RootHost).To(Equal(string(newWildcardHostname)))
+				g.Expect(newWildcardRec.Spec.RootHost).ToNot(Equal(currentWildcardRec.Spec.RootHost))
+				g.Expect(newWildcardRec.UID).ToNot(Equal(currentWildcardRec.UID))
+				g.Expect(newWildcardRec.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
+							"Status": Equal(metav1.ConditionTrue),
+						})),
+				)
+				currentRec = newRec
+				currentWildcardRec = newWildcardRec
+			}, tests.TimeoutMedium, time.Second).Should(BeNil())
+		}, testTimeOut)
+
 		It("should remove gateway back reference on policy deletion", func(ctx SpecContext) {
 			policyBackRefValue := testNamespace + "/" + dnsPolicy.Name
 			refs, _ := json.Marshal([]client.ObjectKey{{Name: dnsPolicy.Name, Namespace: testNamespace}})

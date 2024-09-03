@@ -254,13 +254,15 @@ func (dh *dnsHelper) removeDNSForDeletedListeners(ctx context.Context, upstreamG
 
 	for i, dnsRecord := range dnsList.Items {
 		listenerExists := false
+		rootHostMatches := false
 		for _, listener := range upstreamGateway.Spec.Listeners {
 			if listener.Name == gatewayapiv1.SectionName(dnsRecord.Labels[LabelListenerReference]) {
 				listenerExists = true
+				rootHostMatches = string(*listener.Hostname) == dnsRecord.Spec.RootHost
 				break
 			}
 		}
-		if !listenerExists {
+		if !listenerExists || !rootHostMatches {
 			if err := dh.Delete(ctx, &dnsList.Items[i], &client.DeleteOptions{}); client.IgnoreNotFound(err) != nil {
 				return err
 			}

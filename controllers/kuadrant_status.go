@@ -20,6 +20,7 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
 )
 
@@ -203,6 +204,7 @@ func (r *KuadrantReconciler) checkGatewayProviders() (*string, error) {
 
 	anyProvider, err := anyProviderFunc([]func(restMapper meta.RESTMapper) (bool, error){
 		kuadrantistioutils.IsIstioInstalled,
+		kuadrantenvoygateway.IsEnvoyGatewayInstalled,
 	})
 
 	if err != nil {

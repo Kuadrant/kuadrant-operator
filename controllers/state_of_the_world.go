@@ -24,7 +24,7 @@ var kuadrantNamespace = "kuadrant-system"
 
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
 
-func SetupWithManager(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *controller.Controller {
+func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *controller.Controller {
 	controllerOpts := []controller.ControllerOption{
 		controller.ManagedBy(manager),
 		controller.WithLogger(logger),

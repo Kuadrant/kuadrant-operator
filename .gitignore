@@ -26,7 +26,6 @@ testbin/*
 *~
 /kuadrant-operator
 tmp
-topology.dot
 
 /catalog/kuadrant-operator-catalog
 /catalog/kuadrant-operator-catalog.Dockerfile

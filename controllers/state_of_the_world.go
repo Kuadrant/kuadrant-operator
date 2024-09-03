@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -105,9 +106,18 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 		}
 		return
 	}
-	_, err := r.Client.Resource(configMapRes).Namespace(cm.Namespace).Update(ctx, unstructuredCM, metav1.UpdateOptions{})
-	if err != nil {
-		logger.Error(err, "failed to update topology configmap")
+
+	if len(targets) > 1 {
+		logger.Info("multiple topology configmaps found, continuing but unexpected behaviour may occur")
+	}
+	target := targets[0].(controller.Object).(*controller.RuntimeObject)
+	cmTarget := target.Object.(*corev1.ConfigMap)
+
+	if d, found := cmTarget.Data["topology"]; !found || strings.Compare(d, cm.Data["topology"]) != 0 {
+		_, err := r.Client.Resource(configMapRes).Namespace(cm.Namespace).Update(ctx, unstructuredCM, metav1.UpdateOptions{})
+		if err != nil {
+			logger.Error(err, "failed to update topology configmap")
+		}
 	}
 }
 

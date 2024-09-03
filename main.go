@@ -295,7 +295,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	stateOfTheWorld := controllers.SetupWithManager(mgr, client)
+	stateOfTheWorld := controllers.SetupWithManager(mgr, client, log.Log)
 	if err = stateOfTheWorld.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "unable to start stateOfTheWorld controller")
 		os.Exit(1)

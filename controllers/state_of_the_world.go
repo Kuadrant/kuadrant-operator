@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -23,8 +24,7 @@ var kuadrantNamespace = "kuadrant-system"
 
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
 
-func SetupWithManager(manager ctrlruntime.Manager, client *dynamic.DynamicClient) *controller.Controller {
-	logger := controller.CreateAndSetLogger()
+func SetupWithManager(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *controller.Controller {
 	controllerOpts := []controller.ControllerOption{
 		controller.ManagedBy(manager),
 		controller.WithLogger(logger),

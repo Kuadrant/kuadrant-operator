@@ -32,7 +32,7 @@ jobs:
           kind create cluster
           # Install Istio
           kubectl apply -k config/dependencies/istio/sail
-          kubectl -n gateway-system wait --for=condition=Available deployment istio-operator --timeout=300s
+          kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
           kubectl apply -f config/dependencies/istio/sail/istio.yaml
 
           # Install Observability Stack (Grafana and Prometheus)

@@ -58,7 +58,7 @@ func controlPlaneConfigMapName() string {
 }
 
 func controlPlaneProviderNamespace() string {
-	return env.GetString("ISTIOOPERATOR_NAMESPACE", "gateway-system")
+	return env.GetString("ISTIOOPERATOR_NAMESPACE", "istio-system")
 }
 
 func controlPlaneProviderName() string {

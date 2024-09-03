@@ -402,7 +402,7 @@ info "Installing Istio as a Gateway API provider... 🛫"
 if [ "$ISTIO_INSTALL_SAIL" = true ]; then
   info "Installing Istio via Sail"
   kubectl apply -k ${KUADRANT_ISTIO_KUSTOMIZATION}
-  kubectl -n gateway-system wait --for=condition=Available deployment istio-operator --timeout=300s
+  kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
   kubectl apply -f ${KUADRANT_REPO_RAW}/config/dependencies/istio/sail/istio.yaml
 else
   # Create CRD first to prevent race condition with creating CR
@@ -410,7 +410,7 @@ else
   kubectl kustomize ${MGC_ISTIO_KUSTOMIZATION} >${TMP_DIR}/doctmp
   success "Istio configuration generated."
   ${YQ_BIN} 'select(.kind == "CustomResourceDefinition")' ${TMP_DIR}/doctmp | kubectl apply -f -
-  kubectl -n gateway-system wait --for=condition=established crd/istiooperators.install.istio.io --timeout=60s
+  kubectl -n istio-system wait --for=condition=established crd/istiooperators.install.istio.io --timeout=60s
   cat ${TMP_DIR}/doctmp | kubectl apply -f -
   kubectl -n istio-operator wait --for=condition=Available deployment istio-operator --timeout=300s
 fi

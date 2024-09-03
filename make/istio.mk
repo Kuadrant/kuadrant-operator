@@ -4,7 +4,7 @@
 ## Targets to help install and configure istio
 
 ISTIO_INSTALL_DIR = config/dependencies/istio
-ISTIO_NAMESPACE = gateway-system
+ISTIO_NAMESPACE = istio-system
 ## installs project sail vs istioctl install
 ISTIO_INSTALL_SAIL ?= false
 ifeq (true,$(ISTIO_INSTALL_SAIL))

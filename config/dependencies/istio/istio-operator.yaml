@@ -2,11 +2,11 @@
 apiVersion: install.istio.io/v1alpha1
 kind: IstioOperator
 metadata:
-  namespace: gateway-system
+  namespace: istio-system
   name: istiocontrolplane
 spec:
   profile: default
-  namespace: gateway-system
+  namespace: istio-system
   components:
     base:
       enabled: true
@@ -28,4 +28,4 @@ spec:
     pilot:
       autoscaleEnabled: false
     global:
-      istioNamespace: gateway-system
+      istioNamespace: istio-system

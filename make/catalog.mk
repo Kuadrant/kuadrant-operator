@@ -7,9 +7,22 @@ CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:$(IMAGE_TAG)
 CATALOG_FILE = $(PROJECT_PATH)/catalog/kuadrant-operator-catalog/operator.yaml
 CATALOG_DOCKERFILE = $(PROJECT_PATH)/catalog/kuadrant-operator-catalog.Dockerfile
 
+# Quay image default expiry
+QUAY_IMAGE_EXPIRY ?= never
+
+# A LABEL that can be appended to a generated Dockerfile to set the Quay image expiration through Docker arguments.
+define QUAY_DOCKERFILE_LABEL
+
+# Quay image expiry
+ARG QUAY_IMAGE_EXPIRY
+ENV QUAY_IMAGE_EXPIRY=$${QUAY_IMAGE_EXPIRY:-never}
+LABEL quay.expires-after=$${QUAY_IMAGE_EXPIRY}
+endef
+export QUAY_DOCKERFILE_LABEL
+
 $(CATALOG_DOCKERFILE): $(OPM)
 	-mkdir -p $(PROJECT_PATH)/catalog/kuadrant-operator-catalog
-	cd $(PROJECT_PATH)/catalog && $(OPM) generate dockerfile kuadrant-operator-catalog
+	cd $(PROJECT_PATH)/catalog && $(OPM) generate dockerfile kuadrant-operator-catalog -l quay.expires-after=$(QUAY_IMAGE_EXPIRY)
 catalog-dockerfile: $(CATALOG_DOCKERFILE) ## Generate catalog dockerfile.
 
 CHANNELS ?= preview

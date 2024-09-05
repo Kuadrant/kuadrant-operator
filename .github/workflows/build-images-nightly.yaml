@@ -25,3 +25,4 @@ jobs:
       limitadorOperatorVersion: ${{ vars.LIMITADOR_OPERATOR_SHA }}
       dnsOperatorVersion: ${{ vars.DNS_OPERATOR_SHA }}
       wasmShimVersion: ${{ vars.WASM_SHIM_SHA }}
+      quayImageExpiry: 2w

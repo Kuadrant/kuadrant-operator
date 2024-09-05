@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.22 as builder
+FROM --platform=$BUILDPLATFORM golang:1.22 AS builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -27,5 +27,10 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
+
+# Quay image expiry
+ARG QUAY_IMAGE_EXPIRY
+ENV QUAY_IMAGE_EXPIRY=${QUAY_IMAGE_EXPIRY:-never}
+LABEL quay.expires-after=$QUAY_IMAGE_EXPIRY
 
 ENTRYPOINT ["/manager"]

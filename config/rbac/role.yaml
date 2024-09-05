@@ -145,6 +145,18 @@ rules:
 - apiGroups:
   - gateway.envoyproxy.io
   resources:
+  - envoypatchpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - gateway.envoyproxy.io
+  resources:
   - securitypolicies
   verbs:
   - create

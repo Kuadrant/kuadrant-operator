@@ -317,6 +317,30 @@ func main() {
 		os.Exit(1)
 	}
 
+	envoyGatewayWasmReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("envoyGatewayWasmReconciler"),
+		mgr.GetEventRecorderFor("EnvoyGatewayWasmReconciler"),
+	)
+	if err = (&controllers.EnvoyGatewayWasmReconciler{
+		BaseReconciler: envoyGatewayWasmReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "EnvoyGatewayWasmReconciler")
+		os.Exit(1)
+	}
+
+	envoyGatewayLimitadorClusterReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("envoyGatewayLimitadorClusterReconciler"),
+		mgr.GetEventRecorderFor("EnvoyGatewayLimitadorClusterReconciler"),
+	)
+	if err = (&controllers.EnvoyGatewayLimitadorClusterReconciler{
+		BaseReconciler: envoyGatewayLimitadorClusterReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "EnvoyGatewayLimitadorClusterReconciler")
+		os.Exit(1)
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

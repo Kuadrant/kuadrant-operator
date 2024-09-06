@@ -165,9 +165,9 @@ func Test_deleteTag(t *testing.T) {
 func Test_filterTags(t *testing.T) {
 	t.Run("test filter tags correctly", func(t *testing.T) {
 		tags := []Tag{
-			{"nightly-build", time.Now().Add(-24 * time.Hour).Format(time.RFC1123)}, // Old tag, should be deleted
-			{"v1.1.0", time.Now().Format(time.RFC1123)},                             // Recent tag, should be kept
-			{"latest", time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},        // Old tag, but name contains preserveSubstring
+			{Name: "nightly-build", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)}, // Old tag, should be deleted
+			{Name: "v1.1.0", LastModified: time.Now().Format(time.RFC1123)},                             // Recent tag, should be kept
+			{Name: "latest", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},        // Old tag, but name contains preserveSubstring
 		}
 
 		tagsToDelete, remainingTags, err := filterTags(tags, preserveSubstring)
@@ -195,8 +195,8 @@ func Test_filterTags(t *testing.T) {
 
 	t.Run("test filter tags with no deletions", func(t *testing.T) {
 		tags := []Tag{
-			{"v1.1.0", time.Now().Format(time.RFC1123)}, // Recent tag, should be kept
-			{"latest", time.Now().Format(time.RFC1123)}, // Recent tag, should be kept
+			{Name: "v1.1.0", LastModified: time.Now().Format(time.RFC1123)}, // Recent tag, should be kept
+			{Name: "latest", LastModified: time.Now().Format(time.RFC1123)}, // Recent tag, should be kept
 		}
 
 		tagsToDelete, remainingTags, err := filterTags(tags, preserveSubstring)
@@ -212,7 +212,7 @@ func Test_filterTags(t *testing.T) {
 
 	t.Run("test error unexpected time format", func(t *testing.T) {
 		tags := []Tag{
-			{"v1.1.0", time.Now().Format(time.ANSIC)},
+			{Name: "v1.1.0", LastModified: time.Now().Format(time.ANSIC)},
 		}
 
 		_, _, err := filterTags(tags, preserveSubstring)

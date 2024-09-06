@@ -15,8 +15,10 @@ import (
 )
 
 const (
-	repo    = "kev_fan/kuadrant-operator"
+	repo    = "kuadrant/kuadrant-operator"
 	baseURL = "https://quay.io/api/v1/repository/"
+	// Max page limit from tag response in 100
+	pageLimit = 100
 )
 
 var (
@@ -28,11 +30,14 @@ var (
 type Tag struct {
 	Name         string `json:"name"`
 	LastModified string `json:"last_modified"`
+	Expiration   string `json:"expiration"`
 }
 
 // TagsResponse represents the structure of the API response that contains tags.
 type TagsResponse struct {
 	Tags []Tag `json:"tags"`
+	// HasAdditional denotes whether there is still additional tag to be listed in the paginated response
+	HasAdditional bool `json:"has_additional"`
 }
 
 func main() {
@@ -74,40 +79,56 @@ func main() {
 
 // fetchTags retrieves the tags from the repository using the Quay.io API.
 func fetchTags(client remote.Client) ([]Tag, error) {
-	req, err := http.NewRequest("GET", baseURL+repo+"/tag", nil)
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %w", err)
+	allTags := make([]Tag, 0)
+
+	i := 1
+
+	for {
+		req, err := http.NewRequest("GET", fmt.Sprintf("%s%s/tag/?page=%d&limit=%d", baseURL, repo, i, pageLimit), nil)
+		if err != nil {
+			return nil, fmt.Errorf("error creating request: %w", err)
+		}
+
+		// Required for private repos
+		req.Header.Add("Authorization", "Bearer "+accessToken)
+
+		// Execute the request
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("error making request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		// Handle possible non-200 status codes
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("error: received status code %d\nBody: %s", resp.StatusCode, string(body))
+		}
+
+		// Read the response body
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("error reading response body: %w", err)
+		}
+
+		// Parse the JSON response
+		var tagsResp TagsResponse
+		if err := json.Unmarshal(body, &tagsResp); err != nil {
+			return nil, fmt.Errorf("error unmarshalling response: %w", err)
+		}
+
+		allTags = append(allTags, tagsResp.Tags...)
+
+		if tagsResp.HasAdditional {
+			i += 1
+			continue
+		}
+
+		// Has no additional pages
+		break
 	}
 
-	// Required for private repos
-	req.Header.Add("Authorization", "Bearer "+accessToken)
-
-	// Execute the request
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("error making request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Handle possible non-200 status codes
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("error: received status code %d\nBody: %s", resp.StatusCode, string(body))
-	}
-
-	// Read the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %w", err)
-	}
-
-	// Parse the JSON response
-	var tagsResp TagsResponse
-	if err := json.Unmarshal(body, &tagsResp); err != nil {
-		return nil, fmt.Errorf("error unmarshalling response: %w", err)
-	}
-
-	return tagsResp.Tags, nil
+	return allTags, nil
 }
 
 // filterTags takes a slice of tags and returns two maps: one for tags to delete and one for remaining tags.

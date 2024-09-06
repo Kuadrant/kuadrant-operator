@@ -56,25 +56,28 @@ func main() {
 	}
 
 	// Use filterTags to get tags to delete and remaining tags
-	tagsToDelete, remainingTags, err := filterTags(tags, preserveSubstring)
+	tagsToDelete, preservedTags, err := filterTags(tags, preserveSubstring)
 	if err != nil {
 		logger.Fatalln("Error filtering tags:", err)
 	}
 
+	logger.Println("Tags to delete:", maps.Keys(tagsToDelete))
+
 	// Delete tags and update remainingTags
 	for tagName := range tagsToDelete {
 		if err := deleteTag(client, accessToken, tagName); err != nil {
-			logger.Println("Error deleting tag:", err)
+			logger.Println(err)
 			continue
 		}
 
 		logger.Printf("Successfully deleted tag: %s\n", tagName)
 
-		delete(remainingTags, tagName) // Remove deleted tag from remainingTags
+		delete(tagsToDelete, tagName) // Remove deleted tag from remainingTags
 	}
 
 	// Print remaining tags
-	logger.Println("Remaining tags:", maps.Keys(remainingTags))
+	logger.Println("Preserved tags:", maps.Keys(preservedTags))
+	logger.Println("Tags not deleted successfully:", tagsToDelete)
 }
 
 // fetchTags retrieves the tags from the repository using the Quay.io API.
@@ -137,28 +140,29 @@ func filterTags(tags []Tag, preserveSubstring string) (map[string]struct{}, map[
 	cutOffTime := time.Now().AddDate(0, 0, 0).Add(0 * time.Hour).Add(-1 * time.Minute)
 
 	tagsToDelete := make(map[string]struct{})
-	remainingTags := make(map[string]struct{})
+	perservedTags := make(map[string]struct{})
 
 	for _, tag := range tags {
-		// Parse the LastModified timestamp
+		// Tags that have an expiration set are ignored as they could be historical tags that have already expired
+		// i.e. when an existing tag is updated, the previous tag of the same name is expired and is returned when listing
+		// the tags
+		if tag.Expiration != "" {
+			continue
+		}
+
 		lastModified, err := time.Parse(time.RFC1123, tag.LastModified)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		// Check if tag should be deleted
-		if lastModified.Before(cutOffTime) && !containsSubstring(tag.Name, preserveSubstring) {
+		if lastModified.Before(cutOffTime) && !strings.Contains(tag.Name, preserveSubstring) {
 			tagsToDelete[tag.Name] = struct{}{}
 		} else {
-			remainingTags[tag.Name] = struct{}{}
+			perservedTags[tag.Name] = struct{}{}
 		}
 	}
 
-	return tagsToDelete, remainingTags, nil
-}
-
-func containsSubstring(tagName, substring string) bool {
-	return strings.Contains(tagName, substring)
+	return tagsToDelete, perservedTags, nil
 }
 
 // deleteTag sends a DELETE request to remove the specified tag from the repository

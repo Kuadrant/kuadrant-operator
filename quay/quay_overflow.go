@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"golang.org/x/exp/maps"
 	"oras.land/oras-go/pkg/registry/remote"
 )
 
@@ -36,36 +38,38 @@ type TagsResponse struct {
 func main() {
 	client := &http.Client{}
 
+	logger := log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime)
+
 	if accessToken == "" {
-		fmt.Println("no access token provided")
-		return
+		logger.Fatalln("no access token provided")
 	}
 
 	// Fetch tags from the API
 	tags, err := fetchTags(client)
 	if err != nil {
-		fmt.Println("Error fetching tags:", err)
-		return
+		logger.Fatalln("Error fetching tags:", err)
 	}
 
 	// Use filterTags to get tags to delete and remaining tags
-	tagsToDelete, remainingTags := filterTags(tags, preserveSubstring)
+	tagsToDelete, remainingTags, err := filterTags(tags, preserveSubstring)
+	if err != nil {
+		logger.Fatalln("Error filtering tags:", err)
+	}
 
 	// Delete tags and update remainingTags
 	for tagName := range tagsToDelete {
 		if err := deleteTag(client, accessToken, tagName); err != nil {
-			fmt.Println("Error deleting tag:", err)
+			logger.Println("Error deleting tag:", err)
 			continue
 		}
+
+		logger.Printf("Successfully deleted tag: %s\n", tagName)
 
 		delete(remainingTags, tagName) // Remove deleted tag from remainingTags
 	}
 
 	// Print remaining tags
-	fmt.Println("Remaining tags:")
-	for tag := range remainingTags {
-		fmt.Println(tag)
-	}
+	logger.Println("Remaining tags:", maps.Keys(remainingTags))
 }
 
 // fetchTags retrieves the tags from the repository using the Quay.io API.
@@ -107,7 +111,7 @@ func fetchTags(client remote.Client) ([]Tag, error) {
 }
 
 // filterTags takes a slice of tags and returns two maps: one for tags to delete and one for remaining tags.
-func filterTags(tags []Tag, preserveSubstring string) (map[string]struct{}, map[string]struct{}) {
+func filterTags(tags []Tag, preserveSubstring string) (map[string]struct{}, map[string]struct{}, error) {
 	// Calculate the cutoff time
 	cutOffTime := time.Now().AddDate(0, 0, 0).Add(0 * time.Hour).Add(-1 * time.Minute)
 
@@ -118,8 +122,7 @@ func filterTags(tags []Tag, preserveSubstring string) (map[string]struct{}, map[
 		// Parse the LastModified timestamp
 		lastModified, err := time.Parse(time.RFC1123, tag.LastModified)
 		if err != nil {
-			fmt.Println("Error parsing time:", err)
-			continue
+			return nil, nil, err
 		}
 
 		// Check if tag should be deleted
@@ -130,7 +133,7 @@ func filterTags(tags []Tag, preserveSubstring string) (map[string]struct{}, map[
 		}
 	}
 
-	return tagsToDelete, remainingTags
+	return tagsToDelete, remainingTags, nil
 }
 
 func containsSubstring(tagName, substring string) bool {
@@ -153,7 +156,6 @@ func deleteTag(client remote.Client, accessToken, tagName string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNoContent {
-		fmt.Printf("Successfully deleted tag: %s\n", tagName)
 		return nil
 	}
 

@@ -170,9 +170,11 @@ func Test_filterTags(t *testing.T) {
 			{"latest", time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},        // Old tag, but name contains preserveSubstring
 		}
 
-		preserveSubstring := "latest"
+		tagsToDelete, remainingTags, err := filterTags(tags, preserveSubstring)
 
-		tagsToDelete, remainingTags := filterTags(tags, preserveSubstring)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
 
 		if len(tagsToDelete) != 1 || len(remainingTags) != 2 {
 			t.Fatalf("expected 1 tag to delete and 2 remaining, got %d to delete and %d remaining", len(tagsToDelete), len(remainingTags))
@@ -197,12 +199,26 @@ func Test_filterTags(t *testing.T) {
 			{"latest", time.Now().Format(time.RFC1123)}, // Recent tag, should be kept
 		}
 
-		preserveSubstring := "latest"
+		tagsToDelete, remainingTags, err := filterTags(tags, preserveSubstring)
 
-		tagsToDelete, remainingTags := filterTags(tags, preserveSubstring)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
 
 		if len(tagsToDelete) != 0 || len(remainingTags) != 2 {
 			t.Fatalf("expected 0 tags to delete and 2 remaining, got %d to delete and %d remaining", len(tagsToDelete), len(remainingTags))
+		}
+	})
+
+	t.Run("test error unexpected time format", func(t *testing.T) {
+		tags := []Tag{
+			{"v1.1.0", time.Now().Format(time.ANSIC)},
+		}
+
+		_, _, err := filterTags(tags, preserveSubstring)
+
+		if err == nil {
+			t.Fatal("expected error, got success")
 		}
 	})
 }

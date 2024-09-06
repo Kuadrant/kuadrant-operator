@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,17 +9,15 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/client-go/rest"
+	"oras.land/oras-go/pkg/registry/remote"
 )
 
 const (
-	repo    = "kuadrant/kuadrant-operator"
+	repo    = "kev_fan/kuadrant-operator"
 	baseURL = "https://quay.io/api/v1/repository/"
 )
 
 var (
-	robotPass         = os.Getenv("ROBOT_PASS")
-	robotUser         = os.Getenv("ROBOT_USER")
 	accessToken       = os.Getenv("ACCESS_TOKEN")
 	preserveSubstring = "latest" // Example Tag name that wont be deleted i.e relevant tags
 )
@@ -39,6 +36,11 @@ type TagsResponse struct {
 func main() {
 	client := &http.Client{}
 
+	if accessToken == "" {
+		fmt.Println("no access token provided")
+		return
+	}
+
 	// Fetch tags from the API
 	tags, err := fetchTags(client)
 	if err != nil {
@@ -51,9 +53,12 @@ func main() {
 
 	// Delete tags and update remainingTags
 	for tagName := range tagsToDelete {
-		if deleteTag(client, accessToken, tagName) {
-			delete(remainingTags, tagName) // Remove deleted tag from remainingTags
+		if err := deleteTag(client, accessToken, tagName); err != nil {
+			fmt.Println("Error deleting tag:", err)
+			continue
 		}
+
+		delete(remainingTags, tagName) // Remove deleted tag from remainingTags
 	}
 
 	// Print remaining tags
@@ -64,22 +69,14 @@ func main() {
 }
 
 // fetchTags retrieves the tags from the repository using the Quay.io API.
-func fetchTags(client rest.HTTPClient) ([]Tag, error) {
-	// TODO - DO you want to seperate out builidng the request to a function to unit test?
-	// TODO - Is adding the headers even needed to fetch tags for a public repo?
+func fetchTags(client remote.Client) ([]Tag, error) {
 	req, err := http.NewRequest("GET", baseURL+repo+"/tag", nil)
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %w", err)
 	}
 
-	// Prioritize Bearer token for authorization
-	if accessToken != "" {
-		req.Header.Add("Authorization", "Bearer "+accessToken)
-	} else {
-		// Fallback to Basic Authentication if no access token
-		auth := base64.StdEncoding.EncodeToString([]byte(robotUser + ":" + robotPass))
-		req.Header.Add("Authorization", "Basic "+auth)
-	}
+	// Required for private repos
+	req.Header.Add("Authorization", "Bearer "+accessToken)
 
 	// Execute the request
 	resp, err := client.Do(req)
@@ -142,27 +139,24 @@ func containsSubstring(tagName, substring string) bool {
 
 // deleteTag sends a DELETE request to remove the specified tag from the repository
 // Returns true if successful, false otherwise
-func deleteTag(client rest.HTTPClient, accessToken, tagName string) bool {
+func deleteTag(client remote.Client, accessToken, tagName string) error {
 	req, err := http.NewRequest("DELETE", baseURL+repo+"/tag/"+tagName, nil)
 	if err != nil {
-		fmt.Println("Error creating DELETE request:", err)
-		return false
+		return fmt.Errorf("error creating DELETE request: %s", err)
 	}
 	req.Header.Add("Authorization", "Bearer "+accessToken)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error deleting tag:", err)
-		return false
+		return fmt.Errorf("error deleting tag: %s", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNoContent {
 		fmt.Printf("Successfully deleted tag: %s\n", tagName)
-		return true
-	} else {
-		body, _ := io.ReadAll(resp.Body)
-		fmt.Printf("Failed to delete tag %s: Status code %d\nBody: %s\n", tagName, resp.StatusCode, string(body))
-		return false
+		return nil
 	}
+
+	body, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("Failed to delete tag %s: Status code %d\nBody: %s\n", tagName, resp.StatusCode, string(body))
 }

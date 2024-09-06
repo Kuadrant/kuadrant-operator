@@ -17,7 +17,7 @@ type MockHTTPClient struct {
 	mutateFn func(res *http.Response)
 }
 
-func (m MockHTTPClient) Do(request *http.Request) (*http.Response, error) {
+func (m MockHTTPClient) Do(_ *http.Request) (*http.Response, error) {
 	if m.wantErr {
 		return nil, errors.New("oops")
 	}
@@ -95,12 +95,12 @@ func Test_fetchTags(t *testing.T) {
 				{"name": "latest", "last_modified": "Wed, 04 Jan 2006 15:04:05 MST"}
 			]
 		}`
-	
+
 		tags, err := fetchTags(&MockHTTPClient{mutateFn: func(res *http.Response) {
 			res.StatusCode = http.StatusOK
 			res.Body = io.NopCloser(bytes.NewReader([]byte(mockJSONResponse)))
 		}})
-	
+
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -111,9 +111,9 @@ func Test_fetchTags(t *testing.T) {
 		}
 
 		expectedTags := map[string]string{
-			"v1.0.0":  "Mon, 02 Jan 2006 15:04:05 MST",
-			"v1.1.0":  "Tue, 03 Jan 2006 15:04:05 MST",
-			"latest":  "Wed, 04 Jan 2006 15:04:05 MST",
+			"v1.0.0": "Mon, 02 Jan 2006 15:04:05 MST",
+			"v1.1.0": "Tue, 03 Jan 2006 15:04:05 MST",
+			"latest": "Wed, 04 Jan 2006 15:04:05 MST",
 		}
 
 		for _, tag := range tags {
@@ -131,10 +131,10 @@ func Test_deleteTag(t *testing.T) {
 			res.Body = io.NopCloser(bytes.NewReader(nil))
 		}}
 
-		success := deleteTag(client, "fake_access_token", "v1.0.0")
+		err := deleteTag(client, "fake_access_token", "v1.0.0")
 
-		if !success {
-			t.Error("expected successful delete, got failure")
+		if err != nil {
+			t.Error("expected successful delete, got error")
 		}
 	})
 
@@ -144,9 +144,9 @@ func Test_deleteTag(t *testing.T) {
 			res.Body = io.NopCloser(bytes.NewReader([]byte("internal server error")))
 		}}
 
-		success := deleteTag(client, "fake_access_token", "v1.0.0")
+		err := deleteTag(client, "fake_access_token", "v1.0.0")
 
-		if success {
+		if err == nil {
 			t.Error("expected failure, got success")
 		}
 	})
@@ -154,9 +154,9 @@ func Test_deleteTag(t *testing.T) {
 	t.Run("test error making delete request", func(t *testing.T) {
 		client := &MockHTTPClient{wantErr: true}
 
-		success := deleteTag(client, "fake_access_token", "v1.0.0")
+		err := deleteTag(client, "fake_access_token", "v1.0.0")
 
-		if success {
+		if err == nil {
 			t.Error("expected failure, got success")
 		}
 	})
@@ -166,8 +166,8 @@ func Test_filterTags(t *testing.T) {
 	t.Run("test filter tags correctly", func(t *testing.T) {
 		tags := []Tag{
 			{"nightly-build", time.Now().Add(-24 * time.Hour).Format(time.RFC1123)}, // Old tag, should be deleted
-			{"v1.1.0", time.Now().Format(time.RFC1123)},                       // Recent tag, should be kept
-			{"latest", time.Now().Add(-24 * time.Hour).Format(time.RFC1123)}, // Old tag, but name contains preserveSubstring
+			{"v1.1.0", time.Now().Format(time.RFC1123)},                             // Recent tag, should be kept
+			{"latest", time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},        // Old tag, but name contains preserveSubstring
 		}
 
 		preserveSubstring := "latest"

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -15,18 +16,20 @@ import (
 )
 
 const (
-	repo    = "kuadrant/kuadrant-operator"
-	baseURL = "https://quay.io/api/v1/repository/"
-	// Max page limit from tag response in 100
+	// Max number of entries returned as specified in Quay API docs for listing tags
 	pageLimit = 100
 )
 
 var (
+	repo               *string
+	baseURL            *string
+	dryRun             *bool
 	accessToken        = os.Getenv("ACCESS_TOKEN")
 	preserveSubstrings = []string{
 		"latest",
+		// Preserve release branch images
 		"release-v*",
-		// Semver regex - vX.Y.X
+		// Semver regex - vX.Y.Z(-rc1)
 		"^v(?P<major>0|[1-9]\\d*)\\.(?P<minor>0|[1-9]\\d*)\\.(?P<patch>0|[1-9]\\d*)(?:-(?P<prerelease>(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
 	}
 )
@@ -41,11 +44,16 @@ type Tag struct {
 // TagsResponse represents the structure of the API response that contains tags.
 type TagsResponse struct {
 	Tags []Tag `json:"tags"`
-	// HasAdditional denotes whether there is still additional tag to be listed in the paginated response
+	// HasAdditional denotes whether there is still additional tags to be listed in the paginated response
 	HasAdditional bool `json:"has_additional"`
 }
 
 func main() {
+	repo = flag.String("repo", "kuadrant/kuadrant-operator", "Repository name")
+	baseURL = flag.String("base-url", "https://quay.io/api/v1/repository/", "Base API URL")
+	dryRun = flag.Bool("dry-run", true, "Dry run")
+	flag.Parse()
+
 	client := &http.Client{}
 
 	logger := log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime)
@@ -70,29 +78,34 @@ func main() {
 
 	// Delete tags and update remainingTags
 	for tagName := range tagsToDelete {
-		if err := deleteTag(client, accessToken, tagName); err != nil {
-			logger.Println(err)
-			continue
-		}
+		if dryRun != nil && *dryRun {
+			logger.Printf("DRY RUN - Successfully deleted tag: %s\n", tagName)
+		} else {
+			if err := deleteTag(client, accessToken, tagName); err != nil {
+				logger.Println(err)
+				continue
+			}
 
-		logger.Printf("Successfully deleted tag: %s\n", tagName)
+			logger.Printf("Successfully deleted tag: %s\n", tagName)
+		}
 
 		delete(tagsToDelete, tagName) // Remove deleted tag from remainingTags
 	}
 
 	// Print remaining tags
 	logger.Println("Preserved tags:", maps.Keys(preservedTags))
-	logger.Println("Tags not deleted successfully:", tagsToDelete)
+	logger.Println("Tags not deleted successfully:", maps.Keys(tagsToDelete))
 }
 
 // fetchTags retrieves the tags from the repository using the Quay.io API.
+// https://docs.quay.io/api/swagger/#!/tag/listRepoTags
 func fetchTags(client remote.Client) ([]Tag, error) {
 	allTags := make([]Tag, 0)
 
 	i := 1
 
 	for {
-		req, err := http.NewRequest("GET", fmt.Sprintf("%s%s/tag/?page=%d&limit=%d", baseURL, repo, i, pageLimit), nil)
+		req, err := http.NewRequest("GET", fmt.Sprintf("%s%s/tag/?page=%d&limit=%d", *baseURL, *repo, i, pageLimit), nil)
 		if err != nil {
 			return nil, fmt.Errorf("error creating request: %w", err)
 		}
@@ -139,7 +152,31 @@ func fetchTags(client remote.Client) ([]Tag, error) {
 	return allTags, nil
 }
 
-// filterTags takes a slice of tags and returns two maps: one for tags to delete and one for remaining tags.
+// deleteTag sends a DELETE request to remove the specified tag from the repository
+// Returns nil if successful, error otherwise
+// https://docs.quay.io/api/swagger/#!/tag/deleteFullTag
+func deleteTag(client remote.Client, accessToken, tagName string) error {
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s%s/tag/%s", *baseURL, *repo, tagName), nil)
+	if err != nil {
+		return fmt.Errorf("error creating DELETE request: %s", err)
+	}
+	req.Header.Add("Authorization", "Bearer "+accessToken)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error deleting tag: %s", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNoContent {
+		return nil
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("Failed to delete tag %s: Status code %d\nBody: %s\n", tagName, resp.StatusCode, string(body))
+}
+
+// filterTags takes a slice of tags and preserves string regex and returns two maps: one for tags to delete and one for remaining tags.
 func filterTags(tags []Tag, preserveSubstrings []string) (map[string]struct{}, map[string]struct{}, error) {
 	// Calculate the cutoff time
 	cutOffTime := time.Now().AddDate(0, 0, 0).Add(0 * time.Hour).Add(-1 * time.Minute)
@@ -162,7 +199,6 @@ func filterTags(tags []Tag, preserveSubstrings []string) (map[string]struct{}, m
 		// i.e. when an existing tag is updated, the previous tag of the same name is expired and is returned when listing
 		// the tags
 		if tag.Expiration != "" {
-			perservedTags[tag.Name] = struct{}{}
 			continue
 		}
 
@@ -188,27 +224,4 @@ func filterTags(tags []Tag, preserveSubstrings []string) (map[string]struct{}, m
 	}
 
 	return tagsToDelete, perservedTags, nil
-}
-
-// deleteTag sends a DELETE request to remove the specified tag from the repository
-// Returns true if successful, false otherwise
-func deleteTag(client remote.Client, accessToken, tagName string) error {
-	req, err := http.NewRequest("DELETE", baseURL+repo+"/tag/"+tagName, nil)
-	if err != nil {
-		return fmt.Errorf("error creating DELETE request: %s", err)
-	}
-	req.Header.Add("Authorization", "Bearer "+accessToken)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("error deleting tag: %s", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNoContent {
-		return nil
-	}
-
-	body, _ := io.ReadAll(resp.Body)
-	return fmt.Errorf("Failed to delete tag %s: Status code %d\nBody: %s\n", tagName, resp.StatusCode, string(body))
 }

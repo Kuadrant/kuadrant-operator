@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"time"
 
 	"golang.org/x/exp/maps"
 	"oras.land/oras-go/pkg/registry/remote"
@@ -56,6 +57,8 @@ func main() {
 		logger.Fatalln("no access token provided")
 	}
 
+	beginningTime := time.Now()
+
 	// Fetch tags from the API
 	tags, err := fetchTags(client, baseURL, repo)
 	if err != nil {
@@ -89,6 +92,7 @@ func main() {
 	// Print remaining tags
 	logger.Println("Preserved tags:", maps.Keys(preservedTags), "num", len(preservedTags))
 	logger.Println("Tags not deleted successfully:", maps.Keys(tagsToDelete), len(tagsToDelete))
+	logger.Println("Execution time:", time.Since(beginningTime).String())
 }
 
 // fetchTags retrieves the tags from the repository using the Quay.io API.

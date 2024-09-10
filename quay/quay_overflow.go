@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
+	"regexp"
 	"time"
 
 	"golang.org/x/exp/maps"
@@ -22,8 +22,13 @@ const (
 )
 
 var (
-	accessToken       = os.Getenv("ACCESS_TOKEN")
-	preserveSubstring = "latest" // Example Tag name that wont be deleted i.e relevant tags
+	accessToken        = os.Getenv("ACCESS_TOKEN")
+	preserveSubstrings = []string{
+		"latest",
+		"release-v*",
+		// Semver regex - vX.Y.X
+		"^v(?P<major>0|[1-9]\\d*)\\.(?P<minor>0|[1-9]\\d*)\\.(?P<patch>0|[1-9]\\d*)(?:-(?P<prerelease>(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+	}
 )
 
 // Tag represents a tag in the repository.
@@ -56,7 +61,7 @@ func main() {
 	}
 
 	// Use filterTags to get tags to delete and remaining tags
-	tagsToDelete, preservedTags, err := filterTags(tags, preserveSubstring)
+	tagsToDelete, preservedTags, err := filterTags(tags, preserveSubstrings)
 	if err != nil {
 		logger.Fatalln("Error filtering tags:", err)
 	}
@@ -135,19 +140,39 @@ func fetchTags(client remote.Client) ([]Tag, error) {
 }
 
 // filterTags takes a slice of tags and returns two maps: one for tags to delete and one for remaining tags.
-func filterTags(tags []Tag, preserveSubstring string) (map[string]struct{}, map[string]struct{}, error) {
+func filterTags(tags []Tag, preserveSubstrings []string) (map[string]struct{}, map[string]struct{}, error) {
 	// Calculate the cutoff time
 	cutOffTime := time.Now().AddDate(0, 0, 0).Add(0 * time.Hour).Add(-1 * time.Minute)
 
 	tagsToDelete := make(map[string]struct{})
 	perservedTags := make(map[string]struct{})
 
+	// Compile the regexes for each preserve substring
+	var preserveRegexes []*regexp.Regexp
+	for _, substr := range preserveSubstrings {
+		regex, err := regexp.Compile(substr)
+		if err != nil {
+			return nil, nil, err
+		}
+		preserveRegexes = append(preserveRegexes, regex)
+	}
+
 	for _, tag := range tags {
 		// Tags that have an expiration set are ignored as they could be historical tags that have already expired
 		// i.e. when an existing tag is updated, the previous tag of the same name is expired and is returned when listing
 		// the tags
 		if tag.Expiration != "" {
+			perservedTags[tag.Name] = struct{}{}
 			continue
+		}
+
+		// Check if the tag name matches any of the preserve substrings
+		preserve := false
+		for _, regex := range preserveRegexes {
+			if regex.MatchString(tag.Name) {
+				preserve = true
+				break
+			}
 		}
 
 		lastModified, err := time.Parse(time.RFC1123, tag.LastModified)
@@ -155,7 +180,7 @@ func filterTags(tags []Tag, preserveSubstring string) (map[string]struct{}, map[
 			return nil, nil, err
 		}
 
-		if lastModified.Before(cutOffTime) && !strings.Contains(tag.Name, preserveSubstring) {
+		if lastModified.Before(cutOffTime) && !preserve {
 			tagsToDelete[tag.Name] = struct{}{}
 		} else {
 			perservedTags[tag.Name] = struct{}{}

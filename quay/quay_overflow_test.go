@@ -165,19 +165,23 @@ func Test_deleteTag(t *testing.T) {
 func Test_filterTags(t *testing.T) {
 	t.Run("test filter tags correctly", func(t *testing.T) {
 		tags := []Tag{
-			{Name: "nightly-build", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)}, // Old tag, should be deleted
-			{Name: "v1.1.0", LastModified: time.Now().Format(time.RFC1123)},                             // Recent tag, should be kept
-			{Name: "latest", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},        // Old tag, but name contains preserveSubstring
+			{Name: "nightly-build", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},                                           // Old tag, should be deleted
+			{Name: "v1.1.0", LastModified: time.Now().Format(time.RFC1123)},                                                                       // Recent tag, should be kept
+			{Name: "latest", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},                                                  // Old tag, but name contains preserveSubstring latest
+			{Name: "release-v1.2.3", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},                                          // Old tag, but name contains preserveSubstring release-v*
+			{Name: "v1.0.0", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},                                                  // Old tag, but name contains preserveSubstring semver release
+			{Name: "v1.2.0-rc1", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},                                              // Old tag, but name contains preserveSubstring semver release-candidate
+			{Name: "expiry_set", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123), Expiration: time.Now().Format(time.RFC1123)}, // Old tag, but already has an expiry set
 		}
 
-		tagsToDelete, remainingTags, err := filterTags(tags, preserveSubstring)
+		tagsToDelete, remainingTags, err := filterTags(tags, preserveSubstrings)
 
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 
-		if len(tagsToDelete) != 1 || len(remainingTags) != 2 {
-			t.Fatalf("expected 1 tag to delete and 2 remaining, got %d to delete and %d remaining", len(tagsToDelete), len(remainingTags))
+		if len(tagsToDelete) != 1 || len(remainingTags) != 6 {
+			t.Fatalf("expected 1 tag to delete and 6 remaining, got %d to delete and %d remaining", len(tagsToDelete), len(remainingTags))
 		}
 
 		if _, ok := tagsToDelete["nightly-build"]; !ok {
@@ -191,15 +195,31 @@ func Test_filterTags(t *testing.T) {
 		if _, ok := remainingTags["latest"]; !ok {
 			t.Error("expected latest to be kept")
 		}
+
+		if _, ok := remainingTags["release-v1.2.3"]; !ok {
+			t.Error("expected release-v1.2.3 to be kept")
+		}
+
+		if _, ok := remainingTags["v1.0.0"]; !ok {
+			t.Error("expected v1.0.0 to be kept")
+		}
+
+		if _, ok := remainingTags["v1.2.0-rc1"]; !ok {
+			t.Error("expected v1.2.0-rc1 to be kept")
+		}
+
+		if _, ok := remainingTags["expiry_set"]; !ok {
+			t.Error("expected expiry_set to be kept")
+		}
 	})
 
 	t.Run("test filter tags with no deletions", func(t *testing.T) {
 		tags := []Tag{
-			{Name: "v1.1.0", LastModified: time.Now().Format(time.RFC1123)}, // Recent tag, should be kept
-			{Name: "latest", LastModified: time.Now().Format(time.RFC1123)}, // Recent tag, should be kept
+			{Name: "v1.1.0", LastModified: time.Now().Format(time.RFC1123)}, // Preserved tag, should be kept
+			{Name: "recent", LastModified: time.Now().Format(time.RFC1123)}, // Recent tag, should be kept
 		}
 
-		tagsToDelete, remainingTags, err := filterTags(tags, preserveSubstring)
+		tagsToDelete, remainingTags, err := filterTags(tags, preserveSubstrings)
 
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
@@ -215,7 +235,7 @@ func Test_filterTags(t *testing.T) {
 			{Name: "v1.1.0", LastModified: time.Now().Format(time.ANSIC)},
 		}
 
-		_, _, err := filterTags(tags, preserveSubstring)
+		_, _, err := filterTags(tags, preserveSubstrings)
 
 		if err == nil {
 			t.Fatal("expected error, got success")

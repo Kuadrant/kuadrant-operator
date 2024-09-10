@@ -62,13 +62,13 @@ func main() {
 		logger.Fatalln("Error fetching tags:", err)
 	}
 
-	// Use filterTags to get tags to delete and remaining tags
+	// Use filterTags to get tags to delete and preservedTags tags
 	tagsToDelete, preservedTags, err := filterTags(tags, preserveSubstrings)
 	if err != nil {
 		logger.Fatalln("Error filtering tags:", err)
 	}
 
-	logger.Println("Tags to delete:", maps.Keys(tagsToDelete))
+	logger.Println("Tags to delete:", maps.Keys(tagsToDelete), "num", len(tagsToDelete))
 
 	// Delete tags and update remainingTags
 	for tagName := range tagsToDelete {
@@ -87,15 +87,18 @@ func main() {
 	}
 
 	// Print remaining tags
-	logger.Println("Preserved tags:", maps.Keys(preservedTags))
-	logger.Println("Tags not deleted successfully:", maps.Keys(tagsToDelete))
+	logger.Println("Preserved tags:", maps.Keys(preservedTags), "num", len(preservedTags))
+	logger.Println("Tags not deleted successfully:", maps.Keys(tagsToDelete), len(tagsToDelete))
 }
 
 // fetchTags retrieves the tags from the repository using the Quay.io API.
 // https://docs.quay.io/api/swagger/#!/tag/listRepoTags
 func fetchTags(client remote.Client, baseURL, repo *string) ([]Tag, error) {
-	allTags := make([]Tag, 0)
+	if baseURL == nil || repo == nil {
+		return nil, fmt.Errorf("baseURL or repo required")
+	}
 
+	allTags := make([]Tag, 0)
 	i := 1
 
 	for {
@@ -151,7 +154,13 @@ func fetchTags(client remote.Client, baseURL, repo *string) ([]Tag, error) {
 // Returns nil if successful, error otherwise
 // https://docs.quay.io/api/swagger/#!/tag/deleteFullTag
 func deleteTag(client remote.Client, baseURL, repo *string, accessToken, tagName string) error {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s%s/tag/%s", *baseURL, *repo, tagName), nil)
+	if baseURL == nil || repo == nil {
+		return fmt.Errorf("baseURL or repo required")
+	}
+
+	url := fmt.Sprintf("%s%s/tag/%s", *baseURL, *repo, tagName)
+
+	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return fmt.Errorf("error creating DELETE request: %s", err)
 	}

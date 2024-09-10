@@ -128,6 +128,28 @@ func Test_fetchTags(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("test error nil baseUrl", func(t *testing.T) {
+		_, err := fetchTags(&MockHTTPClient{}, nil, &testRepo)
+		if err == nil {
+			t.Fatal("error expected")
+		}
+
+		if err.Error() != "baseURL or repo required" {
+			t.Errorf("error expected, got %s", err.Error())
+		}
+	})
+
+	t.Run("test error nil repo", func(t *testing.T) {
+		_, err := fetchTags(&MockHTTPClient{}, &testBaseUrl, nil)
+		if err == nil {
+			t.Fatal("error expected")
+		}
+
+		if err.Error() != "baseURL or repo required" {
+			t.Errorf("error expected, got %s", err.Error())
+		}
+	})
 }
 
 func Test_deleteTag(t *testing.T) {
@@ -161,6 +183,24 @@ func Test_deleteTag(t *testing.T) {
 		client := &MockHTTPClient{wantErr: true}
 
 		err := deleteTag(client, &testBaseUrl, &testRepo, "fake_access_token", "v1.0.0")
+
+		if err == nil {
+			t.Error("expected failure, got success")
+		}
+	})
+
+	t.Run("test error nil baseUrl", func(t *testing.T) {
+		client := &MockHTTPClient{}
+		err := deleteTag(client, nil, &testRepo, "fake_access_token", "v1.0.0")
+
+		if err == nil {
+			t.Error("expected failure, got success")
+		}
+	})
+
+	t.Run("test error nil repo", func(t *testing.T) {
+		client := &MockHTTPClient{}
+		err := deleteTag(client, &testBaseUrl, nil, "fake_access_token", "v1.0.0")
 
 		if err == nil {
 			t.Error("expected failure, got success")

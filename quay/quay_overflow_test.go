@@ -5,12 +5,15 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"k8s.io/client-go/rest"
+	"oras.land/oras-go/pkg/registry/remote"
 )
+
+var _ remote.Client = &MockHTTPClient{}
 
 type MockHTTPClient struct {
 	wantErr  bool
@@ -30,11 +33,14 @@ func (m MockHTTPClient) Do(_ *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-var _ rest.HTTPClient = &MockHTTPClient{}
+var (
+	testBaseUrl = "https://quay.io/api/v1/"
+	testRepo    = "testOrg/kuadrant-operator"
+)
 
 func Test_fetchTags(t *testing.T) {
 	t.Run("test error making request", func(t *testing.T) {
-		tags, err := fetchTags(&MockHTTPClient{wantErr: true})
+		tags, err := fetchTags(&MockHTTPClient{wantErr: true}, &testBaseUrl, &testRepo)
 
 		if err == nil {
 			t.Error("error expected")
@@ -53,7 +59,7 @@ func Test_fetchTags(t *testing.T) {
 		tags, err := fetchTags(&MockHTTPClient{mutateFn: func(res *http.Response) {
 			res.Status = string(rune(400))
 			res.Body = io.NopCloser(bytes.NewReader(nil))
-		}})
+		}}, &testBaseUrl, &testRepo)
 
 		if err == nil {
 			t.Error("error expected")
@@ -72,7 +78,7 @@ func Test_fetchTags(t *testing.T) {
 		tags, err := fetchTags(&MockHTTPClient{mutateFn: func(res *http.Response) {
 			res.Status = string(rune(200))
 			res.Body = io.NopCloser(bytes.NewReader([]byte("{notTags: error}")))
-		}})
+		}}, &testBaseUrl, &testRepo)
 
 		if err == nil {
 			t.Error("error expected")
@@ -90,16 +96,16 @@ func Test_fetchTags(t *testing.T) {
 	t.Run("test successful response with tags", func(t *testing.T) {
 		mockJSONResponse := `{
 			"tags": [
-				{"name": "v1.0.0", "last_modified": "Mon, 02 Jan 2006 15:04:05 MST"},
-				{"name": "v1.1.0", "last_modified": "Tue, 03 Jan 2006 15:04:05 MST"},
-				{"name": "latest", "last_modified": "Wed, 04 Jan 2006 15:04:05 MST"}
+				{"name": "v1.0.0"},
+				{"name": "v1.1.0"},
+				{"name": "latest"}
 			]
 		}`
 
 		tags, err := fetchTags(&MockHTTPClient{mutateFn: func(res *http.Response) {
 			res.StatusCode = http.StatusOK
 			res.Body = io.NopCloser(bytes.NewReader([]byte(mockJSONResponse)))
-		}})
+		}}, &testBaseUrl, &testRepo)
 
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -110,15 +116,15 @@ func Test_fetchTags(t *testing.T) {
 			t.Fatalf("expected 3 tags, got %d", len(tags))
 		}
 
-		expectedTags := map[string]string{
-			"v1.0.0": "Mon, 02 Jan 2006 15:04:05 MST",
-			"v1.1.0": "Tue, 03 Jan 2006 15:04:05 MST",
-			"latest": "Wed, 04 Jan 2006 15:04:05 MST",
+		expectedTags := []string{
+			"v1.0.0",
+			"v1.1.0",
+			"latest",
 		}
 
 		for _, tag := range tags {
-			if expectedDate, ok := expectedTags[tag.Name]; !ok || expectedDate != tag.LastModified {
-				t.Errorf("unexpected tag: got %v, expected %v", tag, expectedTags[tag.Name])
+			if !slices.Contains(expectedTags, tag.Name) {
+				t.Errorf("unexpected tag: %v, does not exist in expected tags %v", tag, expectedTags)
 			}
 		}
 	})
@@ -131,7 +137,7 @@ func Test_deleteTag(t *testing.T) {
 			res.Body = io.NopCloser(bytes.NewReader(nil))
 		}}
 
-		err := deleteTag(client, "fake_access_token", "v1.0.0")
+		err := deleteTag(client, &testBaseUrl, &testRepo, "fake_access_token", "v1.0.0")
 
 		if err != nil {
 			t.Error("expected successful delete, got error")
@@ -144,7 +150,7 @@ func Test_deleteTag(t *testing.T) {
 			res.Body = io.NopCloser(bytes.NewReader([]byte("internal server error")))
 		}}
 
-		err := deleteTag(client, "fake_access_token", "v1.0.0")
+		err := deleteTag(client, &testBaseUrl, &testRepo, "fake_access_token", "v1.0.0")
 
 		if err == nil {
 			t.Error("expected failure, got success")
@@ -154,7 +160,7 @@ func Test_deleteTag(t *testing.T) {
 	t.Run("test error making delete request", func(t *testing.T) {
 		client := &MockHTTPClient{wantErr: true}
 
-		err := deleteTag(client, "fake_access_token", "v1.0.0")
+		err := deleteTag(client, &testBaseUrl, &testRepo, "fake_access_token", "v1.0.0")
 
 		if err == nil {
 			t.Error("expected failure, got success")
@@ -165,13 +171,13 @@ func Test_deleteTag(t *testing.T) {
 func Test_filterTags(t *testing.T) {
 	t.Run("test filter tags correctly", func(t *testing.T) {
 		tags := []Tag{
-			{Name: "nightly-build", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},                                           // Old tag, should be deleted
-			{Name: "v1.1.0", LastModified: time.Now().Format(time.RFC1123)},                                                                       // Recent tag, should be kept
-			{Name: "latest", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},                                                  // Old tag, but name contains preserveSubstring latest
-			{Name: "release-v1.2.3", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},                                          // Old tag, but name contains preserveSubstring release-v*
-			{Name: "v1.0.0", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},                                                  // Old tag, but name contains preserveSubstring semver release
-			{Name: "v1.2.0-rc1", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123)},                                              // Old tag, but name contains preserveSubstring semver release-candidate
-			{Name: "expiry_set", LastModified: time.Now().Add(-24 * time.Hour).Format(time.RFC1123), Expiration: time.Now().Format(time.RFC1123)}, // Old tag, but already has an expiry set
+			{Name: "nightly-build"},  // Not a preserved tag, should be deleted
+			{Name: "latest"},         // Preserved tag, name is latest
+			{Name: "release-v1.0.0"}, // Preserved tag, name contains preserveSubstring branch release semver, release-v*
+			{Name: "v1.0.0"},         // Preserved tag, but name contains preserveSubstring tag semver release
+			{Name: "v1.1.0-rc1"},     // Preserved tag, but name contains preserveSubstring tag semver release-candidate
+			{Name: "expiry_set", Expiration: time.Now().Format(time.RFC1123)}, // Skipped tag, already has an expiry set
+			{Name: "release-not-semver"},                                      // Not a preserved tag, should be deleted
 		}
 
 		tagsToDelete, remainingTags, err := filterTags(tags, preserveSubstrings)
@@ -180,43 +186,39 @@ func Test_filterTags(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 		}
 
-		if len(tagsToDelete) != 1 || len(remainingTags) != 6 {
-			t.Fatalf("expected 1 tag to delete and 6 remaining, got %d to delete and %d remaining", len(tagsToDelete), len(remainingTags))
+		if len(tagsToDelete) != 2 || len(remainingTags) != 4 {
+			t.Fatalf("expected 2 tag to delete and 4 remaining, got %d to delete and %d remaining", len(tagsToDelete), len(remainingTags))
 		}
 
 		if _, ok := tagsToDelete["nightly-build"]; !ok {
 			t.Error("expected nightly-build to be deleted")
 		}
 
-		if _, ok := remainingTags["v1.1.0"]; !ok {
-			t.Error("expected v1.1.0 to be kept")
+		if _, ok := tagsToDelete["release-not-semver"]; !ok {
+			t.Error("expected release-not-semver to be deleted")
 		}
 
 		if _, ok := remainingTags["latest"]; !ok {
 			t.Error("expected latest to be kept")
 		}
 
-		if _, ok := remainingTags["release-v1.2.3"]; !ok {
-			t.Error("expected release-v1.2.3 to be kept")
+		if _, ok := remainingTags["release-v1.0.0"]; !ok {
+			t.Error("expected release-v1.0.0 to be kept")
 		}
 
 		if _, ok := remainingTags["v1.0.0"]; !ok {
 			t.Error("expected v1.0.0 to be kept")
 		}
 
-		if _, ok := remainingTags["v1.2.0-rc1"]; !ok {
-			t.Error("expected v1.2.0-rc1 to be kept")
-		}
-
-		if _, ok := remainingTags["expiry_set"]; !ok {
-			t.Error("expected expiry_set to be kept")
+		if _, ok := remainingTags["v1.1.0-rc1"]; !ok {
+			t.Error("expected v1.1.0-rc1 to be kept")
 		}
 	})
 
 	t.Run("test filter tags with no deletions", func(t *testing.T) {
 		tags := []Tag{
-			{Name: "v1.1.0", LastModified: time.Now().Format(time.RFC1123)}, // Preserved tag, should be kept
-			{Name: "recent", LastModified: time.Now().Format(time.RFC1123)}, // Recent tag, should be kept
+			{Name: "v1.1.0"}, // Preserved tag, should be kept
+			{Name: "latest"}, // Preserved tag, should be kept
 		}
 
 		tagsToDelete, remainingTags, err := filterTags(tags, preserveSubstrings)
@@ -227,18 +229,6 @@ func Test_filterTags(t *testing.T) {
 
 		if len(tagsToDelete) != 0 || len(remainingTags) != 2 {
 			t.Fatalf("expected 0 tags to delete and 2 remaining, got %d to delete and %d remaining", len(tagsToDelete), len(remainingTags))
-		}
-	})
-
-	t.Run("test error unexpected time format", func(t *testing.T) {
-		tags := []Tag{
-			{Name: "v1.1.0", LastModified: time.Now().Format(time.ANSIC)},
-		}
-
-		_, _, err := filterTags(tags, preserveSubstrings)
-
-		if err == nil {
-			t.Fatal("expected error, got success")
 		}
 	})
 }

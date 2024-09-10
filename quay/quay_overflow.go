@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"time"
 
 	"golang.org/x/exp/maps"
 	"oras.land/oras-go/pkg/registry/remote"
@@ -21,24 +20,19 @@ const (
 )
 
 var (
-	repo               *string
-	baseURL            *string
-	dryRun             *bool
 	accessToken        = os.Getenv("ACCESS_TOKEN")
 	preserveSubstrings = []string{
 		"latest",
-		// Preserve release branch images
-		"release-v*",
-		// Semver regex - vX.Y.Z(-rc1)
-		"^v(?P<major>0|[1-9]\\d*)\\.(?P<minor>0|[1-9]\\d*)\\.(?P<patch>0|[1-9]\\d*)(?:-(?P<prerelease>(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+		// Preserve semver release branch or semver tag regex - release-vX.Y.Z(-rc1) or vX.Y.Z(-rc1)
+		// Based on https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
+		"^(v|release-v)(?P<major>0|[1-9]\\d*)\\.(?P<minor>0|[1-9]\\d*)\\.(?P<patch>0|[1-9]\\d*)(?:-(?P<prerelease>(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
 	}
 )
 
 // Tag represents a tag in the repository.
 type Tag struct {
-	Name         string `json:"name"`
-	LastModified string `json:"last_modified"`
-	Expiration   string `json:"expiration"`
+	Name       string `json:"name"`
+	Expiration string `json:"expiration"`
 }
 
 // TagsResponse represents the structure of the API response that contains tags.
@@ -49,9 +43,9 @@ type TagsResponse struct {
 }
 
 func main() {
-	repo = flag.String("repo", "kuadrant/kuadrant-operator", "Repository name")
-	baseURL = flag.String("base-url", "https://quay.io/api/v1/repository/", "Base API URL")
-	dryRun = flag.Bool("dry-run", true, "Dry run")
+	repo := flag.String("repo", "kuadrant/kuadrant-operator", "Repository name")
+	baseURL := flag.String("base-url", "https://quay.io/api/v1/repository/", "Base API URL")
+	dryRun := flag.Bool("dry-run", true, "Dry run")
 	flag.Parse()
 
 	client := &http.Client{}
@@ -63,7 +57,7 @@ func main() {
 	}
 
 	// Fetch tags from the API
-	tags, err := fetchTags(client)
+	tags, err := fetchTags(client, baseURL, repo)
 	if err != nil {
 		logger.Fatalln("Error fetching tags:", err)
 	}
@@ -81,7 +75,7 @@ func main() {
 		if dryRun != nil && *dryRun {
 			logger.Printf("DRY RUN - Successfully deleted tag: %s\n", tagName)
 		} else {
-			if err := deleteTag(client, accessToken, tagName); err != nil {
+			if err := deleteTag(client, baseURL, repo, accessToken, tagName); err != nil {
 				logger.Println(err)
 				continue
 			}
@@ -99,13 +93,14 @@ func main() {
 
 // fetchTags retrieves the tags from the repository using the Quay.io API.
 // https://docs.quay.io/api/swagger/#!/tag/listRepoTags
-func fetchTags(client remote.Client) ([]Tag, error) {
+func fetchTags(client remote.Client, baseURL, repo *string) ([]Tag, error) {
 	allTags := make([]Tag, 0)
 
 	i := 1
 
 	for {
-		req, err := http.NewRequest("GET", fmt.Sprintf("%s%s/tag/?page=%d&limit=%d", *baseURL, *repo, i, pageLimit), nil)
+		url := fmt.Sprintf("%s%s/tag/?page=%d&limit=%d", *baseURL, *repo, i, pageLimit)
+		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			return nil, fmt.Errorf("error creating request: %w", err)
 		}
@@ -155,7 +150,7 @@ func fetchTags(client remote.Client) ([]Tag, error) {
 // deleteTag sends a DELETE request to remove the specified tag from the repository
 // Returns nil if successful, error otherwise
 // https://docs.quay.io/api/swagger/#!/tag/deleteFullTag
-func deleteTag(client remote.Client, accessToken, tagName string) error {
+func deleteTag(client remote.Client, baseURL, repo *string, accessToken, tagName string) error {
 	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s%s/tag/%s", *baseURL, *repo, tagName), nil)
 	if err != nil {
 		return fmt.Errorf("error creating DELETE request: %s", err)
@@ -178,11 +173,8 @@ func deleteTag(client remote.Client, accessToken, tagName string) error {
 
 // filterTags takes a slice of tags and preserves string regex and returns two maps: one for tags to delete and one for remaining tags.
 func filterTags(tags []Tag, preserveSubstrings []string) (map[string]struct{}, map[string]struct{}, error) {
-	// Calculate the cutoff time
-	cutOffTime := time.Now().AddDate(0, 0, 0).Add(0 * time.Hour).Add(-1 * time.Minute)
-
 	tagsToDelete := make(map[string]struct{})
-	perservedTags := make(map[string]struct{})
+	preservedTags := make(map[string]struct{})
 
 	// Compile the regexes for each preserve substring
 	var preserveRegexes []*regexp.Regexp
@@ -211,17 +203,12 @@ func filterTags(tags []Tag, preserveSubstrings []string) (map[string]struct{}, m
 			}
 		}
 
-		lastModified, err := time.Parse(time.RFC1123, tag.LastModified)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		if lastModified.Before(cutOffTime) && !preserve {
+		if !preserve {
 			tagsToDelete[tag.Name] = struct{}{}
 		} else {
-			perservedTags[tag.Name] = struct{}{}
+			preservedTags[tag.Name] = struct{}{}
 		}
 	}
 
-	return tagsToDelete, perservedTags, nil
+	return tagsToDelete, preservedTags, nil
 }

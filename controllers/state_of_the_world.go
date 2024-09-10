@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -18,9 +19,8 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
-
-var kuadrantNamespace = "kuadrant-system"
 
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
 
@@ -37,7 +37,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithRunnable("tlspolicy watcher", controller.Watch(&kuadrantv1alpha1.TLSPolicy{}, kuadrantv1alpha1.TLSPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("authpolicy watcher", controller.Watch(&kuadrantv1beta2.AuthPolicy{}, kuadrantv1beta2.AuthPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta2.RateLimitPolicy{}, kuadrantv1beta2.RateLimitPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("configmap watcher", controller.Watch(&corev1.ConfigMap{}, controller.ConfigMapsResource, kuadrantNamespace, controller.FilterResourcesByLabel[*corev1.ConfigMap]("kuadrant.io/topology=true"))),
+		controller.WithRunnable("configmap watcher", controller.Watch(&corev1.ConfigMap{}, controller.ConfigMapsResource, metav1.NamespaceAll, controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyAnnotation)))),
 		controller.WithPolicyKinds(
 			kuadrantv1alpha1.DNSPolicyKind,
 			kuadrantv1alpha1.TLSPolicyKind,
@@ -76,27 +76,30 @@ func NewTopologyFileReconciler(client *dynamic.DynamicClient) *TopologyFileRecon
 	return &TopologyFileReconciler{Client: client}
 }
 
-func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology) {
+func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error) {
 	logger := controller.LoggerFromContext(ctx).WithName("topology file")
+
+	if len(topology.Objects().Roots()) == 0 {
+		logger.Info("no Kuadrant CR found, can create topology configmap")
+		return
+	}
+
+	kuadrantCR := topology.Objects().Roots()[0]
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "topology",
-			Namespace: kuadrantNamespace,
-			Labels:    map[string]string{"kuadrant.io/topology": "true"},
+			Namespace: kuadrantCR.GetNamespace(),
+			Labels:    map[string]string{kuadrant.TopologyAnnotation: "true"},
 		},
 		Data: map[string]string{
 			"topology": topology.ToDot(),
 		},
 	}
-
-	configMapRes := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"}
+	configMapRes := controller.ConfigMapsResource
 	unstructuredCM, _ := controller.Destruct(cm)
 
 	targets := topology.Objects().Items(func(object machinery.Object) bool {
-		if object.GetName() == cm.GetName() && object.GetNamespace() == cm.GetNamespace() {
-			return true
-		}
-		return false
+		return object.GetName() == cm.GetName() && object.GetNamespace() == cm.GetNamespace() && object.GroupVersionKind().Kind == cm.GroupVersionKind().Kind
 	})
 
 	if len(targets) == 0 {
@@ -127,7 +130,7 @@ func NewEventLogger() *EventLogger {
 	return &EventLogger{}
 }
 
-func (e *EventLogger) Log(ctx context.Context, resourceEvents []controller.ResourceEvent, _ *machinery.Topology) {
+func (e *EventLogger) Log(ctx context.Context, resourceEvents []controller.ResourceEvent, _ *machinery.Topology, err error) {
 	logger := controller.LoggerFromContext(ctx).WithName("event logger")
 	for _, event := range resourceEvents {
 		// log the event
@@ -145,5 +148,8 @@ func (e *EventLogger) Log(ctx context.Context, resourceEvents []controller.Resou
 			values = append(values, "diff", cmp.Diff(event.OldObject, event.NewObject))
 		}
 		logger.Info("new event", values...)
+		if err != nil {
+			logger.Error(err, "error passed to reconcile")
+		}
 	}
 }

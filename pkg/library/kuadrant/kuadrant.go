@@ -18,6 +18,7 @@ import (
 
 const (
 	KuadrantNamespaceAnnotation = "kuadrant.io/namespace"
+	TopologyAnnotation          = "kuadrant.io/topology"
 	ControllerName              = "kuadrant.io/policy-controller"
 )
 

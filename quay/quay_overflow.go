@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sync"
 	"time"
 
 	"golang.org/x/exp/maps"
@@ -47,10 +48,10 @@ func main() {
 	repo := flag.String("repo", "kuadrant/kuadrant-operator", "Repository name")
 	baseURL := flag.String("base-url", "https://quay.io/api/v1/repository/", "Base API URL")
 	dryRun := flag.Bool("dry-run", true, "Dry run")
+	batchSize := flag.Int("batch-size", 50, "Batch size for deletion. API calls might get rate limited at large values")
 	flag.Parse()
 
 	client := &http.Client{}
-
 	logger := log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime)
 
 	if accessToken == "" {
@@ -60,12 +61,14 @@ func main() {
 	beginningTime := time.Now()
 
 	// Fetch tags from the API
+	logger.Println("Fetching tags from Quay")
 	tags, err := fetchTags(client, baseURL, repo)
 	if err != nil {
 		logger.Fatalln("Error fetching tags:", err)
 	}
 
-	// Use filterTags to get tags to delete and preservedTags tags
+	// Use filterTags to get tags to delete and preserved tags
+	logger.Println("Filtering tags")
 	tagsToDelete, preservedTags, err := filterTags(tags, preserveSubstrings)
 	if err != nil {
 		logger.Fatalln("Error filtering tags:", err)
@@ -73,23 +76,38 @@ func main() {
 
 	logger.Println("Tags to delete:", maps.Keys(tagsToDelete), "num", len(tagsToDelete))
 
-	// Delete tags and update remainingTags
-	for tagName := range tagsToDelete {
-		if dryRun != nil && *dryRun {
-			logger.Printf("DRY RUN - Successfully deleted tag: %s\n", tagName)
-		} else {
-			if err := deleteTag(client, baseURL, repo, accessToken, tagName); err != nil {
-				logger.Println(err)
-				continue
-			}
+	var wg sync.WaitGroup
 
-			logger.Printf("Successfully deleted tag: %s\n", tagName)
+	// Delete tags in batches
+	i := 0
+	for tagName := range tagsToDelete {
+		if i%*batchSize == 0 && i != 0 {
+			// Wait for the current batch to complete before starting a new one
+			wg.Wait()
 		}
 
+		wg.Add(1)
+		go func(tagName string) {
+			defer wg.Done()
+
+			if dryRun != nil && *dryRun {
+				logger.Printf("DRY RUN - Successfully deleted tag: %s\n", tagName)
+			} else {
+				if err := deleteTag(client, baseURL, repo, accessToken, tagName); err != nil {
+					logger.Println(err)
+				} else {
+					logger.Printf("Successfully deleted tag: %s\n", tagName)
+				}
+			}
+		}(tagName)
+
 		delete(tagsToDelete, tagName) // Remove deleted tag from remainingTags
+		i++
 	}
 
-	// Print remaining tags
+	// Wait for the final batch to complete
+	wg.Wait()
+
 	logger.Println("Preserved tags:", maps.Keys(preservedTags), "num", len(preservedTags))
 	logger.Println("Tags not deleted successfully:", maps.Keys(tagsToDelete), len(tagsToDelete))
 	logger.Println("Execution time:", time.Since(beginningTime).String())

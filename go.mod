@@ -31,7 +31,6 @@ require (
 	k8s.io/klog/v2 v2.120.1
 	k8s.io/utils v0.0.0-20240423183400-0849a56e8f22
 	maistra.io/istio-operator v0.0.0-20240217080932-98753cb28cd7
-	oras.land/oras-go v1.2.4
 	sigs.k8s.io/controller-runtime v0.18.0
 	sigs.k8s.io/external-dns v0.14.0
 	sigs.k8s.io/gateway-api v1.1.0
@@ -173,6 +172,7 @@ require (
 	k8s.io/component-base v0.30.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20240423202451-8948a665c108 // indirect
 	k8s.io/kubectl v0.29.1 // indirect
+	oras.land/oras-go v1.2.4 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.13.5-0.20230601165947-6ce0bf390ce3 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.16.0 // indirect

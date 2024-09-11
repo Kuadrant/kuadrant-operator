@@ -22,6 +22,8 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
+var ConfigMapGroupKind = schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}
+
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
 
 func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *controller.Controller {
@@ -46,7 +48,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		),
 		controller.WithObjectKinds(
 			kuadrantv1beta1.KuadrantKind,
-			schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}),
+			ConfigMapGroupKind),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
 			kuadrantv1beta1.LinkKuadrantToTopologyConfigMap,
@@ -80,11 +82,15 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 	logger := controller.LoggerFromContext(ctx).WithName("topology file")
 
 	if len(topology.Objects().Roots()) == 0 {
-		logger.Info("no Kuadrant CR found, can create topology configmap")
+		logger.Info("no Kuadrant CR found, can't create topology configmap")
 		return
 	}
 
-	kuadrantCR := topology.Objects().Roots()[0]
+	kuadrantCR, okay := topology.Objects().Roots()[0].(*kuadrantv1beta1.Kuadrant)
+	if !okay {
+		logger.Info("kuadrant CR was not root of topology")
+		return
+	}
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "topology",
@@ -95,29 +101,28 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 			"topology": topology.ToDot(),
 		},
 	}
-	configMapRes := controller.ConfigMapsResource
 	unstructuredCM, _ := controller.Destruct(cm)
 
-	targets := topology.Objects().Items(func(object machinery.Object) bool {
-		return object.GetName() == cm.GetName() && object.GetNamespace() == cm.GetNamespace() && object.GroupVersionKind().Kind == cm.GroupVersionKind().Kind
+	existingTopologyConfigMaps := topology.Objects().Items(func(object machinery.Object) bool {
+		return object.GetName() == cm.GetName() && object.GetNamespace() == cm.GetNamespace() && object.GroupVersionKind().Kind == ConfigMapGroupKind.Kind
 	})
 
-	if len(targets) == 0 {
-		_, err := r.Client.Resource(configMapRes).Namespace(cm.Namespace).Create(ctx, unstructuredCM, metav1.CreateOptions{})
+	if len(existingTopologyConfigMaps) == 0 {
+		_, err := r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Create(ctx, unstructuredCM, metav1.CreateOptions{})
 		if err != nil {
 			logger.Error(err, "failed to write topology configmap")
 		}
 		return
 	}
 
-	if len(targets) > 1 {
+	if len(existingTopologyConfigMaps) > 1 {
 		logger.Info("multiple topology configmaps found, continuing but unexpected behaviour may occur")
 	}
-	target := targets[0].(controller.Object).(*controller.RuntimeObject)
-	cmTarget := target.Object.(*corev1.ConfigMap)
+	existingTopologyConfigMap := existingTopologyConfigMaps[0].(controller.Object).(*controller.RuntimeObject)
+	cmTopology := existingTopologyConfigMap.Object.(*corev1.ConfigMap)
 
-	if d, found := cmTarget.Data["topology"]; !found || strings.Compare(d, cm.Data["topology"]) != 0 {
-		_, err := r.Client.Resource(configMapRes).Namespace(cm.Namespace).Update(ctx, unstructuredCM, metav1.UpdateOptions{})
+	if d, found := cmTopology.Data["topology"]; !found || strings.Compare(d, cm.Data["topology"]) != 0 {
+		_, err := r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Update(ctx, unstructuredCM, metav1.UpdateOptions{})
 		if err != nil {
 			logger.Error(err, "failed to update topology configmap")
 		}

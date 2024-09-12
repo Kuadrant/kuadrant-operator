@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -22,7 +23,10 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
-var ConfigMapGroupKind = schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}
+var (
+	ConfigMapGroupKind = schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}
+	topologyNamespace  = env.GetString("TOPOLOGY_NAMESPACE", "")
+)
 
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
 
@@ -39,7 +43,6 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithRunnable("tlspolicy watcher", controller.Watch(&kuadrantv1alpha1.TLSPolicy{}, kuadrantv1alpha1.TLSPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("authpolicy watcher", controller.Watch(&kuadrantv1beta2.AuthPolicy{}, kuadrantv1beta2.AuthPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta2.RateLimitPolicy{}, kuadrantv1beta2.RateLimitPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("configmap watcher", controller.Watch(&corev1.ConfigMap{}, controller.ConfigMapsResource, metav1.NamespaceAll, controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyAnnotation)))),
 		controller.WithPolicyKinds(
 			kuadrantv1alpha1.DNSPolicyKind,
 			kuadrantv1alpha1.TLSPolicyKind,
@@ -51,9 +54,19 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			ConfigMapGroupKind),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
-			kuadrantv1beta1.LinkKuadrantToTopologyConfigMap,
 		),
 		controller.WithReconcile(buildReconciler(client)),
+	}
+
+	if topologyNamespace != "" {
+		controllerOpts = append(
+			controllerOpts,
+			controller.WithRunnable(
+				"topology configmap watcher",
+				controller.Watch(
+					&corev1.ConfigMap{}, controller.ConfigMapsResource,
+					topologyNamespace,
+					controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyAnnotation)))))
 	}
 
 	return controller.NewController(controllerOpts...)
@@ -62,9 +75,9 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
 	reconciler := &controller.Workflow{
 		Precondition: NewEventLogger().Log,
-		Tasks: []controller.ReconcileFunc{
-			NewTopologyFileReconciler(client).Reconcile,
-		},
+	}
+	if topologyNamespace != "" {
+		reconciler.Tasks = append(reconciler.Tasks, NewTopologyFileReconciler(client).Reconcile)
 	}
 
 	return reconciler.Run
@@ -81,20 +94,14 @@ func NewTopologyFileReconciler(client *dynamic.DynamicClient) *TopologyFileRecon
 func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error) {
 	logger := controller.LoggerFromContext(ctx).WithName("topology file")
 
-	if len(topology.Objects().Roots()) == 0 {
-		logger.Info("no Kuadrant CR found, can't create topology configmap")
-		return
-	}
-
-	kuadrantCR, okay := topology.Objects().Roots()[0].(*kuadrantv1beta1.Kuadrant)
-	if !okay {
-		logger.Info("kuadrant CR was not root of topology")
+	if topologyNamespace == "" {
+		logger.Error(fmt.Errorf("blank topology namespace"), "reconcile function was included when the topology namespace was empty")
 		return
 	}
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "topology",
-			Namespace: kuadrantCR.GetNamespace(),
+			Namespace: topologyNamespace,
 			Labels:    map[string]string{kuadrant.TopologyAnnotation: "true"},
 		},
 		Data: map[string]string{

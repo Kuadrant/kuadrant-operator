@@ -30,6 +30,8 @@ spec:
           env:
             - name: RELATED_IMAGE_WASMSHIM
               value: "oci://quay.io/kuadrant/wasm-shim:latest"
+            - name: TOPOLOGY_NAMESPACE
+              value: "kuadrant-system"
           image: controller:latest
           name: manager
           securityContext:

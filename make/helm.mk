@@ -5,9 +5,6 @@ helm-build: $(YQ) kustomize manifests ## Build the helm chart from kustomize man
 	# Set desired operator image and related wasm shim image
 	V="$(RELATED_IMAGE_WASMSHIM)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
-	# Set desired topology namespace
-	V="$(TOPOLOGY_NAMESPACE)" \
-	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "TOPOLOGY_NAMESPACE").value) = strenv(V)' -i config/manager/manager.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Build the helm chart templates from kustomize manifests
 	$(KUSTOMIZE) build config/helm > charts/kuadrant-operator/templates/manifests.yaml

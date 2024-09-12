@@ -168,9 +168,6 @@ else
 RELATED_IMAGE_WASMSHIM ?= oci://quay.io/kuadrant/wasm-shim:$(WASM_SHIM_VERSION)
 endif
 
-## topology config
-TOPOLOGY_NAMESPACE ?= kuadrant-system
-
 all: build
 
 ##@ General
@@ -340,7 +337,7 @@ build: generate fmt vet ## Build manager binary.
 
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
-run: export TOPOLOGY_NAMESPACE = kuadrant-system
+run: export OPERATOR_NAMESPACE = kuadrant-system
 run: generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
@@ -379,9 +376,6 @@ bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## 
 	# Set desired operator image and related wasm shim image
 	V="$(RELATED_IMAGE_WASMSHIM)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
-	# Set desired topology namespace
-	V="$(TOPOLOGY_NAMESPACE)" \
-	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "TOPOLOGY_NAMESPACE").value) = strenv(V)' -i config/manager/manager.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Update CSV
 	$(call update-csv-config,kuadrant-operator.v$(BUNDLE_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.name)

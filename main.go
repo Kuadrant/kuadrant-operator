@@ -129,6 +129,10 @@ func main() {
 		LeaderElectionID:       "f139389e.kuadrant.io",
 	}
 
+	if env.GetString("OPERATOR_NAMESPACE", "") == "" {
+		panic("OPERATOR_NAMESPACE environment variable must be set")
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

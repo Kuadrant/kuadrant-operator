@@ -25,7 +25,7 @@ import (
 
 var (
 	ConfigMapGroupKind = schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}
-	topologyNamespace  = env.GetString("TOPOLOGY_NAMESPACE", "")
+	operatorNamespace  = env.GetString("OPERATOR_NAMESPACE", "")
 )
 
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
@@ -43,6 +43,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithRunnable("tlspolicy watcher", controller.Watch(&kuadrantv1alpha1.TLSPolicy{}, kuadrantv1alpha1.TLSPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("authpolicy watcher", controller.Watch(&kuadrantv1beta2.AuthPolicy{}, kuadrantv1beta2.AuthPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta2.RateLimitPolicy{}, kuadrantv1beta2.RateLimitPoliciesResource, metav1.NamespaceAll)),
+		controller.WithRunnable("topology configmap watcher", controller.Watch(&corev1.ConfigMap{}, controller.ConfigMapsResource, operatorNamespace, controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)))),
 		controller.WithPolicyKinds(
 			kuadrantv1alpha1.DNSPolicyKind,
 			kuadrantv1alpha1.TLSPolicyKind,
@@ -58,57 +59,48 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithReconcile(buildReconciler(client)),
 	}
 
-	if topologyNamespace != "" {
-		controllerOpts = append(
-			controllerOpts,
-			controller.WithRunnable(
-				"topology configmap watcher",
-				controller.Watch(
-					&corev1.ConfigMap{}, controller.ConfigMapsResource,
-					topologyNamespace,
-					controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyAnnotation)))))
-	}
-
 	return controller.NewController(controllerOpts...)
 }
 
 func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
 	reconciler := &controller.Workflow{
 		Precondition: NewEventLogger().Log,
+		Tasks: []controller.ReconcileFunc{
+			NewTopologyFileReconciler(client, operatorNamespace).Reconcile,
+		},
 	}
-	if topologyNamespace != "" {
-		reconciler.Tasks = append(reconciler.Tasks, NewTopologyFileReconciler(client).Reconcile)
-	}
-
 	return reconciler.Run
 }
 
 type TopologyFileReconciler struct {
-	Client *dynamic.DynamicClient
+	Client    *dynamic.DynamicClient
+	Namespace string
 }
 
-func NewTopologyFileReconciler(client *dynamic.DynamicClient) *TopologyFileReconciler {
-	return &TopologyFileReconciler{Client: client}
+func NewTopologyFileReconciler(client *dynamic.DynamicClient, namespace string) *TopologyFileReconciler {
+	if namespace == "" {
+		panic("namespace must be specified and can not be a blank string")
+	}
+	return &TopologyFileReconciler{Client: client, Namespace: namespace}
 }
 
 func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error) {
 	logger := controller.LoggerFromContext(ctx).WithName("topology file")
 
-	if topologyNamespace == "" {
-		logger.Error(fmt.Errorf("blank topology namespace"), "reconcile function was included when the topology namespace was empty")
-		return
-	}
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "topology",
-			Namespace: topologyNamespace,
-			Labels:    map[string]string{kuadrant.TopologyAnnotation: "true"},
+			Namespace: r.Namespace,
+			Labels:    map[string]string{kuadrant.TopologyLabel: "true"},
 		},
 		Data: map[string]string{
 			"topology": topology.ToDot(),
 		},
 	}
-	unstructuredCM, _ := controller.Destruct(cm)
+	unstructuredCM, err := controller.Destruct(cm)
+	if err != nil {
+		logger.Error(err, "failed to destruct topology configmap")
+	}
 
 	existingTopologyConfigMaps := topology.Objects().Items(func(object machinery.Object) bool {
 		return object.GetName() == cm.GetName() && object.GetNamespace() == cm.GetNamespace() && object.GroupVersionKind().Kind == ConfigMapGroupKind.Kind

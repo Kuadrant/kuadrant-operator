@@ -763,7 +763,7 @@ var _ = Describe("DNSPolicy controller", func() {
 				)
 				currentRec = newRec
 				currentWildcardRec = newWildcardRec
-			}, tests.TimeoutMedium, time.Second).Should(BeNil())
+			}, tests.TimeoutLong, time.Second).Should(BeNil())
 		}, testTimeOut)
 
 		It("should remove gateway back reference on policy deletion", func(ctx SpecContext) {

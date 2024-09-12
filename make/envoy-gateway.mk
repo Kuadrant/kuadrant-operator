@@ -39,10 +39,19 @@ $(EGCTL):
 .PHONY: egctl
 egctl: $(EGCTL) ## Download egctl locally if necessary.
 
+envoy-gateway-enable-envoypatchpolicy: $(YQ)
+	$(eval TMP := $(shell mktemp -d))
+	kubectl get configmap -n envoy-gateway-system envoy-gateway-config -o jsonpath='{.data.envoy-gateway\.yaml}' > $(TMP)/envoy-gateway.yaml
+	yq e '.extensionApis.enableEnvoyPatchPolicy = true' -i $(TMP)/envoy-gateway.yaml
+	kubectl create configmap -n envoy-gateway-system envoy-gateway-config --from-file=envoy-gateway.yaml=$(TMP)/envoy-gateway.yaml -o yaml --dry-run=client | kubectl replace -f -
+	-rm -rf $(TMP)
+	kubectl rollout restart deployment envoy-gateway -n envoy-gateway-system
+
 EG_VERSION ?= v1.1.0
 .PHONY: envoy-gateway-install
 envoy-gateway-install: kustomize $(HELM)
 	$(HELM) install eg oci://docker.io/envoyproxy/gateway-helm --version $(EG_VERSION) -n envoy-gateway-system --create-namespace
+	$(MAKE) envoy-gateway-enable-envoypatchpolicy
 	kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
 
 .PHONY: deploy-eg-gateway

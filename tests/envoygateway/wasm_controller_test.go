@@ -1,0 +1,372 @@
+//go:build integration
+
+package envoygateway_test
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/rand"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/controllers"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
+	"github.com/kuadrant/kuadrant-operator/tests"
+)
+
+var _ = Describe("wasm controller", func() {
+	const (
+		testTimeOut      = SpecTimeout(2 * time.Minute)
+		afterEachTimeOut = NodeTimeout(3 * time.Minute)
+	)
+	var (
+		testNamespace string
+		gwHost        = fmt.Sprintf("*.toystore-%s.com", rand.String(4))
+		gateway       *gatewayapiv1.Gateway
+	)
+
+	BeforeEach(func(ctx SpecContext) {
+		testNamespace = tests.CreateNamespace(ctx, testClient())
+		gateway = tests.NewGatewayBuilder(TestGatewayName, tests.GatewayClassName, testNamespace).
+			WithHTTPListener("test-listener", gwHost).
+			Gateway
+		err := testClient().Create(ctx, gateway)
+		Expect(err).ToNot(HaveOccurred())
+
+		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
+	})
+
+	AfterEach(func(ctx SpecContext) {
+		tests.DeleteNamespace(ctx, testClient(), testNamespace)
+	}, afterEachTimeOut)
+
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
+		policy := &kuadrantv1beta2.RateLimitPolicy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "RateLimitPolicy",
+				APIVersion: kuadrantv1beta2.GroupVersion.String(),
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "rlp",
+				Namespace: testNamespace,
+			},
+			Spec: kuadrantv1beta2.RateLimitPolicySpec{},
+		}
+
+		for _, mutateFn := range mutateFns {
+			mutateFn(policy)
+		}
+
+		return policy
+	}
+
+	randomHostFromGWHost := func() string {
+		return strings.Replace(gwHost, "*", rand.String(4), 1)
+	}
+
+	Context("RateLimitPolicy attached to the gateway", func() {
+
+		var (
+			gwPolicy *kuadrantv1beta2.RateLimitPolicy
+			gwRoute  *gatewayapiv1.HTTPRoute
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			gwRoute = tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{randomHostFromGWHost()})
+			err := testClient().Create(ctx, gwRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(gwRoute))).WithContext(ctx).Should(BeTrue())
+
+			gwPolicy = policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Name = "gw"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "Gateway"
+				policy.Spec.TargetRef.Name = TestGatewayName
+				policy.Spec.Defaults = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: "minute",
+								},
+							},
+						},
+					},
+				}
+			})
+
+			gwPolicyKey := client.ObjectKeyFromObject(gwPolicy)
+
+			err = testClient().Create(ctx, gwPolicy)
+			logf.Log.V(1).Info("Creating RateLimitPolicy", "key", gwPolicyKey.String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(tests.IsRLPAcceptedAndEnforced).
+				WithContext(ctx).
+				WithArguments(testClient(), gwPolicyKey).Should(Succeed())
+		})
+
+		It("Creates envoyextensionpolicy", func(ctx SpecContext) {
+			extKey := client.ObjectKey{
+				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Namespace: testNamespace,
+			}
+
+			gwPolicyKey := client.ObjectKeyFromObject(gwPolicy)
+
+			Eventually(IsEnvoyExtensionPolicyAccepted).
+				WithContext(ctx).
+				WithArguments(testClient(), extKey, client.ObjectKeyFromObject(gateway)).
+				Should(Succeed())
+
+			ext := &egv1alpha1.EnvoyExtensionPolicy{}
+			err := testClient().Get(ctx, extKey, ext)
+			// must exist
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(ext.Spec.PolicyTargetReferences.TargetRefs).To(HaveLen(1))
+			Expect(ext.Spec.PolicyTargetReferences.TargetRefs[0].LocalPolicyTargetReference.Group).To(Equal(gatewayapiv1.Group("gateway.networking.k8s.io")))
+			Expect(ext.Spec.PolicyTargetReferences.TargetRefs[0].LocalPolicyTargetReference.Kind).To(Equal(gatewayapiv1.Kind("Gateway")))
+			Expect(ext.Spec.PolicyTargetReferences.TargetRefs[0].LocalPolicyTargetReference.Name).To(Equal(gatewayapiv1.ObjectName(gateway.Name)))
+			Expect(ext.Spec.Wasm).To(HaveLen(1))
+			Expect(ext.Spec.Wasm[0].Code.Type).To(Equal(egv1alpha1.ImageWasmCodeSourceType))
+			Expect(ext.Spec.Wasm[0].Code.Image).To(Not(BeNil()))
+			Expect(ext.Spec.Wasm[0].Code.Image.URL).To(Equal(controllers.WASMFilterImageURL))
+			existingWASMConfig, err := wasm.ConfigFromJSON(ext.Spec.Wasm[0].Config)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingWASMConfig).To(Equal(&wasm.Config{
+				FailureMode: wasm.FailureModeDeny,
+				RateLimitPolicies: []wasm.RateLimitPolicy{
+					{
+						Name:   gwPolicyKey.String(),
+						Domain: wasm.LimitsNamespaceFromRLP(gwPolicy),
+						Rules: []wasm.Rule{
+							{
+								Conditions: []wasm.Condition{
+									{
+										AllOf: []wasm.PatternExpression{
+											{
+												Selector: "request.url_path",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+												Value:    "/toy",
+											},
+											{
+												Selector: "request.method",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+												Value:    "GET",
+											},
+										},
+									},
+								},
+								Data: []wasm.DataItem{
+									{
+										Static: &wasm.StaticSpec{
+											Key:   wasm.LimitNameToLimitadorIdentifier(gwPolicyKey, "l1"),
+											Value: "1",
+										},
+									},
+								},
+							},
+						},
+						Hostnames: []string{gwHost},
+						Service:   common.KuadrantRateLimitClusterName,
+					},
+				},
+			}))
+		}, testTimeOut)
+
+		It("Deletes envoyextensionpolicy when rate limit policy is deleted", func(ctx SpecContext) {
+			gwPolicyKey := client.ObjectKeyFromObject(gwPolicy)
+			err := testClient().Delete(ctx, gwPolicy)
+			logf.Log.V(1).Info("Deleting RateLimitPolicy", "key", gwPolicyKey.String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			extKey := client.ObjectKey{
+				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Namespace: testNamespace,
+			}
+
+			Eventually(func() bool {
+				err := testClient().Get(ctx, extKey, &egv1alpha1.EnvoyExtensionPolicy{})
+				logf.Log.V(1).Info("Fetching EnvoyExtensionPolicy", "key", extKey.String(), "error", err)
+				return apierrors.IsNotFound(err)
+			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+
+		It("Deletes envoyextensionpolicy if gateway is deleted", func(ctx SpecContext) {
+			err := testClient().Delete(ctx, gateway)
+			logf.Log.V(1).Info("Deleting Gateway", "key", client.ObjectKeyFromObject(gateway).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			extKey := client.ObjectKey{
+				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Namespace: testNamespace,
+			}
+
+			Eventually(func() bool {
+				err := testClient().Get(ctx, extKey, &egv1alpha1.EnvoyExtensionPolicy{})
+				logf.Log.V(1).Info("Fetching EnvoyExtensionPolicy", "key", extKey.String(), "error", err)
+				return apierrors.IsNotFound(err)
+			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+	})
+
+	Context("RateLimitPolicy attached to the route", func() {
+
+		var (
+			routePolicy *kuadrantv1beta2.RateLimitPolicy
+			gwRoute     *gatewayapiv1.HTTPRoute
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			gwRoute = tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{randomHostFromGWHost()})
+			err := testClient().Create(ctx, gwRoute)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(gwRoute))).WithContext(ctx).Should(BeTrue())
+
+			routePolicy = policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+				policy.Name = "route"
+				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
+				policy.Spec.TargetRef.Kind = "HTTPRoute"
+				policy.Spec.TargetRef.Name = TestHTTPRouteName
+				policy.Spec.Defaults = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta2.Limit{
+						"l1": {
+							Rates: []kuadrantv1beta2.Rate{
+								{
+									Limit: 1, Duration: 3, Unit: "minute",
+								},
+							},
+						},
+					},
+				}
+			})
+
+			err = testClient().Create(ctx, routePolicy)
+			logf.Log.V(1).Info("Creating RateLimitPolicy", "key", client.ObjectKeyFromObject(routePolicy).String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			// check policy status
+			Eventually(tests.IsRLPAcceptedAndEnforced).
+				WithContext(ctx).
+				WithArguments(testClient(), client.ObjectKeyFromObject(routePolicy)).Should(Succeed())
+		})
+
+		It("Creates envoyextensionpolicy", func(ctx SpecContext) {
+			extKey := client.ObjectKey{
+				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Namespace: testNamespace,
+			}
+
+			routePolicyKey := client.ObjectKeyFromObject(routePolicy)
+
+			Eventually(IsEnvoyExtensionPolicyAccepted).
+				WithContext(ctx).
+				WithArguments(testClient(), extKey, client.ObjectKeyFromObject(gateway)).
+				Should(Succeed())
+
+			ext := &egv1alpha1.EnvoyExtensionPolicy{}
+			err := testClient().Get(ctx, extKey, ext)
+			// must exist
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(gwRoute.Spec.Hostnames).To(Not(BeEmpty()))
+			Expect(ext.Spec.PolicyTargetReferences.TargetRefs).To(HaveLen(1))
+			Expect(ext.Spec.PolicyTargetReferences.TargetRefs[0].LocalPolicyTargetReference.Group).To(Equal(gatewayapiv1.Group("gateway.networking.k8s.io")))
+			Expect(ext.Spec.PolicyTargetReferences.TargetRefs[0].LocalPolicyTargetReference.Kind).To(Equal(gatewayapiv1.Kind("Gateway")))
+			Expect(ext.Spec.PolicyTargetReferences.TargetRefs[0].LocalPolicyTargetReference.Name).To(Equal(gatewayapiv1.ObjectName(gateway.Name)))
+			Expect(ext.Spec.Wasm).To(HaveLen(1))
+			Expect(ext.Spec.Wasm[0].Code.Type).To(Equal(egv1alpha1.ImageWasmCodeSourceType))
+			Expect(ext.Spec.Wasm[0].Code.Image).To(Not(BeNil()))
+			Expect(ext.Spec.Wasm[0].Code.Image.URL).To(Equal(controllers.WASMFilterImageURL))
+			existingWASMConfig, err := wasm.ConfigFromJSON(ext.Spec.Wasm[0].Config)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(existingWASMConfig).To(Equal(&wasm.Config{
+				FailureMode: wasm.FailureModeDeny,
+				RateLimitPolicies: []wasm.RateLimitPolicy{
+					{
+						Name:   routePolicyKey.String(),
+						Domain: wasm.LimitsNamespaceFromRLP(routePolicy),
+						Rules: []wasm.Rule{
+							{
+								Conditions: []wasm.Condition{
+									{
+										AllOf: []wasm.PatternExpression{
+											{
+												Selector: "request.url_path",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.StartsWithOperator),
+												Value:    "/toy",
+											},
+											{
+												Selector: "request.method",
+												Operator: wasm.PatternOperator(kuadrantv1beta2.EqualOperator),
+												Value:    "GET",
+											},
+										},
+									},
+								},
+								Data: []wasm.DataItem{
+									{
+										Static: &wasm.StaticSpec{
+											Key:   wasm.LimitNameToLimitadorIdentifier(routePolicyKey, "l1"),
+											Value: "1",
+										},
+									},
+								},
+							},
+						},
+						Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
+						Service:   common.KuadrantRateLimitClusterName,
+					},
+				},
+			}))
+		}, testTimeOut)
+
+		It("Deletes envoyextensionpolicy when rate limit policy is deleted", func(ctx SpecContext) {
+			routePolicyKey := client.ObjectKeyFromObject(routePolicy)
+			err := testClient().Delete(ctx, routePolicy)
+			logf.Log.V(1).Info("Deleting RateLimitPolicy", "key", routePolicyKey.String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			extKey := client.ObjectKey{
+				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Namespace: testNamespace,
+			}
+
+			Eventually(func() bool {
+				err := testClient().Get(ctx, extKey, &egv1alpha1.EnvoyExtensionPolicy{})
+				logf.Log.V(1).Info("Fetching EnvoyExtensionPolicy", "key", extKey.String(), "error", err)
+				return apierrors.IsNotFound(err)
+			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+
+		It("Deletes envoyextensionpolicy if route is deleted", func(ctx SpecContext) {
+			gwRouteKey := client.ObjectKeyFromObject(gwRoute)
+			err := testClient().Delete(ctx, gwRoute)
+			logf.Log.V(1).Info("Deleting Route", "key", gwRouteKey.String(), "error", err)
+			Expect(err).ToNot(HaveOccurred())
+
+			extKey := client.ObjectKey{
+				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Namespace: testNamespace,
+			}
+
+			Eventually(func() bool {
+				err := testClient().Get(ctx, extKey, &egv1alpha1.EnvoyExtensionPolicy{})
+				logf.Log.V(1).Info("Fetching EnvoyExtensionPolicy", "key", extKey.String(), "error", err)
+				return apierrors.IsNotFound(err)
+			}).WithContext(ctx).Should(BeTrue())
+		}, testTimeOut)
+	})
+})

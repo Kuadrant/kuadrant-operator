@@ -145,7 +145,6 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 				"RateLimitPolicy has been successfully enforced")).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
-
 })
 
 var _ = Describe("RateLimitPolicy controller", func() {
@@ -271,7 +270,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
 					MaxValue:   1,
 					Seconds:    3 * 60,
-					Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
+					Namespace:  wasm.LimitsNamespaceFromRLP(rlp),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
 					Variables:  []string{},
 					Name:       rlptools.LimitsNameFromRLP(rlp),
@@ -359,7 +358,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
 					MaxValue:   1,
 					Seconds:    3 * 60,
-					Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
+					Namespace:  wasm.LimitsNamespaceFromRLP(rlp),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
 					Variables:  []string{},
 					Name:       rlptools.LimitsNameFromRLP(rlp),
@@ -411,7 +410,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Expect(existingLimitador.Spec.Limits).To(ContainElements(limitadorv1alpha1.RateLimit{
 					MaxValue:   1,
 					Seconds:    3 * 60,
-					Namespace:  rlptools.LimitsNamespaceFromRLP(rlp),
+					Namespace:  wasm.LimitsNamespaceFromRLP(rlp),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"))},
 					Variables:  []string{},
 					Name:       rlptools.LimitsNameFromRLP(rlp),
@@ -487,7 +486,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
 					MaxValue:   10,
 					Seconds:    5,
-					Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+					Namespace:  wasm.LimitsNamespaceFromRLP(routeRLP),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "l1"))},
 					Variables:  []string{},
 					Name:       rlptools.LimitsNameFromRLP(routeRLP),
@@ -602,7 +601,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
 				MaxValue:   1,
 				Seconds:    180,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+				Namespace:  wasm.LimitsNamespaceFromRLP(routeRLP),
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
@@ -624,7 +623,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
 				MaxValue:   10,
 				Seconds:    5,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+				Namespace:  wasm.LimitsNamespaceFromRLP(routeRLP),
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "route"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
@@ -659,7 +658,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
 				MaxValue:   1,
 				Seconds:    180,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+				Namespace:  wasm.LimitsNamespaceFromRLP(routeRLP),
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
@@ -698,7 +697,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
 				MaxValue:   10,
 				Seconds:    5,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+				Namespace:  wasm.LimitsNamespaceFromRLP(routeRLP),
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "route"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
@@ -721,7 +720,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
 				MaxValue:   1,
 				Seconds:    180,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+				Namespace:  wasm.LimitsNamespaceFromRLP(routeRLP),
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
@@ -747,7 +746,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
 				MaxValue:   1,
 				Seconds:    180,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+				Namespace:  wasm.LimitsNamespaceFromRLP(routeRLP),
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "l1"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
@@ -770,7 +769,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
 				MaxValue:   10,
 				Seconds:    5,
-				Namespace:  rlptools.LimitsNamespaceFromRLP(routeRLP),
+				Namespace:  wasm.LimitsNamespaceFromRLP(routeRLP),
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "route"))},
 				Variables:  []string{},
 				Name:       rlptools.LimitsNameFromRLP(routeRLP),
@@ -1374,7 +1373,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				limitadorv1alpha1.RateLimit{
 					MaxValue:   1000,
 					Seconds:    1,
-					Namespace:  rlptools.LimitsNamespaceFromRLP(rlpTargetedRoute),
+					Namespace:  wasm.LimitsNamespaceFromRLP(rlpTargetedRoute),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(client.ObjectKeyFromObject(rlpTargetedRoute), "gw-a-1000rps"))},
 					Variables:  []string{},
 					Name:       rlptools.LimitsNameFromRLP(rlpTargetedRoute),
@@ -1382,7 +1381,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				limitadorv1alpha1.RateLimit{
 					MaxValue:   100,
 					Seconds:    1,
-					Namespace:  rlptools.LimitsNamespaceFromRLP(rlpTargetedRoute),
+					Namespace:  wasm.LimitsNamespaceFromRLP(rlpTargetedRoute),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(client.ObjectKeyFromObject(rlpTargetedRoute), "gw-b-100rps"))},
 					Variables:  []string{},
 					Name:       rlptools.LimitsNameFromRLP(rlpTargetedRoute),
@@ -1390,7 +1389,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				limitadorv1alpha1.RateLimit{ // FIXME(@guicassolato): we need to create one limit definition per gateway × route combination, not one per gateway × policy combination
 					MaxValue:   1000,
 					Seconds:    1,
-					Namespace:  rlptools.LimitsNamespaceFromRLP(rlpGatewayA),
+					Namespace:  wasm.LimitsNamespaceFromRLP(rlpGatewayA),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(client.ObjectKeyFromObject(rlpGatewayA), "gw-a-1000rps"))},
 					Variables:  []string{},
 					Name:       rlptools.LimitsNameFromRLP(rlpGatewayA),
@@ -1398,7 +1397,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				limitadorv1alpha1.RateLimit{
 					MaxValue:   100,
 					Seconds:    1,
-					Namespace:  rlptools.LimitsNamespaceFromRLP(rlpGatewayB),
+					Namespace:  wasm.LimitsNamespaceFromRLP(rlpGatewayB),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, wasm.LimitNameToLimitadorIdentifier(client.ObjectKeyFromObject(rlpGatewayB), "gw-b-100rps"))},
 					Variables:  []string{},
 					Name:       rlptools.LimitsNameFromRLP(rlpGatewayB),

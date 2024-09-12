@@ -9,7 +9,6 @@ import (
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -37,54 +36,27 @@ func PolicyTargetRefFromGateway(gateway *gatewayapiv1.Gateway) *istiocommon.Poli
 }
 
 func IsEnvoyFilterInstalled(restMapper meta.RESTMapper) (bool, error) {
-	_, err := restMapper.RESTMapping(
-		schema.GroupKind{Group: istioclientnetworkingv1alpha3.GroupName, Kind: "EnvoyFilter"},
-		istioclientnetworkingv1alpha3.SchemeGroupVersion.Version,
-	)
-
-	if err == nil {
-		return true, nil
-	}
-
-	if meta.IsNoMatchError(err) {
-		return false, nil
-	}
-
-	return false, err
+	return kuadrantgatewayapi.IsCRDInstalled(
+		restMapper,
+		istioclientnetworkingv1alpha3.GroupName,
+		"EnvoyFilter",
+		istioclientnetworkingv1alpha3.SchemeGroupVersion.Version)
 }
 
 func IsWASMPluginInstalled(restMapper meta.RESTMapper) (bool, error) {
-	_, err := restMapper.RESTMapping(
-		schema.GroupKind{Group: istioclientgoextensionv1alpha1.GroupName, Kind: "WasmPlugin"},
-		istioclientgoextensionv1alpha1.SchemeGroupVersion.Version,
-	)
-
-	if err == nil {
-		return true, nil
-	}
-
-	if meta.IsNoMatchError(err) {
-		return false, nil
-	}
-
-	return false, err
+	return kuadrantgatewayapi.IsCRDInstalled(
+		restMapper,
+		istioclientgoextensionv1alpha1.GroupName,
+		"WasmPlugin",
+		istioclientgoextensionv1alpha1.SchemeGroupVersion.Version)
 }
 
 func IsAuthorizationPolicyInstalled(restMapper meta.RESTMapper) (bool, error) {
-	_, err := restMapper.RESTMapping(
-		schema.GroupKind{Group: istioclientgosecurityv1beta1.GroupName, Kind: "AuthorizationPolicy"},
-		istioclientgosecurityv1beta1.SchemeGroupVersion.Version,
-	)
-
-	if err == nil {
-		return true, nil
-	}
-
-	if meta.IsNoMatchError(err) {
-		return false, nil
-	}
-
-	return false, err
+	return kuadrantgatewayapi.IsCRDInstalled(
+		restMapper,
+		istioclientgosecurityv1beta1.GroupName,
+		"AuthorizationPolicy",
+		istioclientgosecurityv1beta1.SchemeGroupVersion.Version)
 }
 
 func IsIstioInstalled(restMapper meta.RESTMapper) (bool, error) {

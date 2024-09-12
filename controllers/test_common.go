@@ -232,6 +232,30 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	Expect(err).NotTo(HaveOccurred())
 
+	envoyGatewayWasmReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("envoyGatewayWasmReconciler"),
+		mgr.GetEventRecorderFor("EnvoyGatewayWasmReconciler"),
+	)
+
+	err = (&EnvoyGatewayWasmReconciler{
+		BaseReconciler: envoyGatewayWasmReconciler,
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
+	envoyGatewayLimitadorClusterReconciler := reconcilers.NewBaseReconciler(
+		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		log.Log.WithName("envoyGatewayLimitadorClusterReconciler"),
+		mgr.GetEventRecorderFor("EnvoyGatewayLimitadorClusterReconciler"),
+	)
+
+	err = (&EnvoyGatewayLimitadorClusterReconciler{
+		BaseReconciler: envoyGatewayLimitadorClusterReconciler,
+	}).SetupWithManager(mgr)
+
+	Expect(err).NotTo(HaveOccurred())
+
 	go func() {
 		defer GinkgoRecover()
 		err = mgr.Start(ctrl.SetupSignalHandler())

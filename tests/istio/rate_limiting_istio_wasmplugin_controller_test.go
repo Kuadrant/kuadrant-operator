@@ -23,7 +23,6 @@ import (
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
@@ -132,7 +131,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
 						Name:   rlpKey.String(),
-						Domain: rlptools.LimitsNamespaceFromRLP(rlp),
+						Domain: wasm.LimitsNamespaceFromRLP(rlp),
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{
@@ -291,7 +290,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(existingWASMConfig.RateLimitPolicies).To(HaveLen(1))
 			wasmRLP := existingWASMConfig.RateLimitPolicies[0]
 			Expect(wasmRLP.Name).To(Equal(rlpKey.String()))
-			Expect(wasmRLP.Domain).To(Equal(rlptools.LimitsNamespaceFromRLP(rlp)))
+			Expect(wasmRLP.Domain).To(Equal(wasm.LimitsNamespaceFromRLP(rlp)))
 			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'toys' limit definition
 				Conditions: []wasm.Condition{
 					{
@@ -435,7 +434,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
 						Name:   rlpKey.String(),
-						Domain: rlptools.LimitsNamespaceFromRLP(rlp),
+						Domain: wasm.LimitsNamespaceFromRLP(rlp),
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{
@@ -750,7 +749,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
 							Name:   rlpAKey.String(),
-							Domain: rlptools.LimitsNamespaceFromRLP(rlpA),
+							Domain: wasm.LimitsNamespaceFromRLP(rlpA),
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -898,7 +897,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
 							Name:   rlpKey.String(),
-							Domain: rlptools.LimitsNamespaceFromRLP(rlpA),
+							Domain: wasm.LimitsNamespaceFromRLP(rlpA),
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1093,7 +1092,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
 							Name:   rlpKey.String(),
-							Domain: rlptools.LimitsNamespaceFromRLP(rlpA),
+							Domain: wasm.LimitsNamespaceFromRLP(rlpA),
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1209,7 +1208,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
 							Name:   rlpKey.String(),
-							Domain: rlptools.LimitsNamespaceFromRLP(rlpA),
+							Domain: wasm.LimitsNamespaceFromRLP(rlpA),
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1390,7 +1389,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
 							Name:   rlpKey.String(),
-							Domain: rlptools.LimitsNamespaceFromRLP(rlpR),
+							Domain: wasm.LimitsNamespaceFromRLP(rlpR),
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1469,7 +1468,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
 							Name:   rlpKey.String(),
-							Domain: rlptools.LimitsNamespaceFromRLP(rlpR),
+							Domain: wasm.LimitsNamespaceFromRLP(rlpR),
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1625,7 +1624,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
 							Name:   rlp1Key.String(),
-							Domain: rlptools.LimitsNamespaceFromRLP(rlp1),
+							Domain: wasm.LimitsNamespaceFromRLP(rlp1),
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1729,7 +1728,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
 							Name:   rlp2Key.String(),
-							Domain: rlptools.LimitsNamespaceFromRLP(rlp2),
+							Domain: wasm.LimitsNamespaceFromRLP(rlp2),
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1919,7 +1918,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{
 							Name:   rlp2Key.String(),
-							Domain: rlptools.LimitsNamespaceFromRLP(rlp2),
+							Domain: wasm.LimitsNamespaceFromRLP(rlp2),
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -2013,7 +2012,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					RateLimitPolicies: []wasm.RateLimitPolicy{
 						{ // First RLP 1 as the controller will sort based on RLP name
 							Name:   rlp1Key.String(), // Route B affected by RLP 1 -> Gateway
-							Domain: rlptools.LimitsNamespaceFromRLP(rlp1),
+							Domain: wasm.LimitsNamespaceFromRLP(rlp1),
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -2047,7 +2046,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						},
 						{
 							Name:   rlp2Key.String(), // Route A affected by RLP 1 -> Route A
-							Domain: rlptools.LimitsNamespaceFromRLP(rlp2),
+							Domain: wasm.LimitsNamespaceFromRLP(rlp2),
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -2175,7 +2174,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
 						Name:   rlpKey.String(),
-						Domain: rlptools.LimitsNamespaceFromRLP(rlp),
+						Domain: wasm.LimitsNamespaceFromRLP(rlp),
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{
@@ -2234,7 +2233,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				RateLimitPolicies: []wasm.RateLimitPolicy{
 					{
 						Name:   rlpKey.String(),
-						Domain: rlptools.LimitsNamespaceFromRLP(rlp),
+						Domain: wasm.LimitsNamespaceFromRLP(rlp),
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{

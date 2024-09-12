@@ -12,7 +12,7 @@ import (
 )
 
 func LimitsNameFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) string {
-	return LimitsNamespaceFromRLP(rlp)
+	return wasm.LimitsNamespaceFromRLP(rlp)
 }
 
 var timeUnitMap = map[kuadrantv1beta2.TimeUnit]int{
@@ -22,14 +22,10 @@ var timeUnitMap = map[kuadrantv1beta2.TimeUnit]int{
 	kuadrantv1beta2.TimeUnit("day"):    60 * 60 * 24,
 }
 
-func LimitsNamespaceFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) string {
-	return fmt.Sprintf("%s/%s", rlp.GetNamespace(), rlp.GetName())
-}
-
 // LimitadorRateLimitsFromRLP converts rate limits from a Kuadrant RateLimitPolicy into a list of Limitador rate limit
 // objects
 func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []limitadorv1alpha1.RateLimit {
-	limitsNamespace := LimitsNamespaceFromRLP(rlp)
+	limitsNamespace := wasm.LimitsNamespaceFromRLP(rlp)
 	rlpKey := client.ObjectKeyFromObject(rlp)
 
 	rateLimits := make([]limitadorv1alpha1.RateLimit, 0)

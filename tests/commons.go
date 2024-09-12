@@ -30,6 +30,7 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	kuadrantdnsbuilder "github.com/kuadrant/dns-operator/pkg/builder"
+
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -662,4 +663,19 @@ func BuildBasicAuthScheme() *kuadrantv1beta2.AuthSchemeSpec {
 			},
 		},
 	}
+}
+
+func IsRLPAcceptedAndEnforced(g Gomega, ctx context.Context, cl client.Client, policyKey client.ObjectKey) {
+	existingPolicy := &kuadrantv1beta2.RateLimitPolicy{}
+	g.Expect(cl.Get(ctx, policyKey, existingPolicy)).To(Succeed())
+
+	acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+	g.Expect(acceptedCond).ToNot(BeNil())
+	g.Expect(acceptedCond.Status).To(Equal(metav1.ConditionTrue))
+	g.Expect(acceptedCond.Reason).To(Equal(string(gatewayapiv1alpha2.PolicyReasonAccepted)))
+
+	enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(kuadrant.PolicyConditionEnforced))
+	g.Expect(enforcedCond).ToNot(BeNil())
+	g.Expect(enforcedCond.Status).To(Equal(metav1.ConditionTrue))
+	g.Expect(enforcedCond.Reason).To(Equal(string(kuadrant.PolicyReasonEnforced)))
 }

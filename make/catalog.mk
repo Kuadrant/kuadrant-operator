@@ -11,14 +11,14 @@ CATALOG_DOCKERFILE = $(PROJECT_PATH)/catalog/kuadrant-operator-catalog.Dockerfil
 QUAY_IMAGE_EXPIRY ?= never
 
 # A LABEL that can be appended to a generated Dockerfile to set the Quay image expiration through Docker arguments.
-define QUAY_DOCKERFILE_LABEL
+define QUAY_EXPIRY_TIME_LABEL
 
 # Quay image expiry
 ARG QUAY_IMAGE_EXPIRY
 ENV QUAY_IMAGE_EXPIRY=$${QUAY_IMAGE_EXPIRY:-never}
 LABEL quay.expires-after=$${QUAY_IMAGE_EXPIRY}
 endef
-export QUAY_DOCKERFILE_LABEL
+export QUAY_EXPIRY_TIME_LABEL
 
 $(CATALOG_DOCKERFILE): $(OPM)
 	-mkdir -p $(PROJECT_PATH)/catalog/kuadrant-operator-catalog

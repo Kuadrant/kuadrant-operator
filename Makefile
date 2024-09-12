@@ -390,7 +390,7 @@ bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## 
 	$(call update-operator-dependencies,dns-operator,$(DNS_OPERATOR_BUNDLE_IMG))
 	$(OPERATOR_SDK) bundle validate ./bundle
 	$(MAKE) bundle-ignore-createdAt
-	echo "$$QUAY_DOCKERFILE_LABEL" >> bundle.Dockerfile
+	echo "$$QUAY_EXPIRY_TIME_LABEL" >> bundle.Dockerfile
 
 .PHONY: bundle-ignore-createdAt
 bundle-ignore-createdAt:

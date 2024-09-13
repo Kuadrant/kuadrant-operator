@@ -273,12 +273,10 @@ metadata:
   name: ${gatewayName}-dnspolicy
   namespace: ${gatewayNS}
 spec:
-  routingStrategy: loadbalanced
   loadBalancing:
-    geo: 
-      defaultGeo: US 
-    weighted:
-      defaultWeight: 120 
+    defaultGeo: true
+    geo: US
+    weight: 120
   targetRef:
     name: ${gatewayName}
     group: gateway.networking.k8s.io

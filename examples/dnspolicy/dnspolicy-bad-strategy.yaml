@@ -10,4 +10,3 @@ spec:
     kind: Gateway
   providerRefs:
     - name: aws-credentials
-  routingStrategy: simple

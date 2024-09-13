@@ -27,10 +27,6 @@ const (
 	DefaultCnameTTL = 300
 )
 
-var (
-	ErrUnknownRoutingStrategy = fmt.Errorf("unknown routing strategy")
-)
-
 type dnsHelper struct {
 	client.Client
 }
@@ -60,7 +56,7 @@ func gatewayDNSRecordLabels(gwKey client.ObjectKey) map[string]string {
 	}
 }
 
-func (dh *dnsHelper) setEndpoints(mcgTarget *multicluster.GatewayTarget, dnsRecord *kuadrantdnsv1alpha1.DNSRecord, listener gatewayapiv1.Listener, strategy v1alpha1.RoutingStrategy) error {
+func (dh *dnsHelper) setEndpoints(mcgTarget *multicluster.GatewayTarget, dnsRecord *kuadrantdnsv1alpha1.DNSRecord, listener gatewayapiv1.Listener, loadBalancing *v1alpha1.LoadBalancingSpec) {
 	gwListenerHost := string(*listener.Hostname)
 	var endpoints []*externaldns.Endpoint
 
@@ -70,13 +66,10 @@ func (dh *dnsHelper) setEndpoints(mcgTarget *multicluster.GatewayTarget, dnsReco
 		currentEndpoints[getSetID(endpoint)] = endpoint
 	}
 
-	switch strategy {
-	case v1alpha1.SimpleRoutingStrategy:
+	if loadBalancing == nil {
 		endpoints = dh.getSimpleEndpoints(mcgTarget, gwListenerHost, currentEndpoints)
-	case v1alpha1.LoadBalancedRoutingStrategy:
+	} else {
 		endpoints = dh.getLoadBalancedEndpoints(mcgTarget, gwListenerHost, currentEndpoints)
-	default:
-		return fmt.Errorf("%w : %s", ErrUnknownRoutingStrategy, strategy)
 	}
 
 	sort.Slice(endpoints, func(i, j int) bool {
@@ -84,8 +77,6 @@ func (dh *dnsHelper) setEndpoints(mcgTarget *multicluster.GatewayTarget, dnsReco
 	})
 
 	dnsRecord.Spec.Endpoints = endpoints
-
-	return nil
 }
 
 // getSimpleEndpoints returns the endpoints for the given GatewayTarget using the simple routing strategy
@@ -207,8 +198,8 @@ func (dh *dnsHelper) getLoadBalancedEndpoints(mcgTarget *multicluster.GatewayTar
 		endpoint.SetProviderSpecificProperty(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(geoCode))
 		endpoints = append(endpoints, endpoint)
 
-		//Add a default geo (*) endpoint if the current geoCode is equal to the defaultGeo set in the policy spec
-		if geoCode == mcgTarget.GetDefaultGeo() {
+		//Add a default geo (*) endpoint if the current target is the default geo
+		if mcgTarget.IsDefaultGeo() {
 			endpoint = createOrUpdateEndpoint(lbName, []string{geoLbName}, kuadrantdnsv1alpha1.CNAMERecordType, "default", DefaultCnameTTL, currentEndpoints)
 			endpoint.SetProviderSpecificProperty(kuadrantdnsv1alpha1.ProviderSpecificGeoCode, string(v1alpha1.WildcardGeo))
 			endpoints = append(endpoints, endpoint)

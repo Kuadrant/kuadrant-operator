@@ -41,13 +41,8 @@ var (
 	}
 )
 
-type RoutingStrategy string
-
 const (
-	SimpleRoutingStrategy       RoutingStrategy = "simple"
-	LoadBalancedRoutingStrategy RoutingStrategy = "loadbalanced"
-
-	DefaultWeight Weight  = 120
+	DefaultWeight int     = 120
 	DefaultGeo    GeoCode = "default"
 	WildcardGeo   GeoCode = "*"
 
@@ -56,7 +51,7 @@ const (
 )
 
 // DNSPolicySpec defines the desired state of DNSPolicy
-// +kubebuilder:validation:XValidation:rule="!(self.routingStrategy == 'loadbalanced' && !has(self.loadBalancing))",message="spec.loadBalancing is a required field when spec.routingStrategy == 'loadbalanced'"
+// +kubebuilder:validation:XValidation:rule="(!has(oldSelf.loadBalancing) || has(self.loadBalancing)) && (has(oldSelf.loadBalancing) || !has(self.loadBalancing))", message="loadBalancing is immutable"
 type DNSPolicySpec struct {
 	// targetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
@@ -69,11 +64,6 @@ type DNSPolicySpec struct {
 	// +optional
 	LoadBalancing *LoadBalancingSpec `json:"loadBalancing,omitempty"`
 
-	// +kubebuilder:validation:Enum=simple;loadbalanced
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="RoutingStrategy is immutable"
-	// +kubebuilder:default=loadbalanced
-	RoutingStrategy RoutingStrategy `json:"routingStrategy"`
-
 	// providerRefs is a list of references to provider secrets. Max is one but intention is to allow this to be more in the future
 	// +kubebuilder:validation:MaxItems=1
 	// +kubebuilder:validation:MinItems=1
@@ -81,33 +71,28 @@ type DNSPolicySpec struct {
 }
 
 type LoadBalancingSpec struct {
-	Weighted LoadBalancingWeighted `json:"weighted"`
-
-	Geo LoadBalancingGeo `json:"geo"`
-}
-
-// +kubebuilder:validation:Minimum=0
-type Weight int
-
-type CustomWeight struct {
-	// Label selector to match resource storing custom weight attribute values e.g. kuadrant.io/lb-attribute-custom-weight: AWS.
-	Selector *metav1.LabelSelector `json:"selector"`
-
-	// The weight value to apply when the selector matches.
-	Weight Weight `json:"weight"`
-}
-
-type LoadBalancingWeighted struct {
-	// defaultWeight is the record weight to use when no other can be determined for a dns target cluster.
+	// weight value to apply to weighted endpoints.
 	//
 	// The maximum value accepted is determined by the target dns provider, please refer to the appropriate docs below.
 	//
 	// Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy-weighted.html
-	DefaultWeight Weight `json:"defaultWeight"`
+	// Google: https://cloud.google.com/dns/docs/overview/
+	// Azure: https://learn.microsoft.com/en-us/azure/traffic-manager/traffic-manager-routing-methods#weighted-traffic-routing-method
+	// +kubebuilder:default=120
+	Weight int `json:"weight"`
 
-	// custom list of custom weight selectors.
-	// +optional
-	Custom []*CustomWeight `json:"custom,omitempty"`
+	// geo value to apply to geo endpoints.
+	//
+	// The values accepted are determined by the target dns provider, please refer to the appropriate docs below.
+	//
+	// Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-geo.html
+	// Google: https://cloud.google.com/compute/docs/regions-zones
+	// Azure: https://learn.microsoft.com/en-us/azure/traffic-manager/traffic-manager-geographic-regions
+	// +kubebuilder:validation:MinLength=2
+	Geo string `json:"geo"`
+
+	// defaultGeo specifies if this is the default geo for providers that support setting a default catch all geo endpoint such as Route53.
+	DefaultGeo bool `json:"defaultGeo"`
 }
 
 type GeoCode string
@@ -118,17 +103,6 @@ func (gc GeoCode) IsDefaultCode() bool {
 
 func (gc GeoCode) IsWildcard() bool {
 	return gc == WildcardGeo
-}
-
-type LoadBalancingGeo struct {
-	// defaultGeo is the country/continent/region code to use when no other can be determined for a dns target cluster.
-	//
-	// The values accepted are determined by the target dns provider, please refer to the appropriate docs below.
-	//
-	// Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-geo.html
-	// Google: https://cloud.google.com/compute/docs/regions-zones
-	// +kubebuilder:validation:MinLength=2
-	DefaultGeo string `json:"defaultGeo"`
 }
 
 // DNSPolicyStatus defines the observed state of DNSPolicy
@@ -264,11 +238,6 @@ func (p *DNSPolicy) WithLoadBalancing(loadBalancing LoadBalancingSpec) *DNSPolic
 	return p
 }
 
-func (p *DNSPolicy) WithRoutingStrategy(strategy RoutingStrategy) *DNSPolicy {
-	p.Spec.RoutingStrategy = strategy
-	return p
-}
-
 func (p *DNSPolicy) WithProviderRef(providerRef dnsv1alpha1.ProviderRef) *DNSPolicy {
 	p.Spec.ProviderRefs = append(p.Spec.ProviderRefs, providerRef)
 	return p
@@ -305,15 +274,11 @@ func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port int, protocol strin
 
 //LoadBalancing
 
-func (p *DNSPolicy) WithLoadBalancingFor(defaultWeight Weight, custom []*CustomWeight, defaultGeo string) *DNSPolicy {
+func (p *DNSPolicy) WithLoadBalancingFor(weight int, geo string, isDefaultGeo bool) *DNSPolicy {
 	return p.WithLoadBalancing(LoadBalancingSpec{
-		Weighted: LoadBalancingWeighted{
-			DefaultWeight: defaultWeight,
-			Custom:        custom,
-		},
-		Geo: LoadBalancingGeo{
-			DefaultGeo: defaultGeo,
-		},
+		Weight:     weight,
+		Geo:        geo,
+		DefaultGeo: isDefaultGeo,
 	})
 }
 

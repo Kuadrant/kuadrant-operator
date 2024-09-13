@@ -25,7 +25,6 @@ spec:
     name: prod-web
     group: gateway.networking.k8s.io
     kind: Gateway
-  loadBalancing: simple
   healthCheck:
     endpoint: "/health"
     port: 443

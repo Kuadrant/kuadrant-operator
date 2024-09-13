@@ -98,7 +98,6 @@ spec:
     name: prod-web
     group: gateway.networking.k8s.io
     kind: Gateway
-  routingStrategy: simple
 EOF
 ```
 

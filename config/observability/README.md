@@ -5,6 +5,7 @@
 ```bash
 ./bin/kustomize build ./config/observability/| docker run --rm -i ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
 ./bin/kustomize build ./config/observability/| docker run --rm -i ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -
+./bin/kustomize build ./examples/dashboards | kubectl apply -f -
 ```
 
 This will deploy prometheus, alertmanager and grafana into the `monitoring` namespace,

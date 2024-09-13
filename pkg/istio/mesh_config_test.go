@@ -17,7 +17,6 @@ import (
 	"maistra.io/istio-operator/pkg/helm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
 	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 )
 
@@ -242,8 +241,8 @@ func TestOSSMControlPlaneWrapper_GetConfigObject(t *testing.T) {
 
 func TestOSSMControlPlaneWrapper_GetMeshConfig(t *testing.T) {
 	ossmControlPlane := &maistrav2.ServiceMeshControlPlane{}
-	ossmControlPlane.Spec.TechPreview = maistrav1.NewHelmValues(nil)
-	err := ossmControlPlane.Spec.TechPreview.SetField("meshConfig", getStubbedMeshConfigStruct().AsMap())
+	config, err := ossmMeshConfigFromStruct(getStubbedMeshConfigStruct())
+	ossmControlPlane.Spec.MeshConfig = config
 	assert.NilError(t, err)
 
 	wrapper := NewOSSMControlPlaneWrapper(ossmControlPlane)
@@ -255,15 +254,10 @@ func TestOSSMControlPlaneWrapper_GetMeshConfig(t *testing.T) {
 
 func TestOSSMControlPlaneWrapper_SetMeshConfig(t *testing.T) {
 	ossmControlPlane := &maistrav2.ServiceMeshControlPlane{}
-	ossmControlPlane.Spec.TechPreview = maistrav1.NewHelmValues(nil)
-	emptyConfig := &structpb.Struct{}
-	err := ossmControlPlane.Spec.TechPreview.SetField("meshConfig", emptyConfig.AsMap())
-	assert.NilError(t, err)
-
 	wrapper := NewOSSMControlPlaneWrapper(ossmControlPlane)
 
 	stubbedMeshConfig := getStubbedMeshConfig()
-	err = wrapper.SetMeshConfig(stubbedMeshConfig)
+	err := wrapper.SetMeshConfig(stubbedMeshConfig)
 	assert.NilError(t, err)
 
 	meshConfig, _ := wrapper.GetMeshConfig()

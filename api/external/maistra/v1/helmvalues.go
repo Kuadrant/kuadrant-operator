@@ -1,3 +1,4 @@
+// nolint
 package v1
 
 import (
@@ -5,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/goccy/go-yaml"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/json"
 )
@@ -13,24 +15,24 @@ import (
 // +kubebuilder:validation:Type=object
 // +kubebuilder:validation:XPreserveUnknownFields
 type HelmValues struct {
-	data map[string]any `json:"-"`
+	data map[string]interface{} `json:"-"`
 }
 
-func NewHelmValues(values map[string]any) *HelmValues {
+func NewHelmValues(values map[string]interface{}) *HelmValues {
 	if values == nil {
-		values = make(map[string]any)
+		values = make(map[string]interface{})
 	}
 	return &HelmValues{data: values}
 }
 
-func (h *HelmValues) GetContent() map[string]any {
+func (h *HelmValues) GetContent() map[string]interface{} {
 	if h == nil {
 		return nil
 	}
 	return h.data
 }
 
-func (h *HelmValues) GetFieldNoCopy(path string) (any, bool, error) {
+func (h *HelmValues) GetFieldNoCopy(path string) (interface{}, bool, error) {
 	if h == nil || h.data == nil {
 		return nil, false, nil
 	}
@@ -193,7 +195,7 @@ func (h *HelmValues) GetAndRemoveStringSlice(path string) ([]string, bool, error
 	return value, ok, err
 }
 
-func (h *HelmValues) GetSlice(path string) ([]any, bool, error) {
+func (h *HelmValues) GetSlice(path string) ([]interface{}, bool, error) {
 	if h == nil || h.data == nil {
 		return nil, false, nil
 	}
@@ -206,7 +208,7 @@ func (h *HelmValues) GetSlice(path string) ([]any, bool, error) {
 	return slice, ok, err
 }
 
-func (h *HelmValues) GetAndRemoveSlice(path string) ([]any, bool, error) {
+func (h *HelmValues) GetAndRemoveSlice(path string) ([]interface{}, bool, error) {
 	value, ok, err := h.GetSlice(path)
 	if err == nil {
 		h.RemoveField(path)
@@ -245,7 +247,7 @@ func (h *HelmValues) GetAndRemoveStringToStringMap(path string) (map[string]stri
 	return stringToStringMap, found, nil
 }
 
-func (h *HelmValues) GetMap(path string) (map[string]any, bool, error) {
+func (h *HelmValues) GetMap(path string) (map[string]interface{}, bool, error) {
 	if h == nil || h.data == nil {
 		return nil, false, nil
 	}
@@ -254,15 +256,15 @@ func (h *HelmValues) GetMap(path string) (map[string]any, bool, error) {
 		if rawval == nil {
 			return nil, ok, err
 		}
-		if mapval, ok := rawval.(map[string]any); ok {
+		if mapval, ok := rawval.(map[string]interface{}); ok {
 			return mapval, ok, err
 		}
-		return nil, false, fmt.Errorf("%v accessor error: %v is of the type %T, expected map[string]any", path, rawval, rawval)
+		return nil, false, fmt.Errorf("%v accessor error: %v is of the type %T, expected map[string]interface{}", path, rawval, rawval)
 	}
 	return nil, ok, err
 }
 
-func (h *HelmValues) GetAndRemoveMap(path string) (map[string]any, bool, error) {
+func (h *HelmValues) GetAndRemoveMap(path string) (map[string]interface{}, bool, error) {
 	value, ok, err := h.GetMap(path)
 	if err == nil {
 		h.RemoveField(path)
@@ -289,12 +291,12 @@ func (h *HelmValues) GetAndRemoveStringMap(path string) (map[string]string, bool
 	return value, ok, err
 }
 
-func (h *HelmValues) SetField(path string, value any) error {
+func (h *HelmValues) SetField(path string, value interface{}) error {
 	if h == nil {
 		panic("Tried to invoke SetField on nil *HelmValues")
 	}
 	if h.data == nil {
-		h.data = map[string]any{}
+		h.data = map[string]interface{}{}
 	}
 	return unstructured.SetNestedField(h.data, value, strings.Split(path, ".")...)
 }
@@ -304,7 +306,7 @@ func (h *HelmValues) SetStringSlice(path string, value []string) error {
 		panic("Tried to invoke SetField on nil *HelmValues")
 	}
 	if h.data == nil {
-		h.data = map[string]any{}
+		h.data = map[string]interface{}{}
 	}
 	return unstructured.SetNestedStringSlice(h.data, value, strings.Split(path, ".")...)
 }
@@ -319,6 +321,13 @@ func (h *HelmValues) RemoveField(path string) {
 func (h *HelmValues) UnmarshalJSON(in []byte) error {
 	err := json.Unmarshal(in, &h.data)
 	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (h *HelmValues) UnmarshalYAML(in []byte) error {
+	if err := yaml.Unmarshal(in, &h.data); err != nil {
 		return err
 	}
 	return nil

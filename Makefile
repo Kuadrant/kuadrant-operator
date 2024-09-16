@@ -337,6 +337,7 @@ build: generate fmt vet ## Build manager binary.
 
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
+run: export OPERATOR_NAMESPACE = kuadrant-system
 run: generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 

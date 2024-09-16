@@ -35,6 +35,7 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/utils/env"
@@ -128,13 +129,17 @@ func main() {
 		LeaderElectionID:       "f139389e.kuadrant.io",
 	}
 
+	if env.GetString("OPERATOR_NAMESPACE", "") == "" {
+		panic("OPERATOR_NAMESPACE environment variable must be set")
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
-	if err := fieldindexers.HTTPRouteIndexByGateway(
+	if err = fieldindexers.HTTPRouteIndexByGateway(
 		mgr,
 		log.Log.WithName("kuadrant").WithName("indexer").WithName("routeIndexByGateway"),
 	); err != nil {
@@ -279,18 +284,24 @@ func main() {
 
 	//+kubebuilder:scaffold:builder
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	if err = mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+	client, err := dynamic.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create client")
+		os.Exit(1)
+	}
+
+	stateOfTheWorld := controllers.NewPolicyMachineryController(mgr, client, log.Log)
+	if err = stateOfTheWorld.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "unable to start stateOfTheWorld controller")
 		os.Exit(1)
 	}
 }

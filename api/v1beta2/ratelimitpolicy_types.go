@@ -214,6 +214,7 @@ func (s *RateLimitPolicyStatus) GetConditions() []metav1.Condition {
 
 var _ kuadrant.Policy = &RateLimitPolicy{}
 var _ kuadrant.Referrer = &RateLimitPolicy{}
+var _ kuadrantgatewayapi.Policy = &RateLimitPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -232,8 +233,6 @@ type RateLimitPolicy struct {
 	Spec   RateLimitPolicySpec   `json:"spec,omitempty"`
 	Status RateLimitPolicyStatus `json:"status,omitempty"`
 }
-
-var _ kuadrantgatewayapi.Policy = &RateLimitPolicy{}
 
 func (r *RateLimitPolicy) GetObservedGeneration() int64  { return r.Status.GetObservedGeneration() }
 func (r *RateLimitPolicy) SetObservedGeneration(o int64) { r.Status.SetObservedGeneration(o) }

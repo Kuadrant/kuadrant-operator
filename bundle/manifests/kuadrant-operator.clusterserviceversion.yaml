@@ -106,7 +106,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2024-09-12T15:37:42Z"
+    createdAt: "2024-09-16T14:01:59Z"
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
     repository: https://github.com/Kuadrant/kuadrant-operator
@@ -307,13 +307,6 @@ spec:
           - update
           - watch
         - apiGroups:
-          - gateway.networking.k8s.io
-          resources:
-          - gatewayclasses
-          verbs:
-          - list
-          - watch
-        - apiGroups:
           - gateway.envoyproxy.io
           resources:
           - securitypolicies
@@ -324,6 +317,13 @@ spec:
           - list
           - patch
           - update
+          - watch
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - gatewayclasses
+          verbs:
+          - list
           - watch
         - apiGroups:
           - gateway.networking.k8s.io

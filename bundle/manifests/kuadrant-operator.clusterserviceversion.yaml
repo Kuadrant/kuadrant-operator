@@ -307,13 +307,6 @@ spec:
           - update
           - watch
         - apiGroups:
-          - gateway.networking.k8s.io
-          resources:
-          - gatewayclasses
-          verbs:
-          - list
-          - watch
-        - apiGroups:
           - gateway.envoyproxy.io
           resources:
           - securitypolicies
@@ -324,6 +317,13 @@ spec:
           - list
           - patch
           - update
+          - watch
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - gatewayclasses
+          verbs:
+          - list
           - watch
         - apiGroups:
           - gateway.networking.k8s.io

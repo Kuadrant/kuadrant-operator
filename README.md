@@ -26,8 +26,10 @@ Kuadrant is a system of cloud-native k8s components that grows as users’ needs
 
 ## Architecture
 
-Kuadrant relies on [Istio](https://istio.io/) and the [Gateway API](https://gateway-api.sigs.k8s.io/)
-to operate the cluster (Istio's) ingress gateway to provide API management with **authentication** (authN),
+Kuadrant relies on the [Gateway API](https://gateway-api.sigs.k8s.io/) and one Gateway API provider
+being installed on the cluster. Currently only [Istio](https://istio.io/) and
+[EnvoyGateway](https://gateway.envoyproxy.io/) are supported
+to operate the cluster ingress gateway to provide API management with **authentication** (authN),
 **authorization** (authZ) and **rate limiting** capabilities.
 
 ### Kuadrant components
@@ -67,11 +69,11 @@ Additionally, Kuadrant provides the following CRDs
 
 ### Pre-requisites
 
-* Istio is installed in the cluster. Otherwise, refer to the
-  [Istio getting started guide](https://istio.io/latest/docs/setup/getting-started/).
-* Kubernetes Gateway API is installed in the cluster. Otherwise,
-  [configure Istio to expose a service using the Kubernetes Gateway API](https://istio.io/latest/docs/tasks/traffic-management/ingress/gateway-api/).
-* cert-manager is installed in the cluster. Otherwise, refer to the 
+* Istio or Envoy Gateway is installed in the cluster. Otherwise, refer to the
+  [Istio getting started guide](https://istio.io/latest/docs/setup/getting-started/)
+  or [EnvoyGateway getting started guide](https://gateway.envoyproxy.io/docs/).
+* Kubernetes Gateway API is installed in the cluster.
+* cert-manager is installed in the cluster. Otherwise, refer to the
   [cert-manager installation guide](https://cert-manager.io/docs/installation/).
 
 ### Installing Kuadrant
@@ -139,7 +141,7 @@ EOF
 
 #### If you are a *Cluster Operator*
 
-* (Optionally) deploy istio ingress gateway using the
+* (Optionally) deploy ingress gateway using the
   [Gateway](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.Gateway) resource.
 * Write and apply the Kuadrant's [RateLimitPolicy](doc/rate-limiting.md) and/or
   [AuthPolicy](doc/auth.md) custom resources targeting the Gateway resource

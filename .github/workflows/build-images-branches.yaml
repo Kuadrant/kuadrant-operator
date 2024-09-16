@@ -13,3 +13,5 @@ jobs:
     with:
       kuadrantOperatorVersion: ${{ github.ref_name }}
       kuadrantOperatorTag: ${{ github.ref_name }}
+      # Conditionally set quayImageExpiry to expire quay images only for non-release branches
+      quayImageExpiry: ${{ startsWith(github.ref_name, 'release') && 'never' || '1w' }}

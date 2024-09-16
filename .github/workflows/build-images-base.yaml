@@ -35,6 +35,10 @@ on:
         description: Bundle and catalog channels, comma separated
         default: preview
         type: string
+      quayImageExpiry:
+        description: When to expire the built quay images. The time values could be something like 1h, 2d, 3w for hours, days, and weeks, respectively, from the time the image is built.
+        default: never
+        type: string
   workflow_dispatch:
     inputs:
       kuadrantOperatorTag:
@@ -69,6 +73,10 @@ on:
         description: Bundle and catalog channels, comma separated
         default: preview
         type: string
+      quayImageExpiry:
+        description: When to expire the built quay images. The time values could be something like 1h, 2d, 3w for hours, days, and weeks, respectively, from the time the image is built.
+        default: never
+        type: string
 
 env:
   IMG_TAGS: ${{ inputs.kuadrantOperatorTag }}
@@ -77,6 +85,7 @@ env:
   IMG_REGISTRY_ORG: kuadrant
   MAIN_BRANCH_NAME: main
   OPERATOR_NAME: kuadrant-operator
+  QUAY_IMAGE_EXPIRY: ${{ inputs.quayImageExpiry }}
 
 jobs:
   build:
@@ -107,6 +116,7 @@ jobs:
           provenance: false
           tags: |
             ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ env.IMG_TAGS }}
+          build-args: QUAY_IMAGE_EXPIRY=${{ inputs.quayImageExpiry }}
       - name: Print Image URL
         run: echo "Image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ env.IMG_TAGS }}"
 
@@ -155,6 +165,7 @@ jobs:
           provenance: false
           tags: |
             ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ env.IMG_TAGS }}
+          build-args: QUAY_IMAGE_EXPIRY=${{ inputs.quayImageExpiry }}
       - name: Print Bundle Image URL
         run: echo "Bundle image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-bundle:${{ env.IMG_TAGS }}"
 
@@ -202,5 +213,6 @@ jobs:
           provenance: false
           tags: |
             ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog:${{ env.IMG_TAGS }}
+          # The Quay image expiry label for the generated catalog Dockerfile is set via opm, using the value set in the QUAY_IMAGE_EXPIRY environment variable
       - name: Print Catalog Image URL
         run: echo "Catalog image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}-catalog:${{ env.IMG_TAGS }}"

@@ -7,9 +7,10 @@ import (
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+
+	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
 func EnvoyExtensionPolicyMutator(existingObj, desiredObj client.Object) (bool, error) {
@@ -90,9 +91,9 @@ func EnvoySecurityPolicyMutator(existingObj, desiredObj client.Object) (bool, er
 		existing.Spec.ExtAuth = desired.Spec.ExtAuth
 	}
 
-	if !reflect.DeepEqual(existing.Spec.TargetRef, desired.Spec.TargetRef) {
+	if !reflect.DeepEqual(existing.Spec.PolicyTargetReferences.TargetRefs, desired.Spec.PolicyTargetReferences.TargetRefs) {
 		update = true
-		existing.Spec.TargetRef = desired.Spec.TargetRef
+		existing.Spec.PolicyTargetReferences.TargetRefs = desired.Spec.PolicyTargetReferences.TargetRefs
 	}
 
 	if !reflect.DeepEqual(existing.Annotations, desired.Annotations) {

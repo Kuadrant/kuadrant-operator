@@ -385,10 +385,9 @@ func wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyInde
 	}, nil
 }
 
-func WasmConfigForGateway(
+func ConfigForGateway(
 	ctx context.Context, gw *gatewayapiv1.Gateway,
 	topology *kuadrantgatewayapi.Topology) (*Config, error) {
-
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return nil, err

@@ -164,7 +164,7 @@ func (r *RateLimitingIstioWASMPluginReconciler) wasmPluginConfig(ctx context.Con
 		return nil, err
 	}
 
-	config, err := wasm.WasmConfigForGateway(ctx, gw, topology)
+	config, err := wasm.ConfigForGateway(ctx, gw, topology)
 	if err != nil {
 		return nil, err
 	}

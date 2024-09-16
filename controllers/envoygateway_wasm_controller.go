@@ -83,7 +83,6 @@ func (r *EnvoyGatewayWasmReconciler) desiredEnvoyExtensionPolicy(
 	ctx context.Context, gw kuadrantgatewayapi.GatewayNode,
 	kObj *kuadrantv1beta1.Kuadrant,
 	topology *kuadrantgatewayapi.Topology) (*egv1alpha1.EnvoyExtensionPolicy, error) {
-
 	baseLogger, err := logr.FromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -131,7 +130,7 @@ func (r *EnvoyGatewayWasmReconciler) desiredEnvoyExtensionPolicy(
 
 	logger := baseLogger.WithValues("envoyextensionpolicy", client.ObjectKeyFromObject(envoyPolicy))
 
-	config, err := wasm.WasmConfigForGateway(ctx, gw.GetGateway(), topology)
+	config, err := wasm.ConfigForGateway(ctx, gw.GetGateway(), topology)
 	if err != nil {
 		return nil, err
 	}

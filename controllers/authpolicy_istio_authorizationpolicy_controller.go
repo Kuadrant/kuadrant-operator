@@ -8,15 +8,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/samber/lo"
 	istiosecurity "istio.io/api/security/v1beta1"
 	istiov1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -28,6 +19,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 var KuadrantExtAuthProviderName = env.GetString("AUTH_PROVIDER", "kuadrant-authorization")

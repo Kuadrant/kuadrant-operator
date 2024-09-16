@@ -14,12 +14,13 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 )
 
 // EnvoyGatewayLimitadorClusterReconciler reconciles an EnvoyGateway EnvoyPatchPolicy object
@@ -99,7 +100,7 @@ func (r *EnvoyGatewayLimitadorClusterReconciler) Reconcile(eventCtx context.Cont
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	limitadorClusterPatchPolicy, err := r.desiredLimitadorClusterPatchPolicy(ctx, extPolicy, limitador)
+	limitadorClusterPatchPolicy, err := r.desiredLimitadorClusterPatchPolicy(extPolicy, limitador)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -114,9 +115,8 @@ func (r *EnvoyGatewayLimitadorClusterReconciler) Reconcile(eventCtx context.Cont
 }
 
 func (r *EnvoyGatewayLimitadorClusterReconciler) desiredLimitadorClusterPatchPolicy(
-	ctx context.Context, extPolicy *egv1alpha1.EnvoyExtensionPolicy,
+	extPolicy *egv1alpha1.EnvoyExtensionPolicy,
 	limitador *limitadorv1alpha1.Limitador) (*egv1alpha1.EnvoyPatchPolicy, error) {
-
 	patchPolicy := &egv1alpha1.EnvoyPatchPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       egv1alpha1.KindEnvoyPatchPolicy,

@@ -3,7 +3,6 @@ package istio
 import (
 	"fmt"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
@@ -16,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 const (

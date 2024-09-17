@@ -332,17 +332,28 @@ test-unit: clean-cov generate fmt vet ## Run Unit tests.
 
 ##@ Build
 
+build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
+build: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 build: generate fmt vet ## Build manager binary.
-	go build -o bin/manager main.go
+	go build -ldflags "-X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -o bin/manager main.go
 
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
 run: export OPERATOR_NAMESPACE = kuadrant-system
+run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
+run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 run: generate fmt vet ## Run a controller from your host.
-	go run ./main.go
+	go run -ldflags "-X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" ./main.go
 
+docker-build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
+docker-build: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_ENGINE) build --build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) -t $(IMG) .
+	$(CONTAINER_ENGINE) build \
+		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
+		--build-arg GIT_SHA=$(GIT_SHA) \
+		--build-arg DIRTY=$(DIRTY) \
+		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
+		-t $(IMG) .
 
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_ENGINE) push $(IMG)

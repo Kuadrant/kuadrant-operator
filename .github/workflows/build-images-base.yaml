@@ -116,7 +116,10 @@ jobs:
           provenance: false
           tags: |
             ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ env.IMG_TAGS }}
-          build-args: QUAY_IMAGE_EXPIRY=${{ inputs.quayImageExpiry }}
+          build-args: |
+            QUAY_IMAGE_EXPIRY=${{ inputs.quayImageExpiry }}
+            GIT_SHA=${{ github.sha }}
+            DIRTY=false
       - name: Print Image URL
         run: echo "Image pushed to ${{ env.IMG_REGISTRY_HOST }}/${{ env.IMG_REGISTRY_ORG }}/${{ env.OPERATOR_NAME }}:${{ env.IMG_TAGS }}"
 

@@ -436,6 +436,7 @@ prepare-release: ## Prepare the manifests for OLM and Helm Chart for a release.
 		LIMITADOR_OPERATOR_VERSION=$(LIMITADOR_OPERATOR_VERSION) \
 		DNS_OPERATOR_VERSION=$(DNS_OPERATOR_VERSION) \
 		WASM_SHIM_VERSION=$(WASM_SHIM_VERSION)
+	sed -i -e 's/Version = ".*"/Version = "$(VERSION)"/' $(PROJECT_PATH)/version/version.go
 
 ##@ Code Style
 

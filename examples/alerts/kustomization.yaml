@@ -5,3 +5,4 @@ resources:
   - prometheusrules_policies_missing.yaml
   - slo-availability.yaml
   - slo-latency.yaml
+  - orphan_records.yaml

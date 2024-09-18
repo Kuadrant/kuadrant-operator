@@ -41,11 +41,11 @@ egctl: $(EGCTL) ## Download egctl locally if necessary.
 
 envoy-gateway-enable-envoypatchpolicy: $(YQ)
 	$(eval TMP := $(shell mktemp -d))
-	kubectl get configmap -n envoy-gateway-system envoy-gateway-config -o jsonpath='{.data.envoy-gateway\.yaml}' > $(TMP)/envoy-gateway.yaml
+	kubectl get configmap -n $(EG_NAMESPACE) envoy-gateway-config -o jsonpath='{.data.envoy-gateway\.yaml}' > $(TMP)/envoy-gateway.yaml
 	yq e '.extensionApis.enableEnvoyPatchPolicy = true' -i $(TMP)/envoy-gateway.yaml
-	kubectl create configmap -n envoy-gateway-system envoy-gateway-config --from-file=envoy-gateway.yaml=$(TMP)/envoy-gateway.yaml -o yaml --dry-run=client | kubectl replace -f -
+	kubectl create configmap -n $(EG_NAMESPACE) envoy-gateway-config --from-file=envoy-gateway.yaml=$(TMP)/envoy-gateway.yaml -o yaml --dry-run=client | kubectl replace -f -
 	-rm -rf $(TMP)
-	kubectl rollout restart deployment envoy-gateway -n envoy-gateway-system
+	kubectl rollout restart deployment envoy-gateway -n $(EG_NAMESPACE)
 
 EG_VERSION ?= v1.1.0
 .PHONY: envoy-gateway-install

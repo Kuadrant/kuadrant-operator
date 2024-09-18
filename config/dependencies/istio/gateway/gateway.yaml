@@ -4,7 +4,7 @@ kind: Gateway
 metadata:
   labels:
     istio: ingressgateway
-  name: istio-ingressgateway
+  name: kuadrant-ingressgateway
 spec:
   gatewayClassName: istio
   listeners:

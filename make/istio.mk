@@ -31,7 +31,7 @@ istioctl: $(ISTIOCTL) ## Download istioctl locally if necessary.
 
 .PHONY: istioctl-install
 istioctl-install: istioctl ## Install istio.
-	$(ISTIOCTL) operator init
+	$(ISTIOCTL) operator init --operatorNamespace $(ISTIO_NAMESPACE) --watchedNamespaces $(ISTIO_NAMESPACE)
 	kubectl apply -f $(ISTIO_INSTALL_DIR)/istio-operator.yaml
 
 .PHONY: istioctl-uninstall
@@ -45,7 +45,7 @@ istioctl-verify-install: istioctl ## Verify istio installation.
 .PHONY: sail-install
 sail-install: kustomize
 	$(KUSTOMIZE) build $(ISTIO_INSTALL_DIR)/sail | kubectl apply -f -
-	kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
+	kubectl -n $(ISTIO_NAMESPACE) wait --for=condition=Available deployment istio-operator --timeout=300s
 	kubectl apply -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
 
 .PHONY: sail-uninstall

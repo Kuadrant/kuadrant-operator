@@ -70,8 +70,8 @@ metadata:
   name: toystore
 spec:
   parentRefs:
-  - name: istio-ingressgateway
-    namespace: istio-system
+  - name: kuadrant-ingressgateway
+    namespace: gateway-system
   hostnames:
   - api.toystore.com
   rules:
@@ -89,8 +89,8 @@ EOF
 Export the gateway hostname and port:
 
 ```sh
-export INGRESS_HOST=$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.status.addresses[0].value}')
-export INGRESS_PORT=$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
+export INGRESS_HOST=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.status.addresses[0].value}')
+export INGRESS_PORT=$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.spec.listeners[?(@.name=="http")].port}')
 export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
 ```
 
@@ -104,7 +104,7 @@ curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toy -i
 > **Note**: If the command above fails to hit the Toy Store API on your environment, try forwarding requests to the service and accessing over localhost:
 >
 > ```sh
-> kubectl port-forward -n istio-system service/istio-ingressgateway-istio 9080:80 >/dev/null 2>&1 &
+> kubectl port-forward -n gateway-system service/kuadrant-ingressgateway-istio 9080:80 >/dev/null 2>&1 &
 > export GATEWAY_URL=localhost:9080
 > ```
 > ```sh

@@ -41,26 +41,26 @@ egctl: $(EGCTL) ## Download egctl locally if necessary.
 
 envoy-gateway-enable-envoypatchpolicy: $(YQ)
 	$(eval TMP := $(shell mktemp -d))
-	kubectl get configmap -n envoy-gateway-system envoy-gateway-config -o jsonpath='{.data.envoy-gateway\.yaml}' > $(TMP)/envoy-gateway.yaml
+	kubectl get configmap -n $(EG_NAMESPACE) envoy-gateway-config -o jsonpath='{.data.envoy-gateway\.yaml}' > $(TMP)/envoy-gateway.yaml
 	yq e '.extensionApis.enableEnvoyPatchPolicy = true' -i $(TMP)/envoy-gateway.yaml
-	kubectl create configmap -n envoy-gateway-system envoy-gateway-config --from-file=envoy-gateway.yaml=$(TMP)/envoy-gateway.yaml -o yaml --dry-run=client | kubectl replace -f -
+	kubectl create configmap -n $(EG_NAMESPACE) envoy-gateway-config --from-file=envoy-gateway.yaml=$(TMP)/envoy-gateway.yaml -o yaml --dry-run=client | kubectl replace -f -
 	-rm -rf $(TMP)
-	kubectl rollout restart deployment envoy-gateway -n envoy-gateway-system
+	kubectl rollout restart deployment envoy-gateway -n $(EG_NAMESPACE)
 
 EG_VERSION ?= v1.1.0
 .PHONY: envoy-gateway-install
 envoy-gateway-install: kustomize $(HELM)
-	$(HELM) install eg oci://docker.io/envoyproxy/gateway-helm --version $(EG_VERSION) -n envoy-gateway-system --create-namespace
+	$(HELM) install eg oci://docker.io/envoyproxy/gateway-helm --version $(EG_VERSION) -n $(EG_NAMESPACE) --create-namespace
 	$(MAKE) envoy-gateway-enable-envoypatchpolicy
-	kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
+	kubectl wait --timeout=5m -n $(EG_NAMESPACE) deployment/envoy-gateway --for=condition=Available
 
 .PHONY: deploy-eg-gateway
 deploy-eg-gateway: kustomize ## Deploy Gateway API gateway
 	$(KUSTOMIZE) build $(EG_CONFIG_DIR)/gateway | kubectl apply -f -
-	kubectl wait --timeout=5m -n envoy-gateway-system gateway/eg --for=condition=Programmed
+	kubectl wait --timeout=5m -n gateway-system gateway/kuadrant-ingressgateway --for=condition=Programmed
 	@echo
 	@echo "-- Linux only -- Ingress gateway is exported using loadbalancer service in port 80"
-	@echo "export INGRESS_HOST=\$$(kubectl get gtw eg -n envoy-gateway-system -o jsonpath='{.status.addresses[0].value}')"
-	@echo "export INGRESS_PORT=\$$(kubectl get gtw eg -n envoy-gateway-system -o jsonpath='{.spec.listeners[?(@.name==\"http\")].port}')"
+	@echo "export INGRESS_HOST=\$$(kubectl get gtw kuadrant-ingressgateway -n gateway-system-o jsonpath='{.status.addresses[0].value}')"
+	@echo "export INGRESS_PORT=\$$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.spec.listeners[?(@.name==\"http\")].port}')"
 	@echo "Now you can hit the gateway:"
 	@echo "curl --verbose --resolve www.example.com:\$${INGRESS_PORT}:\$${INGRESS_HOST} http://www.example.com:\$${INGRESS_PORT}/get"

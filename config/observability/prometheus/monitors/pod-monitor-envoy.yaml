@@ -5,10 +5,10 @@ metadata:
 spec:
   namespaceSelector:
     matchNames:
-    - istio-system
+    - gateway-system
   selector:
     matchLabels:
-      app: istio-ingressgateway
+      app: kuadrant-ingressgateway
   podMetricsEndpoints:
   - port: http-envoy-prom
     path: /stats/prometheus

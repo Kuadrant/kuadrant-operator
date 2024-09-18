@@ -109,12 +109,12 @@ istio-env-setup: ## Install Istio, istio gateway and gatewayapi-env-setup
 	$(MAKE) deploy-istio-gateway
 	@echo
 	@echo "Now you can open local access to the istio gateway by doing:"
-	@echo "kubectl port-forward -n istio-system service/istio-ingressgateway-istio 9080:80 &"
+	@echo "kubectl port-forward -n gateway-system service/kuadrant-ingressgateway-istio 9080:80 &"
 	@echo "export GATEWAY_URL=localhost:9080"
 	@echo "after that, you can curl -H \"Host: myhost.com\" \$$GATEWAY_URL"
 	@echo "-- Linux only -- Ingress gateway is exported using loadbalancer service in port 80"
-	@echo "export INGRESS_HOST=\$$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.status.addresses[0].value}')"
-	@echo "export INGRESS_PORT=\$$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.spec.listeners[?(@.name==\"http\")].port}')"
+	@echo "export INGRESS_HOST=\$$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.status.addresses[0].value}')"
+	@echo "export INGRESS_PORT=\$$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.spec.listeners[?(@.name==\"http\")].port}')"
 	@echo "export GATEWAY_URL=\$$INGRESS_HOST:\$$INGRESS_PORT"
 	@echo "curl -H \"Host: myhost.com\" \$$GATEWAY_URL"
 	@echo

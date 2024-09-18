@@ -391,19 +391,19 @@ A Kuadrant wasm-shim configuration for 2 RateLimitPolicy custom resources (a Gat
 apiVersion: extensions.istio.io/v1alpha1
 kind: WasmPlugin
 metadata:
-  name: kuadrant-istio-ingressgateway
-  namespace: istio-system
+  name: kuadrant-kuadrant-ingressgateway
+  namespace: gateway-system
   …
 spec:
   phase: STATS
   pluginConfig:
     failureMode: deny
     rateLimitPolicies:
-    - domain: istio-system/gw-rlp # allows isolating policy rules and improve performance of the rate limit service
+    - domain: gateway-system/gw-rlp # allows isolating policy rules and improve performance of the rate limit service
       hostnames:
       - '*.website'
       - '*.io'
-      name: istio-system/gw-rlp
+      name: gateway-system/gw-rlp
       rules: # match rules from the gateway and according to conditions specified in the policy
       - conditions:
         - allOf:
@@ -478,6 +478,6 @@ spec:
       service: kuadrant-rate-limiting-service
   selector:
     matchLabels:
-      istio.io/gateway-name: istio-ingressgateway
+      istio.io/gateway-name: kuadrant-ingressgateway
   url: oci://quay.io/kuadrant/wasm-shim:v0.3.0
 ```

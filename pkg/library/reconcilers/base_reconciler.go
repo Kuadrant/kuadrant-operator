@@ -34,15 +34,6 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-type StatusMeta struct {
-	// ObservedGeneration reflects the generation of the most recently observed spec.
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-}
-
-func (meta *StatusMeta) GetObservedGeneration() int64  { return meta.ObservedGeneration }
-func (meta *StatusMeta) SetObservedGeneration(o int64) { meta.ObservedGeneration = o }
-
 // StatusMutator is an interface to hold mutator functions for status updates.
 type StatusMutator interface {
 	Mutate(obj client.Object) (bool, error)

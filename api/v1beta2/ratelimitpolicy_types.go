@@ -168,7 +168,9 @@ type RateLimitPolicyCommonSpec struct {
 
 // RateLimitPolicyStatus defines the observed state of RateLimitPolicy
 type RateLimitPolicyStatus struct {
-	reconcilers.StatusMeta `json:",inline"`
+	// ObservedGeneration reflects the generation of the most recently observed spec.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
 	// Represents the observations of a foo's current state.
 	// Known .status.conditions.type are: "Available"
@@ -233,9 +235,6 @@ type RateLimitPolicy struct {
 	Spec   RateLimitPolicySpec   `json:"spec,omitempty"`
 	Status RateLimitPolicyStatus `json:"status,omitempty"`
 }
-
-func (r *RateLimitPolicy) GetObservedGeneration() int64  { return r.Status.GetObservedGeneration() }
-func (r *RateLimitPolicy) SetObservedGeneration(o int64) { r.Status.SetObservedGeneration(o) }
 
 //+kubebuilder:object:root=true
 

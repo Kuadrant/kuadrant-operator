@@ -56,20 +56,25 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
 		),
-		controller.WithReconcile(buildReconciler(client)),
+		controller.WithReconcile(buildReconciler(client, manager)),
 	}
 
 	return controller.NewController(controllerOpts...)
 }
 
-func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
-	reconciler := &controller.Workflow{
+func buildReconciler(client *dynamic.DynamicClient, manager ctrlruntime.Manager) controller.ReconcileFunc {
+	rateLimitPolicyStatusTask := NewRateLimitPolicyStatusTask(manager)
+
+	return (&controller.Workflow{
 		Precondition: NewEventLogger().Log,
 		Tasks: []controller.ReconcileFunc{
 			NewTopologyFileReconciler(client, operatorNamespace).Reconcile,
+			(&controller.Subscription{
+				ReconcileFunc: rateLimitPolicyStatusTask.Run,
+				Events:        rateLimitPolicyStatusTask.Events(),
+			}).Reconcile,
 		},
-	}
-	return reconciler.Run
+	}).Run
 }
 
 type TopologyFileReconciler struct {

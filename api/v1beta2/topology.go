@@ -11,7 +11,7 @@ var (
 	AuthPoliciesResource      = GroupVersion.WithResource("authpolicies")
 	AuthPolicyKind            = schema.GroupKind{Group: GroupVersion.Group, Kind: "AuthPolicy"}
 	RateLimitPoliciesResource = GroupVersion.WithResource("ratelimitpolicies")
-	RateLimitPolicyKind       = schema.GroupKind{Group: GroupVersion.Group, Kind: "RateLimitPolicy"}
+	RateLimitPolicyKind       = RateLimitPolicyGVK.GroupKind()
 )
 
 var _ machinery.Policy = &AuthPolicy{}

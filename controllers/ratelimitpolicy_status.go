@@ -43,7 +43,7 @@ func (r *RateLimitPolicyReconciler) calculateStatus(rlp *kuadrantv1beta2.RateLim
 		Conditions: slices.Clone(rlp.Status.Conditions),
 	}
 
-	newStatus.SetObservedGeneration(rlp.GetGeneration())
+	newStatus.ObservedGeneration = rlp.Generation
 
 	acceptedCond := kuadrant.AcceptedCondition(rlp, specErr)
 

@@ -24,7 +24,6 @@ import (
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/multicluster"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
@@ -79,43 +78,63 @@ var _ = Describe("DNSPolicy controller", func() {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
-	It("should validate routing strategy field correctly", func(ctx SpecContext) {
-
+	It("should validate loadBalancing field correctly", func(ctx SpecContext) {
 		gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 			WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).Gateway
 
 		// simple should succeed
 		dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 			WithProviderSecret(*dnsProviderSecret).
-			WithTargetGateway("test-gateway").
-			WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
+			WithTargetGateway("test-gateway")
 		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 
-		// should not allow changing routing strategy
+		// should not allow adding loadBalancing field value after creation
 		Eventually(func(g Gomega) {
 			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 			g.Expect(err).NotTo(HaveOccurred())
-			dnsPolicy.Spec.RoutingStrategy = v1alpha1.LoadBalancedRoutingStrategy
+			dnsPolicy.Spec.LoadBalancing = &v1alpha1.LoadBalancingSpec{
+				Weight:     100,
+				Geo:        "foo",
+				DefaultGeo: false,
+			}
 			err = k8sClient.Update(ctx, dnsPolicy)
 			g.Expect(err).To(HaveOccurred())
-			g.Expect(err).To(MatchError(ContainSubstring("RoutingStrategy is immutable")))
+			g.Expect(err).To(MatchError(ContainSubstring("loadBalancing is immutable")))
 		}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		Expect(k8sClient.Delete(ctx, dnsPolicy)).ToNot(HaveOccurred())
-
-		// loadbalanced missing loadbalancing field
-		dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
-			WithProviderSecret(*dnsProviderSecret).
-			WithTargetGateway("test-gateway").
-			WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy)
-		Expect(k8sClient.Create(ctx, dnsPolicy)).To(MatchError(ContainSubstring("spec.loadBalancing is a required field when spec.routingStrategy == 'loadbalanced'")))
 
 		// loadbalanced should succeed
 		dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 			WithProviderSecret(*dnsProviderSecret).
 			WithTargetGateway("test-gateway").
-			WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
-			WithLoadBalancingFor(100, nil, "foo")
+			WithLoadBalancingFor(100, "foo", false)
 		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+
+		// should allow loadBalancing struct fields to be updated
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(dnsPolicy.Spec.LoadBalancing).ToNot(BeNil())
+			g.Expect(dnsPolicy.Spec.LoadBalancing.Geo).To(Equal("foo"))
+			g.Expect(dnsPolicy.Spec.LoadBalancing.Weight).To(Equal(100))
+			g.Expect(dnsPolicy.Spec.LoadBalancing.DefaultGeo).ToNot(BeTrue())
+			dnsPolicy.Spec.LoadBalancing.Geo = "bar"
+			dnsPolicy.Spec.LoadBalancing.Weight = 200
+			dnsPolicy.Spec.LoadBalancing.DefaultGeo = true
+			err = k8sClient.Update(ctx, dnsPolicy)
+			g.Expect(err).To(Succeed())
+		}, tests.TimeoutMedium, time.Second).Should(Succeed())
+
+		// should not allow removing loadBalancing field value after creation
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+			g.Expect(err).NotTo(HaveOccurred())
+			dnsPolicy.Spec.LoadBalancing = nil
+			err = k8sClient.Update(ctx, dnsPolicy)
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err).To(MatchError(ContainSubstring("loadBalancing is immutable")))
+		}, tests.TimeoutMedium, time.Second).Should(Succeed())
+		Expect(k8sClient.Delete(ctx, dnsPolicy)).ToNot(HaveOccurred())
 	}, testTimeOut)
 
 	It("should validate provider ref field correctly", func(ctx SpecContext) {
@@ -125,15 +144,13 @@ var _ = Describe("DNSPolicy controller", func() {
 
 		// should not allow an empty providerRef list
 		dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
-			WithTargetGateway("test-gateway").
-			WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
+			WithTargetGateway("test-gateway")
 		Expect(k8sClient.Create(ctx, dnsPolicy)).To(MatchError(ContainSubstring("spec.providerRefs: Required value")))
 
 		// should create with a single providerRef
 		dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 			WithProviderSecret(*dnsProviderSecret).
-			WithTargetGateway("test-gateway").
-			WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
+			WithTargetGateway("test-gateway")
 		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 
 		// should not allow adding another providerRef
@@ -200,8 +217,7 @@ var _ = Describe("DNSPolicy controller", func() {
 		// Create policy1 targeting gateway1 with simple routing strategy
 		dnsPolicy1 := v1alpha1.NewDNSPolicy("test-dns-policy1", testNamespace).
 			WithProviderSecret(*dnsProviderSecret).
-			WithTargetGateway("test-gateway1").
-			WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
+			WithTargetGateway("test-gateway1")
 		Expect(k8sClient.Create(ctx, dnsPolicy1)).To(Succeed())
 
 		// the policy 1 should succeed
@@ -250,8 +266,7 @@ var _ = Describe("DNSPolicy controller", func() {
 		dnsPolicy2 := v1alpha1.NewDNSPolicy("test-dns-policy2", testNamespace).
 			WithProviderSecret(*dnsProviderSecret).
 			WithTargetGateway("test-gateway2").
-			WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
-			WithLoadBalancingFor(100, nil, "foo")
+			WithLoadBalancingFor(100, "foo", false)
 		Expect(k8sClient.Create(ctx, dnsPolicy2)).To(Succeed())
 
 		errorMessage := "The DNS provider failed to ensure the record: record type conflict, " +
@@ -321,8 +336,7 @@ var _ = Describe("DNSPolicy controller", func() {
 		It("should have accepted condition with status false and correct reason", func(ctx SpecContext) {
 			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
-				WithTargetGateway("test-gateway").
-				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
+				WithTargetGateway("test-gateway")
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 
 			Eventually(func(g Gomega) {
@@ -397,16 +411,14 @@ var _ = Describe("DNSPolicy controller", func() {
 			// Create policy1 targeting gateway1 with simple routing strategy
 			dnsPolicy1 := v1alpha1.NewDNSPolicy("test-dns-policy1", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
-				WithTargetGateway("test-gateway1").
-				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
+				WithTargetGateway("test-gateway1")
 			Expect(k8sClient.Create(ctx, dnsPolicy1)).To(Succeed())
 
 			// create policy2 targeting gateway2 with the load-balanced strategy
 			dnsPolicy2 := v1alpha1.NewDNSPolicy("test-dns-policy2", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway("test-gateway2").
-				WithRoutingStrategy(v1alpha1.LoadBalancedRoutingStrategy).
-				WithLoadBalancingFor(100, nil, "foo")
+				WithLoadBalancingFor(100, "foo", false)
 			Expect(k8sClient.Create(ctx, dnsPolicy2)).To(Succeed())
 
 			// policy2 should fail: dns provider already has a record for this host from the gateway1+policy1
@@ -452,8 +464,7 @@ var _ = Describe("DNSPolicy controller", func() {
 				Gateway
 			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
-				WithTargetGateway(testGatewayName).
-				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
+				WithTargetGateway(testGatewayName)
 
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
@@ -514,54 +525,39 @@ var _ = Describe("DNSPolicy controller", func() {
 				Gateway
 			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
-				WithTargetGateway(tests.GatewayName).
-				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
+				WithTargetGateway(tests.GatewayName)
 
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
 
-			Eventually(func() error {
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
-				Expect(err).ShouldNot(HaveOccurred())
-
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
 				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
 					{
-						Type:  ptr.To(multicluster.MultiClusterIPAddressType),
-						Value: tests.ClusterNameOne + "/" + tests.IPAddressOne,
+						Type:  ptr.To(gatewayapiv1.IPAddressType),
+						Value: tests.IPAddressOne,
 					},
 					{
-						Type:  ptr.To(multicluster.MultiClusterIPAddressType),
-						Value: tests.ClusterNameTwo + "/" + tests.IPAddressTwo,
+						Type:  ptr.To(gatewayapiv1.IPAddressType),
+						Value: tests.IPAddressTwo,
 					},
 				}
 				gateway.Status.Listeners = []gatewayapiv1.ListenerStatus{
 					{
-						Name:           tests.ClusterNameOne + "." + tests.ListenerNameOne,
+						Name:           tests.ListenerNameOne,
 						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
 						AttachedRoutes: 1,
 						Conditions:     []metav1.Condition{},
 					},
 					{
-						Name:           tests.ClusterNameTwo + "." + tests.ListenerNameOne,
-						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
-						AttachedRoutes: 1,
-						Conditions:     []metav1.Condition{},
-					},
-					{
-						Name:           tests.ClusterNameOne + "." + tests.ListenerNameWildcard,
-						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
-						AttachedRoutes: 1,
-						Conditions:     []metav1.Condition{},
-					},
-					{
-						Name:           tests.ClusterNameTwo + "." + tests.ListenerNameWildcard,
+						Name:           tests.ListenerNameWildcard,
 						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
 						AttachedRoutes: 1,
 						Conditions:     []metav1.Condition{},
 					},
 				}
-				return k8sClient.Status().Update(ctx, gateway)
-			}, tests.TimeoutMedium, tests.RetryIntervalMedium).ShouldNot(HaveOccurred())
+				g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 			recordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameOne)
 			wildcardRecordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameWildcard)
@@ -819,8 +815,7 @@ var _ = Describe("DNSPolicy controller", func() {
 		It("should error targeting invalid group", func(ctx SpecContext) {
 			p := v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
-				WithTargetGateway("gateway").
-				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
+				WithTargetGateway("gateway")
 			p.Spec.TargetRef.Group = "not-gateway.networking.k8s.io"
 
 			err := k8sClient.Create(ctx, p)
@@ -831,8 +826,7 @@ var _ = Describe("DNSPolicy controller", func() {
 		It("should error targeting invalid kind", func(ctx SpecContext) {
 			p := v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
-				WithTargetGateway("gateway").
-				WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
+				WithTargetGateway("gateway")
 			p.Spec.TargetRef.Kind = "TCPRoute"
 
 			err := k8sClient.Create(ctx, p)

@@ -102,104 +102,41 @@ spec:
                 type: object
               loadBalancing:
                 properties:
+                  defaultGeo:
+                    description: defaultGeo specifies if this is the default geo for
+                      providers that support setting a default catch all geo endpoint
+                      such as Route53.
+                    type: boolean
                   geo:
-                    properties:
-                      defaultGeo:
-                        description: |-
-                          defaultGeo is the country/continent/region code to use when no other can be determined for a dns target cluster.
+                    description: |-
+                      geo value to apply to geo endpoints.
 
 
-                          The values accepted are determined by the target dns provider, please refer to the appropriate docs below.
+                      The values accepted are determined by the target dns provider, please refer to the appropriate docs below.
 
 
-                          Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-geo.html
-                          Google: https://cloud.google.com/compute/docs/regions-zones
-                        minLength: 2
-                        type: string
-                    required:
-                    - defaultGeo
-                    type: object
-                  weighted:
-                    properties:
-                      custom:
-                        description: custom list of custom weight selectors.
-                        items:
-                          properties:
-                            selector:
-                              description: 'Label selector to match resource storing
-                                custom weight attribute values e.g. kuadrant.io/lb-attribute-custom-weight:
-                                AWS.'
-                              properties:
-                                matchExpressions:
-                                  description: matchExpressions is a list of label
-                                    selector requirements. The requirements are ANDed.
-                                  items:
-                                    description: |-
-                                      A label selector requirement is a selector that contains values, a key, and an operator that
-                                      relates the key and values.
-                                    properties:
-                                      key:
-                                        description: key is the label key that the
-                                          selector applies to.
-                                        type: string
-                                      operator:
-                                        description: |-
-                                          operator represents a key's relationship to a set of values.
-                                          Valid operators are In, NotIn, Exists and DoesNotExist.
-                                        type: string
-                                      values:
-                                        description: |-
-                                          values is an array of string values. If the operator is In or NotIn,
-                                          the values array must be non-empty. If the operator is Exists or DoesNotExist,
-                                          the values array must be empty. This array is replaced during a strategic
-                                          merge patch.
-                                        items:
-                                          type: string
-                                        type: array
-                                        x-kubernetes-list-type: atomic
-                                    required:
-                                    - key
-                                    - operator
-                                    type: object
-                                  type: array
-                                  x-kubernetes-list-type: atomic
-                                matchLabels:
-                                  additionalProperties:
-                                    type: string
-                                  description: |-
-                                    matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
-                                    map is equivalent to an element of matchExpressions, whose key field is "key", the
-                                    operator is "In", and the values array contains only "value". The requirements are ANDed.
-                                  type: object
-                              type: object
-                              x-kubernetes-map-type: atomic
-                            weight:
-                              description: The weight value to apply when the selector
-                                matches.
-                              minimum: 0
-                              type: integer
-                          required:
-                          - selector
-                          - weight
-                          type: object
-                        type: array
-                      defaultWeight:
-                        description: |-
-                          defaultWeight is the record weight to use when no other can be determined for a dns target cluster.
+                      Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-values-geo.html
+                      Google: https://cloud.google.com/compute/docs/regions-zones
+                      Azure: https://learn.microsoft.com/en-us/azure/traffic-manager/traffic-manager-geographic-regions
+                    minLength: 2
+                    type: string
+                  weight:
+                    default: 120
+                    description: |-
+                      weight value to apply to weighted endpoints.
 
 
-                          The maximum value accepted is determined by the target dns provider, please refer to the appropriate docs below.
+                      The maximum value accepted is determined by the target dns provider, please refer to the appropriate docs below.
 
 
-                          Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy-weighted.html
-                        minimum: 0
-                        type: integer
-                    required:
-                    - defaultWeight
-                    type: object
+                      Route53: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy-weighted.html
+                      Google: https://cloud.google.com/dns/docs/overview/
+                      Azure: https://learn.microsoft.com/en-us/azure/traffic-manager/traffic-manager-routing-methods#weighted-traffic-routing-method
+                    type: integer
                 required:
+                - defaultGeo
                 - geo
-                - weighted
+                - weight
                 type: object
               providerRefs:
                 description: providerRefs is a list of references to provider secrets.
@@ -215,15 +152,6 @@ spec:
                 maxItems: 1
                 minItems: 1
                 type: array
-              routingStrategy:
-                default: loadbalanced
-                enum:
-                - simple
-                - loadbalanced
-                type: string
-                x-kubernetes-validations:
-                - message: RoutingStrategy is immutable
-                  rule: self == oldSelf
               targetRef:
                 description: targetRef identifies an API object to apply policy to.
                 properties:
@@ -255,13 +183,12 @@ spec:
                   rule: self.kind == 'Gateway'
             required:
             - providerRefs
-            - routingStrategy
             - targetRef
             type: object
             x-kubernetes-validations:
-            - message: spec.loadBalancing is a required field when spec.routingStrategy
-                == 'loadbalanced'
-              rule: '!(self.routingStrategy == ''loadbalanced'' && !has(self.loadBalancing))'
+            - message: loadBalancing is immutable
+              rule: (!has(oldSelf.loadBalancing) || has(self.loadBalancing)) && (has(oldSelf.loadBalancing)
+                || !has(self.loadBalancing))
           status:
             description: DNSPolicyStatus defines the observed state of DNSPolicy
             properties:

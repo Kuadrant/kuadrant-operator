@@ -478,7 +478,7 @@ var _ = Describe("Target status reconciler", func() {
 
 		// policyFactory builds a standards DNSPolicy object that targets the test gateway by default, with the given mutate functions applied
 		policyFactory := func(mutateFns ...func(policy *v1alpha1.DNSPolicy)) *v1alpha1.DNSPolicy {
-			policy := v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).WithTargetGateway(TestGatewayName).WithRoutingStrategy(v1alpha1.SimpleRoutingStrategy)
+			policy := v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).WithTargetGateway(TestGatewayName)
 			for _, mutateFn := range mutateFns {
 				mutateFn(policy)
 			}

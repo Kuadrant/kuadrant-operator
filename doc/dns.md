@@ -16,7 +16,6 @@ The needed dns names are gathered from the listener definitions and the IPAdress
 The `DNSPolicy` spec includes the following parts:
 
 * A reference to an existing Gateway API resource (`spec.targetRef`)
-* DNS Routing Strategy (`spec.routingStrategy`)
 * LoadBalancing specification (`spec.loadBalancing`)
 * HealthCheck specification (`spec.healthCheck`)
 
@@ -41,33 +40,15 @@ spec:
   providerRefs:
    - name: my-aws-credentials
  
-  # (optional) routing strategy to use when creating DNS records, defaults to `loadbalanced`
-  # determines what DNS records are created in the DNS provider
-  # check out Kuadrant RFC 0005 https://github.com/Kuadrant/architecture/blob/main/rfcs/0005-single-cluster-dnspolicy.md to learn more about the Routing Strategy field
-  # One-of: simple, loadbalanced.
-  routingStrategy: loadbalanced
-
   # (optional) loadbalancing specification
-  # use it for providing the specification of how dns will be configured in order to provide balancing of load across multiple clusters when using the `loadbalanced` routing strategy
-  # Primary use of this is for multi cluster deployments
-  # check out Kuadrant RFC 0003 https://github.com/Kuadrant/architecture/blob/main/rfcs/0003-dns-policy.md to learn more about the options that can be used in this field
+  # use it for providing the specification of how dns will be configured in order to provide balancing of load across multiple clusters
   loadBalancing:
-    # (optional) weighted specification
-    # use it to control the weight value applied to records
-    weighted:
-      # use it to change the weight of a record based on labels applied to the target meta resource i.e. Gateway in a single cluster context or ManagedCluster in multi cluster with OCM
-      custom:
-        - weight: 200
-          selector:
-            matchLabels:
-              kuadrant.io/lb-attribute-custom-weight: AWS
-      # (optional) weight value that will be applied to weighted dns records by default. Integer greater than 0 and no larger than the maximum value accepted by the target dns provider, defaults to `120` 
-      defaultWeight: 100
-    # (optional) geo specification
-    # use it to control the geo value applied to records 
-    geo:
-      # (optional) default geo to be applied to records 
-      defaultGeo: IE
+    # default geo to be applied to records
+    defaultGeo: true
+    # weighted specification
+    weight: 100
+    # 
+    geo: IE
 
   # (optional) health check specification
   # health check probes with the following specification will be created for each DNS target

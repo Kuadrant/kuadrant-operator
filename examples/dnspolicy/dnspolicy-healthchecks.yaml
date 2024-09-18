@@ -10,12 +10,10 @@ spec:
     kind: Gateway
   providerRefs:
     - name: aws-credentials
-  routingStrategy: loadbalanced
   loadBalancing:
-    weighted:
-      defaultWeight: 120
-    geo:
-      defaultGeo: EU
+    weight: 120
+    geo: EU
+    defaultGeo: true
   healthCheck:
     endpoint: /healthz
     port: 1111111

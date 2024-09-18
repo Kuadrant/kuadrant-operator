@@ -20,13 +20,12 @@
 
 ## DNSPolicySpec
 
-| **Field**         | **Type**                                                                                                                          |      **Required**      | **Description**                                                           |
-|-------------------|-----------------------------------------------------------------------------------------------------------------------------------|:----------------------:|---------------------------------------------------------------------------|
-| `targetRef`       | [Gateway API LocalPolicyTargetReference](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1alpha2.LocalPolicyTargetReference)   |          Yes           | Reference to a Kubernetes resource that the policy attaches to            |
-| `healthCheck`     | [HealthCheckSpec](#healthcheckspec)                                                                                               |           No           | HealthCheck spec                                                          |
-| `loadBalancing`   | [LoadBalancingSpec](#loadbalancingspec)                                                                                           | Yes(loadbalanced only) | LoadBalancing Spec, required when routingStrategy is "loadbalanced"       |
-| `routingStrategy` | String (immutable)                                                                                                                |          Yes           | **Immutable!** Routing Strategy to use, one of "simple" or "loadbalanced" |
-| `providerRefs` | [ProviderRefs](#providerrefs)                                                                                                         |          Yes           | array of references to providers. (currently limited to max 1) |
+| **Field**        | **Type**                                                                                                                          |     **Required**      | **Description**                                            |
+|------------------|-----------------------------------------------------------------------------------------------------------------------------------|:---------------------:|------------------------------------------------------------|
+| `targetRef`      | [Gateway API LocalPolicyTargetReference](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1alpha2.LocalPolicyTargetReference)   |          Yes          | Reference to a Kubernetes resource that the policy attaches to |
+| `healthCheck`    | [HealthCheckSpec](#healthcheckspec)                                                                                               |          No           | HealthCheck spec                                           |
+| `loadBalancing`  | [LoadBalancingSpec](#loadbalancingspec)                                                                                           | No | LoadBalancing Spec       |
+| `providerRefs`   | [ProviderRefs](#providerrefs)                                                                                                         |          Yes          | array of references to providers. (currently limited to max 1) |
 
 ## ProviderRefs
 
@@ -52,30 +51,11 @@
 
 ## LoadBalancingSpec
 
-| **Field**  | **Type**                                        | **Required**  | **Description**         |
-|------------|-------------------------------------------------|:-------------:|-------------------------|
-| `weighted` | [LoadBalancingWeighted](#loadbalancingweighted) |      Yes      | Weighted routing spec   |
-| `geo`      | [LoadBalancingGeo](#loadbalancinggeo)           |      Yes      | Geo routing spec        |
-
-## LoadBalancingWeighted
-
-| **Field**       | **Type**                        | **Required** | **Description**                                                       |
-|-----------------|---------------------------------|:------------:|-----------------------------------------------------------------------|
-| `defaultWeight` | Number                          |     Yes      | Default weight to apply to created records                            |
-| `custom`        | [][CustomWeight](#customweight) |      No      | Custom weights to manipulate records weights based on label selectors |
-
-## CustomWeight
-
-| **Field**  | **Type**             | **Description**                                                          |
-|------------|----------------------|--------------------------------------------------------------------------|
-| `selector` | metav1.LabelSelector | Label Selector to specify resources that should have this weight applied |
-| `weight`   | Number               | Weight value to apply for matching resources                             |
-
-## LoadBalancingGeo
-
-| **Field**       | **Type**                        | **Required** | **Description**                 |
-|-----------------|---------------------------------|:------------:|---------------------------------|
-| `defaultGeo` | String                          |     Yes      | Default geo to apply to records |
+| **Field**    | **Type** | **Required** | **Description**                                          |
+|--------------|----------|:------------:|----------------------------------------------------------|
+| `defaultGeo` | Boolean  |     Yes      | Specifies if this is the default geo                     |
+| `geo`        | String   |     Yes      | Geo value to apply to geo endpoints                      |
+| `weight`     | Number   |      No      | Weight value to apply to weighted endpoints default: 120 |
 
 ## DNSPolicyStatus
 

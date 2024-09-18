@@ -292,7 +292,6 @@ metadata:
   name: simple-dnspolicy
   namespace: kuadrant-system
 spec:
-  routingStrategy: simple
   targetRef:
     name: api-gateway
     group: gateway.networking.k8s.io

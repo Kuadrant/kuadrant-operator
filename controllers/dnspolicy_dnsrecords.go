@@ -141,9 +141,7 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *multicluster.GatewayWrap
 		return nil, fmt.Errorf("failed to create multi cluster gateway target for listener %s : %w", targetListener.Name, err)
 	}
 
-	if err = r.dnsHelper.setEndpoints(mcgTarget, dnsRecord, targetListener, dnsPolicy.Spec.RoutingStrategy); err != nil {
-		return nil, fmt.Errorf("failed to add dns record dnsTargets %w %v", err, mcgTarget)
-	}
+	r.dnsHelper.setEndpoints(mcgTarget, dnsRecord, targetListener, dnsPolicy.Spec.LoadBalancing)
 
 	return dnsRecord, nil
 }

@@ -62,7 +62,7 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/ma
 helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.1.0 -n envoy-gateway-system --create-namespace
 ```
 
-Enable *EnvoyPatchPolicy* feature:
+Kuadrant relies on the Envoy Gateway patch policy feature to function correctly - enable the *EnvoyPatchPolicy* feature like so:
 
 ```bash
 TMP=$(mktemp -d)

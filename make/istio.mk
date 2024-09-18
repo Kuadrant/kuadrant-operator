@@ -39,7 +39,7 @@ istioctl-uninstall: istioctl ## Uninstall istio.
 istioctl-verify-install: istioctl ## Verify istio installation.
 	$(ISTIOCTL) verify-install -i $(ISTIO_NAMESPACE)
 
-SAIL_VERSION = 0.1.0-rc.1
+SAIL_VERSION = 0.1.0
 .PHONY: sail-install
 sail-install: helm
 	$(HELM) install sail-operator \

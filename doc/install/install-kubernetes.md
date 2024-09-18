@@ -72,7 +72,7 @@ kubectl create configmap -n envoy-gateway-system envoy-gateway-config --from-fil
 kubectl rollout restart deployment envoy-gateway -n envoy-gateway-system
 ```
 
-Wait for Envoy Gateway to become available::
+Wait for Envoy Gateway to become available:
 
 ```bash
 kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available

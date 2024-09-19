@@ -283,6 +283,42 @@ spec:
           - update
           - watch
         - apiGroups:
+          - gateway.envoyproxy.io
+          resources:
+          - envoyextensionpolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - gateway.envoyproxy.io
+          resources:
+          - envoypatchpolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
+          - gateway.envoyproxy.io
+          resources:
+          - securitypolicies
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
+        - apiGroups:
           - gateway.networking.k8s.io
           resources:
           - gatewayclasses
@@ -333,6 +369,18 @@ spec:
           - get
           - patch
           - update
+        - apiGroups:
+          - gateway.networking.k8s.io
+          resources:
+          - referencegrants
+          verbs:
+          - create
+          - delete
+          - get
+          - list
+          - patch
+          - update
+          - watch
         - apiGroups:
           - install.istio.io
           resources:

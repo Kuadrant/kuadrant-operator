@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/external-dns/endpoint"
 
@@ -29,6 +30,7 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	kuadrantdnsbuilder "github.com/kuadrant/dns-operator/pkg/builder"
+
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -50,6 +52,8 @@ const (
 	IPAddressTwo         = "172.0.0.2"
 	HTTPRouteName        = "toystore-route"
 )
+
+var GatewayClassName string
 
 func HostWildcard(domain string) string {
 	return fmt.Sprintf("*.%s", domain)
@@ -76,7 +80,7 @@ func BuildBasicGateway(gwName, ns string, mutateFns ...func(*gatewayapiv1.Gatewa
 			Annotations: map[string]string{"networking.istio.io/service-type": string(corev1.ServiceTypeClusterIP)},
 		},
 		Spec: gatewayapiv1.GatewaySpec{
-			GatewayClassName: "istio",
+			GatewayClassName: gatewayapiv1.ObjectName(GatewayClassName),
 			Listeners: []gatewayapiv1.Listener{
 				{
 					Name:     "default",
@@ -634,4 +638,44 @@ func KuadrantIsReady(ctx context.Context, cl client.Client, key client.ObjectKey
 		g.Expect(err).To(Succeed())
 		g.Expect(meta.IsStatusConditionTrue(kuadrantCR.Status.Conditions, "Ready")).To(BeTrue())
 	}
+}
+
+func BuildBasicAuthScheme() *kuadrantv1beta2.AuthSchemeSpec {
+	return &kuadrantv1beta2.AuthSchemeSpec{
+		Authentication: map[string]kuadrantv1beta2.AuthenticationSpec{
+			"apiKey": {
+				AuthenticationSpec: authorinoapi.AuthenticationSpec{
+					AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+						ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+							Selector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app": "toystore",
+								},
+							},
+						},
+					},
+					Credentials: authorinoapi.Credentials{
+						AuthorizationHeader: &authorinoapi.Prefixed{
+							Prefix: "APIKEY",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func IsRLPAcceptedAndEnforced(g Gomega, ctx context.Context, cl client.Client, policyKey client.ObjectKey) {
+	existingPolicy := &kuadrantv1beta2.RateLimitPolicy{}
+	g.Expect(cl.Get(ctx, policyKey, existingPolicy)).To(Succeed())
+
+	acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+	g.Expect(acceptedCond).ToNot(BeNil())
+	g.Expect(acceptedCond.Status).To(Equal(metav1.ConditionTrue))
+	g.Expect(acceptedCond.Reason).To(Equal(string(gatewayapiv1alpha2.PolicyReasonAccepted)))
+
+	enforcedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(kuadrant.PolicyConditionEnforced))
+	g.Expect(enforcedCond).ToNot(BeNil())
+	g.Expect(enforcedCond.Status).To(Equal(metav1.ConditionTrue))
+	g.Expect(enforcedCond.Reason).To(Equal(string(kuadrant.PolicyReasonEnforced)))
 }

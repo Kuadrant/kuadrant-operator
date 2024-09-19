@@ -31,7 +31,11 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 curl -sL https://github.com/operator-framework/operator-lifecycle-manager/releases/download/v0.28.0/install.sh | bash -s v0.28.0
 ```
 
-### Install Istio as a Gateway API provider
+### (Optional) Install Istio as a Gateway API provider
+
+!!! note
+
+    Skip this step if planing to use [Envoy Gateway](https://gateway.envoyproxy.io/) as Gateway API provider
 
 !!! note
 
@@ -42,6 +46,36 @@ curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.21.4 sh -
 ./istio-1.21.4/bin/istioctl install --set profile=minimal
 ./istio-1.21.4/bin/istioctl operator init
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/config/dependencies/istio/istio-operator.yaml
+```
+
+### (Optional) Install Envoy Gateway as a Gateway API provider
+
+!!! note
+
+    Skip this step if planing to use [Istio](https://istio.io/) as Gateway API provider
+
+!!! note
+
+    There are several ways to install Envoy Gateway (via `egctl`, Helm chart or Kubernetes yaml) - this is just an example for starting from a bare Kubernetes cluster.
+
+```bash
+helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.1.0 -n envoy-gateway-system --create-namespace
+```
+
+Kuadrant relies on the Envoy Gateway patch policy feature to function correctly - enable the *EnvoyPatchPolicy* feature like so:
+
+```bash
+TMP=$(mktemp -d)
+kubectl get configmap -n envoy-gateway-system envoy-gateway-config -o jsonpath='{.data.envoy-gateway\.yaml}' > ${TMP}/envoy-gateway.yaml
+yq e '.extensionApis.enableEnvoyPatchPolicy = true' -i ${TMP}/envoy-gateway.yaml
+kubectl create configmap -n envoy-gateway-system envoy-gateway-config --from-file=envoy-gateway.yaml=${TMP}/envoy-gateway.yaml -o yaml --dry-run=client | kubectl replace -f -
+kubectl rollout restart deployment envoy-gateway -n envoy-gateway-system
+```
+
+Wait for Envoy Gateway to become available:
+
+```bash
+kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
 ```
 
 ### Install Kuadrant
@@ -106,7 +140,7 @@ Follow these steps to create the necessary secret:
     ```bash
     # Replace this with an accessible Redis cluster URL
     export REDIS_URL=redis://user:xxxxxx@some-redis.com:6379
-    
+
     kubectl -n kuadrant-system create secret generic redis-config \
       --from-literal=URL=$REDIS_URL
     ```
@@ -128,7 +162,7 @@ spec:
     storage:
       redis-cached:
         configSecretRef:
-          name: redis-config 
+          name: redis-config
 EOF
 ```
 

@@ -40,7 +40,7 @@ EOF
 ### ② Create the ingress gateways
 
 ```sh
-kubectl -n istio-system apply -f - <<EOF
+kubectl -n gateway-system apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -99,7 +99,7 @@ EOF
 Create a Kuadrant `RateLimitPolicy` to configure rate limiting:
 
 ```sh
-kubectl apply -n istio-system -f - <<EOF
+kubectl apply -n gateway-system -f - <<EOF
 apiVersion: kuadrant.io/v1beta2
 kind: RateLimitPolicy
 metadata:
@@ -163,9 +163,9 @@ metadata:
 spec:
   parentRefs:
   - name: external
-    namespace: istio-system
+    namespace: gateway-system
   - name: internal
-    namespace: istio-system
+    namespace: gateway-system
   hostnames:
   - "*.toystore.io"
   - "*.toystore.local"
@@ -181,8 +181,8 @@ EOF
 Expose the gateways, respectively at the port numbers `9081` and `9082` of the local host:
 
 ```sh
-kubectl port-forward -n istio-system service/external-istio 9081:80 >/dev/null 2>&1 &
-kubectl port-forward -n istio-system service/internal-istio 9082:80 >/dev/null 2>&1 &
+kubectl port-forward -n gateway-system service/external-istio 9081:80 >/dev/null 2>&1 &
+kubectl port-forward -n gateway-system service/internal-istio 9082:80 >/dev/null 2>&1 &
 ```
 
 Up to 5 successful (`200 OK`) requests every 10 seconds through the `external` ingress gateway (`*.io`), then `429 Too Many Requests`:

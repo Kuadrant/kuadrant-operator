@@ -1,7 +1,5 @@
 ##@ Deployment
 
-GATEWAYAPI_PROVIDER = istio
-
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	# Use server side apply, otherwise will hit into this issue https://medium.com/pareture/kubectl-install-crd-failed-annotations-too-long-2ebc91b40c7d
 	$(KUSTOMIZE) build config/crd | kubectl apply --server-side -f -
@@ -111,12 +109,20 @@ istio-env-setup: ## Install Istio, istio gateway and gatewayapi-env-setup
 	$(MAKE) deploy-istio-gateway
 	@echo
 	@echo "Now you can open local access to the istio gateway by doing:"
-	@echo "kubectl port-forward -n istio-system service/istio-ingressgateway-istio 9080:80 &"
+	@echo "kubectl port-forward -n gateway-system service/kuadrant-ingressgateway-istio 9080:80 &"
 	@echo "export GATEWAY_URL=localhost:9080"
 	@echo "after that, you can curl -H \"Host: myhost.com\" \$$GATEWAY_URL"
 	@echo "-- Linux only -- Ingress gateway is exported using loadbalancer service in port 80"
-	@echo "export INGRESS_HOST=\$$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.status.addresses[0].value}')"
-	@echo "export INGRESS_PORT=\$$(kubectl get gtw istio-ingressgateway -n istio-system -o jsonpath='{.spec.listeners[?(@.name==\"http\")].port}')"
+	@echo "export INGRESS_HOST=\$$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.status.addresses[0].value}')"
+	@echo "export INGRESS_PORT=\$$(kubectl get gtw kuadrant-ingressgateway -n gateway-system -o jsonpath='{.spec.listeners[?(@.name==\"http\")].port}')"
 	@echo "export GATEWAY_URL=\$$INGRESS_HOST:\$$INGRESS_PORT"
 	@echo "curl -H \"Host: myhost.com\" \$$GATEWAY_URL"
 	@echo
+
+##@ Development Environment: Kubernetes with GatewayAPI and EnvoyGateway installed
+
+.PHONY: envoygateway-env-setup
+envoygateway-env-setup: ## Install Envoy Gateway and one gateway
+	$(MAKE) k8s-env-setup
+	$(MAKE) envoy-gateway-install # envoy gateway k8s manifests include gateway API CRDs
+	$(MAKE) deploy-eg-gateway

@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	_struct "google.golang.org/protobuf/types/known/structpb"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
@@ -116,6 +117,15 @@ func (w *Config) ToStruct() (*_struct.Struct, error) {
 	return configStruct, nil
 }
 
+func (w *Config) ToJSON() (*apiextensionsv1.JSON, error) {
+	configJSON, err := json.Marshal(w)
+	if err != nil {
+		return nil, err
+	}
+
+	return &apiextensionsv1.JSON{Raw: configJSON}, nil
+}
+
 func ConfigFromStruct(structure *_struct.Struct) (*Config, error) {
 	if structure == nil {
 		return nil, errors.New("cannot desestructure config from nil")
@@ -128,6 +138,19 @@ func ConfigFromStruct(structure *_struct.Struct) (*Config, error) {
 	// Deserialize protobuf struct into Config struct
 	config := &Config{}
 	if err := json.Unmarshal(configJSON, config); err != nil {
+		return nil, err
+	}
+
+	return config, nil
+}
+
+func ConfigFromJSON(configJSON *apiextensionsv1.JSON) (*Config, error) {
+	if configJSON == nil {
+		return nil, errors.New("cannot desestructure config from nil")
+	}
+
+	config := &Config{}
+	if err := json.Unmarshal(configJSON.Raw, config); err != nil {
 		return nil, err
 	}
 

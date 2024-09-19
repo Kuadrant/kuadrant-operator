@@ -3,8 +3,10 @@
 package istio
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gotest.tools/assert"
 	istiomeshv1alpha1 "istio.io/api/mesh/v1alpha1"
@@ -41,7 +43,7 @@ func TestKuadrantAuthorizer_GetExtensionProvider(t *testing.T) {
 	provider := authorizer.GetExtensionProvider()
 
 	assert.Equal(t, provider.Name, ExtAuthorizerName)
-	assert.Equal(t, provider.GetEnvoyExtAuthzGrpc().Service, "authorino-authorino-authorization.default.svc.cluster.local")
+	assert.Equal(t, provider.GetEnvoyExtAuthzGrpc().Service, fmt.Sprintf("%s.default.svc.cluster.local", kuadrant.AuthorinoServiceName))
 }
 
 func TestHasKuadrantAuthorizer(t *testing.T) {

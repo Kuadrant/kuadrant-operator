@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 const (
@@ -52,7 +53,7 @@ func createKuadrantAuthorizer(namespace string) *istiomeshv1alpha1.MeshConfig_Ex
 	envoyExtAuthGRPC := &istiomeshv1alpha1.MeshConfig_ExtensionProvider_EnvoyExtAuthzGrpc{
 		EnvoyExtAuthzGrpc: &istiomeshv1alpha1.MeshConfig_ExtensionProvider_EnvoyExternalAuthorizationGrpcProvider{
 			Port:    50051,
-			Service: fmt.Sprintf("authorino-authorino-authorization.%s.svc.cluster.local", namespace),
+			Service: fmt.Sprintf("%s.%s.svc.cluster.local", kuadrant.AuthorinoServiceName, namespace),
 		},
 	}
 	return &istiomeshv1alpha1.MeshConfig_ExtensionProvider{

@@ -15,7 +15,10 @@ endif
 
 # istioctl tool
 ISTIOCTL=$(shell pwd)/bin/istioctl
-ISTIOVERSION = 1.20.0
+# OSSM 2.6 is based on Istio 1.20.8
+# https://github.com/maistra/istio/blob/maistra-2.6/go.mod#L116-L117
+# https://github.com/maistra/istio/pull/1039
+ISTIOVERSION = 1.20.8
 $(ISTIOCTL):
 	mkdir -p $(shell pwd)/bin
 	$(eval TMP := $(shell mktemp -d))
@@ -28,7 +31,7 @@ istioctl: $(ISTIOCTL) ## Download istioctl locally if necessary.
 
 .PHONY: istioctl-install
 istioctl-install: istioctl ## Install istio.
-	$(ISTIOCTL) operator init
+	$(ISTIOCTL) operator init --operatorNamespace $(ISTIO_NAMESPACE) --watchedNamespaces $(ISTIO_NAMESPACE)
 	kubectl apply -f $(ISTIO_INSTALL_DIR)/istio-operator.yaml
 
 .PHONY: istioctl-uninstall
@@ -42,7 +45,7 @@ istioctl-verify-install: istioctl ## Verify istio installation.
 .PHONY: sail-install
 sail-install: kustomize
 	$(KUSTOMIZE) build $(ISTIO_INSTALL_DIR)/sail | kubectl apply -f -
-	kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
+	kubectl -n $(ISTIO_NAMESPACE) wait --for=condition=Available deployment istio-operator --timeout=300s
 	kubectl apply -f $(ISTIO_INSTALL_DIR)/sail/istio.yaml
 
 .PHONY: sail-uninstall

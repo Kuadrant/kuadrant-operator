@@ -154,21 +154,21 @@ func FilterValidSubdomains(domains, subdomains []gatewayapiv1.Hostname) []gatewa
 }
 
 func IsGatewayAPIInstalled(restMapper meta.RESTMapper) (bool, error) {
-	return isCRDInstalled(restMapper, gatewayapiv1.GroupName, "HTTPRoute", gatewayapiv1.GroupVersion.Version)
+	return IsCRDInstalled(restMapper, gatewayapiv1.GroupName, "HTTPRoute", gatewayapiv1.GroupVersion.Version)
 }
 
 func IsCertManagerInstalled(restMapper meta.RESTMapper, logger logr.Logger) (bool, error) {
-	if ok, err := isCRDInstalled(restMapper, certmanager.GroupName, certmanv1.CertificateKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
+	if ok, err := IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.CertificateKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
 		logger.V(1).Error(err, "CertManager CRD was not installed", "group", certmanager.GroupName, "kind", certmanv1.CertificateKind, "version", certmanv1.SchemeGroupVersion.Version)
 		return false, err
 	}
 
-	if ok, err := isCRDInstalled(restMapper, certmanager.GroupName, certmanv1.IssuerKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
+	if ok, err := IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.IssuerKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
 		logger.V(1).Error(err, "CertManager CRD was not installed", "group", certmanager.GroupName, "kind", certmanv1.IssuerKind, "version", certmanv1.SchemeGroupVersion.Version)
 		return false, err
 	}
 
-	if ok, err := isCRDInstalled(restMapper, certmanager.GroupName, certmanv1.ClusterIssuerKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
+	if ok, err := IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.ClusterIssuerKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
 		logger.V(1).Error(err, "CertManager CRD was not installed", "group", certmanager.GroupName, "kind", certmanv1.ClusterIssuerKind, "version", certmanv1.SchemeGroupVersion.Version)
 		return false, err
 	}
@@ -176,7 +176,7 @@ func IsCertManagerInstalled(restMapper meta.RESTMapper, logger logr.Logger) (boo
 	return true, nil
 }
 
-func isCRDInstalled(restMapper meta.RESTMapper, group, kind, version string) (bool, error) {
+func IsCRDInstalled(restMapper meta.RESTMapper, group, kind, version string) (bool, error) {
 	_, err := restMapper.RESTMapping(
 		schema.GroupKind{Group: group, Kind: kind},
 		version,

@@ -1,0 +1,7 @@
+---
+# Adds namespace to all resources.
+namespace: gateway-system
+resources:
+- namespace.yaml
+- gateway-class.yaml
+- gateway.yaml

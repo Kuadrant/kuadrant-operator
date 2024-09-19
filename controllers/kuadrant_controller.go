@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 
 	"github.com/go-logr/logr"
+	sailv1alpha1 "github.com/istio-ecosystem/sail-operator/api/v1alpha1"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
@@ -29,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/env"
-	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -338,7 +338,7 @@ func (r *KuadrantReconciler) getIstioConfigObjects(ctx context.Context) ([]istio
 		configsToUpdate = append(configsToUpdate, istio.NewOperatorWrapper(iop))
 	} else if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
 		// IstioOperator not existing or not CRD not found, so check for Istio CR instead
-		ist := &istiov1alpha1.Istio{}
+		ist := &sailv1alpha1.Istio{}
 		istKey := client.ObjectKey{Name: istioCRName}
 		if err := r.GetResource(ctx, istKey, ist); err != nil {
 			logger.V(1).Info("failed to get istio object", "key", istKey, "err", err)

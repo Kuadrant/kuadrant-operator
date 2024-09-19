@@ -2,6 +2,12 @@
 
 ## Process
 
+
+### Regular Minor Release
+Before releasing a new minor version of the Kuadrant Operator each dependency (see below) should also have a minor release if it has changes since the last release.
+
+For each component, compare the git commit on the latest release against main if it has changed, beyond just version bumps, follow the release process for that dependency (linked below) before doing a release of Kuadrant-Operator. You will need to gather the new released versions as you go to use with the release of the kuadrant-operator.
+
 To release a version _“v0.W.Z”_ of Kuadrant Operator in GitHub and Quay.io, follow these steps:
 
 1. Kuadrant dependencies need to be released first:

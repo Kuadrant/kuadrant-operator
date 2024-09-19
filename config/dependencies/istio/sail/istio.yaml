@@ -3,8 +3,8 @@ kind: Istio
 metadata:
   name: default
 spec:
-  # Supported values v1.22.4|v1.23.0
-  version: v1.22.4
+  # Supported values v1.23.0
+  version: v1.23.0
   namespace: istio-system
   # Disable autoscaling to reduce dev resources
   values:

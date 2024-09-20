@@ -29,7 +29,7 @@ import (
 
 var (
 	ConfigMapGroupKind = schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}
-	operatorNamespace  = env.GetString("OPERATOR_NAMESPACE", "")
+	operatorNamespace  = env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
 )
 
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch

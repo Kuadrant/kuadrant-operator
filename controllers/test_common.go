@@ -34,6 +34,7 @@ import (
 	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	istioapis "istio.io/istio/operator/pkg/apis"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
@@ -256,9 +257,14 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	Expect(err).NotTo(HaveOccurred())
 
+	dClient, err := dynamic.NewForConfig(mgr.GetConfig())
+	Expect(err).NotTo(HaveOccurred())
+
+	stateOfTheWorld := NewPolicyMachineryController(mgr, dClient, log.Log)
+
 	go func() {
 		defer GinkgoRecover()
-		err = mgr.Start(ctrl.SetupSignalHandler())
+		err = stateOfTheWorld.Start(ctrl.SetupSignalHandler())
 		Expect(err).ToNot(HaveOccurred())
 	}()
 }

@@ -10,17 +10,21 @@ import (
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
+	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
+	"k8s.io/utils/ptr"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -52,6 +56,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta2.RateLimitPolicy{}, kuadrantv1beta2.RateLimitPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("topology configmap watcher", controller.Watch(&corev1.ConfigMap{}, controller.ConfigMapsResource, operatorNamespace, controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)))),
 		controller.WithRunnable("limitador watcher", controller.Watch(&limitadorv1alpha1.Limitador{}, kuadrantv1beta1.LimitadorResource, metav1.NamespaceAll)),
+		controller.WithRunnable("authorino watcher", controller.Watch(&authorinov1beta1.Authorino{}, kuadrantv1beta1.AuthorinoResource, metav1.NamespaceAll)),
 		controller.WithPolicyKinds(
 			kuadrantv1alpha1.DNSPolicyKind,
 			kuadrantv1alpha1.TLSPolicyKind,
@@ -62,10 +67,12 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			kuadrantv1beta1.KuadrantKind,
 			ConfigMapGroupKind,
 			kuadrantv1beta1.LimitadorKind,
+			kuadrantv1beta1.AuthorinoKind,
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
 			kuadrantv1beta1.LinkKuadrantToLimitador,
+			kuadrantv1beta1.LinkKuadrantToAuthorino,
 		),
 		controller.WithReconcile(buildReconciler(client)),
 	}
@@ -139,13 +146,120 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 }
 
 func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
+	authorinoCrSubscription := &controller.Subscription{
+		ReconcileFunc: NewAuthorinoCrReconciler(client).Reconcile,
+		Events: []controller.ResourceEventMatcher{
+			{Kind: ptr.To(kuadrantv1beta1.KuadrantKind), EventType: ptr.To(controller.CreateEvent)},
+			{Kind: ptr.To(kuadrantv1beta1.AuthorinoKind), EventType: ptr.To(controller.DeleteEvent)},
+		},
+	}
 	reconciler := &controller.Workflow{
 		Precondition: NewEventLogger().Log,
 		Tasks: []controller.ReconcileFunc{
 			NewTopologyFileReconciler(client, operatorNamespace).Reconcile,
+			authorinoCrSubscription.Reconcile,
 		},
 	}
 	return reconciler.Run
+}
+
+type AuthorinoCrReconciler struct {
+	Client *dynamic.DynamicClient
+}
+
+func NewAuthorinoCrReconciler(client *dynamic.DynamicClient) *AuthorinoCrReconciler {
+	return &AuthorinoCrReconciler{Client: client}
+}
+
+func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, events []controller.ResourceEvent, topology *machinery.Topology, _ error) {
+	logger := controller.LoggerFromContext(ctx).WithName("AuthorinoCrReconciler")
+	logger.Info("Reconciling Authorino Cr")
+
+	kobj := &kuadrantv1beta1.Kuadrant{}
+	for _, event := range events {
+		if event.Kind == kuadrantv1beta1.KuadrantKind && event.EventType == controller.CreateEvent {
+			kobjs := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (*kuadrantv1beta1.Kuadrant, bool) {
+				if item.GetName() == event.NewObject.GetName() && item.GetNamespace() == event.NewObject.GetNamespace() && item.GroupVersionKind().Kind == event.NewObject.GetObjectKind().GroupVersionKind().Kind {
+					return item.(*kuadrantv1beta1.Kuadrant), true
+				}
+				return nil, false
+			})
+			if len(kobjs) != 1 {
+				logger.Error(fmt.Errorf("muiltply kuadrant CRs found"), "unexpected behaviour may happen")
+			}
+			kobj = kobjs[0]
+			break
+		} else if event.Kind == kuadrantv1beta1.AuthorinoKind && event.EventType == controller.DeleteEvent {
+			kobjs := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (*kuadrantv1beta1.Kuadrant, bool) {
+				if item.GetNamespace() == event.NewObject.GetNamespace() && item.GroupVersionKind().Kind == kuadrantv1beta1.KuadrantKind.Kind {
+					return item.(*kuadrantv1beta1.Kuadrant), true
+				}
+				return nil, false
+			})
+
+			if len(kobjs) == 0 {
+				logger.Info("no possible kuadrant parent, wont create Authorino CR.")
+				return
+			}
+			if len(kobjs) != 1 {
+				logger.Error(fmt.Errorf("muiltply kuadrant CRs found"), "unexpected behaviour may happen")
+			}
+			kobj = kobjs[0]
+			if kobj.GetDeletionTimestamp() != nil {
+				logger.Info("kuadrant CR marked for deletion, wont create Authorino CR.")
+				return
+			}
+			break
+		}
+	}
+
+	authorino := &authorinov1beta1.Authorino{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Authorino",
+			APIVersion: "operator.authorino.kuadrant.io/v1beta1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "authorino",
+			Namespace: kobj.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         kobj.GroupVersionKind().GroupVersion().String(),
+					Kind:               kobj.GroupVersionKind().Kind,
+					Name:               kobj.Name,
+					UID:                kobj.UID,
+					BlockOwnerDeletion: ptr.To(true),
+					Controller:         ptr.To(true),
+				},
+			},
+		},
+		Spec: authorinov1beta1.AuthorinoSpec{
+			ClusterWide:            true,
+			SupersedingHostSubsets: true,
+			Listener: authorinov1beta1.Listener{
+				Tls: authorinov1beta1.Tls{
+					Enabled: ptr.To(false),
+				},
+			},
+			OIDCServer: authorinov1beta1.OIDCServer{
+				Tls: authorinov1beta1.Tls{
+					Enabled: ptr.To(false),
+				},
+			},
+		},
+	}
+
+	unstructuredAuthorino, err := controller.Destruct(authorino)
+	if err != nil {
+		logger.Error(err, "failed to destruct authorino")
+	}
+	_, err = r.Client.Resource(kuadrantv1beta1.AuthorinoResource).Namespace(authorino.Namespace).Create(ctx, unstructuredAuthorino, metav1.CreateOptions{})
+	if err != nil {
+		if errors.IsAlreadyExists(err) {
+			logger.Info("already created authorino Cr")
+		} else {
+			logger.Error(err, "failed to create authorino Cr")
+		}
+	}
 }
 
 type TopologyFileReconciler struct {

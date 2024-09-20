@@ -39,19 +39,15 @@ func LinkKuadrantToGatewayClasses(objs controller.Store) machinery.LinkFunc {
 }
 
 func LinkKuadrantToAuthorino(objs controller.Store) machinery.LinkFunc {
-	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantKind), controller.ObjectAs[*Kuadrant])
+	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantKind), controller.ObjectAs[machinery.Object])
 
 	return machinery.LinkFunc{
 		From: KuadrantKind,
-		To:   schema.GroupKind{Group: authorinov1beta1.GroupVersion.Group, Kind: "Authorino"},
+		To:   AuthorinoKind,
 		Func: func(child machinery.Object) []machinery.Object {
-			parents := make([]machinery.Object, len(kuadrants))
-			for _, parent := range kuadrants {
-				if parent.Namespace == child.GetNamespace() {
-					parents = append(parents, parent)
-				}
-			}
-			return parents
+			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
+				return kuadrant.GetNamespace() == child.GetNamespace()
+			})
 		},
 	}
 }

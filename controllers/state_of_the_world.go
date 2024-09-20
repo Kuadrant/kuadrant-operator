@@ -71,18 +71,15 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 }
 
 func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
-	authorinoCrSubscription := &controller.Subscription{
-		ReconcileFunc: NewAuthorinoCrReconciler(client).Reconcile,
-		Events: []controller.ResourceEventMatcher{
-			{Kind: ptr.To(kuadrantv1beta1.KuadrantKind), EventType: ptr.To(controller.CreateEvent)},
-			{Kind: ptr.To(kuadrantv1beta1.AuthorinoKind), EventType: ptr.To(controller.DeleteEvent)},
-		},
-	}
 	reconciler := &controller.Workflow{
-		Precondition: NewEventLogger().Log,
+		Precondition: (&controller.Workflow{
+			Precondition: NewEventLogger().Log,
+			Tasks: []controller.ReconcileFunc{
+				NewTopologyFileReconciler(client, operatorNamespace).Reconcile,
+			},
+		}).Run,
 		Tasks: []controller.ReconcileFunc{
-			NewTopologyFileReconciler(client, operatorNamespace).Reconcile,
-			authorinoCrSubscription.Reconcile,
+			NewAuthorinoCrReconciler(client).Subscription().Reconcile,
 		},
 	}
 	return reconciler.Run
@@ -94,6 +91,16 @@ type AuthorinoCrReconciler struct {
 
 func NewAuthorinoCrReconciler(client *dynamic.DynamicClient) *AuthorinoCrReconciler {
 	return &AuthorinoCrReconciler{Client: client}
+}
+
+func (r *AuthorinoCrReconciler) Subscription() *controller.Subscription {
+	return &controller.Subscription{
+		ReconcileFunc: r.Reconcile,
+		Events: []controller.ResourceEventMatcher{
+			{Kind: ptr.To(kuadrantv1beta1.KuadrantKind), EventType: ptr.To(controller.CreateEvent)},
+			{Kind: ptr.To(kuadrantv1beta1.AuthorinoKind), EventType: ptr.To(controller.DeleteEvent)},
+		},
+	}
 }
 
 func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, events []controller.ResourceEvent, topology *machinery.Topology, _ error) {
@@ -116,7 +123,7 @@ func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, events []controll
 			break
 		} else if event.Kind == kuadrantv1beta1.AuthorinoKind && event.EventType == controller.DeleteEvent {
 			kobjs := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (*kuadrantv1beta1.Kuadrant, bool) {
-				if item.GetNamespace() == event.NewObject.GetNamespace() && item.GroupVersionKind().Kind == kuadrantv1beta1.KuadrantKind.Kind {
+				if item.GetNamespace() == event.OldObject.GetNamespace() && item.GroupVersionKind().Kind == kuadrantv1beta1.KuadrantKind.Kind {
 					return item.(*kuadrantv1beta1.Kuadrant), true
 				}
 				return nil, false
@@ -171,6 +178,15 @@ func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, events []controll
 				},
 			},
 		},
+	}
+
+	authorinos := lo.Filter(topology.Objects().Items(), func(item machinery.Object, _ int) bool {
+		return item.GetNamespace() == authorino.GetNamespace() && item.GetName() == authorino.GetName() && item.GroupVersionKind().Kind == authorino.Kind
+	})
+
+	if len(authorinos) > 0 {
+		logger.V(1).Info("authorino CR already in topology, exiting reconcile")
+		return
 	}
 
 	unstructuredAuthorino, err := controller.Destruct(authorino)

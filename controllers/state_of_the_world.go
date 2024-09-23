@@ -191,8 +191,12 @@ func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, events []controll
 				}
 				return nil, false
 			})
-			if len(kobjs) != 1 {
-				logger.Error(fmt.Errorf("muiltply kuadrant CRs found"), "unexpected behaviour may happen")
+			if len(kobjs) > 1 {
+				logger.Error(fmt.Errorf("multiple Kuadrant resources found"), "cannot select root Kuadrant resource")
+			}
+			if len(kobjs) == 0 {
+				logger.Info("no kuadrant resources found")
+				return
 			}
 			kobj = kobjs[0]
 			break
@@ -314,8 +318,13 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 	})
 
 	if len(existingTopologyConfigMaps) == 0 {
-		_, err := r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Create(ctx, unstructuredCM, metav1.CreateOptions{})
+		_, err = r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Create(ctx, unstructuredCM, metav1.CreateOptions{})
 		if err != nil {
+			if errors.IsAlreadyExists(err) {
+				// This error can happen when the operator is starting, and the create event for the topology has not being processed.
+				logger.Info("already created topology configmap, must not be in topology yet")
+				return
+			}
 			logger.Error(err, "failed to write topology configmap")
 		}
 		return err
@@ -328,7 +337,7 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 	cmTopology := existingTopologyConfigMap.Object.(*corev1.ConfigMap)
 
 	if d, found := cmTopology.Data["topology"]; !found || strings.Compare(d, cm.Data["topology"]) != 0 {
-		_, err := r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Update(ctx, unstructuredCM, metav1.UpdateOptions{})
+		_, err = r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Update(ctx, unstructuredCM, metav1.UpdateOptions{})
 		if err != nil {
 			logger.Error(err, "failed to update topology configmap")
 		}

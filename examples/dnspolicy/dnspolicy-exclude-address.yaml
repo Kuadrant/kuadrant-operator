@@ -1,0 +1,20 @@
+apiVersion: kuadrant.io/v1alpha1
+kind: DNSPolicy
+metadata:
+  name: prod-web
+  namespace: ${DNSPOLICY_NAMESPACE}
+spec:
+  targetRef:
+    name: prod-web-istio
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  providerRefs:
+    - name: aws-credentials
+  loadBalancing:
+    weight: 120
+    geo: EU
+    defaultGeo: true
+  excludeAddresses:
+    - "10.89.0.0/16"
+    - "some.local.domain"
+    - "127.0.0.1"

@@ -68,6 +68,11 @@ type DNSPolicySpec struct {
 	// +kubebuilder:validation:MaxItems=1
 	// +kubebuilder:validation:MinItems=1
 	ProviderRefs []dnsv1alpha1.ProviderRef `json:"providerRefs"`
+
+	// ExcludeAddresses is a list of addresses (either hostnames, CIDR or IPAddresses) that DNSPolicy should not use as values in the configured DNS provider records. The default is to allow all addresses configured in the Gateway DNSPolicy is targeting
+	// +optional
+	// +kubebuilder:validation:MaxItems=20
+	ExcludeAddresses []string `json:"excludeAddresses,omitempty"`
 }
 
 type LoadBalancingSpec struct {
@@ -125,6 +130,9 @@ type DNSPolicyStatus struct {
 
 	// +optional
 	RecordConditions map[string][]metav1.Condition `json:"recordConditions,omitempty"`
+	// TotalRecords records the total number of individual DNSRecords managed by this DNSPolicy
+	// +optional
+	TotalRecords int32 `json:"totalRecords,omitempty"`
 }
 
 func (s *DNSPolicyStatus) GetConditions() []metav1.Condition {
@@ -249,6 +257,13 @@ func (p *DNSPolicy) WithProviderSecret(s corev1.Secret) *DNSPolicy {
 	return p.WithProviderRef(dnsv1alpha1.ProviderRef{
 		Name: s.Name,
 	})
+}
+
+//excludeAddresses
+
+func (p *DNSPolicy) WithExcludeAddresses(excluded []string) *DNSPolicy {
+	p.Spec.ExcludeAddresses = excluded
+	return p
 }
 
 //TargetRef

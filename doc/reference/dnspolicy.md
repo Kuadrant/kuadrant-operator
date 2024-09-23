@@ -2,6 +2,7 @@
 
 - [DNSPolicy](#DNSPolicy)
 - [DNSPolicySpec](#dnspolicyspec)
+    - [excludeAddresses]()
     - [ProviderRefs](#providerRefs)
     - [HealthCheckSpec](#healthcheckspec)
     - [LoadBalancingSpec](#loadbalancingspec)
@@ -40,9 +41,16 @@
 | `name`     | String   |     Yes      | Name of the secret in the same namespace that contains the provider credentials
 
 
+## ExcludeAddresses
+| **Field**          | **Type**   | **Required** | **Description**                                                                                                                 |
+|------------|----------|:------------:|----------------------------------------------------------------------------------------|
+| `excludeAddresses` | []String   |      No      | set of hostname, CIDR or IP Addresses to exclude from the DNS Provider
+
 ## HealthCheckSpec
 
-| **Field**          | **Type**   | **Required** | **Description**                                                                                           |
+| **Field**  | **Type** | **Required** | **Description**                                                                        |
+|------------|----------|:------------:|----------------------------------------------------------------------------------------|
+| `name`     | String   |     Yes      | Name of the secret in the same namespace that contains the provider credentials
 |--------------------|------------|:------------:|-----------------------------------------------------------------------------------------------------------|
 | `endpoint`         | String     |     Yes      | Endpoint is the path to append to the host to reach the expected health check                             | 
 | `port`             | Number     |     Yes      | Port to connect to the host on                                                                            | 

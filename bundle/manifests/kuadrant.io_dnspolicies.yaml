@@ -66,6 +66,15 @@ spec:
           spec:
             description: DNSPolicySpec defines the desired state of DNSPolicy
             properties:
+              excludeAddresses:
+                description: ExcludeAddresses is a list of addresses (either hostnames,
+                  CIDR or IPAddresses) that DNSPolicy should not use as values in
+                  the configured DNS provider records. The default is to allow all
+                  addresses configured in the Gateway DNSPolicy is targeting
+                items:
+                  type: string
+                maxItems: 20
+                type: array
               healthCheck:
                 description: |-
                   HealthCheckSpec configures health checks in the DNS provider.
@@ -511,6 +520,11 @@ spec:
                     type: object
                   type: array
                 type: object
+              totalRecords:
+                description: TotalRecords records the total number of individual DNSRecords
+                  managed by this DNSPolicy
+                format: int32
+                type: integer
             type: object
         type: object
     served: true

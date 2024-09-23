@@ -135,7 +135,7 @@ func (r *EnvoyGatewayWasmReconciler) desiredEnvoyExtensionPolicy(
 		return nil, err
 	}
 
-	if config == nil || len(config.RateLimitPolicies) == 0 {
+	if config == nil || len(config.Policies) == 0 {
 		logger.V(1).Info("config is empty. EnvoyExtensionPolicy will be deleted if it exists")
 		utils.TagObjectToDelete(envoyPolicy)
 		return envoyPolicy, nil

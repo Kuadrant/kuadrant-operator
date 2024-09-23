@@ -132,7 +132,7 @@ func (r *RateLimitingIstioWASMPluginReconciler) desiredRateLimitingWASMPlugin(ct
 		return nil, err
 	}
 
-	if pluginConfig == nil || len(pluginConfig.RateLimitPolicies) == 0 {
+	if pluginConfig == nil || len(pluginConfig.Policies) == 0 {
 		logger.V(1).Info("pluginConfig is empty. Wasmplugin will be deleted if it exists")
 		utils.TagObjectToDelete(wasmPlugin)
 		return wasmPlugin, nil

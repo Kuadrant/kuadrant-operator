@@ -49,8 +49,7 @@ type Selector struct {
 }
 
 type DataType struct {
-	// Precisely one of "static", "selector" must be set.
-	Value interface{} `json:,inline`
+	Value interface{}
 }
 
 func (d *DataType) UnmarshalJSON(data []byte) error {
@@ -73,6 +72,17 @@ func (d *DataType) UnmarshalJSON(data []byte) error {
 	}
 
 	return err
+}
+
+func (d *DataType) MarshalJSON() ([]byte, error) {
+	switch val := d.Value.(type) {
+	case *Static:
+		return json.Marshal(val)
+	case *Selector:
+		return json.Marshal(val)
+	default:
+		return nil, errors.New("DataType.Value has unknown type")
+	}
 }
 
 type PatternOperator kuadrantv1beta2.WhenConditionOperator
@@ -126,6 +136,14 @@ type Action struct {
 	Data []DataType `json:"data,omitempty"`
 }
 
+// +kubebuilder:validation:Enum:=ratelimit;auth
+type ExtensionType string
+
+const (
+	RateLimitExtensionType ExtensionType = "ratelimit"
+	AuthExtensionType      ExtensionType = "auth"
+)
+
 // +kubebuilder:validation:Enum:=deny;allow
 type FailureModeType string
 
@@ -135,13 +153,18 @@ const (
 )
 
 type Extension struct {
-	FailureMode FailureModeType `json:"failureMode"`
 	Endpoint    string          `json:"endpoint"`
+	FailureMode FailureModeType `json:"failureMode"`
+	Type        ExtensionType   `json:"type"`
+}
+
+type LimitadorExtension struct {
+	Endpoint string `json:"endpoint"`
 }
 
 type Config struct {
-	Extensions []Extension `json:"extensions"`
-	Policies   []Policy    `json:"policies"`
+	Extensions map[string]Extension `json:"extensions"`
+	Policies   []Policy             `json:"policies"`
 }
 
 func (w *Config) ToStruct() (*_struct.Struct, error) {

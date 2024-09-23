@@ -26,6 +26,7 @@ import (
 
 const (
 	LimitadorRateLimitIdentifierPrefix = "limit."
+	RateLimitPolicyExtensionName       = "limitador"
 )
 
 var (
@@ -56,7 +57,7 @@ func Rules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1.HTTPRoute) 
 		// 1 RLP limit <---> 1 WASM rule
 		limit := limits[limitName]
 		limitIdentifier := LimitNameToLimitadorIdentifier(rlpKey, limitName)
-		rule, err := ruleFromLimit(limitIdentifier, &limit, route)
+		rule, err := ruleFromLimit(rlp, limitIdentifier, &limit, route)
 		if err == nil {
 			rules = append(rules, rule)
 		}
@@ -84,7 +85,7 @@ func LimitNameToLimitadorIdentifier(rlpKey types.NamespacedName, uniqueLimitName
 	return identifier
 }
 
-func ruleFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPRoute) (Rule, error) {
+func ruleFromLimit(rlp *kuadrantv1beta2.RateLimitPolicy, limitIdentifier string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPRoute) (Rule, error) {
 	rule := Rule{}
 
 	conditions, err := conditionsFromLimit(limit, route)
@@ -95,7 +96,13 @@ func ruleFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit, route *
 	rule.Conditions = conditions
 
 	if data := dataFromLimit(limitIdentifier, limit); data != nil {
-		rule.Data = data
+		rule.Actions = []Action{
+			{
+				Scope:         LimitsNamespaceFromRLP(rlp),
+				ExtensionName: RateLimitPolicyExtensionName,
+				Data:          data,
+			},
+		}
 	}
 
 	return rule, nil
@@ -283,16 +290,28 @@ func patternExpresionFromWhen(when kuadrantv1beta2.WhenCondition) PatternExpress
 	}
 }
 
-func dataFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit) (data []DataItem) {
+func dataFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit) (data []DataType) {
 	if limit == nil {
 		return
 	}
 
 	// static key representing the limit
-	data = append(data, DataItem{Static: &StaticSpec{Key: limitIdentifier, Value: "1"}})
+	data = append(data,
+		DataType{
+			Value: &Static{
+				Static: StaticSpec{Key: limitIdentifier, Value: "1"},
+			},
+		},
+	)
 
 	for _, counter := range limit.Counters {
-		data = append(data, DataItem{Selector: &SelectorSpec{Selector: counter}})
+		data = append(data,
+			DataType{
+				Value: &Selector{
+					Selector: SelectorSpec{Selector: counter},
+				},
+			},
+		)
 	}
 
 	return data
@@ -337,7 +356,7 @@ func routeFromRLP(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rl
 	return route, nil
 }
 
-func wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*RateLimitPolicy, error) {
+func wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*Policy, error) {
 	route, err := routeFromRLP(ctx, t, rlp, gw)
 	if err != nil {
 		return nil, err
@@ -376,11 +395,9 @@ func wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyInde
 		return nil, nil
 	}
 
-	return &RateLimitPolicy{
+	return &Policy{
 		Name:      client.ObjectKeyFromObject(rlp).String(),
-		Domain:    LimitsNamespaceFromRLP(rlp),
 		Hostnames: utils.HostnamesToStrings(hostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
-		Service:   common.KuadrantRateLimitClusterName,
 		Rules:     rules,
 	}, nil
 }
@@ -402,8 +419,14 @@ func ConfigForGateway(
 	sort.Sort(kuadrantgatewayapi.PolicyByTargetRefKindAndCreationTimeStamp(rateLimitPolicies))
 
 	config := &Config{
-		FailureMode:       FailureModeDeny,
-		RateLimitPolicies: make([]RateLimitPolicy, 0),
+		Extensions: map[string]Extension{
+			RateLimitPolicyExtensionName: Extension{
+				Endpoint:    common.KuadrantRateLimitClusterName,
+				FailureMode: FailureModeAllow,
+				Type:        RateLimitExtensionType,
+			},
+		},
+		Policies: make([]Policy, 0),
 	}
 
 	for _, policy := range rateLimitPolicies {
@@ -418,7 +441,7 @@ func ConfigForGateway(
 			continue
 		}
 
-		config.RateLimitPolicies = append(config.RateLimitPolicies, *wasmRLP)
+		config.Policies = append(config.Policies, *wasmRLP)
 	}
 
 	return config, nil

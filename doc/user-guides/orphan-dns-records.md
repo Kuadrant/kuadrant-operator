@@ -91,4 +91,4 @@ kubectl get dnsrecord.kuadrant.io somerecord -n my-gateway-ns -o=jsonpath='{.sta
 
 ```
 
-We should also see our alert eventually stop triggering also.
+We should also see our alert eventually stop triggering.

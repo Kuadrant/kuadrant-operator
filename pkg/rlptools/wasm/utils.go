@@ -420,7 +420,7 @@ func ConfigForGateway(
 
 	config := &Config{
 		Extensions: map[string]Extension{
-			RateLimitPolicyExtensionName: Extension{
+			RateLimitPolicyExtensionName: {
 				Endpoint:    common.KuadrantRateLimitClusterName,
 				FailureMode: FailureModeAllow,
 				Type:        RateLimitExtensionType,

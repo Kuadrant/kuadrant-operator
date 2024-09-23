@@ -107,8 +107,6 @@ type Condition struct {
 	AllOf []PatternExpression `json:"allOf,omitempty"`
 }
 
-// Rule defines conditions that are evaluated using patter expressions.
-// The rule evaluates to true when all the pattern expressions are evaluated to true.
 type Rule struct {
 	// Top level conditions for the rule. At least one of the conditions must be met.
 	// Empty conditions evaluate to true, so actions will be invoked.

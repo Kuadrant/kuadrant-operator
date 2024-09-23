@@ -99,11 +99,19 @@ func TestRules(t *testing.T) {
 							},
 						},
 					},
-					Data: []DataItem{
+					Actions: []Action{
 						{
-							Static: &StaticSpec{
-								Key:   "limit.50rps__36e9aa4c",
-								Value: "1",
+							Scope:         "my-app/minimal",
+							ExtensionName: RateLimitPolicyExtensionName,
+							Data: []DataType{
+								{
+									Value: &Static{
+										Static: StaticSpec{
+											Key:   "limit.50rps__36e9aa4c",
+											Value: "1",
+										},
+									},
+								},
 							},
 						},
 					},
@@ -149,11 +157,19 @@ func TestRules(t *testing.T) {
 							},
 						},
 					},
-					Data: []DataItem{
+					Actions: []Action{
 						{
-							Static: &StaticSpec{
-								Key:   "limit.50rps_for_selected_hostnames__ac4044ab",
-								Value: "1",
+							Scope:         "my-app/my-rlp",
+							ExtensionName: RateLimitPolicyExtensionName,
+							Data: []DataType{
+								{
+									Value: &Static{
+										Static: StaticSpec{
+											Key:   "limit.50rps_for_selected_hostnames__ac4044ab",
+											Value: "1",
+										},
+									},
+								},
 							},
 						},
 					},
@@ -199,11 +215,19 @@ func TestRules(t *testing.T) {
 							},
 						},
 					},
-					Data: []DataItem{
+					Actions: []Action{
 						{
-							Static: &StaticSpec{
-								Key:   "limit.50rps_for_selected_route__db289136",
-								Value: "1",
+							Scope:         "my-app/my-rlp",
+							ExtensionName: RateLimitPolicyExtensionName,
+							Data: []DataType{
+								{
+									Value: &Static{
+										Static: StaticSpec{
+											Key:   "limit.50rps_for_selected_route__db289136",
+											Value: "1",
+										},
+									},
+								},
 							},
 						},
 					},
@@ -248,11 +272,19 @@ func TestRules(t *testing.T) {
 							},
 						},
 					},
-					Data: []DataItem{
+					Actions: []Action{
 						{
-							Static: &StaticSpec{
-								Key:   "limit.50rps_for_selected_path__38eb97a4",
-								Value: "1",
+							Scope:         "my-app/my-rlp",
+							ExtensionName: RateLimitPolicyExtensionName,
+							Data: []DataType{
+								{
+									Value: &Static{
+										Static: StaticSpec{
+											Key:   "limit.50rps_for_selected_path__38eb97a4",
+											Value: "1",
+										},
+									},
+								},
 							},
 						},
 					},
@@ -289,11 +321,19 @@ func TestRules(t *testing.T) {
 			expectedRules: []Rule{
 				{
 					Conditions: nil,
-					Data: []DataItem{
+					Actions: []Action{
 						{
-							Static: &StaticSpec{
-								Key:   "limit.50rps__783b9343",
-								Value: "1",
+							Scope:         "my-app/my-rlp",
+							ExtensionName: RateLimitPolicyExtensionName,
+							Data: []DataType{
+								{
+									Value: &Static{
+										Static: StaticSpec{
+											Key:   "limit.50rps__783b9343",
+											Value: "1",
+										},
+									},
+								},
 							},
 						},
 					},
@@ -312,16 +352,26 @@ func TestRules(t *testing.T) {
 			expectedRules: []Rule{
 				{
 					Conditions: nil,
-					Data: []DataItem{
+					Actions: []Action{
 						{
-							Static: &StaticSpec{
-								Key:   "limit.50rps_per_username__d681f6c3",
-								Value: "1",
-							},
-						},
-						{
-							Selector: &SelectorSpec{
-								Selector: "auth.identity.username",
+							Scope:         "my-app/my-rlp",
+							ExtensionName: RateLimitPolicyExtensionName,
+							Data: []DataType{
+								{
+									Value: &Static{
+										Static: StaticSpec{
+											Key:   "limit.50rps_per_username__d681f6c3",
+											Value: "1",
+										},
+									},
+								},
+								{
+									Value: &Selector{
+										Selector: SelectorSpec{
+											Selector: "auth.identity.username",
+										},
+									},
+								},
 							},
 						},
 					},
@@ -391,9 +441,20 @@ func TestRules(t *testing.T) {
 							},
 						},
 					},
-					Data: []DataItem{
+					Actions: []Action{
 						{
-							Static: &StaticSpec{Key: "limit.50rps__783b9343", Value: "1"},
+							Scope:         "my-app/my-rlp",
+							ExtensionName: RateLimitPolicyExtensionName,
+							Data: []DataType{
+								{
+									Value: &Static{
+										Static: StaticSpec{
+											Key:   "limit.50rps__783b9343",
+											Value: "1",
+										},
+									},
+								},
+							},
 						},
 					},
 				},

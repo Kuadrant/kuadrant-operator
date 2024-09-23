@@ -146,11 +146,17 @@ var _ = Describe("wasm controller", func() {
 			existingWASMConfig, err := wasm.ConfigFromJSON(ext.Spec.Wasm[0].Config)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
-				FailureMode: wasm.FailureModeDeny,
-				RateLimitPolicies: []wasm.RateLimitPolicy{
+				Extensions: map[string]wasm.Extension{
+					wasm.RateLimitPolicyExtensionName: {
+						Endpoint:    common.KuadrantRateLimitClusterName,
+						FailureMode: wasm.FailureModeAllow,
+						Type:        wasm.RateLimitExtensionType,
+					},
+				},
+				Policies: []wasm.Policy{
 					{
-						Name:   gwPolicyKey.String(),
-						Domain: wasm.LimitsNamespaceFromRLP(gwPolicy),
+						Name:      gwPolicyKey.String(),
+						Hostnames: []string{gwHost},
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{
@@ -169,18 +175,24 @@ var _ = Describe("wasm controller", func() {
 										},
 									},
 								},
-								Data: []wasm.DataItem{
+								Actions: []wasm.Action{
 									{
-										Static: &wasm.StaticSpec{
-											Key:   wasm.LimitNameToLimitadorIdentifier(gwPolicyKey, "l1"),
-											Value: "1",
+										Scope:         wasm.LimitsNamespaceFromRLP(gwPolicy),
+										ExtensionName: wasm.RateLimitPolicyExtensionName,
+										Data: []wasm.DataType{
+											{
+												Value: &wasm.Static{
+													Static: wasm.StaticSpec{
+														Key:   wasm.LimitNameToLimitadorIdentifier(gwPolicyKey, "l1"),
+														Value: "1",
+													},
+												},
+											},
 										},
 									},
 								},
 							},
 						},
-						Hostnames: []string{gwHost},
-						Service:   common.KuadrantRateLimitClusterName,
 					},
 				},
 			}))
@@ -293,11 +305,17 @@ var _ = Describe("wasm controller", func() {
 			existingWASMConfig, err := wasm.ConfigFromJSON(ext.Spec.Wasm[0].Config)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
-				FailureMode: wasm.FailureModeDeny,
-				RateLimitPolicies: []wasm.RateLimitPolicy{
+				Extensions: map[string]wasm.Extension{
+					wasm.RateLimitPolicyExtensionName: {
+						Endpoint:    common.KuadrantRateLimitClusterName,
+						FailureMode: wasm.FailureModeAllow,
+						Type:        wasm.RateLimitExtensionType,
+					},
+				},
+				Policies: []wasm.Policy{
 					{
-						Name:   routePolicyKey.String(),
-						Domain: wasm.LimitsNamespaceFromRLP(routePolicy),
+						Name:      routePolicyKey.String(),
+						Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{
@@ -316,18 +334,24 @@ var _ = Describe("wasm controller", func() {
 										},
 									},
 								},
-								Data: []wasm.DataItem{
+								Actions: []wasm.Action{
 									{
-										Static: &wasm.StaticSpec{
-											Key:   wasm.LimitNameToLimitadorIdentifier(routePolicyKey, "l1"),
-											Value: "1",
+										Scope:         wasm.LimitsNamespaceFromRLP(routePolicy),
+										ExtensionName: wasm.RateLimitPolicyExtensionName,
+										Data: []wasm.DataType{
+											{
+												Value: &wasm.Static{
+													Static: wasm.StaticSpec{
+														Key:   wasm.LimitNameToLimitadorIdentifier(routePolicyKey, "l1"),
+														Value: "1",
+													},
+												},
+											},
 										},
 									},
 								},
 							},
 						},
-						Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
-						Service:   common.KuadrantRateLimitClusterName,
 					},
 				},
 			}))

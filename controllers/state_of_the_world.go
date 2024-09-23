@@ -178,50 +178,41 @@ func (r *AuthorinoCrReconciler) Subscription() *controller.Subscription {
 	}
 }
 
-func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, events []controller.ResourceEvent, topology *machinery.Topology, _ error) {
+func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error) {
 	logger := controller.LoggerFromContext(ctx).WithName("AuthorinoCrReconciler")
-	logger.Info("Reconciling Authorino Cr")
+	logger.Info("reconciling authorino resource", "status", "started")
+	defer logger.Info("reconciling authorino resource", "status", "completed")
 
-	kobj := &kuadrantv1beta1.Kuadrant{}
-	for _, event := range events {
-		if event.Kind == kuadrantv1beta1.KuadrantKind && event.EventType == controller.CreateEvent {
-			kobjs := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (*kuadrantv1beta1.Kuadrant, bool) {
-				if item.GetName() == event.NewObject.GetName() && item.GetNamespace() == event.NewObject.GetNamespace() && item.GroupVersionKind().Kind == event.NewObject.GetObjectKind().GroupVersionKind().Kind {
-					return item.(*kuadrantv1beta1.Kuadrant), true
-				}
-				return nil, false
-			})
-			if len(kobjs) > 1 {
-				logger.Error(fmt.Errorf("multiple Kuadrant resources found"), "cannot select root Kuadrant resource")
-			}
-			if len(kobjs) == 0 {
-				logger.Info("no kuadrant resources found")
-				return
-			}
-			kobj = kobjs[0]
-			break
-		} else if event.Kind == kuadrantv1beta1.AuthorinoKind && event.EventType == controller.DeleteEvent {
-			kobjs := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (*kuadrantv1beta1.Kuadrant, bool) {
-				if item.GetNamespace() == event.OldObject.GetNamespace() && item.GroupVersionKind().Kind == kuadrantv1beta1.KuadrantKind.Kind {
-					return item.(*kuadrantv1beta1.Kuadrant), true
-				}
-				return nil, false
-			})
-
-			if len(kobjs) == 0 {
-				logger.Info("no possible kuadrant parent, wont create Authorino CR.")
-				return
-			}
-			if len(kobjs) != 1 {
-				logger.Error(fmt.Errorf("muiltply kuadrant CRs found"), "unexpected behaviour may happen")
-			}
-			kobj = kobjs[0]
-			if kobj.GetDeletionTimestamp() != nil {
-				logger.Info("kuadrant CR marked for deletion, wont create Authorino CR.")
-				return
-			}
-			break
+	kobjs := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (*kuadrantv1beta1.Kuadrant, bool) {
+		if item.GroupVersionKind().Kind == kuadrantv1beta1.KuadrantKind.Kind {
+			return item.(*kuadrantv1beta1.Kuadrant), true
 		}
+		return nil, false
+	})
+	if len(kobjs) == 0 {
+		logger.Info("no kuadrant resources found", "status", "skipping")
+		return
+	}
+	if len(kobjs) > 1 {
+		logger.Error(fmt.Errorf("multiple Kuadrant resources found"), "cannot select root Kuadrant resource", "status", "error")
+	}
+	kobj := kobjs[0]
+
+	if kobj.GetDeletionTimestamp() != nil {
+		logger.Info("root kuadrant marked for deletion", "status", "skipping")
+		return
+	}
+
+	aobjs := lo.FilterMap(topology.Objects().Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
+		if item.GroupVersionKind().Kind == kuadrantv1beta1.AuthorinoKind.Kind {
+			return item, true
+		}
+		return nil, false
+	})
+
+	if len(aobjs) > 0 {
+		logger.Info("authorino resource already exists, no need to create", "status", "skipping")
+		return
 	}
 
 	authorino := &authorinov1beta1.Authorino{
@@ -259,25 +250,17 @@ func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, events []controll
 		},
 	}
 
-	authorinos := lo.Filter(topology.Objects().Items(), func(item machinery.Object, _ int) bool {
-		return item.GetNamespace() == authorino.GetNamespace() && item.GetName() == authorino.GetName() && item.GroupVersionKind().Kind == authorino.Kind
-	})
-
-	if len(authorinos) > 0 {
-		logger.V(1).Info("authorino CR already in topology, exiting reconcile")
-		return
-	}
-
 	unstructuredAuthorino, err := controller.Destruct(authorino)
 	if err != nil {
-		logger.Error(err, "failed to destruct authorino")
+		logger.Error(err, "failed to destruct authorino", "status", "error")
 	}
+	logger.Info("creating authorino resource", "status", "processing")
 	_, err = r.Client.Resource(kuadrantv1beta1.AuthorinoResource).Namespace(authorino.Namespace).Create(ctx, unstructuredAuthorino, metav1.CreateOptions{})
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
-			logger.Info("already created authorino Cr")
+			logger.Info("already created authorino resource", "status", "acceptable")
 		} else {
-			logger.Error(err, "failed to create authorino Cr")
+			logger.Error(err, "failed to create authorino resource", "status", "error")
 		}
 	}
 }

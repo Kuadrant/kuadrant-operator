@@ -13,7 +13,7 @@ Orphan records can occur when a `DNSRecord` resource (a resource that is created
 
 ### How do you spot an orphan record(s) exist?
 
-There is an a prometheus based based alert that we have created that uses some metrics exposed from the DNS components to spot this situation. If you have installed the alerts for Kuadrant under the examples folder, you will see in the alerts tab an alert called `PossibleOrphanedDNSRecords`. When this is firing it means there are likely to be orphaned records in your provider.
+There is a prometheus based alert that uses some metrics exposed from the DNS components to spot this situation. If you have installed the alerts for Kuadrant under the examples folder, you will see in the alerts tab an alert called `PossibleOrphanedDNSRecords`. When this is firing it means there are likely to be orphaned records in your provider.
 
 ### How do you get rid of an orphan record?
 

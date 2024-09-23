@@ -1,6 +1,7 @@
 package wasm
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 
@@ -39,14 +40,39 @@ type StaticSpec struct {
 	Key   string `json:"key"`
 }
 
-// TODO implement one of constraint
-// Precisely one of "static", "selector" must be set.
-type DataItem struct {
-	// +optional
-	Static *StaticSpec `json:"static,omitempty"`
+type Static struct {
+	Static StaticSpec `json:"static"`
+}
 
-	// +optional
-	Selector *SelectorSpec `json:"selector,omitempty"`
+type Selector struct {
+	Selector SelectorSpec `json:"selector"`
+}
+
+type DataType struct {
+	// Precisely one of "static", "selector" must be set.
+	Value interface{} `json:,inline`
+}
+
+func (d *DataType) UnmarshalJSON(data []byte) error {
+	// Precisely one of "static", "selector" must be set.
+	types := []interface{}{
+		&Static{},
+		&Selector{},
+	}
+
+	var err error
+
+	for idx := range types {
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.DisallowUnknownFields() // Force errors
+		err = dec.Decode(types[idx])
+		if err == nil {
+			d.Value = types[idx]
+			return nil
+		}
+	}
+
+	return err
 }
 
 type PatternOperator kuadrantv1beta2.WhenConditionOperator
@@ -65,30 +91,39 @@ type PatternExpression struct {
 	Value string `json:"value"`
 }
 
-// Condition defines traffic matching rules
 type Condition struct {
-	// All the expressions defined must match to match this condition
+	// All the expressions defined must match to match this rule
 	// +optional
 	AllOf []PatternExpression `json:"allOf,omitempty"`
 }
 
-// Rule defines one rate limit configuration. When conditions are met,
-// it uses `data` section to generate one RLS descriptor.
+// Rule defines conditions that are evaluated using patter expressions.
+// The rule evaluates to true when all the pattern expressions are evaluated to true.
 type Rule struct {
+	// Top level conditions for the rule. At least one of the conditions must be met.
+	// Empty conditions evaluate to true, so actions will be invoked.
 	// +optional
 	Conditions []Condition `json:"conditions,omitempty"`
-	// +optional
-	Data []DataItem `json:"data,omitempty"`
+
+	// Actions defines which extensions will be invoked when any of the top level conditions match.
+	Actions []Action `json:"actions"`
 }
 
-type RateLimitPolicy struct {
+type Policy struct {
 	Name      string   `json:"name"`
-	Domain    string   `json:"domain"`
-	Service   string   `json:"service"`
 	Hostnames []string `json:"hostnames"`
 
+	// Rules includes top level conditions and actions to be invoked
 	// +optional
 	Rules []Rule `json:"rules,omitempty"`
+}
+
+type Action struct {
+	Scope         string `json:"scope"`
+	ExtensionName string `json:"extension"`
+
+	// +optional
+	Data []DataType `json:"data,omitempty"`
 }
 
 // +kubebuilder:validation:Enum:=deny;allow
@@ -99,9 +134,14 @@ const (
 	FailureModeAllow FailureModeType = "allow"
 )
 
+type Extension struct {
+	FailureMode FailureModeType `json:"failureMode"`
+	Endpoint    string          `json:"endpoint"`
+}
+
 type Config struct {
-	FailureMode       FailureModeType   `json:"failureMode"`
-	RateLimitPolicies []RateLimitPolicy `json:"rateLimitPolicies"`
+	Extensions []Extension `json:"extensions"`
+	Policies   []Policy    `json:"policies"`
 }
 
 func (w *Config) ToStruct() (*_struct.Struct, error) {

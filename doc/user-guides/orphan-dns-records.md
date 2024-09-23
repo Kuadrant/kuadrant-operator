@@ -17,7 +17,7 @@ There is a prometheus based alert that uses some metrics exposed from the DNS co
 
 ### How do you get rid of an orphan record?
 
-To remove an Orphan Record we must first identify the owner of that record that is no longer aware of the record. To do this we need an existing DNSRecord in another cluster.
+To remove an Orphan Record we must first identify the owner that is no longer aware of the record. To do this we need an existing DNSRecord in another cluster.
 
 Example: You have 2 clusters that each have a gateway and share a host `apps.example.com` and have setup a DNSPolicy for each gateway. On cluster 1 you remove the `kuadrant-system` namespace without first cleaning up existing DNSPolicies targeting the gateway in your `ingress-gateway` namespace. Now there are a set of records that were being managed for that gateway that have not been removed. 
 On cluster 2 the DNS Operator managing the existing DNSRecord in that cluster has a record of all owners of that dns name. 

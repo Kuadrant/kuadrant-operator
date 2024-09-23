@@ -36,6 +36,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.18.4
 	sigs.k8s.io/external-dns v0.14.0
 	sigs.k8s.io/gateway-api v1.1.0
+	sigs.k8s.io/yaml v1.4.0
 )
 
 require (
@@ -185,7 +186,6 @@ require (
 	sigs.k8s.io/kustomize/api v0.17.2 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.17.1 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
-	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
 replace maistra.io/istio-operator => github.com/maistra/istio-operator v0.0.0-20240217080932-98753cb28cd7

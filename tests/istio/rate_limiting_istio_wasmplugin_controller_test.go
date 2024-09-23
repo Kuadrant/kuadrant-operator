@@ -127,11 +127,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
-				FailureMode: wasm.FailureModeDeny,
-				RateLimitPolicies: []wasm.RateLimitPolicy{
+				Extensions: map[string]wasm.Extension{
+					wasm.RateLimitPolicyExtensionName: {
+						Endpoint:    common.KuadrantRateLimitClusterName,
+						FailureMode: wasm.FailureModeAllow,
+						Type:        wasm.RateLimitExtensionType,
+					},
+				},
+				Policies: []wasm.Policy{
 					{
-						Name:   rlpKey.String(),
-						Domain: wasm.LimitsNamespaceFromRLP(rlp),
+						Name:      rlpKey.String(),
+						Hostnames: []string{"*.example.com"},
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{
@@ -150,18 +156,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 										},
 									},
 								},
-								Data: []wasm.DataItem{
+								Actions: []wasm.Action{
 									{
-										Static: &wasm.StaticSpec{
-											Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-											Value: "1",
+										Scope:         wasm.LimitsNamespaceFromRLP(rlp),
+										ExtensionName: wasm.RateLimitPolicyExtensionName,
+										Data: []wasm.DataType{
+											{
+												Value: &wasm.Static{
+													Static: wasm.StaticSpec{
+														Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+														Value: "1",
+													},
+												},
+											},
 										},
 									},
 								},
 							},
 						},
-						Hostnames: []string{"*.example.com"},
-						Service:   common.KuadrantRateLimitClusterName,
 					},
 				},
 			}))
@@ -286,12 +298,16 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig.FailureMode).To(Equal(wasm.FailureModeDeny))
-			Expect(existingWASMConfig.RateLimitPolicies).To(HaveLen(1))
-			wasmRLP := existingWASMConfig.RateLimitPolicies[0]
-			Expect(wasmRLP.Name).To(Equal(rlpKey.String()))
-			Expect(wasmRLP.Domain).To(Equal(wasm.LimitsNamespaceFromRLP(rlp)))
-			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'toys' limit definition
+			Expect(existingWASMConfig.Extensions).To(HaveKeyWithValue(wasm.RateLimitPolicyExtensionName, wasm.Extension{
+				Endpoint:    common.KuadrantRateLimitClusterName,
+				FailureMode: wasm.FailureModeAllow,
+				Type:        wasm.RateLimitExtensionType,
+			}))
+			Expect(existingWASMConfig.Policies).To(HaveLen(1))
+			policy := existingWASMConfig.Policies[0]
+			Expect(policy.Name).To(Equal(rlpKey.String()))
+			Expect(policy.Hostnames).To(Equal([]string{"*.toystore.acme.com", "api.toystore.io"}))
+			Expect(policy.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'toys' limit definition
 				Conditions: []wasm.Condition{
 					{
 						AllOf: []wasm.PatternExpression{
@@ -342,21 +358,31 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						},
 					},
 				},
-				Data: []wasm.DataItem{
+				Actions: []wasm.Action{
 					{
-						Static: &wasm.StaticSpec{
-							Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "toys"),
-							Value: "1",
-						},
-					},
-					{
-						Selector: &wasm.SelectorSpec{
-							Selector: kuadrantv1beta2.ContextSelector("auth.identity.username"),
+						Scope:         wasm.LimitsNamespaceFromRLP(rlp),
+						ExtensionName: wasm.RateLimitPolicyExtensionName,
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Static{
+									Static: wasm.StaticSpec{
+										Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "toys"),
+										Value: "1",
+									},
+								},
+							},
+							{
+								Value: &wasm.Selector{
+									Selector: wasm.SelectorSpec{
+										Selector: kuadrantv1beta2.ContextSelector("auth.identity.username"),
+									},
+								},
+							},
 						},
 					},
 				},
 			}))
-			Expect(wasmRLP.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'assets' limit definition
+			Expect(policy.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'assets' limit definition
 				Conditions: []wasm.Condition{
 					{
 						AllOf: []wasm.PatternExpression{
@@ -368,17 +394,23 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						},
 					},
 				},
-				Data: []wasm.DataItem{
+				Actions: []wasm.Action{
 					{
-						Static: &wasm.StaticSpec{
-							Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "assets"),
-							Value: "1",
+						Scope:         wasm.LimitsNamespaceFromRLP(rlp),
+						ExtensionName: wasm.RateLimitPolicyExtensionName,
+						Data: []wasm.DataType{
+							{
+								Value: &wasm.Static{
+									Static: wasm.StaticSpec{
+										Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "assets"),
+										Value: "1",
+									},
+								},
+							},
 						},
 					},
 				},
 			}))
-			Expect(wasmRLP.Hostnames).To(Equal([]string{"*.toystore.acme.com", "api.toystore.io"}))
-			Expect(wasmRLP.Service).To(Equal(common.KuadrantRateLimitClusterName))
 		}, testTimeOut)
 
 		It("Simple RLP targeting Gateway parented by one HTTPRoute creates wasmplugin", func(ctx SpecContext) {
@@ -430,11 +462,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
-				FailureMode: wasm.FailureModeDeny,
-				RateLimitPolicies: []wasm.RateLimitPolicy{
+				Extensions: map[string]wasm.Extension{
+					wasm.RateLimitPolicyExtensionName: {
+						Endpoint:    common.KuadrantRateLimitClusterName,
+						FailureMode: wasm.FailureModeAllow,
+						Type:        wasm.RateLimitExtensionType,
+					},
+				},
+				Policies: []wasm.Policy{
 					{
-						Name:   rlpKey.String(),
-						Domain: wasm.LimitsNamespaceFromRLP(rlp),
+						Name:      rlpKey.String(),
+						Hostnames: []string{"*"},
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{
@@ -453,18 +491,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 										},
 									},
 								},
-								Data: []wasm.DataItem{
+								Actions: []wasm.Action{
 									{
-										Static: &wasm.StaticSpec{
-											Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-											Value: "1",
+										Scope:         wasm.LimitsNamespaceFromRLP(rlp),
+										ExtensionName: wasm.RateLimitPolicyExtensionName,
+										Data: []wasm.DataType{
+											{
+												Value: &wasm.Static{
+													Static: wasm.StaticSpec{
+														Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+														Value: "1",
+													},
+												},
+											},
 										},
 									},
 								},
 							},
 						},
-						Hostnames: []string{"*"},
-						Service:   common.KuadrantRateLimitClusterName,
 					},
 				},
 			}))
@@ -745,11 +789,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					FailureMode: wasm.FailureModeDeny,
-					RateLimitPolicies: []wasm.RateLimitPolicy{
+					Extensions: map[string]wasm.Extension{
+						wasm.RateLimitPolicyExtensionName: {
+							Endpoint:    common.KuadrantRateLimitClusterName,
+							FailureMode: wasm.FailureModeAllow,
+							Type:        wasm.RateLimitExtensionType,
+						},
+					},
+					Policies: []wasm.Policy{
 						{
-							Name:   rlpAKey.String(),
-							Domain: wasm.LimitsNamespaceFromRLP(rlpA),
+							Name:      rlpAKey.String(),
+							Hostnames: []string{"*"},
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -768,18 +818,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
-									Data: []wasm.DataItem{
+									Actions: []wasm.Action{
 										{
-											Static: &wasm.StaticSpec{
-												Key:   wasm.LimitNameToLimitadorIdentifier(rlpAKey, "l1"),
-												Value: "1",
+											Scope:         wasm.LimitsNamespaceFromRLP(rlpA),
+											ExtensionName: wasm.RateLimitPolicyExtensionName,
+											Data: []wasm.DataType{
+												{
+													Value: &wasm.Static{
+														Static: wasm.StaticSpec{
+															Key:   wasm.LimitNameToLimitadorIdentifier(rlpAKey, "l1"),
+															Value: "1",
+														},
+													},
+												},
 											},
 										},
 									},
 								},
 							},
-							Hostnames: []string{"*"},
-							Service:   common.KuadrantRateLimitClusterName,
 						},
 					},
 				}
@@ -893,11 +949,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					FailureMode: wasm.FailureModeDeny,
-					RateLimitPolicies: []wasm.RateLimitPolicy{
+					Extensions: map[string]wasm.Extension{
+						wasm.RateLimitPolicyExtensionName: {
+							Endpoint:    common.KuadrantRateLimitClusterName,
+							FailureMode: wasm.FailureModeAllow,
+							Type:        wasm.RateLimitExtensionType,
+						},
+					},
+					Policies: []wasm.Policy{
 						{
-							Name:   rlpKey.String(),
-							Domain: wasm.LimitsNamespaceFromRLP(rlpA),
+							Name:      rlpKey.String(),
+							Hostnames: []string{"*"},
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -916,18 +978,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
-									Data: []wasm.DataItem{
+									Actions: []wasm.Action{
 										{
-											Static: &wasm.StaticSpec{
-												Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-												Value: "1",
+											Scope:         wasm.LimitsNamespaceFromRLP(rlpA),
+											ExtensionName: wasm.RateLimitPolicyExtensionName,
+											Data: []wasm.DataType{
+												{
+													Value: &wasm.Static{
+														Static: wasm.StaticSpec{
+															Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+															Value: "1",
+														},
+													},
+												},
 											},
 										},
 									},
 								},
 							},
-							Hostnames: []string{"*"},
-							Service:   common.KuadrantRateLimitClusterName,
 						},
 					},
 				}
@@ -1088,11 +1156,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					FailureMode: wasm.FailureModeDeny,
-					RateLimitPolicies: []wasm.RateLimitPolicy{
+					Extensions: map[string]wasm.Extension{
+						wasm.RateLimitPolicyExtensionName: {
+							Endpoint:    common.KuadrantRateLimitClusterName,
+							FailureMode: wasm.FailureModeAllow,
+							Type:        wasm.RateLimitExtensionType,
+						},
+					},
+					Policies: []wasm.Policy{
 						{
-							Name:   rlpKey.String(),
-							Domain: wasm.LimitsNamespaceFromRLP(rlpA),
+							Name:      rlpKey.String(),
+							Hostnames: []string{"*.example.com"},
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1111,18 +1185,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
-									Data: []wasm.DataItem{
+									Actions: []wasm.Action{
 										{
-											Static: &wasm.StaticSpec{
-												Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-												Value: "1",
+											Scope:         wasm.LimitsNamespaceFromRLP(rlpA),
+											ExtensionName: wasm.RateLimitPolicyExtensionName,
+											Data: []wasm.DataType{
+												{
+													Value: &wasm.Static{
+														Static: wasm.StaticSpec{
+															Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+															Value: "1",
+														},
+													},
+												},
 											},
 										},
 									},
 								},
 							},
-							Hostnames: []string{"*.example.com"},
-							Service:   common.KuadrantRateLimitClusterName,
 						},
 					},
 				}
@@ -1204,11 +1284,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					FailureMode: wasm.FailureModeDeny,
-					RateLimitPolicies: []wasm.RateLimitPolicy{
+					Extensions: map[string]wasm.Extension{
+						wasm.RateLimitPolicyExtensionName: {
+							Endpoint:    common.KuadrantRateLimitClusterName,
+							FailureMode: wasm.FailureModeAllow,
+							Type:        wasm.RateLimitExtensionType,
+						},
+					},
+					Policies: []wasm.Policy{
 						{
-							Name:   rlpKey.String(),
-							Domain: wasm.LimitsNamespaceFromRLP(rlpA),
+							Name:      rlpKey.String(),
+							Hostnames: []string{"*.example.com"},
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1227,18 +1313,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
-									Data: []wasm.DataItem{
+									Actions: []wasm.Action{
 										{
-											Static: &wasm.StaticSpec{
-												Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-												Value: "1",
+											Scope:         wasm.LimitsNamespaceFromRLP(rlpA),
+											ExtensionName: wasm.RateLimitPolicyExtensionName,
+											Data: []wasm.DataType{
+												{
+													Value: &wasm.Static{
+														Static: wasm.StaticSpec{
+															Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+															Value: "1",
+														},
+													},
+												},
 											},
 										},
 									},
 								},
 							},
-							Hostnames: []string{"*.example.com"},
-							Service:   common.KuadrantRateLimitClusterName,
 						},
 					},
 				}
@@ -1385,11 +1477,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					FailureMode: wasm.FailureModeDeny,
-					RateLimitPolicies: []wasm.RateLimitPolicy{
+					Extensions: map[string]wasm.Extension{
+						wasm.RateLimitPolicyExtensionName: {
+							Endpoint:    common.KuadrantRateLimitClusterName,
+							FailureMode: wasm.FailureModeAllow,
+							Type:        wasm.RateLimitExtensionType,
+						},
+					},
+					Policies: []wasm.Policy{
 						{
-							Name:   rlpKey.String(),
-							Domain: wasm.LimitsNamespaceFromRLP(rlpR),
+							Name:      rlpKey.String(),
+							Hostnames: []string{"*.a.example.com"},
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1408,18 +1506,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
-									Data: []wasm.DataItem{
+									Actions: []wasm.Action{
 										{
-											Static: &wasm.StaticSpec{
-												Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-												Value: "1",
+											Scope:         wasm.LimitsNamespaceFromRLP(rlpR),
+											ExtensionName: wasm.RateLimitPolicyExtensionName,
+											Data: []wasm.DataType{
+												{
+													Value: &wasm.Static{
+														Static: wasm.StaticSpec{
+															Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+															Value: "1",
+														},
+													},
+												},
 											},
 										},
 									},
 								},
 							},
-							Hostnames: []string{"*.a.example.com"},
-							Service:   common.KuadrantRateLimitClusterName,
 						},
 					},
 				}
@@ -1464,11 +1568,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					FailureMode: wasm.FailureModeDeny,
-					RateLimitPolicies: []wasm.RateLimitPolicy{
+					Extensions: map[string]wasm.Extension{
+						wasm.RateLimitPolicyExtensionName: {
+							Endpoint:    common.KuadrantRateLimitClusterName,
+							FailureMode: wasm.FailureModeAllow,
+							Type:        wasm.RateLimitExtensionType,
+						},
+					},
+					Policies: []wasm.Policy{
 						{
-							Name:   rlpKey.String(),
-							Domain: wasm.LimitsNamespaceFromRLP(rlpR),
+							Name:      rlpKey.String(),
+							Hostnames: []string{"*.b.example.com"},
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1487,18 +1597,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
-									Data: []wasm.DataItem{
+									Actions: []wasm.Action{
 										{
-											Static: &wasm.StaticSpec{
-												Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-												Value: "1",
+											Scope:         wasm.LimitsNamespaceFromRLP(rlpR),
+											ExtensionName: wasm.RateLimitPolicyExtensionName,
+											Data: []wasm.DataType{
+												{
+													Value: &wasm.Static{
+														Static: wasm.StaticSpec{
+															Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+															Value: "1",
+														},
+													},
+												},
 											},
 										},
 									},
 								},
 							},
-							Hostnames: []string{"*.b.example.com"},
-							Service:   common.KuadrantRateLimitClusterName,
 						},
 					},
 				}
@@ -1620,11 +1736,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					FailureMode: wasm.FailureModeDeny,
-					RateLimitPolicies: []wasm.RateLimitPolicy{
+					Extensions: map[string]wasm.Extension{
+						wasm.RateLimitPolicyExtensionName: {
+							Endpoint:    common.KuadrantRateLimitClusterName,
+							FailureMode: wasm.FailureModeAllow,
+							Type:        wasm.RateLimitExtensionType,
+						},
+					},
+					Policies: []wasm.Policy{
 						{
-							Name:   rlp1Key.String(),
-							Domain: wasm.LimitsNamespaceFromRLP(rlp1),
+							Name:      rlp1Key.String(),
+							Hostnames: []string{"*"},
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1643,18 +1765,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
-									Data: []wasm.DataItem{
+									Actions: []wasm.Action{
 										{
-											Static: &wasm.StaticSpec{
-												Key:   wasm.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
-												Value: "1",
+											Scope:         wasm.LimitsNamespaceFromRLP(rlp1),
+											ExtensionName: wasm.RateLimitPolicyExtensionName,
+											Data: []wasm.DataType{
+												{
+													Value: &wasm.Static{
+														Static: wasm.StaticSpec{
+															Key:   wasm.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
+															Value: "1",
+														},
+													},
+												},
 											},
 										},
 									},
 								},
 							},
-							Hostnames: []string{"*"},
-							Service:   common.KuadrantRateLimitClusterName,
 						},
 					},
 				}
@@ -1724,11 +1852,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					FailureMode: wasm.FailureModeDeny,
-					RateLimitPolicies: []wasm.RateLimitPolicy{
+					Extensions: map[string]wasm.Extension{
+						wasm.RateLimitPolicyExtensionName: {
+							Endpoint:    common.KuadrantRateLimitClusterName,
+							FailureMode: wasm.FailureModeAllow,
+							Type:        wasm.RateLimitExtensionType,
+						},
+					},
+					Policies: []wasm.Policy{
 						{
-							Name:   rlp2Key.String(),
-							Domain: wasm.LimitsNamespaceFromRLP(rlp2),
+							Name:      rlp2Key.String(),
+							Hostnames: []string{"*.a.example.com"},
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1747,18 +1881,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
-									Data: []wasm.DataItem{
+									Actions: []wasm.Action{
 										{
-											Static: &wasm.StaticSpec{
-												Key:   wasm.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
-												Value: "1",
+											Scope:         wasm.LimitsNamespaceFromRLP(rlp2),
+											ExtensionName: wasm.RateLimitPolicyExtensionName,
+											Data: []wasm.DataType{
+												{
+													Value: &wasm.Static{
+														Static: wasm.StaticSpec{
+															Key:   wasm.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
+															Value: "1",
+														},
+													},
+												},
 											},
 										},
 									},
 								},
 							},
-							Hostnames: []string{"*.a.example.com"},
-							Service:   common.KuadrantRateLimitClusterName,
 						},
 					},
 				}
@@ -1914,11 +2054,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					FailureMode: wasm.FailureModeDeny,
-					RateLimitPolicies: []wasm.RateLimitPolicy{
+					Extensions: map[string]wasm.Extension{
+						wasm.RateLimitPolicyExtensionName: {
+							Endpoint:    common.KuadrantRateLimitClusterName,
+							FailureMode: wasm.FailureModeAllow,
+							Type:        wasm.RateLimitExtensionType,
+						},
+					},
+					Policies: []wasm.Policy{
 						{
-							Name:   rlp2Key.String(),
-							Domain: wasm.LimitsNamespaceFromRLP(rlp2),
+							Name:      rlp2Key.String(),
+							Hostnames: []string{"*.a.example.com"},
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -1937,18 +2083,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
-									Data: []wasm.DataItem{
+									Actions: []wasm.Action{
 										{
-											Static: &wasm.StaticSpec{
-												Key:   wasm.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
-												Value: "1",
+											Scope:         wasm.LimitsNamespaceFromRLP(rlp2),
+											ExtensionName: wasm.RateLimitPolicyExtensionName,
+											Data: []wasm.DataType{
+												{
+													Value: &wasm.Static{
+														Static: wasm.StaticSpec{
+															Key:   wasm.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
+															Value: "1",
+														},
+													},
+												},
 											},
 										},
 									},
 								},
 							},
-							Hostnames: []string{"*.a.example.com"},
-							Service:   common.KuadrantRateLimitClusterName,
 						},
 					},
 				}
@@ -2008,11 +2160,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					FailureMode: wasm.FailureModeDeny,
-					RateLimitPolicies: []wasm.RateLimitPolicy{
+					Extensions: map[string]wasm.Extension{
+						wasm.RateLimitPolicyExtensionName: {
+							Endpoint:    common.KuadrantRateLimitClusterName,
+							FailureMode: wasm.FailureModeAllow,
+							Type:        wasm.RateLimitExtensionType,
+						},
+					},
+					Policies: []wasm.Policy{
 						{ // First RLP 1 as the controller will sort based on RLP name
-							Name:   rlp1Key.String(), // Route B affected by RLP 1 -> Gateway
-							Domain: wasm.LimitsNamespaceFromRLP(rlp1),
+							Name:      rlp1Key.String(), // Route B affected by RLP 1 -> Gateway
+							Hostnames: []string{"*"},
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -2031,22 +2189,28 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
-									Data: []wasm.DataItem{
+									Actions: []wasm.Action{
 										{
-											Static: &wasm.StaticSpec{
-												Key:   wasm.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
-												Value: "1",
+											Scope:         wasm.LimitsNamespaceFromRLP(rlp1),
+											ExtensionName: wasm.RateLimitPolicyExtensionName,
+											Data: []wasm.DataType{
+												{
+													Value: &wasm.Static{
+														Static: wasm.StaticSpec{
+															Key:   wasm.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
+															Value: "1",
+														},
+													},
+												},
 											},
 										},
 									},
 								},
 							},
-							Hostnames: []string{"*"},
-							Service:   common.KuadrantRateLimitClusterName,
 						},
 						{
-							Name:   rlp2Key.String(), // Route A affected by RLP 1 -> Route A
-							Domain: wasm.LimitsNamespaceFromRLP(rlp2),
+							Name:      rlp2Key.String(), // Route A affected by RLP 1 -> Route A
+							Hostnames: []string{"*.a.example.com"},
 							Rules: []wasm.Rule{
 								{
 									Conditions: []wasm.Condition{
@@ -2065,18 +2229,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 											},
 										},
 									},
-									Data: []wasm.DataItem{
+									Actions: []wasm.Action{
 										{
-											Static: &wasm.StaticSpec{
-												Key:   wasm.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
-												Value: "1",
+											Scope:         wasm.LimitsNamespaceFromRLP(rlp2),
+											ExtensionName: wasm.RateLimitPolicyExtensionName,
+											Data: []wasm.DataType{
+												{
+													Value: &wasm.Static{
+														Static: wasm.StaticSpec{
+															Key:   wasm.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
+															Value: "1",
+														},
+													},
+												},
 											},
 										},
 									},
 								},
 							},
-							Hostnames: []string{"*.a.example.com"},
-							Service:   common.KuadrantRateLimitClusterName,
 						},
 					},
 				}
@@ -2170,11 +2340,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
-				FailureMode: wasm.FailureModeDeny,
-				RateLimitPolicies: []wasm.RateLimitPolicy{
+				Extensions: map[string]wasm.Extension{
+					wasm.RateLimitPolicyExtensionName: {
+						Endpoint:    common.KuadrantRateLimitClusterName,
+						FailureMode: wasm.FailureModeAllow,
+						Type:        wasm.RateLimitExtensionType,
+					},
+				},
+				Policies: []wasm.Policy{
 					{
-						Name:   rlpKey.String(),
-						Domain: wasm.LimitsNamespaceFromRLP(rlp),
+						Name:      rlpKey.String(),
+						Hostnames: []string{gwHostname},
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{
@@ -2193,18 +2369,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 										},
 									},
 								},
-								Data: []wasm.DataItem{
+								Actions: []wasm.Action{
 									{
-										Static: &wasm.StaticSpec{
-											Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-											Value: "1",
+										Scope:         wasm.LimitsNamespaceFromRLP(rlp),
+										ExtensionName: wasm.RateLimitPolicyExtensionName,
+										Data: []wasm.DataType{
+											{
+												Value: &wasm.Static{
+													Static: wasm.StaticSpec{
+														Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+														Value: "1",
+													},
+												},
+											},
 										},
 									},
 								},
 							},
 						},
-						Hostnames: []string{gwHostname},
-						Service:   common.KuadrantRateLimitClusterName,
 					},
 				},
 			}))
@@ -2229,11 +2411,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 		expectedWasmPluginConfig := func(rlpKey client.ObjectKey, rlp *kuadrantv1beta2.RateLimitPolicy, key, hostname string) *wasm.Config {
 			return &wasm.Config{
-				FailureMode: wasm.FailureModeDeny,
-				RateLimitPolicies: []wasm.RateLimitPolicy{
+				Extensions: map[string]wasm.Extension{
+					wasm.RateLimitPolicyExtensionName: {
+						Endpoint:    common.KuadrantRateLimitClusterName,
+						FailureMode: wasm.FailureModeAllow,
+						Type:        wasm.RateLimitExtensionType,
+					},
+				},
+				Policies: []wasm.Policy{
 					{
-						Name:   rlpKey.String(),
-						Domain: wasm.LimitsNamespaceFromRLP(rlp),
+						Name:      rlpKey.String(),
+						Hostnames: []string{hostname},
 						Rules: []wasm.Rule{
 							{
 								Conditions: []wasm.Condition{
@@ -2252,18 +2440,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 										},
 									},
 								},
-								Data: []wasm.DataItem{
+								Actions: []wasm.Action{
 									{
-										Static: &wasm.StaticSpec{
-											Key:   key,
-											Value: "1",
+										Scope:         wasm.LimitsNamespaceFromRLP(rlp),
+										ExtensionName: wasm.RateLimitPolicyExtensionName,
+										Data: []wasm.DataType{
+											{
+												Value: &wasm.Static{
+													Static: wasm.StaticSpec{
+														Key:   key,
+														Value: "1",
+													},
+												},
+											},
 										},
 									},
 								},
 							},
 						},
-						Hostnames: []string{hostname},
-						Service:   common.KuadrantRateLimitClusterName,
 					},
 				},
 			}

@@ -25,25 +25,23 @@ $(CATALOG_DOCKERFILE): $(OPM)
 	cd $(PROJECT_PATH)/catalog && $(OPM) generate dockerfile kuadrant-operator-catalog -l quay.expires-after=$(QUAY_IMAGE_EXPIRY)
 catalog-dockerfile: $(CATALOG_DOCKERFILE) ## Generate catalog dockerfile.
 
-CHANNELS ?= preview
-
 $(CATALOG_FILE): $(OPM) $(YQ)
 	@echo "************************************************************"
 	@echo Build kuadrant operator catalog
 	@echo
-	@echo BUNDLE_IMG                     = $(BUNDLE_IMG)
-	@echo REPLACES_VERSION               = $(REPLACES_VERSION)
-	@echo LIMITADOR_OPERATOR_BUNDLE_IMG  = $(LIMITADOR_OPERATOR_BUNDLE_IMG)
-	@echo AUTHORINO_OPERATOR_BUNDLE_IMG  = $(AUTHORINO_OPERATOR_BUNDLE_IMG)
-	@echo DNS_OPERATOR_BUNDLE_IMG  		 = $(DNS_OPERATOR_BUNDLE_IMG)
-	@echo CHANNELS  					 = $(CHANNELS)
-	@echo CATALOG_FILE                   = $@
+	@echo BUNDLE_IMG                          = $(BUNDLE_IMG)
+	@echo REPLACES_VERSION                    = $(REPLACES_VERSION)
+	@echo LIMITADOR_OPERATOR_BUNDLE_IMG       = $(LIMITADOR_OPERATOR_BUNDLE_IMG)
+	@echo AUTHORINO_OPERATOR_BUNDLE_IMG       = $(AUTHORINO_OPERATOR_BUNDLE_IMG)
+	@echo DNS_OPERATOR_BUNDLE_IMG             = $(DNS_OPERATOR_BUNDLE_IMG)
+	@echo CHANNEL                             = $(DEFAULT_CHANNEL)
+	@echo CATALOG_FILE                        = $@
 	@echo "************************************************************"
 	@echo
 	@echo Please check this matches your expectations and override variables if needed.
 	@echo
 	$(PROJECT_PATH)/utils/generate-catalog.sh $(OPM) $(YQ) $(BUNDLE_IMG) $(REPLACES_VERSION)\
-			$(LIMITADOR_OPERATOR_BUNDLE_IMG) $(AUTHORINO_OPERATOR_BUNDLE_IMG) $(DNS_OPERATOR_BUNDLE_IMG) $(CHANNELS) $@
+			$(LIMITADOR_OPERATOR_BUNDLE_IMG) $(AUTHORINO_OPERATOR_BUNDLE_IMG) $(DNS_OPERATOR_BUNDLE_IMG) $(DEFAULT_CHANNEL) $@
 
 .PHONY: catalog
 catalog: $(OPM) ## Generate catalog content and validate.

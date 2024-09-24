@@ -21,9 +21,11 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/cert-manager/cert-manager/pkg/apis/certmanager"
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,6 +45,16 @@ import (
 )
 
 const TLSPolicyFinalizer = "kuadrant.io/tls-policy"
+
+var (
+	CertManagerCertificatesResource  = certmanagerv1.SchemeGroupVersion.WithResource("certificates")
+	CertManagerIssuersResource       = certmanagerv1.SchemeGroupVersion.WithResource("issuers")
+	CertMangerClusterIssuersResource = certmanagerv1.SchemeGroupVersion.WithResource("clusterissuers")
+
+	CertManagerCertificateKind   = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.CertificateKind}
+	CertManagerIssuerKind        = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.IssuerKind}
+	CertManagerClusterIssuerKind = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.ClusterIssuerKind}
+)
 
 // TLSPolicyReconciler reconciles a TLSPolicy object
 type TLSPolicyReconciler struct {

@@ -3,8 +3,19 @@ package envoygateway
 import (
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+)
+
+var (
+	EnvoyPatchPoliciesResource     = egv1alpha1.SchemeBuilder.GroupVersion.WithResource("envoypatchpolicies")
+	EnvoyExtensionPoliciesResource = egv1alpha1.SchemeBuilder.GroupVersion.WithResource("envoyextensionpolicies")
+	SecurityPoliciesResource       = egv1alpha1.SchemeBuilder.GroupVersion.WithResource("securitypolicies")
+
+	EnvoyPatchPolicyGroupKind     = schema.GroupKind{Group: egv1alpha1.GroupName, Kind: egv1alpha1.KindEnvoyPatchPolicy}
+	EnvoyExtensionPolicyGroupKind = schema.GroupKind{Group: egv1alpha1.GroupName, Kind: egv1alpha1.KindEnvoyExtensionPolicy}
+	SecurityPolicyGroupKind       = schema.GroupKind{Group: egv1alpha1.GroupName, Kind: egv1alpha1.KindSecurityPolicy}
 )
 
 func IsEnvoyPatchPolicyInstalled(restMapper meta.RESTMapper) (bool, error) {

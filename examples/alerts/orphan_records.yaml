@@ -1,0 +1,22 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dns-records-rules
+  namespace: monitoring
+spec:
+  groups:
+  - name: dns_records
+    rules:
+    - alert: PossibleOrphanedDNSRecords
+      expr: |
+        sum by(rootDomain) (
+          count by(rootDomain) (kuadrant_dnsrecord_status_root_domain_owners) / 
+          count by(rootDomain) (kuadrant_dnsrecord_status) - 
+          count by(rootDomain) (kuadrant_dnsrecord_status)
+        ) > 0
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "The number of DNS Owners is greater than the number of records for root domain '{{ $labels.rootDomain }}'"
+        description: "This alert fires if the number of owners (controller collaborating on a record set) is greater than the number of records. This may mean a record has been left behind in the provider due to a failed delete"

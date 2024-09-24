@@ -353,11 +353,12 @@ run: generate fmt vet ## Run a controller from your host.
 docker-build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 docker-build: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_ENGINE) build \
+		$(CONTAINER_ENGINE) build \
 		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
 		--build-arg GIT_SHA=$(GIT_SHA) \
 		--build-arg DIRTY=$(DIRTY) \
 		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
+		--load \
 		-t $(IMG) .
 
 docker-push: ## Push docker image with the manager.

@@ -3,8 +3,7 @@ kind: Kustomization
 
 resources:
   - github.com/prometheus-operator/kube-prometheus?ref=release-0.13
-  - github.com/Kuadrant/gateway-api-state-metrics?ref=0.4.0
-  - github.com/Kuadrant/gateway-api-state-metrics/config/examples/dashboards?ref=0.4.0
+  - github.com/Kuadrant/gateway-api-state-metrics/config/kuadrant?ref=0.5.0
 # To scrape istio metrics, 3 configurations are required:
 # 1. Envoy metrics directly from the istio ingress gateway pod
   - prometheus/monitors/pod-monitor-envoy.yaml

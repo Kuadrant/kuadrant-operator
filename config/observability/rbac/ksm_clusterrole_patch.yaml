@@ -34,6 +34,7 @@
     - dnspolicies
     - ratelimitpolicies
     - authpolicies
+    - dnsrecords
     verbs:
     - list
     - watch

@@ -2,6 +2,7 @@ package v1beta1
 
 import (
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -10,10 +11,12 @@ import (
 )
 
 var (
-	KuadrantResource  = GroupVersion.WithResource("kuadrants")
-	KuadrantKind      = schema.GroupKind{Group: GroupVersion.Group, Kind: "Kuadrant"}
-	AuthorinoResource = authorinov1beta1.GroupVersion.WithResource("authorinos")
 	AuthorinoKind     = schema.GroupKind{Group: authorinov1beta1.GroupVersion.Group, Kind: "Authorino"}
+	AuthorinoResource = authorinov1beta1.GroupVersion.WithResource("authorinos")
+	KuadrantKind      = schema.GroupKind{Group: GroupVersion.Group, Kind: "Kuadrant"}
+	KuadrantResource  = GroupVersion.WithResource("kuadrants")
+	LimitadorKind     = schema.GroupKind{Group: limitadorv1alpha1.GroupVersion.Group, Kind: "Limitador"}
+	LimitadorResource = limitadorv1alpha1.GroupVersion.WithResource("limitadors")
 )
 
 var _ machinery.Object = &Kuadrant{}
@@ -44,6 +47,20 @@ func LinkKuadrantToAuthorino(objs controller.Store) machinery.LinkFunc {
 	return machinery.LinkFunc{
 		From: KuadrantKind,
 		To:   AuthorinoKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
+				return kuadrant.GetNamespace() == child.GetNamespace()
+			})
+		},
+	}
+}
+
+func LinkKuadrantToLimitador(objs controller.Store) machinery.LinkFunc {
+	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantKind), controller.ObjectAs[machinery.Object])
+
+	return machinery.LinkFunc{
+		From: KuadrantKind,
+		To:   LimitadorKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
 				return kuadrant.GetNamespace() == child.GetNamespace()

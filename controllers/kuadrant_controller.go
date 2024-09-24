@@ -37,7 +37,6 @@ import (
 	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
 	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
@@ -395,32 +394,7 @@ func (r *KuadrantReconciler) registerServiceMeshMember(ctx context.Context, kObj
 }
 
 func (r *KuadrantReconciler) reconcileSpec(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	if err := r.registerExternalAuthorizer(ctx, kObj); err != nil {
-		return err
-	}
-
-	return r.reconcileLimitador(ctx, kObj)
-}
-
-func (r *KuadrantReconciler) reconcileLimitador(ctx context.Context, kObj *kuadrantv1beta1.Kuadrant) error {
-	limitador := &limitadorv1alpha1.Limitador{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Limitador",
-			APIVersion: "limitador.kuadrant.io/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.LimitadorName,
-			Namespace: kObj.Namespace,
-		},
-		Spec: limitadorv1alpha1.LimitadorSpec{},
-	}
-
-	err := r.SetOwnerReference(kObj, limitador)
-	if err != nil {
-		return err
-	}
-
-	return r.ReconcileResource(ctx, &limitadorv1alpha1.Limitador{}, limitador, reconcilers.CreateOnlyMutator)
+	return r.registerExternalAuthorizer(ctx, kObj)
 }
 
 // SetupWithManager sets up the controller with the Manager.

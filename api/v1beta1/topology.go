@@ -64,7 +64,7 @@ func LinkKuadrantToAuthorino(objs controller.Store) machinery.LinkFunc {
 		To:   AuthorinoKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
-				return kuadrant.GetNamespace() == child.GetNamespace()
+				return kuadrant.GetNamespace() == child.GetNamespace() && child.GetName() == "authorino"
 			})
 		},
 	}

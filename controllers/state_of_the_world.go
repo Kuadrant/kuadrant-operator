@@ -256,6 +256,7 @@ func (e *EventLogger) Log(ctx context.Context, resourceEvents []controller.Resou
 	return nil
 }
 
+// GetOldestKuadrant returns the oldest kuadrant resource from a list of kuadrant resources that is not marked for deletion.
 func GetOldestKuadrant(kuadrants []*kuadrantv1beta1.Kuadrant) (*kuadrantv1beta1.Kuadrant, error) {
 	if len(kuadrants) == 1 {
 		return kuadrants[0], nil

@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 
 	"github.com/go-logr/logr"
-	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -437,6 +436,5 @@ func (r *KuadrantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&kuadrantv1beta1.Kuadrant{}).
 		Owns(&limitadorv1alpha1.Limitador{}).
-		Owns(&authorinov1beta1.Authorino{}).
 		Complete(r)
 }

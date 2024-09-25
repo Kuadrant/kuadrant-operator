@@ -7,28 +7,28 @@ on:
         description: Commit SHA, tag or branch name
         required: true
       kuadrantOperatorVersion:
-        description: Kuadrant Operator version
-        default: 0.0.0
+        description: Kuadrant Operator version (excluding the v)
+        default: "200.20.2-replace"
         type: string
       authorinoOperatorVersion:
-        description: Authorino Operator bundle version
-        default: latest
+        description: Authorino Operator bundle version (excluding the v)
+        default: "200.20.2"
         type: string
       limitadorOperatorVersion:
-        description: Limitador Operator bundle version
-        default: latest
+        description: Limitador Operator bundle version (excluding the v)
+        default: "200.20.2"
         type: string
       dnsOperatorVersion:
-        description: DNS Operator bundle version
-        default: latest
+        description: DNS Operator bundle version (excluding the v)
+        default: "200.20.2"
         type: string
       wasmShimVersion:
-        description: WASM Shim version
-        default: latest
+        description: WASM Shim version (excluding the v)
+        default: "200.20.2"
         type: string
       replacesVersion:
-        description: Kuadrant Operator replaced version
-        default: 0.0.0-alpha
+        description: Kuadrant Operator replaced version (excluding the v)
+        default: "200.19.0"
         type: string
       prerelease:
         description: Is the release a pre-release?

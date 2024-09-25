@@ -41,7 +41,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1beta2
+    name: v1beta3
     schema:
       openAPIV3Schema:
         description: RateLimitPolicy enables rate limiting for service workloads in

@@ -31,7 +31,7 @@ spec:
         displayName: RateLimitPolicy
         kind: RateLimitPolicy
         name: ratelimitpolicies.kuadrant.io
-        version: v1beta2
+        version: v1beta3
       - description: DNSHealthCheckProbe enables performing health checks against a DNS endpoint (A or CNAME record)
         displayName: DNSHealthCheckProbe
         kind: DNSHealthCheckProbe

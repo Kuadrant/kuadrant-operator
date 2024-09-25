@@ -12,7 +12,7 @@ import (
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 )
 
 // TODO(eastizle): missing WASMPluginMutator tests
@@ -46,14 +46,14 @@ func TestRules(t *testing.T) {
 		},
 	}
 
-	rlp := func(name string, limits map[string]kuadrantv1beta2.Limit) *kuadrantv1beta2.RateLimitPolicy {
-		return &kuadrantv1beta2.RateLimitPolicy{
+	rlp := func(name string, limits map[string]kuadrantv1beta3.Limit) *kuadrantv1beta3.RateLimitPolicy {
+		return &kuadrantv1beta3.RateLimitPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
 				Namespace: "my-app",
 			},
-			Spec: kuadrantv1beta2.RateLimitPolicySpec{
-				RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
+			Spec: kuadrantv1beta3.RateLimitPolicySpec{
+				RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
 					Limits: limits,
 				},
 			},
@@ -61,23 +61,23 @@ func TestRules(t *testing.T) {
 	}
 
 	// a simple 50rps counter, for convinience, to be used in tests
-	counter50rps := kuadrantv1beta2.Rate{
+	counter50rps := kuadrantv1beta3.Rate{
 		Limit:    50,
 		Duration: 1,
-		Unit:     kuadrantv1beta2.TimeUnit("second"),
+		Unit:     kuadrantv1beta3.TimeUnit("second"),
 	}
 
 	testCases := []struct {
 		name          string
-		rlp           *kuadrantv1beta2.RateLimitPolicy
+		rlp           *kuadrantv1beta3.RateLimitPolicy
 		route         *gatewayapiv1.HTTPRoute
 		expectedRules []Rule
 	}{
 		{
 			name: "minimal RLP",
-			rlp: rlp("minimal", map[string]kuadrantv1beta2.Limit{
+			rlp: rlp("minimal", map[string]kuadrantv1beta3.Limit{
 				"50rps": {
-					Rates: []kuadrantv1beta2.Rate{counter50rps},
+					Rates: []kuadrantv1beta3.Rate{counter50rps},
 				},
 			}),
 			route: httpRoute,
@@ -88,12 +88,12 @@ func TestRules(t *testing.T) {
 							AllOf: []PatternExpression{
 								{
 									Selector: "request.url_path",
-									Operator: PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
 									Value:    "/toy",
 								},
 								{
 									Selector: "request.method",
-									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
 									Value:    "GET",
 								},
 							},
@@ -120,10 +120,10 @@ func TestRules(t *testing.T) {
 		},
 		{
 			name: "RLP with route selector based on hostname",
-			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta3.Limit{
 				"50rps-for-selected-hostnames": {
-					Rates: []kuadrantv1beta2.Rate{counter50rps},
-					RouteSelectors: []kuadrantv1beta2.RouteSelector{
+					Rates: []kuadrantv1beta3.Rate{counter50rps},
+					RouteSelectors: []kuadrantv1beta3.RouteSelector{
 						{
 							Hostnames: []gatewayapiv1.Hostname{
 								"*.example.com",
@@ -141,17 +141,17 @@ func TestRules(t *testing.T) {
 							AllOf: []PatternExpression{
 								{
 									Selector: "request.url_path",
-									Operator: PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
 									Value:    "/toy",
 								},
 								{
 									Selector: "request.method",
-									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
 									Value:    "GET",
 								},
 								{
 									Selector: "request.host",
-									Operator: PatternOperator(kuadrantv1beta2.EndsWithOperator),
+									Operator: PatternOperator(kuadrantv1beta3.EndsWithOperator),
 									Value:    ".example.com",
 								},
 							},
@@ -178,10 +178,10 @@ func TestRules(t *testing.T) {
 		},
 		{
 			name: "RLP with route selector based on http route matches (full match)",
-			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta3.Limit{
 				"50rps-for-selected-route": {
-					Rates: []kuadrantv1beta2.Rate{counter50rps},
-					RouteSelectors: []kuadrantv1beta2.RouteSelector{
+					Rates: []kuadrantv1beta3.Rate{counter50rps},
+					RouteSelectors: []kuadrantv1beta3.RouteSelector{
 						{
 							Matches: []gatewayapiv1.HTTPRouteMatch{
 								{
@@ -204,12 +204,12 @@ func TestRules(t *testing.T) {
 							AllOf: []PatternExpression{
 								{
 									Selector: "request.url_path",
-									Operator: PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
 									Value:    "/toy",
 								},
 								{
 									Selector: "request.method",
-									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
 									Value:    "GET",
 								},
 							},
@@ -236,10 +236,10 @@ func TestRules(t *testing.T) {
 		},
 		{
 			name: "RLP with route selector based on http route matches (partial match)",
-			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta3.Limit{
 				"50rps-for-selected-path": {
-					Rates: []kuadrantv1beta2.Rate{counter50rps},
-					RouteSelectors: []kuadrantv1beta2.RouteSelector{
+					Rates: []kuadrantv1beta3.Rate{counter50rps},
+					RouteSelectors: []kuadrantv1beta3.RouteSelector{
 						{
 							Matches: []gatewayapiv1.HTTPRouteMatch{
 								{
@@ -261,12 +261,12 @@ func TestRules(t *testing.T) {
 							AllOf: []PatternExpression{
 								{
 									Selector: "request.url_path",
-									Operator: PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
 									Value:    "/toy",
 								},
 								{
 									Selector: "request.method",
-									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
 									Value:    "GET",
 								},
 							},
@@ -293,10 +293,10 @@ func TestRules(t *testing.T) {
 		},
 		{
 			name: "RLP with mismatching route selectors",
-			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta3.Limit{
 				"50rps-for-non-existent-route": {
-					Rates: []kuadrantv1beta2.Rate{counter50rps},
-					RouteSelectors: []kuadrantv1beta2.RouteSelector{
+					Rates: []kuadrantv1beta3.Rate{counter50rps},
+					RouteSelectors: []kuadrantv1beta3.RouteSelector{
 						{
 							Matches: []gatewayapiv1.HTTPRouteMatch{
 								{
@@ -312,9 +312,9 @@ func TestRules(t *testing.T) {
 		},
 		{
 			name: "HTTPRouteRules without rule matches",
-			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta3.Limit{
 				"50rps": {
-					Rates: []kuadrantv1beta2.Rate{counter50rps},
+					Rates: []kuadrantv1beta3.Rate{counter50rps},
 				},
 			}),
 			route: catchAllHTTPRoute,
@@ -342,10 +342,10 @@ func TestRules(t *testing.T) {
 		},
 		{
 			name: "RLP with counter qualifier",
-			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta3.Limit{
 				"50rps-per-username": {
-					Rates:    []kuadrantv1beta2.Rate{counter50rps},
-					Counters: []kuadrantv1beta2.ContextSelector{"auth.identity.username"},
+					Rates:    []kuadrantv1beta3.Rate{counter50rps},
+					Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
 				},
 			}),
 			route: catchAllHTTPRoute,
@@ -380,9 +380,9 @@ func TestRules(t *testing.T) {
 		},
 		{
 			name: "Route with header match",
-			rlp: rlp("my-rlp", map[string]kuadrantv1beta2.Limit{
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta3.Limit{
 				"50rps": {
-					Rates: []kuadrantv1beta2.Rate{counter50rps},
+					Rates: []kuadrantv1beta3.Rate{counter50rps},
 				},
 			}),
 			route: &gatewayapiv1.HTTPRoute{
@@ -420,22 +420,22 @@ func TestRules(t *testing.T) {
 							AllOf: []PatternExpression{
 								{
 									Selector: "request.url_path",
-									Operator: PatternOperator(kuadrantv1beta2.StartsWithOperator),
+									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
 									Value:    "/v1",
 								},
 								{
 									Selector: "request.method",
-									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
 									Value:    "GET",
 								},
 								{
 									Selector: "request.headers.X-kuadrant-a",
-									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
 									Value:    "1",
 								},
 								{
 									Selector: "request.headers.X-kuadrant-b",
-									Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
 									Value:    "1",
 								},
 							},

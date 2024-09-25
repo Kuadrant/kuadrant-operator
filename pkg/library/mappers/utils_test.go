@@ -7,7 +7,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 )
 
 func gatewayFactory(ns, name string) *gatewayapiv1.Gateway {
@@ -30,10 +30,10 @@ func routeFactory(ns, name string, parentRef gatewayapiv1.ParentReference) *gate
 	}
 }
 
-func policyFactory(ns, name string, targetRef gatewayapiv1alpha2.LocalPolicyTargetReference) *kuadrantv1beta2.RateLimitPolicy {
-	return &kuadrantv1beta2.RateLimitPolicy{
-		TypeMeta:   metav1.TypeMeta{Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta2.GroupVersion.String()},
+func policyFactory(ns, name string, targetRef gatewayapiv1alpha2.LocalPolicyTargetReference) *kuadrantv1beta3.RateLimitPolicy {
+	return &kuadrantv1beta3.RateLimitPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta3.GroupVersion.String()},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Spec:       kuadrantv1beta2.RateLimitPolicySpec{TargetRef: targetRef},
+		Spec:       kuadrantv1beta3.RateLimitPolicySpec{TargetRef: targetRef},
 	}
 }

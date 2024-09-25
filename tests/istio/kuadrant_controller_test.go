@@ -19,7 +19,6 @@ import (
 var _ = Describe("Kuadrant controller on istio", func() {
 	var (
 		testNamespace    string
-		kuadrantName     = "local"
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
@@ -32,19 +31,12 @@ var _ = Describe("Kuadrant controller on istio", func() {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
-	Context("when default kuadrant CR is created", func() {
+	Context("when test suite kuadrant CR exists on cluster", func() {
 		It("Status is ready", func(ctx SpecContext) {
-			kuadrantCR := &kuadrantv1beta1.Kuadrant{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Kuadrant",
-					APIVersion: kuadrantv1beta1.GroupVersion.String(),
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      kuadrantName,
-					Namespace: testNamespace,
-				},
-			}
-			Expect(testClient().Create(ctx, kuadrantCR)).ToNot(HaveOccurred())
+			kuadrantList := &kuadrantv1beta1.KuadrantList{}
+			Expect(testClient().List(ctx, kuadrantList)).ToNot(HaveOccurred())
+			Expect(len(kuadrantList.Items)).To(Equal(1))
+			kuadrantCR := &kuadrantList.Items[0]
 
 			Eventually(func(g Gomega) {
 				kObj := &kuadrantv1beta1.Kuadrant{}

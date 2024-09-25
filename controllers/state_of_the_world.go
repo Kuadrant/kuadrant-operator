@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
@@ -84,7 +85,7 @@ func NewTopologyFileReconciler(client *dynamic.DynamicClient, namespace string) 
 	return &TopologyFileReconciler{Client: client, Namespace: namespace}
 }
 
-func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error) {
+func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("topology file")
 
 	cm := &corev1.ConfigMap{
@@ -100,6 +101,7 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 	unstructuredCM, err := controller.Destruct(cm)
 	if err != nil {
 		logger.Error(err, "failed to destruct topology configmap")
+		return err
 	}
 
 	existingTopologyConfigMaps := topology.Objects().Items(func(object machinery.Object) bool {
@@ -111,7 +113,7 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 		if err != nil {
 			logger.Error(err, "failed to write topology configmap")
 		}
-		return
+		return err
 	}
 
 	if len(existingTopologyConfigMaps) > 1 {
@@ -125,7 +127,10 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 		if err != nil {
 			logger.Error(err, "failed to update topology configmap")
 		}
+		return err
 	}
+
+	return nil
 }
 
 type EventLogger struct{}
@@ -134,7 +139,7 @@ func NewEventLogger() *EventLogger {
 	return &EventLogger{}
 }
 
-func (e *EventLogger) Log(ctx context.Context, resourceEvents []controller.ResourceEvent, _ *machinery.Topology, err error) {
+func (e *EventLogger) Log(ctx context.Context, resourceEvents []controller.ResourceEvent, _ *machinery.Topology, err error, _ *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("event logger")
 	for _, event := range resourceEvents {
 		// log the event
@@ -156,4 +161,6 @@ func (e *EventLogger) Log(ctx context.Context, resourceEvents []controller.Resou
 			logger.Error(err, "error passed to reconcile")
 		}
 	}
+
+	return nil
 }

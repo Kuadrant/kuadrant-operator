@@ -13,7 +13,7 @@ require (
 	github.com/kuadrant/authorino-operator v0.11.1
 	github.com/kuadrant/dns-operator v0.0.0-20240809151102-e79ebbca8f70
 	github.com/kuadrant/limitador-operator v0.9.0
-	github.com/kuadrant/policy-machinery v0.1.1
+	github.com/kuadrant/policy-machinery v0.2.0
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/onsi/ginkgo/v2 v2.17.2
 	github.com/onsi/gomega v1.33.1
@@ -157,7 +157,7 @@ require (
 	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8 // indirect
 	golang.org/x/net v0.27.0 // indirect
 	golang.org/x/oauth2 v0.21.0 // indirect
-	golang.org/x/sync v0.7.0 // indirect
+	golang.org/x/sync v0.8.0 // indirect
 	golang.org/x/sys v0.22.0 // indirect
 	golang.org/x/term v0.22.0 // indirect
 	golang.org/x/text v0.16.0 // indirect

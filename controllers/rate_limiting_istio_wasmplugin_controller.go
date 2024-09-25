@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -154,7 +154,7 @@ func (r *RateLimitingIstioWASMPluginReconciler) desiredRateLimitingWASMPlugin(ct
 }
 
 func (r *RateLimitingIstioWASMPluginReconciler) wasmPluginConfig(ctx context.Context, gw *gatewayapiv1.Gateway) (*wasm.Config, error) {
-	rawTopology, err := kuadranttools.TopologyFromGateway(ctx, r.Client(), gw, kuadrantv1beta2.NewRateLimitPolicyType())
+	rawTopology, err := kuadranttools.TopologyFromGateway(ctx, r.Client(), gw, kuadrantv1beta3.NewRateLimitPolicyType())
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +216,7 @@ func (r *RateLimitingIstioWASMPluginReconciler) SetupWithManager(mgr ctrl.Manage
 			handler.EnqueueRequestsFromMapFunc(httpRouteToParentGatewaysEventMapper.Map),
 		).
 		Watches(
-			&kuadrantv1beta2.RateLimitPolicy{},
+			&kuadrantv1beta3.RateLimitPolicy{},
 			handler.EnqueueRequestsFromMapFunc(rlpToParentGatewaysEventMapper.Map),
 		).
 		Complete(r)

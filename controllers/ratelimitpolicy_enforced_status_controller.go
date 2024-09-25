@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/uuid"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/samber/lo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -23,7 +22,9 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -82,7 +83,7 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) Reconcile(eventCtx context.Con
 	for i := range policies {
 		policy := policies[i]
 		rlpKey := client.ObjectKeyFromObject(policy)
-		rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)
+		rlp := policy.(*kuadrantv1beta3.RateLimitPolicy)
 		conditions := rlp.GetStatus().GetConditions()
 
 		// skip policy if accepted condition is false
@@ -136,7 +137,7 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) Reconcile(eventCtx context.Con
 				var gatewayParentOverridePolicies []kuadrantgatewayapi.Policy
 				gatewayParentsWithOverrides := utils.Filter(gatewayParents, func(gatewayParent *gatewayapiv1.Gateway) bool {
 					_, found := utils.Find(indexes.PoliciesFromGateway(gatewayParent), func(p kuadrantgatewayapi.Policy) bool {
-						rlp := p.(*kuadrantv1beta2.RateLimitPolicy)
+						rlp := p.(*kuadrantv1beta3.RateLimitPolicy)
 						if kuadrantgatewayapi.IsTargetRefGateway(p.GetTargetRef()) && rlp != nil && rlp.Spec.Overrides != nil {
 							gatewayParentOverridePolicies = append(gatewayParentOverridePolicies, p)
 							return true
@@ -192,7 +193,7 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) buildTopology(ctx context.Cont
 		return nil, err
 	}
 
-	policyList := &kuadrantv1beta2.RateLimitPolicyList{}
+	policyList := &kuadrantv1beta3.RateLimitPolicyList{}
 	err = r.Client().List(ctx, policyList)
 	logger.V(1).Info("list rate limit policies", "#policies", len(policyList.Items), "err", err)
 	if err != nil {
@@ -203,12 +204,12 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) buildTopology(ctx context.Cont
 		kuadrantgatewayapi.WithAcceptedRoutesLinkedOnly(),
 		kuadrantgatewayapi.WithGateways(utils.Map(gatewayList.Items, ptr.To[gatewayapiv1.Gateway])),
 		kuadrantgatewayapi.WithRoutes(utils.Map(routeList.Items, ptr.To[gatewayapiv1.HTTPRoute])),
-		kuadrantgatewayapi.WithPolicies(utils.Map(policyList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })),
+		kuadrantgatewayapi.WithPolicies(utils.Map(policyList.Items, func(p kuadrantv1beta3.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })),
 		kuadrantgatewayapi.WithLogger(logger),
 	)
 }
 
-func (r *RateLimitPolicyEnforcedStatusReconciler) hasErrCondOnSubResource(ctx context.Context, p *kuadrantv1beta2.RateLimitPolicy) *metav1.Condition {
+func (r *RateLimitPolicyEnforcedStatusReconciler) hasErrCondOnSubResource(ctx context.Context, p *kuadrantv1beta3.RateLimitPolicy) *metav1.Condition {
 	logger, err := logr.FromContext(ctx)
 	logger.WithName("hasErrCondOnSubResource")
 	if err != nil {
@@ -229,7 +230,7 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) hasErrCondOnSubResource(ctx co
 	return nil
 }
 
-func (r *RateLimitPolicyEnforcedStatusReconciler) setCondition(ctx context.Context, p *kuadrantv1beta2.RateLimitPolicy, conditions *[]metav1.Condition, cond metav1.Condition) error {
+func (r *RateLimitPolicyEnforcedStatusReconciler) setCondition(ctx context.Context, p *kuadrantv1beta3.RateLimitPolicy, conditions *[]metav1.Condition, cond metav1.Condition) error {
 	logger, err := logr.FromContext(ctx)
 	logger.WithName("setCondition")
 	if err != nil {
@@ -301,7 +302,7 @@ func (r *RateLimitPolicyEnforcedStatusReconciler) SetupWithManager(mgr ctrl.Mana
 			handler.EnqueueRequestsFromMapFunc(httpRouteToParentGatewaysEventMapper.Map),
 		).
 		Watches(
-			&kuadrantv1beta2.RateLimitPolicy{},
+			&kuadrantv1beta3.RateLimitPolicy{},
 			handler.EnqueueRequestsFromMapFunc(policyToParentGatewaysEventMapper.Map),
 			builder.WithPredicates(policyStatusChangedPredicate),
 		).

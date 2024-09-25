@@ -1,6 +1,6 @@
 //go:build unit
 
-package v1beta2
+package v1beta3
 
 import (
 	"testing"

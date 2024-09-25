@@ -16,7 +16,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -55,7 +55,7 @@ func (r *EnvoyGatewayWasmReconciler) Reconcile(eventCtx context.Context, req ctr
 		return ctrl.Result{}, err
 	}
 
-	rawTopology, err := kuadranttools.TopologyForPolicies(ctx, r.Client(), kuadrantv1beta2.NewRateLimitPolicyType())
+	rawTopology, err := kuadranttools.TopologyForPolicies(ctx, r.Client(), kuadrantv1beta3.NewRateLimitPolicyType())
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -206,7 +206,7 @@ func (r *EnvoyGatewayWasmReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(kuadrantListEventMapper.Map),
 		).
 		Watches(
-			&kuadrantv1beta2.RateLimitPolicy{},
+			&kuadrantv1beta3.RateLimitPolicy{},
 			handler.EnqueueRequestsFromMapFunc(policyToKuadrantEventMapper.Map),
 		).
 		Watches(

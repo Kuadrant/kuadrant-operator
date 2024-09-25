@@ -23,6 +23,7 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -45,7 +46,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithRunnable("dnspolicy watcher", controller.Watch(&kuadrantv1alpha1.DNSPolicy{}, kuadrantv1alpha1.DNSPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("tlspolicy watcher", controller.Watch(&kuadrantv1alpha1.TLSPolicy{}, kuadrantv1alpha1.TLSPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("authpolicy watcher", controller.Watch(&kuadrantv1beta2.AuthPolicy{}, kuadrantv1beta2.AuthPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta2.RateLimitPolicy{}, kuadrantv1beta2.RateLimitPoliciesResource, metav1.NamespaceAll)),
+		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta3.RateLimitPolicy{}, kuadrantv1beta3.RateLimitPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("topology configmap watcher", controller.Watch(&corev1.ConfigMap{}, controller.ConfigMapsResource, operatorNamespace, controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)))),
 		controller.WithRunnable("limitador watcher", controller.Watch(&limitadorv1alpha1.Limitador{}, kuadrantv1beta1.LimitadorsResource, metav1.NamespaceAll)),
 		controller.WithRunnable("authorino watcher", controller.Watch(&authorinov1beta1.Authorino{}, kuadrantv1beta1.AuthorinosResource, metav1.NamespaceAll)),
@@ -53,7 +54,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			kuadrantv1alpha1.DNSPolicyGroupKind,
 			kuadrantv1alpha1.TLSPolicyGroupKind,
 			kuadrantv1beta2.AuthPolicyGroupKind,
-			kuadrantv1beta2.RateLimitPolicyGroupKind,
+			kuadrantv1beta3.RateLimitPolicyGroupKind,
 		),
 		controller.WithObjectKinds(
 			kuadrantv1beta1.KuadrantGroupKind,

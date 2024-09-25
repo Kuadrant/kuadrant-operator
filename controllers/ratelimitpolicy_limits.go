@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -21,7 +21,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
 )
 
-func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy) error {
+func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *kuadrantv1beta3.RateLimitPolicy) error {
 	policies, err := r.getPolicies(ctx)
 	if err != nil {
 		return err
@@ -33,7 +33,7 @@ func (r *RateLimitPolicyReconciler) reconcileLimits(ctx context.Context, rlp *ku
 	return r.reconcileLimitador(ctx, rlp, topology)
 }
 
-func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy) error {
+func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadrantv1beta3.RateLimitPolicy) error {
 	policies, err := r.getPolicies(ctx)
 	if err != nil {
 		return err
@@ -48,7 +48,7 @@ func (r *RateLimitPolicyReconciler) deleteLimits(ctx context.Context, rlp *kuadr
 	return r.reconcileLimitador(ctx, rlp, topology)
 }
 
-func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp *kuadrantv1beta2.RateLimitPolicy, topology *kuadrantgatewayapi.Topology) error {
+func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp *kuadrantv1beta3.RateLimitPolicy, topology *kuadrantgatewayapi.Topology) error {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("reconcileLimitador")
 
@@ -76,7 +76,7 @@ func (r *RateLimitPolicyReconciler) reconcileLimitador(ctx context.Context, rlp 
 	return nil
 }
 
-func GetLimitador(ctx context.Context, k8sclient client.Client, rlp *kuadrantv1beta2.RateLimitPolicy) (*limitadorv1alpha1.Limitador, error) {
+func GetLimitador(ctx context.Context, k8sclient client.Client, rlp *kuadrantv1beta3.RateLimitPolicy) (*limitadorv1alpha1.Limitador, error) {
 	logger, _ := logr.FromContext(ctx)
 
 	logger.V(1).Info("get kuadrant namespace")
@@ -110,14 +110,14 @@ func GetLimitador(ctx context.Context, k8sclient client.Client, rlp *kuadrantv1b
 func (r *RateLimitPolicyReconciler) getPolicies(ctx context.Context) ([]kuadrantgatewayapi.Policy, error) {
 	logger, _ := logr.FromContext(ctx)
 
-	rlpList := &kuadrantv1beta2.RateLimitPolicyList{}
+	rlpList := &kuadrantv1beta3.RateLimitPolicyList{}
 	err := r.Client().List(ctx, rlpList)
 	logger.V(1).Info("topology: list rate limit policies", "#RLPS", len(rlpList.Items), "err", err)
 	if err != nil {
 		return nil, err
 	}
 
-	policies := utils.Map(rlpList.Items, func(p kuadrantv1beta2.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })
+	policies := utils.Map(rlpList.Items, func(p kuadrantv1beta3.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p })
 
 	return policies, nil
 }
@@ -189,7 +189,7 @@ func (r *RateLimitPolicyReconciler) buildRateLimitIndex(ctx context.Context, top
 				logger.Error(fmt.Errorf("unexpected duplicate rate limit policy key found"), "failed do add rate limit policy to index", "RateLimitPolicy", rlpKey.String(), "Gateway", gatewayKey)
 				continue
 			}
-			rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)
+			rlp := policy.(*kuadrantv1beta3.RateLimitPolicy)
 			rateLimitIndex.Set(key, rlptools.LimitadorRateLimitsFromRLP(rlp))
 		}
 	}

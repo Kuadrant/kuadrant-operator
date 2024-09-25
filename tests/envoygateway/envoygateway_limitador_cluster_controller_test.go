@@ -20,7 +20,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/tests"
@@ -52,17 +52,17 @@ var _ = Describe("limitador cluster controller", func() {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
-	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.RateLimitPolicy)) *kuadrantv1beta2.RateLimitPolicy {
-		policy := &kuadrantv1beta2.RateLimitPolicy{
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta3.RateLimitPolicy)) *kuadrantv1beta3.RateLimitPolicy {
+		policy := &kuadrantv1beta3.RateLimitPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "RateLimitPolicy",
-				APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				APIVersion: kuadrantv1beta3.GroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "rlp",
 				Namespace: testNamespace,
 			},
-			Spec: kuadrantv1beta2.RateLimitPolicySpec{},
+			Spec: kuadrantv1beta3.RateLimitPolicySpec{},
 		}
 
 		for _, mutateFn := range mutateFns {
@@ -88,7 +88,7 @@ var _ = Describe("limitador cluster controller", func() {
 	Context("RateLimitPolicy attached to the gateway", func() {
 
 		var (
-			gwPolicy *kuadrantv1beta2.RateLimitPolicy
+			gwPolicy *kuadrantv1beta3.RateLimitPolicy
 			gwRoute  *gatewayapiv1.HTTPRoute
 		)
 
@@ -98,15 +98,15 @@ var _ = Describe("limitador cluster controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(gwRoute))).WithContext(ctx).Should(BeTrue())
 
-			gwPolicy = policyFactory(func(policy *kuadrantv1beta2.RateLimitPolicy) {
+			gwPolicy = policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Name = "gw"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Defaults = &kuadrantv1beta2.RateLimitPolicyCommonSpec{
-					Limits: map[string]kuadrantv1beta2.Limit{
+				policy.Spec.Defaults = &kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					Limits: map[string]kuadrantv1beta3.Limit{
 						"l1": {
-							Rates: []kuadrantv1beta2.Rate{
+							Rates: []kuadrantv1beta3.Rate{
 								{
 									Limit: 1, Duration: 3, Unit: "minute",
 								},

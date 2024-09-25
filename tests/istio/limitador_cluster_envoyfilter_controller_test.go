@@ -18,7 +18,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/tests"
@@ -79,27 +79,27 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 	Context("RLP targeting Gateway", func() {
 		It("EnvoyFilter created when RLP exists and deleted with RLP is deleted", func(ctx SpecContext) {
 			// create ratelimitpolicy
-			rlp := &kuadrantv1beta2.RateLimitPolicy{
+			rlp := &kuadrantv1beta3.RateLimitPolicy{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "RateLimitPolicy",
-					APIVersion: kuadrantv1beta2.GroupVersion.String(),
+					APIVersion: kuadrantv1beta3.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      rlpName,
 					Namespace: testNamespace,
 				},
-				Spec: kuadrantv1beta2.RateLimitPolicySpec{
+				Spec: kuadrantv1beta3.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "Gateway",
 						Name:  gatewayapiv1.ObjectName(TestGatewayName),
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
-						Limits: map[string]kuadrantv1beta2.Limit{
+					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
-								Rates: []kuadrantv1beta2.Rate{
+								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: kuadrantv1beta2.TimeUnit("minute"),
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
 									},
 								},
 							},

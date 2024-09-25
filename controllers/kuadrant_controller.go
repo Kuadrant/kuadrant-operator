@@ -19,6 +19,11 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
@@ -28,11 +33,15 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/utils/env"
 	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	consolev1 "github.com/openshift/api/console/v1"
 
 	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
 	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
@@ -94,6 +103,9 @@ type KuadrantReconciler struct {
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/finalizers,verbs=update
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
+
+// ConsolePlugin perms
+//+kubebuilder:rbac:groups=console.openshift.io,resources=consoleplugins,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -165,6 +177,17 @@ func (r *KuadrantReconciler) Reconcile(eventCtx context.Context, req ctrl.Reques
 	if statusResult.Requeue {
 		logger.V(1).Info("Reconciling status not finished. Requeueing.")
 		return statusResult, nil
+	}
+
+	if r.isConsolePluginAvailable() {
+		logger.Info("ConsolePlugin API is available, proceeding to apply manifest")
+		if err := r.applyManifest(ctx, "bundle/manifests/kuadrant-console-plugin.yaml", r.Client()); err != nil {
+			logger.Error(err, "failed to apply manifest")
+			return ctrl.Result{}, err
+		}
+		logger.Info("Manifest applied successfully")
+	} else {
+		logger.Info("ConsolePlugin API is not available, skipping creation")
 	}
 
 	logger.Info("successfully reconciled")
@@ -478,4 +501,59 @@ func (r *KuadrantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&limitadorv1alpha1.Limitador{}).
 		Owns(&authorinov1beta1.Authorino{}).
 		Complete(r)
+}
+
+func (r *KuadrantReconciler) isConsolePluginAvailable() bool {
+	gvk := consolev1.GroupVersion.WithKind("ConsolePlugin")
+	mapping, err := r.RestMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil || mapping == nil {
+		log.Log.Info("ConsolePlugin API is not available")
+		return false
+	}
+	log.Log.Info("ConsolePlugin API is available")
+	return true
+}
+
+func (r *KuadrantReconciler) applyManifest(ctx context.Context, filePath string, k8sClient client.Client) error {
+	logger := logr.FromContextOrDiscard(ctx)
+
+	yamlFile, err := os.ReadFile(filepath.Clean(filePath))
+	if err != nil {
+		logger.Error(err, "Failed to read YAML file", "file", filePath)
+		return err
+	}
+
+	decoder := yaml.NewYAMLOrJSONDecoder(strings.NewReader(string(yamlFile)), 4096)
+
+	for {
+		obj := &unstructured.Unstructured{}
+
+		if err := decoder.Decode(obj); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			logger.Error(err, "Failed to decode YAML resource")
+			return err
+		}
+
+		logger.Info("Applying resource", "kind", obj.GetKind(), "name", obj.GetName())
+		if err := r.applyResource(ctx, obj, k8sClient); err != nil {
+			logger.Error(err, "Failed to apply resource", "kind", obj.GetKind(), "name", obj.GetName())
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *KuadrantReconciler) applyResource(ctx context.Context, obj *unstructured.Unstructured, k8sClient client.Client) error {
+	existing := obj.DeepCopy()
+	err := k8sClient.Get(ctx, client.ObjectKey{Name: obj.GetName(), Namespace: obj.GetNamespace()}, existing)
+	if apierrors.IsNotFound(err) {
+		return k8sClient.Create(ctx, obj)
+	} else if err != nil {
+		return err
+	}
+	obj.SetResourceVersion(existing.GetResourceVersion())
+	return k8sClient.Update(ctx, obj)
 }

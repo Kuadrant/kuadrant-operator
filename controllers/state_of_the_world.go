@@ -189,14 +189,11 @@ func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		}
 		return nil, false
 	})
-	if len(kobjs) == 0 {
-		logger.Info("no kuadrant resources found", "status", "skipping")
-		return
+
+	kobj, err := GetOldestKuadrant(kobjs)
+	if err != nil {
+		logger.Error(err, "cannot find Kuadrant resource", "status", "error")
 	}
-	if len(kobjs) > 1 {
-		logger.Error(fmt.Errorf("multiple Kuadrant resources found"), "cannot select root Kuadrant resource", "status", "error")
-	}
-	kobj := kobjs[0]
 
 	if kobj.GetDeletionTimestamp() != nil {
 		logger.Info("root kuadrant marked for deletion", "status", "skipping")
@@ -360,4 +357,30 @@ func (e *EventLogger) Log(ctx context.Context, resourceEvents []controller.Resou
 	}
 
 	return nil
+}
+
+func GetOldestKuadrant(kuadrants []*kuadrantv1beta1.Kuadrant) (*kuadrantv1beta1.Kuadrant, error) {
+	if len(kuadrants) == 1 {
+		return kuadrants[0], nil
+	}
+	if len(kuadrants) == 0 {
+		return nil, fmt.Errorf("empty list passed")
+	}
+	oldest := kuadrants[0]
+	for _, k := range kuadrants[1:] {
+		if k == nil || k.DeletionTimestamp != nil {
+			continue
+		}
+		if oldest == nil {
+			oldest = k
+			continue
+		}
+		if k.CreationTimestamp.Before(&oldest.CreationTimestamp) {
+			oldest = k
+		}
+	}
+	if oldest == nil {
+		return nil, fmt.Errorf("only nil pointers in list")
+	}
+	return oldest, nil
 }

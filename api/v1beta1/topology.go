@@ -1,8 +1,8 @@
 package v1beta1
 
 import (
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	AuthorinoKind     = schema.GroupKind{Group: authorinov1beta1.GroupVersion.Group, Kind: "Authorino"}
+	AuthorinoKind = schema.GroupKind{Group: authorinov1beta1.GroupVersion.Group, Kind: "Authorino"}
 	KuadrantKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "Kuadrant"}
 	LimitadorKind = schema.GroupKind{Group: limitadorv1alpha1.GroupVersion.Group, Kind: "Limitador"}
 

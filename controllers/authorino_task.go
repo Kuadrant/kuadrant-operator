@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"strings"
+	"sync"
 
 	v1beta2 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -34,7 +35,7 @@ func (r *AuthorinoCrReconciler) Subscription() *controller.Subscription {
 	}
 }
 
-func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error) {
+func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("AuthorinoCrReconciler")
 	logger.Info("reconciling authorino resource", "status", "started")
 	defer logger.Info("reconciling authorino resource", "status", "completed")
@@ -50,10 +51,10 @@ func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	if err != nil {
 		if strings.Contains(err.Error(), "empty list passed") {
 			logger.Info("kuadrant resource not found, ignoring", "status", "skipping")
-			return
+			return err
 		}
 		logger.Error(err, "cannot find Kuadrant resource", "status", "error")
-		return
+		return err
 	}
 
 	aobjs := lo.FilterMap(topology.Objects().Objects().Children(kobj), func(item machinery.Object, _ int) (machinery.Object, bool) {
@@ -65,7 +66,7 @@ func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, _ []controller.Re
 
 	if len(aobjs) > 0 {
 		logger.Info("authorino resource already exists, no need to create", "status", "skipping")
-		return
+		return nil
 	}
 
 	authorino := &v1beta2.Authorino{
@@ -116,4 +117,5 @@ func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, _ []controller.Re
 			logger.Error(err, "failed to create authorino resource", "status", "error")
 		}
 	}
+	return nil
 }

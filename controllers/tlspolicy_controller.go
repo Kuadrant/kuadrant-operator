@@ -19,42 +19,24 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"reflect"
 
-	"github.com/cert-manager/cert-manager/pkg/apis/certmanager"
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
 const TLSPolicyFinalizer = "kuadrant.io/tls-policy"
-
-var (
-	CertManagerCertificatesResource  = certmanagerv1.SchemeGroupVersion.WithResource("certificates")
-	CertManagerIssuersResource       = certmanagerv1.SchemeGroupVersion.WithResource("issuers")
-	CertMangerClusterIssuersResource = certmanagerv1.SchemeGroupVersion.WithResource("clusterissuers")
-
-	CertManagerCertificateKind   = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.CertificateKind}
-	CertManagerIssuerKind        = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.IssuerKind}
-	CertManagerClusterIssuerKind = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.ClusterIssuerKind}
-)
 
 // TLSPolicyReconciler reconciles a TLSPolicy object
 type TLSPolicyReconciler struct {
@@ -99,7 +81,7 @@ func (r *TLSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, tlsPolicy, targetReferenceObject, kuadrant.NewErrTargetNotFound(tlsPolicy.Kind(), tlsPolicy.GetTargetRef(), delResErr))
+				return ctrl.Result{}, delResErr
 			}
 			return ctrl.Result{}, err
 		}
@@ -125,25 +107,9 @@ func (r *TLSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return ctrl.Result{}, err
 		}
 	}
-
 	specErr := r.reconcileResources(ctx, tlsPolicy, targetReferenceObject)
 
-	statusResult, statusErr := r.reconcileStatus(ctx, tlsPolicy, targetReferenceObject, specErr)
-
-	if specErr != nil {
-		return ctrl.Result{}, specErr
-	}
-
-	if statusErr != nil {
-		return ctrl.Result{}, statusErr
-	}
-
-	if statusResult.Requeue {
-		log.V(1).Info("Reconciling status not finished. Requeing.")
-		return statusResult, nil
-	}
-
-	return statusResult, statusErr
+	return ctrl.Result{}, specErr
 }
 
 func (r *TLSPolicyReconciler) reconcileResources(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy, targetNetworkObject client.Object) error {
@@ -223,39 +189,9 @@ func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		mappers.WithClient(mgr.GetClient()),
 	)
 
-	issuerStatusChangedPredicate := predicate.Funcs{
-		UpdateFunc: func(ev event.UpdateEvent) bool {
-			oldPolicy, ok := ev.ObjectOld.(certmanagerv1.GenericIssuer)
-			if !ok {
-				return false
-			}
-			newPolicy, ok := ev.ObjectNew.(certmanagerv1.GenericIssuer)
-			if !ok {
-				return false
-			}
-			oldStatus := oldPolicy.GetStatus()
-			newStatus := newPolicy.GetStatus()
-			return !reflect.DeepEqual(oldStatus, newStatus)
-		},
-	}
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.TLSPolicy{}).
 		Owns(&certmanagerv1.Certificate{}).
 		Watches(&gatewayapiv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.Map)).
-		Watches(
-			&certmanagerv1.Issuer{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return mapIssuerToPolicy(ctx, mgr.GetClient(), r.Logger(), object)
-			}),
-			builder.WithPredicates(issuerStatusChangedPredicate),
-		).
-		Watches(
-			&certmanagerv1.ClusterIssuer{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return mapClusterIssuerToPolicy(ctx, mgr.GetClient(), r.Logger(), object)
-			}),
-			builder.WithPredicates(issuerStatusChangedPredicate),
-		).
 		Complete(r)
 }

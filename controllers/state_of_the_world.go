@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	"reflect"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -19,6 +20,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlruntimepredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -203,24 +205,42 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithRunnable("certificate watcher", controller.Watch(
 				&certmanagerv1.Certificate{},
 				CertManagerCertificatesResource,
-				metav1.NamespaceAll,
-			)),
+				metav1.NamespaceAll),
+			),
 			controller.WithRunnable("issuers watcher", controller.Watch(
 				&certmanagerv1.Issuer{},
 				CertManagerIssuersResource,
 				metav1.NamespaceAll,
-			)),
+				controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.Issuer]{
+					UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.Issuer]) bool {
+						oldStatus := e.ObjectOld.GetStatus()
+						newStatus := e.ObjectOld.GetStatus()
+						return !reflect.DeepEqual(oldStatus, newStatus)
+					},
+				})),
+			),
 			controller.WithRunnable("clusterissuers watcher", controller.Watch(
-				&certmanagerv1.Certificate{},
+				&certmanagerv1.ClusterIssuer{},
 				CertMangerClusterIssuersResource,
 				metav1.NamespaceAll,
-			)),
+				controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.ClusterIssuer]{
+					UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.ClusterIssuer]) bool {
+						oldStatus := e.ObjectOld.GetStatus()
+						newStatus := e.ObjectOld.GetStatus()
+						return !reflect.DeepEqual(oldStatus, newStatus)
+					},
+				})),
+			),
 			controller.WithObjectKinds(
 				CertManagerCertificateKind,
 				CertManagerIssuerKind,
 				CertManagerClusterIssuerKind,
 			),
-			// TODO: add object links
+			controller.WithObjectLinks(
+				LinkGatewayToCertificateFunc,
+				LinkGatewayToIssuerFunc,
+				LinkGatewayToClusterIssuerFunc,
+			),
 		)
 		// TODO: add tls policy specific tasks to workflow
 	}
@@ -249,7 +269,7 @@ func buildReconciler(manager ctrlruntime.Manager, client *dynamic.DynamicClient,
 			NewAuthorinoReconciler(client).Subscription().Reconcile,
 			NewLimitadorReconciler(client).Subscription().Reconcile,
 			NewDNSWorkflow().Run,
-			NewTLSWorkflow().Run,
+			NewTLSWorkflow(client).Run,
 			NewAuthWorkflow().Run,
 			NewRateLimitWorkflow().Run,
 		},

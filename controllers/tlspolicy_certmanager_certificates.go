@@ -33,7 +33,7 @@ func (r *TLSPolicyReconciler) reconcileCertificates(ctx context.Context, tlsPoli
 	// Reconcile Certificates for each gateway directly referred by the policy (existing and new)
 	for _, gw := range append(gwDiffObj.GatewaysWithValidPolicyRef, gwDiffObj.GatewaysMissingPolicyRef...) {
 		log.V(1).Info("reconcileCertificates: gateway with valid or missing policy ref", "key", gw.Key())
-		expectedCertificates := r.expectedCertificatesForGateway(ctx, gw.Gateway, tlsPolicy)
+		expectedCertificates := expectedCertificatesForGateway(ctx, gw.Gateway, tlsPolicy)
 		if err := r.createOrUpdateGatewayCertificates(ctx, tlsPolicy, expectedCertificates); err != nil {
 			return fmt.Errorf("error creating and updating expected certificates for gateway %v: %w", gw.Gateway.Name, err)
 		}
@@ -102,7 +102,7 @@ func (r *TLSPolicyReconciler) deleteUnexpectedCertificates(ctx context.Context, 
 	return nil
 }
 
-func (r *TLSPolicyReconciler) expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.Gateway, tlsPolicy *v1alpha1.TLSPolicy) []*certmanv1.Certificate {
+func expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.Gateway, tlsPolicy *v1alpha1.TLSPolicy) []*certmanv1.Certificate {
 	log := crlog.FromContext(ctx)
 
 	tlsHosts := make(map[corev1.ObjectReference][]string)
@@ -130,12 +130,12 @@ func (r *TLSPolicyReconciler) expectedCertificatesForGateway(ctx context.Context
 
 	certs := make([]*certmanv1.Certificate, 0, len(tlsHosts))
 	for secretRef, hosts := range tlsHosts {
-		certs = append(certs, r.buildCertManagerCertificate(gateway, tlsPolicy, secretRef, hosts))
+		certs = append(certs, buildCertManagerCertificate(gateway, tlsPolicy, secretRef, hosts))
 	}
 	return certs
 }
 
-func (r *TLSPolicyReconciler) buildCertManagerCertificate(gateway *gatewayapiv1.Gateway, tlsPolicy *v1alpha1.TLSPolicy, secretRef corev1.ObjectReference, hosts []string) *certmanv1.Certificate {
+func buildCertManagerCertificate(gateway *gatewayapiv1.Gateway, tlsPolicy *v1alpha1.TLSPolicy, secretRef corev1.ObjectReference, hosts []string) *certmanv1.Certificate {
 	tlsCertLabels := commonTLSCertificateLabels(client.ObjectKeyFromObject(gateway), tlsPolicy)
 
 	crt := &certmanv1.Certificate{

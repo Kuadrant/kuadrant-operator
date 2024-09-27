@@ -86,19 +86,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	rateLimitPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("ratelimitpolicy"),
-		mgr.GetEventRecorderFor("RateLimitPolicy"),
-	)
-
-	err = (&RateLimitPolicyReconciler{
-		BaseReconciler:      rateLimitPolicyBaseReconciler,
-		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
 	dnsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("dnspolicy"),
@@ -125,18 +112,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	Expect(err).NotTo(HaveOccurred())
 
-	limitadorClusterEnvoyFilterBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("ratelimitpolicy").WithName("envoyfilter"),
-		mgr.GetEventRecorderFor("LimitadorClusterEnvoyFilter"),
-	)
-
-	err = (&LimitadorClusterEnvoyFilterReconciler{
-		BaseReconciler: limitadorClusterEnvoyFilterBaseReconciler,
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
 	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("kuadrant").WithName("gateway"),
@@ -145,18 +120,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	err = (&GatewayKuadrantReconciler{
 		BaseReconciler: gatewayKuadrantBaseReconciler,
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
-	rateLimitingIstioWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("ratelimitpolicy").WithName("wasmplugin"),
-		mgr.GetEventRecorderFor("RateLimitingIstioWASMPlugin"),
-	)
-
-	err = (&RateLimitingIstioWASMPluginReconciler{
-		BaseReconciler: rateLimitingIstioWASMPluginBaseReconciler,
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())
@@ -185,17 +148,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	Expect(err).NotTo(HaveOccurred())
 
-	policyStatusBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("ratelimitpolicy").WithName("status"),
-		mgr.GetEventRecorderFor("RateLimitPolicyStatus"),
-	)
-	err = (&RateLimitPolicyEnforcedStatusReconciler{
-		BaseReconciler: policyStatusBaseReconciler,
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
 	authPolicyEnvoySecurityPolicyReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy").WithName("securitypolicy"),
@@ -216,18 +168,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	err = (&EnvoySecurityPolicyReferenceGrantReconciler{
 		BaseReconciler: envoySecurityPolicyReferenceGrantReconciler,
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
-	envoyGatewayWasmReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("envoyGatewayWasmReconciler"),
-		mgr.GetEventRecorderFor("EnvoyGatewayWasmReconciler"),
-	)
-
-	err = (&EnvoyGatewayWasmReconciler{
-		BaseReconciler: envoyGatewayWasmReconciler,
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())

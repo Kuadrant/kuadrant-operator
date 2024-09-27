@@ -53,7 +53,7 @@ func TestRules(t *testing.T) {
 				Namespace: "my-app",
 			},
 			Spec: kuadrantv1beta3.RateLimitPolicySpec{
-				RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+				RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 					Limits: limits,
 				},
 			},

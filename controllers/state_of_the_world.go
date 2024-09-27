@@ -44,7 +44,16 @@ var (
 	operatorNamespace  = env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
 )
 
+// gateway-api permissions
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
+
+// istio permissions
+//+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=get;list;watch;create;update;patch;delete
+
+// envoy gateway permissions
+//+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoypatchpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoyextensionpolicies,verbs=get;list;watch;create;update;patch;delete
 
 func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *controller.Controller {
 	// Base options
@@ -302,7 +311,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewDNSWorkflow().Run,
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isCertManagerInstalled).Run,
 			NewAuthWorkflow().Run,
-			NewRateLimitWorkflow().Run,
+			NewRateLimitWorkflow(b.client).Run,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isIstioInstalled, b.isGatewayAPIInstalled).Run,
 	}
@@ -438,4 +447,19 @@ func isObjectOwnedByGroupKind(o client.Object, groupKind schema.GroupKind) bool 
 	}
 
 	return false
+}
+
+var ErrMissingKuadrant = fmt.Errorf("missing kuadrant object in topology")
+
+func GetKuadrantFromTopology(topology *machinery.Topology) (*kuadrantv1beta1.Kuadrant, error) {
+	kuadrants := lo.FilterMap(topology.Objects().Roots(), func(root machinery.Object, _ int) (controller.Object, bool) {
+		o, isSortable := root.(controller.Object)
+		return o, isSortable && root.GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind && o.GetDeletionTimestamp() == nil
+	})
+	if len(kuadrants) == 0 {
+		return nil, ErrMissingKuadrant
+	}
+	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrants))
+	kuadrant, _ := kuadrants[0].(*kuadrantv1beta1.Kuadrant)
+	return kuadrant, nil
 }

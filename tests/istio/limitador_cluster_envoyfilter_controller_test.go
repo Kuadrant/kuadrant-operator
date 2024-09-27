@@ -89,12 +89,14 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "Gateway",
-						Name:  gatewayapiv1.ObjectName(TestGatewayName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{

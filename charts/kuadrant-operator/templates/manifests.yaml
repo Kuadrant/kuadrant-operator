@@ -7486,14 +7486,19 @@ spec:
       name: Enforced
       priority: 2
       type: string
-    - description: Type of the referenced Gateway API resource
+    - description: Kind of the object to which the policy aaplies
       jsonPath: .spec.targetRef.kind
-      name: TargetRefKind
+      name: TargetKind
       priority: 2
       type: string
-    - description: Name of the referenced Gateway API resource
+    - description: Name of the object to which the policy applies
       jsonPath: .spec.targetRef.name
-      name: TargetRefName
+      name: TargetName
+      priority: 2
+      type: string
+    - description: 'Name of the section within the object to which the policy applies '
+      jsonPath: .spec.targetRef.sectionName
+      name: TargetSection
       priority: 2
       type: string
     - jsonPath: .metadata.creationTimestamp
@@ -7523,12 +7528,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: RateLimitPolicySpec defines the desired state of RateLimitPolicy
             properties:
               defaults:
                 description: |-
-                  Defaults define explicit default values for this policy and for policies inheriting this policy.
-                  Defaults are mutually exclusive with implicit defaults defined by RateLimitPolicyCommonSpec.
+                  Rules to apply as defaults. Can be overridden by more specific policiy rules lower in the hierarchy and by less specific policy overrides.
+                  Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
                 properties:
                   limits:
                     additionalProperties:
@@ -7620,8 +7624,15 @@ spec:
                       type: object
                     description: Limits holds the struct of limits indexed by a unique
                       name
-                    maxProperties: 14
                     type: object
+                  strategy:
+                    default: atomic
+                    description: Strategy defines the merge strategy to apply when
+                      merging this policy with other policies.
+                    enum:
+                    - atomic
+                    - merge
+                    type: string
                 type: object
               limits:
                 additionalProperties:
@@ -7713,12 +7724,11 @@ spec:
                   type: object
                 description: Limits holds the struct of limits indexed by a unique
                   name
-                maxProperties: 14
                 type: object
               overrides:
                 description: |-
-                  Overrides define override values for this policy and for policies inheriting this policy.
-                  Overrides are mutually exclusive with implicit defaults and explicit Defaults defined by RateLimitPolicyCommonSpec.
+                  Rules to apply as overrides. Override all policy rules lower in the hierarchy. Can be overridden by less specific policy overrides.
+                  Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
                 properties:
                   limits:
                     additionalProperties:
@@ -7810,11 +7820,18 @@ spec:
                       type: object
                     description: Limits holds the struct of limits indexed by a unique
                       name
-                    maxProperties: 14
                     type: object
+                  strategy:
+                    default: atomic
+                    description: Strategy defines the merge strategy to apply when
+                      merging this policy with other policies.
+                    enum:
+                    - atomic
+                    - merge
+                    type: string
                 type: object
               targetRef:
-                description: TargetRef identifies an API object to apply policy to.
+                description: Reference to the object to which this policy applies.
                 properties:
                   group:
                     description: Group is the group of the target resource.
@@ -7831,6 +7848,25 @@ spec:
                     description: Name is the name of the target resource.
                     maxLength: 253
                     minLength: 1
+                    type: string
+                  sectionName:
+                    description: |-
+                      SectionName is the name of a section within the target resource. When
+                      unspecified, this targetRef targets the entire resource. In the following
+                      resources, SectionName is interpreted as the following:
+
+
+                      * Gateway: Listener name
+                      * HTTPRoute: HTTPRouteRule name
+                      * Service: Port name
+
+
+                      If a SectionName is specified, but does not exist on the targeted object,
+                      the Policy must fail to attach, and the policy implementation should record
+                      a `ResolvedRefs` or similar Condition in the Policy's status.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                     type: string
                 required:
                 - group
@@ -7853,11 +7889,7 @@ spec:
               rule: '!(has(self.defaults) && has(self.overrides))'
             - message: Overrides and implicit defaults are mutually exclusive
               rule: '!(has(self.overrides) && has(self.limits))'
-            - message: Overrides are only allowed for policies targeting a Gateway
-                resource
-              rule: '!(has(self.overrides) && self.targetRef.kind != ''Gateway'')'
           status:
-            description: RateLimitPolicyStatus defines the observed state of RateLimitPolicy
             properties:
               conditions:
                 description: |-

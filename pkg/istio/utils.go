@@ -9,10 +9,21 @@ import (
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+)
+
+var (
+	EnvoyFiltersResource          = istioclientnetworkingv1alpha3.SchemeGroupVersion.WithResource("envoyfilters")
+	WasmPluginsResource           = istioclientgoextensionv1alpha1.SchemeGroupVersion.WithResource("wasmplugins")
+	AuthorizationPoliciesResource = istioclientgosecurityv1beta1.SchemeGroupVersion.WithResource("authorizationpolicies")
+
+	EnvoyFilterGroupKind         = schema.GroupKind{Group: istioclientnetworkingv1alpha3.GroupName, Kind: "EnvoyFilter"}
+	WasmPluginGroupKind          = schema.GroupKind{Group: istioclientgoextensionv1alpha1.GroupName, Kind: "WasmPlugin"}
+	AuthorizationPolicyGroupKind = schema.GroupKind{Group: istioclientgosecurityv1beta1.GroupName, Kind: "AuthorizationPolicy"}
 )
 
 func WorkloadSelectorFromGateway(ctx context.Context, k8sClient client.Client, gateway *gatewayapiv1.Gateway) *istiocommon.WorkloadSelector {

@@ -34,6 +34,6 @@ func policyFactory(ns, name string, targetRef gatewayapiv1alpha2.LocalPolicyTarg
 	return &kuadrantv1beta3.RateLimitPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "RateLimitPolicy", APIVersion: kuadrantv1beta3.GroupVersion.String()},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Spec:       kuadrantv1beta3.RateLimitPolicySpec{TargetRef: targetRef},
+		Spec:       kuadrantv1beta3.RateLimitPolicySpec{TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{LocalPolicyTargetReference: targetRef}},
 	}
 }

@@ -32,8 +32,8 @@ var (
 	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
 )
 
-func LimitsNamespaceFromRLP(rlp *kuadrantv1beta3.RateLimitPolicy) string {
-	return fmt.Sprintf("%s/%s", rlp.GetNamespace(), rlp.GetName())
+func LimitsNamespaceFromRoute(route *gatewayapiv1.HTTPRoute) string {
+	return types.NamespacedName{Name: route.GetName(), Namespace: route.GetNamespace()}.String()
 }
 
 // Rules computes WASM rules from the policy and the targeted route.
@@ -46,7 +46,7 @@ func Rules(rlp *kuadrantv1beta3.RateLimitPolicy, route *gatewayapiv1.HTTPRoute) 
 	}
 
 	rlpKey := client.ObjectKeyFromObject(rlp)
-	limits := rlp.Spec.CommonSpec().Limits
+	limits := rlp.Spec.Proper().Limits
 
 	// Sort RLP limits for consistent comparison with existing wasmplugin objects
 	limitNames := lo.Keys(limits)
@@ -56,7 +56,7 @@ func Rules(rlp *kuadrantv1beta3.RateLimitPolicy, route *gatewayapiv1.HTTPRoute) 
 		// 1 RLP limit <---> 1 WASM rule
 		limit := limits[limitName]
 		limitIdentifier := LimitNameToLimitadorIdentifier(rlpKey, limitName)
-		rule, err := ruleFromLimit(rlp, limitIdentifier, &limit, route)
+		rule, err := ruleFromLimit(limitIdentifier, &limit, route)
 		if err == nil {
 			rules = append(rules, rule)
 		}
@@ -84,7 +84,11 @@ func LimitNameToLimitadorIdentifier(rlpKey types.NamespacedName, uniqueLimitName
 	return identifier
 }
 
-func ruleFromLimit(rlp *kuadrantv1beta3.RateLimitPolicy, limitIdentifier string, limit *kuadrantv1beta3.Limit, route *gatewayapiv1.HTTPRoute) (Rule, error) {
+func ToLimitadorRateLimitName(limitIdentifier, rateID string) string {
+	return fmt.Sprintf("%s__%s", limitIdentifier, rateID)
+}
+
+func ruleFromLimit(limitIdentifier string, limit *kuadrantv1beta3.Limit, route *gatewayapiv1.HTTPRoute) (Rule, error) {
 	rule := Rule{}
 
 	conditions, err := conditionsFromLimit(limit, route)
@@ -97,7 +101,7 @@ func ruleFromLimit(rlp *kuadrantv1beta3.RateLimitPolicy, limitIdentifier string,
 	if data := dataFromLimit(limitIdentifier, limit); data != nil {
 		rule.Actions = []Action{
 			{
-				Scope:         LimitsNamespaceFromRLP(rlp),
+				Scope:         client.ObjectKeyFromObject(route).String(),
 				ExtensionName: RateLimitPolicyExtensionName,
 				Data:          data,
 			},
@@ -107,6 +111,7 @@ func ruleFromLimit(rlp *kuadrantv1beta3.RateLimitPolicy, limitIdentifier string,
 	return rule, nil
 }
 
+// TODO: build conditions for a specific HTTPRouteRule, not for the entire HTTPRoute
 func conditionsFromLimit(limit *kuadrantv1beta3.Limit, route *gatewayapiv1.HTTPRoute) ([]Condition, error) {
 	if limit == nil {
 		return nil, errors.New("limit should not be nil")

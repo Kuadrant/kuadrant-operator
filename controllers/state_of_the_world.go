@@ -3,6 +3,7 @@ package controllers
 import (
 	"fmt"
 	"reflect"
+	"sort"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -10,7 +11,9 @@ import (
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
 	consolev1 "github.com/openshift/api/console/v1"
+	"github.com/samber/lo"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -42,7 +45,16 @@ var (
 	operatorNamespace  = env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
 )
 
+// gateway-api permissions
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
+
+// istio permissions
+//+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=get;list;watch;create;update;patch;delete
+
+// envoy gateway permissions
+//+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoypatchpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoyextensionpolicies,verbs=get;list;watch;create;update;patch;delete
 
 func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *controller.Controller {
 	// Base options
@@ -300,7 +312,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewDNSWorkflow().Run,
 			NewTLSWorkflow(b.client, b.isCertManagerInstalled).Run,
 			NewAuthWorkflow().Run,
-			NewRateLimitWorkflow().Run,
+			NewRateLimitWorkflow(b.client).Run,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isIstioInstalled, b.isGatewayAPIInstalled).Run,
 	}
@@ -444,4 +456,19 @@ func isObjectOwnedByGroupKind(o client.Object, groupKind schema.GroupKind) bool 
 	}
 
 	return false
+}
+
+var ErrMissingKuadrant = fmt.Errorf("missing kuadrant object in topology")
+
+func GetKuadrantFromTopology(topology *machinery.Topology) (*kuadrantv1beta1.Kuadrant, error) {
+	kuadrants := lo.FilterMap(topology.Objects().Roots(), func(root machinery.Object, _ int) (controller.Object, bool) {
+		o, isSortable := root.(controller.Object)
+		return o, isSortable && root.GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind && o.GetDeletionTimestamp() == nil
+	})
+	if len(kuadrants) == 0 {
+		return nil, ErrMissingKuadrant
+	}
+	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrants))
+	kuadrant, _ := kuadrants[0].(*kuadrantv1beta1.Kuadrant)
+	return kuadrant, nil
 }

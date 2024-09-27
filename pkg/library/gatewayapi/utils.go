@@ -11,7 +11,6 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -154,42 +153,26 @@ func FilterValidSubdomains(domains, subdomains []gatewayapiv1.Hostname) []gatewa
 }
 
 func IsGatewayAPIInstalled(restMapper meta.RESTMapper) (bool, error) {
-	return IsCRDInstalled(restMapper, gatewayapiv1.GroupName, "HTTPRoute", gatewayapiv1.GroupVersion.Version)
+	return utils.IsCRDInstalled(restMapper, gatewayapiv1.GroupName, "HTTPRoute", gatewayapiv1.GroupVersion.Version)
 }
 
 func IsCertManagerInstalled(restMapper meta.RESTMapper, logger logr.Logger) (bool, error) {
-	if ok, err := IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.CertificateKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
+	if ok, err := utils.IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.CertificateKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
 		logger.V(1).Error(err, "CertManager CRD was not installed", "group", certmanager.GroupName, "kind", certmanv1.CertificateKind, "version", certmanv1.SchemeGroupVersion.Version)
 		return false, err
 	}
 
-	if ok, err := IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.IssuerKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
+	if ok, err := utils.IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.IssuerKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
 		logger.V(1).Error(err, "CertManager CRD was not installed", "group", certmanager.GroupName, "kind", certmanv1.IssuerKind, "version", certmanv1.SchemeGroupVersion.Version)
 		return false, err
 	}
 
-	if ok, err := IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.ClusterIssuerKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
+	if ok, err := utils.IsCRDInstalled(restMapper, certmanager.GroupName, certmanv1.ClusterIssuerKind, certmanv1.SchemeGroupVersion.Version); !ok || err != nil {
 		logger.V(1).Error(err, "CertManager CRD was not installed", "group", certmanager.GroupName, "kind", certmanv1.ClusterIssuerKind, "version", certmanv1.SchemeGroupVersion.Version)
 		return false, err
 	}
 
 	return true, nil
-}
-
-func IsCRDInstalled(restMapper meta.RESTMapper, group, kind, version string) (bool, error) {
-	_, err := restMapper.RESTMapping(
-		schema.GroupKind{Group: group, Kind: kind},
-		version,
-	)
-	if err == nil {
-		return true, nil
-	}
-
-	if meta.IsNoMatchError(err) {
-		return false, nil
-	}
-
-	return false, err
 }
 
 // GetGatewayParentRefsFromRoute returns the list of parentRefs that are Gateway typed

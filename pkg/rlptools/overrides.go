@@ -46,7 +46,7 @@ func ApplyOverrides(topology *kuadrantgatewayapi.Topology, gateway *gatewayapiv1
 
 		for _, policy := range route.AttachedPolicies() {
 			overriddenPolicy := policy.DeepCopyObject().(*kuadrantv1beta3.RateLimitPolicy)
-			overriddenPolicy.Spec.CommonSpec().Limits = overridePolicies[0].Spec.Overrides.Limits
+			overriddenPolicy.Spec.Proper().Limits = overridePolicies[0].Spec.Overrides.Limits
 			overriddenPolicies = append(overriddenPolicies, overriddenPolicy)
 		}
 	}

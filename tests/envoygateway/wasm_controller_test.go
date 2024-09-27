@@ -92,12 +92,14 @@ var _ = Describe("wasm controller", func() {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Defaults = &kuadrantv1beta3.RateLimitPolicyCommonSpec{
-					Limits: map[string]kuadrantv1beta3.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta3.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: "minute",
+				policy.Spec.Defaults = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1beta3.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta3.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: "minute",
+									},
 								},
 							},
 						},
@@ -177,7 +179,7 @@ var _ = Describe("wasm controller", func() {
 								},
 								Actions: []wasm.Action{
 									{
-										Scope:         wasm.LimitsNamespaceFromRLP(gwPolicy),
+										Scope:         wasm.LimitsNamespaceFromRoute(gwRoute),
 										ExtensionName: wasm.RateLimitPolicyExtensionName,
 										Data: []wasm.DataType{
 											{
@@ -252,12 +254,14 @@ var _ = Describe("wasm controller", func() {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "HTTPRoute"
 				policy.Spec.TargetRef.Name = TestHTTPRouteName
-				policy.Spec.Defaults = &kuadrantv1beta3.RateLimitPolicyCommonSpec{
-					Limits: map[string]kuadrantv1beta3.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta3.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: "minute",
+				policy.Spec.Defaults = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1beta3.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta3.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: "minute",
+									},
 								},
 							},
 						},
@@ -336,7 +340,7 @@ var _ = Describe("wasm controller", func() {
 								},
 								Actions: []wasm.Action{
 									{
-										Scope:         wasm.LimitsNamespaceFromRLP(routePolicy),
+										Scope:         wasm.LimitsNamespaceFromRoute(gwRoute),
 										ExtensionName: wasm.RateLimitPolicyExtensionName,
 										Data: []wasm.DataType{
 											{

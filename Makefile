@@ -23,9 +23,8 @@ VERSION ?= 0.0.0
 # To re-generate a bundle for other specific channels without changing the standard setup, you can:
 # - use the CHANNELS as arg of the bundle target (e.g make bundle CHANNELS=candidate,fast,stable)
 # - use environment variables to overwrite this value (e.g export CHANNELS="candidate,fast,stable")
-ifneq ($(origin CHANNELS), undefined)
+CHANNELS ?= alpha
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
-endif
 
 # DEFAULT_CHANNEL defines the default channel used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g DEFAULT_CHANNEL = "stable")

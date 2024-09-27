@@ -35,6 +35,10 @@ on:
         description: Bundle and catalog channels, comma separated
         default: preview
         type: string
+      defaultChannel:
+        description: Bundle default channel
+        default: preview
+        type: string
       quayImageExpiry:
         description: When to expire the built quay images. The time values could be something like 1h, 2d, 3w for hours, days, and weeks, respectively, from the time the image is built.
         default: never
@@ -71,6 +75,10 @@ on:
         type: string
       channels:
         description: Bundle and catalog channels, comma separated
+        default: preview
+        type: string
+      defaultChannel:
+        description: Bundle default channel
         default: preview
         type: string
       quayImageExpiry:
@@ -148,6 +156,7 @@ jobs:
             DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
             REPLACES_VERSION=${{ inputs.replacesVersion }} \
+            DEFAULT_CHANNEL=${{ inputs.defaultChannel }} \
             CHANNELS=${{ inputs.channels }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -196,7 +205,7 @@ jobs:
             DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
             REPLACES_VERSION=${{ inputs.replacesVersion }} \
-            CHANNELS=${{ inputs.channels }}
+            DEFAULT_CHANNEL=${{ inputs.defaultChannel }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to container registry

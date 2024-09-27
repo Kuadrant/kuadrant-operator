@@ -1,6 +1,7 @@
 package v1beta1
 
 import (
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -9,8 +10,11 @@ import (
 )
 
 var (
-	KuadrantResource = GroupVersion.WithResource("kuadrants")
-	KuadrantKind     = schema.GroupKind{Group: GroupVersion.Group, Kind: "Kuadrant"}
+	KuadrantKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "Kuadrant"}
+	LimitadorKind = schema.GroupKind{Group: limitadorv1alpha1.GroupVersion.Group, Kind: "Limitador"}
+
+	KuadrantResource  = GroupVersion.WithResource("kuadrants")
+	LimitadorResource = limitadorv1alpha1.GroupVersion.WithResource("limitadors")
 )
 
 var _ machinery.Object = &Kuadrant{}
@@ -31,6 +35,20 @@ func LinkKuadrantToGatewayClasses(objs controller.Store) machinery.LinkFunc {
 				parents = append(parents, parent)
 			}
 			return parents
+		},
+	}
+}
+
+func LinkKuadrantToLimitador(objs controller.Store) machinery.LinkFunc {
+	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantKind), controller.ObjectAs[machinery.Object])
+
+	return machinery.LinkFunc{
+		From: KuadrantKind,
+		To:   LimitadorKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
+				return kuadrant.GetNamespace() == child.GetNamespace() && child.GetName() == "limitador"
+			})
 		},
 	}
 }

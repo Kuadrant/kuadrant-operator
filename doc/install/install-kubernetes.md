@@ -4,6 +4,12 @@
 
     You must perform these steps on each Kubernetes cluster where you want to use Kuadrant.
 
+!!! warning
+
+    Kuadrant uses a number of labels to search and filter resources on the cluster.
+    All required labels are formatted as `kuadrant.io/*`.
+    Removal of any labels with the prefix may cause unexpected behaviour and degradstion of the product.
+
 ## Prerequisites
 
 - Access to a Kubernetes cluster, with `kubeadmin` or an account with similar permissions

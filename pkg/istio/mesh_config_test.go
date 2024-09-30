@@ -17,7 +17,6 @@ import (
 	"maistra.io/istio-operator/pkg/helm"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
 	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
 )
 
@@ -242,8 +241,8 @@ func TestOSSMControlPlaneWrapper_GetConfigObject(t *testing.T) {
 
 func TestOSSMControlPlaneWrapper_GetMeshConfig(t *testing.T) {
 	ossmControlPlane := &maistrav2.ServiceMeshControlPlane{}
-	ossmControlPlane.Spec.TechPreview = maistrav1.NewHelmValues(nil)
-	err := ossmControlPlane.Spec.TechPreview.SetField("meshConfig", getStubbedMeshConfigStruct().AsMap())
+	ossmMeshConfig, err := ossmMeshConfigFromStruct(getStubbedMeshConfigStruct())
+	ossmControlPlane.Spec.MeshConfig = ossmMeshConfig
 	assert.NilError(t, err)
 
 	wrapper := NewOSSMControlPlaneWrapper(ossmControlPlane)
@@ -251,19 +250,29 @@ func TestOSSMControlPlaneWrapper_GetMeshConfig(t *testing.T) {
 
 	assert.Equal(t, meshConfig.ExtensionProviders[0].Name, "custom-authorizer")
 	assert.Equal(t, meshConfig.ExtensionProviders[0].GetEnvoyExtAuthzGrpc().GetPort(), uint32(50051))
+
+	// additional test branches for ossmMeshConfigFromStruct
+	ossmMeshConfig, err = ossmMeshConfigFromStruct(nil)
+	assert.NilError(t, err)
+	assert.DeepEqual(t, ossmMeshConfig, &maistrav2.MeshConfig{})
+
+	invalidStruct := &structpb.Struct{
+		Fields: map[string]*structpb.Value{
+			"invalid": {},
+		},
+	}
+
+	ossmMeshConfig, err = ossmMeshConfigFromStruct(invalidStruct)
+	assert.Check(t, err != nil)
+	assert.Check(t, ossmMeshConfig == nil)
 }
 
 func TestOSSMControlPlaneWrapper_SetMeshConfig(t *testing.T) {
 	ossmControlPlane := &maistrav2.ServiceMeshControlPlane{}
-	ossmControlPlane.Spec.TechPreview = maistrav1.NewHelmValues(nil)
-	emptyConfig := &structpb.Struct{}
-	err := ossmControlPlane.Spec.TechPreview.SetField("meshConfig", emptyConfig.AsMap())
-	assert.NilError(t, err)
-
 	wrapper := NewOSSMControlPlaneWrapper(ossmControlPlane)
 
 	stubbedMeshConfig := getStubbedMeshConfig()
-	err = wrapper.SetMeshConfig(stubbedMeshConfig)
+	err := wrapper.SetMeshConfig(stubbedMeshConfig)
 	assert.NilError(t, err)
 
 	meshConfig, _ := wrapper.GetMeshConfig()

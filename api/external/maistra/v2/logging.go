@@ -47,6 +47,10 @@ const (
 	LogLevelError LogLevel = "error"
 	// LogLevelCritical critical logging level
 	LogLevelCritical LogLevel = "critical"
+	// LogLevelFatal critical logging level
+	LogLevelFatal LogLevel = "fatal"
+	// LogLevelNone disable logging
+	LogLevelNone LogLevel = "none"
 	// LogLevelOff disable logging
 	LogLevelOff LogLevel = "off"
 )

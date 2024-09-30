@@ -1,6 +1,7 @@
 package istio
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -261,20 +262,19 @@ func (w *SailWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshConfig) error 
 
 // GetMeshConfig returns the MeshConfig from the OSSM ServiceMeshControlPlane
 func (w *OSSMControlPlaneWrapper) GetMeshConfig() (*istiomeshv1alpha1.MeshConfig, error) {
-	if config, found, err := w.config.Spec.TechPreview.GetMap("meshConfig"); err != nil {
-		return nil, err
-	} else if found {
-		meshConfigStruct, err := structpb.NewStruct(config)
-		if err != nil {
-			return nil, err
-		}
-		meshConfig, err := meshConfigFromStruct(meshConfigStruct)
-		if err != nil {
-			return nil, err
-		}
-		return meshConfig, nil
+	config := w.config.Spec.MeshConfig
+	if config == nil {
+		return &istiomeshv1alpha1.MeshConfig{}, nil
 	}
-	return &istiomeshv1alpha1.MeshConfig{}, nil
+	meshConfigStruct, err := ossmMeshConfigToStruct(config)
+	if err != nil {
+		return nil, err
+	}
+	meshConfig, err := meshConfigFromStruct(meshConfigStruct)
+	if err != nil {
+		return nil, err
+	}
+	return meshConfig, nil
 }
 
 // SetMeshConfig sets the MeshConfig in the OSSM ServiceMeshControlPlane
@@ -283,8 +283,8 @@ func (w *OSSMControlPlaneWrapper) SetMeshConfig(config *istiomeshv1alpha1.MeshCo
 	if err != nil {
 		return err
 	}
-
-	return w.config.Spec.TechPreview.SetField("meshConfig", meshConfigStruct.AsMap())
+	w.config.Spec.MeshConfig, err = ossmMeshConfigFromStruct(meshConfigStruct)
+	return err
 }
 
 // meshConfigFromStruct Builds the Istio/OSSM MeshConfig from a compatible structure:
@@ -344,4 +344,39 @@ func meshConfigToString(config *istiomeshv1alpha1.MeshConfig) (string, error) {
 		return "", err
 	}
 	return configString, nil
+}
+
+// ossmMeshConfigFromStruct returns a maistrav2.MeshConfig from struct
+func ossmMeshConfigFromStruct(structure *structpb.Struct) (*maistrav2.MeshConfig, error) {
+	if structure == nil {
+		return &maistrav2.MeshConfig{}, nil
+	}
+
+	meshConfigJSON, err := structure.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+
+	meshConfig := &maistrav2.MeshConfig{}
+	if err = json.Unmarshal(meshConfigJSON, meshConfig); err != nil {
+		return nil, err
+	}
+
+	return meshConfig, nil
+}
+
+func ossmMeshConfigToStruct(config *maistrav2.MeshConfig) (*structpb.Struct, error) {
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return nil, err
+	}
+	return jsonByteToStruct(configJSON)
+}
+
+func jsonByteToStruct(configJSON []byte) (*structpb.Struct, error) {
+	configStruct := &structpb.Struct{}
+	if err := configStruct.UnmarshalJSON(configJSON); err != nil {
+		return nil, err
+	}
+	return configStruct, nil
 }

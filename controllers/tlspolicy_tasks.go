@@ -233,7 +233,7 @@ func (t *TLSPolicyStatusTask) isIssuerReady(ctx context.Context, tlsPolicy *kuad
 		})
 		if !ok {
 			err := errors.New("unable to find issuer for TLSPolicy")
-			logger.Error(err, "unable to find issuer for TLSPolicy")
+			logger.Error(err, "error finding object in topology")
 			return err
 		}
 
@@ -241,13 +241,13 @@ func (t *TLSPolicyStatusTask) isIssuerReady(ctx context.Context, tlsPolicy *kuad
 
 		conditions = issuer.Status.Conditions
 	case certmanagerv1.ClusterIssuerKind:
-		// TODO: Why cant use gateway children
-		obj, ok := lo.Find(topology.Objects().Items(), func(o machinery.Object) bool {
+		objs := topology.Objects().Children(gw)
+		obj, ok := lo.Find(objs, func(o machinery.Object) bool {
 			return o.GroupVersionKind().GroupKind() == CertManagerClusterIssuerKind && o.GetName() == tlsPolicy.Spec.IssuerRef.Name
 		})
 		if !ok {
 			err := errors.New("unable to find cluster issuer for TLSPolicy")
-			logger.Error(err, "unable to find  cluster issuer for TLSPolicy")
+			logger.Error(err, "error finding object in topology")
 			return err
 		}
 
@@ -289,8 +289,8 @@ func (t *TLSPolicyStatusTask) isCertificatesReady(ctx context.Context, p machine
 		expectedCertificates := expectedCertificatesForGateway(ctx, gw.Gateway, tlsPolicy)
 
 		for _, cert := range expectedCertificates {
-			// TODO: Why cant use gateway
-			obj, ok := lo.Find(topology.Objects().Children(gw), func(o machinery.Object) bool {
+			objs := topology.Objects().Children(gw)
+			obj, ok := lo.Find(objs, func(o machinery.Object) bool {
 				return o.GroupVersionKind().GroupKind() == CertManagerCertificateKind && o.GetNamespace() == cert.GetNamespace() && o.GetName() == cert.GetName()
 			})
 

@@ -1,55 +1,6 @@
 - op: add
   path: /spec/template/spec/volumes/-
   value:
-    name: grafana-gatewayclasses
-    configMap:
-     defaultMode: 420
-     name: grafana-gatewayclasses
-- op: add
-  path: /spec/template/spec/volumes/-
-  value:
-    name: grafana-gateways
-    configMap:
-     defaultMode: 420
-     name: grafana-gateways
-- op: add
-  path: /spec/template/spec/volumes/-
-  value:
-    name: grafana-httproutes
-    configMap:
-     defaultMode: 420
-     name: grafana-httproutes
-- op: add
-  path: /spec/template/spec/volumes/-
-  value:
-    name: grafana-grpcroutes
-    configMap:
-     defaultMode: 420
-     name: grafana-grpcroutes
-- op: add
-  path: /spec/template/spec/volumes/-
-  value:
-    name: grafana-tlsroutes
-    configMap:
-     defaultMode: 420
-     name: grafana-tlsroutes
-- op: add
-  path: /spec/template/spec/volumes/-
-  value:
-    name: grafana-tcproutes
-    configMap:
-     defaultMode: 420
-     name: grafana-tcproutes
-- op: add
-  path: /spec/template/spec/volumes/-
-  value:
-    name: grafana-udproutes
-    configMap:
-     defaultMode: 420
-     name: grafana-udproutes
-- op: add
-  path: /spec/template/spec/volumes/-
-  value:
     name: grafana-app-developer
     configMap:
       defaultMode: 420
@@ -81,42 +32,7 @@
     name: grafana-controller-runtime
     configMap:
       defaultMode: 420
-      name: grafana-controller-runtime          
-- op: add
-  path: /spec/template/spec/containers/0/volumeMounts/-
-  value:
-    name: grafana-gatewayclasses
-    mountPath: /grafana-dashboard-definitions/0/grafana-gatewayclasses
-- op: add
-  path: /spec/template/spec/containers/0/volumeMounts/-
-  value:
-    name: grafana-gateways
-    mountPath: /grafana-dashboard-definitions/0/grafana-gateways
-- op: add
-  path: /spec/template/spec/containers/0/volumeMounts/-
-  value:
-    name: grafana-httproutes
-    mountPath: /grafana-dashboard-definitions/0/grafana-httproutes
-- op: add
-  path: /spec/template/spec/containers/0/volumeMounts/-
-  value:
-    name: grafana-grpcroutes
-    mountPath: /grafana-dashboard-definitions/0/grafana-grpcroutes
-- op: add
-  path: /spec/template/spec/containers/0/volumeMounts/-
-  value:
-    name: grafana-tlsroutes
-    mountPath: /grafana-dashboard-definitions/0/grafana-tlsroutes
-- op: add
-  path: /spec/template/spec/containers/0/volumeMounts/-
-  value:
-    name: grafana-tcproutes
-    mountPath: /grafana-dashboard-definitions/0/grafana-tcproutes
-- op: add
-  path: /spec/template/spec/containers/0/volumeMounts/-
-  value:
-    name: grafana-udproutes
-    mountPath: /grafana-dashboard-definitions/0/grafana-udproutes
+      name: grafana-controller-runtime
 - op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:

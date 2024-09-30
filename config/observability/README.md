@@ -2,14 +2,23 @@
 
 ## Deploying the observabilty stack
 
+If you run the `quickstart-setup.sh` script, the observability stack should already be set up.
+In that case, you can skip the below commands.
+If however you have run `make local-setup` and would like to install the observability stack, these commands will install the stack and example dashboards & alerts.
+
 ```bash
-./bin/kustomize build ./config/observability/| docker run --rm -i ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
-./bin/kustomize build ./config/observability/| docker run --rm -i ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -
+./bin/kustomize build ./config/observability/| docker run --rm -i docker.io/ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
+./bin/kustomize build ./config/observability/| docker run --rm -i docker.io/ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -
+./bin/kustomize build ./config/thanos | kubectl apply -f -
 ./bin/kustomize build ./examples/dashboards | kubectl apply -f -
+./bin/kustomize build ./examples/alerts | kubectl apply -f -
+THANOS_RECEIVE_ROUTER_IP=$(kubectl -n monitoring get svc thanos-receive-router-lb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+kubectl -n monitoring patch prometheus k8s --type='merge' -p '{"spec":{"remoteWrite":[{"url":"http://'"$THANOS_RECEIVE_ROUTER_IP"':19291/api/v1/receive", "writeRelabelConfigs":[{"action":"replace", "replacement":"'"$KUADRANT_CLUSTER_NAME"'", "targetLabel":"cluster_id"}]}]}}'
 ```
 
 This will deploy prometheus, alertmanager and grafana into the `monitoring` namespace,
 along with metrics scrape configuration for Istio and Envoy.
+Thanos will also be deployed with prometheus configured to remote write to it.
 
 ## Accessing Grafana & Prometheus
 

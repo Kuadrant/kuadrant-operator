@@ -7,12 +7,11 @@ set -euo pipefail
 OPM="${1?:Error \$OPM not set. Bye}"
 YQ="${2?:Error \$YQ not set. Bye}"
 BUNDLE_IMG="${3?:Error \$BUNDLE_IMG not set. Bye}"
-REPLACES_VERSION="${4?:Error \$REPLACES_VERSION not set. Bye}"
-LIMITADOR_OPERATOR_BUNDLE_IMG="${5?:Error \$LIMITADOR_OPERATOR_BUNDLE_IMG not set. Bye}"
-AUTHORINO_OPERATOR_BUNDLE_IMG="${6?:Error \$AUTHORINO_OPERATOR_BUNDLE_IMG not set. Bye}"
-DNS_OPERATOR_BUNDLE_IMG="${7?:Error \$DNS_OPERATOR_BUNDLE_IMG not set. Bye}"
-CHANNEL="${8?:Error \$CHANNEL not set. Bye}"
-CATALOG_FILE="${9?:Error \$CATALOG_FILE not set. Bye}"
+LIMITADOR_OPERATOR_BUNDLE_IMG="${4?:Error \$LIMITADOR_OPERATOR_BUNDLE_IMG not set. Bye}"
+AUTHORINO_OPERATOR_BUNDLE_IMG="${5?:Error \$AUTHORINO_OPERATOR_BUNDLE_IMG not set. Bye}"
+DNS_OPERATOR_BUNDLE_IMG="${6?:Error \$DNS_OPERATOR_BUNDLE_IMG not set. Bye}"
+CHANNEL="${7?:Error \$CHANNEL not set. Bye}"
+CATALOG_FILE="${8?:Error \$CATALOG_FILE not set. Bye}"
 
 CATALOG_FILE_BASEDIR="$( cd "$( dirname "$(realpath ${CATALOG_FILE})" )" && pwd )"
 CATALOG_BASEDIR="$( cd "$( dirname "$(realpath ${CATALOG_FILE_BASEDIR})" )" && pwd )"
@@ -99,8 +98,7 @@ ${OPM} init kuadrant-operator --default-channel=${CHANNEL} --output yaml >> ${CA
 cat ${TMP_DIR}/kuadrant-operator-bundle.yaml >> ${CATALOG_FILE}
 # Add a channel entry for the bundle
 NAME=`${YQ} eval '.name' ${TMP_DIR}/kuadrant-operator-bundle.yaml` \
-REPLACES=kuadrant-operator.v${REPLACES_VERSION} \
 CHANNEL=${CHANNEL} \
-    ${YQ} eval '(.entries[0].name = strenv(NAME)) | (.entries[0].replaces = strenv(REPLACES)) | (.name = strenv(CHANNEL))' ${CATALOG_BASEDIR}/kuadrant-operator-channel-entry.yaml >> ${CATALOG_FILE}
+    ${YQ} eval '(.entries[0].name = strenv(NAME)) | (.name = strenv(CHANNEL))' ${CATALOG_BASEDIR}/kuadrant-operator-channel-entry.yaml >> ${CATALOG_FILE}
 
 rm -rf $TMP_DIR

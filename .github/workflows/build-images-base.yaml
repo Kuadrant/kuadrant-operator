@@ -27,10 +27,6 @@ on:
         description: WASM Shim version
         default: latest
         type: string
-      replacesVersion:
-        description: Kuadrant Operator replaced version
-        default: 0.0.0-alpha
-        type: string
       channels:
         description: Bundle and catalog channels, comma separated
         default: preview
@@ -68,10 +64,6 @@ on:
       wasmShimVersion:
         description: WASM Shim version
         default: latest
-        type: string
-      replacesVersion:
-        description: Kuadrant Operator replaced version
-        default: 0.0.0-alpha
         type: string
       channels:
         description: Bundle and catalog channels, comma separated
@@ -155,7 +147,6 @@ jobs:
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
             DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
-            REPLACES_VERSION=${{ inputs.replacesVersion }} \
             DEFAULT_CHANNEL=${{ inputs.defaultChannel }} \
             CHANNELS=${{ inputs.channels }}
       - name: Set up Docker Buildx
@@ -204,7 +195,6 @@ jobs:
             LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
             DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
             WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
-            REPLACES_VERSION=${{ inputs.replacesVersion }} \
             DEFAULT_CHANNEL=${{ inputs.defaultChannel }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

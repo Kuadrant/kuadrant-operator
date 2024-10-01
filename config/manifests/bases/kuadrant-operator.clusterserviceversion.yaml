@@ -96,5 +96,4 @@ spec:
   provider:
     name: Red Hat
     url: https://github.com/Kuadrant/kuadrant-operator
-  replaces: kuadrant-operator.v0.0.0-alpha
   version: 0.0.0

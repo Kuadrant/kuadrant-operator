@@ -32,7 +32,6 @@ $(CATALOG_FILE): $(OPM) $(YQ)
 	@echo Build kuadrant operator catalog
 	@echo
 	@echo BUNDLE_IMG                     = $(BUNDLE_IMG)
-	@echo REPLACES_VERSION               = $(REPLACES_VERSION)
 	@echo LIMITADOR_OPERATOR_BUNDLE_IMG  = $(LIMITADOR_OPERATOR_BUNDLE_IMG)
 	@echo AUTHORINO_OPERATOR_BUNDLE_IMG  = $(AUTHORINO_OPERATOR_BUNDLE_IMG)
 	@echo DNS_OPERATOR_BUNDLE_IMG        = $(DNS_OPERATOR_BUNDLE_IMG)
@@ -42,8 +41,8 @@ $(CATALOG_FILE): $(OPM) $(YQ)
 	@echo
 	@echo Please check this matches your expectations and override variables if needed.
 	@echo
-	$(PROJECT_PATH)/utils/generate-catalog.sh $(OPM) $(YQ) $(BUNDLE_IMG) $(REPLACES_VERSION)\
-			$(LIMITADOR_OPERATOR_BUNDLE_IMG) $(AUTHORINO_OPERATOR_BUNDLE_IMG)\
+	$(PROJECT_PATH)/utils/generate-catalog.sh $(OPM) $(YQ) $(BUNDLE_IMG) \
+			$(LIMITADOR_OPERATOR_BUNDLE_IMG) $(AUTHORINO_OPERATOR_BUNDLE_IMG) \
 			$(DNS_OPERATOR_BUNDLE_IMG) $(DEFAULT_CHANNEL) $@
 
 .PHONY: catalog
@@ -54,8 +53,7 @@ catalog: $(OPM) ## Generate catalog content and validate.
 	$(MAKE) $(CATALOG_DOCKERFILE)
 	$(MAKE) $(CATALOG_FILE) LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) \
 		AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG) \
-		BUNDLE_IMG=$(BUNDLE_IMG) \
-		REPLACES_VERSION=$(REPLACES_VERSION)
+		BUNDLE_IMG=$(BUNDLE_IMG)
 	cd $(PROJECT_PATH)/catalog && $(OPM) validate kuadrant-operator-catalog
 
 # Build a catalog image by adding bundle images to an empty catalog using the operator package manager tool, 'opm'.

@@ -36,9 +36,6 @@ BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 DEFAULT_IMAGE_TAG = latest
-DEFAULT_REPLACES_VERSION = 0.0.0-alpha
-
-REPLACES_VERSION ?= $(DEFAULT_REPLACES_VERSION)
 
 # Semantic versioning (i.e. Major.Minor.Patch)
 is_semantic_version = $(shell [[ $(1) =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$$ ]] && echo "true")
@@ -397,7 +394,6 @@ bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## 
 	$(call update-csv-config,kuadrant-operator.v$(BUNDLE_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.name)
 	$(call update-csv-config,$(BUNDLE_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.spec.version)
 	$(call update-csv-config,$(IMG),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.annotations.containerImage)
-	$(call update-csv-config,kuadrant-operator.v$(REPLACES_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.spec.replaces)
 	# Generate bundle
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)
 	# Update operator dependencies
@@ -435,7 +431,6 @@ prepare-release: ## Prepare the manifests for OLM and Helm Chart for a release.
 		LIMITADOR_OPERATOR_VERSION=$(LIMITADOR_OPERATOR_VERSION) \
 		DNS_OPERATOR_VERSION=$(DNS_OPERATOR_VERSION) \
 		WASM_SHIM_VERSION=$(WASM_SHIM_VERSION) \
-		REPLACES_VERSION=$(REPLACES_VERSION)
 	$(MAKE) helm-build VERSION=$(VERSION) \
 		AUTHORINO_OPERATOR_VERSION=$(AUTHORINO_OPERATOR_VERSION) \
 		LIMITADOR_OPERATOR_VERSION=$(LIMITADOR_OPERATOR_VERSION) \

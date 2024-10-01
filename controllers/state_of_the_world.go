@@ -6,6 +6,9 @@ import (
 	"strings"
 	"sync"
 
+	iopv1alpha1 "istio.io/istio/operator/pkg/apis/istio/v1alpha1"
+	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
+
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
@@ -34,6 +37,7 @@ import (
 
 var (
 	ConfigMapGroupKind = schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}
+	IstioOperatorKind  = schema.GroupKind{Group: iopv1alpha1.IstioOperatorGVR.Group, Kind: "IstioOperator"}
 	operatorNamespace  = env.GetString("OPERATOR_NAMESPACE", "")
 )
 
@@ -102,14 +106,44 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithRunnable("envoyfilter watcher", controller.Watch(&istioclientnetworkingv1alpha3.EnvoyFilter{}, istio.EnvoyFiltersResource, metav1.NamespaceAll)),
 			controller.WithRunnable("wasmplugin watcher", controller.Watch(&istioclientgoextensionv1alpha1.WasmPlugin{}, istio.WasmPluginsResource, metav1.NamespaceAll)),
 			controller.WithRunnable("authorizationpolicy watcher", controller.Watch(&istioclientgosecurityv1beta1.AuthorizationPolicy{}, istio.AuthorizationPoliciesResource, metav1.NamespaceAll)),
+			controller.WithRunnable("istio configmap watcher", controller.Watch(
+				&corev1.ConfigMap{},
+				controller.ConfigMapsResource,
+				controlPlaneProviderNamespace(),
+				controller.FilterResourcesByField[*corev1.ConfigMap](fmt.Sprintf("metadata.name=%v", controlPlaneConfigMapName())),
+			)),
 			controller.WithObjectKinds(
 				istio.EnvoyFilterGroupKind,
 				istio.WasmPluginGroupKind,
 				istio.AuthorizationPolicyGroupKind,
+				ConfigMapGroupKind,
 			),
 			// TODO: add object links
 		)
 		// TODO: add istio specific tasks to workflow
+
+		ok, err = kuadrantgatewayapi.IsCRDInstalled(manager.GetRESTMapper(), iopv1alpha1.IstioOperatorGVK.Group, iopv1alpha1.IstioOperatorGVK.Kind, iopv1alpha1.IstioOperatorGVK.Version)
+		if err == nil && ok {
+			controllerOpts = append(controllerOpts,
+				controller.WithRunnable("istio operator watcher", controller.Watch(&iopv1alpha1.IstioOperator{}, iopv1alpha1.IstioOperatorGVR, metav1.NamespaceAll)),
+				controller.WithObjectKinds(
+					schema.GroupKind{Group: iopv1alpha1.IstioOperatorGVR.Group, Kind: "IstioOperator"},
+				),
+				//controller.WithObjectLinks(LinkIstioOperatorToConfigmap),
+			)
+		} else {
+			logger.Info("istio operator CRD not installed, falling back to watch the istio CR", "err", err)
+			controllerOpts = append(controllerOpts,
+				controller.WithRunnable("istio CR watcher", controller.Watch(
+					&istiov1alpha1.Istio{},
+					istiov1alpha1.GroupVersion.WithResource("istios"),
+					controlPlaneProviderNamespace(),
+					controller.FilterResourcesByField[*istiov1alpha1.Istio](fmt.Sprintf("metadata.name=%v", istioCRName)),
+				),
+				),
+				controller.WithObjectKinds(schema.GroupKind{Group: istiov1alpha1.GroupVersion.Group, Kind: "Istio"}),
+			)
+		}
 	}
 
 	ok, err = kuadrantgatewayapi.IsCertManagerInstalled(manager.GetRESTMapper(), logger)

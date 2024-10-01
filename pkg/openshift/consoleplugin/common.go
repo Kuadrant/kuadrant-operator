@@ -1,15 +1,17 @@
 package consoleplugin
 
 const (
-	KUADRANT_CONSOLE = "kuadrant-console"
+	KuadrantConsoleName     = "kuadrant-console"
+	KuadrantPluginComponent = "kuadrant-plugin"
 )
 
 func CommonLabels() map[string]string {
 	return map[string]string{
-		"app":                         KUADRANT_CONSOLE,
-		"app.kubernetes.io/component": KUADRANT_CONSOLE,
-		"app.kubernetes.io/instance":  KUADRANT_CONSOLE,
-		"app.kubernetes.io/name":      KUADRANT_CONSOLE,
-		"app.kubernetes.io/part-of":   KUADRANT_CONSOLE,
+		"app":                          KuadrantConsoleName,
+		"app.kubernetes.io/component":  KuadrantPluginComponent,
+		"app.kubernetes.io/managed-by": "kuadrant-operator",
+		"app.kubernetes.io/instance":   KuadrantConsoleName,
+		"app.kubernetes.io/name":       KuadrantConsoleName,
+		"app.kubernetes.io/part-of":    KuadrantConsoleName,
 	}
 }

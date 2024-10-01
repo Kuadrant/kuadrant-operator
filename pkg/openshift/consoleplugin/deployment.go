@@ -11,7 +11,7 @@ import (
 )
 
 func DeploymentName() string {
-	return KUADRANT_CONSOLE
+	return KuadrantConsoleName
 }
 
 func DeploymentStrategy() appsv1.DeploymentStrategy {
@@ -98,7 +98,7 @@ func Deployment(ns, image string) *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name:  KUADRANT_CONSOLE,
+							Name:  KuadrantConsoleName,
 							Image: image,
 							Ports: []corev1.ContainerPort{
 								{

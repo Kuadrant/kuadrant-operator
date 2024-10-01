@@ -7,7 +7,7 @@ import (
 )
 
 func ServiceName() string {
-	return KUADRANT_CONSOLE
+	return KuadrantConsoleName
 }
 
 func ServiceAnnotations() map[string]string {
@@ -18,7 +18,7 @@ func ServiceAnnotations() map[string]string {
 
 func ServiceSelector() map[string]string {
 	return map[string]string{
-		"app": KUADRANT_CONSOLE,
+		"app": KuadrantConsoleName,
 	}
 }
 

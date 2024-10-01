@@ -5,3 +5,4 @@ resources:
 - namespace.yaml
 - gateway-class.yaml
 - gateway.yaml
+- envoyproxy.yaml

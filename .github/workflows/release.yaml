@@ -26,10 +26,6 @@ on:
         description: WASM Shim version
         default: latest
         type: string
-      replacesVersion:
-        description: Kuadrant Operator replaced version
-        default: 0.0.0-alpha
-        type: string
       prerelease:
         description: Is the release a pre-release?
         required: false
@@ -64,7 +60,6 @@ jobs:
           LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
           DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
           WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
-          REPLACES_VERSION=${{ inputs.replacesVersion }}
           make prepare-release
       - name: Commit and push
         run: |

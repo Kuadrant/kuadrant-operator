@@ -1,0 +1,9 @@
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: custom-loglevel
+spec:
+  logging:
+    level:
+      default: debug

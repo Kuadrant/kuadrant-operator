@@ -216,12 +216,16 @@ func (t *TLSPolicyStatusTask) isIssuerReady(ctx context.Context, tlsPolicy *kuad
 	})
 
 	// Find gateway defined by target ref
-	gw, _ := lo.Find(gws, func(item *machinery.Gateway) bool {
+	gw, ok := lo.Find(gws, func(item *machinery.Gateway) bool {
 		if item.GetName() == string(tlsPolicy.GetTargetRef().Name) && item.GetNamespace() == tlsPolicy.GetNamespace() {
 			return true
 		}
 		return false
 	})
+
+	if !ok {
+		return fmt.Errorf("unable to find target ref %s for policy %s in ns %s in topology", tlsPolicy.GetTargetRef(), tlsPolicy.Name, tlsPolicy.Namespace)
+	}
 
 	var conditions []certmanagerv1.IssuerCondition
 

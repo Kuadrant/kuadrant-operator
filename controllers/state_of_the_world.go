@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlruntimepredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -201,47 +202,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 	if err != nil || !isCertManagerInstalled {
 		logger.Info("cert manager is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
-		controllerOpts = append(controllerOpts,
-			controller.WithRunnable("certificate watcher", controller.Watch(
-				&certmanagerv1.Certificate{},
-				CertManagerCertificatesResource,
-				metav1.NamespaceAll),
-			),
-			controller.WithRunnable("issuers watcher", controller.Watch(
-				&certmanagerv1.Issuer{},
-				CertManagerIssuersResource,
-				metav1.NamespaceAll,
-				controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.Issuer]{
-					UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.Issuer]) bool {
-						oldStatus := e.ObjectOld.GetStatus()
-						newStatus := e.ObjectOld.GetStatus()
-						return !reflect.DeepEqual(oldStatus, newStatus)
-					},
-				})),
-			),
-			controller.WithRunnable("clusterissuers watcher", controller.Watch(
-				&certmanagerv1.ClusterIssuer{},
-				CertMangerClusterIssuersResource,
-				metav1.NamespaceAll,
-				controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.ClusterIssuer]{
-					UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.ClusterIssuer]) bool {
-						oldStatus := e.ObjectOld.GetStatus()
-						newStatus := e.ObjectOld.GetStatus()
-						return !reflect.DeepEqual(oldStatus, newStatus)
-					},
-				})),
-			),
-			controller.WithObjectKinds(
-				CertManagerCertificateKind,
-				CertManagerIssuerKind,
-				CertManagerClusterIssuerKind,
-			),
-			controller.WithObjectLinks(
-				LinkGatewayToCertificateFunc,
-				LinkGatewayToIssuerFunc,
-				LinkGatewayToClusterIssuerFunc,
-			),
-		)
+		controllerOpts = append(controllerOpts, certManagerControllerOpts()...)
 		// TODO: add tls policy specific tasks to workflow
 	}
 
@@ -260,6 +221,68 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 	controllerOpts = append(controllerOpts, controller.WithReconcile(buildReconciler(manager, client, isIstioInstalled, isEnvoyGatewayInstalled, isConsolePluginInstalled)))
 
 	return controller.NewController(controllerOpts...)
+}
+
+func certManagerControllerOpts() []controller.ControllerOption {
+	isCertificateOwnedByTLSPolicy := func(c *certmanagerv1.Certificate) bool {
+		return isObjectOwnedByKind(c, kuadrantv1alpha1.TLSPolicyGroupKind.Group, kuadrantv1alpha1.TLSPolicyGroupKind.Kind)
+	}
+
+	return []controller.ControllerOption{
+		controller.WithRunnable("certificate watcher", controller.Watch(
+			&certmanagerv1.Certificate{},
+			CertManagerCertificatesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.Certificate]{
+				CreateFunc: func(e event.TypedCreateEvent[*certmanagerv1.Certificate]) bool {
+					return isCertificateOwnedByTLSPolicy(e.Object)
+				},
+				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.Certificate]) bool {
+					return isCertificateOwnedByTLSPolicy(e.ObjectNew)
+				},
+				DeleteFunc: func(e event.TypedDeleteEvent[*certmanagerv1.Certificate]) bool {
+					return isCertificateOwnedByTLSPolicy(e.Object)
+				},
+				GenericFunc: func(e event.TypedGenericEvent[*certmanagerv1.Certificate]) bool {
+					return isCertificateOwnedByTLSPolicy(e.Object)
+				},
+			})),
+		),
+		controller.WithRunnable("issuers watcher", controller.Watch(
+			&certmanagerv1.Issuer{},
+			CertManagerIssuersResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.Issuer]{
+				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.Issuer]) bool {
+					oldStatus := e.ObjectOld.GetStatus()
+					newStatus := e.ObjectOld.GetStatus()
+					return !reflect.DeepEqual(oldStatus, newStatus)
+				},
+			})),
+		),
+		controller.WithRunnable("clusterissuers watcher", controller.Watch(
+			&certmanagerv1.ClusterIssuer{},
+			CertMangerClusterIssuersResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.ClusterIssuer]{
+				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.ClusterIssuer]) bool {
+					oldStatus := e.ObjectOld.GetStatus()
+					newStatus := e.ObjectOld.GetStatus()
+					return !reflect.DeepEqual(oldStatus, newStatus)
+				},
+			})),
+		),
+		controller.WithObjectKinds(
+			CertManagerCertificateKind,
+			CertManagerIssuerKind,
+			CertManagerClusterIssuerKind,
+		),
+		controller.WithObjectLinks(
+			LinkGatewayToCertificateFunc,
+			LinkGatewayToIssuerFunc,
+			LinkGatewayToClusterIssuerFunc,
+		),
+	}
 }
 
 func buildReconciler(manager ctrlruntime.Manager, client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled, isConsolePluginInstalled bool) controller.ReconcileFunc {
@@ -338,4 +361,19 @@ func GetOldestKuadrant(kuadrants []*kuadrantv1beta1.Kuadrant) (*kuadrantv1beta1.
 		return nil, fmt.Errorf("only nil pointers in list")
 	}
 	return oldest, nil
+}
+
+func isObjectOwnedByKind(o client.Object, ownerGroup, ownerKind string) bool {
+	for _, o := range o.GetOwnerReferences() {
+		oGV, err := schema.ParseGroupVersion(o.APIVersion)
+		if err != nil {
+			return false
+		}
+
+		if oGV.Group == ownerGroup && o.Kind == ownerKind {
+			return true
+		}
+	}
+
+	return false
 }

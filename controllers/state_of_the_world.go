@@ -6,6 +6,9 @@ import (
 	"strings"
 	"sync"
 
+	maistrav1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
+	maistrav2 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v2"
+
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
@@ -102,6 +105,12 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithRunnable("envoyfilter watcher", controller.Watch(&istioclientnetworkingv1alpha3.EnvoyFilter{}, istio.EnvoyFiltersResource, metav1.NamespaceAll)),
 			controller.WithRunnable("wasmplugin watcher", controller.Watch(&istioclientgoextensionv1alpha1.WasmPlugin{}, istio.WasmPluginsResource, metav1.NamespaceAll)),
 			controller.WithRunnable("authorizationpolicy watcher", controller.Watch(&istioclientgosecurityv1beta1.AuthorizationPolicy{}, istio.AuthorizationPoliciesResource, metav1.NamespaceAll)),
+			controller.WithRunnable("istio configmap watcher", controller.Watch(
+				&corev1.ConfigMap{},
+				controller.ConfigMapsResource,
+				controlPlaneProviderNamespace(),
+				controller.FilterResourcesByField[*corev1.ConfigMap](fmt.Sprintf("metadata.name=%v", controlPlaneConfigMapName())),
+			)),
 			controller.WithObjectKinds(
 				istio.EnvoyFilterGroupKind,
 				istio.WasmPluginGroupKind,
@@ -110,6 +119,36 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			// TODO: add object links
 		)
 		// TODO: add istio specific tasks to workflow
+
+	}
+
+	// OSSM required resources
+	okSMM, err := kuadrantgatewayapi.IsCRDInstalled(manager.GetRESTMapper(), maistrav1.ServiceMeshMemberGVK.Group, maistrav1.ServiceMeshMemberGVK.Kind, maistrav1.ServiceMeshMemberGVK.Version)
+	if err != nil {
+		logger.Info("error checking ServiceMeshMember CRDs", "err", err)
+	}
+	okSMCP, err := kuadrantgatewayapi.IsCRDInstalled(manager.GetRESTMapper(), maistrav2.ServiceMeshControlPlaneGVK.Group, maistrav2.ServiceMeshControlPlaneGVK.Kind, maistrav2.ServiceMeshControlPlaneGVK.Version)
+	if err != nil {
+		logger.Info("error checking ServiceMeshControlPlane CRDs", "err", err)
+	}
+	if okSMM && okSMCP {
+		controllerOpts = append(controllerOpts,
+			controller.WithRunnable(
+				"service mesh control plane watcher",
+				controller.Watch(&maistrav2.ServiceMeshControlPlane{}, maistrav2.ServiceMeshControlPlaneGVR, controlPlaneProviderNamespace(),
+					controller.FilterResourcesByField[*maistrav2.ServiceMeshControlPlane](fmt.Sprintf("metadata.name=%v", controlPlaneProviderName())),
+				),
+			),
+			controller.WithRunnable("service mesh member watcher",
+				controller.Watch(&maistrav1.ServiceMeshMember{}, maistrav1.ServiceMeshMemberGVR, metav1.NamespaceAll), // TODO: add label filter when the functions to create the resources has being transferred
+			),
+			controller.WithObjectKinds(
+				schema.GroupKind{Group: maistrav1.SchemeGroupVersion.Group, Kind: "ServiceMeshMember"},
+				schema.GroupKind{Group: maistrav2.SchemeGroupVersion.Group, Kind: "ServiceMeshControlPlane"},
+			),
+		)
+	} else {
+		logger.Info("OSSM is not installed, skipping related watches and reconcilers")
 	}
 
 	ok, err = kuadrantgatewayapi.IsCertManagerInstalled(manager.GetRESTMapper(), logger)

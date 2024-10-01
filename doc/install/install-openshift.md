@@ -136,7 +136,7 @@ kubectl wait istio/default -n gateway-system --for="condition=Ready=true"
 helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.1.0 -n envoy-gateway-system --create-namespace
 ```
 
-Enable *EnvoyPatchPolicy* feature:
+Enable _EnvoyPatchPolicy_ feature:
 
 ```bash
 TMP=$(mktemp -d)
@@ -181,7 +181,6 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/ma
 If you have Grafana installed in your cluster, you can import the [example dashboards and alerts](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/examples).
 
 For example installation details, see [installing Grafana on OpenShift](https://cloud.redhat.com/experts/o11y/ocp-grafana/). When installed, you must add your Thanos instance as a data source to Grafana. Alternatively, if you are using only the user workload monitoring stack in your OpenShift cluster, and not writing metrics to an external Thanos instance, you can [set up a data source to the thanos-querier route in the OpenShift cluster](https://docs.openshift.com/container-platform/4.15/observability/monitoring/accessing-third-party-monitoring-apis.html#accessing-metrics-from-outside-cluster_accessing-monitoring-apis-by-using-the-cli).
-
 
 ### Step 7 - Create secrets for your credentials
 
@@ -310,5 +309,25 @@ kubectl wait kuadrant/kuadrant --for="condition=Ready=true" -n kuadrant-system -
 
 Kuadrant is now ready to use.
 
+### Step 10 - Configure the Kuadrant Console Plugin
+
+When running on OpenShift, the Kuadrant Operator will automatically install and configure the Kuadrant dynamic console plugin.
+
+#### Enable the Console Plugin
+
+To enable the Kuadrant console plugin:
+
+1. Log in to OpenShift or OKD as an administrator.
+2. Switch to the **Admin** perspective.
+3. Navigate to **Home** > **Overview**.
+4. In the **Dynamic Plugins** section of the status box, click **View all**.
+5. In the **Console plugins** area, find the `kuadrant-console` plugin. It should be listed but disabled.
+6. Click the **Disabled** button next to the `kuadrant-console` plugin.
+7. Select the **Enabled** radio button, and then click **Save**.
+8. Wait for the plugin status to change to **Loaded**.
+
+Once the plugin is loaded, refresh the console. You should see a new **Kuadrant** section in the navigation sidebar.
+
 ## Next steps
+
 - [Secure, protect, and connect APIs with Kuadrant on OpenShift](../user-guides/secure-protect-connect-single-multi-cluster.md)

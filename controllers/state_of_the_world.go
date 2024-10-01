@@ -29,6 +29,7 @@ import (
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift"
+	"github.com/kuadrant/kuadrant-operator/pkg/openshift/consoleplugin"
 )
 
 var (
@@ -140,7 +141,9 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		logger.Info("console plugin is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts,
-			controller.WithRunnable("consoleplugin watcher", controller.Watch(&consolev1.ConsolePlugin{}, openshift.ConsolePluginsResource, metav1.NamespaceAll)),
+			controller.WithRunnable("consoleplugin watcher", controller.Watch(
+				&consolev1.ConsolePlugin{}, openshift.ConsolePluginsResource, metav1.NamespaceAll,
+				controller.FilterResourcesByLabel[*consolev1.ConsolePlugin](fmt.Sprintf("%s=%s", consoleplugin.AppLabelKey, consoleplugin.AppLabelValue)))),
 			controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind()),
 			// TODO: add object links
 		)

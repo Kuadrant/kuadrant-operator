@@ -5,9 +5,14 @@ const (
 	KuadrantPluginComponent = "kuadrant-plugin"
 )
 
+var (
+	AppLabelKey   = "app"
+	AppLabelValue = KuadrantConsoleName
+)
+
 func CommonLabels() map[string]string {
 	return map[string]string{
-		"app":                          KuadrantConsoleName,
+		AppLabelKey:                    AppLabelValue,
 		"app.kubernetes.io/component":  KuadrantPluginComponent,
 		"app.kubernetes.io/managed-by": "kuadrant-operator",
 		"app.kubernetes.io/instance":   KuadrantConsoleName,

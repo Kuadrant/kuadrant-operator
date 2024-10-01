@@ -385,73 +385,66 @@ As a consequence of this design:
 - The rate limiting service can rely on the indexation to look up for groups of limit definitions and counters.
 - Components remain compliant with industry protocols and flexible for different integration options.
 
-A Kuadrant wasm-shim configuration for 2 RateLimitPolicy custom resources (a Gateway default RateLimitPolicy and a HTTPRoute RateLimitPolicy) looks like the following and it is generated automatically by the Kuadrant control plane:
+A Kuadrant wasm-shim configuration for one RateLimitPolicy custom resources targeting a HTTPRoute looks like the following and it is generated automatically by the Kuadrant control plane:
 
 ```yaml
 apiVersion: extensions.istio.io/v1alpha1
 kind: WasmPlugin
 metadata:
+  creationTimestamp: "2024-10-01T16:59:40Z"
+  generation: 1
   name: kuadrant-kuadrant-ingressgateway
   namespace: gateway-system
-  …
+  ownerReferences:
+  - apiVersion: gateway.networking.k8s.io/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Gateway
+    name: kuadrant-ingressgateway
+    uid: 0298355b-fb30-4442-af2b-88d0c05bd2bd
+  resourceVersion: "11253"
+  uid: 36ef1fb7-9eca-46c7-af63-fe783f40148c
 spec:
   phase: STATS
   pluginConfig:
-    failureMode: deny
-    rateLimitPolicies:
-    - domain: gateway-system/gw-rlp # allows isolating policy rules and improve performance of the rate limit service
-      hostnames:
-      - '*.website'
-      - '*.io'
-      name: gateway-system/gw-rlp
-      rules: # match rules from the gateway and according to conditions specified in the policy
-      - conditions:
-        - allOf:
-          - operator: startswith
-            selector: request.url_path
-            value: /
-        data:
-        - static: # tells which rate limit definitions and counters to activate
-            key: limit.internet_traffic_all__593de456
-            value: "1"
-      - conditions:
-        - allOf:
-          - operator: startswith
-            selector: request.url_path
-            value: /
-          - operator: endswith
-            selector: request.host
-            value: .io
-        data:
-        - static:
-            key: limit.internet_traffic_apis_per_host__a2b149d2
-            value: "1"
-        - selector:
-            selector: request.host
-      service: kuadrant-rate-limiting-service
-    - domain: default/app-rlp
-      hostnames:
+    extensions:
+      limitador:
+        endpoint: kuadrant-rate-limiting-service
+        failureMode: allow
+        type: ratelimit
+    policies:
+    - hostnames:
       - '*.toystore.website'
       - '*.toystore.io'
-      name: default/app-rlp
-      rules: # matches rules from a httproute and additional specified in the policy
-      - conditions:
+      name: gateway-system/app-rlp
+      rules:
+      - actions:
+        - data:
+          - static:
+              key: limit.toystore_assets_all_domains__b61ee8e6
+              value: "1"
+          extension: limitador
+          scope: gateway-system/app-rlp
+        conditions:
         - allOf:
           - operator: startswith
             selector: request.url_path
-            value: /assets/
-        data:
-        - static:
-            key: limit.toystore_assets_all_domains__8cfb7371
-            value: "1"
-      - conditions:
+            value: /assets
+          - operator: endswith
+            selector: request.host
+            value: .toystore.website
+      - actions:
+        - data:
+          - static:
+              key: limit.toystore_v1_website_unauthenticated__377837ee
+              value: "1"
+          extension: limitador
+          scope: gateway-system/app-rlp
+        conditions:
         - allOf:
           - operator: startswith
             selector: request.url_path
-            value: /v1/
-          - operator: eq
-            selector: request.method
-            value: GET
+            value: /v1
           - operator: endswith
             selector: request.host
             value: .toystore.website
@@ -461,23 +454,16 @@ spec:
         - allOf:
           - operator: startswith
             selector: request.url_path
-            value: /v1/
-          - operator: eq
-            selector: request.method
-            value: POST
+            value: /assets
           - operator: endswith
             selector: request.host
             value: .toystore.website
           - operator: eq
             selector: auth.identity.username
             value: ""
-        data:
-        - static:
-            key: limit.toystore_v1_website_unauthenticated__3f9c40c6
-            value: "1"
-      service: kuadrant-rate-limiting-service
-  selector:
-    matchLabels:
-      istio.io/gateway-name: kuadrant-ingressgateway
-  url: oci://quay.io/kuadrant/wasm-shim:v0.3.0
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: kuadrant-ingressgateway
+  url: oci://quay.io/kuadrant/wasm-shim:latest
 ```

@@ -236,7 +236,7 @@ func (t *TLSPolicyStatusTask) isIssuerReady(ctx context.Context, tlsPolicy *kuad
 			return o.GroupVersionKind().GroupKind() == CertManagerIssuerKind && o.GetNamespace() == tlsPolicy.GetNamespace() && o.GetName() == tlsPolicy.Spec.IssuerRef.Name
 		})
 		if !ok {
-			err := errors.New("unable to find issuer for TLSPolicy")
+			err := fmt.Errorf("%s \"%s\" not found", tlsPolicy.Spec.IssuerRef.Kind, tlsPolicy.Spec.IssuerRef.Name)
 			logger.Error(err, "error finding object in topology")
 			return err
 		}
@@ -250,7 +250,7 @@ func (t *TLSPolicyStatusTask) isIssuerReady(ctx context.Context, tlsPolicy *kuad
 			return o.GroupVersionKind().GroupKind() == CertManagerClusterIssuerKind && o.GetName() == tlsPolicy.Spec.IssuerRef.Name
 		})
 		if !ok {
-			err := errors.New("unable to find cluster issuer for TLSPolicy")
+			err := fmt.Errorf("%s \"%s\" not found", tlsPolicy.Spec.IssuerRef.Kind, tlsPolicy.Spec.IssuerRef.Name)
 			logger.Error(err, "error finding object in topology")
 			return err
 		}
@@ -266,7 +266,7 @@ func (t *TLSPolicyStatusTask) isIssuerReady(ctx context.Context, tlsPolicy *kuad
 	})
 
 	if !meta.IsStatusConditionTrue(transformedCond, string(certmanagerv1.IssuerConditionReady)) {
-		return errors.New("issuer not ready")
+		return fmt.Errorf("%s not ready", tlsPolicy.Spec.IssuerRef.Kind)
 	}
 
 	return nil
@@ -281,7 +281,6 @@ func (t *TLSPolicyStatusTask) isCertificatesReady(ctx context.Context, p machine
 	// Get all gateways that contains this policy
 	gws := lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, index int) (*machinery.Gateway, bool) {
 		gw, ok := item.(*machinery.Gateway)
-
 		return gw, ok && lo.Contains(gw.Policies(), p)
 	})
 

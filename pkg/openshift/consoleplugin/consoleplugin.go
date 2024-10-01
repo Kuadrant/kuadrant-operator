@@ -21,7 +21,7 @@ func ConsolePlugin(ns string) *consolev1.ConsolePlugin {
 			Backend: consolev1.ConsolePluginBackend{
 				Type: consolev1.Service,
 				Service: &consolev1.ConsolePluginService{
-					Name:      KuadrantConsoleName,
+					Name:      ServiceName(),
 					Namespace: ns,
 					Port:      9443,
 					BasePath:  "/",

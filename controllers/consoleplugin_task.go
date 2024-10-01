@@ -29,15 +29,18 @@ var (
 
 type ConsolePluginTask struct {
 	*reconcilers.BaseReconciler
+
+	namespace string
 }
 
-func NewConsolePluginTaskTask(mgr ctrlruntime.Manager) *ConsolePluginTask {
+func NewConsolePluginTask(mgr ctrlruntime.Manager, namespace string) *ConsolePluginTask {
 	return &ConsolePluginTask{
 		BaseReconciler: reconcilers.NewBaseReconciler(
 			mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 			log.Log.WithName("consoleplugin"),
 			mgr.GetEventRecorderFor("ConsolePlugin"),
 		),
+		namespace: namespace,
 	}
 }
 
@@ -53,7 +56,7 @@ func (r *ConsolePluginTask) Run(eventCtx context.Context, _ []controller.Resourc
 	ctx := logr.NewContext(eventCtx, logger)
 
 	// Service
-	service := consoleplugin.Service(operatorNamespace)
+	service := consoleplugin.Service(r.namespace)
 	err := r.ReconcileResource(ctx, &corev1.Service{}, service, reconcilers.CreateOnlyMutator)
 	if err != nil {
 		logger.Error(err, "reconciling service")
@@ -61,7 +64,7 @@ func (r *ConsolePluginTask) Run(eventCtx context.Context, _ []controller.Resourc
 	}
 
 	// Deployment
-	deployment := consoleplugin.Deployment(operatorNamespace, ConsolePluginImageURL)
+	deployment := consoleplugin.Deployment(r.namespace, ConsolePluginImageURL)
 	deploymentMutators := make([]reconcilers.DeploymentMutateFn, 0)
 	deploymentMutators = append(deploymentMutators, reconcilers.DeploymentImageMutator)
 	err = r.ReconcileResource(ctx, &appsv1.Deployment{}, deployment, reconcilers.DeploymentMutator(deploymentMutators...))
@@ -71,7 +74,7 @@ func (r *ConsolePluginTask) Run(eventCtx context.Context, _ []controller.Resourc
 	}
 
 	// Nginx ConfigMap
-	nginxConfigMap := consoleplugin.NginxConfigMap(operatorNamespace)
+	nginxConfigMap := consoleplugin.NginxConfigMap(r.namespace)
 	err = r.ReconcileResource(ctx, &corev1.ConfigMap{}, nginxConfigMap, reconcilers.CreateOnlyMutator)
 	if err != nil {
 		logger.Error(err, "reconciling nginx configmap")
@@ -79,7 +82,7 @@ func (r *ConsolePluginTask) Run(eventCtx context.Context, _ []controller.Resourc
 	}
 
 	// ConsolePlugin
-	consolePlugin := consoleplugin.ConsolePlugin(operatorNamespace)
+	consolePlugin := consoleplugin.ConsolePlugin(r.namespace)
 	err = r.ReconcileResource(ctx, &consolev1.ConsolePlugin{}, consolePlugin, reconcilers.CreateOnlyMutator)
 	if err != nil {
 		logger.Error(err, "reconciling consoleplugin")

@@ -174,8 +174,8 @@ func buildReconciler(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGat
 	if err == nil && ok {
 		reconciler.Tasks = append(reconciler.Tasks,
 			(&controller.Subscription{
-				ReconcileFunc: consolePluginTaskTask.Run,
-				Events:        consolePluginTaskTask.Events(),
+				ReconcileFunc: consolePluginTask.Run,
+				Events:        consolePluginTask.Events(),
 			}).Reconcile,
 		)
 	}

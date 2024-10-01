@@ -26,6 +26,10 @@ on:
         description: WASM Shim version
         default: latest
         type: string
+      consolePluginImageURL:
+        description: ConsolePlugin image URL
+        default: "quay.io/kuadrant/console-plugin:latest"
+        type: string
       prerelease:
         description: Is the release a pre-release?
         required: false
@@ -60,6 +64,7 @@ jobs:
           LIMITADOR_OPERATOR_VERSION=${{ inputs.limitadorOperatorVersion }} \
           DNS_OPERATOR_VERSION=${{ inputs.dnsOperatorVersion }} \
           WASM_SHIM_VERSION=${{ inputs.wasmShimVersion }} \
+          RELATED_IMAGE_CONSOLEPLUGIN=${{ inputs.consolePluginImageURL }} \
           make prepare-release
       - name: Commit and push
         run: |
@@ -72,7 +77,7 @@ jobs:
         with:
           name: v${{ inputs.kuadrantOperatorVersion }}
           tag_name: v${{ inputs.kuadrantOperatorVersion }}
-          body: "**This release enables installations of Authorino Operator v${{ inputs.authorinoOperatorVersion }}, Limitador Operator v${{ inputs.limitadorOperatorVersion }}, DNS Operator v${{ inputs.dnsOperatorVersion }} and WASM Shim v${{ inputs.wasmShimVersion }}**"
+          body: "**This release enables installations of Authorino Operator v${{ inputs.authorinoOperatorVersion }}, Limitador Operator v${{ inputs.limitadorOperatorVersion }}, DNS Operator v${{ inputs.dnsOperatorVersion }}, WASM Shim v${{ inputs.wasmShimVersion }} and ConsolePlugin ${{ inputs.consolePluginImageURL }}**"
           generate_release_notes: true
           target_commitish: release-v${{ github.event.inputs.kuadrantOperatorVersion }}
           prerelease: ${{ github.event.inputs.prerelease }}

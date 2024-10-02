@@ -225,7 +225,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 
 func certManagerControllerOpts() []controller.ControllerOption {
 	isCertificateOwnedByTLSPolicy := func(c *certmanagerv1.Certificate) bool {
-		return isObjectOwnedByKind(c, kuadrantv1alpha1.TLSPolicyGroupKind.Group, kuadrantv1alpha1.TLSPolicyGroupKind.Kind)
+		return isObjectOwnedByGroupKind(c, kuadrantv1alpha1.TLSPolicyGroupKind)
 	}
 
 	return []controller.ControllerOption{
@@ -364,14 +364,14 @@ func GetOldestKuadrant(kuadrants []*kuadrantv1beta1.Kuadrant) (*kuadrantv1beta1.
 	return oldest, nil
 }
 
-func isObjectOwnedByKind(o client.Object, ownerGroup, ownerKind string) bool {
+func isObjectOwnedByGroupKind(o client.Object, groupKind schema.GroupKind) bool {
 	for _, o := range o.GetOwnerReferences() {
 		oGV, err := schema.ParseGroupVersion(o.APIVersion)
 		if err != nil {
 			return false
 		}
 
-		if oGV.Group == ownerGroup && o.Kind == ownerKind {
+		if oGV.Group == groupKind.Group && o.Kind == groupKind.Kind {
 			return true
 		}
 	}

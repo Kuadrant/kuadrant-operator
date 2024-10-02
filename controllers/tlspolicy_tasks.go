@@ -341,7 +341,7 @@ type IsCertManagerInstalledTask struct {
 	restMapper meta.RESTMapper
 }
 
-func (t IsCertManagerInstalledTask) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
+func (t IsCertManagerInstalledTask) Reconcile(ctx context.Context, _ []controller.ResourceEvent, _ *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("IsCertManagerInstalledTask").WithName("Reconcile")
 	isCertManagerInstalled, err := kuadrantgatewayapi.IsCertManagerInstalled(t.restMapper, logger)
 

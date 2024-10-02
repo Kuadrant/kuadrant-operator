@@ -112,12 +112,12 @@ func (t *ValidateTLSPolicyTask) Reconcile(ctx context.Context, _ []controller.Re
 
 			// Can't find gateway target ref
 			if !ok {
-				logger.Info("tls policy cannot find target ref", "name", policy.Name, "namespace", policy.Namespace)
+				logger.V(1).Info("tls policy cannot find target ref", "name", policy.Name, "namespace", policy.Namespace)
 				s.Store(TLSPolicyAcceptedKey(policy.GetUID()), kuadrant.NewErrTargetNotFound(policy.Kind(), policy.GetTargetRef(), apierrors.NewNotFound(kuadrantv1alpha1.TLSPoliciesResource.GroupResource(), policy.GetName())))
 				continue
 			}
 
-			logger.Info("tls policy found target ref", "name", policy.Name, "namespace", policy.Namespace)
+			logger.V(1).Info("tls policy found target ref", "name", policy.Name, "namespace", policy.Namespace)
 			s.Store(TLSPolicyAcceptedKey(policy.GetUID()), nil)
 		}
 	}
@@ -185,7 +185,7 @@ func (t *TLSPolicyStatusTask) Reconcile(ctx context.Context, _ []controller.Reso
 		// Nothing to do
 		equalStatus := equality.Semantic.DeepEqual(newStatus, policy.Status)
 		if equalStatus && policy.Generation == policy.Status.ObservedGeneration {
-			logger.Info("policy status unchanged, skipping update")
+			logger.V(1).Info("policy status unchanged, skipping update")
 			continue
 		}
 		newStatus.ObservedGeneration = policy.Generation
@@ -200,7 +200,7 @@ func (t *TLSPolicyStatusTask) Reconcile(ctx context.Context, _ []controller.Reso
 
 		_, err = resource.UpdateStatus(ctx, un, metav1.UpdateOptions{})
 		if err != nil {
-			logger.Error(err, "unable to update status for TLSPolicy", "uid", policy.GetUID())
+			logger.Error(err, "unable to update status for TLSPolicy", "name", policy.GetUID(), "namespace", policy.GetNamespace(), "uid", policy.GetUID())
 		}
 	}
 

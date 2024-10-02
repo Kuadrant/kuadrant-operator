@@ -1556,7 +1556,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$route_name\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{service=~\"$route_name\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$route_name\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "legendFormat": "{{service}} - 99th %ile",
           "range": true,
           "refId": "A"
@@ -1567,7 +1567,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$route_name\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{service=~\"$route_name\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "histogram_quantile(0.95, sum(irate(istio_request_duration_milliseconds_bucket{}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$route_name\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "{{service}} - 95th %ile",
           "range": true,

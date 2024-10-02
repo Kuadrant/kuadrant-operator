@@ -17,9 +17,10 @@ import (
 const (
 	PolicyConditionEnforced gatewayapiv1alpha2.PolicyConditionType = "Enforced"
 
-	PolicyReasonEnforced   gatewayapiv1alpha2.PolicyConditionReason = "Enforced"
-	PolicyReasonOverridden gatewayapiv1alpha2.PolicyConditionReason = "Overridden"
-	PolicyReasonUnknown    gatewayapiv1alpha2.PolicyConditionReason = "Unknown"
+	PolicyReasonEnforced          gatewayapiv1alpha2.PolicyConditionReason = "Enforced"
+	PolicyReasonOverridden        gatewayapiv1alpha2.PolicyConditionReason = "Overridden"
+	PolicyReasonUnknown           gatewayapiv1alpha2.PolicyConditionReason = "Unknown"
+	PolicyReasonMissingDependency gatewayapiv1alpha2.PolicyConditionReason = "MissingDependency"
 )
 
 func NewAffectedPolicyMap() *AffectedPolicyMap {

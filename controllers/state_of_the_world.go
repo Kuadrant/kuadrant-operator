@@ -15,6 +15,7 @@ import (
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -203,7 +204,6 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		logger.Info("cert manager is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts, certManagerControllerOpts()...)
-		// TODO: add tls policy specific tasks to workflow
 	}
 
 	isConsolePluginInstalled, err := openshift.IsConsolePluginInstalled(manager.GetRESTMapper())
@@ -287,7 +287,7 @@ func certManagerControllerOpts() []controller.ControllerOption {
 
 func buildReconciler(manager ctrlruntime.Manager, client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled, isConsolePluginInstalled bool) controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
-		Precondition: initWorkflow(client).Run,
+		Precondition: initWorkflow(client, manager.GetRESTMapper()).Run,
 		Tasks: []controller.ReconcileFunc{
 			NewAuthorinoReconciler(client).Subscription().Reconcile,
 			NewLimitadorReconciler(client).Subscription().Reconcile,
@@ -308,11 +308,12 @@ func buildReconciler(manager ctrlruntime.Manager, client *dynamic.DynamicClient,
 	return mainWorkflow.Run
 }
 
-func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
+func initWorkflow(client *dynamic.DynamicClient, restMapper meta.RESTMapper) *controller.Workflow {
 	return &controller.Workflow{
 		Precondition: NewEventLogger().Log,
 		Tasks: []controller.ReconcileFunc{
 			NewTopologyReconciler(client, operatorNamespace).Reconcile,
+			NewIsCertManagerInstalledTask(restMapper).Reconcile,
 		},
 	}
 }

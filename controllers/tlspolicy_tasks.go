@@ -23,6 +23,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -36,6 +37,13 @@ var (
 	CertManagerIssuerKind        = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.IssuerKind}
 	CertManagerClusterIssuerKind = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.ClusterIssuerKind}
 )
+
+func NewTLSPolicyWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
+	return &controller.Workflow{
+		Precondition:  NewValidateTLSPolicyTask().Reconcile,
+		Postcondition: NewTLSPolicyStatusTask(client).Reconcile,
+	}
+}
 
 type ValidateTLSPolicyTask struct{}
 
@@ -72,9 +80,22 @@ func (t *ValidateTLSPolicyTask) Reconcile(ctx context.Context, _ []controller.Re
 		return gw, ok
 	})
 
+	isCertManagerInstalled := false
+	installed, ok := s.Load(IsCertManagerInstalledKey)
+	if ok {
+		isCertManagerInstalled = installed.(bool)
+	} else {
+		logger.V(1).Error(errors.New("isCertManagerInstalled was not found in sync map, defaulting to false"), "sync map error")
+	}
+
 	for _, policy := range policies {
 		if policy.DeletionTimestamp != nil {
 			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", policy.Name, "namespace", policy.Namespace)
+			continue
+		}
+
+		if !isCertManagerInstalled {
+			s.Store(TLSPolicyAcceptedKey(policy.GetUID()), kuadrant.NewErrDependencyNotInstalled("Cert Manager"))
 			continue
 		}
 
@@ -92,12 +113,12 @@ func (t *ValidateTLSPolicyTask) Reconcile(ctx context.Context, _ []controller.Re
 			// Can't find gateway target ref
 			if !ok {
 				logger.Info("tls policy cannot find target ref", "name", policy.Name, "namespace", policy.Namespace)
-				s.Store(TLSPolicyValidKey(policy.GetUID()), false)
+				s.Store(TLSPolicyAcceptedKey(policy.GetUID()), kuadrant.NewErrTargetNotFound(policy.Kind(), policy.GetTargetRef(), apierrors.NewNotFound(kuadrantv1alpha1.TLSPoliciesResource.GroupResource(), policy.GetName())))
 				continue
 			}
 
 			logger.Info("tls policy found target ref", "name", policy.Name, "namespace", policy.Namespace)
-			s.Store(TLSPolicyValidKey(policy.GetUID()), true)
+			s.Store(TLSPolicyAcceptedKey(policy.GetUID()), nil)
 		}
 	}
 
@@ -136,7 +157,7 @@ func (t *TLSPolicyStatusTask) Reconcile(ctx context.Context, _ []controller.Reso
 
 	for _, policy := range policies {
 		if policy.DeletionTimestamp != nil {
-			logger.Info("tls policy is marked for deletion", "name", policy.Name, "namespace", policy.Namespace)
+			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", policy.Name, "namespace", policy.Namespace)
 			continue
 		}
 
@@ -147,18 +168,10 @@ func (t *TLSPolicyStatusTask) Reconcile(ctx context.Context, _ []controller.Reso
 		}
 
 		var err error
-		isValid, ok := s.Load(TLSPolicyValidKey(policy.GetUID()))
-		// Should not happen unless this was triggered by an event where the ValidateTLSPolicyTask.Reconcile function was not called
-		if !ok {
-			err = fmt.Errorf("unable to find %s key in sync map", policy.GetUID())
-			logger.Error(err, "unexpected error")
-			continue
+		accepted, ok := s.Load(TLSPolicyAcceptedKey(policy.GetUID()))
+		if ok && accepted != nil {
+			err = accepted.(error)
 		}
-		// Target Ref not found
-		if !isValid.(bool) {
-			err = kuadrant.NewErrTargetNotFound(policy.Kind(), policy.GetTargetRef(), apierrors.NewNotFound(kuadrantv1alpha1.TLSPoliciesResource.GroupResource(), policy.GetName()))
-		}
-
 		meta.SetStatusCondition(&newStatus.Conditions, *kuadrant.AcceptedCondition(policy, err))
 
 		// Do not set enforced condition if Accepted condition is false
@@ -316,6 +329,31 @@ func (t *TLSPolicyStatusTask) isCertificatesReady(ctx context.Context, p machine
 	return nil
 }
 
-func TLSPolicyValidKey(uid types.UID) string {
+const IsCertManagerInstalledKey = "IsCertManagerInstalled"
+
+func NewIsCertManagerInstalledTask(restMapper meta.RESTMapper) IsCertManagerInstalledTask {
+	return IsCertManagerInstalledTask{
+		restMapper: restMapper,
+	}
+}
+
+type IsCertManagerInstalledTask struct {
+	restMapper meta.RESTMapper
+}
+
+func (t IsCertManagerInstalledTask) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("IsCertManagerInstalledTask").WithName("Reconcile")
+	isCertManagerInstalled, err := kuadrantgatewayapi.IsCertManagerInstalled(t.restMapper, logger)
+
+	if err != nil {
+		logger.Error(err, "error checking IsCertManagerInstalled")
+	}
+
+	s.Store(IsCertManagerInstalledKey, isCertManagerInstalled)
+
+	return nil
+}
+
+func TLSPolicyAcceptedKey(uid types.UID) string {
 	return fmt.Sprintf("TLSPolicyValid:%s", uid)
 }

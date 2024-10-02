@@ -23,7 +23,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
-func TestTLSPolicyValidKey(t *testing.T) {
+func TestTLSPolicyAcceptedKey(t *testing.T) {
 	type args struct {
 		uid types.UID
 	}
@@ -42,7 +42,7 @@ func TestTLSPolicyValidKey(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := TLSPolicyValidKey(tt.args.uid); got != tt.want {
+			if got := TLSPolicyAcceptedKey(tt.args.uid); got != tt.want {
 				t.Errorf("TLSPolicyValidKey() = %v, want %v", got, tt.want)
 			}
 		})

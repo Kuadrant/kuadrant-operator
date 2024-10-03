@@ -396,14 +396,26 @@ bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## 
 	$(call update-csv-config,$(IMG),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.annotations.containerImage)
 	# Generate bundle
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)
+	$(MAKE) bundle-post-generate LIMITADOR_OPERATOR_BUNDLE_IMG=$(LIMITADOR_OPERATOR_BUNDLE_IMG) \
+		AUTHORINO_OPERATOR_BUNDLE_IMG=$(AUTHORINO_OPERATOR_BUNDLE_IMG) \
+		DNS_OPERATOR_BUNDLE_IMG=$(DNS_OPERATOR_BUNDLE_IMG)
+	$(OPERATOR_SDK) bundle validate ./bundle
+	$(MAKE) bundle-ignore-createdAt
+	echo "$$QUAY_EXPIRY_TIME_LABEL" >> bundle.Dockerfile
+
+.PHONY: bundle-post-generate
+bundle-post-generate: OPENSHIFT_VERSIONS_ANNOTATION_KEY="com.redhat.openshift.versions"
+# Supports Openshift v4.12+ (https://redhat-connect.gitbook.io/certified-operator-guide/ocp-deployment/operator-metadata/bundle-directory/managing-openshift-versions)
+bundle-post-generate: OPENSHIFT_SUPPORTED_VERSIONS="v4.12"
+bundle-post-generate:
+	# Set Openshift version in bundle annotations
+	$(YQ) -i '.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] = $(OPENSHIFT_SUPPORTED_VERSIONS)' bundle/metadata/annotations.yaml
+	$(YQ) -i '(.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] | key) headComment = "Custom annotations"' bundle/metadata/annotations.yaml
 	# Update operator dependencies
 	# TODO(eguzki): run only if not default one. Avoid bundle parsing if version is known in advance
 	$(call update-operator-dependencies,limitador-operator,$(LIMITADOR_OPERATOR_BUNDLE_IMG))
 	$(call update-operator-dependencies,authorino-operator,$(AUTHORINO_OPERATOR_BUNDLE_IMG))
 	$(call update-operator-dependencies,dns-operator,$(DNS_OPERATOR_BUNDLE_IMG))
-	$(OPERATOR_SDK) bundle validate ./bundle
-	$(MAKE) bundle-ignore-createdAt
-	echo "$$QUAY_EXPIRY_TIME_LABEL" >> bundle.Dockerfile
 
 .PHONY: bundle-ignore-createdAt
 bundle-ignore-createdAt:

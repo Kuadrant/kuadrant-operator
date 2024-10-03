@@ -44,10 +44,13 @@
 
 | **Field**          | **Type**   | **Required** | **Description**                                                                                           |
 |--------------------|------------|:------------:|-----------------------------------------------------------------------------------------------------------|
-| `endpoint`         | String     |     Yes      | Endpoint is the path to append to the host to reach the expected health check                             | 
-| `port`             | Number     |     Yes      | Port to connect to the host on                                                                            | 
+| `path`         | String     |     Yes      | Path is the path to append to the host to reach the expected health check. Must start with "?" or "/", contain only valid URL characters and end with alphanumeric char or "/". For example "/" or "/healthz" are common              | 
+| `port`             | Number     |     Yes      | Port to connect to the host on. Must be either 80, 443 or 1024-49151                          | 
 | `protocol`         | String     |     Yes      | Protocol to use when connecting to the host, valid values are "HTTP" or "HTTPS"                           | 
 | `failureThreshold` | Number     |     Yes      | FailureThreshold is a limit of consecutive failures that must occur for a host to be considered unhealthy | 
+| `interval`         | Duration     |     Yes      | Interval defines how frequently this probe should execute     
+| `additionalHeadersRef`         | String     |     No      | AdditionalHeadersRef refers to a secret that contains extra headers to send in the probe request, this is primarily useful if an authentication token is required by the endpoint.
+| `allowInsecureCertificate`         | Boolean     |     No      | AllowInsecureCertificate will instruct the health check probe to not fail on a self-signed or otherwise invalid SSL certificate this is primarily used in development or testing environments
 
 ## LoadBalancingSpec
 

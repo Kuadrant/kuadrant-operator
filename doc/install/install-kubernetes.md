@@ -8,7 +8,7 @@
 
     Kuadrant uses a number of labels to search and filter resources on the cluster.
     All required labels are formatted as `kuadrant.io/*`.
-    Removal of any labels with the prefix may cause unexpected behaviour and degradstion of the product.
+    Removal of any labels with the prefix may cause unexpected behaviour and degradation of the product.
 
 ## Prerequisites
 

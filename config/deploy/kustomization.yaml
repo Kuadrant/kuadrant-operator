@@ -1,5 +1,6 @@
 namespace: kuadrant-system
 
 resources:
+  - namespace.yaml
   - ../default
   - ../dependencies

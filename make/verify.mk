@@ -25,3 +25,8 @@ verify-generate: generate ## Verify generate update.
 verify-go-mod: ## Verify go.mod matches source code
 	go mod tidy
 	git diff --exit-code ./go.mod
+
+.PHONY: verify-helm-charts
+verify-helm-charts: helm-build ## Verify helm charts update.
+	git diff --exit-code ./charts
+	[ -z "$$(git ls-files --other --exclude-standard --directory --no-empty-directory ./charts)" ]

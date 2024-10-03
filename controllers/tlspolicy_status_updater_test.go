@@ -486,7 +486,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t1 *testing.T) {
-			t := &TLSPolicyStatusTask{}
+			t := &TLSPolicyStatusUpdaterReconciler{}
 			if got := t.enforcedCondition(context.Background(), tt.args.tlsPolicy, tt.args.topology(tt.args.tlsPolicy)); !reflect.DeepEqual(got, tt.want) {
 				t1.Errorf("enforcedCondition() = %v, want %v", got, tt.want)
 			}

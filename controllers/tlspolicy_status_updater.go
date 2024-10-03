@@ -7,133 +7,32 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/cert-manager/cert-manager/pkg/apis/certmanager"
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/equality"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-var (
-	CertManagerCertificatesResource  = certmanagerv1.SchemeGroupVersion.WithResource("certificates")
-	CertManagerIssuersResource       = certmanagerv1.SchemeGroupVersion.WithResource("issuers")
-	CertMangerClusterIssuersResource = certmanagerv1.SchemeGroupVersion.WithResource("clusterissuers")
-
-	CertManagerCertificateKind   = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.CertificateKind}
-	CertManagerIssuerKind        = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.IssuerKind}
-	CertManagerClusterIssuerKind = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.ClusterIssuerKind}
-)
-
-func NewTLSPolicyWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
-	return &controller.Workflow{
-		Precondition:  NewValidateTLSPolicyTask().Reconcile,
-		Postcondition: NewTLSPolicyStatusTask(client).Reconcile,
-	}
-}
-
-type ValidateTLSPolicyTask struct{}
-
-func NewValidateTLSPolicyTask() *ValidateTLSPolicyTask {
-	return &ValidateTLSPolicyTask{}
-}
-
-func (t *ValidateTLSPolicyTask) Subscription() *controller.Subscription {
-	return &controller.Subscription{
-		Events: []controller.ResourceEventMatcher{
-			{Kind: &machinery.GatewayGroupKind},
-			{Kind: &kuadrantv1alpha1.TLSPolicyKind, EventType: ptr.To(controller.CreateEvent)},
-			{Kind: &kuadrantv1alpha1.TLSPolicyKind, EventType: ptr.To(controller.UpdateEvent)},
-			{Kind: &CertManagerCertificateKind},
-			{Kind: &CertManagerIssuerKind},
-			{Kind: &CertManagerClusterIssuerKind},
-		},
-		ReconcileFunc: t.Reconcile,
-	}
-}
-
-func (t *ValidateTLSPolicyTask) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("ValidateTLSPolicyTask").WithName("Reconcile")
-
-	// Get all TLS Policies
-	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1alpha1.TLSPolicy, bool) {
-		p, ok := item.(*kuadrantv1alpha1.TLSPolicy)
-		return p, ok
-	})
-
-	// Get all gateways
-	gws := lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, index int) (*machinery.Gateway, bool) {
-		gw, ok := item.(*machinery.Gateway)
-		return gw, ok
-	})
-
-	isCertManagerInstalled := false
-	installed, ok := s.Load(IsCertManagerInstalledKey)
-	if ok {
-		isCertManagerInstalled = installed.(bool)
-	} else {
-		logger.V(1).Error(errors.New("isCertManagerInstalled was not found in sync map, defaulting to false"), "sync map error")
-	}
-
-	for _, policy := range policies {
-		if policy.DeletionTimestamp != nil {
-			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", policy.Name, "namespace", policy.Namespace)
-			continue
-		}
-
-		if !isCertManagerInstalled {
-			s.Store(TLSPolicyAcceptedKey(policy.GetUID()), kuadrant.NewErrDependencyNotInstalled("Cert Manager"))
-			continue
-		}
-
-		// TODO: This should be only one target ref for now, but what should happen if multiple target refs is supported in the future?
-		targetRefs := policy.GetTargetRefs()
-		for _, targetRef := range targetRefs {
-			// Find gateway defined by target ref
-			_, ok := lo.Find(gws, func(item *machinery.Gateway) bool {
-				if item.GetName() == targetRef.GetName() && item.GetNamespace() == targetRef.GetNamespace() {
-					return true
-				}
-				return false
-			})
-
-			// Can't find gateway target ref
-			if !ok {
-				logger.V(1).Info("tls policy cannot find target ref", "name", policy.Name, "namespace", policy.Namespace)
-				s.Store(TLSPolicyAcceptedKey(policy.GetUID()), kuadrant.NewErrTargetNotFound(policy.Kind(), policy.GetTargetRef(), apierrors.NewNotFound(kuadrantv1alpha1.TLSPoliciesResource.GroupResource(), policy.GetName())))
-				continue
-			}
-
-			logger.V(1).Info("tls policy found target ref", "name", policy.Name, "namespace", policy.Namespace)
-			s.Store(TLSPolicyAcceptedKey(policy.GetUID()), nil)
-		}
-	}
-
-	return nil
-}
-
-type TLSPolicyStatusTask struct {
+type TLSPolicyStatusUpdaterReconciler struct {
 	Client *dynamic.DynamicClient
 }
 
-func NewTLSPolicyStatusTask(client *dynamic.DynamicClient) *TLSPolicyStatusTask {
-	return &TLSPolicyStatusTask{Client: client}
+func NewTLSPolicyStatusUpdaterReconciler(client *dynamic.DynamicClient) *TLSPolicyStatusUpdaterReconciler {
+	return &TLSPolicyStatusUpdaterReconciler{Client: client}
 }
 
-func (t *TLSPolicyStatusTask) Subscription() *controller.Subscription {
+func (t *TLSPolicyStatusUpdaterReconciler) Subscription() *controller.Subscription {
 	return &controller.Subscription{
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
@@ -143,12 +42,12 @@ func (t *TLSPolicyStatusTask) Subscription() *controller.Subscription {
 			{Kind: &CertManagerIssuerKind},
 			{Kind: &CertManagerClusterIssuerKind},
 		},
-		ReconcileFunc: t.Reconcile,
+		ReconcileFunc: t.UpdateStatus,
 	}
 }
 
-func (t *TLSPolicyStatusTask) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusTask").WithName("Reconcile")
+func (t *TLSPolicyStatusUpdaterReconciler) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdaterReconciler").WithName("Reconcile")
 
 	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1alpha1.TLSPolicy, bool) {
 		p, ok := item.(*kuadrantv1alpha1.TLSPolicy)
@@ -207,7 +106,7 @@ func (t *TLSPolicyStatusTask) Reconcile(ctx context.Context, _ []controller.Reso
 	return nil
 }
 
-func (t *TLSPolicyStatusTask) enforcedCondition(ctx context.Context, tlsPolicy *kuadrantv1alpha1.TLSPolicy, topology *machinery.Topology) *metav1.Condition {
+func (t *TLSPolicyStatusUpdaterReconciler) enforcedCondition(ctx context.Context, tlsPolicy *kuadrantv1alpha1.TLSPolicy, topology *machinery.Topology) *metav1.Condition {
 	if err := t.isIssuerReady(ctx, tlsPolicy, topology); err != nil {
 		return kuadrant.EnforcedCondition(tlsPolicy, kuadrant.NewErrUnknown(tlsPolicy.Kind(), err), false)
 	}
@@ -219,8 +118,8 @@ func (t *TLSPolicyStatusTask) enforcedCondition(ctx context.Context, tlsPolicy *
 	return kuadrant.EnforcedCondition(tlsPolicy, nil, true)
 }
 
-func (t *TLSPolicyStatusTask) isIssuerReady(ctx context.Context, tlsPolicy *kuadrantv1alpha1.TLSPolicy, topology *machinery.Topology) error {
-	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusTask").WithName("isIssuerReady")
+func (t *TLSPolicyStatusUpdaterReconciler) isIssuerReady(ctx context.Context, tlsPolicy *kuadrantv1alpha1.TLSPolicy, topology *machinery.Topology) error {
+	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdaterReconciler").WithName("isIssuerReady")
 
 	// Get all gateways
 	gws := lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, index int) (*machinery.Gateway, bool) {
@@ -285,7 +184,7 @@ func (t *TLSPolicyStatusTask) isIssuerReady(ctx context.Context, tlsPolicy *kuad
 	return nil
 }
 
-func (t *TLSPolicyStatusTask) isCertificatesReady(ctx context.Context, p machinery.Policy, topology *machinery.Topology) error {
+func (t *TLSPolicyStatusUpdaterReconciler) isCertificatesReady(ctx context.Context, p machinery.Policy, topology *machinery.Topology) error {
 	tlsPolicy, ok := p.(*kuadrantv1alpha1.TLSPolicy)
 	if !ok {
 		return errors.New("invalid policy")
@@ -325,31 +224,6 @@ func (t *TLSPolicyStatusTask) isCertificatesReady(ctx context.Context, p machine
 			}
 		}
 	}
-
-	return nil
-}
-
-const IsCertManagerInstalledKey = "IsCertManagerInstalled"
-
-func NewIsCertManagerInstalledTask(restMapper meta.RESTMapper) IsCertManagerInstalledTask {
-	return IsCertManagerInstalledTask{
-		restMapper: restMapper,
-	}
-}
-
-type IsCertManagerInstalledTask struct {
-	restMapper meta.RESTMapper
-}
-
-func (t IsCertManagerInstalledTask) Reconcile(ctx context.Context, _ []controller.ResourceEvent, _ *machinery.Topology, _ error, s *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("IsCertManagerInstalledTask").WithName("Reconcile")
-	isCertManagerInstalled, err := kuadrantgatewayapi.IsCertManagerInstalled(t.restMapper, logger)
-
-	if err != nil {
-		logger.Error(err, "error checking IsCertManagerInstalled")
-	}
-
-	s.Store(IsCertManagerInstalledKey, isCertManagerInstalled)
 
 	return nil
 }

@@ -313,7 +313,7 @@ func initWorkflow(client *dynamic.DynamicClient, restMapper meta.RESTMapper) *co
 		Precondition: NewEventLogger().Log,
 		Tasks: []controller.ReconcileFunc{
 			NewTopologyReconciler(client, operatorNamespace).Reconcile,
-			NewIsCertManagerInstalledTask(restMapper).Reconcile,
+			NewIsCertManagerInstalledReconciler(restMapper).Check,
 		},
 	}
 }

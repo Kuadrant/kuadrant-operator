@@ -103,10 +103,11 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *gatewayapiv1.Gateway, cl
 
 	if dnsPolicy.Spec.HealthCheck != nil {
 		healthCheckSpec = &kuadrantdnsv1alpha1.HealthCheckSpec{
-			Endpoint:         dnsPolicy.Spec.HealthCheck.Endpoint,
+			Path:             dnsPolicy.Spec.HealthCheck.Path,
 			Port:             dnsPolicy.Spec.HealthCheck.Port,
 			Protocol:         dnsPolicy.Spec.HealthCheck.Protocol,
 			FailureThreshold: dnsPolicy.Spec.HealthCheck.FailureThreshold,
+			Interval:         dnsPolicy.Spec.HealthCheck.Interval,
 		}
 	}
 	dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{

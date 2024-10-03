@@ -1556,7 +1556,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$route_name\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{service=~\"$route_name\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "histogram_quantile(0.99, sum(irate(istio_request_duration_milliseconds_bucket{}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$route_name\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "legendFormat": "{{service}} - 99th %ile",
           "range": true,
           "refId": "A"
@@ -1567,7 +1567,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(irate(istio_request_duration_milliseconds_bucket{destination_service_name=~\"$route_name\"}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{service=~\"$route_name\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
+          "expr": "histogram_quantile(0.95, sum(irate(istio_request_duration_milliseconds_bucket{}[5m])) by (le, destination_service_name)) * on(destination_service_name) group_right() (group without(cluster_id, instance, app_kubernetes_io_instance) (label_replace(gatewayapi_httproute_labels{name=~\"$route_name\"}, \"destination_service_name\", \"$1\",\"service\", \"(.+)\")))",
           "hide": false,
           "legendFormat": "{{service}} - 95th %ile",
           "range": true,
@@ -1748,7 +1748,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{exported_namespace=~\"$api_policy_namespace\"}\n* on(namespace, exported_namespace,pod)\n  group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{exported_namespace=~\"$api_policy_namespace\", workload_type=\"deployment\"}\n) by (workload, workload_type)\n* on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")))",
+          "expr": "sum(\n  node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=~\"$api_policy_namespace\"}\n* on(namespace, pod)\n  group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$api_policy_namespace\", workload_type=\"deployment\"}\n) by (workload, workload_type)\n* on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")))",
           "format": "time_series",
           "legendFormat": "API: {{workload}}",
           "range": true,
@@ -1929,7 +1929,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(\n    container_memory_working_set_bytes{metrics_path=\"/metrics/cadvisor\", exported_namespace=~\"$api_policy_namespace\", container!=\"\", image!=\"\"}\n  * on(namespace, exported_namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{exported_namespace=~\"$api_policy_namespace\", workload_type=\"deployment\"}\n) by (workload, workload_type)\n* on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")))",
+          "expr": "sum(\n    container_memory_working_set_bytes{metrics_path=\"/metrics/cadvisor\", namespace=~\"$api_policy_namespace\", container!=\"\", image!=\"\"}\n  * on(namespace, namespace,pod)\n    group_left(workload, workload_type) namespace_workload_pod:kube_pod_owner:relabel{namespace=~\"$api_policy_namespace\", workload_type=\"deployment\"}\n) by (workload, workload_type)\n* on(workload) (group by(workload) (label_replace(gatewayapi_httproute_labels{exported_namespace=~\"$api_policy_namespace\",name=~\"$route_name\"}, \"workload\", \"$1\",\"deployment\", \"(.+)\")))",
           "format": "time_series",
           "legendFormat": "API: {{workload}}",
           "range": true,

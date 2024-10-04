@@ -25,8 +25,8 @@ func (t *ValidateTLSPoliciesValidatorReconciler) Subscription() *controller.Subs
 	return &controller.Subscription{
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
-			{Kind: &kuadrantv1alpha1.TLSPolicyKind, EventType: ptr.To(controller.CreateEvent)},
-			{Kind: &kuadrantv1alpha1.TLSPolicyKind, EventType: ptr.To(controller.UpdateEvent)},
+			{Kind: &kuadrantv1alpha1.TLSPolicyGroupKind, EventType: ptr.To(controller.CreateEvent)},
+			{Kind: &kuadrantv1alpha1.TLSPolicyGroupKind, EventType: ptr.To(controller.UpdateEvent)},
 			{Kind: &CertManagerCertificateKind},
 			{Kind: &CertManagerIssuerKind},
 			{Kind: &CertManagerClusterIssuerKind},
@@ -44,11 +44,7 @@ func (t *ValidateTLSPoliciesValidatorReconciler) Validate(ctx context.Context, _
 		return p, ok
 	})
 
-	// Get all gateways
-	gws := lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, index int) (*machinery.Gateway, bool) {
-		gw, ok := item.(*machinery.Gateway)
-		return gw, ok
-	})
+	isPolicyValidErrorMap := make(map[string]error, len(policies))
 
 	isCertManagerInstalled := false
 	installed, ok := s.Load(IsCertManagerInstalledKey)
@@ -58,39 +54,29 @@ func (t *ValidateTLSPoliciesValidatorReconciler) Validate(ctx context.Context, _
 		logger.V(1).Error(errors.New("isCertManagerInstalled was not found in sync map, defaulting to false"), "sync map error")
 	}
 
-	for _, policy := range policies {
-		if policy.DeletionTimestamp != nil {
-			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", policy.Name, "namespace", policy.Namespace)
+	for _, p := range policies {
+		if p.DeletionTimestamp != nil {
+			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", p.Name, "namespace", p.Namespace)
 			continue
 		}
 
 		if !isCertManagerInstalled {
-			s.Store(TLSPolicyAcceptedKey(policy.GetUID()), kuadrant.NewErrDependencyNotInstalled("Cert Manager"))
+			isPolicyValidErrorMap[p.GetLocator()] = kuadrant.NewErrDependencyNotInstalled("Cert Manager")
 			continue
 		}
 
-		// TODO: This should be only one target ref for now, but what should happen if multiple target refs is supported in the future?
-		targetRefs := policy.GetTargetRefs()
-		for _, targetRef := range targetRefs {
-			// Find gateway defined by target ref
-			_, ok := lo.Find(gws, func(item *machinery.Gateway) bool {
-				if item.GetName() == targetRef.GetName() && item.GetNamespace() == targetRef.GetNamespace() {
-					return true
-				}
-				return false
-			})
-
-			// Can't find gateway target ref
-			if !ok {
-				logger.V(1).Info("tls policy cannot find target ref", "name", policy.Name, "namespace", policy.Namespace)
-				s.Store(TLSPolicyAcceptedKey(policy.GetUID()), kuadrant.NewErrTargetNotFound(policy.Kind(), policy.GetTargetRef(), apierrors.NewNotFound(kuadrantv1alpha1.TLSPoliciesResource.GroupResource(), policy.GetName())))
-				continue
-			}
-
-			logger.V(1).Info("tls policy found target ref", "name", policy.Name, "namespace", policy.Namespace)
-			s.Store(TLSPolicyAcceptedKey(policy.GetUID()), nil)
+		// TODO: What should happen if multiple target refs is supported in the future in terms of reporting in log and policy status?
+		// Policies are already linked to their targets, if is target ref length and length of targetables by this policy is the same
+		if len(p.GetTargetRefs()) != len(topology.Targetables().Children(p)) {
+			logger.V(1).Info("tls policy cannot find target ref", "name", p.Name, "namespace", p.Namespace)
+			isPolicyValidErrorMap[p.GetLocator()] = kuadrant.NewErrTargetNotFound(p.Kind(), p.GetTargetRef(), apierrors.NewNotFound(kuadrantv1alpha1.TLSPoliciesResource.GroupResource(), p.GetName()))
+			continue
 		}
+
+		isPolicyValidErrorMap[p.GetLocator()] = nil
 	}
+
+	s.Store(TLSPolicyAcceptedKey, isPolicyValidErrorMap)
 
 	return nil
 }

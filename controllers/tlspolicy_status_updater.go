@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -36,8 +35,8 @@ func (t *TLSPolicyStatusUpdaterReconciler) Subscription() *controller.Subscripti
 	return &controller.Subscription{
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
-			{Kind: &kuadrantv1alpha1.TLSPolicyKind, EventType: ptr.To(controller.CreateEvent)},
-			{Kind: &kuadrantv1alpha1.TLSPolicyKind, EventType: ptr.To(controller.UpdateEvent)},
+			{Kind: &kuadrantv1alpha1.TLSPolicyGroupKind, EventType: ptr.To(controller.CreateEvent)},
+			{Kind: &kuadrantv1alpha1.TLSPolicyGroupKind, EventType: ptr.To(controller.UpdateEvent)},
 			{Kind: &CertManagerCertificateKind},
 			{Kind: &CertManagerIssuerKind},
 			{Kind: &CertManagerClusterIssuerKind},
@@ -54,6 +53,14 @@ func (t *TLSPolicyStatusUpdaterReconciler) UpdateStatus(ctx context.Context, _ [
 		return p, ok
 	})
 
+	store, ok := s.Load(TLSPolicyAcceptedKey)
+	if !ok {
+		logger.Error(errors.New("TLSPolicyAcceptedKey not found, skipping update of tls policy statuses"), "sync map error")
+		return nil
+	}
+
+	isPolicyValidErrorMap := store.(map[string]error)
+
 	for _, policy := range policies {
 		if policy.DeletionTimestamp != nil {
 			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", policy.Name, "namespace", policy.Namespace)
@@ -66,11 +73,7 @@ func (t *TLSPolicyStatusUpdaterReconciler) UpdateStatus(ctx context.Context, _ [
 			ObservedGeneration: policy.Status.ObservedGeneration,
 		}
 
-		var err error
-		accepted, ok := s.Load(TLSPolicyAcceptedKey(policy.GetUID()))
-		if ok && accepted != nil {
-			err = accepted.(error)
-		}
+		err := isPolicyValidErrorMap[policy.GetLocator()]
 		meta.SetStatusCondition(&newStatus.Conditions, *kuadrant.AcceptedCondition(policy, err))
 
 		// Do not set enforced condition if Accepted condition is false
@@ -226,8 +229,4 @@ func (t *TLSPolicyStatusUpdaterReconciler) isCertificatesReady(ctx context.Conte
 	}
 
 	return nil
-}
-
-func TLSPolicyAcceptedKey(uid types.UID) string {
-	return fmt.Sprintf("TLSPolicyValid:%s", uid)
 }

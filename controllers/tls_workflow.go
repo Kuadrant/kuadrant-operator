@@ -13,6 +13,10 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 )
 
+const (
+	TLSPolicyAcceptedKey = "TLSPolicyValid"
+)
+
 var (
 	CertManagerCertificatesResource  = certmanagerv1.SchemeGroupVersion.WithResource("certificates")
 	CertManagerIssuersResource       = certmanagerv1.SchemeGroupVersion.WithResource("issuers")

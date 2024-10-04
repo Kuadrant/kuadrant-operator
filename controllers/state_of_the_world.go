@@ -138,18 +138,32 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 }
 
 func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
-	reconciler := &controller.Workflow{
-		Precondition: (&controller.Workflow{
-			Precondition: NewEventLogger().Log,
-			Tasks: []controller.ReconcileFunc{
-				NewTopologyFileReconciler(client, operatorNamespace).Reconcile,
-			},
-		}).Run,
+	mainWorkflow := &controller.Workflow{
+		Precondition: preConditionWorkflow(client).Run,
 		Tasks: []controller.ReconcileFunc{
 			NewAuthorinoCrReconciler(client).Subscription().Reconcile,
+			NewDNSWorkflow().Run,
+			NewTLSWorkflow().Run,
+			NewAuthWorkflow().Run,
+			NewRateLimitWorkflow().Run,
+		},
+		Postcondition: postConditionWorkflow().Run,
+	}
+
+	return mainWorkflow.Run
+}
+
+func preConditionWorkflow(client *dynamic.DynamicClient) controller.Workflow {
+	return controller.Workflow{
+		Precondition: NewEventLogger().Log,
+		Tasks: []controller.ReconcileFunc{
+			NewTopologyFileReconciler(client, operatorNamespace).Reconcile,
 		},
 	}
-	return reconciler.Run
+}
+
+func postConditionWorkflow() controller.Workflow {
+	return controller.Workflow{}
 }
 
 // GetOldestKuadrant returns the oldest kuadrant resource from a list of kuadrant resources that is not marked for deletion.

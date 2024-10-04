@@ -19,12 +19,6 @@ spec:
       - limit: 5
         duration: 30
         unit: second
-      routeSelectors:
-      - matches:
-        - path:
-            type: Exact
-            value: "/toy"
-          method: GET
 
     "admin-post-or-delete-toy-per-user":
       rates:

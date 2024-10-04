@@ -9,7 +9,7 @@ import (
 
 var (
 	RateLimitPoliciesResource = GroupVersion.WithResource("ratelimitpolicies")
-	RateLimitPolicyKind       = schema.GroupKind{Group: GroupVersion.Group, Kind: "RateLimitPolicy"}
+	RateLimitPolicyGroupKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "RateLimitPolicy"}
 )
 
 var _ machinery.Policy = &RateLimitPolicy{}

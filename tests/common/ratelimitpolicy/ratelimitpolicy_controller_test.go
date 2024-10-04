@@ -1594,44 +1594,4 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 		}, testTimeOut)
 	})
-
-	Context("Route Selector Validation", func() {
-		const (
-			gateWayRouteSelectorErrorMessage = "route selectors not supported when targeting a Gateway"
-		)
-
-		It("invalid usage of limit route selectors with a gateway targetRef", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
-				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.TargetRef.Name = "my-gw"
-				policy.Spec.RateLimitPolicyCommonSpec = kuadrantv1beta3.RateLimitPolicyCommonSpec{
-					Limits: map[string]kuadrantv1beta3.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta3.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: "minute",
-								},
-							},
-							RouteSelectors: []kuadrantv1beta3.RouteSelector{
-								{
-									Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
-									Matches: []gatewayapiv1.HTTPRouteMatch{
-										{
-											Path: &gatewayapiv1.HTTPPathMatch{
-												Value: ptr.To("/foo"),
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		}, testTimeOut)
-	})
 })

@@ -1,6 +1,6 @@
 //go:build unit
 
-package v1beta3
+package v1beta2
 
 import (
 	"fmt"

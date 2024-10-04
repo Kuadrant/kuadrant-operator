@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strings"
 	"unicode"
 
 	"github.com/go-logr/logr"
@@ -115,24 +114,9 @@ func conditionsFromLimit(limit *kuadrantv1beta3.Limit, route *gatewayapiv1.HTTPR
 
 	routeConditions := make([]Condition, 0)
 
-	if len(limit.RouteSelectors) > 0 {
-		// build conditions from the rules selected by the route selectors
-		for idx := range limit.RouteSelectors {
-			routeSelector := limit.RouteSelectors[idx]
-			hostnamesForConditions := routeSelector.HostnamesForConditions(route)
-			for _, rule := range routeSelector.SelectRules(route) {
-				routeConditions = append(routeConditions, conditionsFromRule(rule, hostnamesForConditions)...)
-			}
-		}
-		if len(routeConditions) == 0 {
-			return nil, errors.New("cannot match any route rules, check for invalid route selectors in the policy")
-		}
-	} else {
-		// build conditions from all rules if no route selectors are defined
-		hostnamesForConditions := (&kuadrantv1beta3.RouteSelector{}).HostnamesForConditions(route)
-		for _, rule := range route.Spec.Rules {
-			routeConditions = append(routeConditions, conditionsFromRule(rule, hostnamesForConditions)...)
-		}
+	// build conditions from all rules
+	for _, rule := range route.Spec.Rules {
+		routeConditions = append(routeConditions, conditionsFromRule(rule)...)
 	}
 
 	if len(limit.When) == 0 {
@@ -163,41 +147,12 @@ func conditionsFromLimit(limit *kuadrantv1beta3.Limit, route *gatewayapiv1.HTTPR
 	return whenConditions, nil
 }
 
-// conditionsFromRule builds a list of conditions from a rule and a list of hostnames
-// each combination of a rule match and hostname yields one condition
+// conditionsFromRule builds a list of conditions from a rule
 // rules that specify no explicit match are assumed to match all request (i.e. implicit catch-all rule)
-// empty list of hostnames yields a condition without a hostname pattern expression
-func conditionsFromRule(rule gatewayapiv1.HTTPRouteRule, hostnames []gatewayapiv1.Hostname) (conditions []Condition) {
-	if len(rule.Matches) == 0 {
-		for _, hostname := range hostnames {
-			if hostname == "*" {
-				continue
-			}
-			condition := Condition{AllOf: []PatternExpression{patternExpresionFromHostname(hostname)}}
-			conditions = append(conditions, condition)
-		}
-		return
-	}
-
-	for _, match := range rule.Matches {
-		condition := Condition{AllOf: patternExpresionsFromMatch(match)}
-
-		if len(hostnames) > 0 {
-			for _, hostname := range hostnames {
-				if hostname == "*" {
-					conditions = append(conditions, condition)
-					continue
-				}
-				mergedCondition := condition
-				mergedCondition.AllOf = append(mergedCondition.AllOf, patternExpresionFromHostname(hostname))
-				conditions = append(conditions, mergedCondition)
-			}
-			continue
-		}
-
-		conditions = append(conditions, condition)
-	}
-	return
+func conditionsFromRule(rule gatewayapiv1.HTTPRouteRule) []Condition {
+	return utils.Map(rule.Matches, func(match gatewayapiv1.HTTPRouteMatch) Condition {
+		return Condition{AllOf: patternExpresionsFromMatch(match)}
+	})
 }
 
 func patternExpresionsFromMatch(match gatewayapiv1.HTTPRouteMatch) []PatternExpression {
@@ -265,20 +220,6 @@ func patternExpresionFromHeader(headerMatch gatewayapiv1.HTTPHeaderMatch) Patter
 		Selector: kuadrantv1beta3.ContextSelector(fmt.Sprintf("request.headers.%s", headerMatch.Name)),
 		Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
 		Value:    headerMatch.Value,
-	}
-}
-
-func patternExpresionFromHostname(hostname gatewayapiv1.Hostname) PatternExpression {
-	value := string(hostname)
-	operator := "eq"
-	if strings.HasPrefix(value, "*.") {
-		operator = "endswith"
-		value = value[1:]
-	}
-	return PatternExpression{
-		Selector: "request.host",
-		Operator: PatternOperator(operator),
-		Value:    value,
 	}
 }
 

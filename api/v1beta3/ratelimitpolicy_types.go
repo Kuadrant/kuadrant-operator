@@ -87,7 +87,7 @@ type Rate struct {
 	Unit TimeUnit `json:"unit"`
 }
 
-// RouteSelector defines semantics for matching an HTTP request based on conditions
+// WhenCondition defines semantics for matching an HTTP request based on conditions
 // https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
 type WhenCondition struct {
 	// Selector defines one item from the well known selectors
@@ -104,11 +104,6 @@ type WhenCondition struct {
 
 // Limit represents a complete rate limit configuration
 type Limit struct {
-	// RouteSelectors defines semantics for matching an HTTP request based on conditions
-	// +optional
-	// +kubebuilder:validation:MaxItems=15
-	RouteSelectors []RouteSelector `json:"routeSelectors,omitempty"`
-
 	// When holds the list of conditions for the policy to be enforced.
 	// Called also "soft" conditions as route selectors must also match
 	// +optional
@@ -132,7 +127,6 @@ func (l Limit) CountersAsStringList() []string {
 }
 
 // RateLimitPolicySpec defines the desired state of RateLimitPolicy
-// +kubebuilder:validation:XValidation:rule="self.targetRef.kind != 'Gateway' || !has(self.limits) || !self.limits.exists(x, has(self.limits[x].routeSelectors))",message="route selectors not supported when targeting a Gateway"
 // +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && has(self.limits))",message="Implicit and explicit defaults are mutually exclusive"
 // +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && has(self.overrides))",message="Overrides and explicit defaults are mutually exclusive"
 // +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && has(self.limits))",message="Overrides and implicit defaults are mutually exclusive"
@@ -266,18 +260,6 @@ func (r *RateLimitPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
 
 func (r *RateLimitPolicy) GetRulesHostnames() (ruleHosts []string) {
 	ruleHosts = make([]string, 0)
-	for _, limit := range r.Spec.CommonSpec().Limits {
-		for _, routeSelector := range limit.RouteSelectors {
-			convertHostnamesToString := func(gwHostnames []gatewayapiv1.Hostname) []string {
-				hostnames := make([]string, 0, len(gwHostnames))
-				for _, gwHostName := range gwHostnames {
-					hostnames = append(hostnames, string(gwHostName))
-				}
-				return hostnames
-			}
-			ruleHosts = append(ruleHosts, convertHostnamesToString(routeSelector.Hostnames)...)
-		}
-	}
 	return
 }
 

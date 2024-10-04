@@ -239,19 +239,6 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 									{Limit: 50, Duration: 1, Unit: kuadrantv1beta3.TimeUnit("minute")},
 								},
 								Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
-								RouteSelectors: []kuadrantv1beta3.RouteSelector{
-									{ // selects the 1st HTTPRouteRule (i.e. get|post /toys*) for one of the hostnames
-										Matches: []gatewayapiv1.HTTPRouteMatch{
-											{
-												Path: &gatewayapiv1.HTTPPathMatch{
-													Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-													Value: ptr.To("/toys"),
-												},
-											},
-										},
-										Hostnames: []gatewayapiv1.Hostname{"*.toystore.acme.com"},
-									},
-								},
 								When: []kuadrantv1beta3.WhenCondition{
 									{
 										Selector: "auth.identity.group",
@@ -264,18 +251,6 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Rates: []kuadrantv1beta3.Rate{
 									{Limit: 5, Duration: 1, Unit: kuadrantv1beta3.TimeUnit("minute")},
 									{Limit: 100, Duration: 12, Unit: kuadrantv1beta3.TimeUnit("hour")},
-								},
-								RouteSelectors: []kuadrantv1beta3.RouteSelector{
-									{ // selects the 2nd HTTPRouteRule (i.e. /assets*) for all hostnames
-										Matches: []gatewayapiv1.HTTPRouteMatch{
-											{
-												Path: &gatewayapiv1.HTTPPathMatch{
-													Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-													Value: ptr.To("/assets"),
-												},
-											},
-										},
-									},
 								},
 							},
 						},
@@ -322,11 +297,6 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Value:    "GET",
 							},
 							{
-								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.EndsWithOperator),
-								Value:    ".toystore.acme.com",
-							},
-							{
 								Selector: "auth.identity.group",
 								Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
 								Value:    "admin",
@@ -344,11 +314,6 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Selector: "request.method",
 								Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 								Value:    "POST",
-							},
-							{
-								Selector: "request.host",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.EndsWithOperator),
-								Value:    ".toystore.acme.com",
 							},
 							{
 								Selector: "auth.identity.group",
@@ -615,18 +580,6 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
-								RouteSelectors: []kuadrantv1beta3.RouteSelector{
-									{ // does no select any HTTPRouteRule (i.e. GET /toys*)
-										Matches: []gatewayapiv1.HTTPRouteMatch{
-											{
-												Path: &gatewayapiv1.HTTPPathMatch{
-													Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-													Value: ptr.To("/other"),
-												},
-											},
-										},
-									},
-								},
 								Rates: []kuadrantv1beta3.Rate{
 									{
 										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
@@ -741,18 +694,6 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
-								RouteSelectors: []kuadrantv1beta3.RouteSelector{
-									{ // does no select any HTTPRouteRule (i.e. GET /otherPathRouteC*)
-										Matches: []gatewayapiv1.HTTPRouteMatch{
-											{
-												Path: &gatewayapiv1.HTTPPathMatch{
-													Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-													Value: ptr.To("/notmatchingpath"),
-												},
-											},
-										},
-									},
-								},
 								Rates: []kuadrantv1beta3.Rate{
 									{
 										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
@@ -2305,14 +2246,6 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
-								RouteSelectors: []kuadrantv1beta3.RouteSelector{
-									{
-										// Route does not specify any hostname
-										// gateway's listener specifies *.gw.example.com
-										Hostnames: []gatewayapiv1.Hostname{"*.gw.example.com"},
-									},
-								},
-
 								Rates: []kuadrantv1beta3.Rate{
 									{
 										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),

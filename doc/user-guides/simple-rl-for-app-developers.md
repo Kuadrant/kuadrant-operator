@@ -136,12 +136,10 @@ spec:
       - limit: 5
         duration: 10
         unit: second
-      routeSelectors:
-      - matches: # selects the 2nd HTTPRouteRule of the targeted route
-        - method: POST
-          path:
-            type: Exact
-            value: "/toys"
+      when:
+      - selector: request.method
+        operator: eq
+        value: "POST"
 EOF
 ```
 

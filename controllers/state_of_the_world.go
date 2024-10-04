@@ -1,24 +1,18 @@
 package controllers
 
 import (
-	"context"
 	"fmt"
-	"strings"
-	"sync"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
-	"github.com/google/go-cmp/cmp"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
-	"github.com/kuadrant/policy-machinery/machinery"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -47,32 +41,31 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.ManagedBy(manager),
 		controller.WithLogger(logger),
 		controller.WithClient(client),
-		controller.WithRunnable("kuadrant watcher", controller.Watch(&kuadrantv1beta1.Kuadrant{}, kuadrantv1beta1.KuadrantResource, metav1.NamespaceAll)),
+		controller.WithRunnable("kuadrant watcher", controller.Watch(&kuadrantv1beta1.Kuadrant{}, kuadrantv1beta1.KuadrantsResource, metav1.NamespaceAll)),
 		controller.WithRunnable("dnspolicy watcher", controller.Watch(&kuadrantv1alpha1.DNSPolicy{}, kuadrantv1alpha1.DNSPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("tlspolicy watcher", controller.Watch(&kuadrantv1alpha1.TLSPolicy{}, kuadrantv1alpha1.TLSPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("authpolicy watcher", controller.Watch(&kuadrantv1beta2.AuthPolicy{}, kuadrantv1beta2.AuthPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta2.RateLimitPolicy{}, kuadrantv1beta2.RateLimitPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("topology configmap watcher", controller.Watch(&corev1.ConfigMap{}, controller.ConfigMapsResource, operatorNamespace, controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)))),
-		controller.WithRunnable("limitador watcher", controller.Watch(&limitadorv1alpha1.Limitador{}, kuadrantv1beta1.LimitadorResource, metav1.NamespaceAll)),
-		controller.WithRunnable("authorino watcher", controller.Watch(&authorinov1beta1.Authorino{}, kuadrantv1beta1.AuthorinoResource, metav1.NamespaceAll)),
+		controller.WithRunnable("limitador watcher", controller.Watch(&limitadorv1alpha1.Limitador{}, kuadrantv1beta1.LimitadorsResource, metav1.NamespaceAll)),
+		controller.WithRunnable("authorino watcher", controller.Watch(&authorinov1beta1.Authorino{}, kuadrantv1beta1.AuthorinosResource, metav1.NamespaceAll)),
 		controller.WithPolicyKinds(
-			kuadrantv1alpha1.DNSPolicyKind,
-			kuadrantv1alpha1.TLSPolicyKind,
-			kuadrantv1beta2.AuthPolicyKind,
-			kuadrantv1beta2.RateLimitPolicyKind,
+			kuadrantv1alpha1.DNSPolicyGroupKind,
+			kuadrantv1alpha1.TLSPolicyGroupKind,
+			kuadrantv1beta2.AuthPolicyGroupKind,
+			kuadrantv1beta2.RateLimitPolicyGroupKind,
 		),
 		controller.WithObjectKinds(
-			kuadrantv1beta1.KuadrantKind,
+			kuadrantv1beta1.KuadrantGroupKind,
 			ConfigMapGroupKind,
-			kuadrantv1beta1.LimitadorKind,
-			kuadrantv1beta1.AuthorinoKind,
+			kuadrantv1beta1.LimitadorGroupKind,
+			kuadrantv1beta1.AuthorinoGroupKind,
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
 			kuadrantv1beta1.LinkKuadrantToLimitador,
 			kuadrantv1beta1.LinkKuadrantToAuthorino,
 		),
-		controller.WithReconcile(buildReconciler(client)),
 	}
 
 	ok, err := kuadrantgatewayapi.IsGatewayAPIInstalled(manager.GetRESTMapper())
@@ -86,8 +79,8 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		)
 	}
 
-	ok, err = envoygateway.IsEnvoyGatewayInstalled(manager.GetRESTMapper())
-	if err != nil || !ok {
+	isEnvoyGatewayInstalled, err := envoygateway.IsEnvoyGatewayInstalled(manager.GetRESTMapper())
+	if err != nil || !isEnvoyGatewayInstalled {
 		logger.Info("envoygateway is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts,
@@ -104,8 +97,8 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		// TODO: add specific tasks to workflow
 	}
 
-	ok, err = istio.IsIstioInstalled(manager.GetRESTMapper())
-	if err != nil || !ok {
+	isIstioInstalled, err := istio.IsIstioInstalled(manager.GetRESTMapper())
+	if err != nil || !isIstioInstalled {
 		logger.Info("istio is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts,
@@ -140,119 +133,54 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		// TODO: add tls policy specific tasks to workflow
 	}
 
+	controllerOpts = append(controllerOpts, controller.WithReconcile(buildReconciler(client, isIstioInstalled, isEnvoyGatewayInstalled)))
+
 	return controller.NewController(controllerOpts...)
 }
 
-func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
-	reconciler := &controller.Workflow{
-		Precondition: (&controller.Workflow{
-			Precondition: NewEventLogger().Log,
-			Tasks: []controller.ReconcileFunc{
-				NewTopologyFileReconciler(client, operatorNamespace).Reconcile,
-			},
-		}).Run,
+func buildReconciler(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) controller.ReconcileFunc {
+	mainWorkflow := &controller.Workflow{
+		Precondition: initWorkflow(client).Run,
 		Tasks: []controller.ReconcileFunc{
-			NewAuthorinoCrReconciler(client).Subscription().Reconcile,
+			NewAuthorinoReconciler(client).Subscription().Reconcile,
+			NewLimitadorReconciler(client).Subscription().Reconcile,
+			NewDNSWorkflow().Run,
+			NewTLSWorkflow().Run,
+			NewAuthWorkflow().Run,
+			NewRateLimitWorkflow().Run,
+		},
+		Postcondition: finalStepsWorkflow(client, isIstioInstalled, isEnvoyGatewayInstalled).Run,
+	}
+
+	return mainWorkflow.Run
+}
+
+func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
+	return &controller.Workflow{
+		Precondition: NewEventLogger().Log,
+		Tasks: []controller.ReconcileFunc{
+			NewTopologyReconciler(client, operatorNamespace).Reconcile,
 		},
 	}
-	return reconciler.Run
 }
 
-type TopologyFileReconciler struct {
-	Client    *dynamic.DynamicClient
-	Namespace string
-}
-
-func NewTopologyFileReconciler(client *dynamic.DynamicClient, namespace string) *TopologyFileReconciler {
-	if namespace == "" {
-		panic("namespace must be specified and can not be a blank string")
-	}
-	return &TopologyFileReconciler{Client: client, Namespace: namespace}
-}
-
-func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("topology file")
-
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "topology",
-			Namespace: r.Namespace,
-			Labels:    map[string]string{kuadrant.TopologyLabel: "true"},
-		},
-		Data: map[string]string{
-			"topology": topology.ToDot(),
+func finalStepsWorkflow(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) *controller.Workflow {
+	workflow := &controller.Workflow{
+		Tasks: []controller.ReconcileFunc{
+			NewGatewayPolicyDiscoverabilityReconciler(client).Subscription().Reconcile,
+			NewHTTPRoutePolicyDiscoverabilityReconciler(client).Subscription().Reconcile,
 		},
 	}
-	unstructuredCM, err := controller.Destruct(cm)
-	if err != nil {
-		logger.Error(err, "failed to destruct topology configmap")
-		return err
+
+	if isIstioInstalled {
+		workflow.Tasks = append(workflow.Tasks, NewIstioExtensionsJanitor(client).Subscription().Reconcile)
 	}
 
-	existingTopologyConfigMaps := topology.Objects().Items(func(object machinery.Object) bool {
-		return object.GetName() == cm.GetName() && object.GetNamespace() == cm.GetNamespace() && object.GroupVersionKind().Kind == ConfigMapGroupKind.Kind
-	})
-
-	if len(existingTopologyConfigMaps) == 0 {
-		_, err = r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Create(ctx, unstructuredCM, metav1.CreateOptions{})
-		if err != nil {
-			if errors.IsAlreadyExists(err) {
-				// This error can happen when the operator is starting, and the create event for the topology has not being processed.
-				logger.Info("already created topology configmap, must not be in topology yet")
-				return err
-			}
-			logger.Error(err, "failed to write topology configmap")
-		}
-		return err
+	if isEnvoyGatewayInstalled {
+		workflow.Tasks = append(workflow.Tasks, NewEnvoyGatewayJanitor(client).Subscription().Reconcile)
 	}
 
-	if len(existingTopologyConfigMaps) > 1 {
-		logger.Info("multiple topology configmaps found, continuing but unexpected behaviour may occur")
-	}
-	existingTopologyConfigMap := existingTopologyConfigMaps[0].(controller.Object).(*controller.RuntimeObject)
-	cmTopology := existingTopologyConfigMap.Object.(*corev1.ConfigMap)
-
-	if d, found := cmTopology.Data["topology"]; !found || strings.Compare(d, cm.Data["topology"]) != 0 {
-		_, err = r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Update(ctx, unstructuredCM, metav1.UpdateOptions{})
-		if err != nil {
-			logger.Error(err, "failed to update topology configmap")
-		}
-		return err
-	}
-
-	return nil
-}
-
-type EventLogger struct{}
-
-func NewEventLogger() *EventLogger {
-	return &EventLogger{}
-}
-
-func (e *EventLogger) Log(ctx context.Context, resourceEvents []controller.ResourceEvent, _ *machinery.Topology, err error, _ *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("event logger")
-	for _, event := range resourceEvents {
-		// log the event
-		obj := event.OldObject
-		if obj == nil {
-			obj = event.NewObject
-		}
-		values := []any{
-			"type", event.EventType.String(),
-			"kind", obj.GetObjectKind().GroupVersionKind().Kind,
-			"namespace", obj.GetNamespace(),
-			"name", obj.GetName(),
-		}
-		if event.EventType == controller.UpdateEvent && logger.V(1).Enabled() {
-			values = append(values, "diff", cmp.Diff(event.OldObject, event.NewObject))
-		}
-		logger.Info("new event", values...)
-		if err != nil {
-			logger.Error(err, "error passed to reconcile")
-		}
-	}
-
-	return nil
+	return workflow
 }
 
 // GetOldestKuadrant returns the oldest kuadrant resource from a list of kuadrant resources that is not marked for deletion.

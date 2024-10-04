@@ -11,9 +11,9 @@ import (
 )
 
 var (
-	AuthorinoKind = schema.GroupKind{Group: authorinov1beta1.GroupVersion.Group, Kind: "Authorino"}
-	KuadrantKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "Kuadrant"}
-	LimitadorKind = schema.GroupKind{Group: limitadorv1alpha1.GroupVersion.Group, Kind: "Limitador"}
+	AuthorinoGroupKind = schema.GroupKind{Group: authorinov1beta1.GroupVersion.Group, Kind: "Authorino"}
+	KuadrantGroupKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "Kuadrant"}
+	LimitadorGroupKind = schema.GroupKind{Group: limitadorv1alpha1.GroupVersion.Group, Kind: "Limitador"}
 
 	AuthorinoResource = authorinov1beta1.GroupVersion.WithResource("authorinos")
 	KuadrantResource  = GroupVersion.WithResource("kuadrants")
@@ -27,10 +27,10 @@ func (p *Kuadrant) GetLocator() string {
 }
 
 func LinkKuadrantToGatewayClasses(objs controller.Store) machinery.LinkFunc {
-	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantKind), controller.ObjectAs[*Kuadrant])
+	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantGroupKind), controller.ObjectAs[*Kuadrant])
 
 	return machinery.LinkFunc{
-		From: KuadrantKind,
+		From: KuadrantGroupKind,
 		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GatewayClass"},
 		Func: func(_ machinery.Object) []machinery.Object {
 			parents := make([]machinery.Object, len(kuadrants))
@@ -43,11 +43,11 @@ func LinkKuadrantToGatewayClasses(objs controller.Store) machinery.LinkFunc {
 }
 
 func LinkKuadrantToLimitador(objs controller.Store) machinery.LinkFunc {
-	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantKind), controller.ObjectAs[machinery.Object])
+	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantGroupKind), controller.ObjectAs[machinery.Object])
 
 	return machinery.LinkFunc{
-		From: KuadrantKind,
-		To:   LimitadorKind,
+		From: KuadrantGroupKind,
+		To:   LimitadorGroupKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
 				return kuadrant.GetNamespace() == child.GetNamespace() && child.GetName() == "limitador"
@@ -57,11 +57,11 @@ func LinkKuadrantToLimitador(objs controller.Store) machinery.LinkFunc {
 }
 
 func LinkKuadrantToAuthorino(objs controller.Store) machinery.LinkFunc {
-	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantKind), controller.ObjectAs[machinery.Object])
+	kuadrants := lo.Map(objs.FilterByGroupKind(KuadrantGroupKind), controller.ObjectAs[machinery.Object])
 
 	return machinery.LinkFunc{
-		From: KuadrantKind,
-		To:   AuthorinoKind,
+		From: KuadrantGroupKind,
+		To:   AuthorinoGroupKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
 				return kuadrant.GetNamespace() == child.GetNamespace() && child.GetName() == "authorino"

@@ -8,10 +8,10 @@ import (
 )
 
 var (
-	DNSPoliciesResource = GroupVersion.WithResource("dnspolicies")
-	DNSPolicyKind       = schema.GroupKind{Group: GroupVersion.Group, Kind: "DNSPolicy"}
-	TLSPoliciesResource = GroupVersion.WithResource("tlspolicies")
-	TLSPolicyKind       = schema.GroupKind{Group: GroupVersion.Group, Kind: "TLSPolicy"}
+	DNSPolicyResource  = GroupVersion.WithResource("dnspolicies")
+	DNSPolicyGroupKind = schema.GroupKind{Group: GroupVersion.Group, Kind: "DNSPolicy"}
+	TLSPolicyResource  = GroupVersion.WithResource("tlspolicies")
+	TLSPolicyGroupKind = schema.GroupKind{Group: GroupVersion.Group, Kind: "TLSPolicy"}
 )
 
 var _ machinery.Policy = &DNSPolicy{}

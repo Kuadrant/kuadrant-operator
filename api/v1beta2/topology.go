@@ -8,10 +8,10 @@ import (
 )
 
 var (
-	AuthPoliciesResource      = GroupVersion.WithResource("authpolicies")
-	AuthPolicyKind            = schema.GroupKind{Group: GroupVersion.Group, Kind: "AuthPolicy"}
-	RateLimitPoliciesResource = GroupVersion.WithResource("ratelimitpolicies")
-	RateLimitPolicyKind       = schema.GroupKind{Group: GroupVersion.Group, Kind: "RateLimitPolicy"}
+	AuthPolicyResource       = GroupVersion.WithResource("authpolicies")
+	AuthPolicyGroupKind      = schema.GroupKind{Group: GroupVersion.Group, Kind: "AuthPolicy"}
+	RateLimitPolicyResource  = GroupVersion.WithResource("ratelimitpolicies")
+	RateLimitPolicyGroupKind = schema.GroupKind{Group: GroupVersion.Group, Kind: "RateLimitPolicy"}
 )
 
 var _ machinery.Policy = &AuthPolicy{}

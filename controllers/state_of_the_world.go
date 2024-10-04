@@ -42,24 +42,24 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithLogger(logger),
 		controller.WithClient(client),
 		controller.WithRunnable("kuadrant watcher", controller.Watch(&kuadrantv1beta1.Kuadrant{}, kuadrantv1beta1.KuadrantResource, metav1.NamespaceAll)),
-		controller.WithRunnable("dnspolicy watcher", controller.Watch(&kuadrantv1alpha1.DNSPolicy{}, kuadrantv1alpha1.DNSPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("tlspolicy watcher", controller.Watch(&kuadrantv1alpha1.TLSPolicy{}, kuadrantv1alpha1.TLSPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("authpolicy watcher", controller.Watch(&kuadrantv1beta2.AuthPolicy{}, kuadrantv1beta2.AuthPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta2.RateLimitPolicy{}, kuadrantv1beta2.RateLimitPoliciesResource, metav1.NamespaceAll)),
+		controller.WithRunnable("dnspolicy watcher", controller.Watch(&kuadrantv1alpha1.DNSPolicy{}, kuadrantv1alpha1.DNSPolicyResource, metav1.NamespaceAll)),
+		controller.WithRunnable("tlspolicy watcher", controller.Watch(&kuadrantv1alpha1.TLSPolicy{}, kuadrantv1alpha1.TLSPolicyResource, metav1.NamespaceAll)),
+		controller.WithRunnable("authpolicy watcher", controller.Watch(&kuadrantv1beta2.AuthPolicy{}, kuadrantv1beta2.AuthPolicyResource, metav1.NamespaceAll)),
+		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta2.RateLimitPolicy{}, kuadrantv1beta2.RateLimitPolicyResource, metav1.NamespaceAll)),
 		controller.WithRunnable("topology configmap watcher", controller.Watch(&corev1.ConfigMap{}, controller.ConfigMapsResource, operatorNamespace, controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)))),
 		controller.WithRunnable("limitador watcher", controller.Watch(&limitadorv1alpha1.Limitador{}, kuadrantv1beta1.LimitadorResource, metav1.NamespaceAll)),
 		controller.WithRunnable("authorino watcher", controller.Watch(&authorinov1beta1.Authorino{}, kuadrantv1beta1.AuthorinoResource, metav1.NamespaceAll)),
 		controller.WithPolicyKinds(
-			kuadrantv1alpha1.DNSPolicyKind,
-			kuadrantv1alpha1.TLSPolicyKind,
-			kuadrantv1beta2.AuthPolicyKind,
-			kuadrantv1beta2.RateLimitPolicyKind,
+			kuadrantv1alpha1.DNSPolicyGroupKind,
+			kuadrantv1alpha1.TLSPolicyGroupKind,
+			kuadrantv1beta2.AuthPolicyGroupKind,
+			kuadrantv1beta2.RateLimitPolicyGroupKind,
 		),
 		controller.WithObjectKinds(
-			kuadrantv1beta1.KuadrantKind,
+			kuadrantv1beta1.KuadrantGroupKind,
 			ConfigMapGroupKind,
-			kuadrantv1beta1.LimitadorKind,
-			kuadrantv1beta1.AuthorinoKind,
+			kuadrantv1beta1.LimitadorGroupKind,
+			kuadrantv1beta1.AuthorinoGroupKind,
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
@@ -153,8 +153,8 @@ func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
 	return mainWorkflow.Run
 }
 
-func preConditionWorkflow(client *dynamic.DynamicClient) controller.Workflow {
-	return controller.Workflow{
+func preConditionWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
+	return &controller.Workflow{
 		Precondition: NewEventLogger().Log,
 		Tasks: []controller.ReconcileFunc{
 			NewTopologyFileReconciler(client, operatorNamespace).Reconcile,
@@ -162,8 +162,8 @@ func preConditionWorkflow(client *dynamic.DynamicClient) controller.Workflow {
 	}
 }
 
-func postConditionWorkflow() controller.Workflow {
-	return controller.Workflow{}
+func postConditionWorkflow() *controller.Workflow {
+	return &controller.Workflow{}
 }
 
 // GetOldestKuadrant returns the oldest kuadrant resource from a list of kuadrant resources that is not marked for deletion.

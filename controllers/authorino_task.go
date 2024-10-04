@@ -29,8 +29,8 @@ func (r *AuthorinoCrReconciler) Subscription() *controller.Subscription {
 	return &controller.Subscription{
 		ReconcileFunc: r.Reconcile,
 		Events: []controller.ResourceEventMatcher{
-			{Kind: ptr.To(v1beta1.KuadrantKind), EventType: ptr.To(controller.CreateEvent)},
-			{Kind: ptr.To(v1beta1.AuthorinoKind), EventType: ptr.To(controller.DeleteEvent)},
+			{Kind: ptr.To(v1beta1.KuadrantGroupKind), EventType: ptr.To(controller.CreateEvent)},
+			{Kind: ptr.To(v1beta1.AuthorinoGroupKind), EventType: ptr.To(controller.DeleteEvent)},
 		},
 	}
 }
@@ -41,7 +41,7 @@ func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	defer logger.Info("reconciling authorino resource", "status", "completed")
 
 	kobjs := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (*v1beta1.Kuadrant, bool) {
-		if item.GroupVersionKind().Kind == v1beta1.KuadrantKind.Kind {
+		if item.GroupVersionKind().Kind == v1beta1.KuadrantGroupKind.Kind {
 			return item.(*v1beta1.Kuadrant), true
 		}
 		return nil, false
@@ -58,7 +58,7 @@ func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	}
 
 	aobjs := lo.FilterMap(topology.Objects().Objects().Children(kobj), func(item machinery.Object, _ int) (machinery.Object, bool) {
-		if item.GroupVersionKind().Kind == v1beta1.AuthorinoKind.Kind {
+		if item.GroupVersionKind().Kind == v1beta1.AuthorinoGroupKind.Kind {
 			return item, true
 		}
 		return nil, false

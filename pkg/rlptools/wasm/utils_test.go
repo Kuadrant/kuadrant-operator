@@ -268,6 +268,199 @@ func TestRules(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "RLP with when and counter attributes",
+			rlp: rlp("my-rlp", map[string]kuadrantv1beta3.Limit{
+				"users": {
+					Rates:    []kuadrantv1beta3.Rate{counter50rps},
+					Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
+					When: []kuadrantv1beta3.WhenCondition{
+						{
+							Selector: kuadrantv1beta3.ContextSelector("auth.identity.group"),
+							Operator: kuadrantv1beta3.NotEqualOperator,
+							Value:    "admin",
+						},
+					},
+				},
+				"all": {
+					Rates: []kuadrantv1beta3.Rate{counter50rps},
+				},
+			}),
+			route: &gatewayapiv1.HTTPRoute{
+				Spec: gatewayapiv1.HTTPRouteSpec{
+					Hostnames: []gatewayapiv1.Hostname{"api.toystore.com"},
+					// 2 rules
+					Rules: []gatewayapiv1.HTTPRouteRule{
+						{ // Toys rule (think about routing to toystore backend)
+							Matches: []gatewayapiv1.HTTPRouteMatch{
+								{
+									Path: &gatewayapiv1.HTTPPathMatch{
+										Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+										Value: ptr.To("/toys"),
+									},
+									Method: ptr.To(gatewayapiv1.HTTPMethodGet),
+								},
+								{
+									Path: &gatewayapiv1.HTTPPathMatch{
+										Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+										Value: ptr.To("/toys"),
+									},
+									Method: ptr.To(gatewayapiv1.HTTPMethodPost),
+								},
+							},
+						},
+						{ // Assets rule (think about routing to assets backend)
+							Matches: []gatewayapiv1.HTTPRouteMatch{
+								{
+									Path: &gatewayapiv1.HTTPPathMatch{
+										Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+										Value: ptr.To("/assets"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedRules: []Rule{
+				{ // rule associated to "all" limit
+					Conditions: []Condition{
+						{
+							AllOf: []PatternExpression{
+								{
+									Selector: "request.url_path",
+									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toys",
+								},
+								{
+									Selector: "request.method",
+									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+									Value:    "GET",
+								},
+							},
+						},
+						{
+							AllOf: []PatternExpression{
+								{
+									Selector: "request.url_path",
+									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toys",
+								},
+								{
+									Selector: "request.method",
+									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+									Value:    "POST",
+								},
+							},
+						},
+						{
+							AllOf: []PatternExpression{
+								{
+									Selector: "request.url_path",
+									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/assets",
+								},
+							},
+						},
+					},
+					Actions: []Action{
+						{
+							Scope:         "my-app/my-rlp",
+							ExtensionName: RateLimitPolicyExtensionName,
+							Data: []DataType{
+								{
+									Value: &Static{
+										Static: StaticSpec{
+											Key:   "limit.all__1edae8a9",
+											Value: "1",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{ // rule associated to "users" limit
+					Conditions: []Condition{
+						{
+							AllOf: []PatternExpression{
+								{
+									Selector: "request.url_path",
+									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toys",
+								},
+								{
+									Selector: "request.method",
+									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+									Value:    "GET",
+								},
+								{
+									Selector: "auth.identity.group",
+									Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
+									Value:    "admin",
+								},
+							},
+						},
+						{
+							AllOf: []PatternExpression{
+								{
+									Selector: "request.url_path",
+									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toys",
+								},
+								{
+									Selector: "request.method",
+									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+									Value:    "POST",
+								},
+								{
+									Selector: "auth.identity.group",
+									Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
+									Value:    "admin",
+								},
+							},
+						},
+						{
+							AllOf: []PatternExpression{
+								{
+									Selector: "request.url_path",
+									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/assets",
+								},
+								{
+									Selector: "auth.identity.group",
+									Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
+									Value:    "admin",
+								},
+							},
+						},
+					},
+					Actions: []Action{
+						{
+							Scope:         "my-app/my-rlp",
+							ExtensionName: RateLimitPolicyExtensionName,
+							Data: []DataType{
+								{
+									Value: &Static{
+										Static: StaticSpec{
+											Key:   "limit.users__6231d900",
+											Value: "1",
+										},
+									},
+								},
+								{
+									Value: &Selector{
+										Selector: SelectorSpec{
+											Selector: "auth.identity.username",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {

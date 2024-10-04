@@ -10,6 +10,7 @@ import (
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -17,6 +18,7 @@ import (
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -35,7 +37,7 @@ import (
 
 var (
 	ConfigMapGroupKind = schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}
-	operatorNamespace  = env.GetString("OPERATOR_NAMESPACE", "")
+	operatorNamespace  = env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
 )
 
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
@@ -52,6 +54,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta2.RateLimitPolicy{}, kuadrantv1beta2.RateLimitPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("topology configmap watcher", controller.Watch(&corev1.ConfigMap{}, controller.ConfigMapsResource, operatorNamespace, controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)))),
 		controller.WithRunnable("limitador watcher", controller.Watch(&limitadorv1alpha1.Limitador{}, kuadrantv1beta1.LimitadorResource, metav1.NamespaceAll)),
+		controller.WithRunnable("authorino watcher", controller.Watch(&authorinov1beta1.Authorino{}, kuadrantv1beta1.AuthorinoResource, metav1.NamespaceAll)),
 		controller.WithPolicyKinds(
 			kuadrantv1alpha1.DNSPolicyKind,
 			kuadrantv1alpha1.TLSPolicyKind,
@@ -62,10 +65,12 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			kuadrantv1beta1.KuadrantKind,
 			ConfigMapGroupKind,
 			kuadrantv1beta1.LimitadorKind,
+			kuadrantv1beta1.AuthorinoKind,
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
 			kuadrantv1beta1.LinkKuadrantToLimitador,
+			kuadrantv1beta1.LinkKuadrantToAuthorino,
 		),
 		controller.WithReconcile(buildReconciler(client)),
 	}
@@ -140,9 +145,14 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 
 func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
 	reconciler := &controller.Workflow{
-		Precondition: NewEventLogger().Log,
+		Precondition: (&controller.Workflow{
+			Precondition: NewEventLogger().Log,
+			Tasks: []controller.ReconcileFunc{
+				NewTopologyFileReconciler(client, operatorNamespace).Reconcile,
+			},
+		}).Run,
 		Tasks: []controller.ReconcileFunc{
-			NewTopologyFileReconciler(client, operatorNamespace).Reconcile,
+			NewAuthorinoCrReconciler(client).Subscription().Reconcile,
 		},
 	}
 	return reconciler.Run
@@ -184,8 +194,13 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 	})
 
 	if len(existingTopologyConfigMaps) == 0 {
-		_, err := r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Create(ctx, unstructuredCM, metav1.CreateOptions{})
+		_, err = r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Create(ctx, unstructuredCM, metav1.CreateOptions{})
 		if err != nil {
+			if errors.IsAlreadyExists(err) {
+				// This error can happen when the operator is starting, and the create event for the topology has not being processed.
+				logger.Info("already created topology configmap, must not be in topology yet")
+				return err
+			}
 			logger.Error(err, "failed to write topology configmap")
 		}
 		return err
@@ -198,7 +213,7 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 	cmTopology := existingTopologyConfigMap.Object.(*corev1.ConfigMap)
 
 	if d, found := cmTopology.Data["topology"]; !found || strings.Compare(d, cm.Data["topology"]) != 0 {
-		_, err := r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Update(ctx, unstructuredCM, metav1.UpdateOptions{})
+		_, err = r.Client.Resource(controller.ConfigMapsResource).Namespace(cm.Namespace).Update(ctx, unstructuredCM, metav1.UpdateOptions{})
 		if err != nil {
 			logger.Error(err, "failed to update topology configmap")
 		}
@@ -238,4 +253,31 @@ func (e *EventLogger) Log(ctx context.Context, resourceEvents []controller.Resou
 	}
 
 	return nil
+}
+
+// GetOldestKuadrant returns the oldest kuadrant resource from a list of kuadrant resources that is not marked for deletion.
+func GetOldestKuadrant(kuadrants []*kuadrantv1beta1.Kuadrant) (*kuadrantv1beta1.Kuadrant, error) {
+	if len(kuadrants) == 1 {
+		return kuadrants[0], nil
+	}
+	if len(kuadrants) == 0 {
+		return nil, fmt.Errorf("empty list passed")
+	}
+	oldest := kuadrants[0]
+	for _, k := range kuadrants[1:] {
+		if k == nil || k.DeletionTimestamp != nil {
+			continue
+		}
+		if oldest == nil {
+			oldest = k
+			continue
+		}
+		if k.CreationTimestamp.Before(&oldest.CreationTimestamp) {
+			oldest = k
+		}
+	}
+	if oldest == nil {
+		return nil, fmt.Errorf("only nil pointers in list")
+	}
+	return oldest, nil
 }

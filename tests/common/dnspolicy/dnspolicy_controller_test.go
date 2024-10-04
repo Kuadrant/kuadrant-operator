@@ -80,6 +80,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 	It("should validate loadBalancing field correctly", func(ctx SpecContext) {
 		gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+			WithHTTPListener(tests.ListenerNameOne, "").
 			WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).Gateway
 
 		// simple should succeed
@@ -140,6 +141,7 @@ var _ = Describe("DNSPolicy controller", func() {
 	It("should validate provider ref field correctly", func(ctx SpecContext) {
 
 		gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+			WithHTTPListener(tests.ListenerNameOne, "").
 			WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).Gateway
 
 		// should not allow an empty providerRef list

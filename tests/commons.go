@@ -548,14 +548,20 @@ func (t *GatewayBuilder) WithLabels(labels map[string]string) *GatewayBuilder {
 	return t
 }
 
-func (t *GatewayBuilder) WithHTTPListener(name, hostname string) *GatewayBuilder {
-	typedHostname := gatewayapiv1.Hostname(hostname)
-	t.WithListener(gatewayapiv1.Listener{
+func (t *GatewayBuilder) WithHTTPListener(name string, hostname string) *GatewayBuilder {
+
+	var typedHostname gatewayapiv1.Hostname
+	gl := gatewayapiv1.Listener{
 		Name:     gatewayapiv1.SectionName(name),
-		Hostname: &typedHostname,
 		Port:     gatewayapiv1.PortNumber(80),
 		Protocol: gatewayapiv1.HTTPProtocolType,
-	})
+	}
+	if hostname != "" {
+		typedHostname = gatewayapiv1.Hostname(hostname)
+		gl.Hostname = &typedHostname
+	}
+
+	t.WithListener(gl)
 	return t
 }
 

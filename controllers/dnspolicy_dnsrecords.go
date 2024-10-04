@@ -55,13 +55,12 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, ga
 	}
 
 	log.V(3).Info("checking gateway for attached routes ", "gateway", gateway.Name)
-
 	for _, listener := range gateway.Spec.Listeners {
-		listenerHost := *listener.Hostname
-		if listenerHost == "" {
-			log.Info("skipping listener no hostname assigned", listener.Name, "in ns ", gateway.Namespace)
+		if listener.Hostname == nil || *listener.Hostname == "" {
+			log.Info("skipping listener no hostname assigned", "listener", listener.Name, "in ns ", gateway.Namespace)
 			continue
 		}
+
 		hasAttachedRoute := false
 		for _, statusListener := range gateway.Status.Listeners {
 			if string(listener.Name) == string(statusListener.Name) {

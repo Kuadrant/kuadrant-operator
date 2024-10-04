@@ -115,6 +115,7 @@ var _ = Describe("TLSPolicy controller", func() {
 
 			By("creating a valid Gateway")
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+				WithHTTPListener("no-host", "").
 				WithHTTPListener("test-listener", "test.example.com").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 

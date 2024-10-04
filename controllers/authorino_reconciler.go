@@ -17,15 +17,15 @@ import (
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
 )
 
-type AuthorinoCrReconciler struct {
+type AuthorinoReconciler struct {
 	Client *dynamic.DynamicClient
 }
 
-func NewAuthorinoCrReconciler(client *dynamic.DynamicClient) *AuthorinoCrReconciler {
-	return &AuthorinoCrReconciler{Client: client}
+func NewAuthorinoReconciler(client *dynamic.DynamicClient) *AuthorinoReconciler {
+	return &AuthorinoReconciler{Client: client}
 }
 
-func (r *AuthorinoCrReconciler) Subscription() *controller.Subscription {
+func (r *AuthorinoReconciler) Subscription() *controller.Subscription {
 	return &controller.Subscription{
 		ReconcileFunc: r.Reconcile,
 		Events: []controller.ResourceEventMatcher{
@@ -35,8 +35,8 @@ func (r *AuthorinoCrReconciler) Subscription() *controller.Subscription {
 	}
 }
 
-func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("AuthorinoCrReconciler")
+func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("AuthorinoReconciler")
 	logger.Info("reconciling authorino resource", "status", "started")
 	defer logger.Info("reconciling authorino resource", "status", "completed")
 
@@ -109,7 +109,7 @@ func (r *AuthorinoCrReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		logger.Error(err, "failed to destruct authorino", "status", "error")
 	}
 	logger.Info("creating authorino resource", "status", "processing")
-	_, err = r.Client.Resource(v1beta1.AuthorinoResource).Namespace(authorino.Namespace).Create(ctx, unstructuredAuthorino, metav1.CreateOptions{})
+	_, err = r.Client.Resource(v1beta1.AuthorinosResource).Namespace(authorino.Namespace).Create(ctx, unstructuredAuthorino, metav1.CreateOptions{})
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
 			logger.Info("already created authorino resource", "status", "acceptable")

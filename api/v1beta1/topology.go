@@ -15,9 +15,9 @@ var (
 	KuadrantGroupKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "Kuadrant"}
 	LimitadorGroupKind = schema.GroupKind{Group: limitadorv1alpha1.GroupVersion.Group, Kind: "Limitador"}
 
-	AuthorinoResource = authorinov1beta1.GroupVersion.WithResource("authorinos")
-	KuadrantResource  = GroupVersion.WithResource("kuadrants")
-	LimitadorResource = limitadorv1alpha1.GroupVersion.WithResource("limitadors")
+	AuthorinosResource = authorinov1beta1.GroupVersion.WithResource("authorinos")
+	KuadrantsResource  = GroupVersion.WithResource("kuadrants")
+	LimitadorsResource = limitadorv1alpha1.GroupVersion.WithResource("limitadors")
 )
 
 var _ machinery.Object = &Kuadrant{}

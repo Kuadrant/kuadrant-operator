@@ -41,14 +41,14 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.ManagedBy(manager),
 		controller.WithLogger(logger),
 		controller.WithClient(client),
-		controller.WithRunnable("kuadrant watcher", controller.Watch(&kuadrantv1beta1.Kuadrant{}, kuadrantv1beta1.KuadrantResource, metav1.NamespaceAll)),
-		controller.WithRunnable("dnspolicy watcher", controller.Watch(&kuadrantv1alpha1.DNSPolicy{}, kuadrantv1alpha1.DNSPolicyResource, metav1.NamespaceAll)),
-		controller.WithRunnable("tlspolicy watcher", controller.Watch(&kuadrantv1alpha1.TLSPolicy{}, kuadrantv1alpha1.TLSPolicyResource, metav1.NamespaceAll)),
-		controller.WithRunnable("authpolicy watcher", controller.Watch(&kuadrantv1beta2.AuthPolicy{}, kuadrantv1beta2.AuthPolicyResource, metav1.NamespaceAll)),
-		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta2.RateLimitPolicy{}, kuadrantv1beta2.RateLimitPolicyResource, metav1.NamespaceAll)),
+		controller.WithRunnable("kuadrant watcher", controller.Watch(&kuadrantv1beta1.Kuadrant{}, kuadrantv1beta1.KuadrantsResource, metav1.NamespaceAll)),
+		controller.WithRunnable("dnspolicy watcher", controller.Watch(&kuadrantv1alpha1.DNSPolicy{}, kuadrantv1alpha1.DNSPoliciesResource, metav1.NamespaceAll)),
+		controller.WithRunnable("tlspolicy watcher", controller.Watch(&kuadrantv1alpha1.TLSPolicy{}, kuadrantv1alpha1.TLSPoliciesResource, metav1.NamespaceAll)),
+		controller.WithRunnable("authpolicy watcher", controller.Watch(&kuadrantv1beta2.AuthPolicy{}, kuadrantv1beta2.AuthPoliciesResource, metav1.NamespaceAll)),
+		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta2.RateLimitPolicy{}, kuadrantv1beta2.RateLimitPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("topology configmap watcher", controller.Watch(&corev1.ConfigMap{}, controller.ConfigMapsResource, operatorNamespace, controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)))),
-		controller.WithRunnable("limitador watcher", controller.Watch(&limitadorv1alpha1.Limitador{}, kuadrantv1beta1.LimitadorResource, metav1.NamespaceAll)),
-		controller.WithRunnable("authorino watcher", controller.Watch(&authorinov1beta1.Authorino{}, kuadrantv1beta1.AuthorinoResource, metav1.NamespaceAll)),
+		controller.WithRunnable("limitador watcher", controller.Watch(&limitadorv1alpha1.Limitador{}, kuadrantv1beta1.LimitadorsResource, metav1.NamespaceAll)),
+		controller.WithRunnable("authorino watcher", controller.Watch(&authorinov1beta1.Authorino{}, kuadrantv1beta1.AuthorinosResource, metav1.NamespaceAll)),
 		controller.WithPolicyKinds(
 			kuadrantv1alpha1.DNSPolicyGroupKind,
 			kuadrantv1alpha1.TLSPolicyGroupKind,
@@ -66,7 +66,6 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			kuadrantv1beta1.LinkKuadrantToLimitador,
 			kuadrantv1beta1.LinkKuadrantToAuthorino,
 		),
-		controller.WithReconcile(buildReconciler(client)),
 	}
 
 	ok, err := kuadrantgatewayapi.IsGatewayAPIInstalled(manager.GetRESTMapper())
@@ -80,8 +79,8 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		)
 	}
 
-	ok, err = envoygateway.IsEnvoyGatewayInstalled(manager.GetRESTMapper())
-	if err != nil || !ok {
+	isEnvoyGatewayInstalled, err := envoygateway.IsEnvoyGatewayInstalled(manager.GetRESTMapper())
+	if err != nil || !isEnvoyGatewayInstalled {
 		logger.Info("envoygateway is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts,
@@ -98,8 +97,8 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		// TODO: add specific tasks to workflow
 	}
 
-	ok, err = istio.IsIstioInstalled(manager.GetRESTMapper())
-	if err != nil || !ok {
+	isIstioInstalled, err := istio.IsIstioInstalled(manager.GetRESTMapper())
+	if err != nil || !isIstioInstalled {
 		logger.Info("istio is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts,
@@ -134,36 +133,54 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		// TODO: add tls policy specific tasks to workflow
 	}
 
+	controllerOpts = append(controllerOpts, controller.WithReconcile(buildReconciler(client, isIstioInstalled, isEnvoyGatewayInstalled)))
+
 	return controller.NewController(controllerOpts...)
 }
 
-func buildReconciler(client *dynamic.DynamicClient) controller.ReconcileFunc {
+func buildReconciler(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
-		Precondition: preConditionWorkflow(client).Run,
+		Precondition: initWorkflow(client).Run,
 		Tasks: []controller.ReconcileFunc{
-			NewAuthorinoCrReconciler(client).Subscription().Reconcile,
+			NewAuthorinoReconciler(client).Subscription().Reconcile,
+			NewLimitadorReconciler(client).Subscription().Reconcile,
 			NewDNSWorkflow().Run,
 			NewTLSWorkflow().Run,
 			NewAuthWorkflow().Run,
 			NewRateLimitWorkflow().Run,
 		},
-		Postcondition: postConditionWorkflow().Run,
+		Postcondition: finalStepsWorkflow(client, isIstioInstalled, isEnvoyGatewayInstalled).Run,
 	}
 
 	return mainWorkflow.Run
 }
 
-func preConditionWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
+func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 	return &controller.Workflow{
 		Precondition: NewEventLogger().Log,
 		Tasks: []controller.ReconcileFunc{
-			NewTopologyFileReconciler(client, operatorNamespace).Reconcile,
+			NewTopologyReconciler(client, operatorNamespace).Reconcile,
 		},
 	}
 }
 
-func postConditionWorkflow() *controller.Workflow {
-	return &controller.Workflow{}
+func finalStepsWorkflow(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) *controller.Workflow {
+	workflow := &controller.Workflow{
+		Tasks: []controller.ReconcileFunc{
+			NewGatewayPolicyDiscoverabilityReconciler(client).Subscription().Reconcile,
+			NewHTTPRoutePolicyDiscoverabilityReconciler(client).Subscription().Reconcile,
+		},
+	}
+
+	if isIstioInstalled {
+		workflow.Tasks = append(workflow.Tasks, NewIstioExtensionsJanitor(client).Subscription().Reconcile)
+	}
+
+	if isEnvoyGatewayInstalled {
+		workflow.Tasks = append(workflow.Tasks, NewEnvoyGatewayJanitor(client).Subscription().Reconcile)
+	}
+
+	return workflow
 }
 
 // GetOldestKuadrant returns the oldest kuadrant resource from a list of kuadrant resources that is not marked for deletion.

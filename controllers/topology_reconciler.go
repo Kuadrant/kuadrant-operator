@@ -15,19 +15,19 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
-type TopologyFileReconciler struct {
+type TopologyReconciler struct {
 	Client    *dynamic.DynamicClient
 	Namespace string
 }
 
-func NewTopologyFileReconciler(client *dynamic.DynamicClient, namespace string) *TopologyFileReconciler {
+func NewTopologyReconciler(client *dynamic.DynamicClient, namespace string) *TopologyReconciler {
 	if namespace == "" {
 		panic("namespace must be specified and can not be a blank string")
 	}
-	return &TopologyFileReconciler{Client: client, Namespace: namespace}
+	return &TopologyReconciler{Client: client, Namespace: namespace}
 }
 
-func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("topology file")
 
 	cm := &corev1.ConfigMap{

@@ -404,29 +404,28 @@ func finalStepsWorkflow(client *dynamic.DynamicClient, isIstioInstalled, isEnvoy
 	return workflow
 }
 
-// GetOldestKuadrant returns the oldest kuadrant resource from a list of kuadrant resources that is not marked for deletion.
-func GetOldestKuadrant(kuadrants []*kuadrantv1beta1.Kuadrant) (*kuadrantv1beta1.Kuadrant, error) {
-	if len(kuadrants) == 1 {
-		return kuadrants[0], nil
-	}
-	if len(kuadrants) == 0 {
-		return nil, fmt.Errorf("empty list passed")
-	}
-	oldest := kuadrants[0]
-	for _, k := range kuadrants[1:] {
-		if k == nil || k.DeletionTimestamp != nil {
-			continue
+var ErrNoKandrantResource = fmt.Errorf("no kuadrant resources in topology")
+
+// GetKuadrant returns the oldest Kuadrant from the root objects in the topology
+func GetKuadrant(topology *machinery.Topology) (*kuadrantv1beta1.Kuadrant, error) {
+	kuadrantList := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (*kuadrantv1beta1.Kuadrant, bool) {
+		k, ok := item.(*kuadrantv1beta1.Kuadrant)
+		if ok && k.DeletionTimestamp == nil {
+			return k, true
 		}
-		if oldest == nil {
-			oldest = k
-			continue
-		}
+		return nil, false
+	})
+	if len(kuadrantList) == 1 {
+		return kuadrantList[0], nil
+	}
+	if len(kuadrantList) == 0 {
+		return nil, ErrNoKandrantResource
+	}
+	oldest := kuadrantList[0]
+	for _, k := range kuadrantList[1:] {
 		if k.CreationTimestamp.Before(&oldest.CreationTimestamp) {
 			oldest = k
 		}
-	}
-	if oldest == nil {
-		return nil, fmt.Errorf("only nil pointers in list")
 	}
 	return oldest, nil
 }

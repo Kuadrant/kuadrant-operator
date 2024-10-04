@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -124,6 +125,13 @@ var _ = Describe("AuthPolicy controller (Serial)", Serial, func() {
 			// Remove kuadrant to simulate AuthPolicy enforcement error
 			defer tests.ApplyKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
 			tests.DeleteKuadrantCR(ctx, testClient(), kuadrantInstallationNS)
+
+			Eventually(func(g Gomega) {
+				authorinos := &authorinov1beta1.AuthorinoList{}
+				err := testClient().List(ctx, authorinos, &client.ListOptions{Namespace: kuadrantInstallationNS})
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(len(authorinos.Items)).To(Equal(0))
+			}).Should(Succeed())
 
 			policy := policyFactory()
 

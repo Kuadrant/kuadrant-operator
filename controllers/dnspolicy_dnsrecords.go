@@ -21,6 +21,11 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
+var (
+	ErrNoRoutes    = fmt.Errorf("no routes attached to any gateway listeners")
+	ErrNoAddresses = fmt.Errorf("no valid status addresses to use on gateway")
+)
+
 func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, gwDiffObj *reconcilerutils.GatewayDiffs) error {
 	log := crlog.FromContext(ctx)
 
@@ -36,7 +41,7 @@ func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy
 	for _, gw := range append(gwDiffObj.GatewaysWithValidPolicyRef, gwDiffObj.GatewaysMissingPolicyRef...) {
 		log.V(1).Info("reconcileDNSRecords: gateway with valid or missing policy ref", "key", gw.Key())
 		if err := r.reconcileGatewayDNSRecords(ctx, gw.Gateway, dnsPolicy); err != nil {
-			return fmt.Errorf("error reconciling dns records for gateway %v: %w", gw.Gateway.Name, err)
+			return fmt.Errorf("reconciling dns records for gateway %v: error %w", gw.Gateway.Name, err)
 		}
 	}
 	return nil
@@ -48,14 +53,27 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, ga
 	if err != nil {
 		return fmt.Errorf("failed to generate cluster ID: %w", err)
 	}
+	gw := gateway.DeepCopy()
+	gatewayWrapper := NewGatewayWrapper(gw)
+	// modify the status addresses based on any that need to be excluded
+	if err := gatewayWrapper.RemoveExcludedStatusAddresses(dnsPolicy); err != nil {
+		return fmt.Errorf("failed to reconcile gateway dns records error: %w ", err)
+	}
 
-	if err = r.dnsHelper.removeDNSForDeletedListeners(ctx, gateway); err != nil {
+	if err = r.dnsHelper.removeDNSForDeletedListeners(ctx, gw); err != nil {
 		log.V(3).Info("error removing DNS for deleted listeners")
 		return err
 	}
 
-	log.V(3).Info("checking gateway for attached routes ", "gateway", gateway.Name)
-	for _, listener := range gateway.Spec.Listeners {
+	log.V(3).Info("checking gateway for attached routes ", "gateway", gw.Name)
+	var totalPolicyRecords int32
+	var gatewayHasAttachedRoutes = false
+
+	if len(gw.Status.Addresses) == 0 {
+		return ErrNoAddresses
+	}
+
+	for _, listener := range gw.Spec.Listeners {
 		if listener.Hostname == nil || *listener.Hostname == "" {
 			log.Info("skipping listener no hostname assigned", "listener", listener.Name, "in ns ", gateway.Namespace)
 			continue
@@ -68,16 +86,19 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, ga
 			}
 		}
 
+		if hasAttachedRoute {
+			gatewayHasAttachedRoutes = true
+		}
 		if !hasAttachedRoute {
 			// delete record
 			log.V(1).Info("no cluster gateways, deleting DNS record", " for listener ", listener.Name)
-			if err := r.dnsHelper.deleteDNSRecordForListener(ctx, gateway, listener); client.IgnoreNotFound(err) != nil {
+			if err := r.dnsHelper.deleteDNSRecordForListener(ctx, gw, listener); client.IgnoreNotFound(err) != nil {
 				return fmt.Errorf("failed to delete dns record for listener %s : %w", listener.Name, err)
 			}
 			continue
 		}
 
-		dnsRecord, err := r.desiredDNSRecord(gateway, clusterID, dnsPolicy, listener)
+		dnsRecord, err := r.desiredDNSRecord(gw, clusterID, dnsPolicy, listener)
 		if err != nil {
 			return err
 		}
@@ -87,11 +108,25 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, ga
 			return err
 		}
 
+		if len(dnsRecord.Spec.Endpoints) == 0 {
+			log.V(1).Info("no endpoint addresses for DNSRecord ", "removing any records for listener", listener)
+			if err := r.dnsHelper.deleteDNSRecordForListener(ctx, gatewayWrapper, listener); client.IgnoreNotFound(err) != nil {
+				return err
+			}
+			//return fmt.Errorf("no valid addresses for DNSRecord endpoints. Check allowedAddresses")
+			continue
+		}
+
 		err = r.ReconcileResource(ctx, &kuadrantdnsv1alpha1.DNSRecord{}, dnsRecord, dnsRecordBasicMutator)
 		if err != nil && !apierrors.IsAlreadyExists(err) {
 			log.Error(err, "ReconcileResource failed to create/update DNSRecord resource")
 			return err
 		}
+		totalPolicyRecords++
+	}
+	dnsPolicy.Status.TotalRecords = totalPolicyRecords
+	if !gatewayHasAttachedRoutes {
+		return ErrNoRoutes
 	}
 	return nil
 }

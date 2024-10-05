@@ -133,7 +133,7 @@ func (r *DNSPolicyReconciler) reconcileResources(ctx context.Context, dnsPolicy 
 	}
 
 	if err = r.reconcileDNSRecords(ctx, dnsPolicy, gatewayDiffObj); err != nil {
-		return fmt.Errorf("reconcile DNSRecords error %w", err)
+		return fmt.Errorf("error reconciling DNSRecords %w", err)
 	}
 
 	// set direct back ref - i.e. claim the target network object as taken asap

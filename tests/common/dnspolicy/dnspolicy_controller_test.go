@@ -481,10 +481,11 @@ var _ = Describe("DNSPolicy controller", func() {
 			}, time.Second*15, time.Second).Should(BeEmpty())
 		}, testTimeOut)
 
-		It("should have accepted and not enforced status", func(ctx SpecContext) {
+		It("should have accepted and enforced status", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
+				fmt.Println("conditions ", dnsPolicy.Status.Conditions)
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElements(
 						MatchFields(IgnoreExtras, Fields{
@@ -495,25 +496,11 @@ var _ = Describe("DNSPolicy controller", func() {
 						}),
 						MatchFields(IgnoreExtras, Fields{
 							"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
-							"Status":  Equal(metav1.ConditionFalse),
-							"Reason":  Equal(string(kuadrant.PolicyReasonUnknown)),
-							"Message": Equal("DNSPolicy has encountered some issues: policy is not enforced on any DNSRecord: no routes attached for listeners"),
+							"Status":  Equal(metav1.ConditionTrue),
+							"Reason":  Equal(string(kuadrant.PolicyReasonEnforced)),
+							"Message": ContainSubstring("DNSPolicy has been successfully enforced : no DNSRecords created based on policy and gateway configuration : no valid status addresses to use on gateway"),
 						})),
 				)
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
-		}, testTimeOut)
-
-		It("should set gateway back reference", func(ctx SpecContext) {
-			policyBackRefValue := testNamespace + "/" + dnsPolicy.Name
-			refs, _ := json.Marshal([]client.ObjectKey{{Name: dnsPolicy.Name, Namespace: testNamespace}})
-			policiesBackRefValue := string(refs)
-
-			Eventually(func(g Gomega) {
-				gw := &gatewayapiv1.Gateway{}
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: gateway.Name, Namespace: testNamespace}, gw)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
-				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		}, testTimeOut)
 	})
@@ -835,5 +822,257 @@ var _ = Describe("DNSPolicy controller", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("Invalid targetRef.kind. The only supported values are 'Gateway'"))
 		}, testTimeOut)
+	})
+
+	Context("no attached routes to listeners", func() {
+		BeforeEach(func(ctx SpecContext) {
+			gateway = tests.NewGatewayBuilder(tests.GatewayName, gatewayClass.Name, testNamespace).
+				WithHTTPListener(tests.ListenerNameOne, tests.HostOne(domain)).
+				WithHTTPListener(tests.ListenerNameWildcard, tests.HostWildcard(domain)).
+				Gateway
+			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+				WithProviderSecret(*dnsProviderSecret).
+				WithTargetGateway(tests.GatewayName)
+			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
+			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
+					{
+						Type:  ptr.To(gatewayapiv1.IPAddressType),
+						Value: tests.IPAddressOne,
+					},
+					{
+						Type:  ptr.To(gatewayapiv1.IPAddressType),
+						Value: tests.IPAddressTwo,
+					},
+				}
+				gateway.Status.Listeners = []gatewayapiv1.ListenerStatus{
+					{
+						Name:           tests.ListenerNameOne,
+						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
+						AttachedRoutes: 0,
+						Conditions:     []metav1.Condition{},
+					},
+					{
+						Name:           tests.ListenerNameWildcard,
+						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
+						AttachedRoutes: 0,
+						Conditions:     []metav1.Condition{},
+					},
+				}
+				g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
+
+		})
+
+		It("should have an accpeterd and enforced policy with additional context", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Status":  Equal(metav1.ConditionTrue),
+						"Message": ContainSubstring("DNSPolicy has been accepted"),
+					})),
+				)
+
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
+						"Status":  Equal(metav1.ConditionTrue),
+						"Message": ContainSubstring("DNSPolicy has been successfully enforced : no DNSRecords created based on policy and gateway configuration : no routes attached to any gateway listeners"),
+					})),
+				)
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+		})
+
+	})
+
+	Context("excludeAddresses from DNS", func() {
+		BeforeEach(func(ctx SpecContext) {
+			gateway = tests.NewGatewayBuilder(tests.GatewayName, gatewayClass.Name, testNamespace).
+				WithHTTPListener(tests.ListenerNameOne, tests.HostOne(domain)).
+				WithHTTPListener(tests.ListenerNameWildcard, tests.HostWildcard(domain)).
+				Gateway
+			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
+		})
+		It("should create a DNSPolicy with an invalid CIDR", func(ctx SpecContext) {
+			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+				WithProviderSecret(*dnsProviderSecret).
+				WithTargetGateway(gateway.Name).
+				WithExcludeAddresses([]string{"1.1.1.1/345"})
+			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
+					{
+						Type:  ptr.To(gatewayapiv1.IPAddressType),
+						Value: tests.IPAddressOne,
+					},
+					{
+						Type:  ptr.To(gatewayapiv1.IPAddressType),
+						Value: tests.IPAddressTwo,
+					},
+				}
+				gateway.Status.Listeners = []gatewayapiv1.ListenerStatus{
+					{
+						Name:           tests.ListenerNameOne,
+						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
+						AttachedRoutes: 1,
+						Conditions:     []metav1.Condition{},
+					},
+					{
+						Name:           tests.ListenerNameWildcard,
+						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
+						AttachedRoutes: 1,
+						Conditions:     []metav1.Condition{},
+					},
+				}
+				g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Status":  Equal(metav1.ConditionFalse),
+						"Message": ContainSubstring("could not parse the CIDR from the excludeAddresses field"),
+					})),
+				)
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+
+		})
+
+		It("should create a DNSPolicy valid exclude addresses", func(ctx SpecContext) {
+			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+				WithProviderSecret(*dnsProviderSecret).
+				WithTargetGateway(gateway.Name).
+				WithExcludeAddresses([]string{tests.IPAddressOne})
+			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
+					{
+						Type:  ptr.To(gatewayapiv1.IPAddressType),
+						Value: tests.IPAddressOne,
+					},
+					{
+						Type:  ptr.To(gatewayapiv1.IPAddressType),
+						Value: tests.IPAddressTwo,
+					},
+				}
+				gateway.Status.Listeners = []gatewayapiv1.ListenerStatus{
+					{
+						Name:           tests.ListenerNameOne,
+						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
+						AttachedRoutes: 1,
+						Conditions:     []metav1.Condition{},
+					},
+					{
+						Name:           tests.ListenerNameWildcard,
+						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
+						AttachedRoutes: 1,
+						Conditions:     []metav1.Condition{},
+					},
+				}
+				g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Status": Equal(metav1.ConditionTrue),
+					})),
+				)
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
+						"Status":  Equal(metav1.ConditionTrue),
+						"Reason":  Equal(string(kuadrant.PolicyReasonEnforced)),
+						"Message": Equal("DNSPolicy has been successfully enforced"),
+					})),
+				)
+				recordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameOne)
+				rec := &kuadrantdnsv1alpha1.DNSRecord{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, rec)).To(Succeed())
+				foundExcluded := false
+				foundAllowed := false
+				for _, ep := range rec.Spec.Endpoints {
+					for _, t := range ep.Targets {
+						if t == tests.IPAddressOne {
+							foundExcluded = true
+						}
+						if t == tests.IPAddressTwo {
+							foundAllowed = true
+						}
+					}
+				}
+				g.Expect(foundExcluded).To(BeFalse())
+				g.Expect(foundAllowed).To(BeTrue())
+				g.Expect(len(gateway.Status.Listeners)).To(Equal(int(dnsPolicy.Status.TotalRecords)))
+
+			}, tests.TimeoutLong, time.Second).Should(Succeed())
+
+		})
+		It("should not create a DNSRecords if no endpoints due to DNSPolicy exclude addresses", func(ctx SpecContext) {
+			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+				WithProviderSecret(*dnsProviderSecret).
+				WithTargetGateway(gateway.Name).
+				WithExcludeAddresses([]string{tests.IPAddressOne, tests.IPAddressTwo})
+			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
+					{
+						Type:  ptr.To(gatewayapiv1.IPAddressType),
+						Value: tests.IPAddressOne,
+					},
+					{
+						Type:  ptr.To(gatewayapiv1.IPAddressType),
+						Value: tests.IPAddressTwo,
+					},
+				}
+				gateway.Status.Listeners = []gatewayapiv1.ListenerStatus{
+					{
+						Name:           tests.ListenerNameOne,
+						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
+						AttachedRoutes: 1,
+						Conditions:     []metav1.Condition{},
+					},
+					{
+						Name:           tests.ListenerNameWildcard,
+						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
+						AttachedRoutes: 1,
+						Conditions:     []metav1.Condition{},
+					},
+				}
+				g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Status": Equal(metav1.ConditionTrue),
+					})),
+				)
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type":   Equal(string(kuadrant.PolicyConditionEnforced)),
+						"Status": Equal(metav1.ConditionTrue),
+					})),
+				)
+				g.Expect(int(dnsPolicy.Status.TotalRecords)).To(Equal(0))
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
+		})
 	})
 })

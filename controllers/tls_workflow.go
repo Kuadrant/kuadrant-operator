@@ -29,8 +29,8 @@ var (
 
 func NewTLSWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 	return &controller.Workflow{
-		Precondition:  NewValidateTLSPoliciesValidatorReconciler().Validate,
-		Postcondition: NewTLSPolicyStatusUpdaterReconciler(client).UpdateStatus,
+		Precondition:  NewValidateTLSPoliciesValidatorReconciler().Subscription().Reconcile,
+		Postcondition: NewTLSPolicyStatusUpdaterReconciler(client).Subscription().Reconcile,
 	}
 }
 

@@ -278,7 +278,7 @@ func certManagerControllerOpts() []controller.ControllerOption {
 			CertManagerClusterIssuerKind,
 		),
 		controller.WithObjectLinks(
-			LinkGatewayToCertificateFunc,
+			LinkListenerToCertificateFunc,
 			LinkGatewayToIssuerFunc,
 			LinkGatewayToClusterIssuerFunc,
 		),

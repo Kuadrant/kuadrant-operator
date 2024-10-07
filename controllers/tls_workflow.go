@@ -34,29 +34,34 @@ func NewTLSWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 	}
 }
 
-func LinkGatewayToCertificateFunc(objs controller.Store) machinery.LinkFunc {
+func LinkListenerToCertificateFunc(objs controller.Store) machinery.LinkFunc {
 	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), controller.ObjectAs[*gwapiv1.Gateway])
+	listeners := lo.FlatMap(lo.Map(gateways, func(g *gwapiv1.Gateway, _ int) *machinery.Gateway {
+		return &machinery.Gateway{Gateway: g}
+	}), machinery.ListenersFromGatewayFunc)
 
 	return machinery.LinkFunc{
-		From: machinery.GatewayGroupKind,
+		From: machinery.ListenerGroupKind,
 		To:   CertManagerCertificateKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			o := child.(*controller.RuntimeObject)
 			cert := o.Object.(*certmanagerv1.Certificate)
 
-			gateway, ok := lo.Find(gateways, func(g *gwapiv1.Gateway) bool {
-				for _, l := range g.Spec.Listeners {
-					if l.TLS != nil && l.TLS.CertificateRefs != nil {
-						for _, certRef := range l.TLS.CertificateRefs {
-							certRefNS := ""
-							if certRef.Namespace == nil {
-								certRefNS = g.GetNamespace()
-							} else {
-								certRefNS = string(*certRef.Namespace)
-							}
-							if certRefNS == cert.GetNamespace() && string(certRef.Name) == cert.GetName() {
-								return true
-							}
+			if len(listeners) == 0 {
+				return nil
+			}
+
+			listener, ok := lo.Find(listeners, func(l *machinery.Listener) bool {
+				if l.TLS != nil && l.TLS.CertificateRefs != nil {
+					for _, certRef := range l.TLS.CertificateRefs {
+						certRefNS := ""
+						if certRef.Namespace == nil {
+							certRefNS = l.GetNamespace()
+						} else {
+							certRefNS = string(*certRef.Namespace)
+						}
+						if certRefNS == cert.GetNamespace() && string(certRef.Name) == cert.GetName() {
+							return true
 						}
 					}
 				}
@@ -65,7 +70,7 @@ func LinkGatewayToCertificateFunc(objs controller.Store) machinery.LinkFunc {
 			})
 
 			if ok {
-				return []machinery.Object{&machinery.Gateway{Gateway: gateway}}
+				return []machinery.Object{listener}
 			}
 
 			return nil

@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	"github.com/kuadrant/policy-machinery/machinery"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -131,6 +132,30 @@ func expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.G
 	certs := make([]*certmanv1.Certificate, 0, len(tlsHosts))
 	for secretRef, hosts := range tlsHosts {
 		certs = append(certs, buildCertManagerCertificate(gateway, tlsPolicy, secretRef, hosts))
+	}
+	return certs
+}
+
+func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *v1alpha1.TLSPolicy) []*certmanv1.Certificate {
+	tlsHosts := make(map[corev1.ObjectReference][]string)
+
+	for _, certRef := range l.TLS.CertificateRefs {
+		secretRef := corev1.ObjectReference{
+			Name: string(certRef.Name),
+		}
+		if certRef.Namespace != nil {
+			secretRef.Namespace = string(*certRef.Namespace)
+		} else {
+			secretRef.Namespace = l.GetNamespace()
+		}
+		// Gateway API hostname explicitly disallows IP addresses, so this
+		// should be OK.
+		tlsHosts[secretRef] = append(tlsHosts[secretRef], string(*l.Hostname))
+	}
+
+	certs := make([]*certmanv1.Certificate, 0, len(tlsHosts))
+	for secretRef, hosts := range tlsHosts {
+		certs = append(certs, buildCertManagerCertificate(l.Gateway.Gateway, tlsPolicy, secretRef, hosts))
 	}
 	return certs
 }

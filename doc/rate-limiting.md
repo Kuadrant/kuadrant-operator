@@ -30,7 +30,6 @@ The `RateLimitPolicy` spec includes, basically, two parts:
 Each limit definition includes:
 * A set of rate limits (`spec.limits.<limit-name>.rates[]`)
 * (Optional) A set of dynamic counter qualifiers (`spec.limits.<limit-name>.counters[]`)
-* (Optional) A set of route selectors, to further qualify the specific routing rules when to activate the limit (`spec.limits.<limit-name>.routeSelectors[]`)
 * (Optional) A set of additional dynamic conditions to activate the limit (`spec.limits.<limit-name>.when[]`)
 
 The limit definitions (`limits`) can be declared at the top-level level of the spec (with the semantics of _defaults_) or alternatively within explicit `defaults` or `overrides` blocks.
@@ -73,12 +72,6 @@ spec:
       # Check out Kuadrant RFC 0002 (https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md) to learn more about the Well-known Attributes that can be used in this field.
       counters: […]
 
-      # Further qualification of the scpecific HTTPRouteRules within the targeted HTTPRoute that should trigger the limit.
-      # Each element contains a HTTPRouteMatch object that will be used to select HTTPRouteRules that include at least one identical HTTPRouteMatch.
-      # The HTTPRouteMatch part does not have to be fully identical, but the what's stated in the selector must be identically stated in the HTTPRouteRule.
-      # Do not use it on RateLimitPolicies that target a Gateway.
-      routeSelectors: […]
-
       # Additional dynamic conditions to trigger the limit.
       # Use it for filtering attributes not supported by HTTPRouteRule or with RateLimitPolicies that target a Gateway.
       # Check out Kuadrant RFC 0002 (https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md) to learn more about the Well-known Attributes that can be used in this field.
@@ -102,8 +95,6 @@ spec:
 ### Targeting a HTTPRoute networking resource
 
 When a RateLimitPolicy targets a HTTPRoute, the policy is enforced to all traffic routed according to the rules and hostnames specified in the HTTPRoute, across all Gateways referenced in the `spec.parentRefs` field of the HTTPRoute.
-
-The targeted HTTPRoute's rules and/or hostnames to which the policy must be enforced can be filtered to specific subsets, by specifying the [`routeSelectors`](reference/route-selectors.md#the-routeselectors-field) field of the limit definition.
 
 Target a HTTPRoute by setting the `spec.targetRef` field of the RateLimitPolicy as follows:
 
@@ -195,7 +186,6 @@ Expected behavior:
 ### Limit definition
 
 A limit will be activated whenever a request comes in and the request matches:
-- any of the route rules selected by the limit (via [`routeSelectors`](reference/route-selectors.md#the-routeselectors-field) or implicit "catch-all" selector), and
 - all of the `when` conditions specified in the limit.
 
 A limit can define:
@@ -225,19 +215,20 @@ spec:
         unit: minute
       counters:
       - auth.identity.username
-      routeSelectors:
-        hostnames:
-        - api.toystore.com
+      when:
+      - selector: request.host
+        operator: eq
+        value: "api.toystore.com"
 
     "toystore-admin-unverified-users":
       rates:
       - limit: 250
         duration: 1
         unit: second
-      routeSelectors:
-        hostnames:
-        - admin.toystore.com
       when:
+      - selector: request.host
+        operator: eq
+        value: "admin.toystore.com"
       - selector: auth.identity.email_verified
         operator: eq
         value: "false"
@@ -249,15 +240,9 @@ spec:
 | `admin.toystore.com` | 250rps                                                       |
 | `other.toystore.com` | 5000rps                                                      |
 
-### Route selectors
-
-Route selectors allow targeting sections of a HTTPRoute, by specifying sets of HTTPRouteMatches and/or hostnames that make the policy controller look up within the HTTPRoute spec for compatible declarations, and select the corresponding HTTPRouteRules and hostnames, to then build conditions that activate the policy or policy rule.
-
-Check out [Route selectors](reference/route-selectors.md) for a full description, semantics and API reference.
-
 #### `when` conditions
 
-`when` conditions can be used to scope a limit (i.e. to filter the traffic to which a limit definition applies) without any coupling to the underlying network topology, i.e. without making direct references to HTTPRouteRules via [`routeSelectors`](reference/route-selectors.md#the-routeselectors-field).
+`when` conditions can be used to scope a limit (i.e. to filter the traffic to which a limit definition applies) without any coupling to the underlying network topology, i.e. without making direct references to HTTPRouteRules.
 
 Use `when` conditions to conditionally activate limits based on attributes that cannot be expressed in the HTTPRoutes' `spec.hostnames` and `spec.rules.matches` fields, or in general in RateLimitPolicies that target a Gateway.
 

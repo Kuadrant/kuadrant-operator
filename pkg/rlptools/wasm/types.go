@@ -9,21 +9,21 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 )
 
 var (
 	PathMatchTypeMap = map[gatewayapiv1.PathMatchType]PatternOperator{
-		gatewayapiv1.PathMatchExact:             PatternOperator(kuadrantv1beta2.EqualOperator),
-		gatewayapiv1.PathMatchPathPrefix:        PatternOperator(kuadrantv1beta2.StartsWithOperator),
-		gatewayapiv1.PathMatchRegularExpression: PatternOperator(kuadrantv1beta2.MatchesOperator),
+		gatewayapiv1.PathMatchExact:             PatternOperator(kuadrantv1beta3.EqualOperator),
+		gatewayapiv1.PathMatchPathPrefix:        PatternOperator(kuadrantv1beta3.StartsWithOperator),
+		gatewayapiv1.PathMatchRegularExpression: PatternOperator(kuadrantv1beta3.MatchesOperator),
 	}
 )
 
 type SelectorSpec struct {
 	// Selector of an attribute from the contextual properties provided by kuadrant
 	// during request and connection processing
-	Selector kuadrantv1beta2.ContextSelector `json:"selector"`
+	Selector kuadrantv1beta3.ContextSelector `json:"selector"`
 
 	// If not set it defaults to `selector` field value as the descriptor key.
 	// +optional
@@ -85,12 +85,12 @@ func (d *DataType) MarshalJSON() ([]byte, error) {
 	}
 }
 
-type PatternOperator kuadrantv1beta2.WhenConditionOperator
+type PatternOperator kuadrantv1beta3.WhenConditionOperator
 
 type PatternExpression struct {
 	// Selector of an attribute from the contextual properties provided by kuadrant
 	// during request and connection processing
-	Selector kuadrantv1beta2.ContextSelector `json:"selector"`
+	Selector kuadrantv1beta3.ContextSelector `json:"selector"`
 
 	// The binary operator to be applied to the content fetched from context, for comparison with "value".
 	// Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)

@@ -10,25 +10,25 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 func TestRateLimitPolicyReconciler_calculateStatus(t *testing.T) {
 	type args struct {
-		rlp     *kuadrantv1beta2.RateLimitPolicy
+		rlp     *kuadrantv1beta3.RateLimitPolicy
 		specErr error
 	}
 	tests := []struct {
 		name string
 		args args
-		want *kuadrantv1beta2.RateLimitPolicyStatus
+		want *kuadrantv1beta3.RateLimitPolicyStatus
 	}{
 		{
 			name: "Enforced status block removed if policy not Accepted. (Regression test)", // https://github.com/Kuadrant/kuadrant-operator/issues/588
 			args: args{
-				rlp: &kuadrantv1beta2.RateLimitPolicy{
-					Status: kuadrantv1beta2.RateLimitPolicyStatus{
+				rlp: &kuadrantv1beta3.RateLimitPolicy{
+					Status: kuadrantv1beta3.RateLimitPolicyStatus{
 						Conditions: []metav1.Condition{
 							{
 								Message: "not accepted",
@@ -47,7 +47,7 @@ func TestRateLimitPolicyReconciler_calculateStatus(t *testing.T) {
 				},
 				specErr: kuadrant.NewErrInvalid("RateLimitPolicy", errors.New("policy Error")),
 			},
-			want: &kuadrantv1beta2.RateLimitPolicyStatus{
+			want: &kuadrantv1beta3.RateLimitPolicyStatus{
 				Conditions: []metav1.Condition{
 					{
 						Message: "RateLimitPolicy target is invalid: policy Error",

@@ -16,7 +16,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -36,7 +36,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = kuadrantv1beta2.AddToScheme(testScheme)
+	err = kuadrantv1beta3.AddToScheme(testScheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 	t.Run("not gateway related event", func(subT *testing.T) {
 		objs := []runtime.Object{}
 		cl := clientBuilder(objs)
-		em := NewGatewayEventMapper(kuadrantv1beta2.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
+		em := NewGatewayEventMapper(kuadrantv1beta3.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
 		requests := em.Map(ctx, &gatewayapiv1.HTTPRoute{})
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
@@ -71,7 +71,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 	t.Run("gateway related event - no policies - no requests", func(subT *testing.T) {
 		objs := []runtime.Object{}
 		cl := clientBuilder(objs)
-		em := NewGatewayEventMapper(kuadrantv1beta2.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
+		em := NewGatewayEventMapper(kuadrantv1beta3.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
 		requests := em.Map(ctx, &gatewayapiv1.Gateway{})
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
@@ -91,7 +91,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 		})
 		objs := []runtime.Object{gw, route, pGw, pRoute}
 		cl := clientBuilder(objs)
-		em := NewGatewayEventMapper(kuadrantv1beta2.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
+		em := NewGatewayEventMapper(kuadrantv1beta3.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
 		requests := em.Map(ctx, gw)
 		assert.Equal(subT, len(requests), 2)
 		assert.Assert(subT, utils.Index(requests, func(r reconcile.Request) bool {

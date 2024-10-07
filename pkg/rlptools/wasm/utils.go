@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strings"
 	"unicode"
 
 	"github.com/go-logr/logr"
@@ -18,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -33,14 +32,14 @@ var (
 	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
 )
 
-func LimitsNamespaceFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) string {
+func LimitsNamespaceFromRLP(rlp *kuadrantv1beta3.RateLimitPolicy) string {
 	return fmt.Sprintf("%s/%s", rlp.GetNamespace(), rlp.GetName())
 }
 
 // Rules computes WASM rules from the policy and the targeted route.
 // It returns an empty list of wasm rules if the policy specifies no limits or if all limits specified in the policy
 // fail to match any route rule according to the limits route selectors.
-func Rules(rlp *kuadrantv1beta2.RateLimitPolicy, route *gatewayapiv1.HTTPRoute) []Rule {
+func Rules(rlp *kuadrantv1beta3.RateLimitPolicy, route *gatewayapiv1.HTTPRoute) []Rule {
 	rules := make([]Rule, 0)
 	if rlp == nil {
 		return rules
@@ -85,7 +84,7 @@ func LimitNameToLimitadorIdentifier(rlpKey types.NamespacedName, uniqueLimitName
 	return identifier
 }
 
-func ruleFromLimit(rlp *kuadrantv1beta2.RateLimitPolicy, limitIdentifier string, limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPRoute) (Rule, error) {
+func ruleFromLimit(rlp *kuadrantv1beta3.RateLimitPolicy, limitIdentifier string, limit *kuadrantv1beta3.Limit, route *gatewayapiv1.HTTPRoute) (Rule, error) {
 	rule := Rule{}
 
 	conditions, err := conditionsFromLimit(limit, route)
@@ -108,31 +107,16 @@ func ruleFromLimit(rlp *kuadrantv1beta2.RateLimitPolicy, limitIdentifier string,
 	return rule, nil
 }
 
-func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPRoute) ([]Condition, error) {
+func conditionsFromLimit(limit *kuadrantv1beta3.Limit, route *gatewayapiv1.HTTPRoute) ([]Condition, error) {
 	if limit == nil {
 		return nil, errors.New("limit should not be nil")
 	}
 
 	routeConditions := make([]Condition, 0)
 
-	if len(limit.RouteSelectors) > 0 {
-		// build conditions from the rules selected by the route selectors
-		for idx := range limit.RouteSelectors {
-			routeSelector := limit.RouteSelectors[idx]
-			hostnamesForConditions := routeSelector.HostnamesForConditions(route)
-			for _, rule := range routeSelector.SelectRules(route) {
-				routeConditions = append(routeConditions, conditionsFromRule(rule, hostnamesForConditions)...)
-			}
-		}
-		if len(routeConditions) == 0 {
-			return nil, errors.New("cannot match any route rules, check for invalid route selectors in the policy")
-		}
-	} else {
-		// build conditions from all rules if no route selectors are defined
-		hostnamesForConditions := (&kuadrantv1beta2.RouteSelector{}).HostnamesForConditions(route)
-		for _, rule := range route.Spec.Rules {
-			routeConditions = append(routeConditions, conditionsFromRule(rule, hostnamesForConditions)...)
-		}
+	// build conditions from all rules
+	for _, rule := range route.Spec.Rules {
+		routeConditions = append(routeConditions, conditionsFromRule(rule)...)
 	}
 
 	if len(limit.When) == 0 {
@@ -163,41 +147,12 @@ func conditionsFromLimit(limit *kuadrantv1beta2.Limit, route *gatewayapiv1.HTTPR
 	return whenConditions, nil
 }
 
-// conditionsFromRule builds a list of conditions from a rule and a list of hostnames
-// each combination of a rule match and hostname yields one condition
+// conditionsFromRule builds a list of conditions from a rule
 // rules that specify no explicit match are assumed to match all request (i.e. implicit catch-all rule)
-// empty list of hostnames yields a condition without a hostname pattern expression
-func conditionsFromRule(rule gatewayapiv1.HTTPRouteRule, hostnames []gatewayapiv1.Hostname) (conditions []Condition) {
-	if len(rule.Matches) == 0 {
-		for _, hostname := range hostnames {
-			if hostname == "*" {
-				continue
-			}
-			condition := Condition{AllOf: []PatternExpression{patternExpresionFromHostname(hostname)}}
-			conditions = append(conditions, condition)
-		}
-		return
-	}
-
-	for _, match := range rule.Matches {
-		condition := Condition{AllOf: patternExpresionsFromMatch(match)}
-
-		if len(hostnames) > 0 {
-			for _, hostname := range hostnames {
-				if hostname == "*" {
-					conditions = append(conditions, condition)
-					continue
-				}
-				mergedCondition := condition
-				mergedCondition.AllOf = append(mergedCondition.AllOf, patternExpresionFromHostname(hostname))
-				conditions = append(conditions, mergedCondition)
-			}
-			continue
-		}
-
-		conditions = append(conditions, condition)
-	}
-	return
+func conditionsFromRule(rule gatewayapiv1.HTTPRouteRule) []Condition {
+	return utils.Map(rule.Matches, func(match gatewayapiv1.HTTPRouteMatch) Condition {
+		return Condition{AllOf: patternExpresionsFromMatch(match)}
+	})
 }
 
 func patternExpresionsFromMatch(match gatewayapiv1.HTTPRouteMatch) []PatternExpression {
@@ -228,7 +183,7 @@ func patternExpresionsFromMatch(match gatewayapiv1.HTTPRouteMatch) []PatternExpr
 
 func patternExpresionFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) PatternExpression {
 	var (
-		operator = PatternOperator(kuadrantv1beta2.StartsWithOperator) // default value
+		operator = PatternOperator(kuadrantv1beta3.StartsWithOperator) // default value
 		value    = "/"                                                 // default value
 	)
 
@@ -252,7 +207,7 @@ func patternExpresionFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) Pattern
 func patternExpresionFromMethod(method gatewayapiv1.HTTPMethod) PatternExpression {
 	return PatternExpression{
 		Selector: "request.method",
-		Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+		Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
 		Value:    string(method),
 	}
 }
@@ -262,27 +217,13 @@ func patternExpresionFromHeader(headerMatch gatewayapiv1.HTTPHeaderMatch) Patter
 	// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPHeaderMatch
 
 	return PatternExpression{
-		Selector: kuadrantv1beta2.ContextSelector(fmt.Sprintf("request.headers.%s", headerMatch.Name)),
-		Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+		Selector: kuadrantv1beta3.ContextSelector(fmt.Sprintf("request.headers.%s", headerMatch.Name)),
+		Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
 		Value:    headerMatch.Value,
 	}
 }
 
-func patternExpresionFromHostname(hostname gatewayapiv1.Hostname) PatternExpression {
-	value := string(hostname)
-	operator := "eq"
-	if strings.HasPrefix(value, "*.") {
-		operator = "endswith"
-		value = value[1:]
-	}
-	return PatternExpression{
-		Selector: "request.host",
-		Operator: PatternOperator(operator),
-		Value:    value,
-	}
-}
-
-func patternExpresionFromWhen(when kuadrantv1beta2.WhenCondition) PatternExpression {
+func patternExpresionFromWhen(when kuadrantv1beta3.WhenCondition) PatternExpression {
 	return PatternExpression{
 		Selector: when.Selector,
 		Operator: PatternOperator(when.Operator),
@@ -290,7 +231,7 @@ func patternExpresionFromWhen(when kuadrantv1beta2.WhenCondition) PatternExpress
 	}
 }
 
-func dataFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit) (data []DataType) {
+func dataFromLimit(limitIdentifier string, limit *kuadrantv1beta3.Limit) (data []DataType) {
 	if limit == nil {
 		return
 	}
@@ -317,7 +258,7 @@ func dataFromLimit(limitIdentifier string, limit *kuadrantv1beta2.Limit) (data [
 	return data
 }
 
-func routeFromRLP(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*gatewayapiv1.HTTPRoute, error) {
+func routeFromRLP(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta3.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*gatewayapiv1.HTTPRoute, error) {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -356,7 +297,7 @@ func routeFromRLP(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rl
 	return route, nil
 }
 
-func wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta2.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*Policy, error) {
+func wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta3.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*Policy, error) {
 	route, err := routeFromRLP(ctx, t, rlp, gw)
 	if err != nil {
 		return nil, err
@@ -430,7 +371,7 @@ func ConfigForGateway(
 	}
 
 	for _, policy := range rateLimitPolicies {
-		rlp := policy.(*kuadrantv1beta2.RateLimitPolicy)
+		rlp := policy.(*kuadrantv1beta3.RateLimitPolicy)
 		wasmRLP, err := wasmRateLimitPolicy(ctx, topologyIndex, rlp, gw)
 		if err != nil {
 			return nil, err

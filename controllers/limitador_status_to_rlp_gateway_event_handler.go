@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 )
@@ -71,7 +71,7 @@ func (eh limitadorStatusRLPGatewayEventHandler) IsKuadrantInstalled(ctx context.
 }
 func (eh limitadorStatusRLPGatewayEventHandler) enqueue(ctx context.Context, limitingInterface workqueue.RateLimitingInterface) {
 	// List all RLPs as there's been an event from Limitador which may affect RLP status
-	rlpList := &kuadrantv1beta2.RateLimitPolicyList{}
+	rlpList := &kuadrantv1beta3.RateLimitPolicyList{}
 	if err := eh.Client.List(ctx, rlpList); err != nil {
 		eh.Logger.V(1).Error(err, "failed to list RLPs")
 	}

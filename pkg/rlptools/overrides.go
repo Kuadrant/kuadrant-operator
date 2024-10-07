@@ -7,7 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -22,9 +22,9 @@ func ApplyOverrides(topology *kuadrantgatewayapi.Topology, gateway *gatewayapiv1
 		return topology, nil
 	}
 
-	overridePolicies := lo.FilterMap(gatewayNode.AttachedPolicies(), func(pNode kuadrantgatewayapi.PolicyNode, _ int) (*kuadrantv1beta2.RateLimitPolicy, bool) {
+	overridePolicies := lo.FilterMap(gatewayNode.AttachedPolicies(), func(pNode kuadrantgatewayapi.PolicyNode, _ int) (*kuadrantv1beta3.RateLimitPolicy, bool) {
 		policy := pNode.Policy
-		rlp, ok := policy.(*kuadrantv1beta2.RateLimitPolicy)
+		rlp, ok := policy.(*kuadrantv1beta3.RateLimitPolicy)
 		if !ok || rlp.Spec.Overrides == nil {
 			return nil, false
 		}
@@ -35,7 +35,7 @@ func ApplyOverrides(topology *kuadrantgatewayapi.Topology, gateway *gatewayapiv1
 		return topology, nil
 	}
 
-	overriddenPolicies := lo.Map(overridePolicies, func(p *kuadrantv1beta2.RateLimitPolicy, _ int) kuadrantgatewayapi.Policy { return p })
+	overriddenPolicies := lo.Map(overridePolicies, func(p *kuadrantv1beta3.RateLimitPolicy, _ int) kuadrantgatewayapi.Policy { return p })
 
 	for _, route := range topology.Routes() {
 		if !slices.Contains(kuadrantgatewayapi.GetRouteAcceptedGatewayParentKeys(route.HTTPRoute), client.ObjectKeyFromObject(gateway)) {
@@ -45,7 +45,7 @@ func ApplyOverrides(topology *kuadrantgatewayapi.Topology, gateway *gatewayapiv1
 		}
 
 		for _, policy := range route.AttachedPolicies() {
-			overriddenPolicy := policy.DeepCopyObject().(*kuadrantv1beta2.RateLimitPolicy)
+			overriddenPolicy := policy.DeepCopyObject().(*kuadrantv1beta3.RateLimitPolicy)
 			overriddenPolicy.Spec.CommonSpec().Limits = overridePolicies[0].Spec.Overrides.Limits
 			overriddenPolicies = append(overriddenPolicies, overriddenPolicy)
 		}

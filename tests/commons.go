@@ -33,6 +33,7 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -279,7 +280,7 @@ func RLPIsEnforced(ctx context.Context, cl client.Client, rlpKey client.ObjectKe
 
 func RLPIsConditionTrue(ctx context.Context, cl client.Client, rlpKey client.ObjectKey, condition string) func() bool {
 	return func() bool {
-		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+		existingRLP := &kuadrantv1beta3.RateLimitPolicy{}
 		err := cl.Get(ctx, rlpKey, existingRLP)
 		if err != nil {
 			logf.Log.V(1).Error(err, "ratelimitpolicy not read", "rlp", rlpKey)
@@ -291,7 +292,7 @@ func RLPIsConditionTrue(ctx context.Context, cl client.Client, rlpKey client.Obj
 }
 
 func RLPEnforcedCondition(ctx context.Context, cl client.Client, rlpKey client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) bool {
-	p := &kuadrantv1beta2.RateLimitPolicy{}
+	p := &kuadrantv1beta3.RateLimitPolicy{}
 	if err := cl.Get(ctx, rlpKey, p); err != nil {
 		return false
 	}
@@ -369,7 +370,7 @@ func IsAuthPolicyConditionTrue(ctx context.Context, cl client.Client, policy *ku
 
 func RLPIsNotAccepted(ctx context.Context, k8sClient client.Client, rlpKey client.ObjectKey) func() bool {
 	return func() bool {
-		existingRLP := &kuadrantv1beta2.RateLimitPolicy{}
+		existingRLP := &kuadrantv1beta3.RateLimitPolicy{}
 		err := k8sClient.Get(ctx, rlpKey, existingRLP)
 		if err != nil {
 			logf.Log.V(1).Info("ratelimitpolicy not read", "rlp", rlpKey, "error", err)
@@ -672,7 +673,7 @@ func BuildBasicAuthScheme() *kuadrantv1beta2.AuthSchemeSpec {
 }
 
 func IsRLPAcceptedAndEnforced(g Gomega, ctx context.Context, cl client.Client, policyKey client.ObjectKey) {
-	existingPolicy := &kuadrantv1beta2.RateLimitPolicy{}
+	existingPolicy := &kuadrantv1beta3.RateLimitPolicy{}
 	g.Expect(cl.Get(ctx, policyKey, existingPolicy)).To(Succeed())
 
 	acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))

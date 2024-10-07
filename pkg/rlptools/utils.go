@@ -6,25 +6,25 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
 
-func LimitsNameFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) string {
+func LimitsNameFromRLP(rlp *kuadrantv1beta3.RateLimitPolicy) string {
 	return wasm.LimitsNamespaceFromRLP(rlp)
 }
 
-var timeUnitMap = map[kuadrantv1beta2.TimeUnit]int{
-	kuadrantv1beta2.TimeUnit("second"): 1,
-	kuadrantv1beta2.TimeUnit("minute"): 60,
-	kuadrantv1beta2.TimeUnit("hour"):   60 * 60,
-	kuadrantv1beta2.TimeUnit("day"):    60 * 60 * 24,
+var timeUnitMap = map[kuadrantv1beta3.TimeUnit]int{
+	kuadrantv1beta3.TimeUnit("second"): 1,
+	kuadrantv1beta3.TimeUnit("minute"): 60,
+	kuadrantv1beta3.TimeUnit("hour"):   60 * 60,
+	kuadrantv1beta3.TimeUnit("day"):    60 * 60 * 24,
 }
 
 // LimitadorRateLimitsFromRLP converts rate limits from a Kuadrant RateLimitPolicy into a list of Limitador rate limit
 // objects
-func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []limitadorv1alpha1.RateLimit {
+func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta3.RateLimitPolicy) []limitadorv1alpha1.RateLimit {
 	limitsNamespace := wasm.LimitsNamespaceFromRLP(rlp)
 	rlpKey := client.ObjectKeyFromObject(rlp)
 
@@ -48,7 +48,7 @@ func LimitadorRateLimitsFromRLP(rlp *kuadrantv1beta2.RateLimitPolicy) []limitado
 
 // rateToSeconds converts from RLP Rate API (limit, duration and unit)
 // to Limitador's Limit format (maxValue, Seconds)
-func rateToSeconds(rate kuadrantv1beta2.Rate) (maxValue int, seconds int) {
+func rateToSeconds(rate kuadrantv1beta3.Rate) (maxValue int, seconds int) {
 	maxValue = rate.Limit
 	seconds = 0
 

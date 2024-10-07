@@ -11,7 +11,6 @@ import (
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
-	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -23,8 +22,11 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -135,25 +137,25 @@ var _ = Describe("Target status reconciler", func() {
 		policyAffectedCondition := controllers.PolicyAffectedConditionType("AuthPolicy")
 
 		// policyFactory builds a standards AuthPolicy object that targets the test HTTPRoute by default, with the given mutate functions applied
-		policyFactory := func(mutateFns ...func(policy *v1beta2.AuthPolicy)) *v1beta2.AuthPolicy {
-			policy := &v1beta2.AuthPolicy{
+		policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.AuthPolicy)) *kuadrantv1beta2.AuthPolicy {
+			policy := &kuadrantv1beta2.AuthPolicy{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "AuthPolicy",
-					APIVersion: v1beta2.GroupVersion.String(),
+					APIVersion: kuadrantv1beta2.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
 					Namespace: testNamespace,
 				},
-				Spec: v1beta2.AuthPolicySpec{
+				Spec: kuadrantv1beta2.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  TestHTTPRouteName,
 					},
-					Defaults: &v1beta2.AuthPolicyCommonSpec{
-						AuthScheme: &v1beta2.AuthSchemeSpec{
-							Authentication: map[string]v1beta2.AuthenticationSpec{
+					Defaults: &kuadrantv1beta2.AuthPolicyCommonSpec{
+						AuthScheme: &kuadrantv1beta2.AuthSchemeSpec{
+							Authentication: map[string]kuadrantv1beta2.AuthenticationSpec{
 								"anonymous": {
 									AuthenticationSpec: authorinoapi.AuthenticationSpec{
 										AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
@@ -174,7 +176,7 @@ var _ = Describe("Target status reconciler", func() {
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if an AuthPolicy is accepted
 		// and the statuses of its target object and other optional route objects have been all updated as affected by the policy
-		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *v1beta2.AuthPolicy, routeNames ...string) func() bool {
+		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *kuadrantv1beta2.AuthPolicy, routeNames ...string) func() bool {
 			return func() bool {
 				if !tests.IsAuthPolicyAccepted(ctx, testClient(), policy)() {
 					return false
@@ -190,14 +192,14 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("Adds truthy PolicyAffected status condition if there is at least one policy accepted", func(ctx SpecContext) {
-			routePolicy1 := policyFactory(func(p *v1beta2.AuthPolicy) {
+			routePolicy1 := policyFactory(func(p *kuadrantv1beta2.AuthPolicy) {
 				p.Name = "route-auth-1"
 			})
 			Expect(k8sClient.Create(ctx, routePolicy1)).To(Succeed())
 
 			Eventually(policyAcceptedAndTargetsAffected(ctx, routePolicy1)).WithContext(ctx).Should(BeTrue())
 
-			routePolicy2 := policyFactory(func(p *v1beta2.AuthPolicy) { // another policy that targets the same route. this policy will not be accepted
+			routePolicy2 := policyFactory(func(p *kuadrantv1beta2.AuthPolicy) { // another policy that targets the same route. this policy will not be accepted
 				p.Name = "route-auth-2"
 			})
 			Expect(k8sClient.Create(ctx, routePolicy2)).To(Succeed())
@@ -210,15 +212,15 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("Adds falsey PolicyAffected status condition if no policy is accepted", func(ctx SpecContext) {
-			routePolicy1 := policyFactory(func(p *v1beta2.AuthPolicy) { // create a policy with an invalid route selector so the policy is not accepted
+			routePolicy1 := policyFactory(func(p *kuadrantv1beta2.AuthPolicy) { // create a policy with an invalid route selector so the policy is not accepted
 				p.Name = "route-auth-1"
-				p.Spec.Defaults.RouteSelectors = []v1beta2.RouteSelector{{Hostnames: []gatewayapiv1.Hostname{"invalid.example.com"}}}
+				p.Spec.Defaults.RouteSelectors = []kuadrantv1beta2.RouteSelector{{Hostnames: []gatewayapiv1.Hostname{"invalid.example.com"}}}
 			})
 			Expect(k8sClient.Create(ctx, routePolicy1)).To(Succeed())
 
-			routePolicy2 := policyFactory(func(p *v1beta2.AuthPolicy) { // create another policy with an invalid route selector so the policy is not accepted
+			routePolicy2 := policyFactory(func(p *kuadrantv1beta2.AuthPolicy) { // create another policy with an invalid route selector so the policy is not accepted
 				p.Name = "route-auth-2"
-				p.Spec.Defaults.RouteSelectors = []v1beta2.RouteSelector{{Hostnames: []gatewayapiv1.Hostname{"invalid.example.com"}}}
+				p.Spec.Defaults.RouteSelectors = []kuadrantv1beta2.RouteSelector{{Hostnames: []gatewayapiv1.Hostname{"invalid.example.com"}}}
 			})
 			Expect(k8sClient.Create(ctx, routePolicy2)).To(Succeed())
 
@@ -249,7 +251,7 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("adds PolicyAffected status condition to the targeted gateway and routes", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *v1beta2.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta2.AuthPolicy) {
 				policy.Name = "gateway-auth"
 				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -262,7 +264,7 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *v1beta2.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta2.AuthPolicy) {
 				policy.Name = "gateway-auth"
 				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -301,7 +303,7 @@ var _ = Describe("Target status reconciler", func() {
 			otherRoute := tests.BuildBasicHttpRoute(otherRouteName, TestGatewayName, testNamespace, []string{randomHostFromGWHost()})
 			Expect(k8sClient.Create(ctx, otherRoute)).To(Succeed())
 
-			gatewayPolicy := policyFactory(func(policy *v1beta2.AuthPolicy) {
+			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta2.AuthPolicy) {
 				policy.Name = "gateway-auth"
 				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -327,28 +329,28 @@ var _ = Describe("Target status reconciler", func() {
 		policyAffectedCondition := controllers.PolicyAffectedConditionType("RateLimitPolicy")
 
 		// policyFactory builds a standards RateLimitPolicy object that targets the test HTTPRoute by default, with the given mutate functions applied
-		policyFactory := func(mutateFns ...func(policy *v1beta2.RateLimitPolicy)) *v1beta2.RateLimitPolicy {
-			policy := &v1beta2.RateLimitPolicy{
+		policyFactory := func(mutateFns ...func(policy *kuadrantv1beta3.RateLimitPolicy)) *kuadrantv1beta3.RateLimitPolicy {
+			policy := &kuadrantv1beta3.RateLimitPolicy{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "RateLimitPolicy",
-					APIVersion: v1beta2.GroupVersion.String(),
+					APIVersion: kuadrantv1beta3.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
 					Namespace: testNamespace,
 				},
-				Spec: v1beta2.RateLimitPolicySpec{
+				Spec: kuadrantv1beta3.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  gatewayapiv1.ObjectName(TestHTTPRouteName),
 					},
-					Defaults: &v1beta2.RateLimitPolicyCommonSpec{
-						Limits: map[string]v1beta2.Limit{
+					Defaults: &kuadrantv1beta3.RateLimitPolicyCommonSpec{
+						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
-								Rates: []v1beta2.Rate{
+								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: v1beta2.TimeUnit("minute"),
+										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
 									},
 								},
 							},
@@ -364,7 +366,7 @@ var _ = Describe("Target status reconciler", func() {
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if an RateLimitPolicy is accepted
 		// and the statuses of its target object and other optional route objects have been all updated as affected by the policy
-		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *v1beta2.RateLimitPolicy, routeNames ...string) func() bool {
+		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *kuadrantv1beta3.RateLimitPolicy, routeNames ...string) func() bool {
 			return func() bool {
 				policyKey := client.ObjectKeyFromObject(policy)
 				if !tests.RLPIsAccepted(ctx, testClient(), policyKey)() {
@@ -399,7 +401,7 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("adds PolicyAffected status condition to the targeted gateway and routes", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *v1beta2.RateLimitPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
 				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -412,7 +414,7 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *v1beta2.RateLimitPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
 				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -451,7 +453,7 @@ var _ = Describe("Target status reconciler", func() {
 			otherRoute := tests.BuildBasicHttpRoute(otherRouteName, TestGatewayName, testNamespace, []string{randomHostFromGWHost()})
 			Expect(k8sClient.Create(ctx, otherRoute)).To(Succeed())
 
-			gatewayPolicy := policyFactory(func(policy *v1beta2.RateLimitPolicy) {
+			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
 				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -477,8 +479,8 @@ var _ = Describe("Target status reconciler", func() {
 		policyAffectedCondition := controllers.PolicyAffectedConditionType("DNSPolicy")
 
 		// policyFactory builds a standards DNSPolicy object that targets the test gateway by default, with the given mutate functions applied
-		policyFactory := func(mutateFns ...func(policy *v1alpha1.DNSPolicy)) *v1alpha1.DNSPolicy {
-			policy := v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).WithTargetGateway(TestGatewayName)
+		policyFactory := func(mutateFns ...func(policy *kuadrantv1alpha1.DNSPolicy)) *kuadrantv1alpha1.DNSPolicy {
+			policy := kuadrantv1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).WithTargetGateway(TestGatewayName)
 			for _, mutateFn := range mutateFns {
 				mutateFn(policy)
 			}
@@ -486,7 +488,7 @@ var _ = Describe("Target status reconciler", func() {
 		}
 
 		isDNSPolicyAccepted := func(ctx context.Context, policyKey client.ObjectKey) bool {
-			policy := &v1alpha1.DNSPolicy{}
+			policy := &kuadrantv1alpha1.DNSPolicy{}
 			err := k8sClient.Get(ctx, policyKey, policy)
 			if err != nil {
 				return false
@@ -495,7 +497,7 @@ var _ = Describe("Target status reconciler", func() {
 		}
 
 		isDNSPolicyEnforced := func(ctx context.Context, policyKey client.ObjectKey) bool {
-			policy := &v1alpha1.DNSPolicy{}
+			policy := &kuadrantv1alpha1.DNSPolicy{}
 			err := k8sClient.Get(ctx, policyKey, policy)
 			if err != nil {
 				return false
@@ -505,7 +507,7 @@ var _ = Describe("Target status reconciler", func() {
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if a DNSPolicy is accepted
 		// and the statuses of its target object has been all updated as affected by the policy
-		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *v1alpha1.DNSPolicy) func() bool {
+		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *kuadrantv1alpha1.DNSPolicy) func() bool {
 			return func() bool {
 				policyKey := client.ObjectKeyFromObject(policy)
 				return isDNSPolicyAccepted(ctx, policyKey) && targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef)
@@ -530,7 +532,7 @@ var _ = Describe("Target status reconciler", func() {
 		}, afterEachTimeOut)
 
 		It("adds PolicyAffected status condition to the targeted gateway", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *v1alpha1.DNSPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1alpha1.DNSPolicy) {
 				policy.Spec.ProviderRefs = append(policy.Spec.ProviderRefs, kuadrantdnsv1alpha1.ProviderRef{
 					Name: dnsProviderSecret.Name,
 				})
@@ -543,7 +545,7 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("removes PolicyAffected status condition from the targeted gateway when the policy is deleted", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *v1alpha1.DNSPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1alpha1.DNSPolicy) {
 				policy.Spec.ProviderRefs = append(policy.Spec.ProviderRefs, kuadrantdnsv1alpha1.ProviderRef{
 					Name: dnsProviderSecret.Name,
 				})
@@ -574,8 +576,8 @@ var _ = Describe("Target status reconciler", func() {
 		var issuerRef *certmanmetav1.ObjectReference
 
 		// policyFactory builds a standards TLSPolicy object that targets the test gateway by default, with the given mutate functions applied
-		policyFactory := func(mutateFns ...func(policy *v1alpha1.TLSPolicy)) *v1alpha1.TLSPolicy {
-			policy := v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).WithTargetGateway(TestGatewayName).WithIssuerRef(*issuerRef)
+		policyFactory := func(mutateFns ...func(policy *kuadrantv1alpha1.TLSPolicy)) *kuadrantv1alpha1.TLSPolicy {
+			policy := kuadrantv1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).WithTargetGateway(TestGatewayName).WithIssuerRef(*issuerRef)
 			for _, mutateFn := range mutateFns {
 				mutateFn(policy)
 			}
@@ -583,7 +585,7 @@ var _ = Describe("Target status reconciler", func() {
 		}
 
 		isTLSPolicyAccepted := func(ctx context.Context, policyKey client.ObjectKey) bool {
-			policy := &v1alpha1.TLSPolicy{}
+			policy := &kuadrantv1alpha1.TLSPolicy{}
 			err := k8sClient.Get(ctx, policyKey, policy)
 			if err != nil {
 				return false
@@ -593,7 +595,7 @@ var _ = Describe("Target status reconciler", func() {
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if a TLSPolicy is accepted
 		// and the statuses of its target object has been all updated as affected by the policy
-		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *v1alpha1.TLSPolicy) func() bool {
+		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *kuadrantv1alpha1.TLSPolicy) func() bool {
 			return func() bool {
 				policyKey := client.ObjectKeyFromObject(policy)
 				if !isTLSPolicyAccepted(ctx, policyKey) {

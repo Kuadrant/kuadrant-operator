@@ -52,6 +52,7 @@ import (
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -88,6 +89,7 @@ func init() {
 	utilruntime.Must(kuadrantv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta2.AddToScheme(scheme))
+	utilruntime.Must(kuadrantv1beta3.AddToScheme(scheme))
 	utilruntime.Must(kuadrantdnsv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(certmanv1.AddToScheme(scheme))
 	utilruntime.Must(egv1alpha1.AddToScheme(scheme))

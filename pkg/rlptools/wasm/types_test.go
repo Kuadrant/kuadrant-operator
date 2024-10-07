@@ -10,7 +10,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"sigs.k8s.io/yaml"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
@@ -184,7 +184,7 @@ func testBasicConfigExample() *Config {
 								AllOf: []PatternExpression{
 									{
 										Selector: "request.host",
-										Operator: PatternOperator(kuadrantv1beta2.EqualOperator),
+										Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
 										Value:    "cars.toystore.com",
 									},
 								},

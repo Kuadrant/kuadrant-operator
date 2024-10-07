@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -124,7 +124,7 @@ func (r *LimitadorClusterEnvoyFilterReconciler) desiredRateLimitingClusterEnvoyF
 		},
 	}
 
-	gateway := kuadrant.GatewayWrapper{Gateway: gw, Referrer: &v1beta2.RateLimitPolicy{}}
+	gateway := kuadrant.GatewayWrapper{Gateway: gw, Referrer: &kuadrantv1beta3.RateLimitPolicy{}}
 	rlpRefs := gateway.PolicyRefs()
 	logger.V(1).Info("desiredRateLimitingClusterEnvoyFilter", "rlpRefs", rlpRefs)
 

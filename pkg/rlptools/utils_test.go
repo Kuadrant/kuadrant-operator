@@ -6,28 +6,29 @@ import (
 	"reflect"
 	"testing"
 
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-func testRLP_1Limit_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
-	return &kuadrantv1beta2.RateLimitPolicy{
+func testRLP_1Limit_1Rate(ns, name string) *kuadrantv1beta3.RateLimitPolicy {
+	return &kuadrantv1beta3.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
-			APIVersion: kuadrantv1beta2.GroupVersion.String(),
+			APIVersion: kuadrantv1beta3.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 		},
-		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
-				Limits: map[string]kuadrantv1beta2.Limit{
+		Spec: kuadrantv1beta3.RateLimitPolicySpec{
+			RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+				Limits: map[string]kuadrantv1beta3.Limit{
 					"l1": {
-						Rates: []kuadrantv1beta2.Rate{
+						Rates: []kuadrantv1beta3.Rate{
 							{
 								Limit:    5,
 								Duration: 10,
@@ -41,21 +42,21 @@ func testRLP_1Limit_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 	}
 }
 
-func testRLP_2Limits_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
-	return &kuadrantv1beta2.RateLimitPolicy{
+func testRLP_2Limits_1Rate(ns, name string) *kuadrantv1beta3.RateLimitPolicy {
+	return &kuadrantv1beta3.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
-			APIVersion: kuadrantv1beta2.GroupVersion.String(),
+			APIVersion: kuadrantv1beta3.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 		},
-		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
-				Limits: map[string]kuadrantv1beta2.Limit{
+		Spec: kuadrantv1beta3.RateLimitPolicySpec{
+			RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+				Limits: map[string]kuadrantv1beta3.Limit{
 					"l1": {
-						Rates: []kuadrantv1beta2.Rate{
+						Rates: []kuadrantv1beta3.Rate{
 							{
 								Limit:    5,
 								Duration: 10,
@@ -64,7 +65,7 @@ func testRLP_2Limits_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 						},
 					},
 					"l2": {
-						Rates: []kuadrantv1beta2.Rate{
+						Rates: []kuadrantv1beta3.Rate{
 							{
 								Limit:    3,
 								Duration: 1,
@@ -78,21 +79,21 @@ func testRLP_2Limits_1Rate(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 	}
 }
 
-func testRLP_1Limit_2Rates(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
-	return &kuadrantv1beta2.RateLimitPolicy{
+func testRLP_1Limit_2Rates(ns, name string) *kuadrantv1beta3.RateLimitPolicy {
+	return &kuadrantv1beta3.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
-			APIVersion: kuadrantv1beta2.GroupVersion.String(),
+			APIVersion: kuadrantv1beta3.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 		},
-		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
-				Limits: map[string]kuadrantv1beta2.Limit{
+		Spec: kuadrantv1beta3.RateLimitPolicySpec{
+			RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+				Limits: map[string]kuadrantv1beta3.Limit{
 					"l1": {
-						Rates: []kuadrantv1beta2.Rate{
+						Rates: []kuadrantv1beta3.Rate{
 							{
 								Limit:    5,
 								Duration: 10,
@@ -111,24 +112,24 @@ func testRLP_1Limit_2Rates(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
 	}
 }
 
-func testRLP_1Limit_1Rate_1Counter(ns, name string) *kuadrantv1beta2.RateLimitPolicy {
-	return &kuadrantv1beta2.RateLimitPolicy{
+func testRLP_1Limit_1Rate_1Counter(ns, name string) *kuadrantv1beta3.RateLimitPolicy {
+	return &kuadrantv1beta3.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "RateLimitPolicy",
-			APIVersion: kuadrantv1beta2.GroupVersion.String(),
+			APIVersion: kuadrantv1beta3.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
 		},
-		Spec: kuadrantv1beta2.RateLimitPolicySpec{
-			RateLimitPolicyCommonSpec: kuadrantv1beta2.RateLimitPolicyCommonSpec{
-				Limits: map[string]kuadrantv1beta2.Limit{
+		Spec: kuadrantv1beta3.RateLimitPolicySpec{
+			RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+				Limits: map[string]kuadrantv1beta3.Limit{
 					"l1": {
-						Counters: []kuadrantv1beta2.ContextSelector{
+						Counters: []kuadrantv1beta3.ContextSelector{
 							"request.path",
 						},
-						Rates: []kuadrantv1beta2.Rate{
+						Rates: []kuadrantv1beta3.Rate{
 							{
 								Limit:    5,
 								Duration: 10,
@@ -145,7 +146,7 @@ func testRLP_1Limit_1Rate_1Counter(ns, name string) *kuadrantv1beta2.RateLimitPo
 func TestLimitadorRateLimitsFromRLP(t *testing.T) {
 	testCases := []struct {
 		name     string
-		rlp      *kuadrantv1beta2.RateLimitPolicy
+		rlp      *kuadrantv1beta3.RateLimitPolicy
 		expected []limitadorv1alpha1.RateLimit
 	}{
 		{
@@ -244,78 +245,78 @@ func TestLimitadorRateLimitsFromRLP(t *testing.T) {
 func TestConvertRateIntoSeconds(t *testing.T) {
 	testCases := []struct {
 		name             string
-		rate             kuadrantv1beta2.Rate
+		rate             kuadrantv1beta3.Rate
 		expectedMaxValue int
 		expectedSeconds  int
 	}{
 		{
 			name: "seconds",
-			rate: kuadrantv1beta2.Rate{
-				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("second"),
+			rate: kuadrantv1beta3.Rate{
+				Limit: 5, Duration: 2, Unit: kuadrantv1beta3.TimeUnit("second"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  2,
 		},
 		{
 			name: "minutes",
-			rate: kuadrantv1beta2.Rate{
-				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("minute"),
+			rate: kuadrantv1beta3.Rate{
+				Limit: 5, Duration: 2, Unit: kuadrantv1beta3.TimeUnit("minute"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  2 * 60,
 		},
 		{
 			name: "hours",
-			rate: kuadrantv1beta2.Rate{
-				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("hour"),
+			rate: kuadrantv1beta3.Rate{
+				Limit: 5, Duration: 2, Unit: kuadrantv1beta3.TimeUnit("hour"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  2 * 60 * 60,
 		},
 		{
 			name: "day",
-			rate: kuadrantv1beta2.Rate{
-				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("day"),
+			rate: kuadrantv1beta3.Rate{
+				Limit: 5, Duration: 2, Unit: kuadrantv1beta3.TimeUnit("day"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  2 * 60 * 60 * 24,
 		},
 		{
 			name: "negative limit",
-			rate: kuadrantv1beta2.Rate{
-				Limit: -5, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("second"),
+			rate: kuadrantv1beta3.Rate{
+				Limit: -5, Duration: 2, Unit: kuadrantv1beta3.TimeUnit("second"),
 			},
 			expectedMaxValue: 0,
 			expectedSeconds:  2,
 		},
 		{
 			name: "negative duration",
-			rate: kuadrantv1beta2.Rate{
-				Limit: 5, Duration: -2, Unit: kuadrantv1beta2.TimeUnit("second"),
+			rate: kuadrantv1beta3.Rate{
+				Limit: 5, Duration: -2, Unit: kuadrantv1beta3.TimeUnit("second"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  0,
 		},
 		{
 			name: "limit  is 0",
-			rate: kuadrantv1beta2.Rate{
-				Limit: 0, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("second"),
+			rate: kuadrantv1beta3.Rate{
+				Limit: 0, Duration: 2, Unit: kuadrantv1beta3.TimeUnit("second"),
 			},
 			expectedMaxValue: 0,
 			expectedSeconds:  2,
 		},
 		{
 			name: "rate is 0",
-			rate: kuadrantv1beta2.Rate{
-				Limit: 5, Duration: 0, Unit: kuadrantv1beta2.TimeUnit("second"),
+			rate: kuadrantv1beta3.Rate{
+				Limit: 5, Duration: 0, Unit: kuadrantv1beta3.TimeUnit("second"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  0,
 		},
 		{
 			name: "unexpected time unit",
-			rate: kuadrantv1beta2.Rate{
-				Limit: 5, Duration: 2, Unit: kuadrantv1beta2.TimeUnit("unknown"),
+			rate: kuadrantv1beta3.Rate{
+				Limit: 5, Duration: 2, Unit: kuadrantv1beta3.TimeUnit("unknown"),
 			},
 			expectedMaxValue: 5,
 			expectedSeconds:  0,

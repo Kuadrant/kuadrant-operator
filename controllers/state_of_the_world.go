@@ -145,7 +145,6 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 				&consolev1.ConsolePlugin{}, openshift.ConsolePluginsResource, metav1.NamespaceAll,
 				controller.FilterResourcesByLabel[*consolev1.ConsolePlugin](fmt.Sprintf("%s=%s", consoleplugin.AppLabelKey, consoleplugin.AppLabelValue)))),
 			controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind()),
-			// TODO: add object links
 		)
 	}
 

@@ -16,6 +16,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift/consoleplugin"
@@ -49,17 +50,38 @@ func (r *ConsolePluginReconciler) Subscription() *controller.Subscription {
 		ReconcileFunc: r.Run,
 		Events: []controller.ResourceEventMatcher{
 			{Kind: ptr.To(openshift.ConsolePluginGVK.GroupKind())},
+			{
+				Kind:            ptr.To(ConfigMapGroupKind),
+				ObjectNamespace: r.namespace,
+				ObjectName:      TopologyConfigMapName,
+				EventType:       ptr.To(controller.CreateEvent),
+			},
+			{
+				Kind:            ptr.To(ConfigMapGroupKind),
+				ObjectNamespace: r.namespace,
+				ObjectName:      TopologyConfigMapName,
+				EventType:       ptr.To(controller.DeleteEvent),
+			},
 		},
 	}
 }
 
-func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.ResourceEvent, _ *machinery.Topology, _ error, _ *sync.Map) error {
+func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
 	logger := r.Logger()
 	logger.V(1).Info("task started")
 	ctx := logr.NewContext(eventCtx, logger)
 
+	existingTopologyConfigMaps := topology.Objects().Items(func(object machinery.Object) bool {
+		return object.GetName() == TopologyConfigMapName && object.GetNamespace() == r.namespace && object.GroupVersionKind().Kind == ConfigMapGroupKind.Kind
+	})
+
+	topologyExists := len(existingTopologyConfigMaps) > 0
+
 	// Service
 	service := consoleplugin.Service(r.namespace)
+	if !topologyExists {
+		utils.TagObjectToDelete(service)
+	}
 	err := r.ReconcileResource(ctx, &corev1.Service{}, service, reconcilers.CreateOnlyMutator)
 	if err != nil {
 		logger.Error(err, "reconciling service")
@@ -70,6 +92,9 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	deployment := consoleplugin.Deployment(r.namespace, ConsolePluginImageURL)
 	deploymentMutators := make([]reconcilers.DeploymentMutateFn, 0)
 	deploymentMutators = append(deploymentMutators, reconcilers.DeploymentImageMutator)
+	if !topologyExists {
+		utils.TagObjectToDelete(deployment)
+	}
 	err = r.ReconcileResource(ctx, &appsv1.Deployment{}, deployment, reconcilers.DeploymentMutator(deploymentMutators...))
 	if err != nil {
 		logger.Error(err, "reconciling deployment")
@@ -78,6 +103,9 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 
 	// Nginx ConfigMap
 	nginxConfigMap := consoleplugin.NginxConfigMap(r.namespace)
+	if !topologyExists {
+		utils.TagObjectToDelete(nginxConfigMap)
+	}
 	err = r.ReconcileResource(ctx, &corev1.ConfigMap{}, nginxConfigMap, reconcilers.CreateOnlyMutator)
 	if err != nil {
 		logger.Error(err, "reconciling nginx configmap")
@@ -86,6 +114,9 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 
 	// ConsolePlugin
 	consolePlugin := consoleplugin.ConsolePlugin(r.namespace)
+	if !topologyExists {
+		utils.TagObjectToDelete(consolePlugin)
+	}
 	err = r.ReconcileResource(ctx, &consolev1.ConsolePlugin{}, consolePlugin, reconcilers.CreateOnlyMutator)
 	if err != nil {
 		logger.Error(err, "reconciling consoleplugin")

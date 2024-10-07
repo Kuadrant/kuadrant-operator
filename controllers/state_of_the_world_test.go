@@ -1,3 +1,5 @@
+//go:build unit
+
 package controllers
 
 import (
@@ -13,6 +15,10 @@ import (
 
 func TestGetKuadrant(t *testing.T) {
 	unexpected := &kuadrantv1beta1.Kuadrant{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Kuadrant",
+			APIVersion: "kuadrant.io/v1beta1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "UnExpected",
 			CreationTimestamp: metav1.Time{
@@ -21,6 +27,10 @@ func TestGetKuadrant(t *testing.T) {
 		},
 	}
 	expected := &kuadrantv1beta1.Kuadrant{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Kuadrant",
+			APIVersion: "kuadrant.io/v1beta1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "Expected",
 			CreationTimestamp: metav1.Time{
@@ -29,6 +39,10 @@ func TestGetKuadrant(t *testing.T) {
 		},
 	}
 	deleted := &kuadrantv1beta1.Kuadrant{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Kuadrant",
+			APIVersion: "kuadrant.io/v1beta1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "Expected",
 			CreationTimestamp: metav1.Time{

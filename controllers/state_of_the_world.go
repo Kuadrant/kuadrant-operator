@@ -3,6 +3,7 @@ package controllers
 import (
 	"fmt"
 	"reflect"
+	"sort"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -408,26 +409,22 @@ var ErrNoKandrantResource = fmt.Errorf("no kuadrant resources in topology")
 
 // GetKuadrant returns the oldest Kuadrant from the root objects in the topology
 func GetKuadrant(topology *machinery.Topology) (*kuadrantv1beta1.Kuadrant, error) {
-	kuadrantList := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (*kuadrantv1beta1.Kuadrant, bool) {
-		k, ok := item.(*kuadrantv1beta1.Kuadrant)
-		if ok && k.DeletionTimestamp == nil {
+	kuadrantList := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (controller.Object, bool) {
+		k, ok := item.(controller.Object)
+		if ok && k.GetObjectKind().GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind && k.GetDeletionTimestamp() == nil {
 			return k, true
 		}
 		return nil, false
 	})
 	if len(kuadrantList) == 1 {
-		return kuadrantList[0], nil
+		return kuadrantList[0].(*kuadrantv1beta1.Kuadrant), nil
 	}
 	if len(kuadrantList) == 0 {
 		return nil, ErrNoKandrantResource
 	}
-	oldest := kuadrantList[0]
-	for _, k := range kuadrantList[1:] {
-		if k.CreationTimestamp.Before(&oldest.CreationTimestamp) {
-			oldest = k
-		}
-	}
-	return oldest, nil
+	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrantList))
+	k, _ := kuadrantList[0].(*kuadrantv1beta1.Kuadrant)
+	return k, nil
 }
 
 func isObjectOwnedByGroupKind(o client.Object, groupKind schema.GroupKind) bool {

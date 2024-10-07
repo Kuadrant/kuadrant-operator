@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
+	ctrlruntimepredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
@@ -47,7 +48,13 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithRunnable("tlspolicy watcher", controller.Watch(&kuadrantv1alpha1.TLSPolicy{}, kuadrantv1alpha1.TLSPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("authpolicy watcher", controller.Watch(&kuadrantv1beta2.AuthPolicy{}, kuadrantv1beta2.AuthPoliciesResource, metav1.NamespaceAll)),
 		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta3.RateLimitPolicy{}, kuadrantv1beta3.RateLimitPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("topology configmap watcher", controller.Watch(&corev1.ConfigMap{}, controller.ConfigMapsResource, operatorNamespace, controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)))),
+		controller.WithRunnable("topology configmap watcher", controller.Watch(
+			&corev1.ConfigMap{},
+			controller.ConfigMapsResource,
+			operatorNamespace,
+			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)),
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*corev1.ConfigMap]{}),
+		)),
 		controller.WithRunnable("limitador watcher", controller.Watch(&limitadorv1alpha1.Limitador{}, kuadrantv1beta1.LimitadorsResource, metav1.NamespaceAll)),
 		controller.WithRunnable("authorino watcher", controller.Watch(&authorinov1beta1.Authorino{}, kuadrantv1beta1.AuthorinosResource, metav1.NamespaceAll)),
 		controller.WithPolicyKinds(

@@ -344,6 +344,7 @@ run: export OPERATOR_NAMESPACE = $(shell kubectl config view --minify -o jsonpat
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 run: generate fmt vet ## Run a controller from your host.
+	@[ "$(OPERATOR_NAMESPACE)" ] || ( echo "🚨 namespace could not be parsed from kubeconfig 💥" >/dev/stderr; exit 1 )
 	go run -ldflags "-X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" ./main.go
 
 docker-build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")

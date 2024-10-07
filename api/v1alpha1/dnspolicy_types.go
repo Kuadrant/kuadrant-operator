@@ -23,7 +23,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -280,9 +279,9 @@ func (p *DNSPolicy) WithTargetGateway(gwName string) *DNSPolicy {
 
 func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port int, protocol string, failureThreshold int) *DNSPolicy {
 	return p.WithHealthCheck(dnsv1alpha1.HealthCheckSpec{
-		Endpoint:         endpoint,
+		Path:             endpoint,
 		Port:             &port,
-		Protocol:         ptr.To(dnsv1alpha1.HealthProtocol(protocol)),
+		Protocol:         dnsv1alpha1.Protocol(protocol),
 		FailureThreshold: &failureThreshold,
 	})
 }

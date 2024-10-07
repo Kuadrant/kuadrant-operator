@@ -15,7 +15,7 @@ spec:
     geo: EU
     defaultGeo: true
   healthCheck:
-    endpoint: /healthz
-    port: 1111111
-    protocol: HTTP
+    path: /healthz
+    port: 443
+    protocol: HTTPS
     failureThreshold: 3

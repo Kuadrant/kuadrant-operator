@@ -81,12 +81,21 @@ spec:
                   By default this health check will be applied to each unique DNS A Record for
                   the listeners assigned to the target gateway
                 properties:
-                  endpoint:
+                  additionalHeadersRef:
                     description: |-
-                      Endpoint is the path to append to the host to reach the expected health check.
-                      Must start with "?" or "/", contain only valid URL characters and end with alphanumeric char or "/". For example "/" or "/healthz" are common
-                    pattern: ^(?:\?|\/)[\w\-.~:\/?#\[\]@!$&'()*+,;=]+(?:[a-zA-Z0-9]|\/){1}$
-                    type: string
+                      AdditionalHeadersRef refers to a secret that contains extra headers to send in the probe request, this is primarily useful if an authentication
+                      token is required by the endpoint.
+                    properties:
+                      name:
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  allowInsecureCertificate:
+                    description: |-
+                      AllowInsecureCertificate will instruct the health check probe to not fail on a self-signed or otherwise invalid SSL certificate
+                      this is primarily used in development or testing environments
+                    type: boolean
                   failureThreshold:
                     description: FailureThreshold is a limit of consecutive failures
                       that must occur for a host to be considered unhealthy
@@ -94,6 +103,16 @@ spec:
                     x-kubernetes-validations:
                     - message: Failure threshold must be greater than 0
                       rule: self > 0
+                  interval:
+                    description: Interval defines how frequently this probe should
+                      execute
+                    type: string
+                  path:
+                    description: |-
+                      Path is the path to append to the host to reach the expected health check.
+                      Must start with "?" or "/", contain only valid URL characters and end with alphanumeric char or "/". For example "/" or "/healthz" are common
+                    pattern: ^(?:\?|\/)[\w\-.~:\/?#\[\]@!$&'()*+,;=]+(?:[a-zA-Z0-9]|\/){1}$
+                    type: string
                   port:
                     description: Port to connect to the host on. Must be either 80,
                       443 or 1024-49151

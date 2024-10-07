@@ -2,6 +2,7 @@ package v2
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kuadrant/kuadrant-operator/api/external/maistra/status"
 	v1 "github.com/kuadrant/kuadrant-operator/api/external/maistra/v1"
@@ -19,6 +20,19 @@ type ControlPlaneMode string
 const (
 	ClusterWideMode ControlPlaneMode = "ClusterWide"
 	MultiTenantMode ControlPlaneMode = "MultiTenant"
+)
+
+var (
+	ServiceMeshControlPlaneGVR = schema.GroupVersionResource{
+		Group:    "maistra.io",
+		Version:  "v2",
+		Resource: "servicemeshcontrolplanes",
+	}
+	ServiceMeshControlPlaneGVK = schema.GroupVersionKind{
+		Group:   "maistra.io",
+		Version: "v2",
+		Kind:    "ServiceMeshControlPlane",
+	}
 )
 
 func init() {

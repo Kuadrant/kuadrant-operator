@@ -4,6 +4,12 @@
 
     You must perform these steps on each OpenShift cluster that you want to use Kuadrant on.
 
+!!! warning
+    
+    Kuadrant uses a number of labels to search and filter resources on the cluster.
+    All required labels are formatted as `kuadrant.io/*`.
+    Removal of any labels with the prefix may cause unexpected behaviour and degradation of the product.
+
 ## Prerequisites
 
 - OpenShift Container Platform 4.14.x or later with community Operator catalog available.

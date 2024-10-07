@@ -15,7 +15,6 @@ import (
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -116,8 +115,8 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		),
 	}
 
-	ok, err := kuadrantgatewayapi.IsGatewayAPIInstalled(manager.GetRESTMapper())
-	if err != nil || !ok {
+	isGatewayAPIInstalled, err := kuadrantgatewayapi.IsGatewayAPIInstalled(manager.GetRESTMapper())
+	if err != nil || !isGatewayAPIInstalled {
 		logger.Info("gateway api is not installed, skipping watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts,
@@ -218,7 +217,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		)
 	}
 
-	controllerOpts = append(controllerOpts, controller.WithReconcile(buildReconciler(manager, client, isIstioInstalled, isEnvoyGatewayInstalled, isConsolePluginInstalled)))
+	controllerOpts = append(controllerOpts, controller.WithReconcile(buildReconciler(manager, client, isIstioInstalled, isEnvoyGatewayInstalled, isConsolePluginInstalled, isCertManagerInstalled)))
 
 	return controller.NewController(controllerOpts...)
 }
@@ -285,14 +284,14 @@ func certManagerControllerOpts() []controller.ControllerOption {
 	}
 }
 
-func buildReconciler(manager ctrlruntime.Manager, client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled, isConsolePluginInstalled bool) controller.ReconcileFunc {
+func buildReconciler(manager ctrlruntime.Manager, client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled, isConsolePluginInstalled, isCertManagerInstalled bool) controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
-		Precondition: initWorkflow(client, manager.GetRESTMapper()).Run,
+		Precondition: initWorkflow(client).Run,
 		Tasks: []controller.ReconcileFunc{
 			NewAuthorinoReconciler(client).Subscription().Reconcile,
 			NewLimitadorReconciler(client).Subscription().Reconcile,
 			NewDNSWorkflow().Run,
-			NewTLSWorkflow(client).Run,
+			NewTLSWorkflow(client, isCertManagerInstalled).Run,
 			NewAuthWorkflow().Run,
 			NewRateLimitWorkflow().Run,
 		},
@@ -308,12 +307,11 @@ func buildReconciler(manager ctrlruntime.Manager, client *dynamic.DynamicClient,
 	return mainWorkflow.Run
 }
 
-func initWorkflow(client *dynamic.DynamicClient, restMapper meta.RESTMapper) *controller.Workflow {
+func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 	return &controller.Workflow{
 		Precondition: NewEventLogger().Log,
 		Tasks: []controller.ReconcileFunc{
 			NewTopologyReconciler(client, operatorNamespace).Reconcile,
-			NewIsCertManagerInstalledReconciler(restMapper).Check,
 		},
 	}
 }

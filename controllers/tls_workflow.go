@@ -27,9 +27,9 @@ var (
 	CertManagerClusterIssuerKind = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.ClusterIssuerKind}
 )
 
-func NewTLSWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
+func NewTLSWorkflow(client *dynamic.DynamicClient, isCertManagerInstalled bool) *controller.Workflow {
 	return &controller.Workflow{
-		Precondition:  NewValidateTLSPoliciesValidatorReconciler().Subscription().Reconcile,
+		Precondition:  NewValidateTLSPoliciesValidatorReconciler(isCertManagerInstalled).Subscription().Reconcile,
 		Postcondition: NewTLSPolicyStatusUpdaterReconciler(client).Subscription().Reconcile,
 	}
 }

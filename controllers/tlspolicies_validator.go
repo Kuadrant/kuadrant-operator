@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/kuadrant/policy-machinery/controller"
@@ -15,11 +14,15 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
-func NewValidateTLSPoliciesValidatorReconciler() *ValidateTLSPoliciesValidatorReconciler {
-	return &ValidateTLSPoliciesValidatorReconciler{}
+func NewValidateTLSPoliciesValidatorReconciler(isCertManagerInstalled bool) *ValidateTLSPoliciesValidatorReconciler {
+	return &ValidateTLSPoliciesValidatorReconciler{
+		isCertManagerInstalled: isCertManagerInstalled,
+	}
 }
 
-type ValidateTLSPoliciesValidatorReconciler struct{}
+type ValidateTLSPoliciesValidatorReconciler struct {
+	isCertManagerInstalled bool
+}
 
 func (t *ValidateTLSPoliciesValidatorReconciler) Subscription() *controller.Subscription {
 	return &controller.Subscription{
@@ -46,21 +49,13 @@ func (t *ValidateTLSPoliciesValidatorReconciler) Validate(ctx context.Context, _
 
 	isPolicyValidErrorMap := make(map[string]error, len(policies))
 
-	isCertManagerInstalled := false
-	installed, ok := s.Load(IsCertManagerInstalledKey)
-	if ok {
-		isCertManagerInstalled = installed.(bool)
-	} else {
-		logger.V(1).Error(errors.New("isCertManagerInstalled was not found in sync map, defaulting to false"), "sync map error")
-	}
-
 	for _, p := range policies {
 		if p.DeletionTimestamp != nil {
 			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", p.Name, "namespace", p.Namespace)
 			continue
 		}
 
-		if !isCertManagerInstalled {
+		if !t.isCertManagerInstalled {
 			isPolicyValidErrorMap[p.GetLocator()] = kuadrant.NewErrDependencyNotInstalled("Cert Manager")
 			continue
 		}

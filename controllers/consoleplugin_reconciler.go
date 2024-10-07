@@ -27,14 +27,14 @@ var (
 	ConsolePluginImageURL = env.GetString("RELATED_IMAGE_CONSOLEPLUGIN", "quay.io/kuadrant/console-plugin:latest")
 )
 
-type ConsolePluginTask struct {
+type ConsolePluginReconciler struct {
 	*reconcilers.BaseReconciler
 
 	namespace string
 }
 
-func NewConsolePluginTask(mgr ctrlruntime.Manager, namespace string) *ConsolePluginTask {
-	return &ConsolePluginTask{
+func NewConsolePluginReconciler(mgr ctrlruntime.Manager, namespace string) *ConsolePluginReconciler {
+	return &ConsolePluginReconciler{
 		BaseReconciler: reconcilers.NewBaseReconciler(
 			mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 			log.Log.WithName("consoleplugin"),
@@ -44,13 +44,16 @@ func NewConsolePluginTask(mgr ctrlruntime.Manager, namespace string) *ConsolePlu
 	}
 }
 
-func (r *ConsolePluginTask) Events() []controller.ResourceEventMatcher {
-	return []controller.ResourceEventMatcher{
-		{Kind: ptr.To(openshift.ConsolePluginGVK.GroupKind())},
+func (r *ConsolePluginReconciler) Subscription() *controller.Subscription {
+	return &controller.Subscription{
+		ReconcileFunc: r.Run,
+		Events: []controller.ResourceEventMatcher{
+			{Kind: ptr.To(openshift.ConsolePluginGVK.GroupKind())},
+		},
 	}
 }
 
-func (r *ConsolePluginTask) Run(eventCtx context.Context, _ []controller.ResourceEvent, _ *machinery.Topology, _ error, _ *sync.Map) error {
+func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.ResourceEvent, _ *machinery.Topology, _ error, _ *sync.Map) error {
 	logger := r.Logger()
 	logger.V(1).Info("task started")
 	ctx := logr.NewContext(eventCtx, logger)

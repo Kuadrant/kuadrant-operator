@@ -27,9 +27,9 @@ var (
 	TestNamespace = "test-namespace"
 )
 
-// Since this task only runs on Openshift,
+// Since this reconciler only runs on Openshift,
 // this unit test will add some coverage
-func TestConsolePluginTask(t *testing.T) {
+func TestConsolePluginReconciler(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
@@ -42,17 +42,19 @@ func TestConsolePluginTask(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	task := NewConsolePluginTask(manager, TestNamespace)
-	assert.Assert(t, task != nil)
+	reconciler := NewConsolePluginReconciler(manager, TestNamespace)
+	assert.Assert(t, reconciler != nil)
 
-	t.Run("Events", func(subT *testing.T) {
-		events := task.Events()
+	t.Run("Subscription", func(subT *testing.T) {
+		subscription := reconciler.Subscription()
+		assert.Assert(subT, subscription != nil)
+		events := subscription.Events
 		assert.Assert(subT, is.Len(events, 1))
 		assert.DeepEqual(subT, events[0].Kind, ptr.To(openshift.ConsolePluginGVK.GroupKind()))
 	})
 
 	t.Run("Create service", func(subT *testing.T) {
-		assert.NilError(subT, task.Run(context.TODO(), nil, nil, nil, nil))
+		assert.NilError(subT, reconciler.Run(context.TODO(), nil, nil, nil, nil))
 		service := &corev1.Service{}
 		serviceKey := client.ObjectKey{Name: consoleplugin.ServiceName(), Namespace: TestNamespace}
 		assert.NilError(subT, manager.GetClient().Get(context.TODO(), serviceKey, service))
@@ -68,7 +70,7 @@ func TestConsolePluginTask(t *testing.T) {
 	})
 
 	t.Run("Create deployment", func(subT *testing.T) {
-		assert.NilError(subT, task.Run(context.TODO(), nil, nil, nil, nil))
+		assert.NilError(subT, reconciler.Run(context.TODO(), nil, nil, nil, nil))
 		deployment := &appsv1.Deployment{}
 		deploymentKey := client.ObjectKey{Name: consoleplugin.DeploymentName(), Namespace: TestNamespace}
 		assert.NilError(subT, manager.GetClient().Get(context.TODO(), deploymentKey, deployment))
@@ -80,7 +82,7 @@ func TestConsolePluginTask(t *testing.T) {
 	})
 
 	t.Run("Create nginx configmap", func(subT *testing.T) {
-		assert.NilError(subT, task.Run(context.TODO(), nil, nil, nil, nil))
+		assert.NilError(subT, reconciler.Run(context.TODO(), nil, nil, nil, nil))
 		configMap := &corev1.ConfigMap{}
 		cmKey := client.ObjectKey{Name: consoleplugin.NginxConfigMapName(), Namespace: TestNamespace}
 		assert.NilError(subT, manager.GetClient().Get(context.TODO(), cmKey, configMap))
@@ -90,7 +92,7 @@ func TestConsolePluginTask(t *testing.T) {
 	})
 
 	t.Run("Create consoleplugin", func(subT *testing.T) {
-		assert.NilError(subT, task.Run(context.TODO(), nil, nil, nil, nil))
+		assert.NilError(subT, reconciler.Run(context.TODO(), nil, nil, nil, nil))
 		consolePlugin := &consolev1.ConsolePlugin{}
 		consolePluginKey := client.ObjectKey{Name: consoleplugin.Name()}
 		assert.NilError(subT, manager.GetClient().Get(context.TODO(), consolePluginKey, consolePlugin))

@@ -118,8 +118,8 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		// TODO: add istio specific tasks to workflow
 	}
 
-	ok, err = kuadrantgatewayapi.IsCertManagerInstalled(manager.GetRESTMapper(), logger)
-	if err != nil || !ok {
+	isCertManagerInstalled, err := kuadrantgatewayapi.IsCertManagerInstalled(manager.GetRESTMapper(), logger)
+	if err != nil || !isCertManagerInstalled {
 		logger.Info("cert manager is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts,
@@ -136,8 +136,8 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		// TODO: add tls policy specific tasks to workflow
 	}
 
-	ok, err = openshift.IsConsolePluginInstalled(manager.GetRESTMapper())
-	if err != nil || !ok {
+	isConsolePluginInstalled, err := openshift.IsConsolePluginInstalled(manager.GetRESTMapper())
+	if err != nil || !isConsolePluginInstalled {
 		logger.Info("console plugin is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts,
@@ -149,14 +149,12 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		)
 	}
 
-	controllerOpts = append(controllerOpts, controller.WithReconcile(buildReconciler(client, isIstioInstalled, isEnvoyGatewayInstalled)))
+	controllerOpts = append(controllerOpts, controller.WithReconcile(buildReconciler(manager, client, isIstioInstalled, isEnvoyGatewayInstalled, isConsolePluginInstalled)))
 
 	return controller.NewController(controllerOpts...)
 }
 
-func buildReconciler(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) controller.ReconcileFunc {
-	
-	consolePluginTaskTask := NewConsolePluginTaskTask(manager)	
+func buildReconciler(manager ctrlruntime.Manager, client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled, isConsolePluginInstalled bool) controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
 		Precondition: initWorkflow(client).Run,
 		Tasks: []controller.ReconcileFunc{
@@ -170,17 +168,13 @@ func buildReconciler(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGat
 		Postcondition: finalStepsWorkflow(client, isIstioInstalled, isEnvoyGatewayInstalled).Run,
 	}
 
-	ok, err := openshift.IsConsolePluginInstalled(manager.GetRESTMapper())
-	if err == nil && ok {
-		reconciler.Tasks = append(reconciler.Tasks,
-			(&controller.Subscription{
-				ReconcileFunc: consolePluginTask.Run,
-				Events:        consolePluginTask.Events(),
-			}).Reconcile,
+	if isConsolePluginInstalled {
+		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
+			NewConsolePluginReconciler(manager, operatorNamespace).Subscription().Reconcile,
 		)
 	}
 
-	return reconciler.Run
+	return mainWorkflow.Run
 }
 
 func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {

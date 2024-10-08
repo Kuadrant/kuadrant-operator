@@ -1,0 +1,4 @@
+resources:  
+  - service-monitor-istiod.yaml
+  - telemetry.yaml
+

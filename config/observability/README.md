@@ -9,6 +9,7 @@ If however you have run `make local-setup` and would like to install the observa
 ```bash
 ./bin/kustomize build ./config/observability/| docker run --rm -i docker.io/ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
 ./bin/kustomize build ./config/observability/| docker run --rm -i docker.io/ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -
+./bin/kustomize build ./config/observability/prometheus/monitors/envoy | kubectl apply -f -
 ./bin/kustomize build ./config/thanos | kubectl apply -f -
 ./bin/kustomize build ./examples/dashboards | kubectl apply -f -
 ./bin/kustomize build ./examples/alerts | kubectl apply -f -

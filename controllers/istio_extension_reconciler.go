@@ -86,8 +86,10 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			if err != nil {
 				return err // should never happen
 			}
-			_, err = resource.Create(ctx, desiredWasmPluginUnstructured, metav1.CreateOptions{})
-			logger.Error(err, "failed to create wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", desiredWasmPluginUnstructured.Object)
+			if _, err = resource.Create(ctx, desiredWasmPluginUnstructured, metav1.CreateOptions{}); err != nil {
+				logger.Error(err, "failed to create wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", desiredWasmPluginUnstructured.Object)
+				// TODO: handle error
+			}
 			return nil
 		}
 
@@ -99,9 +101,9 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 
 		// delete
 		if utils.IsObjectTaggedToDelete(desiredWasmPlugin) && !utils.IsObjectTaggedToDelete(existingWasmPlugin) {
-			err := resource.Delete(ctx, existingWasmPlugin.GetName(), metav1.DeleteOptions{})
-			if err != nil {
+			if err := resource.Delete(ctx, existingWasmPlugin.GetName(), metav1.DeleteOptions{}); err != nil {
 				logger.Error(err, "failed to delete wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", fmt.Sprintf("%s/%s", existingWasmPlugin.GetNamespace(), existingWasmPlugin.GetName()))
+				// TODO: handle error
 			}
 			return nil
 		}
@@ -116,8 +118,10 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			if err != nil {
 				return err // should never happen
 			}
-			_, err = resource.Update(ctx, existingWasmPluginUnstructured, metav1.UpdateOptions{})
-			logger.Error(err, "failed to update wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", existingWasmPluginUnstructured.Object)
+			if _, err = resource.Update(ctx, existingWasmPluginUnstructured, metav1.UpdateOptions{}); err != nil {
+				logger.Error(err, "failed to update wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", existingWasmPluginUnstructured.Object)
+				// TODO: handle error
+			}
 			return nil
 		}
 	}

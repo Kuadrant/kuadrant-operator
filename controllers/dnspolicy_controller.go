@@ -51,14 +51,6 @@ type DNSPolicyReconciler struct {
 	dnsHelper           dnsHelper
 }
 
-//+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnspolicies,verbs=get;list;watch;update;patch;delete
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnspolicies/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnspolicies/finalizers,verbs=update
-
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords/status,verbs=get
-
 func (r *DNSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Logger().WithValues("DNSPolicy", req.NamespacedName)
 	log.Info("Reconciling DNSPolicy")

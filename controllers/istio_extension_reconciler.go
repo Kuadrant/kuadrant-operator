@@ -57,9 +57,9 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	if err != nil {
 		if errors.Is(err, ErrMissingStateEffectiveRateLimitPolicies) {
 			logger.V(1).Info(err.Error())
-			return nil
+		} else {
+			return err
 		}
-		return err
 	}
 
 	// reconcile for each gateway based on the desired wasm plugin policies calculated before
@@ -130,14 +130,14 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 func (r *istioExtensionReconciler) buildWasmPoliciesPerGateway(ctx context.Context, state *sync.Map) (map[string][]wasm.Policy, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("istioExtensionReconciler").WithName("buildWasmPolicies")
 
+	wasmPolicies := make(map[string][]wasm.Policy)
+
 	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
 	if !ok {
-		return nil, ErrMissingStateEffectiveRateLimitPolicies
+		return wasmPolicies, ErrMissingStateEffectiveRateLimitPolicies
 	}
 
 	logger.V(1).Info("building wasm policies for istio extension", "effectivePolicies", len(effectivePolicies.(EffectiveRateLimitPolicies)))
-
-	wasmPolicies := make(map[string][]wasm.Policy)
 
 	// build wasm config for effective rate limit policies
 	for pathID, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {

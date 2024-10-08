@@ -19,6 +19,8 @@ import (
 )
 
 var (
+	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
+
 	StateRateLimitPolicyValid       = "RateLimitPolicyValid"
 	StateEffectiveRateLimitPolicies = "EffectiveRateLimitPolicies"
 
@@ -53,7 +55,7 @@ func NewRateLimitWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 			Tasks: []controller.ReconcileFunc{
 				(&limitadorLimitsReconciler{client: client}).Subscription().Reconcile,
 				// TODO: reconcile istio cluster (EnvoyFilter)
-				// TODO: reconcile istio extension (WasmPlugin)
+				(&istioExtensionReconciler{client: client}).Subscription().Reconcile,
 				// TODO: reconcile envoy cluster (EnvoyPatchPolicy)
 				// TODO: reconcile envoy extension (EnvoyExtensionPolicy)
 			},
@@ -78,12 +80,14 @@ func acceptedRateLimitPolicyFunc(state *sync.Map) func(machinery.Policy) bool {
 	}
 }
 
+func wasmPluginName(gatewayName string) string {
+	return fmt.Sprintf("kuadrant-%s", gatewayName)
+}
+
 // Used in the tests
 
-var WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
-
 func WASMPluginName(gw *gatewayapiv1.Gateway) string {
-	return fmt.Sprintf("kuadrant-%s", gw.Name)
+	return wasmPluginName(gw.Name)
 }
 func EnvoyExtensionPolicyName(targetName string) string {
 	return fmt.Sprintf("kuadrant-wasm-for-%s", targetName)

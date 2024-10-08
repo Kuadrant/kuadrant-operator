@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/env"
 	"k8s.io/utils/ptr"
 )
 
@@ -108,6 +109,16 @@ func Deployment(ns, image string) *appsv1.Deployment {
 							},
 							ImagePullPolicy: corev1.PullAlways,
 							VolumeMounts:    DeploymentVolumeMounts(),
+							Env: []corev1.EnvVar{
+								{
+									Name:  "TOPOLOGY_CONFIGMAP_NAME",
+									Value: "topology",
+								},
+								{
+									Name:  "TOPOLOGY_CONFIGMAP_NAMESPACE",
+									Value: env.GetString("OPERATOR_NAMESPACE", "kuadrant-system"),
+								},
+							},
 						},
 					},
 					Volumes:       DeploymentVolumes(),

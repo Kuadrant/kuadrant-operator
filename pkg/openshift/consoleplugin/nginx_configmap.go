@@ -34,6 +34,9 @@ http {
 		location / {
 			root                /usr/share/nginx/html;
 		}
+		location /config.js {
+			root /tmp;
+		}
 	}
 }
 `,

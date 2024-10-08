@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 )
@@ -23,16 +22,12 @@ func (e *EventLogger) Log(ctx context.Context, resourceEvents []controller.Resou
 		if obj == nil {
 			obj = event.NewObject
 		}
-		values := []any{
+		logger.Info("new event",
 			"type", event.EventType.String(),
 			"kind", obj.GetObjectKind().GroupVersionKind().Kind,
 			"namespace", obj.GetNamespace(),
 			"name", obj.GetName(),
-		}
-		if event.EventType == controller.UpdateEvent && logger.V(1).Enabled() {
-			values = append(values, "diff", cmp.Diff(event.OldObject, event.NewObject))
-		}
-		logger.Info("new event", values...)
+		)
 		if err != nil {
 			logger.Error(err, "error passed to reconcile")
 		}

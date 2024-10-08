@@ -9,6 +9,7 @@ import (
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -169,6 +170,7 @@ func (b *BootOptionsBuilder) getOptions() []controller.ControllerOption {
 	opts = append(opts, b.getEnvoyGatewayOptions()...)
 	opts = append(opts, b.getCertManagerOptions()...)
 	opts = append(opts, b.getConsolePluginOptions()...)
+	opts = append(opts, b.getDNSOperatorOptions()...)
 
 	return opts
 }
@@ -315,13 +317,28 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() []controller.ControllerOp
 	return opts
 }
 
+func (b *BootOptionsBuilder) getDNSOperatorOptions() []controller.ControllerOption {
+	var opts []controller.ControllerOption
+	opts = append(opts,
+		controller.WithRunnable("dnsrecord watcher", controller.Watch(&kuadrantdnsv1alpha1.DNSRecord{}, DNSRecordResource, metav1.NamespaceAll)),
+		controller.WithObjectKinds(
+			DNSRecordGroupKind,
+		),
+		controller.WithObjectLinks(
+			LinkListenerToDNSRecord,
+		),
+	)
+
+	return opts
+}
+
 func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
 		Precondition: initWorkflow(b.client).Run,
 		Tasks: []controller.ReconcileFunc{
 			NewAuthorinoReconciler(b.client).Subscription().Reconcile,
 			NewLimitadorReconciler(b.client).Subscription().Reconcile,
-			NewDNSWorkflow().Run,
+			NewDNSWorkflow(b.client).Run,
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isCertManagerInstalled).Run,
 			NewAuthWorkflow().Run,
 			NewRateLimitWorkflow(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,

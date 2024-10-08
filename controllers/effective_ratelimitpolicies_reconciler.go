@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 
 	"github.com/samber/lo"
@@ -38,8 +39,8 @@ func (r *effectiveRateLimitPolicyReconciler) Reconcile(ctx context.Context, _ []
 
 	kuadrant, err := GetKuadrantFromTopology(topology)
 	if err != nil {
-		if err == ErrMissingKuadrant {
-			logger.V(1).Info(ErrMissingKuadrant.Error())
+		if errors.Is(err, ErrMissingKuadrant) {
+			logger.V(1).Info(err.Error())
 			return nil
 		}
 		return err

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -38,8 +39,8 @@ func (r *limitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 
 	kuadrant, err := GetKuadrantFromTopology(topology)
 	if err != nil {
-		if err == ErrMissingKuadrant {
-			logger.V(1).Info(ErrMissingKuadrant.Error())
+		if errors.Is(err, ErrMissingKuadrant) {
+			logger.V(1).Info(err.Error())
 			return nil
 		}
 		return err

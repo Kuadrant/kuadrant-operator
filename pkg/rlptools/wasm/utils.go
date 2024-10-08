@@ -43,10 +43,6 @@ func LimitNameToLimitadorIdentifier(rlpKey types.NamespacedName, uniqueLimitName
 	return identifier
 }
 
-func ToLimitadorRateLimitName(limitIdentifier, rateID string) string {
-	return fmt.Sprintf("%s__%s", limitIdentifier, rateID)
-}
-
 func RateLimitConfig(policies []Policy) Config {
 	return Config{
 		Extensions: map[string]Extension{

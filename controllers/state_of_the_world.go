@@ -263,7 +263,9 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 				istio.WasmPluginGroupKind,
 				istio.AuthorizationPolicyGroupKind,
 			),
-			// TODO: add object links
+			controller.WithObjectLinks(
+				istio.LinkGatewayToWasmPlugin,
+			),
 		)
 		// TODO: add istio specific tasks to workflow
 	}

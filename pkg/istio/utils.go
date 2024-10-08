@@ -4,6 +4,9 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
+	"github.com/samber/lo"
 	istiocommon "istio.io/api/type/v1beta1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
@@ -98,4 +101,43 @@ func IsIstioInstalled(restMapper meta.RESTMapper) (bool, error) {
 
 	// Istio found
 	return true, nil
+}
+
+func LinkGatewayToWasmPlugin(objs controller.Store) machinery.LinkFunc {
+	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), controller.ObjectAs[*gatewayapiv1.Gateway])
+
+	return machinery.LinkFunc{
+		From: machinery.GatewayGroupKind,
+		To:   WasmPluginGroupKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			wasmPlugin := child.(*controller.RuntimeObject).Object.(*istioclientgoextensionv1alpha1.WasmPlugin)
+			return lo.FilterMap(gateways, func(g *gatewayapiv1.Gateway, _ int) (machinery.Object, bool) {
+				gateway := &machinery.Gateway{Gateway: g}
+				targetRef := wasmPlugin.Spec.TargetRef
+				if targetRef == nil {
+					return gateway, false
+				}
+				group := targetRef.GetGroup()
+				if group == "" {
+					group = machinery.GatewayGroupKind.Group
+				}
+				kind := targetRef.GetKind()
+				if kind == "" {
+					kind = machinery.GatewayGroupKind.Kind
+				}
+				name := targetRef.GetName()
+				if name == "" {
+					return gateway, false
+				}
+				namespace := targetRef.GetNamespace()
+				if namespace == "" {
+					namespace = wasmPlugin.GetNamespace()
+				}
+				return gateway, group == machinery.GatewayGroupKind.Group &&
+					kind == machinery.GatewayGroupKind.Kind &&
+					name == gateway.GetName() &&
+					namespace == gateway.GetNamespace()
+			})
+		},
+	}
 }

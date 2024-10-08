@@ -1,25 +1,17 @@
 package wasm
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
-	"slices"
-	"sort"
 	"unicode"
 
-	"github.com/go-logr/logr"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/env"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -28,41 +20,8 @@ const (
 	RateLimitPolicyExtensionName       = "limitador"
 )
 
-var (
-	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
-)
-
 func LimitsNamespaceFromRoute(route *gatewayapiv1.HTTPRoute) string {
 	return types.NamespacedName{Name: route.GetName(), Namespace: route.GetNamespace()}.String()
-}
-
-// Rules computes WASM rules from the policy and the targeted route.
-// It returns an empty list of wasm rules if the policy specifies no limits or if all limits specified in the policy
-// fail to match any route rule according to the limits route selectors.
-func Rules(rlp *kuadrantv1beta3.RateLimitPolicy, route *gatewayapiv1.HTTPRoute) []Rule {
-	rules := make([]Rule, 0)
-	if rlp == nil {
-		return rules
-	}
-
-	rlpKey := client.ObjectKeyFromObject(rlp)
-	limits := rlp.Spec.Proper().Limits
-
-	// Sort RLP limits for consistent comparison with existing wasmplugin objects
-	limitNames := lo.Keys(limits)
-	slices.Sort(limitNames)
-
-	for _, limitName := range limitNames {
-		// 1 RLP limit <---> 1 WASM rule
-		limit := limits[limitName]
-		limitIdentifier := LimitNameToLimitadorIdentifier(rlpKey, limitName)
-		rule, err := ruleFromLimit(limitIdentifier, &limit, route)
-		if err == nil {
-			rules = append(rules, rule)
-		}
-	}
-
-	return rules
 }
 
 func LimitNameToLimitadorIdentifier(rlpKey types.NamespacedName, uniqueLimitName string) string {
@@ -88,68 +47,70 @@ func ToLimitadorRateLimitName(limitIdentifier, rateID string) string {
 	return fmt.Sprintf("%s__%s", limitIdentifier, rateID)
 }
 
-func ruleFromLimit(limitIdentifier string, limit *kuadrantv1beta3.Limit, route *gatewayapiv1.HTTPRoute) (Rule, error) {
-	rule := Rule{}
-
-	conditions, err := conditionsFromLimit(limit, route)
-	if err != nil {
-		return rule, err
+func RateLimitConfig(policies []Policy) Config {
+	return Config{
+		Extensions: map[string]Extension{
+			RateLimitPolicyExtensionName: {
+				Endpoint:    common.KuadrantRateLimitClusterName,
+				FailureMode: FailureModeAllow,
+				Type:        RateLimitExtensionType,
+			},
+		},
+		Policies: policies,
 	}
+}
 
-	rule.Conditions = conditions
+// RuleFromLimit builds a wasm rate-limit rule for a given limit.
+// Conditions are built from the limit top-level conditions and the route rule's HTTPRouteMatches.
+// The order of the conditions is as follows:
+//  1. Route-level conditions: HTTP method, path, headers
+//  2. Top-level conditions: 'when' conditions (blended into each block of route-level conditions)
+//
+// The only action of the rule is the rate-limit policy extension, whose data includes the activation of the limit
+// and any counter qualifier of the limit.
+func RuleFromLimit(limit kuadrantv1beta3.Limit, limitIdentifier, scope string, routeRule gatewayapiv1.HTTPRouteRule) Rule {
+	rule := Rule{
+		Conditions: conditionsFromLimit(limit, routeRule),
+	}
 
 	if data := dataFromLimit(limitIdentifier, limit); data != nil {
 		rule.Actions = []Action{
 			{
-				Scope:         client.ObjectKeyFromObject(route).String(),
+				Scope:         scope,
 				ExtensionName: RateLimitPolicyExtensionName,
 				Data:          data,
 			},
 		}
 	}
 
-	return rule, nil
+	return rule
 }
 
-// TODO: build conditions for a specific HTTPRouteRule, not for the entire HTTPRoute
-func conditionsFromLimit(limit *kuadrantv1beta3.Limit, route *gatewayapiv1.HTTPRoute) ([]Condition, error) {
-	if limit == nil {
-		return nil, errors.New("limit should not be nil")
-	}
+func conditionsFromLimit(limit kuadrantv1beta3.Limit, routeRule gatewayapiv1.HTTPRouteRule) []Condition {
+	ruleConditions := conditionsFromRule(routeRule)
 
-	routeConditions := make([]Condition, 0)
-
-	// build conditions from all rules
-	for _, rule := range route.Spec.Rules {
-		routeConditions = append(routeConditions, conditionsFromRule(rule)...)
-	}
-
+	// only rule conditions (or no condition at all)
 	if len(limit.When) == 0 {
-		if len(routeConditions) == 0 {
-			return nil, nil
+		if len(ruleConditions) == 0 {
+			return nil
 		}
-		return routeConditions, nil
+		return ruleConditions
 	}
 
-	if len(routeConditions) > 0 {
-		// merge the 'when' conditions into each route level one
-		mergedConditions := make([]Condition, len(routeConditions))
-		for _, when := range limit.When {
-			for idx := range routeConditions {
-				mergedCondition := routeConditions[idx]
-				mergedCondition.AllOf = append(mergedCondition.AllOf, patternExpresionFromWhen(when))
-				mergedConditions[idx] = mergedCondition
-			}
-		}
-		return mergedConditions, nil
+	whenConditionToWasmPatternExpressionFunc := func(when kuadrantv1beta3.WhenCondition, _ int) PatternExpression {
+		return patternExpresionFromWhen(when)
 	}
 
-	// build conditions only from the 'when' field
-	whenConditions := make([]Condition, len(limit.When))
-	for idx, when := range limit.When {
-		whenConditions[idx] = Condition{AllOf: []PatternExpression{patternExpresionFromWhen(when)}}
+	// top-level conditions merged into the rule conditions
+	if len(ruleConditions) > 0 {
+		return lo.Map(ruleConditions, func(condition Condition, _ int) Condition {
+			condition.AllOf = append(condition.AllOf, lo.Map(limit.When, whenConditionToWasmPatternExpressionFunc)...)
+			return condition
+		})
 	}
-	return whenConditions, nil
+
+	// only top-level conditions
+	return []Condition{{AllOf: lo.Map(limit.When, whenConditionToWasmPatternExpressionFunc)}}
 }
 
 // conditionsFromRule builds a list of conditions from a rule
@@ -163,14 +124,14 @@ func conditionsFromRule(rule gatewayapiv1.HTTPRouteRule) []Condition {
 func patternExpresionsFromMatch(match gatewayapiv1.HTTPRouteMatch) []PatternExpression {
 	expressions := make([]PatternExpression, 0)
 
-	// path
-	if match.Path != nil {
-		expressions = append(expressions, patternExpresionFromPathMatch(*match.Path))
-	}
-
 	// method
 	if match.Method != nil {
 		expressions = append(expressions, patternExpresionFromMethod(*match.Method))
+	}
+
+	// path
+	if match.Path != nil {
+		expressions = append(expressions, patternExpresionFromPathMatch(*match.Path))
 	}
 
 	// headers
@@ -236,11 +197,7 @@ func patternExpresionFromWhen(when kuadrantv1beta3.WhenCondition) PatternExpress
 	}
 }
 
-func dataFromLimit(limitIdentifier string, limit *kuadrantv1beta3.Limit) (data []DataType) {
-	if limit == nil {
-		return
-	}
-
+func dataFromLimit(limitIdentifier string, limit kuadrantv1beta3.Limit) (data []DataType) {
 	// static key representing the limit
 	data = append(data,
 		DataType{
@@ -261,134 +218,4 @@ func dataFromLimit(limitIdentifier string, limit *kuadrantv1beta3.Limit) (data [
 	}
 
 	return data
-}
-
-func routeFromRLP(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta3.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*gatewayapiv1.HTTPRoute, error) {
-	logger, err := logr.FromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	route := t.GetPolicyHTTPRoute(rlp)
-
-	if route == nil {
-		// The policy is targeting a gateway
-		// This gateway policy will be enforced into all HTTPRoutes that do not have a policy attached to it
-
-		// Build imaginary route with all the routes not having a RLP targeting it
-		untargetedRoutes := t.GetUntargetedRoutes(gw)
-
-		if len(untargetedRoutes) == 0 {
-			// For policies targeting a gateway, when no httproutes is attached to the gateway, skip wasm config
-			// test wasm config when no http routes attached to the gateway
-			logger.V(1).Info("no untargeted httproutes attached to the targeted gateway, skipping wasm config for the gateway rlp", "ratelimitpolicy", client.ObjectKeyFromObject(rlp))
-			return nil, nil
-		}
-
-		untargetedRules := make([]gatewayapiv1.HTTPRouteRule, 0)
-		for idx := range untargetedRoutes {
-			untargetedRules = append(untargetedRules, untargetedRoutes[idx].Spec.Rules...)
-		}
-		gwHostnamesTmp := kuadrantgatewayapi.TargetHostnames(gw)
-		gwHostnames := utils.Map(gwHostnamesTmp, func(str string) gatewayapiv1.Hostname { return gatewayapiv1.Hostname(str) })
-		route = &gatewayapiv1.HTTPRoute{
-			Spec: gatewayapiv1.HTTPRouteSpec{
-				Hostnames: gwHostnames,
-				Rules:     untargetedRules,
-			},
-		}
-	}
-
-	return route, nil
-}
-
-func wasmRateLimitPolicy(ctx context.Context, t *kuadrantgatewayapi.TopologyIndexes, rlp *kuadrantv1beta3.RateLimitPolicy, gw *gatewayapiv1.Gateway) (*Policy, error) {
-	route, err := routeFromRLP(ctx, t, rlp, gw)
-	if err != nil {
-		return nil, err
-	}
-	if route == nil {
-		// no need to add the policy if there are no routes;
-		// a rlp can return no rules if all its limits fail to match any route rule
-		// or targeting a gateway with no "free" routes. "free" meaning no route with policies targeting it
-		return nil, nil
-	}
-
-	// narrow the list of hostnames specified in the route so we don't generate wasm rules that only apply to other gateways
-	// this is a no-op for the gateway rlp
-	gwHostnames := kuadrantgatewayapi.GatewayHostnames(gw)
-	if len(gwHostnames) == 0 {
-		gwHostnames = []gatewayapiv1.Hostname{"*"}
-	}
-	hostnames := kuadrantgatewayapi.FilterValidSubdomains(gwHostnames, route.Spec.Hostnames)
-	if len(hostnames) == 0 { // it should only happen when the route specifies no hostnames
-		hostnames = gwHostnames
-	}
-
-	//
-	// The route selectors logic rely on the "hostnames" field of the route object.
-	// However, routes effective hostname can be inherited from parent gateway,
-	// hence it depends on the context as multiple gateways can be targeted by a route
-	// The route selectors logic needs to be refactored
-	// or just deleted as soon as the HTTPRoute has name in the route object
-	//
-	routeWithEffectiveHostnames := route.DeepCopy()
-	routeWithEffectiveHostnames.Spec.Hostnames = hostnames
-
-	rules := Rules(rlp, routeWithEffectiveHostnames)
-	if len(rules) == 0 {
-		// no need to add the policy if there are no rules; a rlp can return no rules if all its limits fail to match any route rule
-		return nil, nil
-	}
-
-	return &Policy{
-		Name:      client.ObjectKeyFromObject(rlp).String(),
-		Hostnames: utils.HostnamesToStrings(hostnames), // we might be listing more hostnames than needed due to route selectors hostnames possibly being more restrictive
-		Rules:     rules,
-	}, nil
-}
-
-func ConfigForGateway(
-	ctx context.Context, gw *gatewayapiv1.Gateway,
-	topology *kuadrantgatewayapi.Topology) (*Config, error) {
-	logger, err := logr.FromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	topologyIndex := kuadrantgatewayapi.NewTopologyIndexes(topology)
-
-	rateLimitPolicies := topologyIndex.PoliciesFromGateway(gw)
-	logger.V(1).Info("WasmConfig", "#RLPS", len(rateLimitPolicies))
-
-	// Sort RLPs for consistent comparison with existing objects
-	sort.Sort(kuadrantgatewayapi.PolicyByTargetRefKindAndCreationTimeStamp(rateLimitPolicies))
-
-	config := &Config{
-		Extensions: map[string]Extension{
-			RateLimitPolicyExtensionName: {
-				Endpoint:    common.KuadrantRateLimitClusterName,
-				FailureMode: FailureModeAllow,
-				Type:        RateLimitExtensionType,
-			},
-		},
-		Policies: make([]Policy, 0),
-	}
-
-	for _, policy := range rateLimitPolicies {
-		rlp := policy.(*kuadrantv1beta3.RateLimitPolicy)
-		wasmRLP, err := wasmRateLimitPolicy(ctx, topologyIndex, rlp, gw)
-		if err != nil {
-			return nil, err
-		}
-
-		if wasmRLP == nil {
-			// skip this RLP
-			continue
-		}
-
-		config.Policies = append(config.Policies, *wasmRLP)
-	}
-
-	return config, nil
 }

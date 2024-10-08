@@ -98,16 +98,14 @@ func (r *limitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 		httpRoute, _ := effectivePolicy.Path[3].(*machinery.HTTPRoute) // assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]
 		limitsNamespace := wasm.LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
 		for limitKey, mergeableLimit := range effectivePolicy.Spec.Rules() {
-			policies := kuadrantv1.PoliciesInPath(effectivePolicy.Path, acceptedRateLimitPolicyFunc(state))
-			source, found := lo.Find(policies, func(policy machinery.Policy) bool {
-				return policy.GetLocator() == mergeableLimit.Source
+			policy, found := lo.Find(kuadrantv1.PoliciesInPath(effectivePolicy.Path, acceptedRateLimitPolicyFunc(state)), func(p machinery.Policy) bool {
+				return p.GetLocator() == mergeableLimit.Source
 			})
 			if !found { // should never happen
 				logger.Error(fmt.Errorf("origin policy %s not found in path %s", mergeableLimit.Source, pathID), "failed to build limitador limit definition")
 				continue
 			}
-			sourceKey := k8stypes.NamespacedName{Name: source.GetName(), Namespace: source.GetNamespace()}
-			limitIdentifier := wasm.LimitNameToLimitadorIdentifier(sourceKey, limitKey)
+			limitIdentifier := wasm.LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
 			limit := mergeableLimit.Spec.(kuadrantv1beta3.Limit)
 			rateLimits := lo.Map(limit.Rates, func(rate kuadrantv1beta3.Rate, i int) limitadorv1alpha1.RateLimit {
 				maxValue, seconds := rate.ToSeconds()

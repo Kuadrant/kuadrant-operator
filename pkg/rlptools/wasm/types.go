@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/samber/lo"
 	_struct "google.golang.org/protobuf/types/known/structpb"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -85,6 +86,18 @@ func (d *DataType) MarshalJSON() ([]byte, error) {
 	}
 }
 
+func (d *DataType) EqualTo(other DataType) bool {
+	dt, err := d.MarshalJSON()
+	if err != nil {
+		return false
+	}
+	odt, err := other.MarshalJSON()
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(dt, odt)
+}
+
 type PatternOperator kuadrantv1beta3.WhenConditionOperator
 
 type PatternExpression struct {
@@ -101,10 +114,23 @@ type PatternExpression struct {
 	Value string `json:"value"`
 }
 
+func (p *PatternExpression) EqualTo(other PatternExpression) bool {
+	return p.Selector == other.Selector &&
+		p.Operator == other.Operator &&
+		p.Value == other.Value
+}
+
 type Condition struct {
 	// All the expressions defined must match to match this rule
 	// +optional
 	AllOf []PatternExpression `json:"allOf,omitempty"`
+}
+
+func (c *Condition) EqualTo(other Condition) bool {
+	return len(c.AllOf) == len(other.AllOf) &&
+		lo.EveryBy(c.AllOf, func(expression PatternExpression) bool {
+			return lo.ContainsBy(other.AllOf, expression.EqualTo)
+		})
 }
 
 type Rule struct {
@@ -117,6 +143,17 @@ type Rule struct {
 	Actions []Action `json:"actions"`
 }
 
+func (r *Rule) EqualTo(other Rule) bool {
+	return len(r.Conditions) == len(other.Conditions) &&
+		len(r.Actions) == len(other.Actions) &&
+		lo.EveryBy(r.Conditions, func(condition Condition) bool {
+			return lo.ContainsBy(other.Conditions, condition.EqualTo)
+		}) &&
+		lo.EveryBy(r.Actions, func(action Action) bool {
+			return lo.ContainsBy(other.Actions, action.EqualTo)
+		})
+}
+
 type Policy struct {
 	Name      string   `json:"name"`
 	Hostnames []string `json:"hostnames"`
@@ -126,12 +163,31 @@ type Policy struct {
 	Rules []Rule `json:"rules,omitempty"`
 }
 
+func (p *Policy) EqualTo(other Policy) bool {
+	return p.Name == other.Name &&
+		len(p.Hostnames) == len(other.Hostnames) &&
+		len(p.Rules) == len(other.Rules) &&
+		lo.Every(p.Hostnames, other.Hostnames) &&
+		lo.EveryBy(p.Rules, func(rule Rule) bool {
+			return lo.ContainsBy(other.Rules, rule.EqualTo)
+		})
+}
+
 type Action struct {
 	Scope         string `json:"scope"`
 	ExtensionName string `json:"extension"`
 
 	// +optional
 	Data []DataType `json:"data,omitempty"`
+}
+
+func (a *Action) EqualTo(other Action) bool {
+	return a.Scope == other.Scope &&
+		a.ExtensionName == other.ExtensionName &&
+		len(a.Data) == len(other.Data) &&
+		lo.EveryBy(a.Data, func(data DataType) bool {
+			return lo.ContainsBy(other.Data, data.EqualTo)
+		})
 }
 
 // +kubebuilder:validation:Enum:=ratelimit;auth
@@ -165,8 +221,8 @@ type Config struct {
 	Policies   []Policy             `json:"policies"`
 }
 
-func (w *Config) ToStruct() (*_struct.Struct, error) {
-	configJSON, err := json.Marshal(w)
+func (c *Config) ToStruct() (*_struct.Struct, error) {
+	configJSON, err := json.Marshal(c)
 	if err != nil {
 		return nil, err
 	}
@@ -178,13 +234,29 @@ func (w *Config) ToStruct() (*_struct.Struct, error) {
 	return configStruct, nil
 }
 
-func (w *Config) ToJSON() (*apiextensionsv1.JSON, error) {
-	configJSON, err := json.Marshal(w)
+func (c *Config) ToJSON() (*apiextensionsv1.JSON, error) {
+	configJSON, err := json.Marshal(c)
 	if err != nil {
 		return nil, err
 	}
 
 	return &apiextensionsv1.JSON{Raw: configJSON}, nil
+}
+
+func (c *Config) EqualTo(other *Config) bool {
+	if len(c.Extensions) != len(other.Extensions) || len(c.Policies) != len(other.Policies) {
+		return false
+	}
+
+	for key, extension := range c.Extensions {
+		if otherExtension, ok := other.Extensions[key]; !ok || extension != otherExtension {
+			return false
+		}
+	}
+
+	return lo.EveryBy(c.Policies, func(policy Policy) bool {
+		return lo.ContainsBy(other.Policies, policy.EqualTo)
+	})
 }
 
 func ConfigFromStruct(structure *_struct.Struct) (*Config, error) {

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -17,99 +16,32 @@ import (
 
 // TODO(eastizle): missing WASMPluginMutator tests
 // TODO(eastizle): missing TestWasmRules use cases tests. Only happy path
-func TestRules(t *testing.T) {
-	httpRoute := &gatewayapiv1.HTTPRoute{
-		Spec: gatewayapiv1.HTTPRouteSpec{
-			Hostnames: []gatewayapiv1.Hostname{
-				"*.example.com",
-				"*.apps.example.internal",
-			},
-			Rules: []gatewayapiv1.HTTPRouteRule{
-				{
-					Matches: []gatewayapiv1.HTTPRouteMatch{
-						{
-							Path: &gatewayapiv1.HTTPPathMatch{
-								Type:  &[]gatewayapiv1.PathMatchType{gatewayapiv1.PathMatchPathPrefix}[0],
-								Value: &[]string{"/toy"}[0],
-							},
-							Method: &[]gatewayapiv1.HTTPMethod{"GET"}[0],
-						},
-					},
-				},
-			},
-		},
-	}
-
-	catchAllHTTPRoute := &gatewayapiv1.HTTPRoute{
-		Spec: gatewayapiv1.HTTPRouteSpec{
-			Hostnames: []gatewayapiv1.Hostname{"*"},
-		},
-	}
-
-	rlp := func(name string, limits map[string]kuadrantv1beta3.Limit) *kuadrantv1beta3.RateLimitPolicy {
-		return &kuadrantv1beta3.RateLimitPolicy{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: "my-app",
-			},
-			Spec: kuadrantv1beta3.RateLimitPolicySpec{
-				RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-					Limits: limits,
-				},
-			},
-		}
-	}
-
-	// a simple 50rps counter, for convinience, to be used in tests
-	counter50rps := kuadrantv1beta3.Rate{
-		Limit:    50,
-		Duration: 1,
-		Unit:     kuadrantv1beta3.TimeUnit("second"),
-	}
-
+func TestRuleFromLimit(t *testing.T) {
 	testCases := []struct {
-		name          string
-		rlp           *kuadrantv1beta3.RateLimitPolicy
-		route         *gatewayapiv1.HTTPRoute
-		expectedRules []Rule
+		name            string
+		limit           kuadrantv1beta3.Limit
+		limitIdentifier string
+		scope           string
+		routeRule       gatewayapiv1.HTTPRouteRule
+		expectedRule    Rule
 	}{
 		{
-			name: "minimal RLP",
-			rlp: rlp("minimal", map[string]kuadrantv1beta3.Limit{
-				"50rps": {
-					Rates: []kuadrantv1beta3.Rate{counter50rps},
-				},
-			}),
-			route: httpRoute,
-			expectedRules: []Rule{
-				{
-					Conditions: []Condition{
-						{
-							AllOf: []PatternExpression{
-								{
-									Selector: "request.url_path",
-									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/toy",
-								},
-								{
-									Selector: "request.method",
-									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-									Value:    "GET",
-								},
-							},
-						},
-					},
-					Actions: []Action{
-						{
-							Scope:         "my-app/minimal",
-							ExtensionName: RateLimitPolicyExtensionName,
-							Data: []DataType{
-								{
-									Value: &Static{
-										Static: StaticSpec{
-											Key:   "limit.50rps__36e9aa4c",
-											Value: "1",
-										},
+			name:            "limit without conditions nor counters",
+			limit:           kuadrantv1beta3.Limit{},
+			limitIdentifier: "limit.myLimit__d681f6c3",
+			scope:           "my-ns/my-route",
+			routeRule:       gatewayapiv1.HTTPRouteRule{},
+			expectedRule: Rule{
+				Actions: []Action{
+					{
+						Scope:         "my-ns/my-route",
+						ExtensionName: RateLimitPolicyExtensionName,
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
 									},
 								},
 							},
@@ -119,27 +51,68 @@ func TestRules(t *testing.T) {
 			},
 		},
 		{
-			name: "HTTPRouteRules without rule matches",
-			rlp: rlp("my-rlp", map[string]kuadrantv1beta3.Limit{
-				"50rps": {
-					Rates: []kuadrantv1beta3.Rate{counter50rps},
+			name:            "limit with httproutematch",
+			limit:           kuadrantv1beta3.Limit{},
+			limitIdentifier: "limit.myLimit__d681f6c3",
+			scope:           "my-ns/my-route",
+			routeRule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
+					{
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+							Value: ptr.To("/v1"),
+						},
+						Method: ptr.To(gatewayapiv1.HTTPMethodGet),
+						Headers: []gatewayapiv1.HTTPHeaderMatch{
+							{
+								Name:  gatewayapiv1.HTTPHeaderName("X-kuadrant-a"),
+								Value: "1",
+							},
+							{
+								Name:  gatewayapiv1.HTTPHeaderName("X-kuadrant-b"),
+								Value: "1",
+							},
+						},
+					},
 				},
-			}),
-			route: catchAllHTTPRoute,
-			expectedRules: []Rule{
-				{
-					Conditions: nil,
-					Actions: []Action{
-						{
-							Scope:         "my-app/my-rlp",
-							ExtensionName: RateLimitPolicyExtensionName,
-							Data: []DataType{
-								{
-									Value: &Static{
-										Static: StaticSpec{
-											Key:   "limit.50rps__783b9343",
-											Value: "1",
-										},
+			},
+			expectedRule: Rule{
+				Conditions: []Condition{
+					{
+						AllOf: []PatternExpression{
+							{
+								Selector: "request.method",
+								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+								Value:    "GET",
+							},
+							{
+								Selector: "request.url_path",
+								Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+								Value:    "/v1",
+							},
+							{
+								Selector: "request.headers.X-kuadrant-a",
+								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+								Value:    "1",
+							},
+							{
+								Selector: "request.headers.X-kuadrant-b",
+								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+								Value:    "1",
+							},
+						},
+					},
+				},
+				Actions: []Action{
+					{
+						Scope:         "my-ns/my-route",
+						ExtensionName: RateLimitPolicyExtensionName,
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
 									},
 								},
 							},
@@ -149,35 +122,61 @@ func TestRules(t *testing.T) {
 			},
 		},
 		{
-			name: "RLP with counter qualifier",
-			rlp: rlp("my-rlp", map[string]kuadrantv1beta3.Limit{
-				"50rps-per-username": {
-					Rates:    []kuadrantv1beta3.Rate{counter50rps},
-					Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
+			name: "limit with httproutematch and when conditions",
+			limit: kuadrantv1beta3.Limit{
+				When: []kuadrantv1beta3.WhenCondition{
+					{
+						Selector: kuadrantv1beta3.ContextSelector("auth.identity.group"),
+						Operator: kuadrantv1beta3.NotEqualOperator,
+						Value:    "admin",
+					},
 				},
-			}),
-			route: catchAllHTTPRoute,
-			expectedRules: []Rule{
-				{
-					Conditions: nil,
-					Actions: []Action{
-						{
-							Scope:         "my-app/my-rlp",
-							ExtensionName: RateLimitPolicyExtensionName,
-							Data: []DataType{
-								{
-									Value: &Static{
-										Static: StaticSpec{
-											Key:   "limit.50rps_per_username__d681f6c3",
-											Value: "1",
-										},
-									},
-								},
-								{
-									Value: &Selector{
-										Selector: SelectorSpec{
-											Selector: "auth.identity.username",
-										},
+			},
+			limitIdentifier: "limit.myLimit__d681f6c3",
+			scope:           "my-ns/my-route",
+			routeRule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
+					{
+						Method: ptr.To(gatewayapiv1.HTTPMethodGet),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+							Value: ptr.To("/toys"),
+						},
+					},
+				},
+			},
+			expectedRule: Rule{
+				Conditions: []Condition{
+					{
+						AllOf: []PatternExpression{
+							{
+								Selector: "request.method",
+								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+								Value:    "GET",
+							},
+							{
+								Selector: "request.url_path",
+								Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+								Value:    "/toys",
+							},
+							{
+								Selector: "auth.identity.group",
+								Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
+								Value:    "admin",
+							},
+						},
+					},
+				},
+				Actions: []Action{
+					{
+						Scope:         "my-ns/my-route",
+						ExtensionName: RateLimitPolicyExtensionName,
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
 									},
 								},
 							},
@@ -187,79 +186,69 @@ func TestRules(t *testing.T) {
 			},
 		},
 		{
-			name: "Route with header match",
-			rlp: rlp("my-rlp", map[string]kuadrantv1beta3.Limit{
-				"50rps": {
-					Rates: []kuadrantv1beta3.Rate{counter50rps},
-				},
-			}),
-			route: &gatewayapiv1.HTTPRoute{
-				Spec: gatewayapiv1.HTTPRouteSpec{
-					Hostnames: []gatewayapiv1.Hostname{"*.example.com"},
-					Rules: []gatewayapiv1.HTTPRouteRule{
-						{
-							Matches: []gatewayapiv1.HTTPRouteMatch{
-								{
-									Path: &gatewayapiv1.HTTPPathMatch{
-										Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-										Value: ptr.To("/v1"),
-									},
-									Method: ptr.To(gatewayapiv1.HTTPMethodGet),
-									Headers: []gatewayapiv1.HTTPHeaderMatch{
-										{
-											Name:  gatewayapiv1.HTTPHeaderName("X-kuadrant-a"),
-											Value: "1",
-										},
-										{
-											Name:  gatewayapiv1.HTTPHeaderName("X-kuadrant-b"),
-											Value: "1",
-										},
-									},
-								},
-							},
+			name:            "limit with multiple httproutematches",
+			limit:           kuadrantv1beta3.Limit{},
+			limitIdentifier: "limit.myLimit__d681f6c3",
+			scope:           "my-ns/my-route",
+			routeRule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
+					{
+						Method: ptr.To(gatewayapiv1.HTTPMethodGet),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+							Value: ptr.To("/toys"),
+						},
+					},
+					{
+						Method: ptr.To(gatewayapiv1.HTTPMethodPost),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+							Value: ptr.To("/toys"),
 						},
 					},
 				},
 			},
-			expectedRules: []Rule{
-				{
-					Conditions: []Condition{
-						{
-							AllOf: []PatternExpression{
-								{
-									Selector: "request.url_path",
-									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/v1",
-								},
-								{
-									Selector: "request.method",
-									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-									Value:    "GET",
-								},
-								{
-									Selector: "request.headers.X-kuadrant-a",
-									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-									Value:    "1",
-								},
-								{
-									Selector: "request.headers.X-kuadrant-b",
-									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-									Value:    "1",
-								},
+			expectedRule: Rule{
+				Conditions: []Condition{
+					{
+						AllOf: []PatternExpression{
+							{
+								Selector: "request.method",
+								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+								Value:    "GET",
+							},
+							{
+								Selector: "request.url_path",
+								Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+								Value:    "/toys",
 							},
 						},
 					},
-					Actions: []Action{
-						{
-							Scope:         "my-app/my-rlp",
-							ExtensionName: RateLimitPolicyExtensionName,
-							Data: []DataType{
-								{
-									Value: &Static{
-										Static: StaticSpec{
-											Key:   "limit.50rps__783b9343",
-											Value: "1",
-										},
+					{
+						AllOf: []PatternExpression{
+							{
+								Selector: "request.method",
+								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+								Value:    "POST",
+							},
+							{
+								Selector: "request.url_path",
+								Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+								Value:    "/toys",
+							},
+						},
+					},
+				},
+				Actions: []Action{
+					{
+						Scope:         "my-ns/my-route",
+						ExtensionName: RateLimitPolicyExtensionName,
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
 									},
 								},
 							},
@@ -269,52 +258,102 @@ func TestRules(t *testing.T) {
 			},
 		},
 		{
-			name: "RLP with when and counter attributes",
-			rlp: rlp("my-rlp", map[string]kuadrantv1beta3.Limit{
-				"users": {
-					Rates:    []kuadrantv1beta3.Rate{counter50rps},
-					Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
-					When: []kuadrantv1beta3.WhenCondition{
-						{
-							Selector: kuadrantv1beta3.ContextSelector("auth.identity.group"),
-							Operator: kuadrantv1beta3.NotEqualOperator,
-							Value:    "admin",
+			name: "limit with multiple httproutematches and when conditions",
+			limit: kuadrantv1beta3.Limit{
+				When: []kuadrantv1beta3.WhenCondition{
+					{
+						Selector: kuadrantv1beta3.ContextSelector("auth.identity.group"),
+						Operator: kuadrantv1beta3.NotEqualOperator,
+						Value:    "admin",
+					},
+					{
+						Selector: kuadrantv1beta3.ContextSelector("auth.authorization.ratelimited"),
+						Operator: kuadrantv1beta3.EqualOperator,
+						Value:    "true",
+					},
+				},
+			},
+			limitIdentifier: "limit.myLimit__d681f6c3",
+			scope:           "my-ns/my-route",
+			routeRule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
+					{
+						Method: ptr.To(gatewayapiv1.HTTPMethodGet),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+							Value: ptr.To("/toys"),
+						},
+					},
+					{
+						Method: ptr.To(gatewayapiv1.HTTPMethodPost),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+							Value: ptr.To("/toys"),
 						},
 					},
 				},
-				"all": {
-					Rates: []kuadrantv1beta3.Rate{counter50rps},
-				},
-			}),
-			route: &gatewayapiv1.HTTPRoute{
-				Spec: gatewayapiv1.HTTPRouteSpec{
-					Hostnames: []gatewayapiv1.Hostname{"api.toystore.com"},
-					// 2 rules
-					Rules: []gatewayapiv1.HTTPRouteRule{
-						{ // Toys rule (think about routing to toystore backend)
-							Matches: []gatewayapiv1.HTTPRouteMatch{
-								{
-									Path: &gatewayapiv1.HTTPPathMatch{
-										Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-										Value: ptr.To("/toys"),
-									},
-									Method: ptr.To(gatewayapiv1.HTTPMethodGet),
-								},
-								{
-									Path: &gatewayapiv1.HTTPPathMatch{
-										Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-										Value: ptr.To("/toys"),
-									},
-									Method: ptr.To(gatewayapiv1.HTTPMethodPost),
-								},
+			},
+			expectedRule: Rule{
+				Conditions: []Condition{
+					{
+						AllOf: []PatternExpression{
+							{
+								Selector: "request.method",
+								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+								Value:    "GET",
+							},
+							{
+								Selector: "request.url_path",
+								Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+								Value:    "/toys",
+							},
+							{
+								Selector: "auth.identity.group",
+								Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
+								Value:    "admin",
+							},
+							{
+								Selector: "auth.authorization.ratelimited",
+								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+								Value:    "true",
 							},
 						},
-						{ // Assets rule (think about routing to assets backend)
-							Matches: []gatewayapiv1.HTTPRouteMatch{
-								{
-									Path: &gatewayapiv1.HTTPPathMatch{
-										Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-										Value: ptr.To("/assets"),
+					},
+					{
+						AllOf: []PatternExpression{
+							{
+								Selector: "request.method",
+								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+								Value:    "POST",
+							},
+							{
+								Selector: "request.url_path",
+								Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+								Value:    "/toys",
+							},
+							{
+								Selector: "auth.identity.group",
+								Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
+								Value:    "admin",
+							},
+							{
+								Selector: "auth.authorization.ratelimited",
+								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+								Value:    "true",
+							},
+						},
+					},
+				},
+				Actions: []Action{
+					{
+						Scope:         "my-ns/my-route",
+						ExtensionName: RateLimitPolicyExtensionName,
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
 									},
 								},
 							},
@@ -322,137 +361,217 @@ func TestRules(t *testing.T) {
 					},
 				},
 			},
-			expectedRules: []Rule{
-				{ // rule associated to "all" limit
-					Conditions: []Condition{
-						{
-							AllOf: []PatternExpression{
-								{
-									Selector: "request.url_path",
-									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/toys",
-								},
-								{
-									Selector: "request.method",
-									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-									Value:    "GET",
-								},
-							},
-						},
-						{
-							AllOf: []PatternExpression{
-								{
-									Selector: "request.url_path",
-									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/toys",
-								},
-								{
-									Selector: "request.method",
-									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-									Value:    "POST",
+		},
+		{
+			name: "limit with counter qualifiers",
+			limit: kuadrantv1beta3.Limit{
+				Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
+			},
+			limitIdentifier: "limit.myLimit__d681f6c3",
+			scope:           "my-ns/my-route",
+			routeRule:       gatewayapiv1.HTTPRouteRule{},
+			expectedRule: Rule{
+				Actions: []Action{
+					{
+						Scope:         "my-ns/my-route",
+						ExtensionName: RateLimitPolicyExtensionName,
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
+									},
 								},
 							},
-						},
-						{
-							AllOf: []PatternExpression{
-								{
-									Selector: "request.url_path",
-									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/assets",
-								},
-							},
-						},
-					},
-					Actions: []Action{
-						{
-							Scope:         "my-app/my-rlp",
-							ExtensionName: RateLimitPolicyExtensionName,
-							Data: []DataType{
-								{
-									Value: &Static{
-										Static: StaticSpec{
-											Key:   "limit.all__1edae8a9",
-											Value: "1",
-										},
+							{
+								Value: &Selector{
+									Selector: SelectorSpec{
+										Selector: "auth.identity.username",
 									},
 								},
 							},
 						},
 					},
 				},
-				{ // rule associated to "users" limit
-					Conditions: []Condition{
-						{
-							AllOf: []PatternExpression{
-								{
-									Selector: "request.url_path",
-									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/toys",
-								},
-								{
-									Selector: "request.method",
-									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-									Value:    "GET",
-								},
-								{
-									Selector: "auth.identity.group",
-									Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
-									Value:    "admin",
-								},
+			},
+		},
+		{
+			name: "limit with counter qualifiers and httproutematch",
+			limit: kuadrantv1beta3.Limit{
+				Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
+			},
+			limitIdentifier: "limit.myLimit__d681f6c3",
+			scope:           "my-ns/my-route",
+			routeRule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
+					{
+						Method: ptr.To(gatewayapiv1.HTTPMethodGet),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+							Value: ptr.To("/toys"),
+						},
+					},
+				},
+			},
+			expectedRule: Rule{
+				Conditions: []Condition{
+					{
+						AllOf: []PatternExpression{
+							{
+								Selector: "request.method",
+								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+								Value:    "GET",
+							},
+							{
+								Selector: "request.url_path",
+								Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+								Value:    "/toys",
 							},
 						},
-						{
-							AllOf: []PatternExpression{
-								{
-									Selector: "request.url_path",
-									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/toys",
-								},
-								{
-									Selector: "request.method",
-									Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-									Value:    "POST",
-								},
-								{
-									Selector: "auth.identity.group",
-									Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
-									Value:    "admin",
+					},
+				},
+				Actions: []Action{
+					{
+						Scope:         "my-ns/my-route",
+						ExtensionName: RateLimitPolicyExtensionName,
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
+									},
 								},
 							},
-						},
-						{
-							AllOf: []PatternExpression{
-								{
-									Selector: "request.url_path",
-									Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/assets",
-								},
-								{
-									Selector: "auth.identity.group",
-									Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
-									Value:    "admin",
+							{
+								Value: &Selector{
+									Selector: SelectorSpec{
+										Selector: "auth.identity.username",
+									},
 								},
 							},
 						},
 					},
-					Actions: []Action{
-						{
-							Scope:         "my-app/my-rlp",
-							ExtensionName: RateLimitPolicyExtensionName,
-							Data: []DataType{
-								{
-									Value: &Static{
-										Static: StaticSpec{
-											Key:   "limit.users__6231d900",
-											Value: "1",
-										},
+				},
+			},
+		},
+		{
+			name: "limit with counter qualifiers and when conditions",
+			limit: kuadrantv1beta3.Limit{
+				Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
+				When: []kuadrantv1beta3.WhenCondition{
+					{
+						Selector: kuadrantv1beta3.ContextSelector("auth.identity.group"),
+						Operator: kuadrantv1beta3.NotEqualOperator,
+						Value:    "admin",
+					},
+				},
+			},
+			limitIdentifier: "limit.myLimit__d681f6c3",
+			scope:           "my-ns/my-route",
+			routeRule:       gatewayapiv1.HTTPRouteRule{},
+			expectedRule: Rule{
+				Conditions: []Condition{
+					{
+						AllOf: []PatternExpression{
+							{
+								Selector: "auth.identity.group",
+								Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
+								Value:    "admin",
+							},
+						},
+					},
+				},
+				Actions: []Action{
+					{
+						Scope:         "my-ns/my-route",
+						ExtensionName: RateLimitPolicyExtensionName,
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
 									},
 								},
-								{
-									Value: &Selector{
-										Selector: SelectorSpec{
-											Selector: "auth.identity.username",
-										},
+							},
+							{
+								Value: &Selector{
+									Selector: SelectorSpec{
+										Selector: "auth.identity.username",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "limit with counter qualifiers, httproutematch and when conditions",
+			limit: kuadrantv1beta3.Limit{
+				Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
+				When: []kuadrantv1beta3.WhenCondition{
+					{
+						Selector: kuadrantv1beta3.ContextSelector("auth.identity.group"),
+						Operator: kuadrantv1beta3.NotEqualOperator,
+						Value:    "admin",
+					},
+				},
+			},
+			limitIdentifier: "limit.myLimit__d681f6c3",
+			scope:           "my-ns/my-route",
+			routeRule: gatewayapiv1.HTTPRouteRule{
+				Matches: []gatewayapiv1.HTTPRouteMatch{
+					{
+						Method: ptr.To(gatewayapiv1.HTTPMethodGet),
+						Path: &gatewayapiv1.HTTPPathMatch{
+							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+							Value: ptr.To("/toys"),
+						},
+					},
+				},
+			},
+			expectedRule: Rule{
+				Conditions: []Condition{
+					{
+						AllOf: []PatternExpression{
+							{
+								Selector: "request.method",
+								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
+								Value:    "GET",
+							},
+							{
+								Selector: "request.url_path",
+								Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+								Value:    "/toys",
+							},
+							{
+								Selector: "auth.identity.group",
+								Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
+								Value:    "admin",
+							},
+						},
+					},
+				},
+				Actions: []Action{
+					{
+						Scope:         "my-ns/my-route",
+						ExtensionName: RateLimitPolicyExtensionName,
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "limit.myLimit__d681f6c3",
+										Value: "1",
+									},
+								},
+							},
+							{
+								Value: &Selector{
+									Selector: SelectorSpec{
+										Selector: "auth.identity.username",
 									},
 								},
 							},
@@ -465,9 +584,9 @@ func TestRules(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			computedRules := Rules(tc.rlp, tc.route)
-			if diff := cmp.Diff(tc.expectedRules, computedRules); diff != "" {
-				t.Errorf("unexpected wasm rules (-want +got):\n%s", diff)
+			computedRule := RuleFromLimit(tc.limit, tc.limitIdentifier, tc.scope, tc.routeRule)
+			if diff := cmp.Diff(tc.expectedRule, computedRule); diff != "" {
+				t.Errorf("unexpected wasm rule (-want +got):\n%s", diff)
 			}
 		})
 	}

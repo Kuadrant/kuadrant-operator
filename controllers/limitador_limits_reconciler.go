@@ -38,8 +38,11 @@ func (r *limitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 
 	kuadrant, err := GetKuadrantFromTopology(topology)
 	if err != nil {
-		logger.Error(err, "failed to get kuadrant from topology")
-		return nil
+		if err == ErrMissingKuadrant {
+			logger.V(1).Info(ErrMissingKuadrant.Error())
+			return nil
+		}
+		return err
 	}
 
 	limitadorObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {

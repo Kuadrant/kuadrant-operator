@@ -262,7 +262,7 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	dClient, err := dynamic.NewForConfig(mgr.GetConfig())
 	Expect(err).NotTo(HaveOccurred())
 
-	stateOfTheWorld := (&PolicyMachineryController{}).Controller(mgr, dClient, log.Log)
+	stateOfTheWorld := NewPolicyMachineryController(mgr, dClient, log.Log)
 
 	go func() {
 		defer GinkgoRecover()

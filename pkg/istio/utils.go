@@ -14,6 +14,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 var (
@@ -47,7 +48,7 @@ func PolicyTargetRefFromGateway(gateway *gatewayapiv1.Gateway) *istiocommon.Poli
 }
 
 func IsEnvoyFilterInstalled(restMapper meta.RESTMapper) (bool, error) {
-	return kuadrantgatewayapi.IsCRDInstalled(
+	return utils.IsCRDInstalled(
 		restMapper,
 		istioclientnetworkingv1alpha3.GroupName,
 		"EnvoyFilter",
@@ -55,7 +56,7 @@ func IsEnvoyFilterInstalled(restMapper meta.RESTMapper) (bool, error) {
 }
 
 func IsWASMPluginInstalled(restMapper meta.RESTMapper) (bool, error) {
-	return kuadrantgatewayapi.IsCRDInstalled(
+	return utils.IsCRDInstalled(
 		restMapper,
 		istioclientgoextensionv1alpha1.GroupName,
 		"WasmPlugin",
@@ -63,7 +64,7 @@ func IsWASMPluginInstalled(restMapper meta.RESTMapper) (bool, error) {
 }
 
 func IsAuthorizationPolicyInstalled(restMapper meta.RESTMapper) (bool, error) {
-	return kuadrantgatewayapi.IsCRDInstalled(
+	return utils.IsCRDInstalled(
 		restMapper,
 		istioclientgosecurityv1beta1.GroupName,
 		"AuthorizationPolicy",

@@ -119,6 +119,7 @@ The `make bundle` target accepts the following variables:
 | `AUTHORINO_OPERATOR_BUNDLE_IMG` | Authorino operator bundle URL | `quay.io/kuadrant/authorino-operator-bundle:latest` | `AUTHORINO_OPERATOR_VERSION` var could be used to build this, defaults to _latest_ if not provided |
 | `DNS_OPERATOR_BUNDLE_IMG`       | DNS operator bundle URL       | `quay.io/kuadrant/dns-operator-bundle:latest`       | `DNS_OPERATOR_BUNDLE_IMG` var could be used to build this, defaults to _latest_ if not provided    |
 | `RELATED_IMAGE_WASMSHIM`        | WASM shim image URL           | `oci://quay.io/kuadrant/wasm-shim:latest`           | `WASM_SHIM_VERSION` var could be used to build this, defaults to _latest_ if not provided          |
+| `RELATED_IMAGE_CONSOLEPLUGIN`   | ConsolePlugin image URL       | `quay.io/kuadrant/console-plugin:latest`            |                                                                                                  |
 | `CHANNELS`                      | Bundle channels used in the bundle, comma separated  | `alpha`           |                                                                                                               |
 | `DEFAULT_CHANNEL`               | The default channel used in the bundle               | `alpha`           |                                                                                                               |
 

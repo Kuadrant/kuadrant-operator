@@ -15,6 +15,10 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
+const (
+	TopologyConfigMapName = "topology"
+)
+
 type TopologyReconciler struct {
 	Client    *dynamic.DynamicClient
 	Namespace string
@@ -32,7 +36,7 @@ func (r *TopologyReconciler) Reconcile(ctx context.Context, _ []controller.Resou
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "topology",
+			Name:      TopologyConfigMapName,
 			Namespace: r.Namespace,
 			Labels:    map[string]string{kuadrant.TopologyLabel: "true"},
 		},

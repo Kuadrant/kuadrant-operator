@@ -14881,6 +14881,18 @@ rules:
   - list
   - watch
 - apiGroups:
+  - console.openshift.io
+  resources:
+  - consoleplugins
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - coordination.k8s.io
   resources:
   - configmaps
@@ -15342,6 +15354,8 @@ spec:
         env:
         - name: RELATED_IMAGE_WASMSHIM
           value: oci://quay.io/kuadrant/wasm-shim:latest
+        - name: RELATED_IMAGE_CONSOLEPLUGIN
+          value: quay.io/kuadrant/console-plugin:latest
         - name: OPERATOR_NAMESPACE
           valueFrom:
             fieldRef:

@@ -29,6 +29,7 @@ import (
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	consolev1 "github.com/openshift/api/console/v1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -308,6 +309,7 @@ func BootstrapScheme() *runtime.Scheme {
 		certmanv1.AddToScheme,
 		maistraapis.AddToScheme,
 		egv1alpha1.AddToScheme,
+		consolev1.AddToScheme,
 	)
 
 	err := sb.AddToScheme(s)

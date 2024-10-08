@@ -9,6 +9,7 @@ import (
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
+	consolev1 "github.com/openshift/api/console/v1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -28,6 +29,8 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/openshift"
+	"github.com/kuadrant/kuadrant-operator/pkg/openshift/consoleplugin"
 )
 
 var (
@@ -116,8 +119,8 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		// TODO: add istio specific tasks to workflow
 	}
 
-	ok, err = kuadrantgatewayapi.IsCertManagerInstalled(manager.GetRESTMapper(), logger)
-	if err != nil || !ok {
+	isCertManagerInstalled, err := kuadrantgatewayapi.IsCertManagerInstalled(manager.GetRESTMapper(), logger)
+	if err != nil || !isCertManagerInstalled {
 		logger.Info("cert manager is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts,
@@ -134,12 +137,24 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		// TODO: add tls policy specific tasks to workflow
 	}
 
-	controllerOpts = append(controllerOpts, controller.WithReconcile(buildReconciler(client, isIstioInstalled, isEnvoyGatewayInstalled)))
+	isConsolePluginInstalled, err := openshift.IsConsolePluginInstalled(manager.GetRESTMapper())
+	if err != nil || !isConsolePluginInstalled {
+		logger.Info("console plugin is not installed, skipping related watches and reconcilers", "err", err)
+	} else {
+		controllerOpts = append(controllerOpts,
+			controller.WithRunnable("consoleplugin watcher", controller.Watch(
+				&consolev1.ConsolePlugin{}, openshift.ConsolePluginsResource, metav1.NamespaceAll,
+				controller.FilterResourcesByLabel[*consolev1.ConsolePlugin](fmt.Sprintf("%s=%s", consoleplugin.AppLabelKey, consoleplugin.AppLabelValue)))),
+			controller.WithObjectKinds(openshift.ConsolePluginGVK.GroupKind()),
+		)
+	}
+
+	controllerOpts = append(controllerOpts, controller.WithReconcile(buildReconciler(manager, client, isIstioInstalled, isEnvoyGatewayInstalled, isConsolePluginInstalled)))
 
 	return controller.NewController(controllerOpts...)
 }
 
-func buildReconciler(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) controller.ReconcileFunc {
+func buildReconciler(manager ctrlruntime.Manager, client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled, isConsolePluginInstalled bool) controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
 		Precondition: initWorkflow(client).Run,
 		Tasks: []controller.ReconcileFunc{
@@ -151,6 +166,12 @@ func buildReconciler(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGat
 			NewRateLimitWorkflow().Run,
 		},
 		Postcondition: finalStepsWorkflow(client, isIstioInstalled, isEnvoyGatewayInstalled).Run,
+	}
+
+	if isConsolePluginInstalled {
+		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
+			NewConsolePluginReconciler(manager, operatorNamespace).Subscription().Reconcile,
+		)
 	}
 
 	return mainWorkflow.Run

@@ -5,7 +5,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 var (
@@ -19,7 +19,7 @@ var (
 )
 
 func IsEnvoyPatchPolicyInstalled(restMapper meta.RESTMapper) (bool, error) {
-	return kuadrantgatewayapi.IsCRDInstalled(
+	return utils.IsCRDInstalled(
 		restMapper,
 		egv1alpha1.GroupName,
 		egv1alpha1.KindEnvoyPatchPolicy,
@@ -27,7 +27,7 @@ func IsEnvoyPatchPolicyInstalled(restMapper meta.RESTMapper) (bool, error) {
 }
 
 func IsEnvoyExtensionPolicyInstalled(restMapper meta.RESTMapper) (bool, error) {
-	return kuadrantgatewayapi.IsCRDInstalled(
+	return utils.IsCRDInstalled(
 		restMapper,
 		egv1alpha1.GroupName,
 		egv1alpha1.KindEnvoyExtensionPolicy,
@@ -35,7 +35,7 @@ func IsEnvoyExtensionPolicyInstalled(restMapper meta.RESTMapper) (bool, error) {
 }
 
 func IsEnvoyGatewaySecurityPolicyInstalled(restMapper meta.RESTMapper) (bool, error) {
-	return kuadrantgatewayapi.IsCRDInstalled(
+	return utils.IsCRDInstalled(
 		restMapper,
 		egv1alpha1.GroupName,
 		egv1alpha1.KindSecurityPolicy,

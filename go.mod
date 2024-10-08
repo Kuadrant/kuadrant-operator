@@ -18,6 +18,7 @@ require (
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/onsi/ginkgo/v2 v2.20.2
 	github.com/onsi/gomega v1.34.1
+	github.com/openshift/api v0.0.0-20240926211938-f89ab92f1597
 	github.com/prometheus/client_golang v1.19.1
 	github.com/samber/lo v1.39.0
 	go.uber.org/zap v1.27.0

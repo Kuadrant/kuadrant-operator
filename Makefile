@@ -96,6 +96,7 @@ endif
 
 # Kuadrant Namespace
 KUADRANT_NAMESPACE ?= kuadrant-system
+OPERATOR_NAMESPACE ?= $(KUADRANT_NAMESPACE)
 
 # Kuadrant component versions
 ## authorino
@@ -340,7 +341,7 @@ build: generate fmt vet ## Build manager binary.
 
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
-run: export OPERATOR_NAMESPACE = kuadrant-system
+run: export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 run: generate fmt vet ## Run a controller from your host.
@@ -383,12 +384,18 @@ rm -rf $$TMP_DIR ;\
 }
 endef
 
+RELATED_IMAGE_CONSOLEPLUGIN ?= quay.io/kuadrant/console-plugin:latest
+
 .PHONY: bundle
 bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## Generate bundle manifests and metadata, then validate generated files.
 	$(OPERATOR_SDK) generate kustomize manifests -q
-	# Set desired operator image and related wasm shim image
+	# Set desired Wasm-shim image
 	V="$(RELATED_IMAGE_WASMSHIM)" \
 	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_WASMSHIM").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired ConsolePlugin image
+	V="$(RELATED_IMAGE_CONSOLEPLUGIN)" \
+	$(YQ) eval '(select(.kind == "Deployment").spec.template.spec.containers[].env[] | select(.name == "RELATED_IMAGE_CONSOLEPLUGIN").value) = strenv(V)' -i config/manager/manager.yaml
+	# Set desired operator image
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	# Update CSV
 	$(call update-csv-config,kuadrant-operator.v$(BUNDLE_VERSION),config/manifests/bases/kuadrant-operator.clusterserviceversion.yaml,.metadata.name)
@@ -443,11 +450,13 @@ prepare-release: ## Prepare the manifests for OLM and Helm Chart for a release.
 		LIMITADOR_OPERATOR_VERSION=$(LIMITADOR_OPERATOR_VERSION) \
 		DNS_OPERATOR_VERSION=$(DNS_OPERATOR_VERSION) \
 		WASM_SHIM_VERSION=$(WASM_SHIM_VERSION) \
+		RELATED_IMAGE_CONSOLEPLUGIN=$(RELATED_IMAGE_CONSOLEPLUGIN) \
 	$(MAKE) helm-build VERSION=$(VERSION) \
 		AUTHORINO_OPERATOR_VERSION=$(AUTHORINO_OPERATOR_VERSION) \
 		LIMITADOR_OPERATOR_VERSION=$(LIMITADOR_OPERATOR_VERSION) \
 		DNS_OPERATOR_VERSION=$(DNS_OPERATOR_VERSION) \
-		WASM_SHIM_VERSION=$(WASM_SHIM_VERSION)
+		WASM_SHIM_VERSION=$(WASM_SHIM_VERSION) \
+		RELATED_IMAGE_CONSOLEPLUGIN=$(RELATED_IMAGE_CONSOLEPLUGIN)
 	sed -i -e 's/Version = ".*"/Version = "$(VERSION)"/' $(PROJECT_PATH)/version/version.go
 
 ##@ Code Style

@@ -70,10 +70,6 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
 		desiredWasmPlugin := r.buildWasmPluginForGateway(gateway, wasmPolicies[gateway.GetLocator()])
-		desiredWasmPluginConfig, err := wasm.ConfigFromStruct(desiredWasmPlugin.Spec.PluginConfig)
-		if err != nil {
-			return err
-		}
 
 		resource := r.client.Resource(kuadrantistio.WasmPluginsResource).Namespace(desiredWasmPlugin.GetNamespace())
 
@@ -98,10 +94,6 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		}
 
 		existingWasmPlugin := existingWasmPluginObj.(*controller.RuntimeObject).Object.(*istioclientgoextensionv1alpha1.WasmPlugin)
-		existingWasmPluginConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
-		if err != nil {
-			return err
-		}
 
 		// delete
 		if utils.IsObjectTaggedToDelete(desiredWasmPlugin) && !utils.IsObjectTaggedToDelete(existingWasmPlugin) {
@@ -113,7 +105,7 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		}
 
 		// update
-		if existingWasmPlugin.Spec.Url != desiredWasmPlugin.Spec.Url || existingWasmPlugin.Spec.Phase != desiredWasmPlugin.Spec.Phase || len(existingWasmPlugin.Spec.TargetRefs) != 1 && !desiredWasmPluginConfig.EqualTo(existingWasmPluginConfig) {
+		if !equalWasmPlugins(existingWasmPlugin, desiredWasmPlugin) {
 			existingWasmPlugin.Spec.Url = desiredWasmPlugin.Spec.Url
 			existingWasmPlugin.Spec.Phase = desiredWasmPlugin.Spec.Phase
 			existingWasmPlugin.Spec.TargetRefs = desiredWasmPlugin.Spec.TargetRefs
@@ -237,4 +229,38 @@ func hostnamesFromListenerAndHTTPRoute(listener *machinery.Listener, httpRoute *
 		})
 	}
 	return lo.Filter(hostnames, func(h gatewayapiv1.Hostname, _ int) bool { return h != "*" })
+}
+
+func equalWasmPlugins(a, b *istioclientgoextensionv1alpha1.WasmPlugin) bool {
+	aTargetRef := ptr.Deref(a.Spec.TargetRef, istiov1beta1.PolicyTargetReference{})
+	bTargetRef := ptr.Deref(b.Spec.TargetRef, istiov1beta1.PolicyTargetReference{})
+
+	if a.Spec.Url != b.Spec.Url || a.Spec.Phase != b.Spec.Phase || aTargetRef.Group != bTargetRef.Group || aTargetRef.Kind != bTargetRef.Kind || aTargetRef.Name != bTargetRef.Name || aTargetRef.Namespace != bTargetRef.Namespace {
+		return false
+	}
+
+	if a.Spec.PluginConfig == nil && b.Spec.PluginConfig == nil {
+		return true
+	}
+
+	var err error
+
+	var aConfig *wasm.Config
+	var bConfig *wasm.Config
+
+	if a.Spec.PluginConfig != nil {
+		aConfig, err = wasm.ConfigFromStruct(a.Spec.PluginConfig)
+		if err != nil {
+			return false
+		}
+	}
+
+	if b.Spec.PluginConfig != nil {
+		bConfig, err = wasm.ConfigFromStruct(b.Spec.PluginConfig)
+		if err != nil {
+			return false
+		}
+	}
+
+	return aConfig != nil && bConfig != nil && aConfig.EqualTo(bConfig)
 }

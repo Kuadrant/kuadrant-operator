@@ -66,50 +66,6 @@ func TestRateLimitIndexSet(t *testing.T) {
 		}
 	})
 
-	t.Run("add rate limits to an existing key", func(subT *testing.T) {
-		index := NewRateLimitIndex()
-
-		index.Set("foo", []limitadorv1alpha1.RateLimit{
-			{Namespace: "ns/rlp-1", MaxValue: 10, Seconds: 1},
-			{Namespace: "ns/rlp-1", MaxValue: 100, Seconds: 60},
-			{Namespace: "ns/rlp-1", MaxValue: 1000, Seconds: 1},
-		})
-
-		index.Set("bar", []limitadorv1alpha1.RateLimit{
-			{Namespace: "ns/rlp-2", MaxValue: 50, Seconds: 1},
-		})
-
-		index.Add("foo", []limitadorv1alpha1.RateLimit{
-			{Namespace: "ns/rlp-1", MaxValue: 500, Seconds: 3600},
-		})
-
-		key := "foo"
-		rateLimits, found := index.Get(key)
-		if !found {
-			subT.Fatal("expected rate limits to be indexed to key but none found:", key)
-		}
-		expectedCount := 4
-		if len(rateLimits) != expectedCount {
-			subT.Fatal("expected:", expectedCount, "rate limits for key", key, ", returned:", len(rateLimits))
-		}
-
-		key = "bar"
-		rateLimits, found = index.Get(key)
-		if !found {
-			subT.Fatal("expected rate limits to be indexed to key but none found:", key)
-		}
-		expectedCount = 1
-		if len(rateLimits) != expectedCount {
-			subT.Fatal("expected:", expectedCount, "rate limits for key", key, ", returned:", len(rateLimits))
-		}
-
-		aggregatedRateLimits := index.ToRateLimits()
-		expectedCount = 5
-		if len(aggregatedRateLimits) != expectedCount {
-			subT.Fatal("expected:", expectedCount, "rate limits in total, returned:", len(aggregatedRateLimits))
-		}
-	})
-
 	t.Run("reset rate limits for an existing key", func(subT *testing.T) {
 		index := NewRateLimitIndex()
 

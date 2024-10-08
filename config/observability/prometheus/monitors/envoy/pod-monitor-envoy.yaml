@@ -2,13 +2,15 @@ apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
   name: envoy-stats
+  namespace: envoy-gateway-system 
 spec:
   namespaceSelector:
     matchNames:
-    - gateway-system
+      - gateway-system
   selector:
     matchLabels:
       app: kuadrant-ingressgateway
   podMetricsEndpoints:
-  - port: http-envoy-prom
-    path: /stats/prometheus
+    - port: http-envoy-prom
+      path: /stats/prometheus
+

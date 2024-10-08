@@ -54,6 +54,10 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	// build wasm plugin policies for each gateway
 	wasmPolicies, err := r.buildWasmPoliciesPerGateway(ctx, state)
 	if err != nil {
+		if err == ErrMissingStateEffectiveRateLimitPolicies {
+			logger.V(1).Info(ErrMissingStateEffectiveRateLimitPolicies.Error())
+			return nil
+		}
 		return err
 	}
 

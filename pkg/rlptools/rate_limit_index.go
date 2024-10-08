@@ -1,7 +1,6 @@
 package rlptools
 
 import (
-	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -9,7 +8,6 @@ import (
 
 	"github.com/elliotchance/orderedmap/v2"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
-	"github.com/samber/lo"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -25,17 +23,13 @@ type RateLimitIndex struct {
 	orderedmap.OrderedMap[string, RateLimitList]
 }
 
-func (l *RateLimitIndex) Add(key string, rateLimits RateLimitList) {
+func (l *RateLimitIndex) Set(key string, rateLimits RateLimitList) {
 	if len(rateLimits) == 0 {
 		return
 	}
 	l.Lock()
 	defer l.Unlock()
-	rlSet, _ := l.Get(key)
-	newSet := lo.UniqBy(append(rlSet, rateLimits...), func(rl limitadorv1alpha1.RateLimit) string {
-		return fmt.Sprintf("%s/%s", rl.Namespace, rl.Name)
-	})
-	l.OrderedMap.Set(key, newSet)
+	l.OrderedMap.Set(key, rateLimits)
 }
 
 func (l *RateLimitIndex) ToRateLimits() RateLimitList {

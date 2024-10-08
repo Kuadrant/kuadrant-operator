@@ -107,18 +107,17 @@ func (r *limitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 			}
 			limitIdentifier := wasm.LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
 			limit := mergeableLimit.Spec.(kuadrantv1beta3.Limit)
-			rateLimits := lo.Map(limit.Rates, func(rate kuadrantv1beta3.Rate, i int) limitadorv1alpha1.RateLimit {
+			rateLimits := lo.Map(limit.Rates, func(rate kuadrantv1beta3.Rate, _ int) limitadorv1alpha1.RateLimit {
 				maxValue, seconds := rate.ToSeconds()
 				return limitadorv1alpha1.RateLimit{
 					Namespace:  limitsNamespace,
-					Name:       wasm.ToLimitadorRateLimitName(limitIdentifier, fmt.Sprintf("%d", i)),
 					MaxValue:   maxValue,
 					Seconds:    seconds,
 					Conditions: []string{fmt.Sprintf("%s == \"1\"", limitIdentifier)},
 					Variables:  utils.GetEmptySliceIfNil(limit.CountersAsStringList()),
 				}
 			})
-			rateLimitIndex.Add(limitsNamespace, rateLimits)
+			rateLimitIndex.Set(fmt.Sprintf("%s/%s", limitsNamespace, limitIdentifier), rateLimits)
 		}
 	}
 

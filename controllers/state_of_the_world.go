@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
+	ctrlruntimepredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
@@ -45,14 +46,53 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.ManagedBy(manager),
 		controller.WithLogger(logger),
 		controller.WithClient(client),
-		controller.WithRunnable("kuadrant watcher", controller.Watch(&kuadrantv1beta1.Kuadrant{}, kuadrantv1beta1.KuadrantsResource, metav1.NamespaceAll)),
-		controller.WithRunnable("dnspolicy watcher", controller.Watch(&kuadrantv1alpha1.DNSPolicy{}, kuadrantv1alpha1.DNSPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("tlspolicy watcher", controller.Watch(&kuadrantv1alpha1.TLSPolicy{}, kuadrantv1alpha1.TLSPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("authpolicy watcher", controller.Watch(&kuadrantv1beta2.AuthPolicy{}, kuadrantv1beta2.AuthPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(&kuadrantv1beta3.RateLimitPolicy{}, kuadrantv1beta3.RateLimitPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("topology configmap watcher", controller.Watch(&corev1.ConfigMap{}, controller.ConfigMapsResource, operatorNamespace, controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)))),
-		controller.WithRunnable("limitador watcher", controller.Watch(&limitadorv1alpha1.Limitador{}, kuadrantv1beta1.LimitadorsResource, metav1.NamespaceAll)),
-		controller.WithRunnable("authorino watcher", controller.Watch(&authorinov1beta1.Authorino{}, kuadrantv1beta1.AuthorinosResource, metav1.NamespaceAll)),
+		controller.WithRunnable("kuadrant watcher", controller.Watch(
+			&kuadrantv1beta1.Kuadrant{},
+			kuadrantv1beta1.KuadrantsResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta1.Kuadrant]{}),
+		)),
+		controller.WithRunnable("dnspolicy watcher", controller.Watch(
+			&kuadrantv1alpha1.DNSPolicy{},
+			kuadrantv1alpha1.DNSPoliciesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1alpha1.DNSPolicy]{}),
+		)),
+		controller.WithRunnable("tlspolicy watcher", controller.Watch(
+			&kuadrantv1alpha1.TLSPolicy{},
+			kuadrantv1alpha1.TLSPoliciesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1alpha1.TLSPolicy]{}),
+		)),
+		controller.WithRunnable("authpolicy watcher", controller.Watch(
+			&kuadrantv1beta2.AuthPolicy{},
+			kuadrantv1beta2.AuthPoliciesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta2.AuthPolicy]{}),
+		)),
+		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(
+			&kuadrantv1beta3.RateLimitPolicy{},
+			kuadrantv1beta3.RateLimitPoliciesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta3.RateLimitPolicy]{}),
+		)),
+		controller.WithRunnable("topology configmap watcher", controller.Watch(
+			&corev1.ConfigMap{},
+			controller.ConfigMapsResource,
+			operatorNamespace,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*corev1.ConfigMap]{}),
+			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)),
+		)),
+		controller.WithRunnable("limitador watcher", controller.Watch(
+			&limitadorv1alpha1.Limitador{},
+			kuadrantv1beta1.LimitadorsResource,
+			metav1.NamespaceAll,
+		)),
+		controller.WithRunnable("authorino watcher", controller.Watch(
+			&authorinov1beta1.Authorino{},
+			kuadrantv1beta1.AuthorinosResource,
+			metav1.NamespaceAll,
+		)),
 		controller.WithPolicyKinds(
 			kuadrantv1alpha1.DNSPolicyGroupKind,
 			kuadrantv1alpha1.TLSPolicyGroupKind,
@@ -77,9 +117,21 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		logger.Info("gateway api is not installed, skipping watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts,
-			controller.WithRunnable("gatewayclass watcher", controller.Watch(&gwapiv1.GatewayClass{}, controller.GatewayClassesResource, metav1.NamespaceAll)),
-			controller.WithRunnable("gateway watcher", controller.Watch(&gwapiv1.Gateway{}, controller.GatewaysResource, metav1.NamespaceAll)),
-			controller.WithRunnable("httproute watcher", controller.Watch(&gwapiv1.HTTPRoute{}, controller.HTTPRoutesResource, metav1.NamespaceAll)),
+			controller.WithRunnable("gatewayclass watcher", controller.Watch(
+				&gwapiv1.GatewayClass{},
+				controller.GatewayClassesResource,
+				metav1.NamespaceAll,
+			)),
+			controller.WithRunnable("gateway watcher", controller.Watch(
+				&gwapiv1.Gateway{},
+				controller.GatewaysResource,
+				metav1.NamespaceAll,
+			)),
+			controller.WithRunnable("httproute watcher", controller.Watch(
+				&gwapiv1.HTTPRoute{},
+				controller.HTTPRoutesResource,
+				metav1.NamespaceAll,
+			)),
 		)
 	}
 
@@ -88,9 +140,21 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		logger.Info("envoygateway is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts,
-			controller.WithRunnable("envoypatchpolicy watcher", controller.Watch(&egv1alpha1.EnvoyPatchPolicy{}, envoygateway.EnvoyPatchPoliciesResource, metav1.NamespaceAll)),
-			controller.WithRunnable("envoyextensionpolicy watcher", controller.Watch(&egv1alpha1.EnvoyExtensionPolicy{}, envoygateway.EnvoyExtensionPoliciesResource, metav1.NamespaceAll)),
-			controller.WithRunnable("envoysecuritypolicy watcher", controller.Watch(&egv1alpha1.SecurityPolicy{}, envoygateway.SecurityPoliciesResource, metav1.NamespaceAll)),
+			controller.WithRunnable("envoypatchpolicy watcher", controller.Watch(
+				&egv1alpha1.EnvoyPatchPolicy{},
+				envoygateway.EnvoyPatchPoliciesResource,
+				metav1.NamespaceAll,
+			)),
+			controller.WithRunnable("envoyextensionpolicy watcher", controller.Watch(
+				&egv1alpha1.EnvoyExtensionPolicy{},
+				envoygateway.EnvoyExtensionPoliciesResource,
+				metav1.NamespaceAll,
+			)),
+			controller.WithRunnable("envoysecuritypolicy watcher", controller.Watch(
+				&egv1alpha1.SecurityPolicy{},
+				envoygateway.SecurityPoliciesResource,
+				metav1.NamespaceAll,
+			)),
 			controller.WithObjectKinds(
 				envoygateway.EnvoyPatchPolicyGroupKind,
 				envoygateway.EnvoyExtensionPolicyGroupKind,
@@ -106,9 +170,21 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		logger.Info("istio is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts,
-			controller.WithRunnable("envoyfilter watcher", controller.Watch(&istioclientnetworkingv1alpha3.EnvoyFilter{}, istio.EnvoyFiltersResource, metav1.NamespaceAll)),
-			controller.WithRunnable("wasmplugin watcher", controller.Watch(&istioclientgoextensionv1alpha1.WasmPlugin{}, istio.WasmPluginsResource, metav1.NamespaceAll)),
-			controller.WithRunnable("authorizationpolicy watcher", controller.Watch(&istioclientgosecurityv1beta1.AuthorizationPolicy{}, istio.AuthorizationPoliciesResource, metav1.NamespaceAll)),
+			controller.WithRunnable("envoyfilter watcher", controller.Watch(
+				&istioclientnetworkingv1alpha3.EnvoyFilter{},
+				istio.EnvoyFiltersResource,
+				metav1.NamespaceAll,
+			)),
+			controller.WithRunnable("wasmplugin watcher", controller.Watch(
+				&istioclientgoextensionv1alpha1.WasmPlugin{},
+				istio.WasmPluginsResource,
+				metav1.NamespaceAll,
+			)),
+			controller.WithRunnable("authorizationpolicy watcher", controller.Watch(
+				&istioclientgosecurityv1beta1.AuthorizationPolicy{},
+				istio.AuthorizationPoliciesResource,
+				metav1.NamespaceAll,
+			)),
 			controller.WithObjectKinds(
 				istio.EnvoyFilterGroupKind,
 				istio.WasmPluginGroupKind,
@@ -124,9 +200,21 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		logger.Info("cert manager is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
 		controllerOpts = append(controllerOpts,
-			controller.WithRunnable("certificate watcher", controller.Watch(&certmanagerv1.Certificate{}, CertManagerCertificatesResource, metav1.NamespaceAll)),
-			controller.WithRunnable("issuers watcher", controller.Watch(&certmanagerv1.Issuer{}, CertManagerIssuersResource, metav1.NamespaceAll)),
-			controller.WithRunnable("clusterissuers watcher", controller.Watch(&certmanagerv1.Certificate{}, CertMangerClusterIssuersResource, metav1.NamespaceAll)),
+			controller.WithRunnable("certificate watcher", controller.Watch(
+				&certmanagerv1.Certificate{},
+				CertManagerCertificatesResource,
+				metav1.NamespaceAll,
+			)),
+			controller.WithRunnable("issuers watcher", controller.Watch(
+				&certmanagerv1.Issuer{},
+				CertManagerIssuersResource,
+				metav1.NamespaceAll,
+			)),
+			controller.WithRunnable("clusterissuers watcher", controller.Watch(
+				&certmanagerv1.Certificate{},
+				CertMangerClusterIssuersResource,
+				metav1.NamespaceAll,
+			)),
 			controller.WithObjectKinds(
 				CertManagerCertificateKind,
 				CertManagerIssuerKind,

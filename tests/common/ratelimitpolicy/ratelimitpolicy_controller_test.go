@@ -283,7 +283,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Namespace:  limitsNamespace,
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifier)},
 					Variables:  []string{},
-					Name:       wasm.ToLimitadorRateLimitName(limitIdentifier, "0"),
 				}))
 			}).WithContext(ctx).Should(Succeed())
 
@@ -378,7 +377,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Namespace:  limitsNamespace,
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifier)},
 					Variables:  []string{},
-					Name:       wasm.ToLimitadorRateLimitName(limitIdentifier, "0"),
 				}))
 			}).WithContext(ctx).Should(Succeed())
 
@@ -502,7 +500,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Namespace:  limitsNamespace,
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifier)},
 					Variables:  []string{},
-					Name:       wasm.ToLimitadorRateLimitName(limitIdentifier, "0"),
 				})).WithContext(ctx).Should(Succeed())
 
 				// Gateway should contain HTTPRoute RLP in backreference
@@ -621,7 +618,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Namespace:  limitsNamespace,
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifier)},
 				Variables:  []string{},
-				Name:       wasm.ToLimitadorRateLimitName(limitIdentifier, "0"),
 			})).WithContext(ctx).Should(Succeed())
 
 			// Gateway should contain HTTPRoute RLP in backreference
@@ -645,7 +641,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Namespace:  limitsNamespace,
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifier)},
 				Variables:  []string{},
-				Name:       wasm.ToLimitadorRateLimitName(limitIdentifier, "0"),
 			})).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
@@ -683,7 +678,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Namespace:  limitsNamespace,
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifier)},
 				Variables:  []string{},
-				Name:       wasm.ToLimitadorRateLimitName(limitIdentifier, "0"),
 			})).WithContext(ctx).Should(Succeed())
 
 			// Gateway should contain HTTPRoute RLP in backreference
@@ -725,7 +719,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Namespace:  limitsNamespace,
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifier)},
 				Variables:  []string{},
-				Name:       wasm.ToLimitadorRateLimitName(limitIdentifier, "0"),
 			})).WithContext(ctx).Should(Succeed())
 
 			// Update GW RLP defaults to overrides
@@ -750,7 +743,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Namespace:  limitsNamespace,
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifier)},
 				Variables:  []string{},
-				Name:       wasm.ToLimitadorRateLimitName(limitIdentifier, "0"),
 			})).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
@@ -779,7 +771,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Namespace:  limitsNamespace,
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifier)},
 				Variables:  []string{},
-				Name:       wasm.ToLimitadorRateLimitName(limitIdentifier, "0"),
 			})).WithContext(ctx).Should(Succeed())
 
 			// Update GW RLP overrides to defaults
@@ -804,7 +795,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Namespace:  limitsNamespace,
 				Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifier)},
 				Variables:  []string{},
-				Name:       wasm.ToLimitadorRateLimitName(limitIdentifier, "0"),
 			})).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 
@@ -1415,7 +1405,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Namespace:  wasm.LimitsNamespaceFromRoute(targetedRoute),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifierGwA)},
 					Variables:  []string{},
-					Name:       wasm.ToLimitadorRateLimitName(limitIdentifierGwA, "0"),
 				},
 				limitadorv1alpha1.RateLimit{
 					MaxValue:   100,
@@ -1423,7 +1412,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Namespace:  wasm.LimitsNamespaceFromRoute(targetedRoute),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifierGwB)},
 					Variables:  []string{},
-					Name:       wasm.ToLimitadorRateLimitName(limitIdentifierGwB, "0"),
 				},
 				limitadorv1alpha1.RateLimit{ // FIXME(@guicassolato): we need to create one limit definition per gateway × route combination, not one per gateway × policy combination
 					MaxValue:   1000,
@@ -1431,7 +1419,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Namespace:  wasm.LimitsNamespaceFromRoute(untargetedRoute),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifierGwA)},
 					Variables:  []string{},
-					Name:       wasm.ToLimitadorRateLimitName(limitIdentifierGwA, "0"),
 				},
 				limitadorv1alpha1.RateLimit{
 					MaxValue:   100,
@@ -1439,7 +1426,6 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					Namespace:  wasm.LimitsNamespaceFromRoute(untargetedRoute),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifierGwB)},
 					Variables:  []string{},
-					Name:       wasm.ToLimitadorRateLimitName(limitIdentifierGwB, "0"),
 				},
 			)).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)

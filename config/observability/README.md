@@ -9,7 +9,6 @@ If however you have run `make local-setup` and would like to install the observa
 ```bash
 ./bin/kustomize build ./config/observability/| docker run --rm -i docker.io/ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
 ./bin/kustomize build ./config/observability/| docker run --rm -i docker.io/ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -
-./bin/kustomize build ./config/observability/prometheus/monitors/envoy | kubectl apply -f -
 ./bin/kustomize build ./config/thanos | kubectl apply -f -
 ./bin/kustomize build ./examples/dashboards | kubectl apply -f -
 ./bin/kustomize build ./examples/alerts | kubectl apply -f -
@@ -20,6 +19,18 @@ kubectl -n monitoring patch prometheus k8s --type='merge' -p '{"spec":{"remoteWr
 This will deploy prometheus, alertmanager and grafana into the `monitoring` namespace,
 along with metrics scrape configuration for Istio and Envoy.
 Thanos will also be deployed with prometheus configured to remote write to it.
+
+If you are using Istio as your gateway provider, run this command to configure & scrape Istio specific metrics
+
+```bash
+./bin/kustomize build ./config/observability/prometheus/monitors/istio | kubectl apply -f -
+```
+
+If you are using Envoy Gateway as your gateway provider, run this command to configure & scrape Envoy Gateway specific metrics:
+
+```bash
+./bin/kustomize build ./config/observability/prometheus/monitors/envoy | kubectl apply -f -
+```
 
 ## Accessing Grafana & Prometheus
 

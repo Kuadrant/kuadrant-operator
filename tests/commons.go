@@ -106,12 +106,6 @@ func DeleteNamespace(ctx context.Context, cl client.Client, namespace string) {
 	}).WithContext(ctx).Should(Succeed())
 }
 
-func DeleteNamespaceCallback(ctx context.Context, cl client.Client, namespace string) func() {
-	return func() {
-		DeleteNamespace(ctx, cl, namespace)
-	}
-}
-
 func CreateNamespace(ctx context.Context, cl client.Client) string {
 	nsObject := &corev1.Namespace{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},

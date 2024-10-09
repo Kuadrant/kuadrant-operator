@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	"github.com/kuadrant/policy-machinery/machinery"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -33,7 +34,7 @@ func (r *TLSPolicyReconciler) reconcileCertificates(ctx context.Context, tlsPoli
 	// Reconcile Certificates for each gateway directly referred by the policy (existing and new)
 	for _, gw := range append(gwDiffObj.GatewaysWithValidPolicyRef, gwDiffObj.GatewaysMissingPolicyRef...) {
 		log.V(1).Info("reconcileCertificates: gateway with valid or missing policy ref", "key", gw.Key())
-		expectedCertificates := r.expectedCertificatesForGateway(ctx, gw.Gateway, tlsPolicy)
+		expectedCertificates := expectedCertificatesForGateway(ctx, gw.Gateway, tlsPolicy)
 		if err := r.createOrUpdateGatewayCertificates(ctx, tlsPolicy, expectedCertificates); err != nil {
 			return fmt.Errorf("error creating and updating expected certificates for gateway %v: %w", gw.Gateway.Name, err)
 		}
@@ -102,7 +103,7 @@ func (r *TLSPolicyReconciler) deleteUnexpectedCertificates(ctx context.Context, 
 	return nil
 }
 
-func (r *TLSPolicyReconciler) expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.Gateway, tlsPolicy *v1alpha1.TLSPolicy) []*certmanv1.Certificate {
+func expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.Gateway, tlsPolicy *v1alpha1.TLSPolicy) []*certmanv1.Certificate {
 	log := crlog.FromContext(ctx)
 
 	tlsHosts := make(map[corev1.ObjectReference][]string)
@@ -130,12 +131,41 @@ func (r *TLSPolicyReconciler) expectedCertificatesForGateway(ctx context.Context
 
 	certs := make([]*certmanv1.Certificate, 0, len(tlsHosts))
 	for secretRef, hosts := range tlsHosts {
-		certs = append(certs, r.buildCertManagerCertificate(gateway, tlsPolicy, secretRef, hosts))
+		certs = append(certs, buildCertManagerCertificate(gateway, tlsPolicy, secretRef, hosts))
 	}
 	return certs
 }
 
-func (r *TLSPolicyReconciler) buildCertManagerCertificate(gateway *gatewayapiv1.Gateway, tlsPolicy *v1alpha1.TLSPolicy, secretRef corev1.ObjectReference, hosts []string) *certmanv1.Certificate {
+func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *v1alpha1.TLSPolicy) []*certmanv1.Certificate {
+	tlsHosts := make(map[corev1.ObjectReference][]string)
+
+	hostname := "*"
+	if l.Hostname != nil {
+		hostname = string(*l.Hostname)
+	}
+
+	for _, certRef := range l.TLS.CertificateRefs {
+		secretRef := corev1.ObjectReference{
+			Name: string(certRef.Name),
+		}
+		if certRef.Namespace != nil {
+			secretRef.Namespace = string(*certRef.Namespace)
+		} else {
+			secretRef.Namespace = l.GetNamespace()
+		}
+		// Gateway API hostname explicitly disallows IP addresses, so this
+		// should be OK.
+		tlsHosts[secretRef] = append(tlsHosts[secretRef], hostname)
+	}
+
+	certs := make([]*certmanv1.Certificate, 0, len(tlsHosts))
+	for secretRef, hosts := range tlsHosts {
+		certs = append(certs, buildCertManagerCertificate(l.Gateway.Gateway, tlsPolicy, secretRef, hosts))
+	}
+	return certs
+}
+
+func buildCertManagerCertificate(gateway *gatewayapiv1.Gateway, tlsPolicy *v1alpha1.TLSPolicy, secretRef corev1.ObjectReference, hosts []string) *certmanv1.Certificate {
 	tlsCertLabels := commonTLSCertificateLabels(client.ObjectKeyFromObject(gateway), tlsPolicy)
 
 	crt := &certmanv1.Certificate{

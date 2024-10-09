@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"fmt"
+	"reflect"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -19,6 +20,8 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrlruntimepredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -42,6 +45,7 @@ var (
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
 
 func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *controller.Controller {
+	// Base options
 	controllerOpts := []controller.ControllerOption{
 		controller.ManagedBy(manager),
 		controller.WithLogger(logger),
@@ -83,6 +87,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*corev1.ConfigMap]{}),
 			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)),
 		)),
+		// TODO: Move as boot options for Limitador and Authorino as there can be a possibility that the operators are not installed
 		controller.WithRunnable("limitador watcher", controller.Watch(
 			&limitadorv1alpha1.Limitador{},
 			kuadrantv1beta1.LimitadorsResource,
@@ -112,11 +117,56 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		),
 	}
 
-	ok, err := kuadrantgatewayapi.IsGatewayAPIInstalled(manager.GetRESTMapper())
-	if err != nil || !ok {
-		logger.Info("gateway api is not installed, skipping watches and reconcilers", "err", err)
+	// Boot options and reconciler based on detected dependencies
+	bootOptions := NewBootOptionsBuilder(manager, client, logger)
+	controllerOpts = append(controllerOpts, bootOptions.getOptions()...)
+	controllerOpts = append(controllerOpts, controller.WithReconcile(bootOptions.Reconciler()))
+
+	return controller.NewController(controllerOpts...)
+}
+
+// NewBootOptionsBuilder is used to return a list of controller.ControllerOption and a controller.ReconcileFunc that depend
+// on if external dependent CRDs are installed at boot time
+func NewBootOptionsBuilder(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *BootOptionsBuilder {
+	return &BootOptionsBuilder{
+		manager: manager,
+		client:  client,
+		logger:  logger,
+	}
+}
+
+type BootOptionsBuilder struct {
+	logger  logr.Logger
+	manager ctrlruntime.Manager
+	client  *dynamic.DynamicClient
+
+	// Internal configurations
+	isGatewayAPIInstalled    bool
+	isEnvoyGatewayInstalled  bool
+	isIstioInstalled         bool
+	isCertManagerInstalled   bool
+	isConsolePluginInstalled bool
+}
+
+func (b *BootOptionsBuilder) getOptions() []controller.ControllerOption {
+	var opts []controller.ControllerOption
+	opts = append(opts, b.getGatewayAPIOptions()...)
+	opts = append(opts, b.getIstioOptions()...)
+	opts = append(opts, b.getEnvoyGatewayOptions()...)
+	opts = append(opts, b.getCertManagerOptions()...)
+	opts = append(opts, b.getConsolePluginOptions()...)
+
+	return opts
+}
+
+func (b *BootOptionsBuilder) getGatewayAPIOptions() []controller.ControllerOption {
+	var opts []controller.ControllerOption
+	var err error
+	b.isGatewayAPIInstalled, err = kuadrantgatewayapi.IsGatewayAPIInstalled(b.manager.GetRESTMapper())
+	if err != nil || !b.isGatewayAPIInstalled {
+		b.logger.Info("gateway api is not installed, skipping watches and reconcilers", "err", err)
 	} else {
-		controllerOpts = append(controllerOpts,
+		opts = append(opts,
 			controller.WithRunnable("gatewayclass watcher", controller.Watch(
 				&gwapiv1.GatewayClass{},
 				controller.GatewayClassesResource,
@@ -135,11 +185,17 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		)
 	}
 
-	isEnvoyGatewayInstalled, err := envoygateway.IsEnvoyGatewayInstalled(manager.GetRESTMapper())
-	if err != nil || !isEnvoyGatewayInstalled {
-		logger.Info("envoygateway is not installed, skipping related watches and reconcilers", "err", err)
+	return opts
+}
+
+func (b *BootOptionsBuilder) getEnvoyGatewayOptions() []controller.ControllerOption {
+	var opts []controller.ControllerOption
+	var err error
+	b.isEnvoyGatewayInstalled, err = envoygateway.IsEnvoyGatewayInstalled(b.manager.GetRESTMapper())
+	if err != nil || !b.isEnvoyGatewayInstalled {
+		b.logger.Info("envoygateway is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
-		controllerOpts = append(controllerOpts,
+		opts = append(opts,
 			controller.WithRunnable("envoypatchpolicy watcher", controller.Watch(
 				&egv1alpha1.EnvoyPatchPolicy{},
 				envoygateway.EnvoyPatchPoliciesResource,
@@ -165,11 +221,17 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		// TODO: add specific tasks to workflow
 	}
 
-	isIstioInstalled, err := istio.IsIstioInstalled(manager.GetRESTMapper())
-	if err != nil || !isIstioInstalled {
-		logger.Info("istio is not installed, skipping related watches and reconcilers", "err", err)
+	return opts
+}
+
+func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
+	var opts []controller.ControllerOption
+	var err error
+	b.isIstioInstalled, err = istio.IsIstioInstalled(b.manager.GetRESTMapper())
+	if err != nil || !b.isIstioInstalled {
+		b.logger.Info("istio is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
-		controllerOpts = append(controllerOpts,
+		opts = append(opts,
 			controller.WithRunnable("envoyfilter watcher", controller.Watch(
 				&istioclientnetworkingv1alpha3.EnvoyFilter{},
 				istio.EnvoyFiltersResource,
@@ -195,41 +257,30 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		// TODO: add istio specific tasks to workflow
 	}
 
-	isCertManagerInstalled, err := kuadrantgatewayapi.IsCertManagerInstalled(manager.GetRESTMapper(), logger)
-	if err != nil || !isCertManagerInstalled {
-		logger.Info("cert manager is not installed, skipping related watches and reconcilers", "err", err)
+	return opts
+}
+
+func (b *BootOptionsBuilder) getCertManagerOptions() []controller.ControllerOption {
+	var opts []controller.ControllerOption
+	var err error
+	b.isCertManagerInstalled, err = kuadrantgatewayapi.IsCertManagerInstalled(b.manager.GetRESTMapper(), b.logger)
+	if err != nil || !b.isCertManagerInstalled {
+		b.logger.Info("cert manager is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
-		controllerOpts = append(controllerOpts,
-			controller.WithRunnable("certificate watcher", controller.Watch(
-				&certmanagerv1.Certificate{},
-				CertManagerCertificatesResource,
-				metav1.NamespaceAll,
-			)),
-			controller.WithRunnable("issuers watcher", controller.Watch(
-				&certmanagerv1.Issuer{},
-				CertManagerIssuersResource,
-				metav1.NamespaceAll,
-			)),
-			controller.WithRunnable("clusterissuers watcher", controller.Watch(
-				&certmanagerv1.Certificate{},
-				CertMangerClusterIssuersResource,
-				metav1.NamespaceAll,
-			)),
-			controller.WithObjectKinds(
-				CertManagerCertificateKind,
-				CertManagerIssuerKind,
-				CertManagerClusterIssuerKind,
-			),
-			// TODO: add object links
-		)
-		// TODO: add tls policy specific tasks to workflow
+		opts = append(opts, certManagerControllerOpts()...)
 	}
 
-	isConsolePluginInstalled, err := openshift.IsConsolePluginInstalled(manager.GetRESTMapper())
-	if err != nil || !isConsolePluginInstalled {
-		logger.Info("console plugin is not installed, skipping related watches and reconcilers", "err", err)
+	return opts
+}
+
+func (b *BootOptionsBuilder) getConsolePluginOptions() []controller.ControllerOption {
+	var opts []controller.ControllerOption
+	var err error
+	b.isConsolePluginInstalled, err = openshift.IsConsolePluginInstalled(b.manager.GetRESTMapper())
+	if err != nil || !b.isConsolePluginInstalled {
+		b.logger.Info("console plugin is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
-		controllerOpts = append(controllerOpts,
+		opts = append(opts,
 			controller.WithRunnable("consoleplugin watcher", controller.Watch(
 				&consolev1.ConsolePlugin{}, openshift.ConsolePluginsResource, metav1.NamespaceAll,
 				controller.FilterResourcesByLabel[*consolev1.ConsolePlugin](fmt.Sprintf("%s=%s", consoleplugin.AppLabelKey, consoleplugin.AppLabelValue)))),
@@ -237,32 +288,92 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		)
 	}
 
-	controllerOpts = append(controllerOpts, controller.WithReconcile(buildReconciler(manager, client, isIstioInstalled, isEnvoyGatewayInstalled, isConsolePluginInstalled)))
-
-	return controller.NewController(controllerOpts...)
+	return opts
 }
 
-func buildReconciler(manager ctrlruntime.Manager, client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled, isConsolePluginInstalled bool) controller.ReconcileFunc {
+func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
-		Precondition: initWorkflow(client).Run,
+		Precondition: initWorkflow(b.client).Run,
 		Tasks: []controller.ReconcileFunc{
-			NewAuthorinoReconciler(client).Subscription().Reconcile,
-			NewLimitadorReconciler(client).Subscription().Reconcile,
+			NewAuthorinoReconciler(b.client).Subscription().Reconcile,
+			NewLimitadorReconciler(b.client).Subscription().Reconcile,
 			NewDNSWorkflow().Run,
-			NewTLSWorkflow().Run,
+			NewTLSWorkflow(b.client, b.isCertManagerInstalled).Run,
 			NewAuthWorkflow().Run,
 			NewRateLimitWorkflow().Run,
 		},
-		Postcondition: finalStepsWorkflow(client, isIstioInstalled, isEnvoyGatewayInstalled).Run,
+		Postcondition: finalStepsWorkflow(b.client, b.isIstioInstalled, b.isGatewayAPIInstalled).Run,
 	}
 
-	if isConsolePluginInstalled {
+	if b.isConsolePluginInstalled {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
-			NewConsolePluginReconciler(manager, operatorNamespace).Subscription().Reconcile,
+			NewConsolePluginReconciler(b.manager, operatorNamespace).Subscription().Reconcile,
 		)
 	}
 
 	return mainWorkflow.Run
+}
+
+func certManagerControllerOpts() []controller.ControllerOption {
+	isCertificateOwnedByTLSPolicy := func(c *certmanagerv1.Certificate) bool {
+		return isObjectOwnedByGroupKind(c, kuadrantv1alpha1.TLSPolicyGroupKind)
+	}
+
+	return []controller.ControllerOption{
+		controller.WithRunnable("certificate watcher", controller.Watch(
+			&certmanagerv1.Certificate{},
+			CertManagerCertificatesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.Certificate]{
+				CreateFunc: func(e event.TypedCreateEvent[*certmanagerv1.Certificate]) bool {
+					return isCertificateOwnedByTLSPolicy(e.Object)
+				},
+				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.Certificate]) bool {
+					return isCertificateOwnedByTLSPolicy(e.ObjectNew)
+				},
+				DeleteFunc: func(e event.TypedDeleteEvent[*certmanagerv1.Certificate]) bool {
+					return isCertificateOwnedByTLSPolicy(e.Object)
+				},
+				GenericFunc: func(e event.TypedGenericEvent[*certmanagerv1.Certificate]) bool {
+					return isCertificateOwnedByTLSPolicy(e.Object)
+				},
+			})),
+		),
+		controller.WithRunnable("issuers watcher", controller.Watch(
+			&certmanagerv1.Issuer{},
+			CertManagerIssuersResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.Issuer]{
+				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.Issuer]) bool {
+					oldStatus := e.ObjectOld.GetStatus()
+					newStatus := e.ObjectOld.GetStatus()
+					return !reflect.DeepEqual(oldStatus, newStatus)
+				},
+			})),
+		),
+		controller.WithRunnable("clusterissuers watcher", controller.Watch(
+			&certmanagerv1.ClusterIssuer{},
+			CertMangerClusterIssuersResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(ctrlruntimepredicate.TypedFuncs[*certmanagerv1.ClusterIssuer]{
+				UpdateFunc: func(e event.TypedUpdateEvent[*certmanagerv1.ClusterIssuer]) bool {
+					oldStatus := e.ObjectOld.GetStatus()
+					newStatus := e.ObjectOld.GetStatus()
+					return !reflect.DeepEqual(oldStatus, newStatus)
+				},
+			})),
+		),
+		controller.WithObjectKinds(
+			CertManagerCertificateKind,
+			CertManagerIssuerKind,
+			CertManagerClusterIssuerKind,
+		),
+		controller.WithObjectLinks(
+			LinkListenerToCertificateFunc,
+			LinkGatewayToIssuerFunc,
+			LinkGatewayToClusterIssuerFunc,
+		),
+	}
 }
 
 func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
@@ -318,4 +429,19 @@ func GetOldestKuadrant(kuadrants []*kuadrantv1beta1.Kuadrant) (*kuadrantv1beta1.
 		return nil, fmt.Errorf("only nil pointers in list")
 	}
 	return oldest, nil
+}
+
+func isObjectOwnedByGroupKind(o client.Object, groupKind schema.GroupKind) bool {
+	for _, o := range o.GetOwnerReferences() {
+		oGV, err := schema.ParseGroupVersion(o.APIVersion)
+		if err != nil {
+			return false
+		}
+
+		if oGV.Group == groupKind.Group && o.Kind == groupKind.Kind {
+			return true
+		}
+	}
+
+	return false
 }

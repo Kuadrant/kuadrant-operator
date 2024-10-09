@@ -144,3 +144,23 @@ func reasonForError(err error) gatewayapiv1alpha2.PolicyConditionReason {
 	}
 	return ""
 }
+
+func NewErrDependencyNotInstalled(dependencyName string) ErrDependencyNotInstalled {
+	return ErrDependencyNotInstalled{
+		dependencyName: dependencyName,
+	}
+}
+
+var _ PolicyError = ErrDependencyNotInstalled{}
+
+type ErrDependencyNotInstalled struct {
+	dependencyName string
+}
+
+func (e ErrDependencyNotInstalled) Error() string {
+	return fmt.Sprintf("%s is not installed, please restart pod once dependency has been installed", e.dependencyName)
+}
+
+func (e ErrDependencyNotInstalled) Reason() gatewayapiv1alpha2.PolicyConditionReason {
+	return PolicyReasonMissingDependency
+}

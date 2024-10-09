@@ -72,10 +72,10 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1alpha1.TLSPolicy]{}),
 		)),
 		controller.WithRunnable("authpolicy watcher", controller.Watch(
-			&kuadrantv1beta2.AuthPolicy{},
-			kuadrantv1beta2.AuthPoliciesResource,
+			&kuadrantv1beta3.AuthPolicy{},
+			kuadrantv1beta3.AuthPoliciesResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta2.AuthPolicy]{}),
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta3.AuthPolicy]{}),
 		)),
 		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(
 			&kuadrantv1beta3.RateLimitPolicy{},
@@ -104,7 +104,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithPolicyKinds(
 			kuadrantv1alpha1.DNSPolicyGroupKind,
 			kuadrantv1alpha1.TLSPolicyGroupKind,
-			kuadrantv1beta2.AuthPolicyGroupKind,
+			kuadrantv1beta3.AuthPolicyGroupKind,
 			kuadrantv1beta3.RateLimitPolicyGroupKind,
 		),
 		controller.WithObjectKinds(

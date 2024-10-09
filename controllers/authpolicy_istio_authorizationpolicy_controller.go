@@ -20,7 +20,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
@@ -67,13 +67,13 @@ func (r *AuthPolicyIstioAuthorizationPolicyReconciler) Reconcile(eventCtx contex
 		return ctrl.Result{}, nil
 	}
 
-	topology, err := kuadranttools.TopologyFromGateway(ctx, r.Client(), gw, kuadrantv1beta2.NewAuthPolicyType())
+	topology, err := kuadranttools.TopologyFromGateway(ctx, r.Client(), gw, kuadrantv1beta3.NewAuthPolicyType())
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	topologyIndex := kuadrantgatewayapi.NewTopologyIndexes(topology)
-	policies := lo.FilterMap(topologyIndex.PoliciesFromGateway(gw), func(policy kuadrantgatewayapi.Policy, _ int) (*kuadrantv1beta2.AuthPolicy, bool) {
-		ap, ok := policy.(*kuadrantv1beta2.AuthPolicy)
+	policies := lo.FilterMap(topologyIndex.PoliciesFromGateway(gw), func(policy kuadrantgatewayapi.Policy, _ int) (*kuadrantv1beta3.AuthPolicy, bool) {
+		ap, ok := policy.(*kuadrantv1beta3.AuthPolicy)
 		if !ok {
 			return nil, false
 		}
@@ -99,7 +99,7 @@ func (r *AuthPolicyIstioAuthorizationPolicyReconciler) Reconcile(eventCtx contex
 	return ctrl.Result{}, nil
 }
 
-func (r *AuthPolicyIstioAuthorizationPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, gateway *gatewayapiv1.Gateway, ap *kuadrantv1beta2.AuthPolicy, topologyIndex *kuadrantgatewayapi.TopologyIndexes, topology *kuadrantgatewayapi.Topology) (*istiov1beta1.AuthorizationPolicy, error) {
+func (r *AuthPolicyIstioAuthorizationPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, gateway *gatewayapiv1.Gateway, ap *kuadrantv1beta3.AuthPolicy, topologyIndex *kuadrantgatewayapi.TopologyIndexes, topology *kuadrantgatewayapi.Topology) (*istiov1beta1.AuthorizationPolicy, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("istioAuthorizationPolicy")
 
@@ -226,7 +226,7 @@ func (r *AuthPolicyIstioAuthorizationPolicyReconciler) SetupWithManager(mgr ctrl
 			handler.EnqueueRequestsFromMapFunc(httpRouteToParentGatewaysEventMapper.Map),
 		).
 		Watches(
-			&kuadrantv1beta2.AuthPolicy{},
+			&kuadrantv1beta3.AuthPolicy{},
 			handler.EnqueueRequestsFromMapFunc(apToParentGatewaysEventMapper.Map),
 		).
 		Complete(r)

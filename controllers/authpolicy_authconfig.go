@@ -15,14 +15,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
+func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *kuadrantv1beta3.AuthPolicy, targetNetworkObject client.Object) error {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return err
@@ -46,7 +46,7 @@ func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api
 	return nil
 }
 
-func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) (*authorinoapi.AuthConfig, error) {
+func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *kuadrantv1beta3.AuthPolicy, targetNetworkObject client.Object) (*authorinoapi.AuthConfig, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("desiredAuthConfig")
 
@@ -158,17 +158,21 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 
 	// authentication
 	if authentication := commonSpec.AuthScheme.Authentication; len(authentication) > 0 {
-		authConfig.Spec.Authentication = authorinoSpecsFromConfigs(authentication, func(config api.AuthenticationSpec) authorinoapi.AuthenticationSpec { return config.AuthenticationSpec })
+		authConfig.Spec.Authentication = authorinoSpecsFromConfigs(authentication, func(config kuadrantv1beta3.AuthenticationSpec) authorinoapi.AuthenticationSpec {
+			return config.AuthenticationSpec
+		})
 	}
 
 	// metadata
 	if metadata := commonSpec.AuthScheme.Metadata; len(metadata) > 0 {
-		authConfig.Spec.Metadata = authorinoSpecsFromConfigs(metadata, func(config api.MetadataSpec) authorinoapi.MetadataSpec { return config.MetadataSpec })
+		authConfig.Spec.Metadata = authorinoSpecsFromConfigs(metadata, func(config kuadrantv1beta3.MetadataSpec) authorinoapi.MetadataSpec { return config.MetadataSpec })
 	}
 
 	// authorization
 	if authorization := commonSpec.AuthScheme.Authorization; len(authorization) > 0 {
-		authConfig.Spec.Authorization = authorinoSpecsFromConfigs(authorization, func(config api.AuthorizationSpec) authorinoapi.AuthorizationSpec { return config.AuthorizationSpec })
+		authConfig.Spec.Authorization = authorinoSpecsFromConfigs(authorization, func(config kuadrantv1beta3.AuthorizationSpec) authorinoapi.AuthorizationSpec {
+			return config.AuthorizationSpec
+		})
 	}
 
 	// response
@@ -177,10 +181,10 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 			Unauthenticated: response.Unauthenticated,
 			Unauthorized:    response.Unauthorized,
 			Success: authorinoapi.WrappedSuccessResponseSpec{
-				Headers: authorinoSpecsFromConfigs(response.Success.Headers, func(config api.HeaderSuccessResponseSpec) authorinoapi.HeaderSuccessResponseSpec {
+				Headers: authorinoSpecsFromConfigs(response.Success.Headers, func(config kuadrantv1beta3.HeaderSuccessResponseSpec) authorinoapi.HeaderSuccessResponseSpec {
 					return authorinoapi.HeaderSuccessResponseSpec{SuccessResponseSpec: config.SuccessResponseSpec.SuccessResponseSpec}
 				}),
-				DynamicMetadata: authorinoSpecsFromConfigs(response.Success.DynamicMetadata, func(config api.SuccessResponseSpec) authorinoapi.SuccessResponseSpec {
+				DynamicMetadata: authorinoSpecsFromConfigs(response.Success.DynamicMetadata, func(config kuadrantv1beta3.SuccessResponseSpec) authorinoapi.SuccessResponseSpec {
 					return config.SuccessResponseSpec
 				}),
 			},
@@ -189,14 +193,14 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 
 	// callbacks
 	if callbacks := commonSpec.AuthScheme.Callbacks; len(callbacks) > 0 {
-		authConfig.Spec.Callbacks = authorinoSpecsFromConfigs(callbacks, func(config api.CallbackSpec) authorinoapi.CallbackSpec { return config.CallbackSpec })
+		authConfig.Spec.Callbacks = authorinoSpecsFromConfigs(callbacks, func(config kuadrantv1beta3.CallbackSpec) authorinoapi.CallbackSpec { return config.CallbackSpec })
 	}
 
 	return mergeConditionsFromRouteSelectorsIntoConfigs(ap, route, authConfig)
 }
 
 // routeGatewayAuthOverrides returns the GW auth policies that has an override field set
-func routeGatewayAuthOverrides(t *kuadrantgatewayapi.Topology, ap *api.AuthPolicy) []client.ObjectKey {
+func routeGatewayAuthOverrides(t *kuadrantgatewayapi.Topology, ap *kuadrantv1beta3.AuthPolicy) []client.ObjectKey {
 	affectedPolicies := getAffectedPolicies(t, ap)
 
 	// Filter the policies where:
@@ -205,7 +209,7 @@ func routeGatewayAuthOverrides(t *kuadrantgatewayapi.Topology, ap *api.AuthPolic
 	// 3. is an overriding policy
 	// 4. is not marked for deletion
 	affectedPolicies = utils.Filter(affectedPolicies, func(policy kuadrantgatewayapi.Policy) bool {
-		p, ok := policy.(*api.AuthPolicy)
+		p, ok := policy.(*kuadrantv1beta3.AuthPolicy)
 		return ok &&
 			p.DeletionTimestamp == nil &&
 			kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef()) &&
@@ -218,7 +222,7 @@ func routeGatewayAuthOverrides(t *kuadrantgatewayapi.Topology, ap *api.AuthPolic
 	})
 }
 
-func getAffectedPolicies(t *kuadrantgatewayapi.Topology, ap *api.AuthPolicy) []kuadrantgatewayapi.Policy {
+func getAffectedPolicies(t *kuadrantgatewayapi.Topology, ap *kuadrantv1beta3.AuthPolicy) []kuadrantgatewayapi.Policy {
 	topologyIndexes := kuadrantgatewayapi.NewTopologyIndexes(t)
 	var affectedPolicies []kuadrantgatewayapi.Policy
 

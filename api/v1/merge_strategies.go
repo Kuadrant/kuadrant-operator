@@ -19,15 +19,13 @@ package v1
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/samber/lo"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 
+	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 )
 
@@ -50,25 +48,6 @@ type MergeablePolicy interface {
 	Empty() bool
 
 	DeepCopyObject() runtime.Object
-}
-
-type SortablePolicy interface {
-	machinery.Policy
-	GetCreationTimestamp() metav1.Time
-}
-
-type PolicyByCreationTimestamp []SortablePolicy
-
-func (a PolicyByCreationTimestamp) Len() int      { return len(a) }
-func (a PolicyByCreationTimestamp) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-func (a PolicyByCreationTimestamp) Less(i, j int) bool {
-	p1Time := ptr.To(a[i].GetCreationTimestamp())
-	p2Time := ptr.To(a[j].GetCreationTimestamp())
-	if !p1Time.Equal(p2Time) {
-		return p1Time.Before(p2Time)
-	}
-	//  The object appearing first in alphabetical order by "{namespace}/{name}".
-	return fmt.Sprintf("%s/%s", a[i].GetNamespace(), a[i].GetName()) < fmt.Sprintf("%s/%s", a[j].GetNamespace(), a[j].GetName())
 }
 
 // AtomicDefaultsMergeStrategy implements a merge strategy that returns the target Policy if it exists,
@@ -204,12 +183,15 @@ func EffectivePolicyForPath[T machinery.Policy](path []machinery.Targetable, pre
 // Only policies whose predicate returns true are considered.
 func PoliciesInPath(path []machinery.Targetable, predicate func(machinery.Policy) bool) []machinery.Policy {
 	return lo.FlatMap(path, func(targetable machinery.Targetable, _ int) []machinery.Policy {
-		policies := lo.FilterMap(targetable.Policies(), func(policy machinery.Policy, _ int) (SortablePolicy, bool) {
-			p, sortable := policy.(SortablePolicy)
-			return p, sortable && predicate(p)
+		policies := lo.FilterMap(targetable.Policies(), func(policy machinery.Policy, _ int) (controller.Object, bool) {
+			o, object := policy.(controller.Object)
+			return o, object && predicate(policy)
 		})
-		sort.Sort(PolicyByCreationTimestamp(policies))
-		return lo.Map(policies, func(policy SortablePolicy, _ int) machinery.Policy { return policy })
+		sort.Sort(controller.ObjectsByCreationTimestamp(policies))
+		return lo.Map(policies, func(policy controller.Object, _ int) machinery.Policy {
+			p, _ := policy.(machinery.Policy)
+			return p
+		})
 	})
 }
 

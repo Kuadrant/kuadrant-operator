@@ -142,11 +142,6 @@ func (r *DNSPolicyReconciler) reconcileResources(ctx context.Context, dnsPolicy 
 }
 
 func (r *DNSPolicyReconciler) deleteResources(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, targetNetworkObject client.Object) error {
-	// delete based on gateway diffs
-	if err := r.deleteDNSRecords(ctx, dnsPolicy); err != nil {
-		return err
-	}
-
 	// remove direct back ref
 	if targetNetworkObject != nil {
 		if err := r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, dnsPolicy.DirectReferenceAnnotationName()); err != nil {

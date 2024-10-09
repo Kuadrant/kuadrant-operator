@@ -216,21 +216,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	tlsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("tlspolicy"),
-		mgr.GetEventRecorderFor("TLSPolicy"),
-	)
-
-	if err = (&controllers.TLSPolicyReconciler{
-		BaseReconciler:      tlsPolicyBaseReconciler,
-		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-		RestMapper:          mgr.GetRESTMapper(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "TLSPolicy")
-		os.Exit(1)
-	}
-
 	limitadorClusterEnvoyFilterBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("ratelimitpolicy").WithName("envoyfilter"),

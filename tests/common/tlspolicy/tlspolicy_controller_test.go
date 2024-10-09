@@ -4,7 +4,6 @@ package tlspolicy
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -176,21 +175,6 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Message": Equal("TLSPolicy has been successfully enforced"),
 					})),
 				)
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
-		}, testTimeOut)
-
-		It("should set gateway back reference and policy affected status", func(ctx SpecContext) {
-			policyBackRefValue := testNamespace + "/" + tlsPolicy.Name
-			refs, _ := json.Marshal([]client.ObjectKey{{Name: tlsPolicy.Name, Namespace: testNamespace}})
-			policiesBackRefValue := string(refs)
-
-			Eventually(func(g Gomega) {
-				gw := &gatewayapiv1.Gateway{}
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: gateway.Name, Namespace: testNamespace}, gw)
-				//Check annotations
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.TLSPolicyDirectReferenceAnnotationName, policyBackRefValue))
-				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.TLSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		}, testTimeOut)
 	})

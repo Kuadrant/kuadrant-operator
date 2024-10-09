@@ -54,14 +54,6 @@ func (t *TLSPolicyStatusUpdaterReconciler) UpdateStatus(ctx context.Context, _ [
 		return p, ok
 	})
 
-	store, ok := s.Load(TLSPolicyAcceptedKey)
-	if !ok {
-		logger.Error(errors.New("TLSPolicyAcceptedKey not found, skipping update of tls policy statuses"), "sync map error")
-		return nil
-	}
-
-	isPolicyValidErrorMap := store.(map[string]error)
-
 	for _, policy := range policies {
 		if policy.DeletionTimestamp != nil {
 			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", policy.GetName(), "namespace", policy.GetNamespace(), "uid", policy.GetUID())
@@ -74,7 +66,7 @@ func (t *TLSPolicyStatusUpdaterReconciler) UpdateStatus(ctx context.Context, _ [
 			ObservedGeneration: policy.Status.ObservedGeneration,
 		}
 
-		err := isPolicyValidErrorMap[policy.GetLocator()]
+		_, err := IsPolicyValid(ctx, s, policy)
 		meta.SetStatusCondition(&newStatus.Conditions, *kuadrant.AcceptedCondition(policy, err))
 
 		// Do not set enforced condition if Accepted condition is false

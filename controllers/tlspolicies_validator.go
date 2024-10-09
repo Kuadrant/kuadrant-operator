@@ -2,8 +2,10 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
+	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -30,7 +32,6 @@ func (t *ValidateTLSPoliciesValidatorReconciler) Subscription() *controller.Subs
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &kuadrantv1alpha1.TLSPolicyGroupKind, EventType: ptr.To(controller.CreateEvent)},
 			{Kind: &kuadrantv1alpha1.TLSPolicyGroupKind, EventType: ptr.To(controller.UpdateEvent)},
-			{Kind: &CertManagerCertificateKind},
 			{Kind: &CertManagerIssuerKind},
 			{Kind: &CertManagerClusterIssuerKind},
 		},
@@ -65,6 +66,40 @@ func (t *ValidateTLSPoliciesValidatorReconciler) Validate(ctx context.Context, _
 		if len(p.GetTargetRefs()) != len(topology.Targetables().Children(p)) {
 			logger.V(1).Info("tls policy cannot find target ref", "name", p.Name, "namespace", p.Namespace)
 			isPolicyValidErrorMap[p.GetLocator()] = kuadrant.NewErrTargetNotFound(p.Kind(), p.GetTargetRef(), apierrors.NewNotFound(kuadrantv1alpha1.TLSPoliciesResource.GroupResource(), p.GetName()))
+			continue
+		}
+
+		// Validate IssuerRef is correct
+		if !lo.Contains([]string{"", certmanv1.IssuerKind, certmanv1.ClusterIssuerKind}, p.Spec.IssuerRef.Kind) {
+			isPolicyValidErrorMap[p.GetLocator()] = fmt.Errorf(`invalid value %q for issuerRef.kind. Must be empty, %q or %q`, p.Spec.IssuerRef.Kind, certmanv1.IssuerKind, certmanv1.ClusterIssuerKind)
+			continue
+		}
+
+		// Validate Issuer is present on cluster through the topology
+		_, ok := lo.Find(topology.Objects().Items(), func(item machinery.Object) bool {
+			runtimeObj, ok := item.(*controller.RuntimeObject)
+			if !ok {
+				return false
+			}
+
+			issuer, ok := runtimeObj.Object.(certmanv1.GenericIssuer)
+			if !ok {
+				return false
+			}
+
+			match := issuer.GetName() == p.Spec.IssuerRef.Name
+			if lo.Contains([]string{"", certmanv1.IssuerKind}, p.Spec.IssuerRef.Kind) {
+				match = match && issuer.GetNamespace() == p.GetNamespace() &&
+					issuer.GetObjectKind().GroupVersionKind().Kind == certmanv1.IssuerKind
+			} else {
+				match = match && issuer.GetObjectKind().GroupVersionKind().Kind == certmanv1.ClusterIssuerKind
+			}
+
+			return match
+		})
+
+		if !ok {
+			isPolicyValidErrorMap[p.GetLocator()] = fmt.Errorf("unable to find issuer")
 			continue
 		}
 

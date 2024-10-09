@@ -11,7 +11,9 @@ import (
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
 	consolev1 "github.com/openshift/api/console/v1"
+	"github.com/samber/lo"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -416,9 +418,6 @@ func GetKuadrant(topology *machinery.Topology) (*kuadrantv1beta1.Kuadrant, error
 		}
 		return nil, false
 	})
-	if len(kuadrantList) == 1 {
-		return kuadrantList[0].(*kuadrantv1beta1.Kuadrant), nil
-	}
 	if len(kuadrantList) == 0 {
 		return nil, ErrNoKandrantResource
 	}

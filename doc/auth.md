@@ -189,7 +189,7 @@ Check out the [API reference](reference/authpolicy.md) for a full specification 
 
 When an AuthPolicy targets a HTTPRoute, the policy is enforced to all traffic routed according to the rules and hostnames specified in the HTTPRoute, across all Gateways referenced in the `spec.parentRefs` field of the HTTPRoute.
 
-The targeted HTTPRoute's rules and/or hostnames to which the policy must be enforced can be filtered to specific subsets, by specifying the [`routeSelectors`](reference/route-selectors.md#the-routeselectors-field) field of the AuthPolicy spec.
+The targeted HTTPRoute's rules and/or hostnames to which the policy must be enforced can be filtered to specific subsets.
 
 Target a HTTPRoute by setting the `spec.targetRef` field of the AuthPolicy as follows:
 
@@ -320,15 +320,9 @@ Expected behavior:
 - Request to `other.com` (suppose a route exists) → AuthPolicy G will be enforced
 - Request to `yet-another.net` (suppose a route and gateway exist) → No AuthPolicy will be enforced
 
-### Route selectors
-
-Route selectors allow targeting sections of a HTTPRoute, by specifying sets of HTTPRouteMatches and/or hostnames that make the policy controller look up within the HTTPRoute spec for compatible declarations, and select the corresponding HTTPRouteRules and hostnames, to then build conditions that activate the policy or policy rule.
-
-Check out [Route selectors](reference/route-selectors.md) for a full description, semantics and API reference.
-
 #### `when` conditions
 
-`when` conditions can be used to scope an AuthPolicy or auth rule within an AuthPolicy (i.e. to filter the traffic to which a policy or policy rule applies) without any coupling to the underlying network topology, i.e. without making direct references to HTTPRouteRules via [`routeSelectors`](reference/route-selectors.md#the-routeselectors-field).
+`when` conditions can be used to scope an AuthPolicy or auth rule within an AuthPolicy (i.e. to filter the traffic to which a policy or policy rule applies) without any coupling to the underlying network topology.
 
 Use `when` conditions to conditionally activate policies and policy rules based on attributes that cannot be expressed in the HTTPRoutes' `spec.hostnames` and `spec.rules.matches` fields, or in general in AuthPolicies that target a Gateway.
 

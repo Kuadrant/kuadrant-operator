@@ -11,26 +11,26 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 func TestAuthPolicyReconciler_calculateStatus(t *testing.T) {
 	type args struct {
 		ctx     context.Context
-		ap      *api.AuthPolicy
+		ap      *kuadrantv1beta3.AuthPolicy
 		specErr error
 	}
 	tests := []struct {
 		name string
 		args args
-		want *api.AuthPolicyStatus
+		want *kuadrantv1beta3.AuthPolicyStatus
 	}{
 		{
 			name: "Enforced status block removed if policy not Accepted. (Regression test)", // https://github.com/Kuadrant/kuadrant-operator/issues/588
 			args: args{
-				ap: &api.AuthPolicy{
-					Status: api.AuthPolicyStatus{
+				ap: &kuadrantv1beta3.AuthPolicy{
+					Status: kuadrantv1beta3.AuthPolicyStatus{
 						Conditions: []metav1.Condition{
 							{
 								Message: "not accepted",
@@ -49,7 +49,7 @@ func TestAuthPolicyReconciler_calculateStatus(t *testing.T) {
 				},
 				specErr: kuadrant.NewErrInvalid("AuthPolicy", errors.New("policy Error")),
 			},
-			want: &api.AuthPolicyStatus{
+			want: &kuadrantv1beta3.AuthPolicyStatus{
 				Conditions: []metav1.Condition{
 					{
 						Message: "AuthPolicy target is invalid: policy Error",

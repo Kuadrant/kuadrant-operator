@@ -466,6 +466,58 @@ func TestIsOwnedBy(t *testing.T) {
 			},
 			expected: false,
 		},
+		{
+			name: "when owned object has owner reference and in same namespace then return true",
+			owned: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "ns1",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "v1",
+							Kind:       "Deployment",
+							Name:       "my-deployment",
+						},
+					},
+				},
+			},
+			owner: &appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Deployment",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-deployment",
+					Namespace: "ns1",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "when owned object has owner reference but in different namespace then return false",
+			owned: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "ns1",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "v1",
+							Kind:       "Deployment",
+							Name:       "my-deployment",
+						},
+					},
+				},
+			},
+			owner: &appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Deployment",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-deployment",
+					Namespace: "ns2",
+				},
+			},
+			expected: false,
+		},
 	}
 
 	for _, tc := range testCases {

@@ -7,7 +7,6 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	externaldns "sigs.k8s.io/external-dns/endpoint"
@@ -28,14 +27,7 @@ var (
 
 func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, gwDiffObj *reconcilerutils.GatewayDiffs) error {
 	log := crlog.FromContext(ctx)
-
 	log.V(3).Info("reconciling dns records")
-	for _, gw := range gwDiffObj.GatewaysWithInvalidPolicyRef {
-		log.V(1).Info("reconcileDNSRecords: gateway with invalid policy ref", "key", gw.Key())
-		if err := r.deleteGatewayDNSRecords(ctx, gw.Gateway, dnsPolicy); err != nil {
-			return fmt.Errorf("error deleting dns records for gw %v: %w", gw.Gateway.Name, err)
-		}
-	}
 
 	// Reconcile DNSRecords for each gateway directly referred by the policy (existing and new)
 	for _, gw := range append(gwDiffObj.GatewaysWithValidPolicyRef, gwDiffObj.GatewaysMissingPolicyRef...) {
@@ -168,32 +160,6 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *gatewayapiv1.Gateway, cl
 	}
 	dnsRecord.Spec.Endpoints = endpoints
 	return dnsRecord, nil
-}
-
-func (r *DNSPolicyReconciler) deleteGatewayDNSRecords(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) error {
-	return r.deleteDNSRecordsWithLabels(ctx, commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy), dnsPolicy.Namespace)
-}
-
-func (r *DNSPolicyReconciler) deleteDNSRecords(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy) error {
-	return r.deleteDNSRecordsWithLabels(ctx, policyDNSRecordLabels(dnsPolicy), dnsPolicy.Namespace)
-}
-
-func (r *DNSPolicyReconciler) deleteDNSRecordsWithLabels(ctx context.Context, lbls map[string]string, namespace string) error {
-	log := crlog.FromContext(ctx)
-
-	listOptions := &client.ListOptions{LabelSelector: labels.SelectorFromSet(lbls), Namespace: namespace}
-	recordsList := &kuadrantdnsv1alpha1.DNSRecordList{}
-	if err := r.Client().List(ctx, recordsList, listOptions); err != nil {
-		return err
-	}
-
-	for i := range recordsList.Items {
-		if err := r.DeleteResource(ctx, &recordsList.Items[i]); client.IgnoreNotFound(err) != nil {
-			log.Error(err, "failed to delete DNSRecord")
-			return err
-		}
-	}
-	return nil
 }
 
 func dnsRecordBasicMutator(existingObj, desiredObj client.Object) (bool, error) {

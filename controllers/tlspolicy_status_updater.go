@@ -64,7 +64,7 @@ func (t *TLSPolicyStatusUpdaterReconciler) UpdateStatus(ctx context.Context, _ [
 
 	for _, policy := range policies {
 		if policy.DeletionTimestamp != nil {
-			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", policy.Name, "namespace", policy.Namespace)
+			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", policy.GetName(), "namespace", policy.GetNamespace(), "uid", policy.GetUID())
 			continue
 		}
 
@@ -103,7 +103,7 @@ func (t *TLSPolicyStatusUpdaterReconciler) UpdateStatus(ctx context.Context, _ [
 
 		_, err = resource.UpdateStatus(ctx, un, metav1.UpdateOptions{})
 		if err != nil {
-			logger.Error(err, "unable to update status for TLSPolicy", "name", policy.GetUID(), "namespace", policy.GetNamespace(), "uid", policy.GetUID())
+			logger.Error(err, "unable to update status for TLSPolicy", "name", policy.GetName(), "namespace", policy.GetNamespace(), "uid", policy.GetUID())
 		}
 	}
 
@@ -206,7 +206,7 @@ func (t *TLSPolicyStatusUpdaterReconciler) isCertificatesReady(p machinery.Polic
 	}
 
 	for i, l := range listeners {
-		// Not valid - so no need to check if cert is ready since it should not be one created
+		// Not valid - so no need to check if cert is ready since there should not be one created
 		err := validateGatewayListenerBlock(field.NewPath("").Index(i), *l.Listener, l.Gateway).ToAggregate()
 		if err != nil {
 			continue

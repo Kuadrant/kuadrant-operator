@@ -150,7 +150,11 @@ func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *v1alpha1.
 		}
 		// Gateway API hostname explicitly disallows IP addresses, so this
 		// should be OK.
-		tlsHosts[secretRef] = append(tlsHosts[secretRef], string(*l.Hostname))
+		hostname := "*"
+		if l.Hostname != nil {
+			hostname = string(*l.Hostname)
+		}
+		tlsHosts[secretRef] = append(tlsHosts[secretRef], hostname)
 	}
 
 	certs := make([]*certmanv1.Certificate, 0, len(tlsHosts))

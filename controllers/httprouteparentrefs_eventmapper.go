@@ -29,7 +29,7 @@ func (m *HTTPRouteParentRefsEventMapper) MapToRateLimitPolicy(obj client.Object)
 }
 
 func (m *HTTPRouteParentRefsEventMapper) MapToAuthPolicy(obj client.Object) []reconcile.Request {
-	return m.mapToPolicyRequest(obj, "authpolicy", &kuadrantv1beta2.AuthPolicyList{})
+	return m.mapToPolicyRequest(obj, "authpolicy", &kuadrantv1beta3.AuthPolicyList{})
 }
 
 func (m *HTTPRouteParentRefsEventMapper) mapToPolicyRequest(obj client.Object, policyKind string, policyList client.ObjectList) []reconcile.Request {

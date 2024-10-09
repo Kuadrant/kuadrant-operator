@@ -17,14 +17,14 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 // reconcileStatus makes sure status block of AuthPolicy is up-to-date.
-func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *api.AuthPolicy, specErr error) (ctrl.Result, error) {
+func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *kuadrantv1beta3.AuthPolicy, specErr error) (ctrl.Result, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger.V(1).Info("Reconciling AuthPolicy status", "spec error", specErr)
 
@@ -60,8 +60,8 @@ func (r *AuthPolicyReconciler) reconcileStatus(ctx context.Context, ap *api.Auth
 	return ctrl.Result{}, nil
 }
 
-func (r *AuthPolicyReconciler) calculateStatus(ctx context.Context, ap *api.AuthPolicy, specErr error) *api.AuthPolicyStatus {
-	newStatus := &api.AuthPolicyStatus{
+func (r *AuthPolicyReconciler) calculateStatus(ctx context.Context, ap *kuadrantv1beta3.AuthPolicy, specErr error) *kuadrantv1beta3.AuthPolicyStatus {
+	newStatus := &kuadrantv1beta3.AuthPolicyStatus{
 		Conditions:         slices.Clone(ap.Status.Conditions),
 		ObservedGeneration: ap.Status.ObservedGeneration,
 	}
@@ -87,7 +87,7 @@ func (r *AuthPolicyReconciler) acceptedCondition(policy kuadrant.Policy, specErr
 
 // enforcedCondition checks if the provided AuthPolicy is enforced, ensuring it is properly configured and applied based
 // on the status of the associated AuthConfig and Gateway.
-func (r *AuthPolicyReconciler) enforcedCondition(ctx context.Context, policy *api.AuthPolicy) *metav1.Condition {
+func (r *AuthPolicyReconciler) enforcedCondition(ctx context.Context, policy *kuadrantv1beta3.AuthPolicy) *metav1.Condition {
 	logger, _ := logr.FromContext(ctx)
 
 	// Check if the policy is Affected
@@ -116,7 +116,7 @@ func (r *AuthPolicyReconciler) enforcedCondition(ctx context.Context, policy *ap
 }
 
 // isAuthConfigReady checks if the AuthConfig is ready.
-func (r *AuthPolicyReconciler) isAuthConfigReady(ctx context.Context, policy *api.AuthPolicy) (bool, error) {
+func (r *AuthPolicyReconciler) isAuthConfigReady(ctx context.Context, policy *kuadrantv1beta3.AuthPolicy) (bool, error) {
 	apKey := client.ObjectKeyFromObject(policy)
 	authConfigKey := client.ObjectKey{
 		Namespace: policy.Namespace,
@@ -132,7 +132,7 @@ func (r *AuthPolicyReconciler) isAuthConfigReady(ctx context.Context, policy *ap
 	return authConfig.Status.Ready(), nil
 }
 
-func (r *AuthPolicyReconciler) handlePolicyOverride(policy *api.AuthPolicy) *metav1.Condition {
+func (r *AuthPolicyReconciler) handlePolicyOverride(policy *kuadrantv1beta3.AuthPolicy) *metav1.Condition {
 	if !r.AffectedPolicyMap.IsPolicyOverridden(policy) {
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), errors.New("no free routes to enforce policy")), false) // Maybe this should be a standard condition rather than an unknown condition
 	}
@@ -157,14 +157,14 @@ func (r *AuthPolicyReconciler) generateTopology(ctx context.Context) (*kuadrantg
 		return nil, err
 	}
 
-	aplist := &api.AuthPolicyList{}
+	aplist := &kuadrantv1beta3.AuthPolicyList{}
 	err = r.Client().List(ctx, aplist)
 	logger.V(1).Info("topology: list rate limit policies", "#RLPS", len(aplist.Items), "err", err)
 	if err != nil {
 		return nil, err
 	}
 
-	policies := utils.Map(aplist.Items, func(p api.AuthPolicy) kuadrantgatewayapi.Policy {
+	policies := utils.Map(aplist.Items, func(p kuadrantv1beta3.AuthPolicy) kuadrantgatewayapi.Policy {
 		return &p
 	})
 

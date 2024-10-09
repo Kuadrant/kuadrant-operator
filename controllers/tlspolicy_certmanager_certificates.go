@@ -139,6 +139,11 @@ func expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.G
 func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *v1alpha1.TLSPolicy) []*certmanv1.Certificate {
 	tlsHosts := make(map[corev1.ObjectReference][]string)
 
+	hostname := "*"
+	if l.Hostname != nil {
+		hostname = string(*l.Hostname)
+	}
+
 	for _, certRef := range l.TLS.CertificateRefs {
 		secretRef := corev1.ObjectReference{
 			Name: string(certRef.Name),
@@ -150,10 +155,6 @@ func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *v1alpha1.
 		}
 		// Gateway API hostname explicitly disallows IP addresses, so this
 		// should be OK.
-		hostname := "*"
-		if l.Hostname != nil {
-			hostname = string(*l.Hostname)
-		}
 		tlsHosts[secretRef] = append(tlsHosts[secretRef], hostname)
 	}
 

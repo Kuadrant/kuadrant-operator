@@ -50,34 +50,6 @@ metadata:
           "spec": {}
         },
         {
-          "apiVersion": "kuadrant.io/v1beta2",
-          "kind": "AuthPolicy",
-          "metadata": {
-            "name": "toystore"
-          },
-          "spec": {
-            "rules": {
-              "authentication": {
-                "apikey": {
-                  "apiKey": {
-                    "selector": {}
-                  }
-                },
-                "credentials": {
-                  "authorizationHeader": {
-                    "prefix": "APIKEY"
-                  }
-                }
-              }
-            },
-            "targetRef": {
-              "group": "gateway.networking.k8s.io",
-              "kind": "HTTPRoute",
-              "name": "toystore"
-            }
-          }
-        },
-        {
           "apiVersion": "kuadrant.io/v1beta3",
           "kind": "RateLimitPolicy",
           "metadata": {
@@ -118,12 +90,9 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: AuthPolicy enables authentication and authorization for service
-        workloads in a Gateway API network
-      displayName: AuthPolicy
-      kind: AuthPolicy
+    - kind: AuthPolicy
       name: authpolicies.kuadrant.io
-      version: v1beta2
+      version: v1beta3
     - description: DNSPolicy configures how North-South based traffic should be balanced
         and reach the gateways
       displayName: DNSPolicy

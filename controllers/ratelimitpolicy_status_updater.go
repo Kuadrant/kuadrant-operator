@@ -11,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -54,6 +53,8 @@ func (r *rateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 		return p, ok
 	})
 
+	policyAcceptedFunc := rateLimitPolicyAcceptedStatusFunc(state)
+
 	logger.V(1).Info("updating rate limit policy statuses", "policies", len(policies))
 
 	for _, policy := range policies {
@@ -68,14 +69,11 @@ func (r *rateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 			ObservedGeneration: policy.Status.ObservedGeneration,
 		}
 
-		var err error
-		if validatedPolicies, validated := state.Load(StateRateLimitPolicyValid); validated {
-			err = validatedPolicies.(map[string]error)[policy.GetLocator()]
-		}
+		accepted, err := policyAcceptedFunc(policy)
 		meta.SetStatusCondition(&newStatus.Conditions, *kuadrant.AcceptedCondition(policy, err))
 
 		// do not set enforced condition if Accepted condition is false
-		if meta.IsStatusConditionFalse(newStatus.Conditions, string(gatewayapiv1alpha2.PolicyReasonAccepted)) {
+		if !accepted {
 			meta.RemoveStatusCondition(&newStatus.Conditions, string(kuadrant.PolicyConditionEnforced))
 		} else {
 			enforcedCond := r.enforcedCondition(policy, topology)

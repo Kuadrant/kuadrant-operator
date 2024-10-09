@@ -70,9 +70,8 @@ func (r *effectiveRateLimitPolicyReconciler) calculateEffectivePolicies(ctx cont
 	for _, gatewayClass := range gatewayClasses {
 		for _, httpRouteRule := range httpRouteRules {
 			paths := targetables.Paths(gatewayClass, httpRouteRule) // this may be expensive in clusters with many gateway classes - an alternative is to deep search the topology for httprouterules from each gatewayclass, keeping record of the paths
-			// TODO: skip for gateways and routes that are not in a valid state (?)
 			for i := range paths {
-				if effectivePolicy := kuadrantv1.EffectivePolicyForPath[*kuadrantv1beta3.RateLimitPolicy](paths[i], acceptedRateLimitPolicyFunc(state)); effectivePolicy != nil {
+				if effectivePolicy := kuadrantv1.EffectivePolicyForPath[*kuadrantv1beta3.RateLimitPolicy](paths[i], isRateLimitPolicyAcceptedAndNotDeletedFunc(state)); effectivePolicy != nil {
 					pathID := kuadrantv1.PathID(paths[i])
 					effectivePolicies[pathID] = EffectiveRateLimitPolicy{
 						Path: paths[i],

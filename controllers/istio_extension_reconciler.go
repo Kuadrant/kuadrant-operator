@@ -158,7 +158,7 @@ func (r *istioExtensionReconciler) buildWasmPoliciesPerGateway(ctx context.Conte
 
 		var wasmRules []wasm.Rule
 		for limitKey, mergeableLimit := range effectivePolicy.Spec.Rules() {
-			policy, found := lo.Find(kuadrantv1.PoliciesInPath(effectivePolicy.Path, acceptedRateLimitPolicyFunc(state)), func(p machinery.Policy) bool {
+			policy, found := lo.Find(kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state)), func(p machinery.Policy) bool {
 				return p.GetLocator() == mergeableLimit.Source
 			})
 			if !found { // should never happen

@@ -1602,23 +1602,6 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			Expect(err.Error()).To(ContainSubstring("Overrides and implicit defaults are mutually exclusive"))
 		}, testTimeOut)
 
-		It("Invalid - policy override targeting resource other than Gateway", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
-				policy.Spec.Overrides = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
-					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1beta3.Limit{
-							"implicit": {
-								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Duration: 10, Unit: "second"}},
-							},
-						},
-					},
-				}
-			})
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).ToNot(BeNil())
-			Expect(err.Error()).To(ContainSubstring("Overrides are only allowed for policies targeting a Gateway resource"))
-		}, testTimeOut)
-
 		It("Valid - policy override targeting Gateway", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"

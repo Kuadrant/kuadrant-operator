@@ -4,12 +4,6 @@ kind: Kustomization
 resources:
   - github.com/prometheus-operator/kube-prometheus?ref=release-0.13
   - github.com/Kuadrant/gateway-api-state-metrics/config/kuadrant?ref=0.5.0
-# To scrape istio metrics, 3 configurations are required:
-# 1. Envoy metrics directly from the istio ingress gateway pod
-  - prometheus/monitors/pod-monitor-envoy.yaml
-# 2. Istiod metrics via the istiod service
-  - prometheus/monitors/service-monitor-istiod.yaml
-# 3. Istio metrics exposed via envoy on 15020 in each application.
 # We're using the additionalScrapeConfigs field of the Prometheus CR
 # here to read existing prometheus scrape annotations on pods.
 # Ideally this would be done via another PodMonitor or ServicMonitor,
@@ -24,7 +18,6 @@ resources:
   - prometheus/monitors/service-monitor-authorino-operator.yaml
   - prometheus/monitors/service-monitor-dns-operator.yaml
 
-  - prometheus/telemetry.yaml
 
 patchesStrategicMerge:
   - rbac/cluster_role.yaml

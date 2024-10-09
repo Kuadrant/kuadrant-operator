@@ -1,13 +1,15 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: istiod
+  name: envoy-gateway
+  namespace: envoy-gateway-system
 spec:
   namespaceSelector:
     matchNames:
-    - gateway-system
+      - envoy-gateway-system
   selector:
     matchLabels:
-      app: istiod
+      control-plane: envoy-gateway
   endpoints:
-  - port: http-monitoring
+    - port: metrics
+

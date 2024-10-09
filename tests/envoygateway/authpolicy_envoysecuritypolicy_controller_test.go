@@ -8,10 +8,6 @@ import (
 	"time"
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
-	"github.com/kuadrant/kuadrant-operator/controllers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/tests"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
@@ -23,6 +19,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
+	"github.com/kuadrant/kuadrant-operator/controllers"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
 var _ = Describe("Auth Envoy SecurityPolicy controller", func() {
@@ -51,23 +52,23 @@ var _ = Describe("Auth Envoy SecurityPolicy controller", func() {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
-	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.AuthPolicy)) *kuadrantv1beta2.AuthPolicy {
-		policy := &kuadrantv1beta2.AuthPolicy{
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta3.AuthPolicy)) *kuadrantv1beta3.AuthPolicy {
+		policy := &kuadrantv1beta3.AuthPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "AuthPolicy",
-				APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				APIVersion: kuadrantv1beta3.GroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "toystore",
 				Namespace: testNamespace,
 			},
-			Spec: kuadrantv1beta2.AuthPolicySpec{
+			Spec: kuadrantv1beta3.AuthPolicySpec{
 				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  TestHTTPRouteName,
 				},
-				Defaults: &kuadrantv1beta2.AuthPolicyCommonSpec{
+				Defaults: &kuadrantv1beta3.AuthPolicyCommonSpec{
 					AuthScheme: tests.BuildBasicAuthScheme(),
 				},
 			},
@@ -85,7 +86,7 @@ var _ = Describe("Auth Envoy SecurityPolicy controller", func() {
 	Context("Auth Policy attached to the gateway", func() {
 
 		var (
-			gwPolicy *kuadrantv1beta2.AuthPolicy
+			gwPolicy *kuadrantv1beta3.AuthPolicy
 		)
 
 		BeforeEach(func(ctx SpecContext) {
@@ -94,7 +95,7 @@ var _ = Describe("Auth Envoy SecurityPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(gwRoute))).WithContext(ctx).Should(BeTrue())
 
-			gwPolicy = policyFactory(func(policy *kuadrantv1beta2.AuthPolicy) {
+			gwPolicy = policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -181,7 +182,7 @@ var _ = Describe("Auth Envoy SecurityPolicy controller", func() {
 	Context("Auth Policy attached to the route", func() {
 
 		var (
-			routePolicy *kuadrantv1beta2.AuthPolicy
+			routePolicy *kuadrantv1beta3.AuthPolicy
 			gwRoute     *gatewayapiv1.HTTPRoute
 		)
 
@@ -191,7 +192,7 @@ var _ = Describe("Auth Envoy SecurityPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(gwRoute))).WithContext(ctx).Should(BeTrue())
 
-			routePolicy = policyFactory(func(policy *kuadrantv1beta2.AuthPolicy) {
+			routePolicy = policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "HTTPRoute"
 				policy.Spec.TargetRef.Name = TestHTTPRouteName

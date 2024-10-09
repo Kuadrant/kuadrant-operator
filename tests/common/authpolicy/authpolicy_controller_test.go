@@ -26,7 +26,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/tests"
@@ -59,9 +59,9 @@ var _ = Describe("AuthPolicy controller (Serial)", Serial, func() {
 	}, afterEachTimeOut)
 
 	Context("AuthPolicy enforced condition reasons", func() {
-		assertAcceptedCondTrueAndEnforcedCond := func(ctx context.Context, policy *api.AuthPolicy, conditionStatus metav1.ConditionStatus, reason, message string) func() bool {
+		assertAcceptedCondTrueAndEnforcedCond := func(ctx context.Context, policy *kuadrantv1beta3.AuthPolicy, conditionStatus metav1.ConditionStatus, reason, message string) func() bool {
 			return func() bool {
-				existingPolicy := &api.AuthPolicy{}
+				existingPolicy := &kuadrantv1beta3.AuthPolicy{}
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)
 				if err != nil {
 					return false
@@ -83,23 +83,23 @@ var _ = Describe("AuthPolicy controller (Serial)", Serial, func() {
 			}
 		}
 
-		policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
-			policy := &api.AuthPolicy{
+		policyFactory := func(mutateFns ...func(policy *kuadrantv1beta3.AuthPolicy)) *kuadrantv1beta3.AuthPolicy {
+			policy := &kuadrantv1beta3.AuthPolicy{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "AuthPolicy",
-					APIVersion: api.GroupVersion.String(),
+					APIVersion: kuadrantv1beta3.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
 					Namespace: testNamespace,
 				},
-				Spec: api.AuthPolicySpec{
+				Spec: kuadrantv1beta3.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  TestHTTPRouteName,
 					},
-					Defaults: &api.AuthPolicyCommonSpec{
+					Defaults: &kuadrantv1beta3.AuthPolicyCommonSpec{
 						AuthScheme: tests.BuildBasicAuthScheme(),
 					},
 				},
@@ -171,23 +171,23 @@ var _ = Describe("AuthPolicy controller", func() {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
-	policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
-		policy := &api.AuthPolicy{
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta3.AuthPolicy)) *kuadrantv1beta3.AuthPolicy {
+		policy := &kuadrantv1beta3.AuthPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "AuthPolicy",
-				APIVersion: api.GroupVersion.String(),
+				APIVersion: kuadrantv1beta3.GroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "toystore",
 				Namespace: testNamespace,
 			},
-			Spec: api.AuthPolicySpec{
+			Spec: kuadrantv1beta3.AuthPolicySpec{
 				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  TestHTTPRouteName,
 				},
-				Defaults: &api.AuthPolicyCommonSpec{
+				Defaults: &kuadrantv1beta3.AuthPolicyCommonSpec{
 					AuthScheme: tests.BuildBasicAuthScheme(),
 				},
 			},
@@ -225,7 +225,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, k8sClient, client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
 
-			policy := policyFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -263,7 +263,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		}, testTimeOut)
 
 		It("Attaches policy to a Gateway with hostname in listeners", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -309,6 +309,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			}).WithContext(ctx).Should(BeTrue())
 			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
 			Expect(authConfig.Spec.Hosts).To(Equal([]string{routeHost}))
+			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
 			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(1))        // 1 HTTPRouteRule in the HTTPRoute
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the HTTPRouteRule
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(2))
@@ -346,7 +347,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(otherRoute))).WithContext(ctx).Should(BeTrue())
 
 			// attach policy to the gatewaay
-			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
+			gwPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -382,79 +383,6 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/.*"))
 		}, testTimeOut)
 
-		It("Rejects policy with only unmatching top-level route selectors while trying to configure the gateway", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.CommonSpec().RouteSelectors = []api.RouteSelector{
-					{ // does not select any HTTPRouteRule
-						Matches: []gatewayapiv1.HTTPRouteMatch{
-							{
-								Method: ptr.To(gatewayapiv1.HTTPMethod("DELETE")),
-							},
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(func() bool {
-				existingPolicy := &api.AuthPolicy{}
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)
-				if err != nil {
-					return false
-				}
-				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
-				return condition != nil && condition.Reason == string(kuadrant.PolicyReasonUnknown) && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
-			}).WithContext(ctx).Should(BeTrue())
-
-			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: controllers.AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, authConfigKey, &authorinoapi.AuthConfig{})
-				return apierrors.IsNotFound(err)
-			}).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
-
-		It("Rejects policy with only unmatching config-level route selectors post-configuring the gateway", func(ctx SpecContext) {
-			policy := policyFactory()
-			config := policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"]
-			config.RouteSelectors = []api.RouteSelector{
-				{ // does not select any HTTPRouteRule
-					Matches: []gatewayapiv1.HTTPRouteMatch{
-						{
-							Method: ptr.To(gatewayapiv1.HTTPMethod("DELETE")),
-						},
-					},
-				},
-			}
-			policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"] = config
-
-			err := k8sClient.Create(ctx, policy)
-			logf.Log.V(1).Info("Creating AuthPolicy", "key", client.ObjectKeyFromObject(policy).String(), "error", err)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(func() bool {
-				existingPolicy := &api.AuthPolicy{}
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)
-				if err != nil {
-					return false
-				}
-				condition := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
-				return condition != nil && condition.Reason == string(kuadrant.PolicyReasonUnknown) && strings.Contains(condition.Message, "cannot match any route rules, check for invalid route selectors in the policy")
-			}).WithContext(ctx).Should(BeTrue())
-
-			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: controllers.AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, authConfigKey, &authorinoapi.AuthConfig{})
-				return apierrors.IsNotFound(err)
-			}).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
-
 		It("Deletes resources when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory()
 
@@ -478,7 +406,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		}, testTimeOut)
 
 		It("Maps to all fields of the AuthConfig", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Spec.CommonSpec().NamedPatterns = map[string]authorinoapi.PatternExpressions{
 					"internal-source": []authorinoapi.PatternExpression{
 						{
@@ -502,8 +430,8 @@ var _ = Describe("AuthPolicy controller", func() {
 						},
 					},
 				}
-				policy.Spec.CommonSpec().AuthScheme = &api.AuthSchemeSpec{
-					Authentication: map[string]api.AuthenticationSpec{
+				policy.Spec.CommonSpec().AuthScheme = &kuadrantv1beta3.AuthSchemeSpec{
+					Authentication: map[string]kuadrantv1beta3.AuthenticationSpec{
 						"jwt": {
 							AuthenticationSpec: authorinoapi.AuthenticationSpec{
 								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
@@ -525,7 +453,7 @@ var _ = Describe("AuthPolicy controller", func() {
 							},
 						},
 					},
-					Metadata: map[string]api.MetadataSpec{
+					Metadata: map[string]kuadrantv1beta3.MetadataSpec{
 						"user-groups": {
 							MetadataSpec: authorinoapi.MetadataSpec{
 								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
@@ -547,7 +475,7 @@ var _ = Describe("AuthPolicy controller", func() {
 							},
 						},
 					},
-					Authorization: map[string]api.AuthorizationSpec{
+					Authorization: map[string]kuadrantv1beta3.AuthorizationSpec{
 						"admin-or-privileged": {
 							AuthorizationSpec: authorinoapi.AuthorizationSpec{
 								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
@@ -590,7 +518,7 @@ var _ = Describe("AuthPolicy controller", func() {
 							},
 						},
 					},
-					Response: &api.ResponseSpec{
+					Response: &kuadrantv1beta3.ResponseSpec{
 						Unauthenticated: &authorinoapi.DenyWithSpec{
 							Message: &authorinoapi.ValueOrSelector{
 								Value: k8sruntime.RawExtension{Raw: []byte(`"Missing verified JWT injected by the gateway"`)},
@@ -601,10 +529,10 @@ var _ = Describe("AuthPolicy controller", func() {
 								Value: k8sruntime.RawExtension{Raw: []byte(`"User must be admin or member of privileged group"`)},
 							},
 						},
-						Success: api.WrappedSuccessResponseSpec{
-							Headers: map[string]api.HeaderSuccessResponseSpec{
+						Success: kuadrantv1beta3.WrappedSuccessResponseSpec{
+							Headers: map[string]kuadrantv1beta3.HeaderSuccessResponseSpec{
 								"x-username": {
-									SuccessResponseSpec: api.SuccessResponseSpec{
+									SuccessResponseSpec: kuadrantv1beta3.SuccessResponseSpec{
 										SuccessResponseSpec: authorinoapi.SuccessResponseSpec{
 											CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
 												Conditions: []authorinoapi.PatternExpressionOrRef{
@@ -626,7 +554,7 @@ var _ = Describe("AuthPolicy controller", func() {
 									},
 								},
 							},
-							DynamicMetadata: map[string]api.SuccessResponseSpec{
+							DynamicMetadata: map[string]kuadrantv1beta3.SuccessResponseSpec{
 								"x-auth-data": {
 									SuccessResponseSpec: authorinoapi.SuccessResponseSpec{
 										CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
@@ -655,7 +583,7 @@ var _ = Describe("AuthPolicy controller", func() {
 							},
 						},
 					},
-					Callbacks: map[string]api.CallbackSpec{
+					Callbacks: map[string]kuadrantv1beta3.CallbackSpec{
 						"unauthorized-attempt": {
 							CallbackSpec: authorinoapi.CallbackSpec{
 								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
@@ -710,7 +638,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		}, testTimeOut)
 
 		It("Succeeds when AuthScheme is not defined", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Spec.CommonSpec().AuthScheme = nil
 			})
 
@@ -780,259 +708,12 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
 			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Value).To(Equal("/private.*"))
 		}, testTimeOut)
-
-		It("Attaches policy with top-level route selectors to the HTTPRoute", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.CommonSpec().RouteSelectors = []api.RouteSelector{
-					{ // Selects: POST|DELETE *.admin.toystore.com/admin*
-						Matches: []gatewayapiv1.HTTPRouteMatch{
-							{
-								Path: &gatewayapiv1.HTTPPathMatch{
-									Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
-									Value: ptr.To("/admin"),
-								},
-							},
-						},
-						Hostnames: []gatewayapiv1.Hostname{gatewayapiv1.Hostname(host2)},
-					},
-					{ // Selects: GET /private*
-						Matches: []gatewayapiv1.HTTPRouteMatch{
-							{
-								Path: &gatewayapiv1.HTTPPathMatch{
-									Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
-									Value: ptr.To("/private"),
-								},
-							},
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
-
-			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: controllers.AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
-			authConfig := &authorinoapi.AuthConfig{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, authConfigKey, authConfig)
-				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
-				return err == nil && authConfig.Status.Ready()
-			}).WithContext(ctx).Should(BeTrue())
-			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions)
-			Expect(authConfig.Spec.Hosts).To(Equal([]string{host1, host2}))
-			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
-			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(2))        // 2 HTTPRouteRules in the HTTPRoute
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(2)) // 2 HTTPRouteMatches in the 1st HTTPRouteRule
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(3))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("request.host"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal(strings.Replace(host2, ".", `\.`, -1)))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal("request.method"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("POST"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[2].Selector).To(Equal(`request.url_path`))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[2].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[2].Value).To(Equal("/admin.*"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All).To(HaveLen(3))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Selector).To(Equal("request.host"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Value).To(Equal(strings.Replace(host2, ".", `\.`, -1)))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Selector).To(Equal("request.method"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Value).To(Equal("DELETE"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[2].Selector).To(Equal(`request.url_path`))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[2].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[2].Value).To(Equal("/admin.*"))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the 2nd HTTPRouteRule
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All).To(HaveLen(2))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Selector).To(Equal("request.method"))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Value).To(Equal("GET"))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Selector).To(Equal(`request.url_path`))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Value).To(Equal("/private.*"))
-		}, testTimeOut)
-
-		It("Attaches policy with config-level route selectors to the HTTPRoute", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				config := policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"]
-				config.RouteSelectors = []api.RouteSelector{
-					{ // Selects: POST|DELETE *.admin.toystore.com/admin*
-						Matches: []gatewayapiv1.HTTPRouteMatch{
-							{
-								Path: &gatewayapiv1.HTTPPathMatch{
-									Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
-									Value: ptr.To("/admin"),
-								},
-							},
-						},
-						Hostnames: []gatewayapiv1.Hostname{gatewayapiv1.Hostname(host2)},
-					},
-				}
-				policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"] = config
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
-
-			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: controllers.AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
-			authConfig := &authorinoapi.AuthConfig{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, authConfigKey, authConfig)
-				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
-				return err == nil && authConfig.Status.Ready()
-			}).WithContext(ctx).Should(BeTrue())
-			apiKeyConditions := authConfig.Spec.Authentication["apiKey"].Conditions
-			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions, "apiKey conditions", apiKeyConditions)
-			Expect(authConfig.Spec.Hosts).To(Equal([]string{host1, host2}))
-			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
-			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(2))        // 2 HTTPRouteRules in the HTTPRoute
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(2)) // 2 HTTPRouteMatches in the 1st HTTPRouteRule
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(2))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("request.method"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal("POST"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`request.url_path`))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/admin.*"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All).To(HaveLen(2))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Selector).To(Equal("request.method"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Value).To(Equal("DELETE"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Selector).To(Equal(`request.url_path`))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Value).To(Equal("/admin.*"))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the 2nd HTTPRouteRule
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All).To(HaveLen(2))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Selector).To(Equal("request.method"))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Value).To(Equal("GET"))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Selector).To(Equal(`request.url_path`))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Value).To(Equal("/private.*"))
-			Expect(apiKeyConditions).To(HaveLen(1))
-			Expect(apiKeyConditions[0].Any).To(HaveLen(1))        // 1 HTTPRouteRule selected from the HTTPRoute
-			Expect(apiKeyConditions[0].Any[0].Any).To(HaveLen(2)) // 2 HTTPRouteMatches in the HTTPRouteRule
-			Expect(apiKeyConditions[0].Any[0].Any[0].All).To(HaveLen(3))
-			Expect(apiKeyConditions[0].Any[0].Any[0].All[0].Selector).To(Equal("request.host"))
-			Expect(apiKeyConditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(apiKeyConditions[0].Any[0].Any[0].All[0].Value).To(Equal(strings.Replace(host2, ".", `\.`, -1)))
-			Expect(apiKeyConditions[0].Any[0].Any[0].All[1].Selector).To(Equal("request.method"))
-			Expect(apiKeyConditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(apiKeyConditions[0].Any[0].Any[0].All[1].Value).To(Equal("POST"))
-			Expect(apiKeyConditions[0].Any[0].Any[0].All[2].Selector).To(Equal(`request.url_path`))
-			Expect(apiKeyConditions[0].Any[0].Any[0].All[2].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(apiKeyConditions[0].Any[0].Any[0].All[2].Value).To(Equal("/admin.*"))
-			Expect(apiKeyConditions[0].Any[0].Any[1].All).To(HaveLen(3))
-			Expect(apiKeyConditions[0].Any[0].Any[1].All[0].Selector).To(Equal("request.host"))
-			Expect(apiKeyConditions[0].Any[0].Any[1].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(apiKeyConditions[0].Any[0].Any[1].All[0].Value).To(Equal(strings.Replace(host2, ".", `\.`, -1)))
-			Expect(apiKeyConditions[0].Any[0].Any[1].All[1].Selector).To(Equal("request.method"))
-			Expect(apiKeyConditions[0].Any[0].Any[1].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(apiKeyConditions[0].Any[0].Any[1].All[1].Value).To(Equal("DELETE"))
-			Expect(apiKeyConditions[0].Any[0].Any[1].All[2].Selector).To(Equal(`request.url_path`))
-			Expect(apiKeyConditions[0].Any[0].Any[1].All[2].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(apiKeyConditions[0].Any[0].Any[1].All[2].Value).To(Equal("/admin.*"))
-		}, testTimeOut)
-
-		It("Mixes route selectors into other conditions", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				config := policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"]
-				config.RouteSelectors = []api.RouteSelector{
-					{ // Selects: GET /private*
-						Matches: []gatewayapiv1.HTTPRouteMatch{
-							{
-								Path: &gatewayapiv1.HTTPPathMatch{
-									Type:  ptr.To(gatewayapiv1.PathMatchType("PathPrefix")),
-									Value: ptr.To("/private"),
-								},
-								Method: ptr.To(gatewayapiv1.HTTPMethod("GET")),
-							},
-						},
-					},
-				}
-				config.Conditions = []authorinoapi.PatternExpressionOrRef{
-					{
-						PatternExpression: authorinoapi.PatternExpression{
-							Selector: "context.source.address.Address.SocketAddress.address",
-							Operator: authorinoapi.PatternExpressionOperator("matches"),
-							Value:    `192\.168\.0\..*`,
-						},
-					},
-				}
-				policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"] = config
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).ToNot(HaveOccurred())
-
-			// check policy status
-			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
-
-			// check authorino authconfig
-			authConfigKey := types.NamespacedName{Name: controllers.AuthConfigName(client.ObjectKeyFromObject(policy)), Namespace: testNamespace}
-			authConfig := &authorinoapi.AuthConfig{}
-			Eventually(func() bool {
-				err := k8sClient.Get(ctx, authConfigKey, authConfig)
-				logf.Log.V(1).Info("Fetching Authorino's AuthConfig", "key", authConfigKey.String(), "error", err)
-				return err == nil && authConfig.Status.Ready()
-			}).WithContext(ctx).Should(BeTrue())
-			apiKeyConditions := authConfig.Spec.Authentication["apiKey"].Conditions
-			logf.Log.V(1).Info("authConfig.Spec", "hosts", authConfig.Spec.Hosts, "conditions", authConfig.Spec.Conditions, "apiKey conditions", apiKeyConditions)
-			Expect(authConfig.Spec.Hosts).To(Equal([]string{host1, host2}))
-			Expect(authConfig.Spec.Conditions).To(HaveLen(1))
-			Expect(authConfig.Spec.Conditions[0].Any).To(HaveLen(2))        // 2 HTTPRouteRules in the HTTPRoute
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any).To(HaveLen(2)) // 2 HTTPRouteMatches in the 1st HTTPRouteRule
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All).To(HaveLen(2))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Selector).To(Equal("request.method"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[0].Value).To(Equal("POST"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Selector).To(Equal(`request.url_path`))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[0].All[1].Value).To(Equal("/admin.*"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All).To(HaveLen(2))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Selector).To(Equal("request.method"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[0].Value).To(Equal("DELETE"))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Selector).To(Equal(`request.url_path`))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[0].Any[1].All[1].Value).To(Equal("/admin.*"))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the 2nd HTTPRouteRule
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All).To(HaveLen(2))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Selector).To(Equal("request.method"))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[0].Value).To(Equal("GET"))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Selector).To(Equal(`request.url_path`))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(authConfig.Spec.Conditions[0].Any[1].Any[0].All[1].Value).To(Equal("/private.*"))
-			Expect(apiKeyConditions).To(HaveLen(2)) // 1 existed condition + 1 HTTPRouteRule selected from the HTTPRoute
-			Expect(apiKeyConditions[0].Selector).To(Equal("context.source.address.Address.SocketAddress.address"))
-			Expect(apiKeyConditions[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(apiKeyConditions[0].Value).To(Equal(`192\.168\.0\..*`))
-			Expect(apiKeyConditions[1].Any).To(HaveLen(1))        // 1 HTTPRouteRule selected from the HTTPRoute
-			Expect(apiKeyConditions[1].Any[0].Any).To(HaveLen(1)) // 1 HTTPRouteMatch in the HTTPRouteRule
-			Expect(apiKeyConditions[1].Any[0].Any[0].All).To(HaveLen(2))
-			Expect(apiKeyConditions[1].Any[0].Any[0].All[0].Selector).To(Equal("request.method"))
-			Expect(apiKeyConditions[1].Any[0].Any[0].All[0].Operator).To(Equal(authorinoapi.PatternExpressionOperator("eq")))
-			Expect(apiKeyConditions[1].Any[0].Any[0].All[0].Value).To(Equal("GET"))
-			Expect(apiKeyConditions[1].Any[0].Any[0].All[1].Selector).To(Equal(`request.url_path`))
-			Expect(apiKeyConditions[1].Any[0].Any[0].All[1].Operator).To(Equal(authorinoapi.PatternExpressionOperator("matches")))
-			Expect(apiKeyConditions[1].Any[0].Any[0].All[1].Value).To(Equal("/private.*"))
-		}, testTimeOut)
 	})
 
 	Context("AuthPolicy accepted condition reasons", func() {
-		assertAcceptedCondFalseAndEnforcedCondNil := func(ctx context.Context, policy *api.AuthPolicy, reason, message string) func() bool {
+		assertAcceptedCondFalseAndEnforcedCondNil := func(ctx context.Context, policy *kuadrantv1beta3.AuthPolicy, reason, message string) func() bool {
 			return func() bool {
-				existingPolicy := &api.AuthPolicy{}
+				existingPolicy := &kuadrantv1beta3.AuthPolicy{}
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)
 				if err != nil {
 					return false
@@ -1078,7 +759,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
-			policy2 := policyFactory(func(policy *api.AuthPolicy) {
+			policy2 := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "conflicting-ap"
 			})
 			err = k8sClient.Create(ctx, policy2)
@@ -1093,9 +774,9 @@ var _ = Describe("AuthPolicy controller", func() {
 	})
 
 	Context("AuthPolicy enforced condition reasons", func() {
-		assertAcceptedCondTrueAndEnforcedCond := func(ctx context.Context, policy *api.AuthPolicy, conditionStatus metav1.ConditionStatus, reason, message string) func() bool {
+		assertAcceptedCondTrueAndEnforcedCond := func(ctx context.Context, policy *kuadrantv1beta3.AuthPolicy, conditionStatus metav1.ConditionStatus, reason, message string) func() bool {
 			return func() bool {
-				existingPolicy := &api.AuthPolicy{}
+				existingPolicy := &kuadrantv1beta3.AuthPolicy{}
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)
 				if err != nil {
 					return false
@@ -1146,7 +827,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			// attach policy to the gatewaay
-			gwPolicy := policyFactory(func(policy *api.AuthPolicy) {
+			gwPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -1189,12 +870,12 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Gateway AuthPolicy has overrides and Route AuthPolicy is added.", func(ctx SpecContext) {
-			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Overrides = &kuadrantv1beta3.AuthPolicyCommonSpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -1226,12 +907,12 @@ var _ = Describe("AuthPolicy controller", func() {
 			// check policy status
 			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy)).WithContext(ctx).Should(BeTrue())
 
-			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Overrides = &kuadrantv1beta3.AuthPolicyCommonSpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -1256,12 +937,12 @@ var _ = Describe("AuthPolicy controller", func() {
 			// check policy status
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), routePolicy)).WithContext(ctx).Should(BeTrue())
 
-			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Overrides = &kuadrantv1beta3.AuthPolicyCommonSpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -1293,7 +974,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			// check policy status
 			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy)).WithContext(ctx).Should(BeTrue())
 
-			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -1315,7 +996,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				if err != nil {
 					return false
 				}
-				gatewayPolicy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				gatewayPolicy.Spec.Overrides = &kuadrantv1beta3.AuthPolicyCommonSpec{}
 				gatewayPolicy.Spec.Defaults = nil
 				gatewayPolicy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				gatewayPolicy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -1339,12 +1020,12 @@ var _ = Describe("AuthPolicy controller", func() {
 			// check policy status
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), routePolicy)).WithContext(ctx).Should(BeTrue())
 
-			gatewayPolicy := policyFactory(func(policy *api.AuthPolicy) {
+			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+				policy.Spec.Overrides = &kuadrantv1beta3.AuthPolicyCommonSpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -1379,8 +1060,8 @@ var _ = Describe("AuthPolicy controller", func() {
 		}, testTimeOut)
 
 		It("Blocks creation of AuthPolicies with overrides targeting HTTPRoutes", func(ctx SpecContext) {
-			routePolicy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Overrides = &api.AuthPolicyCommonSpec{}
+			routePolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+				policy.Spec.Overrides = &kuadrantv1beta3.AuthPolicyCommonSpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 			})
@@ -1407,13 +1088,13 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
-	policyFactory := func(mutateFns ...func(policy *api.AuthPolicy)) *api.AuthPolicy {
-		policy := &api.AuthPolicy{
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta3.AuthPolicy)) *kuadrantv1beta3.AuthPolicy {
+		policy := &kuadrantv1beta3.AuthPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "my-policy",
 				Namespace: testNamespace,
 			},
-			Spec: api.AuthPolicySpec{
+			Spec: kuadrantv1beta3.AuthPolicySpec{
 				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
@@ -1437,7 +1118,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("Valid policy targeting Gateway", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
 			})
 			err := k8sClient.Create(ctx, policy)
@@ -1445,7 +1126,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("Invalid Target Ref Group", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Spec.TargetRef.Group = "not-gateway.networking.k8s.io"
 			})
 			err := k8sClient.Create(ctx, policy)
@@ -1454,7 +1135,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("Invalid Target Ref Kind", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Spec.TargetRef.Kind = "TCPRoute"
 			})
 			err := k8sClient.Create(ctx, policy)
@@ -1465,15 +1146,15 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 	Context("Defaults mutual exclusivity validation", func() {
 		It("Valid when only implicit defaults are used", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Spec.AuthScheme = tests.BuildBasicAuthScheme()
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 		})
 
 		It("Valid when only explicit defaults are used", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+				policy.Spec.Defaults = &kuadrantv1beta3.AuthPolicyCommonSpec{
 					AuthScheme: tests.BuildBasicAuthScheme(),
 				}
 			})
@@ -1481,8 +1162,8 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("Invalid when both implicit and explicit defaults are used - authScheme", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+				policy.Spec.Defaults = &kuadrantv1beta3.AuthPolicyCommonSpec{}
 				policy.Spec.AuthScheme = tests.BuildBasicAuthScheme()
 			})
 			err := k8sClient.Create(ctx, policy)
@@ -1490,30 +1171,9 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 			Expect(strings.Contains(err.Error(), "Implicit and explicit defaults are mutually exclusive")).To(BeTrue())
 		})
 
-		It("Invalid when both implicit and explicit defaults are used - routeSelectors", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
-				policy.Spec.RouteSelectors = []api.RouteSelector{
-					{
-						Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
-						Matches: []gatewayapiv1.HTTPRouteMatch{
-							{
-								Path: &gatewayapiv1.HTTPPathMatch{
-									Value: ptr.To("/foo"),
-								},
-							},
-						},
-					},
-				}
-			})
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), "Implicit and explicit defaults are mutually exclusive")).To(BeTrue())
-		})
-
 		It("Invalid when both implicit and explicit defaults are used - namedPatterns", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+				policy.Spec.Defaults = &kuadrantv1beta3.AuthPolicyCommonSpec{}
 				policy.Spec.NamedPatterns = map[string]authorinoapi.PatternExpressions{
 					"internal-source": []authorinoapi.PatternExpression{
 						{
@@ -1530,8 +1190,8 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("Invalid when both implicit and explicit defaults are used - conditions", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+				policy.Spec.Defaults = &kuadrantv1beta3.AuthPolicyCommonSpec{}
 				policy.Spec.Conditions = []authorinoapi.PatternExpressionOrRef{
 					{
 						PatternRef: authorinoapi.PatternRef{
@@ -1543,379 +1203,6 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 			err := k8sClient.Create(ctx, policy)
 			Expect(err).To(Not(BeNil()))
 			Expect(strings.Contains(err.Error(), "Implicit and explicit defaults are mutually exclusive")).To(BeTrue())
-		})
-	})
-
-	Context("Route Selector Validation", func() {
-		const (
-			gateWayRouteSelectorErrorMessage = "route selectors not supported when targeting a Gateway"
-		)
-
-		var (
-			routeSelector = api.RouteSelector{
-				Hostnames: []gatewayapiv1.Hostname{"*.foo.io"},
-				Matches: []gatewayapiv1.HTTPRouteMatch{
-					{
-						Path: &gatewayapiv1.HTTPPathMatch{
-							Value: ptr.To("/foo"),
-						},
-					},
-				},
-			}
-			routeSelectors     = []api.RouteSelector{routeSelector}
-			commonAuthRuleSpec = api.CommonAuthRuleSpec{RouteSelectors: routeSelectors}
-		)
-
-		policyFactory := func(mutateFn func(policy *api.AuthPolicy)) *api.AuthPolicy {
-			policy := &api.AuthPolicy{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-policy",
-					Namespace: testNamespace,
-				},
-				Spec: api.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "Gateway",
-						Name:  "my-gw",
-					},
-				},
-			}
-
-			if mutateFn != nil {
-				mutateFn(policy)
-			}
-
-			return policy
-		}
-		It("invalid usage of top-level route selectors with a gateway targetRef", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.RouteSelectors = routeSelectors
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of top-level route selectors with a gateway targetRef - defaults", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
-				policy.Spec.CommonSpec().RouteSelectors = routeSelectors
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of config-level route selectors with a gateway targetRef - authentication", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.AuthScheme = &api.AuthSchemeSpec{
-					Authentication: map[string]api.AuthenticationSpec{
-						"my-rule": {
-							AuthenticationSpec: authorinoapi.AuthenticationSpec{
-								AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-									AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
-								},
-							},
-							CommonAuthRuleSpec: commonAuthRuleSpec,
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of config-level route selectors with a gateway targetRef - authentication - defaults", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
-				policy.Spec.CommonSpec().AuthScheme = &api.AuthSchemeSpec{
-					Authentication: map[string]api.AuthenticationSpec{
-						"my-rule": {
-							AuthenticationSpec: authorinoapi.AuthenticationSpec{
-								AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-									AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
-								},
-							},
-							CommonAuthRuleSpec: commonAuthRuleSpec,
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of config-level route selectors with a gateway targetRef - metadata", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.AuthScheme = &api.AuthSchemeSpec{
-					Metadata: map[string]api.MetadataSpec{
-						"my-metadata": {
-							CommonAuthRuleSpec: commonAuthRuleSpec,
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of config-level route selectors with a gateway targetRef - metadata - defaults", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
-				policy.Spec.CommonSpec().AuthScheme = &api.AuthSchemeSpec{
-					Metadata: map[string]api.MetadataSpec{
-						"my-metadata": {
-							CommonAuthRuleSpec: commonAuthRuleSpec,
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of config-level route selectors with a gateway targetRef - authorization", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.AuthScheme = &api.AuthSchemeSpec{
-					Authorization: map[string]api.AuthorizationSpec{
-						"my-authZ": {
-							CommonAuthRuleSpec: commonAuthRuleSpec,
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of config-level route selectors with a gateway targetRef - authorization - defaults", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
-				policy.Spec.CommonSpec().AuthScheme = &api.AuthSchemeSpec{
-					Authorization: map[string]api.AuthorizationSpec{
-						"my-authZ": {
-							CommonAuthRuleSpec: commonAuthRuleSpec,
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of config-level route selectors with a gateway targetRef - response success headers", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.AuthScheme = &api.AuthSchemeSpec{
-					Response: &api.ResponseSpec{
-						Success: api.WrappedSuccessResponseSpec{
-							Headers: map[string]api.HeaderSuccessResponseSpec{
-								"header": {
-									SuccessResponseSpec: api.SuccessResponseSpec{
-										CommonAuthRuleSpec: commonAuthRuleSpec,
-									},
-								},
-							},
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of config-level route selectors with a gateway targetRef - response success headers - defaults", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
-				policy.Spec.CommonSpec().AuthScheme = &api.AuthSchemeSpec{
-					Response: &api.ResponseSpec{
-						Success: api.WrappedSuccessResponseSpec{
-							Headers: map[string]api.HeaderSuccessResponseSpec{
-								"header": {
-									SuccessResponseSpec: api.SuccessResponseSpec{
-										CommonAuthRuleSpec: commonAuthRuleSpec,
-									},
-								},
-							},
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of config-level route selectors with a gateway targetRef - response success dynamic metadata", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
-				policy.Spec.CommonSpec().AuthScheme = &api.AuthSchemeSpec{
-					Response: &api.ResponseSpec{
-						Success: api.WrappedSuccessResponseSpec{
-							DynamicMetadata: map[string]api.SuccessResponseSpec{
-								"header": {
-									CommonAuthRuleSpec: commonAuthRuleSpec,
-								},
-							},
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of config-level route selectors with a gateway targetRef - response success dynamic metadata - defaults", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
-				policy.Spec.CommonSpec().AuthScheme = &api.AuthSchemeSpec{
-					Response: &api.ResponseSpec{
-						Success: api.WrappedSuccessResponseSpec{
-							DynamicMetadata: map[string]api.SuccessResponseSpec{
-								"header": {
-									CommonAuthRuleSpec: commonAuthRuleSpec,
-								},
-							},
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of config-level route selectors with a gateway targetRef - callbacks", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.AuthScheme = &api.AuthSchemeSpec{
-					Callbacks: map[string]api.CallbackSpec{
-						"callback": {
-							CallbackSpec: authorinoapi.CallbackSpec{
-								CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
-									Http: &authorinoapi.HttpEndpointSpec{
-										Url: "test.com",
-									},
-								},
-							},
-							CommonAuthRuleSpec: commonAuthRuleSpec,
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of config-level route selectors with a gateway targetRef - callbacks - defaults", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
-				policy.Spec.CommonSpec().AuthScheme = &api.AuthSchemeSpec{
-					Callbacks: map[string]api.CallbackSpec{
-						"callback": {
-							CallbackSpec: authorinoapi.CallbackSpec{
-								CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
-									Http: &authorinoapi.HttpEndpointSpec{
-										Url: "test.com",
-									},
-								},
-							},
-							CommonAuthRuleSpec: commonAuthRuleSpec,
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).To(Not(BeNil()))
-			Expect(strings.Contains(err.Error(), gateWayRouteSelectorErrorMessage)).To(BeTrue())
-		})
-
-		It("invalid usage of root level route selectors for HTTPRoute - max number is 15", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.TargetRef.Kind = "HTTPRoute"
-				policy.Spec.TargetRef.Name = "my-route"
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
-				policy.Spec.CommonSpec().RouteSelectors = []api.RouteSelector{
-					routeSelector,
-					routeSelector,
-					routeSelector,
-					routeSelector,
-					routeSelector,
-					routeSelector,
-					routeSelector,
-					routeSelector,
-					routeSelector,
-					routeSelector,
-					routeSelector,
-					routeSelector,
-					routeSelector,
-					routeSelector,
-					routeSelector,
-					routeSelector,
-				}
-			})
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).ToNot(BeNil())
-			Expect(err.Error(), ContainSubstring("Too many: 16: must have at most 15 items"))
-		})
-
-		It("invalid usage of config level route selectors for HTTPRoute - max number is 8", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *api.AuthPolicy) {
-				policy.Spec.TargetRef.Kind = "HTTPRoute"
-				policy.Spec.TargetRef.Name = "my-route"
-				policy.Spec.Defaults = &api.AuthPolicyCommonSpec{}
-				policy.Spec.CommonSpec().AuthScheme = &api.AuthSchemeSpec{
-					Callbacks: map[string]api.CallbackSpec{
-						"callback": {
-							CallbackSpec: authorinoapi.CallbackSpec{
-								CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
-									Http: &authorinoapi.HttpEndpointSpec{
-										Url: "test.com",
-									},
-								},
-							},
-							CommonAuthRuleSpec: api.CommonAuthRuleSpec{
-								RouteSelectors: []api.RouteSelector{
-									routeSelector,
-									routeSelector,
-									routeSelector,
-									routeSelector,
-									routeSelector,
-									routeSelector,
-									routeSelector,
-									routeSelector,
-									routeSelector,
-								},
-							},
-						},
-					},
-				}
-			})
-
-			err := k8sClient.Create(ctx, policy)
-			Expect(err).ToNot(BeNil())
-			Expect(err.Error(), ContainSubstring("Too many: 9: must have at most 8 items"))
 		})
 	})
 })

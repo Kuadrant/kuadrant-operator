@@ -30,7 +30,7 @@ import (
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/api/v1alpha2"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
@@ -58,7 +58,7 @@ func (r *TLSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	log.Info("Reconciling TLSPolicy")
 	ctx = crlog.IntoContext(ctx, log)
 
-	previous := &v1alpha1.TLSPolicy{}
+	previous := &v1alpha2.TLSPolicy{}
 	if err := r.Client().Get(ctx, req.NamespacedName, previous); err != nil {
 		if err := client.IgnoreNotFound(err); err == nil {
 			return ctrl.Result{}, nil
@@ -112,7 +112,7 @@ func (r *TLSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return ctrl.Result{}, specErr
 }
 
-func (r *TLSPolicyReconciler) reconcileResources(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy, targetNetworkObject client.Object) error {
+func (r *TLSPolicyReconciler) reconcileResources(ctx context.Context, tlsPolicy *v1alpha2.TLSPolicy, targetNetworkObject client.Object) error {
 	err := validateIssuer(ctx, r.Client(), tlsPolicy)
 	if err != nil {
 		return err
@@ -141,7 +141,7 @@ func (r *TLSPolicyReconciler) reconcileResources(ctx context.Context, tlsPolicy 
 	return nil
 }
 
-func (r *TLSPolicyReconciler) deleteResources(ctx context.Context, tlsPolicy *v1alpha1.TLSPolicy, targetNetworkObject client.Object) error {
+func (r *TLSPolicyReconciler) deleteResources(ctx context.Context, tlsPolicy *v1alpha2.TLSPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
 	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), tlsPolicy, targetNetworkObject)
 	if err != nil {
@@ -184,13 +184,13 @@ func (r *TLSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	gatewayEventMapper := mappers.NewGatewayEventMapper(
-		v1alpha1.NewTLSPolicyType(),
+		v1alpha2.NewTLSPolicyType(),
 		mappers.WithLogger(r.Logger().WithName("gateway.mapper")),
 		mappers.WithClient(mgr.GetClient()),
 	)
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.TLSPolicy{}).
+		For(&v1alpha2.TLSPolicy{}).
 		Owns(&certmanagerv1.Certificate{}).
 		Watches(&gatewayapiv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.Map)).
 		Complete(r)

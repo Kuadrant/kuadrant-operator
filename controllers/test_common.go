@@ -52,6 +52,7 @@ import (
 
 	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1alpha2 "github.com/kuadrant/kuadrant-operator/api/v1alpha2"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
@@ -293,6 +294,7 @@ func BootstrapScheme() *runtime.Scheme {
 		scheme.AddToScheme,
 		kuadrantdnsv1alpha1.AddToScheme,
 		kuadrantv1alpha1.AddToScheme,
+		kuadrantv1alpha2.AddToScheme,
 		kuadrantv1beta1.AddToScheme,
 		kuadrantv1beta2.AddToScheme,
 		kuadrantv1beta3.AddToScheme,

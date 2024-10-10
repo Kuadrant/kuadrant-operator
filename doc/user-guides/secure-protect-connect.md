@@ -98,7 +98,7 @@ This is because currently there is not a TLS secret in place. Let's fix that by 
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1alpha2
 kind: TLSPolicy
 metadata:
   name: api-gateway-tls

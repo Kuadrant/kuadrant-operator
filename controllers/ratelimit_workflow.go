@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
+	ctrlruntime "sigs.k8s.io/controller-runtime"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -18,6 +19,14 @@ import (
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
+	"github.com/kuadrant/kuadrant-operator/pkg/log"
+)
+
+const (
+	rateLimitClusterLabelKey = "kuadrant.io/rate-limit-cluster"
+
+	istioGatewayControllerName = "istio.io/gateway-controller" // make this configurable?
 )
 
 var (
@@ -49,14 +58,16 @@ var (
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
 //+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;patch;delete
 
-func NewRateLimitWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
+func NewRateLimitWorkflow(manager ctrlruntime.Manager, client *dynamic.DynamicClient) *controller.Workflow {
+	baseReconciler := reconcilers.NewBaseReconciler(manager.GetClient(), manager.GetScheme(), manager.GetAPIReader(), log.Log.WithName("ratelimit"))
+
 	return &controller.Workflow{
 		Precondition: (&rateLimitPolicyValidator{}).Subscription().Reconcile,
 		Tasks: []controller.ReconcileFunc{(&controller.Workflow{
 			Precondition: (&effectiveRateLimitPolicyReconciler{client: client}).Subscription().Reconcile,
 			Tasks: []controller.ReconcileFunc{
 				(&limitadorLimitsReconciler{client: client}).Subscription().Reconcile,
-				// TODO: reconcile istio cluster (EnvoyFilter)
+				(&istioRateLimitClusterReconciler{BaseReconciler: baseReconciler, client: client}).Subscription().Reconcile,
 				(&istioExtensionReconciler{client: client}).Subscription().Reconcile,
 				// TODO: reconcile envoy cluster (EnvoyPatchPolicy)
 				// TODO: reconcile envoy extension (EnvoyExtensionPolicy)
@@ -112,14 +123,18 @@ func isRateLimitPolicyAcceptedAndNotDeletedFunc(state *sync.Map) func(machinery.
 	}
 }
 
-func wasmPluginName(gatewayName string) string {
+func wasmExtensionName(gatewayName string) string {
 	return fmt.Sprintf("kuadrant-%s", gatewayName)
+}
+
+func rateLimitClusterName(gatewayName string) string {
+	return fmt.Sprintf("kuadrant-ratelimiting-%s", gatewayName)
 }
 
 // Used in the tests
 
 func WASMPluginName(gw *gatewayapiv1.Gateway) string {
-	return wasmPluginName(gw.Name)
+	return wasmExtensionName(gw.Name)
 }
 func EnvoyExtensionPolicyName(targetName string) string {
 	return fmt.Sprintf("kuadrant-wasm-for-%s", targetName)

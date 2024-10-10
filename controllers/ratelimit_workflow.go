@@ -58,21 +58,28 @@ var (
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
 //+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;patch;delete
 
-func NewRateLimitWorkflow(manager ctrlruntime.Manager, client *dynamic.DynamicClient) *controller.Workflow {
-	baseReconciler := reconcilers.NewBaseReconciler(manager.GetClient(), manager.GetScheme(), manager.GetAPIReader(), log.Log.WithName("ratelimit"))
+func NewRateLimitWorkflow(manager ctrlruntime.Manager, client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) *controller.Workflow {
+	effectiveRateLimitPoliciesWorkflow := &controller.Workflow{
+		Precondition: (&effectiveRateLimitPolicyReconciler{client: client}).Subscription().Reconcile,
+		Tasks: []controller.ReconcileFunc{
+			(&limitadorLimitsReconciler{client: client}).Subscription().Reconcile,
+		},
+	}
+
+	if isIstioInstalled {
+		baseReconciler := reconcilers.NewBaseReconciler(manager.GetClient(), manager.GetScheme(), manager.GetAPIReader(), log.Log.WithName("ratelimit"))
+		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&istioRateLimitClusterReconciler{BaseReconciler: baseReconciler, client: client}).Subscription().Reconcile)
+		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&istioExtensionReconciler{client: client}).Subscription().Reconcile)
+	}
+
+	if isEnvoyGatewayInstalled {
+		// TODO: reconcile envoy cluster (EnvoyPatchPolicy)
+		// TODO: reconcile envoy extension (EnvoyExtensionPolicy)
+	}
 
 	return &controller.Workflow{
-		Precondition: (&rateLimitPolicyValidator{}).Subscription().Reconcile,
-		Tasks: []controller.ReconcileFunc{(&controller.Workflow{
-			Precondition: (&effectiveRateLimitPolicyReconciler{client: client}).Subscription().Reconcile,
-			Tasks: []controller.ReconcileFunc{
-				(&limitadorLimitsReconciler{client: client}).Subscription().Reconcile,
-				(&istioRateLimitClusterReconciler{BaseReconciler: baseReconciler, client: client}).Subscription().Reconcile,
-				(&istioExtensionReconciler{client: client}).Subscription().Reconcile,
-				// TODO: reconcile envoy cluster (EnvoyPatchPolicy)
-				// TODO: reconcile envoy extension (EnvoyExtensionPolicy)
-			},
-		}).Run},
+		Precondition:  (&rateLimitPolicyValidator{}).Subscription().Reconcile,
+		Tasks:         []controller.ReconcileFunc{effectiveRateLimitPoliciesWorkflow.Run},
 		Postcondition: (&rateLimitPolicyStatusUpdater{client: client}).Subscription().Reconcile,
 	}
 }

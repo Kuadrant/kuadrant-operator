@@ -232,7 +232,7 @@ func hostnamesFromListenerAndHTTPRoute(listener *machinery.Listener, httpRoute *
 			return utils.Name(h).SubsetOf(utils.Name(*hostname))
 		})
 	}
-	return lo.Filter(hostnames, func(h gatewayapiv1.Hostname, _ int) bool { return h != "*" })
+	return hostnames
 }
 
 func equalWasmPlugins(a, b *istioclientgoextensionv1alpha1.WasmPlugin) bool {

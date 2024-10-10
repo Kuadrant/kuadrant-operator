@@ -235,7 +235,7 @@ Set the default `RateLimitPolicy` for your Gateway as follows:
 
 ```bash
 kubectl apply -f  - <<EOF
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1beta3
 kind: RateLimitPolicy
 metadata:
   name: ${gatewayName}-rlp

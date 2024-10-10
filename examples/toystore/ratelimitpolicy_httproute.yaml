@@ -1,4 +1,4 @@
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1beta3
 kind: RateLimitPolicy
 metadata:
   name: toystore-httproute
@@ -13,32 +13,49 @@ spec:
       - limit: 6
         duration: 30
         unit: second
-
     "get-toy":
+      when:
+      - selector: request.method
+        operator: eq
+        value: "GET"
+      - selector: request.path
+        operator: eq
+        value: "/toy"
       rates:
       - limit: 5
         duration: 30
         unit: second
-
-    "admin-post-or-delete-toy-per-user":
+    "admin-post-toy-per-user":
       rates:
       - limit: 2
         duration: 30
         unit: second
       counters:
       - metadata.filter_metadata.envoy\.filters\.http\.ext_authz.username
-      routeSelectors:
-      - matches:
-        - path:
-            type: Exact
-            value: "/admin/toy"
-          method: POST
-      - matches:
-        - path:
-            type: Exact
-            value: "/admin/toy"
-          method: DELETE
       when:
+      - selector: request.method
+        operator: eq
+        value: "GET"
+      - selector: request.path
+        operator: eq
+        value: "/admin/toy"
+      - selector: metadata.filter_metadata.envoy\.filters\.http\.ext_authz.admin
+        operator: eq
+        value: "true"
+    "admin-delete-per-user":
+      rates:
+      - limit: 2
+        duration: 30
+        unit: second
+      counters:
+      - metadata.filter_metadata.envoy\.filters\.http\.ext_authz.username
+      when:
+      - selector: request.method
+        operator: eq
+        value: "DELETE"
+      - selector: request.path
+        operator: eq
+        value: "/admin/toy"
       - selector: metadata.filter_metadata.envoy\.filters\.http\.ext_authz.admin
         operator: eq
         value: "true"

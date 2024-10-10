@@ -50,7 +50,7 @@ func (r *limitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 		return child.GroupVersionKind().GroupKind() == kuadrantv1beta1.LimitadorGroupKind
 	})
 	if !found {
-		logger.Error(ErrMissingLimitador, "failed to get limitador from topology")
+		logger.V(1).Info(ErrMissingLimitador.Error())
 		return nil
 	}
 

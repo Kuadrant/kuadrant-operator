@@ -152,7 +152,7 @@ func (r *istioExtensionReconciler) buildWasmPoliciesPerGateway(ctx context.Conte
 		httpRouteRule, _ := effectivePolicy.Path[4].(*machinery.HTTPRouteRule)
 
 		// ignore if not an istio gateway
-		if gatewayClass.Spec.ControllerName != "istio.io/gateway-controller" {
+		if gatewayClass.Spec.ControllerName != istioGatewayControllerName {
 			continue
 		}
 
@@ -192,7 +192,7 @@ func (r *istioExtensionReconciler) buildWasmPluginForGateway(gateway machinery.T
 			APIVersion: istioclientgoextensionv1alpha1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      wasmPluginName(gateway.GetName()),
+			Name:      wasmExtensionName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
 		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{

@@ -5,6 +5,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.14.0
   labels:
     app: kuadrant
+    app.kubernetes.io/managed-by: helm
     gateway.networking.k8s.io/policy: inherited
   name: authpolicies.kuadrant.io
 spec:
@@ -13206,6 +13207,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.14.0
   labels:
     app: kuadrant
+    app.kubernetes.io/managed-by: helm
     gateway.networking.k8s.io/policy: direct
   name: dnspolicies.kuadrant.io
 spec:
@@ -13758,6 +13760,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.14.0
   labels:
     app: kuadrant
+    app.kubernetes.io/managed-by: helm
   name: kuadrants.kuadrant.io
 spec:
   group: kuadrant.io
@@ -13899,6 +13902,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.14.0
   labels:
     app: kuadrant
+    app.kubernetes.io/managed-by: helm
     gateway.networking.k8s.io/policy: inherited
   name: ratelimitpolicies.kuadrant.io
 spec:
@@ -14388,6 +14392,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.14.0
   labels:
     app: kuadrant
+    app.kubernetes.io/managed-by: helm
     gateway.networking.k8s.io/policy: direct
   name: tlspolicies.kuadrant.io
 spec:
@@ -14751,6 +14756,7 @@ kind: ServiceAccount
 metadata:
   labels:
     app: kuadrant
+    app.kubernetes.io/managed-by: helm
   name: kuadrant-operator-controller-manager
   namespace: '{{ .Release.Namespace }}'
 ---
@@ -14759,6 +14765,7 @@ kind: Role
 metadata:
   labels:
     app: kuadrant
+    app.kubernetes.io/managed-by: helm
   name: kuadrant-operator-leader-election-role
   namespace: '{{ .Release.Namespace }}'
 rules:
@@ -14799,6 +14806,7 @@ kind: ClusterRole
 metadata:
   labels:
     app: kuadrant
+    app.kubernetes.io/managed-by: helm
   name: kuadrant-operator-manager-role
 rules:
 - apiGroups:
@@ -15283,6 +15291,7 @@ kind: RoleBinding
 metadata:
   labels:
     app: kuadrant
+    app.kubernetes.io/managed-by: helm
   name: kuadrant-operator-leader-election-rolebinding
   namespace: '{{ .Release.Namespace }}'
 roleRef:
@@ -15299,6 +15308,7 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     app: kuadrant
+    app.kubernetes.io/managed-by: helm
   name: kuadrant-operator-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -15314,6 +15324,7 @@ kind: Service
 metadata:
   labels:
     app: kuadrant
+    app.kubernetes.io/managed-by: helm
     control-plane: controller-manager
   name: kuadrant-operator-metrics
   namespace: '{{ .Release.Namespace }}'
@@ -15331,6 +15342,7 @@ kind: Deployment
 metadata:
   labels:
     app: kuadrant
+    app.kubernetes.io/managed-by: helm
     control-plane: controller-manager
   name: kuadrant-operator-controller-manager
   namespace: '{{ .Release.Namespace }}'
@@ -15344,6 +15356,7 @@ spec:
     metadata:
       labels:
         app: kuadrant
+        app.kubernetes.io/managed-by: helm
         control-plane: controller-manager
     spec:
       containers:

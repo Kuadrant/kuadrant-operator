@@ -20,7 +20,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/api/v1alpha2"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
@@ -36,7 +36,7 @@ var _ = Describe("TLSPolicy controller", func() {
 	var issuer *certmanv1.Issuer
 	var issuerRef *certmanmetav1.ObjectReference
 	var gateway *gatewayapiv1.Gateway
-	var tlsPolicy *v1alpha1.TLSPolicy
+	var tlsPolicy *v1alpha2.TLSPolicy
 
 	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
@@ -70,7 +70,7 @@ var _ = Describe("TLSPolicy controller", func() {
 
 	Context("invalid target", func() {
 		BeforeEach(func(ctx SpecContext) {
-			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+			tlsPolicy = v1alpha2.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway("test-gateway").
 				WithIssuerRef(*issuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
@@ -150,7 +150,7 @@ var _ = Describe("TLSPolicy controller", func() {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 				WithHTTPListener("test-listener", "test.example.com").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
-			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+			tlsPolicy = v1alpha2.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*issuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
@@ -189,8 +189,8 @@ var _ = Describe("TLSPolicy controller", func() {
 				err := k8sClient.Get(ctx, client.ObjectKey{Name: gateway.Name, Namespace: testNamespace}, gw)
 				//Check annotations
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.TLSPolicyDirectReferenceAnnotationName, policyBackRefValue))
-				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha1.TLSPolicyBackReferenceAnnotationName, policiesBackRefValue))
+				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha2.TLSPolicyDirectReferenceAnnotationName, policyBackRefValue))
+				g.Expect(gw.Annotations).To(HaveKeyWithValue(v1alpha2.TLSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		}, testTimeOut)
 	})
@@ -205,7 +205,7 @@ var _ = Describe("TLSPolicy controller", func() {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 				WithHTTPListener("test-listener", "test.example.com").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
-			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+			tlsPolicy = v1alpha2.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*clusterIssuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
@@ -245,7 +245,7 @@ var _ = Describe("TLSPolicy controller", func() {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 				WithHTTPListener("test-listener", "test.example.com").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
-			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+			tlsPolicy = v1alpha2.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*issuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
@@ -294,7 +294,7 @@ var _ = Describe("TLSPolicy controller", func() {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 				WithHTTPSListener("test.example.com", "test-tls-secret").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
-			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+			tlsPolicy = v1alpha2.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*issuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
@@ -321,7 +321,7 @@ var _ = Describe("TLSPolicy controller", func() {
 				WithHTTPSListener("test2.example.com", "test-tls-secret").
 				WithHTTPSListener("test3.example.com", "test2-tls-secret").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
-			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+			tlsPolicy = v1alpha2.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*issuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
@@ -360,7 +360,7 @@ var _ = Describe("TLSPolicy controller", func() {
 				WithHTTPSListener("test2.example.com", "test2-tls-secret").
 				WithHTTPSListener("test3.example.com", "test3-tls-secret").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
-			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+			tlsPolicy = v1alpha2.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*issuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
@@ -460,7 +460,7 @@ var _ = Describe("TLSPolicy controller", func() {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 				WithHTTPSListener("test.example.com", "test-tls-secret").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
-			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+			tlsPolicy = v1alpha2.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*issuerRef)
 			tlsPolicy.Spec.CommonName = "example.com"
@@ -518,7 +518,7 @@ var _ = Describe("TLSPolicy controller", func() {
 
 	Context("cel validation", func() {
 		It("should error targeting invalid group", func(ctx SpecContext) {
-			p := v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+			p := v1alpha2.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway("gateway")
 			p.Spec.TargetRef.Group = "not-gateway.networking.k8s.io"
 
@@ -528,7 +528,7 @@ var _ = Describe("TLSPolicy controller", func() {
 		}, testTimeOut)
 
 		It("should error targeting invalid kind", func(ctx SpecContext) {
-			p := v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+			p := v1alpha2.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway("gateway")
 			p.Spec.TargetRef.Kind = "TCPRoute"
 

@@ -25,6 +25,7 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1alpha2 "github.com/kuadrant/kuadrant-operator/api/v1alpha2"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
@@ -576,8 +577,8 @@ var _ = Describe("Target status reconciler", func() {
 		var issuerRef *certmanmetav1.ObjectReference
 
 		// policyFactory builds a standards TLSPolicy object that targets the test gateway by default, with the given mutate functions applied
-		policyFactory := func(mutateFns ...func(policy *kuadrantv1alpha1.TLSPolicy)) *kuadrantv1alpha1.TLSPolicy {
-			policy := kuadrantv1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).WithTargetGateway(TestGatewayName).WithIssuerRef(*issuerRef)
+		policyFactory := func(mutateFns ...func(policy *kuadrantv1alpha2.TLSPolicy)) *kuadrantv1alpha2.TLSPolicy {
+			policy := kuadrantv1alpha2.NewTLSPolicy("test-tls-policy", testNamespace).WithTargetGateway(TestGatewayName).WithIssuerRef(*issuerRef)
 			for _, mutateFn := range mutateFns {
 				mutateFn(policy)
 			}
@@ -585,7 +586,7 @@ var _ = Describe("Target status reconciler", func() {
 		}
 
 		isTLSPolicyAccepted := func(ctx context.Context, policyKey client.ObjectKey) bool {
-			policy := &kuadrantv1alpha1.TLSPolicy{}
+			policy := &kuadrantv1alpha2.TLSPolicy{}
 			err := k8sClient.Get(ctx, policyKey, policy)
 			if err != nil {
 				return false
@@ -595,7 +596,7 @@ var _ = Describe("Target status reconciler", func() {
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if a TLSPolicy is accepted
 		// and the statuses of its target object has been all updated as affected by the policy
-		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *kuadrantv1alpha1.TLSPolicy) func() bool {
+		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *kuadrantv1alpha2.TLSPolicy) func() bool {
 			return func() bool {
 				policyKey := client.ObjectKeyFromObject(policy)
 				if !isTLSPolicyAccepted(ctx, policyKey) {

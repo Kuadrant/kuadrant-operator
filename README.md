@@ -53,7 +53,7 @@ The kuadrant control plane owns the following [Custom Resource Definitions, CRDs
 | AuthPolicy CRD [\[doc\]](doc/auth.md) [[reference]](doc/reference/authpolicy.md)                    | Enable AuthN and AuthZ based access control on workloads       | [AuthPolicy CR](https://github.com/Kuadrant/kuadrant-operator/blob/main/examples/toystore/authpolicy.yaml)                             |
 | RateLimitPolicy CRD [\[doc\]](doc/rate-limiting.md) [[reference]](doc/reference/ratelimitpolicy.md) | Enable access control on workloads based on HTTP rate limiting | [RateLimitPolicy CR](https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/examples/toystore/ratelimitpolicy_httproute.yaml) |
 | DNSPolicy CRD [\[doc\]](doc/dns.md) [[reference]](doc/reference/dnspolicy.md)                       | Enable DNS management                                          | [DNSPolicy CR](config/samples/kuadrant_v1alpha1_dnspolicy.yaml)                |
-| TLSPolicy CRD [\[doc\]](doc/tls.md) [[reference]](doc/reference/tlspolicy.md)                       | Enable TLS management                                          | [TLSPolicy CR](config/samples/kuadrant_v1alpha1_tlspolicy.yaml)                |
+| TLSPolicy CRD [\[doc\]](doc/tls.md) [[reference]](doc/reference/tlspolicy.md)                       | Enable TLS management                                          | [TLSPolicy CR](config/samples/kuadrant_v1alpha2_tlspolicy.yaml)                |
 
 Additionally, Kuadrant provides the following CRDs
 

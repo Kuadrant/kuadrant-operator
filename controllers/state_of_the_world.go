@@ -248,6 +248,7 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 				&istioclientnetworkingv1alpha3.EnvoyFilter{},
 				istio.EnvoyFiltersResource,
 				metav1.NamespaceAll,
+				controller.FilterResourcesByLabel[*istioclientnetworkingv1alpha3.EnvoyFilter](fmt.Sprintf("%s=true", rateLimitClusterLabelKey)),
 			)),
 			controller.WithRunnable("wasmplugin watcher", controller.Watch(
 				&istioclientgoextensionv1alpha1.WasmPlugin{},
@@ -266,6 +267,7 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 			),
 			controller.WithObjectLinks(
 				istio.LinkGatewayToWasmPlugin,
+				istio.LinkGatewayToEnvoyFilter,
 			),
 		)
 		// TODO: add istio specific tasks to workflow
@@ -314,7 +316,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewDNSWorkflow().Run,
 			NewTLSWorkflow(b.client, b.isCertManagerInstalled).Run,
 			NewAuthWorkflow().Run,
-			NewRateLimitWorkflow(b.client).Run,
+			NewRateLimitWorkflow(b.manager, b.client).Run,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isIstioInstalled, b.isGatewayAPIInstalled).Run,
 	}

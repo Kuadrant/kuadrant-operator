@@ -80,7 +80,7 @@ func DeploymentLabels(namespace string) map[string]string {
 	return result
 }
 
-func Deployment(ns, image string) *appsv1.Deployment {
+func Deployment(ns, image, topologyName string) *appsv1.Deployment {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -108,6 +108,10 @@ func Deployment(ns, image string) *appsv1.Deployment {
 							},
 							ImagePullPolicy: corev1.PullAlways,
 							VolumeMounts:    DeploymentVolumeMounts(),
+							Env: []corev1.EnvVar{
+								{Name: "TOPOLOGY_CONFIGMAP_NAME", Value: topologyName},
+								{Name: "TOPOLOGY_CONFIGMAP_NAMESPACE", Value: ns},
+							},
 						},
 					},
 					Volumes:       DeploymentVolumes(),

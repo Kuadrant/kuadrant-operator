@@ -89,7 +89,7 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	}
 
 	// Deployment
-	deployment := consoleplugin.Deployment(r.namespace, ConsolePluginImageURL)
+	deployment := consoleplugin.Deployment(r.namespace, ConsolePluginImageURL, TopologyConfigMapName)
 	deploymentMutators := make([]reconcilers.DeploymentMutateFn, 0)
 	deploymentMutators = append(deploymentMutators, reconcilers.DeploymentImageMutator)
 	if !topologyExists {

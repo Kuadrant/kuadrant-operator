@@ -8,7 +8,9 @@ import (
 
 	"gotest.tools/assert"
 	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -31,7 +33,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = gatewayapiv1.AddToScheme(testScheme)
+	err = gatewayapiv1.Install(testScheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +65,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 	t.Run("not gateway related event", func(subT *testing.T) {
 		objs := []runtime.Object{}
 		cl := clientBuilder(objs)
-		em := NewGatewayEventMapper(kuadrantv1beta3.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
+		em := NewGatewayEventMapper(&rateLimitPolicyType{}, WithClient(cl), WithLogger(log.NewLogger()))
 		requests := em.Map(ctx, &gatewayapiv1.HTTPRoute{})
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
@@ -71,7 +73,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 	t.Run("gateway related event - no policies - no requests", func(subT *testing.T) {
 		objs := []runtime.Object{}
 		cl := clientBuilder(objs)
-		em := NewGatewayEventMapper(kuadrantv1beta3.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
+		em := NewGatewayEventMapper(&rateLimitPolicyType{}, WithClient(cl), WithLogger(log.NewLogger()))
 		requests := em.Map(ctx, &gatewayapiv1.Gateway{})
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
@@ -91,7 +93,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 		})
 		objs := []runtime.Object{gw, route, pGw, pRoute}
 		cl := clientBuilder(objs)
-		em := NewGatewayEventMapper(kuadrantv1beta3.NewRateLimitPolicyType(), WithClient(cl), WithLogger(log.NewLogger()))
+		em := NewGatewayEventMapper(&rateLimitPolicyType{}, WithClient(cl), WithLogger(log.NewLogger()))
 		requests := em.Map(ctx, gw)
 		assert.Equal(subT, len(requests), 2)
 		assert.Assert(subT, utils.Index(requests, func(r reconcile.Request) bool {
@@ -101,4 +103,44 @@ func TestNewGatewayEventMapper(t *testing.T) {
 			return r.NamespacedName == types.NamespacedName{Namespace: "ns-a", Name: "pRoute"}
 		}) >= 0)
 	})
+}
+
+const (
+	RateLimitPolicyBackReferenceAnnotationName   = "kuadrant.io/ratelimitpolicies"
+	RateLimitPolicyDirectReferenceAnnotationName = "kuadrant.io/ratelimitpolicy"
+)
+
+type rateLimitPolicyType struct{}
+
+func (r rateLimitPolicyType) GetGVK() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   kuadrantv1beta3.GroupVersion.Group,
+		Version: kuadrantv1beta3.GroupVersion.Version,
+		Kind:    "RateLimitPolicy",
+	}
+}
+func (r rateLimitPolicyType) GetInstance() client.Object {
+	return &kuadrantv1beta3.RateLimitPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       kuadrantv1beta3.RateLimitPolicyGroupKind.Kind,
+			APIVersion: kuadrantv1beta3.GroupVersion.String(),
+		},
+	}
+}
+
+func (r rateLimitPolicyType) BackReferenceAnnotationName() string {
+	return RateLimitPolicyBackReferenceAnnotationName
+}
+
+func (r rateLimitPolicyType) DirectReferenceAnnotationName() string {
+	return RateLimitPolicyDirectReferenceAnnotationName
+}
+
+func (r rateLimitPolicyType) GetList(ctx context.Context, cl client.Client, listOpts ...client.ListOption) ([]kuadrantgatewayapi.Policy, error) {
+	rlpList := &kuadrantv1beta3.RateLimitPolicyList{}
+	err := cl.List(ctx, rlpList, listOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return utils.Map(rlpList.Items, func(p kuadrantv1beta3.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p }), nil
 }

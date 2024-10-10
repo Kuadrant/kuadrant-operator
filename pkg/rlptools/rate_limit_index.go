@@ -4,37 +4,37 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/elliotchance/orderedmap/v2"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
-	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-type RateLimitIndexKey struct {
-	RateLimitPolicyKey types.NamespacedName
-	GatewayKey         types.NamespacedName
-}
-
 // NewRateLimitIndex builds an index to manage sets of rate limits, organized by key
 func NewRateLimitIndex() *RateLimitIndex {
-	return &RateLimitIndex{*orderedmap.NewOrderedMap[RateLimitIndexKey, RateLimitList]()}
+	return &RateLimitIndex{OrderedMap: *orderedmap.NewOrderedMap[string, RateLimitList]()}
 }
 
 // RateLimitIndex stores RateLimitLists by key
 type RateLimitIndex struct {
-	orderedmap.OrderedMap[RateLimitIndexKey, RateLimitList]
+	sync.RWMutex
+	orderedmap.OrderedMap[string, RateLimitList]
 }
 
-func (l *RateLimitIndex) Set(key RateLimitIndexKey, rateLimits RateLimitList) {
+func (l *RateLimitIndex) Set(key string, rateLimits RateLimitList) {
 	if len(rateLimits) == 0 {
 		return
 	}
+	l.Lock()
+	defer l.Unlock()
 	l.OrderedMap.Set(key, rateLimits)
 }
 
 func (l *RateLimitIndex) ToRateLimits() RateLimitList {
+	l.RLock()
+	defer l.RUnlock()
 	limitadorRateLimits := make(RateLimitList, 0)
 	for rlSet := l.Front(); rlSet != nil; rlSet = rlSet.Next() {
 		limitadorRateLimits = append(limitadorRateLimits, rlSet.Value...)

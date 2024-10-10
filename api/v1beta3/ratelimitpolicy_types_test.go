@@ -4,102 +4,98 @@ package v1beta3
 
 import (
 	"testing"
-
-	"gotest.tools/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
-func testBuildBasicRLP(name string, kind gatewayapiv1.Kind, mutateFn func(*RateLimitPolicy)) *RateLimitPolicy {
-	p := &RateLimitPolicy{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "RateLimitPolicy",
-			APIVersion: GroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "testNS",
-		},
-		Spec: RateLimitPolicySpec{
-			TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-				Group: gatewayapiv1.GroupName,
-				Kind:  kind,
-				Name:  "some-name",
+func TestConvertRateIntoSeconds(t *testing.T) {
+	testCases := []struct {
+		name             string
+		rate             Rate
+		expectedMaxValue int
+		expectedSeconds  int
+	}{
+		{
+			name: "seconds",
+			rate: Rate{
+				Limit: 5, Duration: 2, Unit: TimeUnit("second"),
 			},
+			expectedMaxValue: 5,
+			expectedSeconds:  2,
+		},
+		{
+			name: "minutes",
+			rate: Rate{
+				Limit: 5, Duration: 2, Unit: TimeUnit("minute"),
+			},
+			expectedMaxValue: 5,
+			expectedSeconds:  2 * 60,
+		},
+		{
+			name: "hours",
+			rate: Rate{
+				Limit: 5, Duration: 2, Unit: TimeUnit("hour"),
+			},
+			expectedMaxValue: 5,
+			expectedSeconds:  2 * 60 * 60,
+		},
+		{
+			name: "day",
+			rate: Rate{
+				Limit: 5, Duration: 2, Unit: TimeUnit("day"),
+			},
+			expectedMaxValue: 5,
+			expectedSeconds:  2 * 60 * 60 * 24,
+		},
+		{
+			name: "negative limit",
+			rate: Rate{
+				Limit: -5, Duration: 2, Unit: TimeUnit("second"),
+			},
+			expectedMaxValue: 0,
+			expectedSeconds:  2,
+		},
+		{
+			name: "negative duration",
+			rate: Rate{
+				Limit: 5, Duration: -2, Unit: TimeUnit("second"),
+			},
+			expectedMaxValue: 5,
+			expectedSeconds:  0,
+		},
+		{
+			name: "limit  is 0",
+			rate: Rate{
+				Limit: 0, Duration: 2, Unit: TimeUnit("second"),
+			},
+			expectedMaxValue: 0,
+			expectedSeconds:  2,
+		},
+		{
+			name: "rate is 0",
+			rate: Rate{
+				Limit: 5, Duration: 0, Unit: TimeUnit("second"),
+			},
+			expectedMaxValue: 5,
+			expectedSeconds:  0,
+		},
+		{
+			name: "unexpected time unit",
+			rate: Rate{
+				Limit: 5, Duration: 2, Unit: TimeUnit("unknown"),
+			},
+			expectedMaxValue: 5,
+			expectedSeconds:  0,
 		},
 	}
 
-	if mutateFn != nil {
-		mutateFn(p)
-	}
-
-	return p
-}
-
-func testBuildBasicHTTPRouteRLP(name string, mutateFn func(*RateLimitPolicy)) *RateLimitPolicy {
-	return testBuildBasicRLP(name, "HTTPRoute", mutateFn)
-}
-
-func TestRateLimitPolicyListGetItems(t *testing.T) {
-	list := &RateLimitPolicyList{}
-	if len(list.GetItems()) != 0 {
-		t.Errorf("Expected empty list of items")
-	}
-	policy := RateLimitPolicy{}
-	list.Items = []RateLimitPolicy{policy}
-	result := list.GetItems()
-	if len(result) != 1 {
-		t.Errorf("Expected 1 item, got %d", len(result))
-	}
-	_, ok := result[0].(kuadrant.Policy)
-	if !ok {
-		t.Errorf("Expected item to be a Policy")
-	}
-}
-
-func TestRateLimitPolicy_GetLimits(t *testing.T) {
-	const name = "policy"
-	var (
-		defaultLimits = map[string]Limit{
-			"default": {
-				Rates: []Rate{{Limit: 10, Duration: 1, Unit: "seconds"}},
-			},
-		}
-		implicitLimits = map[string]Limit{
-			"implicit": {
-				Rates: []Rate{{Limit: 20, Duration: 2, Unit: "minutes"}},
-			},
-		}
-	)
-
-	t.Run("No limits defined", func(subT *testing.T) {
-		r := testBuildBasicHTTPRouteRLP(name, nil)
-		assert.DeepEqual(subT, r.Spec.CommonSpec().Limits, map[string]Limit(nil))
-	})
-	t.Run("Defaults defined", func(subT *testing.T) {
-		r := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
-			policy.Spec.Defaults = &RateLimitPolicyCommonSpec{
-				Limits: defaultLimits,
+	for _, tc := range testCases {
+		t.Run(tc.name, func(subT *testing.T) {
+			maxValue, seconds := tc.rate.ToSeconds()
+			if maxValue != tc.expectedMaxValue {
+				subT.Errorf("maxValue does not match, expected(%d), got (%d)", tc.expectedMaxValue, maxValue)
+			}
+			if seconds != tc.expectedSeconds {
+				subT.Errorf("seconds does not match, expected(%d), got (%d)", tc.expectedSeconds, seconds)
 			}
 		})
-		assert.DeepEqual(subT, r.Spec.CommonSpec().Limits, defaultLimits)
-	})
-	t.Run("Implicit rules defined", func(subT *testing.T) {
-		r := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
-			policy.Spec.Limits = implicitLimits
-		})
-		assert.DeepEqual(subT, r.Spec.CommonSpec().Limits, implicitLimits)
-	})
-	t.Run("Default rules takes precedence over implicit rules if validation is somehow bypassed", func(subT *testing.T) {
-		r := testBuildBasicHTTPRouteRLP(name, func(policy *RateLimitPolicy) {
-			policy.Spec.Defaults = &RateLimitPolicyCommonSpec{
-				Limits: defaultLimits,
-			}
-			policy.Spec.Limits = implicitLimits
-		})
-		assert.DeepEqual(subT, r.Spec.CommonSpec().Limits, defaultLimits)
-	})
+	}
 }

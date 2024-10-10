@@ -10,9 +10,16 @@ spec:
   limits:
     "global":
       rates:
+<<<<<<< HEAD
       - limit: 6
         duration: 30
         unit: second
+=======
+        - limit: 6
+          duration: 30
+          unit: second
+
+>>>>>>> 8996d6dd (find and replace v1beta2 rlp)
     "get-toy":
       when:
       - selector: request.method
@@ -22,15 +29,24 @@ spec:
         operator: eq
         value: "/toy"
       rates:
+<<<<<<< HEAD
       - limit: 5
         duration: 30
         unit: second
     "admin-post-toy-per-user":
+=======
+        - limit: 5
+          duration: 30
+          unit: second
+
+    "admin-post-or-delete-toy-per-user":
+>>>>>>> 8996d6dd (find and replace v1beta2 rlp)
       rates:
-      - limit: 2
-        duration: 30
-        unit: second
+        - limit: 2
+          duration: 30
+          unit: second
       counters:
+<<<<<<< HEAD
       - metadata.filter_metadata.envoy\.filters\.http\.ext_authz.username
       when:
       - selector: request.method
@@ -59,3 +75,21 @@ spec:
       - selector: metadata.filter_metadata.envoy\.filters\.http\.ext_authz.admin
         operator: eq
         value: "true"
+=======
+        - metadata.filter_metadata.envoy\.filters\.http\.ext_authz.username
+      routeSelectors:
+        - matches:
+            - path:
+                type: Exact
+                value: "/admin/toy"
+              method: POST
+        - matches:
+            - path:
+                type: Exact
+                value: "/admin/toy"
+              method: DELETE
+      when:
+        - selector: metadata.filter_metadata.envoy\.filters\.http\.ext_authz.admin
+          operator: eq
+          value: "true"
+>>>>>>> 8996d6dd (find and replace v1beta2 rlp)

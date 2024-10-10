@@ -11,20 +11,20 @@ spec:
   limits:
     "expensive-operation":
       rates:
-      - limit: 2
-        duration: 30
-        unit: second
+        - limit: 2
+          duration: 30
+          unit: second
       when:
-      - selector: request.method
-        operator: eq
-        value: POST
+        - selector: request.method
+          operator: eq
+          value: POST
 
     "limit-per-ip":
       rates:
-      - limit: 5
-        duration: 30
-        unit: second
+        - limit: 5
+          duration: 30
+          unit: second
       when:
-      - selector: source.ip
-        operator: eq
-        value: source.address
+        - selector: source.ip
+          operator: eq
+          value: source.address

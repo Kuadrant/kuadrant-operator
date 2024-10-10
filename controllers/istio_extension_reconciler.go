@@ -81,17 +81,18 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		// create
 		if !found {
 			if utils.IsObjectTaggedToDelete(desiredWasmPlugin) {
-				return nil
+				continue
 			}
 			desiredWasmPluginUnstructured, err := controller.Destruct(desiredWasmPlugin)
 			if err != nil {
-				return err // should never happen
+				logger.Error(err, "failed to destruct wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", desiredWasmPlugin)
+				continue
 			}
 			if _, err = resource.Create(ctx, desiredWasmPluginUnstructured, metav1.CreateOptions{}); err != nil {
 				logger.Error(err, "failed to create wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", desiredWasmPluginUnstructured.Object)
 				// TODO: handle error
 			}
-			return nil
+			continue
 		}
 
 		existingWasmPlugin := existingWasmPluginObj.(*controller.RuntimeObject).Object.(*istioclientgoextensionv1alpha1.WasmPlugin)
@@ -102,7 +103,7 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 				logger.Error(err, "failed to delete wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", fmt.Sprintf("%s/%s", existingWasmPlugin.GetNamespace(), existingWasmPlugin.GetName()))
 				// TODO: handle error
 			}
-			return nil
+			continue
 		}
 
 		// update
@@ -111,15 +112,17 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			existingWasmPlugin.Spec.Phase = desiredWasmPlugin.Spec.Phase
 			existingWasmPlugin.Spec.TargetRefs = desiredWasmPlugin.Spec.TargetRefs
 			existingWasmPlugin.Spec.PluginConfig = desiredWasmPlugin.Spec.PluginConfig
+
 			existingWasmPluginUnstructured, err := controller.Destruct(existingWasmPlugin)
 			if err != nil {
-				return err // should never happen
+				logger.Error(err, "failed to destruct wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", existingWasmPlugin)
+				continue
 			}
 			if _, err = resource.Update(ctx, existingWasmPluginUnstructured, metav1.UpdateOptions{}); err != nil {
 				logger.Error(err, "failed to update wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", existingWasmPluginUnstructured.Object)
 				// TODO: handle error
 			}
-			return nil
+			continue
 		}
 	}
 

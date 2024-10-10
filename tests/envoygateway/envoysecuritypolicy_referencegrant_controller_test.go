@@ -6,7 +6,6 @@ import (
 	"time"
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/tests"
@@ -21,6 +20,8 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 )
 
 var _ = Describe("Envoy SecurityPolicy ReferenceGrant controller", func() {
@@ -29,12 +30,12 @@ var _ = Describe("Envoy SecurityPolicy ReferenceGrant controller", func() {
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
 	)
 	var (
-		routePolicyOne *kuadrantv1beta2.AuthPolicy
+		routePolicyOne *kuadrantv1beta3.AuthPolicy
 		gateway        *gatewayapiv1.Gateway
 		route          *gatewayapiv1.HTTPRoute
 	)
 
-	initGatewayRoutePolicy := func(ctx SpecContext, testNamespace string, policy *kuadrantv1beta2.AuthPolicy) {
+	initGatewayRoutePolicy := func(ctx SpecContext, testNamespace string, policy *kuadrantv1beta3.AuthPolicy) {
 		gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
 		err := k8sClient.Create(ctx, gateway)
 		Expect(err).ToNot(HaveOccurred())
@@ -50,23 +51,23 @@ var _ = Describe("Envoy SecurityPolicy ReferenceGrant controller", func() {
 		Expect(err).ToNot(HaveOccurred())
 	}
 
-	policyFactory := func(testNamespace string, mutateFns ...func(policy *kuadrantv1beta2.AuthPolicy)) *kuadrantv1beta2.AuthPolicy {
-		policy := &kuadrantv1beta2.AuthPolicy{
+	policyFactory := func(testNamespace string, mutateFns ...func(policy *kuadrantv1beta3.AuthPolicy)) *kuadrantv1beta3.AuthPolicy {
+		policy := &kuadrantv1beta3.AuthPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "AuthPolicy",
-				APIVersion: kuadrantv1beta2.GroupVersion.String(),
+				APIVersion: kuadrantv1beta3.GroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "toystore",
 				Namespace: testNamespace,
 			},
-			Spec: kuadrantv1beta2.AuthPolicySpec{
+			Spec: kuadrantv1beta3.AuthPolicySpec{
 				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
 					Kind:  "HTTPRoute",
 					Name:  TestHTTPRouteName,
 				},
-				Defaults: &kuadrantv1beta2.AuthPolicyCommonSpec{
+				Defaults: &kuadrantv1beta3.AuthPolicyCommonSpec{
 					AuthScheme: tests.BuildBasicAuthScheme(),
 				},
 			},
@@ -178,7 +179,7 @@ var _ = Describe("Envoy SecurityPolicy ReferenceGrant controller", func() {
 		var (
 			testNamespaceOne string
 			testNamespaceTwo string
-			routePolicyTwo   *kuadrantv1beta2.AuthPolicy
+			routePolicyTwo   *kuadrantv1beta3.AuthPolicy
 		)
 
 		BeforeEach(func(ctx SpecContext) {

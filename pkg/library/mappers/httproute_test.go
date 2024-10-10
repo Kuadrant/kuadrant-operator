@@ -18,7 +18,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -36,12 +36,12 @@ func TestNewHTTPRouteEventMapper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = kuadrantv1beta2.AddToScheme(testScheme)
+	err = kuadrantv1beta3.AddToScheme(testScheme)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	spec := kuadrantv1beta2.AuthPolicySpec{
+	spec := kuadrantv1beta3.AuthPolicySpec{
 		TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 			Group: "gateway.networking.k8s.io",
 			Kind:  "HTTPRoute",
@@ -49,7 +49,7 @@ func TestNewHTTPRouteEventMapper(t *testing.T) {
 		},
 	}
 	routeList := &gatewayapiv1.HTTPRouteList{Items: make([]gatewayapiv1.HTTPRoute, 0)}
-	authPolicyList := &kuadrantv1beta2.AuthPolicyList{Items: []kuadrantv1beta2.AuthPolicy{
+	authPolicyList := &kuadrantv1beta3.AuthPolicyList{Items: []kuadrantv1beta3.AuthPolicy{
 		{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "policy-1",
@@ -76,12 +76,12 @@ func TestNewHTTPRouteEventMapper(t *testing.T) {
 	em := NewHTTPRouteEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
 
 	t.Run("not http route related event", func(subT *testing.T) {
-		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.Gateway{}, kuadrantv1beta2.NewAuthPolicyType())
+		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.Gateway{}, kuadrantv1beta3.NewAuthPolicyType())
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
 
 	t.Run("http route related event - no requests", func(subT *testing.T) {
-		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.HTTPRoute{}, kuadrantv1beta2.NewAuthPolicyType())
+		requests := em.MapToPolicy(context.Background(), &gatewayapiv1.HTTPRoute{}, kuadrantv1beta3.NewAuthPolicyType())
 		assert.DeepEqual(subT, []reconcile.Request{}, requests)
 	})
 
@@ -130,7 +130,7 @@ func TestNewHTTPRouteEventMapper(t *testing.T) {
 			})
 		}).Build()
 		em = NewHTTPRouteEventMapper(WithLogger(log.NewLogger()), WithClient(cl))
-		requests := em.MapToPolicy(context.Background(), httpRoute, kuadrantv1beta2.NewAuthPolicyType())
+		requests := em.MapToPolicy(context.Background(), httpRoute, kuadrantv1beta3.NewAuthPolicyType())
 		expected := []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: "app-ns", Name: "policy-1"}}}
 		assert.DeepEqual(subT, expected, requests)
 	})

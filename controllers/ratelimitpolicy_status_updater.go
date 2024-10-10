@@ -97,6 +97,7 @@ func (r *rateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 		_, err = r.client.Resource(kuadrantv1beta3.RateLimitPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
 		if err != nil {
 			logger.Error(err, "unable to update status for ratelimitpolicy", "name", policy.GetName(), "namespace", policy.GetNamespace())
+			// TODO: handle error
 		}
 	}
 

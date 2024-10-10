@@ -37,9 +37,10 @@ type ConsolePluginReconciler struct {
 func NewConsolePluginReconciler(mgr ctrlruntime.Manager, namespace string) *ConsolePluginReconciler {
 	return &ConsolePluginReconciler{
 		BaseReconciler: reconcilers.NewBaseReconciler(
-			mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+			mgr.GetClient(),
+			mgr.GetScheme(),
+			mgr.GetAPIReader(),
 			log.Log.WithName("consoleplugin"),
-			mgr.GetEventRecorderFor("ConsolePlugin"),
 		),
 		namespace: namespace,
 	}

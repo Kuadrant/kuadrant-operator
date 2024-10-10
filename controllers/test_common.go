@@ -74,9 +74,10 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	Expect(err).ToNot(HaveOccurred())
 
 	authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy"),
-		mgr.GetEventRecorderFor("AuthPolicy"),
 	)
 
 	err = (&AuthPolicyReconciler{
@@ -87,9 +88,10 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	Expect(err).NotTo(HaveOccurred())
 
 	dnsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		mgr.GetAPIReader(),
 		log.Log.WithName("dnspolicy"),
-		mgr.GetEventRecorderFor("DNSPolicy"),
 	)
 
 	err = (&DNSPolicyReconciler{
@@ -100,9 +102,10 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	Expect(err).NotTo(HaveOccurred())
 
 	kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		mgr.GetAPIReader(),
 		log.Log.WithName("kuadrant-controller"),
-		mgr.GetEventRecorderFor("Kuadrant"),
 	)
 
 	err = (&KuadrantReconciler{
@@ -113,9 +116,10 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	Expect(err).NotTo(HaveOccurred())
 
 	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		mgr.GetAPIReader(),
 		log.Log.WithName("kuadrant").WithName("gateway"),
-		mgr.GetEventRecorderFor("GatewayKuadrant"),
 	)
 
 	err = (&GatewayKuadrantReconciler{
@@ -125,9 +129,10 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	Expect(err).NotTo(HaveOccurred())
 
 	authPolicyIstioAuthorizationPolicyReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy").WithName("istioauthorizationpolicy"),
-		mgr.GetEventRecorderFor("AuthPolicyIstioAuthorizationPolicy"),
 	)
 
 	err = (&AuthPolicyIstioAuthorizationPolicyReconciler{
@@ -137,9 +142,10 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	Expect(err).NotTo(HaveOccurred())
 
 	targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		mgr.GetAPIReader(),
 		log.Log.WithName("targetstatus"),
-		mgr.GetEventRecorderFor("PolicyTargetStatus"),
 	)
 
 	err = (&TargetStatusReconciler{
@@ -149,9 +155,10 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	Expect(err).NotTo(HaveOccurred())
 
 	authPolicyEnvoySecurityPolicyReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy").WithName("securitypolicy"),
-		mgr.GetEventRecorderFor("AuthPolicyEnvoySecurityPolicy"),
 	)
 
 	err = (&AuthPolicyEnvoySecurityPolicyReconciler{
@@ -161,9 +168,10 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	Expect(err).NotTo(HaveOccurred())
 
 	envoySecurityPolicyReferenceGrantReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy").WithName("referencegrant"),
-		mgr.GetEventRecorderFor("EnvoySecurityPolicyReferenceGrant"),
 	)
 
 	err = (&EnvoySecurityPolicyReferenceGrantReconciler{
@@ -173,9 +181,10 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	Expect(err).NotTo(HaveOccurred())
 
 	envoyGatewayLimitadorClusterReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		mgr.GetAPIReader(),
 		log.Log.WithName("envoyGatewayLimitadorClusterReconciler"),
-		mgr.GetEventRecorderFor("EnvoyGatewayLimitadorClusterReconciler"),
 	)
 
 	err = (&EnvoyGatewayLimitadorClusterReconciler{

@@ -160,7 +160,6 @@ func main() {
 	kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("kuadrant"),
-		mgr.GetEventRecorderFor("Kuadrant"),
 	)
 
 	if err = (&controllers.KuadrantReconciler{
@@ -174,7 +173,6 @@ func main() {
 	authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy"),
-		mgr.GetEventRecorderFor("AuthPolicy"),
 	)
 
 	if err = (&controllers.AuthPolicyReconciler{
@@ -189,7 +187,6 @@ func main() {
 	dnsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("dnspolicy"),
-		mgr.GetEventRecorderFor("DNSPolicy"),
 	)
 
 	if err = (&controllers.DNSPolicyReconciler{
@@ -203,7 +200,6 @@ func main() {
 	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("kuadrant").WithName("gateway"),
-		mgr.GetEventRecorderFor("GatewayKuadrant"),
 	)
 
 	if err = (&controllers.GatewayKuadrantReconciler{
@@ -216,7 +212,6 @@ func main() {
 	authPolicyIstioAuthorizationPolicyReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy").WithName("istioauthorizationpolicy"),
-		mgr.GetEventRecorderFor("AuthPolicyIstioAuthorizationPolicy"),
 	)
 	if err = (&controllers.AuthPolicyIstioAuthorizationPolicyReconciler{
 		BaseReconciler: authPolicyIstioAuthorizationPolicyReconciler,
@@ -228,7 +223,6 @@ func main() {
 	targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("targetstatus"),
-		mgr.GetEventRecorderFor("PolicyTargetStatus"),
 	)
 	if err = (&controllers.TargetStatusReconciler{
 		BaseReconciler: targetStatusBaseReconciler,
@@ -240,7 +234,6 @@ func main() {
 	authPolicyEnvoySecurityPolicyReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy").WithName("securitypolicy"),
-		mgr.GetEventRecorderFor("AuthPolicyEnvoySecurityPolicy"),
 	)
 	if err = (&controllers.AuthPolicyEnvoySecurityPolicyReconciler{
 		BaseReconciler: authPolicyEnvoySecurityPolicyReconciler,
@@ -252,7 +245,6 @@ func main() {
 	envoySecurityPolicyReferenceGrantReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy").WithName("referencegrant"),
-		mgr.GetEventRecorderFor("EnvoySecurityPolicyReferenceGrant"),
 	)
 	if err = (&controllers.EnvoySecurityPolicyReferenceGrantReconciler{
 		BaseReconciler: envoySecurityPolicyReferenceGrantReconciler,
@@ -264,7 +256,6 @@ func main() {
 	envoyGatewayLimitadorClusterReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("envoyGatewayLimitadorClusterReconciler"),
-		mgr.GetEventRecorderFor("EnvoyGatewayLimitadorClusterReconciler"),
 	)
 	if err = (&controllers.EnvoyGatewayLimitadorClusterReconciler{
 		BaseReconciler: envoyGatewayLimitadorClusterReconciler,

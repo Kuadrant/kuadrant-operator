@@ -65,7 +65,7 @@ func (t *TLSPolicyStatusUpdaterReconciler) UpdateStatus(ctx context.Context, _ [
 			ObservedGeneration: policy.Status.ObservedGeneration,
 		}
 
-		_, err := IsPolicyValid(ctx, s, policy)
+		_, err := IsTLSPolicyValid(ctx, s, policy)
 		meta.SetStatusCondition(&newStatus.Conditions, *kuadrant.AcceptedCondition(policy, err))
 
 		// Do not set enforced condition if Accepted condition is false

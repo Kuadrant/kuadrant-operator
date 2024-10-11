@@ -144,6 +144,64 @@ var _ = Describe("TLSPolicy controller", func() {
 
 	})
 
+	Context("valid target, invalid issuer", func() {
+		BeforeEach(func(ctx SpecContext) {
+			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+				WithHTTPListener("test-listener", "test.example.com").Gateway
+			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
+		})
+
+		It("invalid kind - should have accepted condition with status false and correct reason", func(ctx SpecContext) {
+			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+				WithTargetGateway(gateway.Name).
+				WithIssuerRef(certmanmetav1.ObjectReference{Kind: "NotIssuer"})
+			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
+
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy), tlsPolicy)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(tlsPolicy.Status.Conditions).To(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Status":  Equal(metav1.ConditionFalse),
+						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonInvalid)),
+						"Message": Equal("TLSPolicy target is invalid: invalid value \"NotIssuer\" for issuerRef.kind. Must be empty, \"Issuer\" or \"ClusterIssuer\""),
+					})),
+				)
+				g.Expect(tlsPolicy.Status.Conditions).ToNot(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type": Equal(string(kuadrant.PolicyConditionEnforced)),
+					})),
+				)
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+		}, testTimeOut)
+
+		It("unable to find issuer - should have accepted condition with status false and correct reason", func(ctx SpecContext) {
+			tlsPolicy = v1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).
+				WithTargetGateway(gateway.Name).
+				WithIssuerRef(certmanmetav1.ObjectReference{Name: "DoesNotExist"})
+			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
+
+			Eventually(func(g Gomega) {
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy), tlsPolicy)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(tlsPolicy.Status.Conditions).To(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Status":  Equal(metav1.ConditionFalse),
+						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonInvalid)),
+						"Message": Equal("TLSPolicy target is invalid: unable to find issuer"),
+					})),
+				)
+				g.Expect(tlsPolicy.Status.Conditions).ToNot(
+					ContainElement(MatchFields(IgnoreExtras, Fields{
+						"Type": Equal(string(kuadrant.PolicyConditionEnforced)),
+					})),
+				)
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+		}, testTimeOut)
+	})
+
 	Context("valid target, issuer and policy", func() {
 		BeforeEach(func(ctx SpecContext) {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).

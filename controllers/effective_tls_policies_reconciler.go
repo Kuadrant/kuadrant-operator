@@ -76,7 +76,7 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 		}
 
 		// Policy is not valid
-		isValid, _ := IsPolicyValid(ctx, s, policy)
+		isValid, _ := IsTLSPolicyValid(ctx, s, policy)
 		if !isValid {
 			logger.V(1).Info("deleting certs for invalid policy", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
 			if err := t.deleteCertificatesForPolicy(ctx, topology, listeners); err != nil {

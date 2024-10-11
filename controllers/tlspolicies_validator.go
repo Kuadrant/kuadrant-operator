@@ -41,9 +41,8 @@ func (t *ValidateTLSPoliciesValidatorReconciler) Subscription() *controller.Subs
 }
 
 func (t *ValidateTLSPoliciesValidatorReconciler) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("ValidateTLSPolicyTask").WithName("Reconcile")
+	logger := controller.LoggerFromContext(ctx).WithName("ValidateTLSPoliciesValidatorReconciler").WithName("Validate")
 
-	// Get all TLS Policies
 	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1alpha1.TLSPolicy, bool) {
 		p, ok := item.(*kuadrantv1alpha1.TLSPolicy)
 		return p, ok
@@ -62,49 +61,21 @@ func (t *ValidateTLSPoliciesValidatorReconciler) Validate(ctx context.Context, _
 			continue
 		}
 
-		// TODO: What should happen if multiple target refs is supported in the future in terms of reporting in log and policy status?
-		// Policies are already linked to their targets. If the target ref length and length of targetables by this policy is not the same,
-		// then the policy could not find the target
-		if len(p.GetTargetRefs()) != len(topology.Targetables().Children(p)) {
-			logger.V(1).Info("tls policy cannot find target ref", "name", p.Name, "namespace", p.Namespace)
-			isPolicyValidErrorMap[p.GetLocator()] = kuadrant.NewErrTargetNotFound(p.Kind(), p.GetTargetRef(),
-				apierrors.NewNotFound(kuadrantv1alpha1.TLSPoliciesResource.GroupResource(), p.GetName()))
+		// Validate target ref
+		if err := t.isTargetRefsFound(topology, p); err != nil {
+			isPolicyValidErrorMap[p.GetLocator()] = err
 			continue
 		}
 
-		// Validate IssuerRef is correct
-		if !lo.Contains([]string{"", certmanv1.IssuerKind, certmanv1.ClusterIssuerKind}, p.Spec.IssuerRef.Kind) {
-			isPolicyValidErrorMap[p.GetLocator()] = kuadrant.NewErrInvalid(p.Kind(),
-				fmt.Errorf(`invalid value %q for issuerRef.kind. Must be empty, %q or %q`,
-					p.Spec.IssuerRef.Kind, certmanv1.IssuerKind, certmanv1.ClusterIssuerKind))
+		// Validate IssuerRef kind is correct
+		if err := t.isValidIssuerKind(p); err != nil {
+			isPolicyValidErrorMap[p.GetLocator()] = err
 			continue
 		}
 
 		// Validate Issuer is present on cluster through the topology
-		_, ok := lo.Find(topology.Objects().Items(), func(item machinery.Object) bool {
-			runtimeObj, ok := item.(*controller.RuntimeObject)
-			if !ok {
-				return false
-			}
-
-			issuer, ok := runtimeObj.Object.(certmanv1.GenericIssuer)
-			if !ok {
-				return false
-			}
-
-			match := issuer.GetName() == p.Spec.IssuerRef.Name
-			if lo.Contains([]string{"", certmanv1.IssuerKind}, p.Spec.IssuerRef.Kind) {
-				match = match && issuer.GetNamespace() == p.GetNamespace() &&
-					issuer.GetObjectKind().GroupVersionKind().Kind == certmanv1.IssuerKind
-			} else {
-				match = match && issuer.GetObjectKind().GroupVersionKind().Kind == certmanv1.ClusterIssuerKind
-			}
-
-			return match
-		})
-
-		if !ok {
-			isPolicyValidErrorMap[p.GetLocator()] = kuadrant.NewErrInvalid(p.Kind(), errors.New("unable to find issuer"))
+		if err := t.isIssuerFound(topology, p); err != nil {
+			isPolicyValidErrorMap[p.GetLocator()] = err
 			continue
 		}
 
@@ -112,6 +83,58 @@ func (t *ValidateTLSPoliciesValidatorReconciler) Validate(ctx context.Context, _
 	}
 
 	s.Store(TLSPolicyAcceptedKey, isPolicyValidErrorMap)
+
+	return nil
+}
+
+// isTargetRefsFound Policies are already linked to their targets. If the target ref length and length of targetables by this policy is not the same,
+// then the policy could not find the target
+// TODO: What should happen if multiple target refs is supported in the future in terms of reporting in log and policy status?
+func (t *ValidateTLSPoliciesValidatorReconciler) isTargetRefsFound(topology *machinery.Topology, p *kuadrantv1alpha1.TLSPolicy) error {
+	if len(p.GetTargetRefs()) != len(topology.Targetables().Children(p)) {
+		return kuadrant.NewErrTargetNotFound(p.Kind(), p.GetTargetRef(), apierrors.NewNotFound(kuadrantv1alpha1.TLSPoliciesResource.GroupResource(), p.GetName()))
+	}
+
+	return nil
+}
+
+// isValidIssuerKind Validates that the Issuer Ref kind is either empty, Issuer or ClusterIssuer
+func (t *ValidateTLSPoliciesValidatorReconciler) isValidIssuerKind(p *kuadrantv1alpha1.TLSPolicy) error {
+	if !lo.Contains([]string{"", certmanv1.IssuerKind, certmanv1.ClusterIssuerKind}, p.Spec.IssuerRef.Kind) {
+		return kuadrant.NewErrInvalid(p.Kind(), fmt.Errorf(`invalid value %q for issuerRef.kind. Must be empty, %q or %q`,
+			p.Spec.IssuerRef.Kind, certmanv1.IssuerKind, certmanv1.ClusterIssuerKind))
+	}
+
+	return nil
+}
+
+// isIssuerFound Validates that the Issuer specified can be found in the topology
+func (t *ValidateTLSPoliciesValidatorReconciler) isIssuerFound(topology *machinery.Topology, p *kuadrantv1alpha1.TLSPolicy) error {
+	_, ok := lo.Find(topology.Objects().Items(), func(item machinery.Object) bool {
+		runtimeObj, ok := item.(*controller.RuntimeObject)
+		if !ok {
+			return false
+		}
+
+		issuer, ok := runtimeObj.Object.(certmanv1.GenericIssuer)
+		if !ok {
+			return false
+		}
+
+		match := issuer.GetName() == p.Spec.IssuerRef.Name
+		if lo.Contains([]string{"", certmanv1.IssuerKind}, p.Spec.IssuerRef.Kind) {
+			match = match && issuer.GetNamespace() == p.GetNamespace() &&
+				issuer.GetObjectKind().GroupVersionKind().Kind == certmanv1.IssuerKind
+		} else {
+			match = match && issuer.GetObjectKind().GroupVersionKind().Kind == certmanv1.ClusterIssuerKind
+		}
+
+		return match
+	})
+
+	if !ok {
+		return kuadrant.NewErrInvalid(p.Kind(), errors.New("unable to find issuer"))
+	}
 
 	return nil
 }

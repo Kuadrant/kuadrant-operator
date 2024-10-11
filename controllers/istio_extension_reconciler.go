@@ -196,10 +196,12 @@ func (r *istioExtensionReconciler) buildWasmPluginForGateway(gateway machinery.T
 			Namespace: gateway.GetNamespace(),
 		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{
-			TargetRef: &istiov1beta1.PolicyTargetReference{ // Istio WasmPlugin targeRefs requires Istio 1.22+
-				Group: machinery.GatewayGroupKind.Group,
-				Kind:  machinery.GatewayGroupKind.Kind,
-				Name:  gateway.GetName(),
+			TargetRefs: []*istiov1beta1.PolicyTargetReference{
+				{
+					Group: machinery.GatewayGroupKind.Group,
+					Kind:  machinery.GatewayGroupKind.Kind,
+					Name:  gateway.GetName(),
+				},
 			},
 			Url:          WASMFilterImageURL,
 			PluginConfig: nil,
@@ -236,10 +238,7 @@ func hostnamesFromListenerAndHTTPRoute(listener *machinery.Listener, httpRoute *
 }
 
 func equalWasmPlugins(a, b *istioclientgoextensionv1alpha1.WasmPlugin) bool {
-	aTargetRef := ptr.Deref(a.Spec.TargetRef, istiov1beta1.PolicyTargetReference{})
-	bTargetRef := ptr.Deref(b.Spec.TargetRef, istiov1beta1.PolicyTargetReference{})
-
-	if a.Spec.Url != b.Spec.Url || a.Spec.Phase != b.Spec.Phase || aTargetRef.Group != bTargetRef.Group || aTargetRef.Kind != bTargetRef.Kind || aTargetRef.Name != bTargetRef.Name || aTargetRef.Namespace != bTargetRef.Namespace {
+	if a.Spec.Url != b.Spec.Url || a.Spec.Phase != b.Spec.Phase || !kuadrantistio.EqualTargetRefs(a.Spec.TargetRefs, b.Spec.TargetRefs) {
 		return false
 	}
 

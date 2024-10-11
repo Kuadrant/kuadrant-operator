@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -107,7 +106,7 @@ func (t *TLSPolicyStatusUpdaterReconciler) enforcedCondition(ctx context.Context
 		return kuadrant.EnforcedCondition(tlsPolicy, kuadrant.NewErrUnknown(tlsPolicy.Kind(), err), false)
 	}
 
-	if err := t.isCertificatesReady(tlsPolicy, topology); err != nil {
+	if err := t.isCertificatesReady(ctx, tlsPolicy, topology); err != nil {
 		return kuadrant.EnforcedCondition(tlsPolicy, kuadrant.NewErrUnknown(tlsPolicy.Kind(), err), false)
 	}
 
@@ -180,7 +179,7 @@ func (t *TLSPolicyStatusUpdaterReconciler) isIssuerReady(ctx context.Context, tl
 	return nil
 }
 
-func (t *TLSPolicyStatusUpdaterReconciler) isCertificatesReady(p machinery.Policy, topology *machinery.Topology) error {
+func (t *TLSPolicyStatusUpdaterReconciler) isCertificatesReady(ctx context.Context, p machinery.Policy, topology *machinery.Topology) error {
 	tlsPolicy, ok := p.(*kuadrantv1alpha1.TLSPolicy)
 	if !ok {
 		return errors.New("invalid policy")
@@ -188,26 +187,24 @@ func (t *TLSPolicyStatusUpdaterReconciler) isCertificatesReady(p machinery.Polic
 
 	// Get all listeners where the gateway contains this
 	// TODO: Update when targeting by section name is allowed, the listener will contain the policy rather than the gateway
-	listeners := lo.FilterMap(topology.Targetables().Items(), func(t machinery.Targetable, index int) (*machinery.Listener, bool) {
-		l, ok := t.(*machinery.Listener)
-		return l, ok && lo.Contains(l.Gateway.Policies(), p)
+	gateways := lo.FilterMap(topology.Targetables().Items(), func(t machinery.Targetable, index int) (*machinery.Gateway, bool) {
+		gw, ok := t.(*machinery.Gateway)
+		return gw, ok && lo.Contains(gw.Policies(), p)
 	})
 
-	if len(listeners) == 0 {
+	if len(gateways) == 0 {
 		return errors.New("no valid gateways found")
 	}
 
-	for i, l := range listeners {
-		// Not valid - so no need to check if cert is ready since there should not be one created
-		err := validateGatewayListenerBlock(field.NewPath("").Index(i), *l.Listener, l.Gateway).ToAggregate()
-		if err != nil {
-			continue
-		}
-
-		expectedCertificates := expectedCertificatesForListener(l, tlsPolicy)
+	// Use gateway instead of listener for calculating expected certs
+	// This is because listeners that reference the same cert secret but with different host names are merged to a
+	// singular Certificate resource containing the hostnames. However, this means for Gateways with multiple listeners
+	// the expected certificates will be checked multiple times
+	for _, gw := range gateways {
+		expectedCertificates := expectedCertificatesForGateway(ctx, gw.Gateway, tlsPolicy)
 
 		for _, cert := range expectedCertificates {
-			objs := topology.Objects().Children(l)
+			objs := topology.Objects().Children(gw)
 			obj, ok := lo.Find(objs, func(o machinery.Object) bool {
 				return o.GroupVersionKind().GroupKind() == CertManagerCertificateKind && o.GetNamespace() == cert.GetNamespace() && o.GetName() == cert.GetName()
 			})

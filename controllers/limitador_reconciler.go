@@ -58,14 +58,14 @@ func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 		return err
 	}
 
-	aobjs := lo.FilterMap(topology.Objects().Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
+	lobjs := lo.FilterMap(topology.Objects().Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
 		if item.GroupVersionKind().Kind == v1beta1.LimitadorGroupKind.Kind {
 			return item, true
 		}
 		return nil, false
 	})
 
-	if len(aobjs) > 0 {
+	if len(lobjs) > 0 {
 		logger.Info("limitador resource already exists, no need to create", "status", "skipping")
 		return nil
 	}

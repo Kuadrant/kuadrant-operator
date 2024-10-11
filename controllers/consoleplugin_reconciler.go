@@ -117,7 +117,8 @@ func (r *ConsolePluginReconciler) Run(eventCtx context.Context, _ []controller.R
 	if !topologyExists {
 		utils.TagObjectToDelete(consolePlugin)
 	}
-	err = r.ReconcileResource(ctx, &consolev1.ConsolePlugin{}, consolePlugin, reconcilers.CreateOnlyMutator)
+	consolePluginMutator := reconcilers.Mutator[*consolev1.ConsolePlugin](consoleplugin.ServiceMutator)
+	err = r.ReconcileResource(ctx, &consolev1.ConsolePlugin{}, consolePlugin, consolePluginMutator)
 	if err != nil {
 		logger.Error(err, "reconciling consoleplugin")
 		return err

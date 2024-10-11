@@ -166,7 +166,7 @@ func LinkGatewayToClusterIssuerFunc(objs controller.Store) machinery.LinkFunc {
 
 // Common functions used across multiple reconcilers
 
-func IsPolicyValid(ctx context.Context, s *sync.Map, policy *kuadrantv1alpha1.TLSPolicy) (bool, error) {
+func IsTLSPolicyValid(ctx context.Context, s *sync.Map, policy *kuadrantv1alpha1.TLSPolicy) (bool, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("IsPolicyValid")
 
 	store, ok := s.Load(TLSPolicyAcceptedKey)

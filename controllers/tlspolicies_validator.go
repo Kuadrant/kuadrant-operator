@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -62,16 +63,20 @@ func (t *ValidateTLSPoliciesValidatorReconciler) Validate(ctx context.Context, _
 		}
 
 		// TODO: What should happen if multiple target refs is supported in the future in terms of reporting in log and policy status?
-		// Policies are already linked to their targets, if is target ref length and length of targetables by this policy is the same
+		// Policies are already linked to their targets. If the target ref length and length of targetables by this policy is not the same,
+		// then the policy could not find the target
 		if len(p.GetTargetRefs()) != len(topology.Targetables().Children(p)) {
 			logger.V(1).Info("tls policy cannot find target ref", "name", p.Name, "namespace", p.Namespace)
-			isPolicyValidErrorMap[p.GetLocator()] = kuadrant.NewErrTargetNotFound(p.Kind(), p.GetTargetRef(), apierrors.NewNotFound(kuadrantv1alpha1.TLSPoliciesResource.GroupResource(), p.GetName()))
+			isPolicyValidErrorMap[p.GetLocator()] = kuadrant.NewErrTargetNotFound(p.Kind(), p.GetTargetRef(),
+				apierrors.NewNotFound(kuadrantv1alpha1.TLSPoliciesResource.GroupResource(), p.GetName()))
 			continue
 		}
 
 		// Validate IssuerRef is correct
 		if !lo.Contains([]string{"", certmanv1.IssuerKind, certmanv1.ClusterIssuerKind}, p.Spec.IssuerRef.Kind) {
-			isPolicyValidErrorMap[p.GetLocator()] = fmt.Errorf(`invalid value %q for issuerRef.kind. Must be empty, %q or %q`, p.Spec.IssuerRef.Kind, certmanv1.IssuerKind, certmanv1.ClusterIssuerKind)
+			isPolicyValidErrorMap[p.GetLocator()] = kuadrant.NewErrInvalid(p.Kind(),
+				fmt.Errorf(`invalid value %q for issuerRef.kind. Must be empty, %q or %q`,
+					p.Spec.IssuerRef.Kind, certmanv1.IssuerKind, certmanv1.ClusterIssuerKind))
 			continue
 		}
 
@@ -99,7 +104,7 @@ func (t *ValidateTLSPoliciesValidatorReconciler) Validate(ctx context.Context, _
 		})
 
 		if !ok {
-			isPolicyValidErrorMap[p.GetLocator()] = fmt.Errorf("unable to find issuer")
+			isPolicyValidErrorMap[p.GetLocator()] = kuadrant.NewErrInvalid(p.Kind(), errors.New("unable to find issuer"))
 			continue
 		}
 

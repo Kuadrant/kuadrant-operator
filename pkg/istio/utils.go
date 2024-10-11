@@ -1,28 +1,18 @@
 package istio
 
 import (
-	"context"
-
-	"github.com/go-logr/logr"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
-	istiocommon "istio.io/api/type/v1beta1"
+	istioapiv1beta1 "istio.io/api/type/v1beta1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	k8stypes "k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
-)
-
-const (
-	GatewayAnnotationKey = "kuadrant.io/gateway-name"
 )
 
 var (
@@ -35,24 +25,20 @@ var (
 	AuthorizationPolicyGroupKind = schema.GroupKind{Group: istioclientgosecurityv1beta1.GroupName, Kind: "AuthorizationPolicy"}
 )
 
-func WorkloadSelectorFromGateway(ctx context.Context, k8sClient client.Client, gateway *gatewayapiv1.Gateway) *istiocommon.WorkloadSelector {
-	logger, _ := logr.FromContext(ctx)
-	gatewayWorkloadSelector, err := kuadrantgatewayapi.GetGatewayWorkloadSelector(ctx, k8sClient, gateway)
-	if err != nil {
-		logger.V(1).Info("failed to build Istio WorkloadSelector from Gateway service - falling back to Gateway labels")
-		gatewayWorkloadSelector = gateway.Labels
-	}
-	return &istiocommon.WorkloadSelector{
-		MatchLabels: gatewayWorkloadSelector,
-	}
-}
-
-func PolicyTargetRefFromGateway(gateway *gatewayapiv1.Gateway) *istiocommon.PolicyTargetReference {
-	return &istiocommon.PolicyTargetReference{
+func PolicyTargetRefFromGateway(gateway *gatewayapiv1.Gateway) *istioapiv1beta1.PolicyTargetReference {
+	return &istioapiv1beta1.PolicyTargetReference{
 		Group: gatewayapiv1.GroupName,
 		Kind:  "Gateway",
 		Name:  gateway.Name,
 	}
+}
+
+func EqualTargetRefs(a, b []*istioapiv1beta1.PolicyTargetReference) bool {
+	return len(a) == len(b) && lo.EveryBy(a, func(sTargetRef *istioapiv1beta1.PolicyTargetReference) bool {
+		return lo.SomeBy(b, func(tTargetRef *istioapiv1beta1.PolicyTargetReference) bool {
+			return sTargetRef.Group == tTargetRef.Group && sTargetRef.Kind == tTargetRef.Kind && sTargetRef.Name == tTargetRef.Name && sTargetRef.Namespace == tTargetRef.Namespace
+		})
+	})
 }
 
 func IsEnvoyFilterInstalled(restMapper meta.RESTMapper) (bool, error) {
@@ -109,57 +95,62 @@ func IsIstioInstalled(restMapper meta.RESTMapper) (bool, error) {
 }
 
 func LinkGatewayToWasmPlugin(objs controller.Store) machinery.LinkFunc {
-	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), controller.ObjectAs[*gatewayapiv1.Gateway])
+	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), func(obj controller.Object, _ int) machinery.Object {
+		return &machinery.Gateway{Gateway: obj.(*gatewayapiv1.Gateway)}
+	})
 
 	return machinery.LinkFunc{
 		From: machinery.GatewayGroupKind,
 		To:   WasmPluginGroupKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			wasmPlugin := child.(*controller.RuntimeObject).Object.(*istioclientgoextensionv1alpha1.WasmPlugin)
-			return lo.FilterMap(gateways, func(g *gatewayapiv1.Gateway, _ int) (machinery.Object, bool) {
-				gateway := &machinery.Gateway{Gateway: g}
-				targetRef := wasmPlugin.Spec.TargetRef
-				if targetRef == nil {
-					return gateway, false
-				}
-				group := targetRef.GetGroup()
-				if group == "" {
-					group = machinery.GatewayGroupKind.Group
-				}
-				kind := targetRef.GetKind()
-				if kind == "" {
-					kind = machinery.GatewayGroupKind.Kind
-				}
-				name := targetRef.GetName()
-				if name == "" {
-					return gateway, false
-				}
-				namespace := targetRef.GetNamespace()
-				if namespace == "" {
-					namespace = wasmPlugin.GetNamespace()
-				}
-				return gateway, group == machinery.GatewayGroupKind.Group &&
-					kind == machinery.GatewayGroupKind.Kind &&
-					name == gateway.GetName() &&
-					namespace == gateway.GetNamespace()
-			})
+			return lo.FilterMap(gateways, istioTargetRefsIncludeObjectFunc(wasmPlugin.Spec.TargetRefs, wasmPlugin.GetNamespace()))
 		},
 	}
 }
 
 func LinkGatewayToEnvoyFilter(objs controller.Store) machinery.LinkFunc {
-	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), controller.ObjectAs[*gatewayapiv1.Gateway])
+	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), func(obj controller.Object, _ int) machinery.Object {
+		return &machinery.Gateway{Gateway: obj.(*gatewayapiv1.Gateway)}
+	})
 
 	return machinery.LinkFunc{
 		From: machinery.GatewayGroupKind,
 		To:   EnvoyFilterGroupKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			envoyFilter := child.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter)
-			return lo.FilterMap(gateways, func(g *gatewayapiv1.Gateway, _ int) (machinery.Object, bool) {
-				gateway := &machinery.Gateway{Gateway: g}
-				gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
-				return gateway, envoyFilter.Annotations[GatewayAnnotationKey] == gatewayKey.String()
-			})
+			return lo.FilterMap(gateways, istioTargetRefsIncludeObjectFunc(envoyFilter.Spec.TargetRefs, envoyFilter.GetNamespace()))
 		},
+	}
+}
+
+func istioTargetRefsIncludeObjectFunc(targetRefs []*istioapiv1beta1.PolicyTargetReference, defaultNamespace string) func(machinery.Object, int) (machinery.Object, bool) {
+	return func(obj machinery.Object, _ int) (machinery.Object, bool) {
+		groupKind := obj.GroupVersionKind().GroupKind()
+		return obj, lo.SomeBy(targetRefs, func(targetRef *istioapiv1beta1.PolicyTargetReference) bool {
+			if targetRef == nil {
+				return false
+			}
+			group := targetRef.GetGroup()
+			if group == "" {
+				group = machinery.GatewayClassGroupKind.Group
+			}
+			kind := targetRef.GetKind()
+			if kind == "" {
+				kind = machinery.GatewayClassGroupKind.Kind
+			}
+			name := targetRef.GetName()
+			if name == "" {
+				return false
+			}
+			namespace := targetRef.GetNamespace()
+			if namespace == "" {
+				namespace = defaultNamespace
+			}
+			return group == groupKind.Group &&
+				kind == groupKind.Kind &&
+				name == obj.GetName() &&
+				namespace == obj.GetNamespace()
+		})
 	}
 }

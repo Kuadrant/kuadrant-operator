@@ -10,6 +10,7 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/samber/lo"
 	istioapinetworkingv1alpha3 "istio.io/api/networking/v1alpha3"
+	istiov1beta1 "istio.io/api/type/v1beta1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -122,7 +123,7 @@ func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 		// update
 		if !equalEnvoyFilters(existingEnvoyFilter, desiredEnvoyFilter) {
 			existingEnvoyFilter.Spec = istioapinetworkingv1alpha3.EnvoyFilter{
-				WorkloadSelector: desiredEnvoyFilter.Spec.WorkloadSelector,
+				TargetRefs:       desiredEnvoyFilter.Spec.TargetRefs,
 				ConfigPatches:    desiredEnvoyFilter.Spec.ConfigPatches,
 				Priority:         desiredEnvoyFilter.Spec.Priority,
 			}
@@ -163,14 +164,17 @@ func (r *istioRateLimitClusterReconciler) buildDesiredEnvoyFilter(ctx context.Co
 			APIVersion: istioclientgonetworkingv1alpha3.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        rateLimitClusterName(gateway.GetName()),
-			Namespace:   gateway.GetNamespace(),
-			Labels:      map[string]string{rateLimitClusterLabelKey: "true"},
-			Annotations: map[string]string{kuadrantistio.GatewayAnnotationKey: k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}.String()}, // used to link the envoy filter to the gateway in the topology
+			Name:      rateLimitClusterName(gateway.GetName()),
+			Namespace: gateway.GetNamespace(),
+			Labels:    map[string]string{rateLimitClusterLabelKey: "true"},
 		},
 		Spec: istioapinetworkingv1alpha3.EnvoyFilter{
-			WorkloadSelector: &istioapinetworkingv1alpha3.WorkloadSelector{ // TODO: use targetRefs instead – requires Istio 1.22+
-				Labels: kuadrantistio.WorkloadSelectorFromGateway(ctx, r.BaseReconciler.Client(), gateway.Gateway).MatchLabels, // this will make calls to the API server; ideally all the frequired resources would be in the topology
+			TargetRefs: []*istiov1beta1.PolicyTargetReference{
+				{
+					Group: machinery.GatewayGroupKind.Group,
+					Kind:  machinery.GatewayGroupKind.Kind,
+					Name:  gateway.GetName(),
+				},
 			},
 		},
 	}
@@ -244,13 +248,7 @@ func istioEnvoyFilterClusterPatch(host string, port int) ([]*istioapinetworkingv
 }
 
 func equalEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
-	if a.Spec.Priority != b.Spec.Priority {
-		return false
-	}
-
-	aWorkloadSelectorLabels := a.Spec.WorkloadSelector.Labels
-	bWorkloadSelectorLabels := b.Spec.WorkloadSelector.Labels
-	if len(aWorkloadSelectorLabels) != len(bWorkloadSelectorLabels) || !lo.Every(lo.Entries(aWorkloadSelectorLabels), lo.Entries(bWorkloadSelectorLabels)) {
+	if a.Spec.Priority != b.Spec.Priority || !kuadrantistio.EqualTargetRefs(a.Spec.TargetRefs, b.Spec.TargetRefs) {
 		return false
 	}
 

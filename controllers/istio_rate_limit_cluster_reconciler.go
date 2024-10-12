@@ -120,24 +120,26 @@ func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 
 		existingEnvoyFilter := existingEnvoyFilterObj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter)
 
-		// update
-		if !equalEnvoyFilters(existingEnvoyFilter, desiredEnvoyFilter) {
-			existingEnvoyFilter.Spec = istioapinetworkingv1alpha3.EnvoyFilter{
-				TargetRefs:       desiredEnvoyFilter.Spec.TargetRefs,
-				ConfigPatches:    desiredEnvoyFilter.Spec.ConfigPatches,
-				Priority:         desiredEnvoyFilter.Spec.Priority,
-			}
-
-			existingEnvoyFilterUnstructured, err := controller.Destruct(existingEnvoyFilter)
-			if err != nil {
-				logger.Error(err, "failed to destruct envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilter)
-				continue
-			}
-			if _, err = resource.Update(ctx, existingEnvoyFilterUnstructured, metav1.UpdateOptions{}); err != nil {
-				logger.Error(err, "failed to update envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilterUnstructured.Object)
-				// TODO: handle error
-			}
+		if equalEnvoyFilters(existingEnvoyFilter, desiredEnvoyFilter) {
+			logger.V(1).Info("envoyfilter object is up to date, nothing to do")
 			continue
+		}
+
+		// update
+		existingEnvoyFilter.Spec = istioapinetworkingv1alpha3.EnvoyFilter{
+			TargetRefs:       desiredEnvoyFilter.Spec.TargetRefs,
+			ConfigPatches:    desiredEnvoyFilter.Spec.ConfigPatches,
+			Priority:         desiredEnvoyFilter.Spec.Priority,
+		}
+
+		existingEnvoyFilterUnstructured, err := controller.Destruct(existingEnvoyFilter)
+		if err != nil {
+			logger.Error(err, "failed to destruct envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilter)
+			continue
+		}
+		if _, err = resource.Update(ctx, existingEnvoyFilterUnstructured, metav1.UpdateOptions{}); err != nil {
+			logger.Error(err, "failed to update envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyFilterUnstructured.Object)
+			// TODO: handle error
 		}
 	}
 

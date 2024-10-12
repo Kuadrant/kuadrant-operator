@@ -91,7 +91,7 @@ func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
-		desiredEnvoyFilter, err := r.buildDesiredEnvoyFilter(ctx, limitador, gateway)
+		desiredEnvoyFilter, err := r.buildDesiredEnvoyFilter(limitador, gateway)
 		if err != nil {
 			logger.Error(err, "failed to build desired envoy filter")
 			continue
@@ -159,7 +159,7 @@ func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	return nil
 }
 
-func (r *istioRateLimitClusterReconciler) buildDesiredEnvoyFilter(ctx context.Context, limitador *limitadorv1alpha1.Limitador, gateway *machinery.Gateway) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
+func (r *istioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *limitadorv1alpha1.Limitador, gateway *machinery.Gateway) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
 	envoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantistio.EnvoyFilterGroupKind.Kind,

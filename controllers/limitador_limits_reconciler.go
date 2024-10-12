@@ -63,7 +63,7 @@ func (r *limitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 	}
 
 	if rlptools.Equal(limitador.Spec.Limits, desiredLimits) {
-		logger.Info("limitador object is up to date, nothing to do")
+		logger.V(1).Info("limitador object is up to date, nothing to do")
 		return nil
 	}
 

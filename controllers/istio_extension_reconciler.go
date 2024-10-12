@@ -106,23 +106,25 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			continue
 		}
 
-		// update
-		if !equalWasmPlugins(existingWasmPlugin, desiredWasmPlugin) {
-			existingWasmPlugin.Spec.Url = desiredWasmPlugin.Spec.Url
-			existingWasmPlugin.Spec.Phase = desiredWasmPlugin.Spec.Phase
-			existingWasmPlugin.Spec.TargetRefs = desiredWasmPlugin.Spec.TargetRefs
-			existingWasmPlugin.Spec.PluginConfig = desiredWasmPlugin.Spec.PluginConfig
-
-			existingWasmPluginUnstructured, err := controller.Destruct(existingWasmPlugin)
-			if err != nil {
-				logger.Error(err, "failed to destruct wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", existingWasmPlugin)
-				continue
-			}
-			if _, err = resource.Update(ctx, existingWasmPluginUnstructured, metav1.UpdateOptions{}); err != nil {
-				logger.Error(err, "failed to update wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", existingWasmPluginUnstructured.Object)
-				// TODO: handle error
-			}
+		if equalWasmPlugins(existingWasmPlugin, desiredWasmPlugin) {
+			logger.V(1).Info("wasmplugin object is up to date, nothing to do")
 			continue
+		}
+
+		// update
+		existingWasmPlugin.Spec.Url = desiredWasmPlugin.Spec.Url
+		existingWasmPlugin.Spec.Phase = desiredWasmPlugin.Spec.Phase
+		existingWasmPlugin.Spec.TargetRefs = desiredWasmPlugin.Spec.TargetRefs
+		existingWasmPlugin.Spec.PluginConfig = desiredWasmPlugin.Spec.PluginConfig
+
+		existingWasmPluginUnstructured, err := controller.Destruct(existingWasmPlugin)
+		if err != nil {
+			logger.Error(err, "failed to destruct wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", existingWasmPlugin)
+			continue
+		}
+		if _, err = resource.Update(ctx, existingWasmPluginUnstructured, metav1.UpdateOptions{}); err != nil {
+			logger.Error(err, "failed to update wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", existingWasmPluginUnstructured.Object)
+			// TODO: handle error
 		}
 	}
 

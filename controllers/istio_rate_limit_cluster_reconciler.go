@@ -127,9 +127,9 @@ func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 
 		// update
 		existingEnvoyFilter.Spec = istioapinetworkingv1alpha3.EnvoyFilter{
-			TargetRefs:       desiredEnvoyFilter.Spec.TargetRefs,
-			ConfigPatches:    desiredEnvoyFilter.Spec.ConfigPatches,
-			Priority:         desiredEnvoyFilter.Spec.Priority,
+			TargetRefs:    desiredEnvoyFilter.Spec.TargetRefs,
+			ConfigPatches: desiredEnvoyFilter.Spec.ConfigPatches,
+			Priority:      desiredEnvoyFilter.Spec.Priority,
 		}
 
 		existingEnvoyFilterUnstructured, err := controller.Destruct(existingEnvoyFilter)

@@ -82,7 +82,10 @@ func RuleFromLimit(limit kuadrantv1beta3.Limit, limitIdentifier, scope string, r
 }
 
 func conditionsFromLimit(limit kuadrantv1beta3.Limit, routeMatch gatewayapiv1.HTTPRouteMatch) []Condition {
-	ruleConditions := []Condition{conditionFromMatch(routeMatch)}
+	var ruleConditions []Condition
+	if routeMatch.Path != nil || routeMatch.Method != nil || len(routeMatch.Headers) > 0 || len(routeMatch.QueryParams) > 0 {
+		ruleConditions = append(ruleConditions, conditionFromMatch(routeMatch))
+	}
 
 	// only rule conditions (or no condition at all)
 	if len(limit.When) == 0 {

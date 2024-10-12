@@ -22,7 +22,7 @@ func TestRuleFromLimit(t *testing.T) {
 		limit           kuadrantv1beta3.Limit
 		limitIdentifier string
 		scope           string
-		routeRule       gatewayapiv1.HTTPRouteRule
+		routeMatch      gatewayapiv1.HTTPRouteMatch
 		expectedRule    Rule
 	}{
 		{
@@ -30,7 +30,7 @@ func TestRuleFromLimit(t *testing.T) {
 			limit:           kuadrantv1beta3.Limit{},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
-			routeRule:       gatewayapiv1.HTTPRouteRule{},
+			routeMatch:      gatewayapiv1.HTTPRouteMatch{},
 			expectedRule: Rule{
 				Actions: []Action{
 					{
@@ -55,24 +55,20 @@ func TestRuleFromLimit(t *testing.T) {
 			limit:           kuadrantv1beta3.Limit{},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
-			routeRule: gatewayapiv1.HTTPRouteRule{
-				Matches: []gatewayapiv1.HTTPRouteMatch{
+			routeMatch: gatewayapiv1.HTTPRouteMatch{
+				Path: &gatewayapiv1.HTTPPathMatch{
+					Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+					Value: ptr.To("/v1"),
+				},
+				Method: ptr.To(gatewayapiv1.HTTPMethodGet),
+				Headers: []gatewayapiv1.HTTPHeaderMatch{
 					{
-						Path: &gatewayapiv1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-							Value: ptr.To("/v1"),
-						},
-						Method: ptr.To(gatewayapiv1.HTTPMethodGet),
-						Headers: []gatewayapiv1.HTTPHeaderMatch{
-							{
-								Name:  gatewayapiv1.HTTPHeaderName("X-kuadrant-a"),
-								Value: "1",
-							},
-							{
-								Name:  gatewayapiv1.HTTPHeaderName("X-kuadrant-b"),
-								Value: "1",
-							},
-						},
+						Name:  gatewayapiv1.HTTPHeaderName("X-kuadrant-a"),
+						Value: "1",
+					},
+					{
+						Name:  gatewayapiv1.HTTPHeaderName("X-kuadrant-b"),
+						Value: "1",
 					},
 				},
 			},
@@ -134,15 +130,11 @@ func TestRuleFromLimit(t *testing.T) {
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
-			routeRule: gatewayapiv1.HTTPRouteRule{
-				Matches: []gatewayapiv1.HTTPRouteMatch{
-					{
-						Method: ptr.To(gatewayapiv1.HTTPMethodGet),
-						Path: &gatewayapiv1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-							Value: ptr.To("/toys"),
-						},
-					},
+			routeMatch: gatewayapiv1.HTTPRouteMatch{
+				Method: ptr.To(gatewayapiv1.HTTPMethodGet),
+				Path: &gatewayapiv1.HTTPPathMatch{
+					Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+					Value: ptr.To("/toys"),
 				},
 			},
 			expectedRule: Rule{
@@ -163,183 +155,6 @@ func TestRuleFromLimit(t *testing.T) {
 								Selector: "auth.identity.group",
 								Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
 								Value:    "admin",
-							},
-						},
-					},
-				},
-				Actions: []Action{
-					{
-						Scope:         "my-ns/my-route",
-						ExtensionName: RateLimitPolicyExtensionName,
-						Data: []DataType{
-							{
-								Value: &Static{
-									Static: StaticSpec{
-										Key:   "limit.myLimit__d681f6c3",
-										Value: "1",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			name:            "limit with multiple httproutematches",
-			limit:           kuadrantv1beta3.Limit{},
-			limitIdentifier: "limit.myLimit__d681f6c3",
-			scope:           "my-ns/my-route",
-			routeRule: gatewayapiv1.HTTPRouteRule{
-				Matches: []gatewayapiv1.HTTPRouteMatch{
-					{
-						Method: ptr.To(gatewayapiv1.HTTPMethodGet),
-						Path: &gatewayapiv1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-							Value: ptr.To("/toys"),
-						},
-					},
-					{
-						Method: ptr.To(gatewayapiv1.HTTPMethodPost),
-						Path: &gatewayapiv1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-							Value: ptr.To("/toys"),
-						},
-					},
-				},
-			},
-			expectedRule: Rule{
-				Conditions: []Condition{
-					{
-						AllOf: []PatternExpression{
-							{
-								Selector: "request.method",
-								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-								Value:    "GET",
-							},
-							{
-								Selector: "request.url_path",
-								Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
-								Value:    "/toys",
-							},
-						},
-					},
-					{
-						AllOf: []PatternExpression{
-							{
-								Selector: "request.method",
-								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-								Value:    "POST",
-							},
-							{
-								Selector: "request.url_path",
-								Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
-								Value:    "/toys",
-							},
-						},
-					},
-				},
-				Actions: []Action{
-					{
-						Scope:         "my-ns/my-route",
-						ExtensionName: RateLimitPolicyExtensionName,
-						Data: []DataType{
-							{
-								Value: &Static{
-									Static: StaticSpec{
-										Key:   "limit.myLimit__d681f6c3",
-										Value: "1",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "limit with multiple httproutematches and when conditions",
-			limit: kuadrantv1beta3.Limit{
-				When: []kuadrantv1beta3.WhenCondition{
-					{
-						Selector: kuadrantv1beta3.ContextSelector("auth.identity.group"),
-						Operator: kuadrantv1beta3.NotEqualOperator,
-						Value:    "admin",
-					},
-					{
-						Selector: kuadrantv1beta3.ContextSelector("auth.authorization.ratelimited"),
-						Operator: kuadrantv1beta3.EqualOperator,
-						Value:    "true",
-					},
-				},
-			},
-			limitIdentifier: "limit.myLimit__d681f6c3",
-			scope:           "my-ns/my-route",
-			routeRule: gatewayapiv1.HTTPRouteRule{
-				Matches: []gatewayapiv1.HTTPRouteMatch{
-					{
-						Method: ptr.To(gatewayapiv1.HTTPMethodGet),
-						Path: &gatewayapiv1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-							Value: ptr.To("/toys"),
-						},
-					},
-					{
-						Method: ptr.To(gatewayapiv1.HTTPMethodPost),
-						Path: &gatewayapiv1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-							Value: ptr.To("/toys"),
-						},
-					},
-				},
-			},
-			expectedRule: Rule{
-				Conditions: []Condition{
-					{
-						AllOf: []PatternExpression{
-							{
-								Selector: "request.method",
-								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-								Value:    "GET",
-							},
-							{
-								Selector: "request.url_path",
-								Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
-								Value:    "/toys",
-							},
-							{
-								Selector: "auth.identity.group",
-								Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
-								Value:    "admin",
-							},
-							{
-								Selector: "auth.authorization.ratelimited",
-								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-								Value:    "true",
-							},
-						},
-					},
-					{
-						AllOf: []PatternExpression{
-							{
-								Selector: "request.method",
-								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-								Value:    "POST",
-							},
-							{
-								Selector: "request.url_path",
-								Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
-								Value:    "/toys",
-							},
-							{
-								Selector: "auth.identity.group",
-								Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
-								Value:    "admin",
-							},
-							{
-								Selector: "auth.authorization.ratelimited",
-								Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-								Value:    "true",
 							},
 						},
 					},
@@ -369,7 +184,7 @@ func TestRuleFromLimit(t *testing.T) {
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
-			routeRule:       gatewayapiv1.HTTPRouteRule{},
+			routeMatch:      gatewayapiv1.HTTPRouteMatch{},
 			expectedRule: Rule{
 				Actions: []Action{
 					{
@@ -403,15 +218,11 @@ func TestRuleFromLimit(t *testing.T) {
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
-			routeRule: gatewayapiv1.HTTPRouteRule{
-				Matches: []gatewayapiv1.HTTPRouteMatch{
-					{
-						Method: ptr.To(gatewayapiv1.HTTPMethodGet),
-						Path: &gatewayapiv1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-							Value: ptr.To("/toys"),
-						},
-					},
+			routeMatch: gatewayapiv1.HTTPRouteMatch{
+				Method: ptr.To(gatewayapiv1.HTTPMethodGet),
+				Path: &gatewayapiv1.HTTPPathMatch{
+					Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+					Value: ptr.To("/toys"),
 				},
 			},
 			expectedRule: Rule{
@@ -470,7 +281,7 @@ func TestRuleFromLimit(t *testing.T) {
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
-			routeRule:       gatewayapiv1.HTTPRouteRule{},
+			routeMatch:      gatewayapiv1.HTTPRouteMatch{},
 			expectedRule: Rule{
 				Conditions: []Condition{
 					{
@@ -522,15 +333,11 @@ func TestRuleFromLimit(t *testing.T) {
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
-			routeRule: gatewayapiv1.HTTPRouteRule{
-				Matches: []gatewayapiv1.HTTPRouteMatch{
-					{
-						Method: ptr.To(gatewayapiv1.HTTPMethodGet),
-						Path: &gatewayapiv1.HTTPPathMatch{
-							Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
-							Value: ptr.To("/toys"),
-						},
-					},
+			routeMatch: gatewayapiv1.HTTPRouteMatch{
+				Method: ptr.To(gatewayapiv1.HTTPMethodGet),
+				Path: &gatewayapiv1.HTTPPathMatch{
+					Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+					Value: ptr.To("/toys"),
 				},
 			},
 			expectedRule: Rule{
@@ -584,7 +391,7 @@ func TestRuleFromLimit(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			computedRule := RuleFromLimit(tc.limit, tc.limitIdentifier, tc.scope, tc.routeRule)
+			computedRule := RuleFromLimit(tc.limit, tc.limitIdentifier, tc.scope, tc.routeMatch)
 			if diff := cmp.Diff(tc.expectedRule, computedRule); diff != "" {
 				t.Errorf("unexpected wasm rule (-want +got):\n%s", diff)
 			}

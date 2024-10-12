@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/samber/lo"
@@ -23,6 +24,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 )
@@ -135,14 +137,14 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 func (r *istioExtensionReconciler) buildWasmPoliciesPerGateway(ctx context.Context, state *sync.Map) (map[string][]wasm.Policy, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("istioExtensionReconciler").WithName("buildWasmPolicies")
 
-	wasmPolicies := make(map[string][]wasm.Policy)
-
 	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
 	if !ok {
-		return wasmPolicies, ErrMissingStateEffectiveRateLimitPolicies
+		return nil, ErrMissingStateEffectiveRateLimitPolicies
 	}
 
 	logger.V(1).Info("building wasm policies for istio extension", "effectivePolicies", len(effectivePolicies.(EffectiveRateLimitPolicies)))
+
+	wasmPolicies := make(map[string]kuadrantgatewayapi.SortableHTTPRouteRuleConfigs)
 
 	// build wasm config for effective rate limit policies
 	for pathID, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {
@@ -159,7 +161,6 @@ func (r *istioExtensionReconciler) buildWasmPoliciesPerGateway(ctx context.Conte
 		}
 
 		limitsNamespace := wasm.LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
-		hostnames := hostnamesFromListenerAndHTTPRoute(listener, httpRoute)
 
 		var wasmRules []wasm.Rule
 		for limitKey, mergeableLimit := range effectivePolicy.Spec.Rules() {
@@ -176,14 +177,30 @@ func (r *istioExtensionReconciler) buildWasmPoliciesPerGateway(ctx context.Conte
 			wasmRules = append(wasmRules, wasmRule)
 		}
 
-		wasmPolicies[gateway.GetLocator()] = append(wasmPolicies[gateway.GetLocator()], wasm.Policy{
-			Name:      pathID,
-			Hostnames: utils.HostnamesToStrings(hostnames),
-			Rules:     wasmRules, // we may need to sort the rule from the most specific to the least specific
-		})
+		hostnames := hostnamesFromListenerAndHTTPRoute(listener, httpRoute)
+
+		wasmPolicies[gateway.GetLocator()] = append(wasmPolicies[gateway.GetLocator()], lo.Map(hostnames, func(hostname gatewayapiv1.Hostname, i int) kuadrantgatewayapi.HTTPRouteRuleConfig {
+			return kuadrantgatewayapi.HTTPRouteRuleConfig{
+				HTTPRouteRule: *httpRouteRule.HTTPRouteRule,
+				Hostname:      string(hostname),
+				Config: wasm.Policy{
+					Name:      fmt.Sprintf("%s-%d", pathID, i),
+					Hostnames: []string{string(hostname)},
+					Rules:     wasmRules,
+				},
+			}
+		})...)
 	}
 
-	return wasmPolicies, nil
+	return lo.MapValues(wasmPolicies, func(configs kuadrantgatewayapi.SortableHTTPRouteRuleConfigs, _ string) []wasm.Policy {
+		sortedConfigs := make(kuadrantgatewayapi.SortableHTTPRouteRuleConfigs, len(configs))
+		copy(sortedConfigs, configs)
+		sort.Sort(sortedConfigs)
+		return lo.Map(sortedConfigs, func(c kuadrantgatewayapi.HTTPRouteRuleConfig, _ int) wasm.Policy {
+			wasmPolicy, _ := c.Config.(wasm.Policy)
+			return wasmPolicy
+		})
+	}), nil
 }
 
 // buildWasmPluginForGateway reconciles the WasmPlugin custom resource for a given gateway and slice of wasm policies

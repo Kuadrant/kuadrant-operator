@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/samber/lo"
 	_struct "google.golang.org/protobuf/types/known/structpb"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -127,10 +126,17 @@ type Condition struct {
 }
 
 func (c *Condition) EqualTo(other Condition) bool {
-	return len(c.AllOf) == len(other.AllOf) &&
-		lo.EveryBy(c.AllOf, func(expression PatternExpression) bool {
-			return lo.ContainsBy(other.AllOf, expression.EqualTo)
-		})
+	if len(c.AllOf) != len(other.AllOf) {
+		return false
+	}
+
+	for i := range c.AllOf {
+		if !c.AllOf[i].EqualTo(other.AllOf[i]) {
+			return false
+		}
+	}
+
+	return true
 }
 
 type Rule struct {
@@ -144,14 +150,23 @@ type Rule struct {
 }
 
 func (r *Rule) EqualTo(other Rule) bool {
-	return len(r.Conditions) == len(other.Conditions) &&
-		len(r.Actions) == len(other.Actions) &&
-		lo.EveryBy(r.Conditions, func(condition Condition) bool {
-			return lo.ContainsBy(other.Conditions, condition.EqualTo)
-		}) &&
-		lo.EveryBy(r.Actions, func(action Action) bool {
-			return lo.ContainsBy(other.Actions, action.EqualTo)
-		})
+	if len(r.Conditions) != len(other.Conditions) || len(r.Actions) != len(other.Actions) {
+		return false
+	}
+
+	for i := range r.Conditions {
+		if !r.Conditions[i].EqualTo(other.Conditions[i]) {
+			return false
+		}
+	}
+
+	for i := range r.Actions {
+		if !r.Actions[i].EqualTo(other.Actions[i]) {
+			return false
+		}
+	}
+
+	return true
 }
 
 type Policy struct {
@@ -164,13 +179,23 @@ type Policy struct {
 }
 
 func (p *Policy) EqualTo(other Policy) bool {
-	return p.Name == other.Name &&
-		len(p.Hostnames) == len(other.Hostnames) &&
-		len(p.Rules) == len(other.Rules) &&
-		lo.Every(p.Hostnames, other.Hostnames) &&
-		lo.EveryBy(p.Rules, func(rule Rule) bool {
-			return lo.ContainsBy(other.Rules, rule.EqualTo)
-		})
+	if p.Name != other.Name || len(p.Hostnames) != len(other.Hostnames) || len(p.Rules) != len(other.Rules) {
+		return false
+	}
+
+	for i := range p.Hostnames {
+		if p.Hostnames[i] != other.Hostnames[i] {
+			return false
+		}
+	}
+
+	for i := range p.Rules {
+		if !p.Rules[i].EqualTo(other.Rules[i]) {
+			return false
+		}
+	}
+
+	return true
 }
 
 type Action struct {
@@ -182,12 +207,17 @@ type Action struct {
 }
 
 func (a *Action) EqualTo(other Action) bool {
-	return a.Scope == other.Scope &&
-		a.ExtensionName == other.ExtensionName &&
-		len(a.Data) == len(other.Data) &&
-		lo.EveryBy(a.Data, func(data DataType) bool {
-			return lo.ContainsBy(other.Data, data.EqualTo)
-		})
+	if a.Scope != other.Scope || a.ExtensionName != other.ExtensionName || len(a.Data) != len(other.Data) {
+		return false
+	}
+
+	for i := range a.Data {
+		if !a.Data[i].EqualTo(other.Data[i]) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // +kubebuilder:validation:Enum:=ratelimit;auth
@@ -254,9 +284,13 @@ func (c *Config) EqualTo(other *Config) bool {
 		}
 	}
 
-	return lo.EveryBy(c.Policies, func(policy Policy) bool {
-		return lo.ContainsBy(other.Policies, policy.EqualTo)
-	})
+	for i := range c.Policies {
+		if !c.Policies[i].EqualTo(other.Policies[i]) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func ConfigFromStruct(structure *_struct.Struct) (*Config, error) {

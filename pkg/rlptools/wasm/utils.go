@@ -12,7 +12,6 @@ import (
 
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 const (
@@ -57,16 +56,16 @@ func RateLimitConfig(policies []Policy) Config {
 }
 
 // RuleFromLimit builds a wasm rate-limit rule for a given limit.
-// Conditions are built from the limit top-level conditions and the route rule's HTTPRouteMatches.
+// Conditions are built from the limit top-level conditions and a HTTPRouteMatch.
 // The order of the conditions is as follows:
 //  1. Route-level conditions: HTTP method, path, headers
 //  2. Top-level conditions: 'when' conditions (blended into each block of route-level conditions)
 //
 // The only action of the rule is the rate-limit policy extension, whose data includes the activation of the limit
 // and any counter qualifier of the limit.
-func RuleFromLimit(limit kuadrantv1beta3.Limit, limitIdentifier, scope string, routeRule gatewayapiv1.HTTPRouteRule) Rule {
+func RuleFromLimit(limit kuadrantv1beta3.Limit, limitIdentifier, scope string, routeMatch gatewayapiv1.HTTPRouteMatch) Rule {
 	rule := Rule{
-		Conditions: conditionsFromLimit(limit, routeRule),
+		Conditions: conditionsFromLimit(limit, routeMatch),
 	}
 
 	if data := dataFromLimit(limitIdentifier, limit); data != nil {
@@ -82,8 +81,8 @@ func RuleFromLimit(limit kuadrantv1beta3.Limit, limitIdentifier, scope string, r
 	return rule
 }
 
-func conditionsFromLimit(limit kuadrantv1beta3.Limit, routeRule gatewayapiv1.HTTPRouteRule) []Condition {
-	ruleConditions := conditionsFromRule(routeRule)
+func conditionsFromLimit(limit kuadrantv1beta3.Limit, routeMatch gatewayapiv1.HTTPRouteMatch) []Condition {
+	ruleConditions := []Condition{conditionFromMatch(routeMatch)}
 
 	// only rule conditions (or no condition at all)
 	if len(limit.When) == 0 {
@@ -109,12 +108,9 @@ func conditionsFromLimit(limit kuadrantv1beta3.Limit, routeRule gatewayapiv1.HTT
 	return []Condition{{AllOf: lo.Map(limit.When, whenConditionToWasmPatternExpressionFunc)}}
 }
 
-// conditionsFromRule builds a list of conditions from a rule
-// rules that specify no explicit match are assumed to match all request (i.e. implicit catch-all rule)
-func conditionsFromRule(rule gatewayapiv1.HTTPRouteRule) []Condition {
-	return utils.Map(rule.Matches, func(match gatewayapiv1.HTTPRouteMatch) Condition {
-		return Condition{AllOf: patternExpresionsFromMatch(match)}
-	})
+// conditionFromMatch builds a list of conditions from a rule match
+func conditionFromMatch(match gatewayapiv1.HTTPRouteMatch) Condition {
+	return Condition{AllOf: patternExpresionsFromMatch(match)}
 }
 
 func patternExpresionsFromMatch(match gatewayapiv1.HTTPRouteMatch) []PatternExpression {

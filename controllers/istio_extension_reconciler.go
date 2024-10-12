@@ -144,7 +144,7 @@ func (r *istioExtensionReconciler) buildWasmPoliciesPerGateway(ctx context.Conte
 
 	logger.V(1).Info("building wasm policies for istio extension", "effectivePolicies", len(effectivePolicies.(EffectiveRateLimitPolicies)))
 
-	wasmPolicies := make(map[string]kuadrantgatewayapi.SortableHTTPRouteRuleConfigs)
+	wasmPolicies := make(map[string]kuadrantgatewayapi.SortableHTTPRouteMatchConfigs)
 
 	// build wasm config for effective rate limit policies
 	for pathID, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {
@@ -161,42 +161,46 @@ func (r *istioExtensionReconciler) buildWasmPoliciesPerGateway(ctx context.Conte
 		}
 
 		limitsNamespace := wasm.LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
-
-		var wasmRules []wasm.Rule
-		for limitKey, mergeableLimit := range effectivePolicy.Spec.Rules() {
-			policy, found := lo.Find(kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state)), func(p machinery.Policy) bool {
-				return p.GetLocator() == mergeableLimit.Source
-			})
-			if !found { // should never happen
-				logger.Error(fmt.Errorf("origin policy %s not found in path %s", mergeableLimit.Source, pathID), "failed to build limitador limit definition")
-				continue
-			}
-			limitIdentifier := wasm.LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
-			limit := mergeableLimit.Spec.(kuadrantv1beta3.Limit)
-			wasmRule := wasm.RuleFromLimit(limit, limitIdentifier, limitsNamespace, *httpRouteRule.HTTPRouteRule)
-			wasmRules = append(wasmRules, wasmRule)
-		}
-
 		hostnames := hostnamesFromListenerAndHTTPRoute(listener, httpRoute)
 
-		wasmPolicies[gateway.GetLocator()] = append(wasmPolicies[gateway.GetLocator()], lo.Map(hostnames, func(hostname gatewayapiv1.Hostname, i int) kuadrantgatewayapi.HTTPRouteRuleConfig {
-			return kuadrantgatewayapi.HTTPRouteRuleConfig{
-				HTTPRouteRule: *httpRouteRule.HTTPRouteRule,
-				Hostname:      string(hostname),
-				Config: wasm.Policy{
-					Name:      fmt.Sprintf("%s-%d", pathID, i),
-					Hostnames: []string{string(hostname)},
-					Rules:     wasmRules,
-				},
-			}
+		wasmPolicies[gateway.GetLocator()] = append(wasmPolicies[gateway.GetLocator()], lo.FlatMap(hostnames, func(hostname gatewayapiv1.Hostname, i int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
+			return lo.Map(httpRouteRule.Matches, func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, j int) kuadrantgatewayapi.HTTPRouteMatchConfig {
+				var wasmRules []wasm.Rule
+				for limitKey, mergeableLimit := range effectivePolicy.Spec.Rules() {
+					policy, found := lo.Find(kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state)), func(p machinery.Policy) bool {
+						return p.GetLocator() == mergeableLimit.Source
+					})
+					if !found { // should never happen
+						logger.Error(fmt.Errorf("origin policy %s not found in path %s", mergeableLimit.Source, pathID), "failed to build limitador limit definition")
+						continue
+					}
+					limitIdentifier := wasm.LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
+					limit := mergeableLimit.Spec.(kuadrantv1beta3.Limit)
+					wasmRule := wasm.RuleFromLimit(limit, limitIdentifier, limitsNamespace, httpRouteMatch)
+					wasmRules = append(wasmRules, wasmRule)
+				}
+
+				return kuadrantgatewayapi.HTTPRouteMatchConfig{
+					Hostname:          string(hostname),
+					HTTPRouteMatch:    httpRouteMatch,
+					CreationTimestamp: httpRoute.GetCreationTimestamp(),
+					Namespace:         httpRoute.GetNamespace(),
+					Name:              httpRoute.GetName(),
+					Config: wasm.Policy{
+						Name:      fmt.Sprintf("%d-%s-%d", i, pathID, j),
+						Hostnames: []string{string(hostname)},
+						Rules:     wasmRules,
+					},
+				}
+			})
 		})...)
 	}
 
-	return lo.MapValues(wasmPolicies, func(configs kuadrantgatewayapi.SortableHTTPRouteRuleConfigs, _ string) []wasm.Policy {
-		sortedConfigs := make(kuadrantgatewayapi.SortableHTTPRouteRuleConfigs, len(configs))
+	return lo.MapValues(wasmPolicies, func(configs kuadrantgatewayapi.SortableHTTPRouteMatchConfigs, _ string) []wasm.Policy {
+		sortedConfigs := make(kuadrantgatewayapi.SortableHTTPRouteMatchConfigs, len(configs))
 		copy(sortedConfigs, configs)
 		sort.Sort(sortedConfigs)
-		return lo.Map(sortedConfigs, func(c kuadrantgatewayapi.HTTPRouteRuleConfig, _ int) wasm.Policy {
+		return lo.Map(sortedConfigs, func(c kuadrantgatewayapi.HTTPRouteMatchConfig, _ int) wasm.Policy {
 			wasmPolicy, _ := c.Config.(wasm.Policy)
 			return wasmPolicy
 		})

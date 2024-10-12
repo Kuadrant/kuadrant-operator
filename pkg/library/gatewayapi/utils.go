@@ -194,3 +194,20 @@ func GetGatewayParentKeys(route *gatewayapiv1.HTTPRoute) []client.ObjectKey {
 		}
 	})
 }
+
+// HTTPRouteRuleConfig stores any config associated to an HTTPRouteRule
+type HTTPRouteRuleConfig struct {
+	Hostname      string
+	HTTPRouteRule gatewayapiv1.HTTPRouteRule
+	Config        any
+}
+
+// SortableHTTPRouteRuleConfigs is a slice of HTTPRouteRuleConfig that implements sort.Interface
+type SortableHTTPRouteRuleConfigs []HTTPRouteRuleConfig
+
+func (c SortableHTTPRouteRuleConfigs) Len() int      { return len(c) }
+func (c SortableHTTPRouteRuleConfigs) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
+func (c SortableHTTPRouteRuleConfigs) Less(i, j int) bool {
+	return utils.CompareHostnamesSpecificity(c[i].Hostname, c[j].Hostname)
+	// TODO: implement the rest of the comparison – problem: HTTPRouteRules have multiple HTTPRouteMatches, we can sort HTTPRouteMatches but not HTTPRouteRules (https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteRule)
+}

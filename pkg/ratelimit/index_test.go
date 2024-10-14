@@ -1,6 +1,6 @@
 //go:build unit
 
-package rlptools
+package ratelimit
 
 import (
 	"reflect"

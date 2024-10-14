@@ -21,9 +21,9 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
+	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
@@ -267,8 +267,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
 			}).WithContext(ctx).Should(Succeed())
 
-			limitsNamespace := wasm.LimitsNamespaceFromRoute(httpRoute)
-			limitIdentifier := wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1")
+			limitsNamespace := controllers.LimitsNamespaceFromRoute(httpRoute)
+			limitIdentifier := controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1")
 
 			// check limits
 			Eventually(func(g Gomega) {
@@ -361,8 +361,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					rlp.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(rlp).String()))
 			}).WithContext(ctx).Should(Succeed())
 
-			limitsNamespace := wasm.LimitsNamespaceFromRoute(httpRoute)
-			limitIdentifier := wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1")
+			limitsNamespace := controllers.LimitsNamespaceFromRoute(httpRoute)
+			limitIdentifier := controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1")
 
 			// check limits
 			Eventually(func(g Gomega) {
@@ -490,8 +490,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 						gwRLP.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(gwRLP).String()))
 				}).WithContext(ctx).Should(Succeed())
 
-				limitsNamespace := wasm.LimitsNamespaceFromRoute(httpRoute)
-				limitIdentifier := wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "l1")
+				limitsNamespace := controllers.LimitsNamespaceFromRoute(httpRoute)
+				limitIdentifier := controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "l1")
 
 				// check limits
 				Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
@@ -608,8 +608,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					gwRLP.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(gwRLP).String()))
 			}).WithContext(ctx).Should(Succeed())
 
-			limitsNamespace := wasm.LimitsNamespaceFromRoute(httpRoute)
-			limitIdentifier := wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "l1")
+			limitsNamespace := controllers.LimitsNamespaceFromRoute(httpRoute)
+			limitIdentifier := controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "l1")
 
 			// check limits - should contain override values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
@@ -629,7 +629,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				g.Expect(existingGateway.GetAnnotations()[routeRLP.BackReferenceAnnotationName()]).To(ContainSubstring(string(serialized)))
 			}).WithContext(ctx).Should(Succeed())
 
-			limitIdentifier = wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "route")
+			limitIdentifier = controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "route")
 
 			// Delete GW RLP -> Route RLP should be enforced
 			Expect(k8sClient.Delete(ctx, gwRLP)).To(Succeed())
@@ -668,8 +668,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					gwRLP.DirectReferenceAnnotationName(), client.ObjectKeyFromObject(gwRLP).String()))
 			}).WithContext(ctx).Should(Succeed())
 
-			limitsNamespace := wasm.LimitsNamespaceFromRoute(httpRoute)
-			limitIdentifier := wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "l1")
+			limitsNamespace := controllers.LimitsNamespaceFromRoute(httpRoute)
+			limitIdentifier := controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "l1")
 
 			// Should contain override values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
@@ -709,8 +709,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			// Route RLP should still be enforced
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeTrue())
 
-			limitsNamespace := wasm.LimitsNamespaceFromRoute(httpRoute)
-			limitIdentifier := wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "route")
+			limitsNamespace := controllers.LimitsNamespaceFromRoute(httpRoute)
+			limitIdentifier := controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "route")
 
 			// Should contain Route RLP values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
@@ -734,7 +734,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey)))
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), gwRLPKey)).WithContext(ctx).Should(BeTrue())
 
-			limitIdentifier = wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "l1")
+			limitIdentifier = controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "l1")
 
 			// Should contain override values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
@@ -761,8 +761,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeFalse())
 			Expect(tests.RLPEnforcedCondition(ctx, testClient(), routeRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", gwRLPKey)))
 
-			limitsNamespace := wasm.LimitsNamespaceFromRoute(httpRoute)
-			limitIdentifier := wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "l1")
+			limitsNamespace := controllers.LimitsNamespaceFromRoute(httpRoute)
+			limitIdentifier := controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "l1")
 
 			// Should contain override values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
@@ -786,7 +786,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(tests.RLPEnforcedCondition(ctx, testClient(), gwRLPKey, kuadrant.PolicyReasonOverridden, fmt.Sprintf("RateLimitPolicy is overridden by [%s]", routeRLPKey)))
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), routeRLPKey)).WithContext(ctx).Should(BeTrue())
 
-			limitIdentifier = wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "route")
+			limitIdentifier = controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "route")
 
 			// Should contain Route RLP values
 			Eventually(limitadorContainsLimit(ctx, limitadorv1alpha1.RateLimit{
@@ -1394,36 +1394,36 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			err = k8sClient.Create(ctx, rlpTargetedRoute)
 			Expect(err).ToNot(HaveOccurred())
 
-			limitIdentifierGwA := wasm.LimitNameToLimitadorIdentifier(client.ObjectKeyFromObject(rlpGatewayA), "gw-a-1000rps")
-			limitIdentifierGwB := wasm.LimitNameToLimitadorIdentifier(client.ObjectKeyFromObject(rlpGatewayB), "gw-b-100rps")
+			limitIdentifierGwA := controllers.LimitNameToLimitadorIdentifier(client.ObjectKeyFromObject(rlpGatewayA), "gw-a-1000rps")
+			limitIdentifierGwB := controllers.LimitNameToLimitadorIdentifier(client.ObjectKeyFromObject(rlpGatewayB), "gw-b-100rps")
 
 			Eventually(limitadorContainsLimit(
 				ctx,
 				limitadorv1alpha1.RateLimit{
 					MaxValue:   1000,
 					Seconds:    1,
-					Namespace:  wasm.LimitsNamespaceFromRoute(targetedRoute),
+					Namespace:  controllers.LimitsNamespaceFromRoute(targetedRoute),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifierGwA)},
 					Variables:  []string{},
 				},
 				limitadorv1alpha1.RateLimit{
 					MaxValue:   100,
 					Seconds:    1,
-					Namespace:  wasm.LimitsNamespaceFromRoute(targetedRoute),
+					Namespace:  controllers.LimitsNamespaceFromRoute(targetedRoute),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifierGwB)},
 					Variables:  []string{},
 				},
 				limitadorv1alpha1.RateLimit{ // FIXME(@guicassolato): we need to create one limit definition per gateway × route combination, not one per gateway × policy combination
 					MaxValue:   1000,
 					Seconds:    1,
-					Namespace:  wasm.LimitsNamespaceFromRoute(untargetedRoute),
+					Namespace:  controllers.LimitsNamespaceFromRoute(untargetedRoute),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifierGwA)},
 					Variables:  []string{},
 				},
 				limitadorv1alpha1.RateLimit{
 					MaxValue:   100,
 					Seconds:    1,
-					Namespace:  wasm.LimitsNamespaceFromRoute(untargetedRoute),
+					Namespace:  controllers.LimitsNamespaceFromRoute(untargetedRoute),
 					Conditions: []string{fmt.Sprintf(`%s == "1"`, limitIdentifierGwB)},
 					Variables:  []string{},
 				},

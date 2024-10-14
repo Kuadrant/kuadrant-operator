@@ -16,7 +16,7 @@ CONTAINER_ENGINE ?= docker
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the bundle target (e.g make bundle VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-VERSION ?= 0.0.0
+VERSION ?= 0.11.0
 
 # CHANNELS define the bundle channels used in the bundle.
 # Add a new line here if you would like to change its default config. (E.g CHANNELS = "candidate,fast,stable")
@@ -100,7 +100,7 @@ KUADRANT_NAMESPACE ?= kuadrant-system
 # Kuadrant component versions
 ## authorino
 #ToDo Pin this version once we have an initial release of authorino
-AUTHORINO_OPERATOR_VERSION ?= latest
+AUTHORINO_OPERATOR_VERSION ?= 0.13.0
 authorino_bundle_is_semantic := $(call is_semantic_version,$(AUTHORINO_OPERATOR_VERSION))
 
 ifeq (latest,$(AUTHORINO_OPERATOR_VERSION))
@@ -120,7 +120,7 @@ endif
 AUTHORINO_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/authorino-operator-bundle:$(AUTHORINO_OPERATOR_BUNDLE_IMG_TAG)
 ## limitador
 #ToDo Pin this version once we have an initial release of limitador
-LIMITADOR_OPERATOR_VERSION ?= latest
+LIMITADOR_OPERATOR_VERSION ?= 0.11.0
 limitador_bundle_is_semantic := $(call is_semantic_version,$(LIMITADOR_OPERATOR_VERSION))
 ifeq (latest,$(LIMITADOR_OPERATOR_VERSION))
 LIMITADOR_OPERATOR_BUNDLE_VERSION = 0.0.0
@@ -138,7 +138,7 @@ endif
 LIMITADOR_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/limitador-operator-bundle:$(LIMITADOR_OPERATOR_BUNDLE_IMG_TAG)
 
 ## dns
-DNS_OPERATOR_VERSION ?= latest
+DNS_OPERATOR_VERSION ?= 0.6.0
 
 kuadrantdns_bundle_is_semantic := $(call is_semantic_version,$(DNS_OPERATOR_VERSION))
 ifeq (latest,$(DNS_OPERATOR_VERSION))
@@ -157,7 +157,7 @@ endif
 DNS_OPERATOR_BUNDLE_IMG ?= quay.io/kuadrant/dns-operator-bundle:$(DNS_OPERATOR_BUNDLE_IMG_TAG)
 
 ## wasm-shim
-WASM_SHIM_VERSION ?= latest
+WASM_SHIM_VERSION ?= v0.6.0
 shim_version_is_semantic := $(call is_semantic_version,$(WASM_SHIM_VERSION))
 
 ifeq (true,$(shim_version_is_semantic))

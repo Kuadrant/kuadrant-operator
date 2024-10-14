@@ -84,6 +84,7 @@ KUADRANT_CERT_MANAGER_KUSTOMIZATION="${KUADRANT_REPO}/config/dependencies/cert-m
 KUADRANT_METALLB_KUSTOMIZATION="${KUADRANT_REPO}/config/metallb?ref=${KUADRANT_REF}"
 KUADARNT_THANOS_KUSTOMIZATION="${KUADRANT_REPO}/config/thanos?ref=${KUADRANT_REF}"
 KUADARNT_OBSERVABILITY_KUSTOMIZATION="${KUADRANT_REPO}/config/observability?ref=${KUADRANT_REF}"
+KUADARNT_OBSERVABILITY_ISTIO_KUSTOMIZATION="${KUADRANT_REPO}/config/observability/prometheus/monitors/istio?ref=${KUADRANT_REF}"
 KUADRANT_DASHBOARDS_KUSTOMIZATION="${KUADRANT_REPO}/examples/dashboards?ref=${KUADRANT_REF}"
 KUADRANT_ALERTS_KUSTOMIZATION="${KUADRANT_REPO}/examples/alerts?ref=${KUADRANT_REF}"
 MGC_REPO="github.com/${KUADRANT_ORG}/multicluster-gateway-controller.git"
@@ -462,6 +463,7 @@ fi
 info "Installing observability stack in ${KUADRANT_CLUSTER_NAME}..."
 kubectl kustomize ${KUADARNT_OBSERVABILITY_KUSTOMIZATION} | $CONTAINER_RUNTIME_BIN run --rm -i docker.io/ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
 kubectl kustomize ${KUADARNT_OBSERVABILITY_KUSTOMIZATION} | $CONTAINER_RUNTIME_BIN run --rm -i docker.io/ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -
+kubectl kustomize ${KUADARNT_OBSERVABILITY_ISTIO_KUSTOMIZATION} |  kubectl apply --server-side -f -
 kubectl kustomize ${KUADRANT_DASHBOARDS_KUSTOMIZATION} | kubectl apply --server-side -f -
 kubectl kustomize ${KUADRANT_ALERTS_KUSTOMIZATION} | kubectl apply --server-side -f -
 success "observability stack installed successfully."

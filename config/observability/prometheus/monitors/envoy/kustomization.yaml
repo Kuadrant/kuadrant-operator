@@ -1,0 +1,4 @@
+resources:
+- pod-monitor-envoy.yaml
+- service-monitor.yaml
+

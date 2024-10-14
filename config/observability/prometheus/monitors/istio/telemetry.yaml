@@ -2,7 +2,7 @@ apiVersion: telemetry.istio.io/v1alpha1
 kind: Telemetry
 metadata:
   name: namespace-metrics
-  namespace: gateway-system
+  namespace: istio-system
 spec:
   metrics:
   - providers:
@@ -26,3 +26,4 @@ spec:
           value: "request.host"
         request_url_path:
           value: "request.url_path"
+

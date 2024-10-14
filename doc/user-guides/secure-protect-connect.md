@@ -4,6 +4,15 @@
 
 - You have completed the [Single-cluster Quick Start](https://docs.kuadrant.io/latest/getting-started-single-cluster/) or [Multi-cluster Quick Start](https://docs.kuadrant.io/latest/getting-started-multi-cluster/).
 
+
+### Local Cluster (metallb)
+
+>**Note:** If you are running on a local kind cluster, it is also recommended you use [metallb](https://metallb.universe.tf/) to setup an IP address pool to use with loadbalancer services for your gateways. An example script for configuring metallb based on the docker network once installed can be found [here](https://github.com/Kuadrant/kuadrant-operator/blob/main/utils/docker-network-ipaddresspool.sh).
+
+```
+./utils/docker-network-ipaddresspool.sh kind yq 1 | kubectl apply -n metallb-system -f -
+```
+
 ## Overview
 
 In this guide, we will cover the different policies from Kuadrant and how you can use them to secure, protect and connect an Istio-controlled gateway in a single cluster, and how you can set more refined protection on the HTTPRoutes exposed by that gateway.
@@ -115,7 +124,7 @@ spec:
 EOF
 ```
 
-> **Note:** You may have to create a cluster issuer in the Kubernetes cluster, depending on if one was created during your initial cluster setup or not. Here is an example of how to create a self-signed CA as a cluster issuer.
+> **Note:** You may have to create a cluster issuer in the Kubernetes cluster, depending on if one was created during your initial cluster setup or not. Here is an example of how to create a self-signed CA as a cluster issuer. This is a self signed issuer for simplicity, but you can use other issuers such as [letsencrypt](https://letsencrypt.org/). Refer to the [cert-manager docs](https://cert-manager.io/docs/configuration/acme/dns01/route53/#iam-user-with-long-term-access-key)
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
@@ -282,7 +291,9 @@ kubectl -n kuadrant-system create secret generic aws-credentials \
   --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
 ```
 
-Next, create the DNSPolicy:
+Next, create the DNSPolicy. There are two options here. 
+
+1. **Single gateway with no shared hostnames:**
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
@@ -299,19 +310,56 @@ spec:
   providerRefs:
   - name: aws-credentials
 EOF
+```
+2. **multiple gateways with shared hostnames:**
 
+If you want to use a gateway with a shared listener host (IE the same hostname on more than one gateway instance). Then you should use the following configuration:
+
+> **Note:** This configuration will work fine for a single gateway also, but does create some additional records.
+
+```sh
+kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
+apiVersion: kuadrant.io/v1alpha1
+kind: DNSPolicy
+metadata:
+  name: simple-dnspolicy
+  namespace: kuadrant-system
+spec:
+  targetRef:
+    name: api-gateway
+    group: gateway.networking.k8s.io
+    kind: Gateway
+  providerRefs:
+    - name: aws-credentials
+  loadBalancing:
+    weight: 120
+    geo: EU
+    defaultGeo: true
+EOF
+```    
+
+The loadbalancing section here has the following attributes:
+
+- **Weight:** This will be the weighting used for records created for hosts defined by this gateway. It will decide how often the records for this gateway are returned. If you have 2 gateways and each DNSPolicy specifies the same weight, then you will get an even distribution. If you define one weight as larger than the other, the gateway with the larger weight will receive more traffic (record weight / sum of all records).
+- **geo:** This will be the geo used to decide whether to return records defined for this gateway based on the requesting client's location. This should be set even if you have one gateway in a single geo. 
+- **defaultGeo:** For Azure and AWS, this will decide, if there should be a default geo. A default geo acts as a "catch-all" (GCP always sets a catch-all) for clients outside of the defined geo locations. There can only be one default value and so it is important you set `defaultGeo` as true for **one** and **only one** geo code for each of the gateways in that geo. 
+
+Wait for the DNSPolicy to marked as enforced:
+
+```
 kubectl --context $KUBECTL_CONTEXT wait dnspolicy simple-dnspolicy -n kuadrant-system --for=condition=enforced
 ```
 
-If you want to see the DNSRecord created by the this policy, execute the following command:
+If you want to see the actual DNSRecord created by the this policy, execute the following command:
+
+> **Note:** This resource is managed by kuadrant and so shouldn't be changed directly.
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT get dnsrecord.kuadrant.io api-gateway-api -n kuadrant-system -o=yaml
 ```
 
-So now we have a wildcard DNS record to bring traffic to our gateway.
 
-Let's test it again. This time we expect a `403` still as the _deny-all_ policy is still in effect. Notice we no longer need to set the Host header directly.
+With DNS in place, let's test it again. This time we expect a `403` still as the _deny-all_ policy is still in effect. Notice we no longer need to set the Host header directly.
 
 > **Note:** If you have followed through this guide on more than 1 cluster, the DNS record for the HTTPRoute hostname will have multiple IP addresses. This means that requests will be made in a round robin pattern across clusters as your DNS provider sends different responses to lookups. You may need to send multiple requests before one hits the cluster you are currently configuring.
 

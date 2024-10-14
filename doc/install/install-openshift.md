@@ -356,8 +356,8 @@ To enable the Kuadrant console plugin:
 2. Switch to the **Admin** perspective.
 3. Navigate to **Home** > **Overview**.
 4. In the **Dynamic Plugins** section of the status box, click **View all**.
-5. In the **Console plugins** area, find the `kuadrant-console` plugin. It should be listed but disabled.
-6. Click the **Disabled** button next to the `kuadrant-console` plugin.
+5. In the **Console plugins** area, find the `kuadrant-console-plugin` plugin. It should be listed but disabled.
+6. Click the **Disabled** button next to the `kuadrant-console-plugin` plugin.
 7. Select the **Enabled** radio button, and then click **Save**.
 8. Wait for the plugin status to change to **Loaded**.
 

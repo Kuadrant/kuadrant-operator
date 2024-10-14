@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"sync"
 
 	"github.com/samber/lo"
@@ -14,19 +13,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/utils/ptr"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 
-	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
+	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 )
 
 // istioExtensionReconciler reconciles Istio WasmPlugin custom resources
@@ -54,8 +50,8 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	logger.V(1).Info("building istio extension")
 	defer logger.V(1).Info("finished building istio extension")
 
-	// build wasm plugin policies for each gateway
-	wasmPolicies, err := r.buildWasmPoliciesPerGateway(ctx, state)
+	// build wasm plugin configs for each gateway
+	wasmConfigs, err := r.buildWasmConfigs(ctx, state)
 	if err != nil {
 		if errors.Is(err, ErrMissingStateEffectiveRateLimitPolicies) {
 			logger.V(1).Info(err.Error())
@@ -72,7 +68,7 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
-		desiredWasmPlugin := r.buildWasmPluginForGateway(gateway, wasmPolicies[gateway.GetLocator()])
+		desiredWasmPlugin := buildIstioWasmPluginForGateway(gateway, wasmConfigs[gateway.GetLocator()])
 
 		resource := r.client.Resource(kuadrantistio.WasmPluginsResource).Namespace(desiredWasmPlugin.GetNamespace())
 
@@ -133,8 +129,8 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	return nil
 }
 
-// buildWasmPoliciesPerGateway returns a map of gateway locators to a list of corresponding wasm policies
-func (r *istioExtensionReconciler) buildWasmPoliciesPerGateway(ctx context.Context, state *sync.Map) (map[string][]wasm.Policy, error) {
+// buildWasmPolicies returns a map of istio gateway locators to an ordered list of corresponding wasm policies
+func (r *istioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map) (map[string]wasm.Config, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("istioExtensionReconciler").WithName("buildWasmPolicies")
 
 	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
@@ -144,78 +140,45 @@ func (r *istioExtensionReconciler) buildWasmPoliciesPerGateway(ctx context.Conte
 
 	logger.V(1).Info("building wasm policies for istio extension", "effectivePolicies", len(effectivePolicies.(EffectiveRateLimitPolicies)))
 
-	wasmPolicies := make(map[string]kuadrantgatewayapi.SortableHTTPRouteMatchConfigs)
+	wasmPolicies := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
 
-	// build wasm config for effective rate limit policies
+	// build the wasm policies for each topological path that contains an effective rate limit policy affecting an istio gateway
 	for pathID, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {
 		// assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]
 		gatewayClass, _ := effectivePolicy.Path[0].(*machinery.GatewayClass)
 		gateway, _ := effectivePolicy.Path[1].(*machinery.Gateway)
-		listener, _ := effectivePolicy.Path[2].(*machinery.Listener)
-		httpRoute, _ := effectivePolicy.Path[3].(*machinery.HTTPRoute)
-		httpRouteRule, _ := effectivePolicy.Path[4].(*machinery.HTTPRouteRule)
 
 		// ignore if not an istio gateway
 		if gatewayClass.Spec.ControllerName != istioGatewayControllerName {
 			continue
 		}
 
-		limitsNamespace := wasm.LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
-		hostnames := hostnamesFromListenerAndHTTPRoute(listener, httpRoute)
-
-		wasmPolicies[gateway.GetLocator()] = append(wasmPolicies[gateway.GetLocator()], lo.FlatMap(hostnames, func(hostname gatewayapiv1.Hostname, i int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
-			return lo.Map(httpRouteRule.Matches, func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, j int) kuadrantgatewayapi.HTTPRouteMatchConfig {
-				var wasmRules []wasm.Rule
-				for limitKey, mergeableLimit := range effectivePolicy.Spec.Rules() {
-					policy, found := lo.Find(kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state)), func(p machinery.Policy) bool {
-						return p.GetLocator() == mergeableLimit.Source
-					})
-					if !found { // should never happen
-						logger.Error(fmt.Errorf("origin policy %s not found in path %s", mergeableLimit.Source, pathID), "failed to build limitador limit definition")
-						continue
-					}
-					limitIdentifier := wasm.LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
-					limit := mergeableLimit.Spec.(kuadrantv1beta3.Limit)
-					wasmRule := wasm.RuleFromLimit(limit, limitIdentifier, limitsNamespace, httpRouteMatch)
-					wasmRules = append(wasmRules, wasmRule)
-				}
-
-				return kuadrantgatewayapi.HTTPRouteMatchConfig{
-					Hostname:          string(hostname),
-					HTTPRouteMatch:    httpRouteMatch,
-					CreationTimestamp: httpRoute.GetCreationTimestamp(),
-					Namespace:         httpRoute.GetNamespace(),
-					Name:              httpRoute.GetName(),
-					Config: wasm.Policy{
-						Name:      fmt.Sprintf("%d-%s-%d", i, pathID, j),
-						Hostnames: []string{string(hostname)},
-						Rules:     wasmRules,
-					},
-				}
-			})
-		})...)
+		wasmPoliciesForPath, err := wasm.BuildWasmPoliciesForPath(pathID, effectivePolicy.Path, effectivePolicy.Spec.Rules(), rateLimitWasmRuleBuilder(pathID, effectivePolicy, state))
+		if err != nil {
+			logger.Error(err, "failed to build wasm policies for path", "pathID", pathID)
+			continue
+		}
+		wasmPolicies.Add(gateway.GetLocator(), wasmPoliciesForPath...)
 	}
 
-	return lo.MapValues(wasmPolicies, func(configs kuadrantgatewayapi.SortableHTTPRouteMatchConfigs, _ string) []wasm.Policy {
-		sortedConfigs := make(kuadrantgatewayapi.SortableHTTPRouteMatchConfigs, len(configs))
-		copy(sortedConfigs, configs)
-		sort.Sort(sortedConfigs)
-		return lo.Map(sortedConfigs, func(c kuadrantgatewayapi.HTTPRouteMatchConfig, _ int) wasm.Policy {
-			wasmPolicy, _ := c.Config.(wasm.Policy)
-			return wasmPolicy
-		})
-	}), nil
+	wasmConfigs := lo.MapValues(wasmPolicies.Sorted(), func(configs kuadrantgatewayapi.SortableHTTPRouteMatchConfigs, _ string) wasm.Config {
+		return wasm.BuildWasmConfigForPolicies(lo.Map(configs, func(c kuadrantgatewayapi.HTTPRouteMatchConfig, _ int) wasm.Policy {
+			return c.Config.(wasm.Policy)
+		}))
+	})
+
+	return wasmConfigs, nil
 }
 
-// buildWasmPluginForGateway reconciles the WasmPlugin custom resource for a given gateway and slice of wasm policies
-func (r *istioExtensionReconciler) buildWasmPluginForGateway(gateway machinery.Targetable, wasmPolicies []wasm.Policy) *istioclientgoextensionv1alpha1.WasmPlugin {
+// buildIstioWasmPluginForGateway reconciles the WasmPlugin custom resource for a given gateway and slice of wasm policies
+func buildIstioWasmPluginForGateway(gateway machinery.Targetable, wasmConfig wasm.Config) *istioclientgoextensionv1alpha1.WasmPlugin {
 	wasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantistio.WasmPluginGroupKind.Kind,
 			APIVersion: istioclientgoextensionv1alpha1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      wasmExtensionName(gateway.GetName()),
+			Name:      wasm.WasmExtensionName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
 		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{
@@ -232,11 +195,10 @@ func (r *istioExtensionReconciler) buildWasmPluginForGateway(gateway machinery.T
 		},
 	}
 
-	if len(wasmPolicies) == 0 {
+	if len(wasmConfig.Policies) == 0 {
 		utils.TagObjectToDelete(wasmPlugin)
 	} else {
-		config := wasm.RateLimitConfig(wasmPolicies)
-		pluginConfigStruct, err := config.ToStruct()
+		pluginConfigStruct, err := wasmConfig.ToStruct()
 		if err != nil {
 			return nil
 		}
@@ -244,20 +206,6 @@ func (r *istioExtensionReconciler) buildWasmPluginForGateway(gateway machinery.T
 	}
 
 	return wasmPlugin
-}
-
-func hostnamesFromListenerAndHTTPRoute(listener *machinery.Listener, httpRoute *machinery.HTTPRoute) []gatewayapiv1.Hostname {
-	hostname := listener.Listener.Hostname
-	if hostname == nil {
-		hostname = ptr.To(gatewayapiv1.Hostname("*"))
-	}
-	hostnames := []gatewayapiv1.Hostname{*hostname}
-	if routeHostnames := httpRoute.Spec.Hostnames; len(routeHostnames) > 0 {
-		hostnames = lo.Filter(httpRoute.Spec.Hostnames, func(h gatewayapiv1.Hostname, _ int) bool {
-			return utils.Name(h).SubsetOf(utils.Name(*hostname))
-		})
-	}
-	return hostnames
 }
 
 func equalWasmPlugins(a, b *istioclientgoextensionv1alpha1.WasmPlugin) bool {

@@ -20,7 +20,7 @@ import (
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
+	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
@@ -121,7 +121,7 @@ var _ = Describe("wasm controller", func() {
 
 		It("Creates envoyextensionpolicy", func(ctx SpecContext) {
 			extKey := client.ObjectKey{
-				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Name:      wasm.WasmExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -149,7 +149,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
 				Extensions: map[string]wasm.Extension{
-					wasm.RateLimitPolicyExtensionName: {
+					wasm.RateLimitExtensionName: {
 						Endpoint:    common.KuadrantRateLimitClusterName,
 						FailureMode: wasm.FailureModeAllow,
 						Type:        wasm.RateLimitExtensionType,
@@ -179,13 +179,13 @@ var _ = Describe("wasm controller", func() {
 								},
 								Actions: []wasm.Action{
 									{
-										Scope:         wasm.LimitsNamespaceFromRoute(gwRoute),
-										ExtensionName: wasm.RateLimitPolicyExtensionName,
+										Scope:         controllers.LimitsNamespaceFromRoute(gwRoute),
+										ExtensionName: wasm.RateLimitExtensionName,
 										Data: []wasm.DataType{
 											{
 												Value: &wasm.Static{
 													Static: wasm.StaticSpec{
-														Key:   wasm.LimitNameToLimitadorIdentifier(gwPolicyKey, "l1"),
+														Key:   controllers.LimitNameToLimitadorIdentifier(gwPolicyKey, "l1"),
 														Value: "1",
 													},
 												},
@@ -207,7 +207,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			extKey := client.ObjectKey{
-				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Name:      wasm.WasmExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -224,7 +224,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			extKey := client.ObjectKey{
-				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Name:      wasm.WasmExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -281,7 +281,7 @@ var _ = Describe("wasm controller", func() {
 
 		It("Creates envoyextensionpolicy", func(ctx SpecContext) {
 			extKey := client.ObjectKey{
-				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Name:      wasm.WasmExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -310,7 +310,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
 				Extensions: map[string]wasm.Extension{
-					wasm.RateLimitPolicyExtensionName: {
+					wasm.RateLimitExtensionName: {
 						Endpoint:    common.KuadrantRateLimitClusterName,
 						FailureMode: wasm.FailureModeAllow,
 						Type:        wasm.RateLimitExtensionType,
@@ -340,13 +340,13 @@ var _ = Describe("wasm controller", func() {
 								},
 								Actions: []wasm.Action{
 									{
-										Scope:         wasm.LimitsNamespaceFromRoute(gwRoute),
-										ExtensionName: wasm.RateLimitPolicyExtensionName,
+										Scope:         controllers.LimitsNamespaceFromRoute(gwRoute),
+										ExtensionName: wasm.RateLimitExtensionName,
 										Data: []wasm.DataType{
 											{
 												Value: &wasm.Static{
 													Static: wasm.StaticSpec{
-														Key:   wasm.LimitNameToLimitadorIdentifier(routePolicyKey, "l1"),
+														Key:   controllers.LimitNameToLimitadorIdentifier(routePolicyKey, "l1"),
 														Value: "1",
 													},
 												},
@@ -368,7 +368,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			extKey := client.ObjectKey{
-				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Name:      wasm.WasmExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -386,7 +386,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			extKey := client.ObjectKey{
-				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Name:      wasm.WasmExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 

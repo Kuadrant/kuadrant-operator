@@ -3,8 +3,10 @@ package gatewayapi
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -265,4 +267,24 @@ func pathMatchCount(pathMatch *gatewayapiv1.HTTPPathMatch) int {
 		return len(*pathMatch.Value)
 	}
 	return 0
+}
+
+type GrouppedHTTPRouteMatchConfigs map[string]SortableHTTPRouteMatchConfigs
+
+func (g *GrouppedHTTPRouteMatchConfigs) Add(key string, configs ...HTTPRouteMatchConfig) {
+	for _, config := range configs {
+		(*g)[key] = append((*g)[key], config)
+	}
+}
+
+func (g *GrouppedHTTPRouteMatchConfigs) Sorted() GrouppedHTTPRouteMatchConfigs {
+	if g == nil {
+		return nil
+	}
+	return lo.MapValues(*g, func(configs SortableHTTPRouteMatchConfigs, _ string) SortableHTTPRouteMatchConfigs {
+		sortedConfigs := make(SortableHTTPRouteMatchConfigs, len(configs))
+		copy(sortedConfigs, configs)
+		sort.Sort(sortedConfigs)
+		return sortedConfigs
+	})
 }

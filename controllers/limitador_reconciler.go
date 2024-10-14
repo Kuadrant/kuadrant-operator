@@ -2,14 +2,14 @@ package controllers
 
 import (
 	"context"
-	"strings"
+	"errors"
 	"sync"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
@@ -41,20 +41,13 @@ func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	logger.Info("reconciling limtador resource", "status", "started")
 	defer logger.Info("reconciling limitador resource", "status", "completed")
 
-	kobjs := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (*v1beta1.Kuadrant, bool) {
-		if item.GroupVersionKind().Kind == v1beta1.KuadrantGroupKind.Kind {
-			return item.(*v1beta1.Kuadrant), true
-		}
-		return nil, false
-	})
-
-	kobj, err := GetOldestKuadrant(kobjs)
+	kobj, err := GetKuadrant(topology)
 	if err != nil {
-		if strings.Contains(err.Error(), "empty list passed") {
+		if errors.Is(err, ErrNoKandrantResource) {
 			logger.Info("kuadrant resource not found, ignoring", "status", "skipping")
-			return nil
+			return err
 		}
-		logger.Error(err, "cannont find kuadrant resource", "status", "error")
+		logger.Error(err, "cannot find Kuadrant resource", "status", "error")
 		return err
 	}
 
@@ -100,7 +93,7 @@ func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	logger.Info("creating limitador resource", "status", "processing")
 	_, err = r.Client.Resource(v1beta1.LimitadorsResource).Namespace(limitador.Namespace).Create(ctx, unstructuredLimitador, metav1.CreateOptions{})
 	if err != nil {
-		if errors.IsAlreadyExists(err) {
+		if apiErrors.IsAlreadyExists(err) {
 			logger.Info("already created limitador resource", "status", "acceptable")
 		} else {
 			logger.Error(err, "failed to create limitador resource", "status", "error")

@@ -3,6 +3,7 @@ package controllers
 import (
 	"fmt"
 	"reflect"
+	"sort"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -10,7 +11,9 @@ import (
 	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
 	consolev1 "github.com/openshift/api/console/v1"
+	"github.com/samber/lo"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
@@ -404,31 +407,23 @@ func finalStepsWorkflow(client *dynamic.DynamicClient, isIstioInstalled, isEnvoy
 	return workflow
 }
 
-// GetOldestKuadrant returns the oldest kuadrant resource from a list of kuadrant resources that is not marked for deletion.
-func GetOldestKuadrant(kuadrants []*kuadrantv1beta1.Kuadrant) (*kuadrantv1beta1.Kuadrant, error) {
-	if len(kuadrants) == 1 {
-		return kuadrants[0], nil
-	}
-	if len(kuadrants) == 0 {
-		return nil, fmt.Errorf("empty list passed")
-	}
-	oldest := kuadrants[0]
-	for _, k := range kuadrants[1:] {
-		if k == nil || k.DeletionTimestamp != nil {
-			continue
+var ErrNoKandrantResource = fmt.Errorf("no kuadrant resources in topology")
+
+// GetKuadrant returns the oldest Kuadrant from the root objects in the topology
+func GetKuadrant(topology *machinery.Topology) (*kuadrantv1beta1.Kuadrant, error) {
+	kuadrantList := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (controller.Object, bool) {
+		k, ok := item.(controller.Object)
+		if ok && k.GetObjectKind().GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind && k.GetDeletionTimestamp() == nil {
+			return k, true
 		}
-		if oldest == nil {
-			oldest = k
-			continue
-		}
-		if k.CreationTimestamp.Before(&oldest.CreationTimestamp) {
-			oldest = k
-		}
+		return nil, false
+	})
+	if len(kuadrantList) == 0 {
+		return nil, ErrNoKandrantResource
 	}
-	if oldest == nil {
-		return nil, fmt.Errorf("only nil pointers in list")
-	}
-	return oldest, nil
+	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrantList))
+	k, _ := kuadrantList[0].(*kuadrantv1beta1.Kuadrant)
+	return k, nil
 }
 
 func isObjectOwnedByGroupKind(o client.Object, groupKind schema.GroupKind) bool {

@@ -4,15 +4,25 @@
 
     You must perform these steps on each OpenShift cluster that you want to use Kuadrant on.
 
+    In this document we use AWS route 53 as the example setup.
+
+!!! warning
+    
+    Kuadrant uses a number of labels to search and filter resources on the cluster.
+    All required labels are formatted as `kuadrant.io/*`.
+    Removal of any labels with the prefix may cause unexpected behaviour and degradation of the product.
+
 ## Prerequisites
 
-- OpenShift Container Platform 4.14.x or later with community Operator catalog available.
-- AWS account with Route 53 and zone.
+- OpenShift Container Platform 4.16.x or later with community Operator catalog available.
+- AWS/Azure or GCP with DNS capabilities.
 - Accessible Redis instance.
 
 ## Procedure
 
 ### Step 1 - Set up your environment
+
+We use env vars for convenience only here. If you know these values you can setup the required yaml files in anyway that suites your needs.
 
 ```bash
 export AWS_ACCESS_KEY_ID=xxxxxxx # Key ID from AWS with Route 53 access
@@ -30,9 +40,9 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 
 ### Step 3 - Install cert-manager
 
-Before you can use Kuadrant, you must install cert-manager.
+Before you can use Kuadrant, you must install cert-manager. Cert-Manager is used by kuadrant to manage TLS certificates for your gateways.
 
-> The minimum supported version of cert-manager is v1.12.1.
+> The minimum supported version of cert-manager is v1.14.0.
 
 Install one of the different flavours of the Cert-Manager.
 
@@ -47,6 +57,9 @@ More installation options at [cert-manager.io](https://cert-manager.io/docs/inst
 
 You can install the [cert-manager Operator for Red Hat OpenShift](https://docs.openshift.com/container-platform/4.16/security/cert_manager_operator/cert-manager-operator-install.html)
 by using the web console.
+
+>**Note:** Before using Kuadrant's `TLSPolicy` you will need to setup a certificate issuer refer to the [cert-manager docs for more details](https://cert-manager.io/docs/configuration/acme/dns01/route53/#creating-an-issuer-or-clusterissuer)
+
 
 ### Step 4 - (Optional) Install and configure Istio with the Sail Operator
 
@@ -136,7 +149,7 @@ kubectl wait istio/default -n gateway-system --for="condition=Ready=true"
 helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.1.0 -n envoy-gateway-system --create-namespace
 ```
 
-Enable *EnvoyPatchPolicy* feature:
+Enable _EnvoyPatchPolicy_ feature:
 
 ```bash
 TMP=$(mktemp -d)
@@ -183,7 +196,7 @@ If you have Grafana installed in your cluster, you can import the [example dashb
 For example installation details, see [installing Grafana on OpenShift](https://cloud.redhat.com/experts/o11y/ocp-grafana/). When installed, you must add your Thanos instance as a data source to Grafana. Alternatively, if you are using only the user workload monitoring stack in your OpenShift cluster, and not writing metrics to an external Thanos instance, you can [set up a data source to the thanos-querier route in the OpenShift cluster](https://docs.openshift.com/container-platform/4.15/observability/monitoring/accessing-third-party-monitoring-apis.html#accessing-metrics-from-outside-cluster_accessing-monitoring-apis-by-using-the-cli).
 
 
-### Step 7 - Create secrets for your credentials
+### Step 7 - Setup the catalogsource
 
 Before installing the Kuadrant Operator, you must enter the following commands to set up secrets that you will use later:
 
@@ -202,7 +215,7 @@ metadata:
   namespace: kuadrant-system
 spec:
   sourceType: grpc
-  image: quay.io/kuadrant/kuadrant-operator-catalog:v0.7.1
+  image: quay.io/kuadrant/kuadrant-operator-catalog:v0.11.0
   displayName: Kuadrant Operators
   publisher: grpc
   updateStrategy:
@@ -211,40 +224,6 @@ spec:
 EOF
 ```
 
-#### AWS Route 53 credentials for TLS
-
-Set the AWS Route 53 credentials for TLS verification as follows:
-
-```bash
-kubectl -n kuadrant-system create secret generic aws-credentials \
-  --type=kuadrant.io/aws \
-  --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-  --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-```
-
-#### Redis credentials for rate limiting counters
-
-Set the Redis credentials for shared multicluster counters for the Kuadrant Limitador component as follows:
-
-```bash
-kubectl -n kuadrant-system create secret generic redis-config \
-  --from-literal=URL=$REDIS_URL
-```
-
-#### AWS Route 53 credentials for DNS
-
-Set the AWS Route 53 credentials for managing DNS records as follows:
-
-```bash
-kubectl create ns ingress-gateway
-```
-
-```bash
-kubectl -n ingress-gateway create secret generic aws-credentials \
-  --type=kuadrant.io/aws \
-  --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-  --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-```
 
 ### Step 8 - Install the Kuadrant Operator
 
@@ -258,7 +237,7 @@ metadata:
   name: kuadrant-operator
   namespace: kuadrant-system
 spec:
-  channel: preview
+  channel: stable
   installPlanApproval: Automatic
   name: kuadrant-operator
   source: kuadrant-operator-catalog
@@ -282,9 +261,27 @@ kubectl get installplan -n kuadrant-system -o=jsonpath='{.items[0].status.phase}
 
 After some time, this command should return `complete`.
 
-### Step 9 - Configure Kuadrant
 
-To configure your Kuadrant deployment, enter the following command:
+#### Set up a DNSProvider
+
+The example here is for AWS Route 53. It is important the secret for the DNSProvider is setup in the same namespace as the gateway.
+
+```bash
+kubectl create ns ingress-gateway
+```
+
+```bash
+kubectl -n ingress-gateway create secret generic aws-credentials \
+  --type=kuadrant.io/aws \
+  --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+  --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+```
+
+For more details on other providers take a look at [DNS Providers](https://docs.kuadrant.io/latest/dns-operator/docs/provider/)
+
+### Step 9 - Install Kuadrant Components
+
+To trigger your Kuadrant deployment, enter the following command:
 
 ```bash
 kubectl apply -f - <<EOF
@@ -293,12 +290,6 @@ kind: Kuadrant
 metadata:
   name: kuadrant
   namespace: kuadrant-system
-spec:
-  limitador:
-    storage:
-      redis-cached:
-        configSecretRef:
-          name: redis-config
 EOF
 ```
 
@@ -308,7 +299,71 @@ Wait for Kuadrant to be ready as follows:
 kubectl wait kuadrant/kuadrant --for="condition=Ready=true" -n kuadrant-system --timeout=300s
 ```
 
+This will setup and configure a number of Kuadrant subcomponents. Some of these can also take additional configuration:
+
+- Authorino (Enforcement Component for AuthPolicy)
+  - Learn More: (Authorino CRD)[https://docs.kuadrant.io/latest/authorino-operator/#the-authorino-custom-resource-definition-crd]
+- Limitador (Enforcement Component for RateLimitPolicy)
+  - Learn More:(Limitador CRD)[https://docs.kuadrant.io/latest/limitador-operator/#features]
+- DNS Operator (Enforcement Component for DNSPOlicy)
+
+
+
+### Configuring Redis Storage for Limitador
+
+#### Redis credentials for storage of rate limiting counters
+
+In this installation we will show how to configure ratelimiting counters to be stored in redis. Before we go further we need to setup a redis secret to use later:
+
+```bash
+kubectl -n kuadrant-system create secret generic redis-config --from-literal="URL"=$REDIS_URL
+```
+
+#### Update limitador config
+
+To configure redis storage for Limatador, we must update the Limitador custom resource to use the secret we created:
+
+You can run a command like the one below to add this configuration:
+
+```
+kubectl patch limitador limitador --type=merge -n kuadrant-system -p '
+spec:
+  storage:
+    redis:
+      configSecretRef:
+        name: redis-config
+'
+```
+
+Check that limitador is back to ready:
+
+```
+kubectl wait limitador/limitador -n kuadrant-system --for="condition=Ready=true"
+
+```
+
 Kuadrant is now ready to use.
 
+
+### Step 10 - Configure the Kuadrant Console Plugin
+
+When running on OpenShift, the Kuadrant Operator will automatically install and configure the Kuadrant dynamic console plugin.
+
+#### Enable the Console Plugin
+
+To enable the Kuadrant console plugin:
+
+1. Log in to OpenShift or OKD as an administrator.
+2. Switch to the **Admin** perspective.
+3. Navigate to **Home** > **Overview**.
+4. In the **Dynamic Plugins** section of the status box, click **View all**.
+5. In the **Console plugins** area, find the `kuadrant-console` plugin. It should be listed but disabled.
+6. Click the **Disabled** button next to the `kuadrant-console` plugin.
+7. Select the **Enabled** radio button, and then click **Save**.
+8. Wait for the plugin status to change to **Loaded**.
+
+Once the plugin is loaded, refresh the console. You should see a new **Kuadrant** section in the navigation sidebar.
+
 ## Next steps
+
 - [Secure, protect, and connect APIs with Kuadrant on OpenShift](../user-guides/secure-protect-connect-single-multi-cluster.md)

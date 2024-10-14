@@ -21,7 +21,6 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
@@ -166,7 +165,7 @@ func (r *istioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *lim
 			APIVersion: istioclientgonetworkingv1alpha3.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      rateLimitClusterName(gateway.GetName()),
+			Name:      RateLimitClusterName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
 			Labels:    map[string]string{rateLimitClusterLabelKey: "true"},
 		},
@@ -197,40 +196,9 @@ func (r *istioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *lim
 // istioEnvoyFilterClusterPatch returns an envoy config patch that defines the rate limit cluster for the gateway.
 // The rate limit cluster configures the endpoint of the external rate limit service.
 func istioEnvoyFilterClusterPatch(host string, port int) ([]*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
-	patchUnstructured := map[string]any{
-		"operation": "ADD",
-		"value": map[string]any{
-			"name":                   common.KuadrantRateLimitClusterName,
-			"type":                   "STRICT_DNS",
-			"connect_timeout":        "1s",
-			"lb_policy":              "ROUND_ROBIN",
-			"http2_protocol_options": map[string]any{},
-			"load_assignment": map[string]any{
-				"cluster_name": common.KuadrantRateLimitClusterName,
-				"endpoints": []map[string]any{
-					{
-						"lb_endpoints": []map[string]any{
-							{
-								"endpoint": map[string]any{
-									"address": map[string]any{
-										"socket_address": map[string]any{
-											"address":    host,
-											"port_value": port,
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	patchRaw, _ := json.Marshal(patchUnstructured)
+	patchRaw, _ := json.Marshal(map[string]any{"operation": "ADD", "value": rateLimitClusterPatch(host, port)})
 	patch := &istioapinetworkingv1alpha3.EnvoyFilter_Patch{}
-	err := patch.UnmarshalJSON(patchRaw)
-	if err != nil {
+	if err := patch.UnmarshalJSON(patchRaw); err != nil {
 		return nil, err
 	}
 

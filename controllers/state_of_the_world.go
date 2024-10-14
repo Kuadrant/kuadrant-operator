@@ -227,7 +227,9 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() []controller.ControllerOpt
 				envoygateway.EnvoyExtensionPolicyGroupKind,
 				envoygateway.SecurityPolicyGroupKind,
 			),
-			// TODO: add object links
+			controller.WithObjectLinks(
+				envoygateway.LinkGatewayToEnvoyPatchPolicy,
+			),
 		)
 		// TODO: add specific tasks to workflow
 	}

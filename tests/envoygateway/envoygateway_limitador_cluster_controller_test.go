@@ -23,7 +23,6 @@ import (
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
@@ -133,9 +132,7 @@ var _ = Describe("limitador cluster controller", func() {
 
 		It("Creates envoypatchpolicy for limitador cluster", func(ctx SpecContext) {
 			patchKey := client.ObjectKey{
-				Name: controllers.LimitadorClusterEnvoyPatchPolicyName(
-					wasm.WasmExtensionName(TestGatewayName),
-				),
+				Name:      controllers.RateLimitClusterName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -205,9 +202,7 @@ var _ = Describe("limitador cluster controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			patchKey := client.ObjectKey{
-				Name: controllers.LimitadorClusterEnvoyPatchPolicyName(
-					wasm.WasmExtensionName(TestGatewayName),
-				),
+				Name:      controllers.RateLimitClusterName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -224,9 +219,7 @@ var _ = Describe("limitador cluster controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			patchKey := client.ObjectKey{
-				Name: controllers.LimitadorClusterEnvoyPatchPolicyName(
-					wasm.WasmExtensionName(TestGatewayName),
-				),
+				Name:      controllers.RateLimitClusterName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 

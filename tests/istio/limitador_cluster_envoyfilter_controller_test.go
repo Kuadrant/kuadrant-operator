@@ -3,7 +3,6 @@
 package istio_test
 
 import (
-	"fmt"
 	"time"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
@@ -19,6 +18,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
+	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/tests"
@@ -32,7 +32,6 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 	var (
 		testNamespace string
 		rlpName       = "toystore-rlp"
-		efName        = fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", TestGatewayName)
 	)
 
 	beforeEachCallback := func(ctx SpecContext) {
@@ -120,7 +119,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 			// Check envoy filter
 			Eventually(func() bool {
 				existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
-				efKey := client.ObjectKey{Name: efName, Namespace: testNamespace}
+				efKey := client.ObjectKey{Name: controllers.RateLimitClusterName(TestGatewayName), Namespace: testNamespace}
 				err = testClient().Get(ctx, efKey, existingEF)
 				if err != nil {
 					return false
@@ -134,7 +133,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 			// Check envoy filter is gone
 			Eventually(func() bool {
 				existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
-				efKey := client.ObjectKey{Name: efName, Namespace: testNamespace}
+				efKey := client.ObjectKey{Name: controllers.RateLimitClusterName(TestGatewayName), Namespace: testNamespace}
 				err = testClient().Get(ctx, efKey, existingEF)
 				return apierrors.IsNotFound(err)
 			}).WithContext(ctx).Should(BeTrue())

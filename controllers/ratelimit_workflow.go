@@ -23,6 +23,7 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
@@ -33,7 +34,9 @@ import (
 const (
 	rateLimitClusterLabelKey = "kuadrant.io/rate-limit-cluster"
 
-	istioGatewayControllerName = "istio.io/gateway-controller" // make this configurable?
+	// make these configurable?
+	istioGatewayControllerName        = "istio.io/gateway-controller"
+	envoyGatewayGatewayControllerName = "gateway.envoyproxy.io/gatewayclass-controller"
 )
 
 var (
@@ -73,14 +76,15 @@ func NewRateLimitWorkflow(manager ctrlruntime.Manager, client *dynamic.DynamicCl
 		},
 	}
 
+	baseReconciler := reconcilers.NewBaseReconciler(manager.GetClient(), manager.GetScheme(), manager.GetAPIReader(), log.Log.WithName("ratelimit"))
+
 	if isIstioInstalled {
-		baseReconciler := reconcilers.NewBaseReconciler(manager.GetClient(), manager.GetScheme(), manager.GetAPIReader(), log.Log.WithName("ratelimit"))
 		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&istioRateLimitClusterReconciler{BaseReconciler: baseReconciler, client: client}).Subscription().Reconcile)
 		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&istioExtensionReconciler{client: client}).Subscription().Reconcile)
 	}
 
 	if isEnvoyGatewayInstalled {
-		// TODO: reconcile envoy cluster (EnvoyPatchPolicy)
+		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&envoyGatewayRateLimitClusterReconciler{BaseReconciler: baseReconciler, client: client}).Subscription().Reconcile)
 		// TODO: reconcile envoy extension (EnvoyExtensionPolicy)
 	}
 
@@ -114,54 +118,37 @@ func LimitNameToLimitadorIdentifier(rlpKey k8stypes.NamespacedName, uniqueLimitN
 	return identifier
 }
 
-func rateLimitPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error) {
-	p, ok := policy.(*kuadrantv1beta3.RateLimitPolicy)
-	if !ok {
-		return
-	}
-	if condition := meta.FindStatusCondition(p.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)); condition != nil {
-		accepted = condition.Status == metav1.ConditionTrue
-		if !accepted {
-			err = fmt.Errorf(condition.Message)
-		}
-		return
-	}
-	return
-}
-
-func rateLimitPolicyAcceptedStatusFunc(state *sync.Map) func(policy machinery.Policy) (bool, error) {
-	validatedPolicies, validated := state.Load(StateRateLimitPolicyValid)
-	if !validated {
-		return rateLimitPolicyAcceptedStatus
-	}
-	validatedPoliciesMap := validatedPolicies.(map[string]error)
-	return func(policy machinery.Policy) (bool, error) {
-		err, validated := validatedPoliciesMap[policy.GetLocator()]
-		if validated {
-			return err == nil, err
-		}
-		return rateLimitPolicyAcceptedStatus(policy)
-	}
-}
-
-func isRateLimitPolicyAcceptedFunc(state *sync.Map) func(machinery.Policy) bool {
-	f := rateLimitPolicyAcceptedStatusFunc(state)
-	return func(policy machinery.Policy) bool {
-		accepted, _ := f(policy)
-		return accepted
-	}
-}
-
-func isRateLimitPolicyAcceptedAndNotDeletedFunc(state *sync.Map) func(machinery.Policy) bool {
-	f := isRateLimitPolicyAcceptedFunc(state)
-	return func(policy machinery.Policy) bool {
-		p, object := policy.(metav1.Object)
-		return object && f(policy) && p.GetDeletionTimestamp() == nil
-	}
-}
-
-func rateLimitClusterName(gatewayName string) string {
+func RateLimitClusterName(gatewayName string) string {
 	return fmt.Sprintf("kuadrant-ratelimiting-%s", gatewayName)
+}
+
+func rateLimitClusterPatch(host string, port int) map[string]any {
+	return map[string]any{
+		"name":                   common.KuadrantRateLimitClusterName,
+		"type":                   "STRICT_DNS",
+		"connect_timeout":        "1s",
+		"lb_policy":              "ROUND_ROBIN",
+		"http2_protocol_options": map[string]any{},
+		"load_assignment": map[string]any{
+			"cluster_name": common.KuadrantRateLimitClusterName,
+			"endpoints": []map[string]any{
+				{
+					"lb_endpoints": []map[string]any{
+						{
+							"endpoint": map[string]any{
+								"address": map[string]any{
+									"socket_address": map[string]any{
+										"address":    host,
+										"port_value": port,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 func rateLimitWasmRuleBuilder(pathID string, effectivePolicy EffectiveRateLimitPolicy, state *sync.Map) wasm.WasmRuleBuilderFunc {
@@ -232,4 +219,50 @@ func wasmDataFromLimit(limitIdentifier string, limit kuadrantv1beta3.Limit) (dat
 	}
 
 	return data
+}
+
+func isRateLimitPolicyAcceptedAndNotDeletedFunc(state *sync.Map) func(machinery.Policy) bool {
+	f := isRateLimitPolicyAcceptedFunc(state)
+	return func(policy machinery.Policy) bool {
+		p, object := policy.(metav1.Object)
+		return object && f(policy) && p.GetDeletionTimestamp() == nil
+	}
+}
+
+func isRateLimitPolicyAcceptedFunc(state *sync.Map) func(machinery.Policy) bool {
+	f := rateLimitPolicyAcceptedStatusFunc(state)
+	return func(policy machinery.Policy) bool {
+		accepted, _ := f(policy)
+		return accepted
+	}
+}
+
+func rateLimitPolicyAcceptedStatusFunc(state *sync.Map) func(policy machinery.Policy) (bool, error) {
+	validatedPolicies, validated := state.Load(StateRateLimitPolicyValid)
+	if !validated {
+		return rateLimitPolicyAcceptedStatus
+	}
+	validatedPoliciesMap := validatedPolicies.(map[string]error)
+	return func(policy machinery.Policy) (bool, error) {
+		err, validated := validatedPoliciesMap[policy.GetLocator()]
+		if validated {
+			return err == nil, err
+		}
+		return rateLimitPolicyAcceptedStatus(policy)
+	}
+}
+
+func rateLimitPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error) {
+	p, ok := policy.(*kuadrantv1beta3.RateLimitPolicy)
+	if !ok {
+		return
+	}
+	if condition := meta.FindStatusCondition(p.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)); condition != nil {
+		accepted = condition.Status == metav1.ConditionTrue
+		if !accepted {
+			err = fmt.Errorf(condition.Message)
+		}
+		return
+	}
+	return
 }

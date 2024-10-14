@@ -30,6 +30,13 @@ export AWS_SECRET_ACCESS_KEY=xxxxxxx # Access key from AWS with Route 53 access
 export REDIS_URL=redis://user:xxxxxx@some-redis.com:10340 # A Redis cluster URL
 ```
 
+Set the version of Kuadrant to the latest released version: https://github.com/Kuadrant/kuadrant-operator/releases/
+
+```
+export KUADRANT_VERSION='vX.Y.Z'
+```
+
+
 ### Step 2 - Install Gateway API v1
 
 Before you can use Kuadrant, you must install Gateway API v1 as follows:
@@ -215,7 +222,7 @@ metadata:
   namespace: kuadrant-system
 spec:
   sourceType: grpc
-  image: quay.io/kuadrant/kuadrant-operator-catalog:v0.11.0
+  image: quay.io/kuadrant/kuadrant-operator-catalog:${KUADRANT_VERSION}
   displayName: Kuadrant Operators
   publisher: grpc
   updateStrategy:
@@ -261,15 +268,6 @@ kubectl get installplan -n kuadrant-system -o=jsonpath='{.items[0].status.phase}
 
 After some time, this command should return `complete`.
 
-
-#### Redis credentials for storage of rate limiting counters
-
-In this installation we will show how to configure ratelimiting counters to be stored in redis. Before we go further we need to setup a redis secret to use later:
-
-```bash
-kubectl -n kuadrant-system create secret generic redis-config \
-  --from-literal=URL=$REDIS_URL
-```
 
 #### Set up a DNSProvider
 
@@ -319,6 +317,16 @@ This will setup and configure a number of Kuadrant subcomponents. Some of these 
 
 
 ### Configuring Redis Storage for Limitador
+
+#### Redis credentials for storage of rate limiting counters
+
+In this installation we will show how to configure ratelimiting counters to be stored in redis. Before we go further we need to setup a redis secret to use later:
+
+```bash
+kubectl -n kuadrant-system create secret generic redis-config --from-literal="URL"=$REDIS_URL
+```
+
+#### Update limitador config
 
 To configure redis storage for Limatador, we must update the Limitador custom resource to use the secret we created:
 

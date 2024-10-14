@@ -10,6 +10,7 @@
     All required labels are formatted as `kuadrant.io/*`.
     Removal of any labels with the prefix may cause unexpected behaviour and degradation of the product.
 
+
 ## Prerequisites
 
 - Access to a Kubernetes cluster, with `kubeadmin` or an account with similar permissions
@@ -48,9 +49,9 @@ curl -sL https://github.com/operator-framework/operator-lifecycle-manager/releas
     There are several ways to install Istio (via `istioctl`, Helm chart or Operator) - this is just an example for starting from a bare Kubernetes cluster.
 
 ```bash
-curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.21.4 sh -
-./istio-1.21.4/bin/istioctl install --set profile=minimal
-./istio-1.21.4/bin/istioctl operator init
+curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.22.5 sh -
+./istio-1.22.5/bin/istioctl install --set profile=minimal
+./istio-1.22.5/bin/istioctl operator init
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/config/dependencies/istio/istio-operator.yaml
 ```
 
@@ -115,7 +116,9 @@ Kuadrant is now ready to use.
 
 ### (Optional) `DNSPolicy` setup
 
-If you plan to use `DNSPolicy`, you will need an AWS Account with access to Route 53 (more providers coming soon), and a hosted zone.
+If you plan to use `DNSPolicy`, this doc uses an AWS Account with access to Route 53. There are other providers that you can also use for DNS integration: 
+
+[DNS Providers](https://docs.kuadrant.io/latest/dns-operator/docs/provider/)
 
 Export the following environment variables for setup:
 
@@ -146,7 +149,11 @@ Follow these steps to create the necessary secret:
     ```bash
     # Replace this with an accessible Redis cluster URL
     export REDIS_URL=redis://user:xxxxxx@some-redis.com:6379
-
+    
+    ```    
+3. Create the secret:
+    
+    ```bash
     kubectl -n kuadrant-system create secret generic redis-config \
       --from-literal=URL=$REDIS_URL
     ```
@@ -154,23 +161,24 @@ Follow these steps to create the necessary secret:
 This will create a secret named `redis-config` in the `kuadrant-system` namespace containing your Redis cluster URL, which Kuadrant will use for multi-cluster rate limiting.
 
 
-You'll also need to update your earlier created `Kuadrant` instance to reconfigure Kuadrant to use Redis:
+You'll also need to update the `Limitador` instance (the component that handles rate limiting) to reconfigure Kuadrant to use Redis:
 
 ```bash
-kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta1
-kind: Kuadrant
-metadata:
-  name: kuadrant
-  namespace: kuadrant-system
+kubectl patch limitador limitador --type=merge -n kuadrant-system -p '
 spec:
-  limitador:
-    storage:
-      redis-cached:
-        configSecretRef:
-          name: redis-config
-EOF
+  storage:
+    redis:
+      configSecretRef:
+        name: redis-config
+'
+
+kubectl wait limitador/limitador -n kuadrant-system --for="condition=Ready=true"
+
 ```
+
+### Metal LB (local setup)
+
+If you are using a local kind cluster, we recommend using [metallb](https://metallb.universe.tf/) to allow the service type loadbalancer to be used with your gateways and an IP to be assigned to your gateway address rather than an internal service name.
 
 ## Next Steps
 

@@ -1,11 +1,16 @@
 package controllers
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sync"
+	"unicode"
 
+	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
@@ -15,12 +20,14 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
+	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 )
 
 const (
@@ -84,6 +91,29 @@ func NewRateLimitWorkflow(manager ctrlruntime.Manager, client *dynamic.DynamicCl
 	}
 }
 
+func LimitsNamespaceFromRoute(route *gatewayapiv1.HTTPRoute) string {
+	return k8stypes.NamespacedName{Name: route.GetName(), Namespace: route.GetNamespace()}.String()
+}
+
+func LimitNameToLimitadorIdentifier(rlpKey k8stypes.NamespacedName, uniqueLimitName string) string {
+	identifier := "limit."
+
+	// sanitize chars that are not allowed in limitador identifiers
+	for _, c := range uniqueLimitName {
+		if unicode.IsLetter(c) || unicode.IsDigit(c) || c == '_' {
+			identifier += string(c)
+		} else {
+			identifier += "_"
+		}
+	}
+
+	// to avoid breaking the uniqueness of the limit name after sanitization, we add a hash of the original name
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s/%s", rlpKey.String(), uniqueLimitName)))
+	identifier += "__" + hex.EncodeToString(hash[:4])
+
+	return identifier
+}
+
 func rateLimitPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error) {
 	p, ok := policy.(*kuadrantv1beta3.RateLimitPolicy)
 	if !ok {
@@ -130,19 +160,76 @@ func isRateLimitPolicyAcceptedAndNotDeletedFunc(state *sync.Map) func(machinery.
 	}
 }
 
-func wasmExtensionName(gatewayName string) string {
-	return fmt.Sprintf("kuadrant-%s", gatewayName)
-}
-
 func rateLimitClusterName(gatewayName string) string {
 	return fmt.Sprintf("kuadrant-ratelimiting-%s", gatewayName)
 }
 
-// Used in the tests
+func rateLimitWasmRuleBuilder(pathID string, effectivePolicy EffectiveRateLimitPolicy, state *sync.Map) wasm.WasmRuleBuilderFunc {
+	policiesInPath := kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
 
-func WASMPluginName(gw *gatewayapiv1.Gateway) string {
-	return wasmExtensionName(gw.Name)
+	// assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]
+	httpRoute, _ := effectivePolicy.Path[3].(*machinery.HTTPRoute)
+
+	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
+
+	return func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, uniquePolicyRuleKey string, policyRule kuadrantv1.MergeableRule) (wasm.Rule, error) {
+		source, found := lo.Find(policiesInPath, func(p machinery.Policy) bool {
+			return p.GetLocator() == policyRule.Source
+		})
+		if !found { // should never happen
+			return wasm.Rule{}, fmt.Errorf("could not find source policy %s in path %s", policyRule.Source, pathID)
+		}
+		limitIdentifier := LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: source.GetName(), Namespace: source.GetNamespace()}, uniquePolicyRuleKey)
+		limit := policyRule.Spec.(kuadrantv1beta3.Limit)
+		return wasmRuleFromLimit(limit, limitIdentifier, limitsNamespace, httpRouteMatch), nil
+	}
 }
-func EnvoyExtensionPolicyName(targetName string) string {
-	return fmt.Sprintf("kuadrant-wasm-for-%s", targetName)
+
+// wasmRuleFromLimit builds a wasm rate-limit rule for a given limit.
+// Conditions are built from the limit top-level conditions and a HTTPRouteMatch.
+// The order of the conditions is as follows:
+//  1. Route-level conditions: HTTP method, path, headers
+//  2. Top-level conditions: 'when' conditions (blended into each block of route-level conditions)
+//
+// The only action of the rule is the rate-limit policy extension, whose data includes the activation of the limit
+// and any counter qualifier of the limit.
+func wasmRuleFromLimit(limit kuadrantv1beta3.Limit, limitIdentifier, scope string, routeMatch gatewayapiv1.HTTPRouteMatch) wasm.Rule {
+	rule := wasm.Rule{
+		Conditions: wasm.ConditionsFromHTTPRouteMatch(routeMatch, limit.When...),
+	}
+
+	if data := wasmDataFromLimit(limitIdentifier, limit); data != nil {
+		rule.Actions = []wasm.Action{
+			{
+				Scope:         scope,
+				ExtensionName: wasm.RateLimitExtensionName,
+				Data:          data,
+			},
+		}
+	}
+
+	return rule
+}
+
+func wasmDataFromLimit(limitIdentifier string, limit kuadrantv1beta3.Limit) (data []wasm.DataType) {
+	// static key representing the limit
+	data = append(data,
+		wasm.DataType{
+			Value: &wasm.Static{
+				Static: wasm.StaticSpec{Key: limitIdentifier, Value: "1"},
+			},
+		},
+	)
+
+	for _, counter := range limit.Counters {
+		data = append(data,
+			wasm.DataType{
+				Value: &wasm.Selector{
+					Selector: wasm.SelectorSpec{Selector: counter},
+				},
+			},
+		)
+	}
+
+	return data
 }

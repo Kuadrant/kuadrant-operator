@@ -1,4 +1,4 @@
-package rlptools
+package ratelimit
 
 import (
 	"reflect"
@@ -14,16 +14,16 @@ import (
 
 // NewRateLimitIndex builds an index to manage sets of rate limits, organized by key
 func NewRateLimitIndex() *RateLimitIndex {
-	return &RateLimitIndex{OrderedMap: *orderedmap.NewOrderedMap[string, RateLimitList]()}
+	return &RateLimitIndex{OrderedMap: *orderedmap.NewOrderedMap[string, LimitadorRateLimits]()}
 }
 
-// RateLimitIndex stores RateLimitLists by key
+// RateLimitIndex stores LimitadorRateLimitss by key
 type RateLimitIndex struct {
 	sync.RWMutex
-	orderedmap.OrderedMap[string, RateLimitList]
+	orderedmap.OrderedMap[string, LimitadorRateLimits]
 }
 
-func (l *RateLimitIndex) Set(key string, rateLimits RateLimitList) {
+func (l *RateLimitIndex) Set(key string, rateLimits LimitadorRateLimits) {
 	if len(rateLimits) == 0 {
 		return
 	}
@@ -32,23 +32,23 @@ func (l *RateLimitIndex) Set(key string, rateLimits RateLimitList) {
 	l.OrderedMap.Set(key, rateLimits)
 }
 
-func (l *RateLimitIndex) ToRateLimits() RateLimitList {
+func (l *RateLimitIndex) ToRateLimits() LimitadorRateLimits {
 	l.RLock()
 	defer l.RUnlock()
-	limitadorRateLimits := make(RateLimitList, 0)
+	limitadorRateLimits := make(LimitadorRateLimits, 0)
 	for rlSet := l.Front(); rlSet != nil; rlSet = rlSet.Next() {
 		limitadorRateLimits = append(limitadorRateLimits, rlSet.Value...)
 	}
 	return limitadorRateLimits
 }
 
-type RateLimitList []limitadorv1alpha1.RateLimit
+type LimitadorRateLimits []limitadorv1alpha1.RateLimit
 
-func (l RateLimitList) Len() int {
+func (l LimitadorRateLimits) Len() int {
 	return len(l)
 }
 
-func (l RateLimitList) Less(i, j int) bool {
+func (l LimitadorRateLimits) Less(i, j int) bool {
 	if l[i].MaxValue != l[j].MaxValue {
 		return l[i].MaxValue > l[j].MaxValue
 	}
@@ -93,20 +93,20 @@ func (l RateLimitList) Less(i, j int) bool {
 	return true
 }
 
-func (l RateLimitList) Swap(i, j int) {
+func (l LimitadorRateLimits) Swap(i, j int) {
 	l[i], l[j] = l[j], l[i]
 }
 
-func Equal(a, b RateLimitList) bool {
-	if len(a) != len(b) {
+func (l LimitadorRateLimits) EqualTo(other LimitadorRateLimits) bool {
+	if len(l) != len(other) {
 		return false
 	}
 
-	aCopy := make(RateLimitList, len(a))
-	bCopy := make(RateLimitList, len(b))
+	aCopy := make(LimitadorRateLimits, len(l))
+	bCopy := make(LimitadorRateLimits, len(other))
 
-	copy(aCopy, a)
-	copy(bCopy, b)
+	copy(aCopy, l)
+	copy(bCopy, other)
 
 	// two limits with reordered conditions/variables are effectively the same
 	// For comparison purposes, nil equals the empty array for conditions and variables

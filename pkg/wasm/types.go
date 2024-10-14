@@ -292,34 +292,3 @@ func (c *Config) EqualTo(other *Config) bool {
 
 	return true
 }
-
-func ConfigFromStruct(structure *_struct.Struct) (*Config, error) {
-	if structure == nil {
-		return nil, errors.New("cannot desestructure config from nil")
-	}
-	// Serialize struct into json
-	configJSON, err := structure.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-	// Deserialize protobuf struct into Config struct
-	config := &Config{}
-	if err := json.Unmarshal(configJSON, config); err != nil {
-		return nil, err
-	}
-
-	return config, nil
-}
-
-func ConfigFromJSON(configJSON *apiextensionsv1.JSON) (*Config, error) {
-	if configJSON == nil {
-		return nil, errors.New("cannot desestructure config from nil")
-	}
-
-	config := &Config{}
-	if err := json.Unmarshal(configJSON.Raw, config); err != nil {
-		return nil, err
-	}
-
-	return config, nil
-}

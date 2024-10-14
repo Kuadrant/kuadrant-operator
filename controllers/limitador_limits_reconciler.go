@@ -19,8 +19,7 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
+	"github.com/kuadrant/kuadrant-operator/pkg/ratelimit"
 )
 
 type limitadorLimitsReconciler struct {
@@ -62,7 +61,7 @@ func (r *limitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 		return nil
 	}
 
-	if rlptools.Equal(limitador.Spec.Limits, desiredLimits) {
+	if ratelimit.LimitadorRateLimits(limitador.Spec.Limits).EqualTo(desiredLimits) {
 		logger.V(1).Info("limitador object is up to date, nothing to do")
 		return nil
 	}
@@ -96,11 +95,11 @@ func (r *limitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 
 	logger.V(1).Info("building limitador limits", "effectivePolicies", len(effectivePolicies.(EffectiveRateLimitPolicies)))
 
-	rateLimitIndex := rlptools.NewRateLimitIndex()
+	rateLimitIndex := ratelimit.NewRateLimitIndex()
 
 	for pathID, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {
 		httpRoute, _ := effectivePolicy.Path[3].(*machinery.HTTPRoute) // assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]
-		limitsNamespace := wasm.LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
+		limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
 		for limitKey, mergeableLimit := range effectivePolicy.Spec.Rules() {
 			policy, found := lo.Find(kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state)), func(p machinery.Policy) bool {
 				return p.GetLocator() == mergeableLimit.Source
@@ -109,7 +108,7 @@ func (r *limitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 				logger.Error(fmt.Errorf("origin policy %s not found in path %s", mergeableLimit.Source, pathID), "failed to build limitador limit definition")
 				continue
 			}
-			limitIdentifier := wasm.LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
+			limitIdentifier := LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
 			limit := mergeableLimit.Spec.(kuadrantv1beta3.Limit)
 			rateLimits := lo.Map(limit.Rates, func(rate kuadrantv1beta3.Rate, _ int) limitadorv1alpha1.RateLimit {
 				maxValue, seconds := rate.ToSeconds()

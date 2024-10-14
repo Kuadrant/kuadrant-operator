@@ -133,7 +133,7 @@ func TestInValidActionConfig(t *testing.T) {
 scope: some-scope
 extension: limitador
 data:
-- other: 
+- other:
     key: keyA
 `,
 		},
@@ -143,7 +143,7 @@ data:
 scope: some-scope
 extension: limitador
 data:
-- static: 
+- static:
     key: keyA
   selector:
     selector: selectorA
@@ -164,7 +164,7 @@ data:
 func testBasicConfigExample() *Config {
 	return &Config{
 		Extensions: map[string]Extension{
-			RateLimitPolicyExtensionName: {
+			RateLimitExtensionName: {
 				Endpoint:    common.KuadrantRateLimitClusterName,
 				FailureMode: FailureModeAllow,
 				Type:        RateLimitExtensionType,
@@ -193,7 +193,7 @@ func testBasicConfigExample() *Config {
 						Actions: []Action{
 							{
 								Scope:         "rlp-ns-A/rlp-name-A",
-								ExtensionName: RateLimitPolicyExtensionName,
+								ExtensionName: RateLimitExtensionName,
 								Data: []DataType{
 									{
 										Value: &Static{

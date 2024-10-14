@@ -9,6 +9,7 @@ import (
 	"github.com/cert-manager/cert-manager/pkg/apis/certmanager"
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/go-logr/logr"
+	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -18,6 +19,20 @@ import (
 
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
+
+func HostnamesFromListenerAndHTTPRoute(listener *gatewayapiv1.Listener, httpRoute *gatewayapiv1.HTTPRoute) []gatewayapiv1.Hostname {
+	hostname := listener.Hostname
+	if hostname == nil {
+		hostname = ptr.To(gatewayapiv1.Hostname("*"))
+	}
+	hostnames := []gatewayapiv1.Hostname{*hostname}
+	if routeHostnames := httpRoute.Spec.Hostnames; len(routeHostnames) > 0 {
+		hostnames = lo.Filter(httpRoute.Spec.Hostnames, func(h gatewayapiv1.Hostname, _ int) bool {
+			return utils.Name(h).SubsetOf(utils.Name(*hostname))
+		})
+	}
+	return hostnames
+}
 
 func IsTargetRefHTTPRoute(targetRef gatewayapiv1alpha2.LocalPolicyTargetReference) bool {
 	return targetRef.Group == (gatewayapiv1.GroupName) && targetRef.Kind == ("HTTPRoute")

@@ -104,7 +104,7 @@ func LinkGatewayToWasmPlugin(objs controller.Store) machinery.LinkFunc {
 		To:   WasmPluginGroupKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			wasmPlugin := child.(*controller.RuntimeObject).Object.(*istioclientgoextensionv1alpha1.WasmPlugin)
-			return lo.FilterMap(gateways, istioTargetRefsIncludeObjectFunc(wasmPlugin.Spec.TargetRefs, wasmPlugin.GetNamespace()))
+			return lo.Filter(gateways, istioTargetRefsIncludeObjectFunc(wasmPlugin.Spec.TargetRefs, wasmPlugin.GetNamespace()))
 		},
 	}
 }
@@ -119,15 +119,15 @@ func LinkGatewayToEnvoyFilter(objs controller.Store) machinery.LinkFunc {
 		To:   EnvoyFilterGroupKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			envoyFilter := child.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter)
-			return lo.FilterMap(gateways, istioTargetRefsIncludeObjectFunc(envoyFilter.Spec.TargetRefs, envoyFilter.GetNamespace()))
+			return lo.Filter(gateways, istioTargetRefsIncludeObjectFunc(envoyFilter.Spec.TargetRefs, envoyFilter.GetNamespace()))
 		},
 	}
 }
 
-func istioTargetRefsIncludeObjectFunc(targetRefs []*istioapiv1beta1.PolicyTargetReference, defaultNamespace string) func(machinery.Object, int) (machinery.Object, bool) {
-	return func(obj machinery.Object, _ int) (machinery.Object, bool) {
+func istioTargetRefsIncludeObjectFunc(targetRefs []*istioapiv1beta1.PolicyTargetReference, defaultNamespace string) func(machinery.Object, int) bool {
+	return func(obj machinery.Object, _ int) bool {
 		groupKind := obj.GroupVersionKind().GroupKind()
-		return obj, lo.SomeBy(targetRefs, func(targetRef *istioapiv1beta1.PolicyTargetReference) bool {
+		return lo.SomeBy(targetRefs, func(targetRef *istioapiv1beta1.PolicyTargetReference) bool {
 			if targetRef == nil {
 				return false
 			}

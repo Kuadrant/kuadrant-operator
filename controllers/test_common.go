@@ -196,19 +196,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	Expect(err).NotTo(HaveOccurred())
 
-	envoyGatewayLimitadorClusterReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-		mgr.GetAPIReader(),
-		log.Log.WithName("envoyGatewayLimitadorClusterReconciler"),
-	)
-
-	err = (&EnvoyGatewayLimitadorClusterReconciler{
-		BaseReconciler: envoyGatewayLimitadorClusterReconciler,
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
 	dClient, err := dynamic.NewForConfig(mgr.GetConfig())
 	Expect(err).NotTo(HaveOccurred())
 

@@ -121,7 +121,7 @@ var _ = Describe("wasm controller", func() {
 
 		It("Creates envoyextensionpolicy", func(ctx SpecContext) {
 			extKey := client.ObjectKey{
-				Name:      wasm.WasmExtensionName(TestGatewayName),
+				Name:      wasm.ExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -207,7 +207,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			extKey := client.ObjectKey{
-				Name:      wasm.WasmExtensionName(TestGatewayName),
+				Name:      wasm.ExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -224,7 +224,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			extKey := client.ObjectKey{
-				Name:      wasm.WasmExtensionName(TestGatewayName),
+				Name:      wasm.ExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -281,7 +281,7 @@ var _ = Describe("wasm controller", func() {
 
 		It("Creates envoyextensionpolicy", func(ctx SpecContext) {
 			extKey := client.ObjectKey{
-				Name:      wasm.WasmExtensionName(TestGatewayName),
+				Name:      wasm.ExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -368,7 +368,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			extKey := client.ObjectKey{
-				Name:      wasm.WasmExtensionName(TestGatewayName),
+				Name:      wasm.ExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -386,7 +386,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			extKey := client.ObjectKey{
-				Name:      wasm.WasmExtensionName(TestGatewayName),
+				Name:      wasm.ExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 

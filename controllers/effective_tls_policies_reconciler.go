@@ -60,6 +60,27 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 		return ok
 	})
 
+	// Get all certs in topology for comparison with expected certs to determine orphaned certs later
+	certs := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
+		r, ok := item.(*controller.RuntimeObject)
+		if !ok {
+			return nil, false
+		}
+		c, ok := r.Object.(*certmanv1.Certificate)
+		if !ok {
+			return nil, false
+		}
+
+		// Only want certs owned by TLSPolicies
+		if isObjectOwnedByGroupKind(c, kuadrantv1alpha1.TLSPolicyGroupKind) {
+			return c, true
+		}
+
+		return nil, false
+	})
+
+	var expectedCerts []*certmanv1.Certificate
+
 	for _, p := range policies {
 		policy := p.(*kuadrantv1alpha1.TLSPolicy)
 
@@ -87,27 +108,6 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 		}
 
 		// Policy is valid
-		// Get all certs in topology
-		certs := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
-			r, ok := item.(*controller.RuntimeObject)
-			if !ok {
-				return nil, false
-			}
-			c, ok := r.Object.(*certmanv1.Certificate)
-			if !ok {
-				return nil, false
-			}
-
-			// Only want certs owned by TLSPolicies
-			if isObjectOwnedByGroupKind(c, kuadrantv1alpha1.TLSPolicyGroupKind) {
-				return c, true
-			}
-
-			return nil, false
-		})
-
-		var expectedCerts []*certmanv1.Certificate
-
 		for _, l := range listeners {
 			// Need to use Gateway as listener hosts can be merged into a singular cert if using the same cert reference
 			expectedCertificates := expectedCertificatesForGateway(ctx, l.Gateway.Gateway, policy)
@@ -162,15 +162,15 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 				}
 			}
 		}
+	}
 
-		// Clean up orphaned certs
-		orphanedCerts, _ := lo.Difference(certs, expectedCerts)
-		for _, orphanedCert := range orphanedCerts {
-			resource := t.client.Resource(CertManagerCertificatesResource).Namespace(orphanedCert.GetNamespace())
-			if err := resource.Delete(ctx, orphanedCert.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-				logger.Error(err, "unable to delete orphaned certificate", "policy", policy.Name)
-				continue
-			}
+	// Clean up orphaned certs
+	orphanedCerts, _ := lo.Difference(certs, expectedCerts)
+	for _, orphanedCert := range orphanedCerts {
+		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(orphanedCert.GetNamespace())
+		if err := resource.Delete(ctx, orphanedCert.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			logger.Error(err, "unable to delete orphaned certificate", "name", orphanedCert.GetName(), "namespace", orphanedCert.GetNamespace(), "uid", orphanedCert.GetUID())
+			continue
 		}
 	}
 

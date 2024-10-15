@@ -151,7 +151,7 @@ func rateLimitClusterPatch(host string, port int) map[string]any {
 	}
 }
 
-func rateLimitWasmRuleBuilder(pathID string, effectivePolicy EffectiveRateLimitPolicy, state *sync.Map) wasm.WasmRuleBuilderFunc {
+func rateLimitWasmRuleBuilder(pathID string, effectivePolicy EffectiveRateLimitPolicy, state *sync.Map) wasm.RuleBuilderFunc {
 	policiesInPath := kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
 
 	// assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]

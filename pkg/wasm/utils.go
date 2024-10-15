@@ -41,9 +41,9 @@ func BuildWasmConfigForPolicies(policies []Policy) Config {
 	}
 }
 
-type WasmRuleBuilderFunc func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, uniquePolicyRuleKey string, policyRule kuadrantv1.MergeableRule) (Rule, error)
+type RuleBuilderFunc func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, uniquePolicyRuleKey string, policyRule kuadrantv1.MergeableRule) (Rule, error)
 
-func BuildWasmPoliciesForPath(pathID string, path []machinery.Targetable, policyRules map[string]kuadrantv1.MergeableRule, wasmRuleBuilder WasmRuleBuilderFunc) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
+func BuildWasmPoliciesForPath(pathID string, path []machinery.Targetable, policyRules map[string]kuadrantv1.MergeableRule, wasmRuleBuilder RuleBuilderFunc) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
 	// assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]
 	listener, _ := path[2].(*machinery.Listener)
 	httpRoute, _ := path[3].(*machinery.HTTPRoute)

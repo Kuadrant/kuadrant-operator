@@ -84,7 +84,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).Gateway
 
 		// simple should succeed
-		dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+		dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 			WithProviderSecret(*dnsProviderSecret).
 			WithTargetGateway("test-gateway")
 		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
@@ -105,7 +105,7 @@ var _ = Describe("DNSPolicy controller", func() {
 		Expect(k8sClient.Delete(ctx, dnsPolicy)).ToNot(HaveOccurred())
 
 		// loadbalanced should succeed
-		dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+		dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 			WithProviderSecret(*dnsProviderSecret).
 			WithTargetGateway("test-gateway").
 			WithLoadBalancingFor(100, "foo", false)
@@ -145,12 +145,12 @@ var _ = Describe("DNSPolicy controller", func() {
 			WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).Gateway
 
 		// should not allow an empty providerRef list
-		dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+		dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 			WithTargetGateway("test-gateway")
 		Expect(k8sClient.Create(ctx, dnsPolicy)).To(MatchError(ContainSubstring("spec.providerRefs: Required value")))
 
 		// should create with a single providerRef
-		dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+		dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 			WithProviderSecret(*dnsProviderSecret).
 			WithTargetGateway("test-gateway")
 		Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
@@ -217,7 +217,7 @@ var _ = Describe("DNSPolicy controller", func() {
 		}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 		// Create policy1 targeting gateway1 with simple routing strategy
-		dnsPolicy1 := v1alpha1.NewDNSPolicy("test-dns-policy1", testNamespace).
+		dnsPolicy1 := tests.NewDNSPolicy("test-dns-policy1", testNamespace).
 			WithProviderSecret(*dnsProviderSecret).
 			WithTargetGateway("test-gateway1")
 		Expect(k8sClient.Create(ctx, dnsPolicy1)).To(Succeed())
@@ -265,7 +265,7 @@ var _ = Describe("DNSPolicy controller", func() {
 		}, tests.TimeoutLong, tests.RetryIntervalMedium).Should(Succeed())
 
 		// create policy2 targeting gateway2 with the load-balanced strategy
-		dnsPolicy2 := v1alpha1.NewDNSPolicy("test-dns-policy2", testNamespace).
+		dnsPolicy2 := tests.NewDNSPolicy("test-dns-policy2", testNamespace).
 			WithProviderSecret(*dnsProviderSecret).
 			WithTargetGateway("test-gateway2").
 			WithLoadBalancingFor(100, "foo", false)
@@ -336,7 +336,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 	Context("invalid target", func() {
 		It("should have accepted condition with status false and correct reason", func(ctx SpecContext) {
-			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway("test-gateway")
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
@@ -411,13 +411,13 @@ var _ = Describe("DNSPolicy controller", func() {
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 			// Create policy1 targeting gateway1 with simple routing strategy
-			dnsPolicy1 := v1alpha1.NewDNSPolicy("test-dns-policy1", testNamespace).
+			dnsPolicy1 := tests.NewDNSPolicy("test-dns-policy1", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway("test-gateway1")
 			Expect(k8sClient.Create(ctx, dnsPolicy1)).To(Succeed())
 
 			// create policy2 targeting gateway2 with the load-balanced strategy
-			dnsPolicy2 := v1alpha1.NewDNSPolicy("test-dns-policy2", testNamespace).
+			dnsPolicy2 := tests.NewDNSPolicy("test-dns-policy2", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway("test-gateway2").
 				WithLoadBalancingFor(100, "foo", false)
@@ -464,7 +464,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			gateway = tests.NewGatewayBuilder(testGatewayName, gatewayClass.Name, testNamespace).
 				WithHTTPListener(tests.ListenerNameOne, tests.HostTwo(domain)).
 				Gateway
-			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway(testGatewayName)
 
@@ -512,7 +512,7 @@ var _ = Describe("DNSPolicy controller", func() {
 				WithHTTPListener(tests.ListenerNameOne, tests.HostOne(domain)).
 				WithHTTPListener(tests.ListenerNameWildcard, tests.HostWildcard(domain)).
 				Gateway
-			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway(tests.GatewayName)
 
@@ -802,7 +802,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 	Context("cel validation", func() {
 		It("should error targeting invalid group", func(ctx SpecContext) {
-			p := v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			p := tests.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway("gateway")
 			p.Spec.TargetRef.Group = "not-gateway.networking.k8s.io"
@@ -813,7 +813,7 @@ var _ = Describe("DNSPolicy controller", func() {
 		}, testTimeOut)
 
 		It("should error targeting invalid kind", func(ctx SpecContext) {
-			p := v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			p := tests.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway("gateway")
 			p.Spec.TargetRef.Kind = "TCPRoute"
@@ -830,7 +830,7 @@ var _ = Describe("DNSPolicy controller", func() {
 				WithHTTPListener(tests.ListenerNameOne, tests.HostOne(domain)).
 				WithHTTPListener(tests.ListenerNameWildcard, tests.HostWildcard(domain)).
 				Gateway
-			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway(tests.GatewayName)
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
@@ -866,7 +866,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 		})
 
-		It("should have an accpeterd and enforced policy with additional context", func(ctx SpecContext) {
+		It("should have an accepted and enforced policy with additional context", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -899,7 +899,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 		})
 		It("should create a DNSPolicy with an invalid CIDR", func(ctx SpecContext) {
-			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway(gateway.Name).
 				WithExcludeAddresses([]string{"1.1.1.1/345"})
@@ -948,7 +948,7 @@ var _ = Describe("DNSPolicy controller", func() {
 		})
 
 		It("should create a DNSPolicy valid exclude addresses", func(ctx SpecContext) {
-			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway(gateway.Name).
 				WithExcludeAddresses([]string{tests.IPAddressOne})
@@ -1022,7 +1022,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 		})
 		It("should not create a DNSRecords if no endpoints due to DNSPolicy exclude addresses", func(ctx SpecContext) {
-			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway(gateway.Name).
 				WithExcludeAddresses([]string{tests.IPAddressOne, tests.IPAddressTwo})

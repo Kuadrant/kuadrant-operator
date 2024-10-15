@@ -31,6 +31,7 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	kuadrantdnsbuilder "github.com/kuadrant/dns-operator/pkg/builder"
 
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
@@ -53,6 +54,8 @@ const (
 	IPAddressTwo         = "172.0.0.2"
 	HTTPRouteName        = "toystore-route"
 )
+
+var CommonLabels = map[string]string{"app.kubernetes.io/part-of": "kuadrant-test-suite"}
 
 var GatewayClassName string
 
@@ -77,7 +80,7 @@ func BuildBasicGateway(gwName, ns string, mutateFns ...func(*gatewayapiv1.Gatewa
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        gwName,
 			Namespace:   ns,
-			Labels:      map[string]string{"app": "rlptest"},
+			Labels:      CommonLabels,
 			Annotations: map[string]string{"networking.istio.io/service-type": string(corev1.ServiceTypeClusterIP)},
 		},
 		Spec: gatewayapiv1.GatewaySpec{
@@ -109,7 +112,7 @@ func DeleteNamespace(ctx context.Context, cl client.Client, namespace string) {
 func CreateNamespace(ctx context.Context, cl client.Client) string {
 	nsObject := &corev1.Namespace{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
-		ObjectMeta: metav1.ObjectMeta{GenerateName: "test-namespace-"},
+		ObjectMeta: metav1.ObjectMeta{GenerateName: "test-namespace-", Labels: CommonLabels},
 	}
 	Expect(cl.Create(ctx, nsObject)).To(Succeed())
 
@@ -129,6 +132,7 @@ func ApplyKuadrantCRWithName(ctx context.Context, cl client.Client, namespace, n
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
+			Labels:    CommonLabels,
 		},
 	}
 
@@ -167,7 +171,7 @@ func BuildBasicHttpRoute(routeName, gwName, ns string, hostnames []string, mutat
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      routeName,
 			Namespace: ns,
-			Labels:    map[string]string{"app": "rlptest"},
+			Labels:    CommonLabels,
 		},
 		Spec: gatewayapiv1.HTTPRouteSpec{
 			CommonRouteSpec: gatewayapiv1.CommonRouteSpec{
@@ -458,10 +462,18 @@ func ObjectDoesNotExist(k8sClient client.Client, obj client.Object) func() bool 
 // DNS
 
 func BuildInMemoryCredentialsSecret(name, ns, initDomain string) *corev1.Secret {
-	return kuadrantdnsbuilder.NewProviderBuilder(name, ns).
+	secret := kuadrantdnsbuilder.NewProviderBuilder(name, ns).
 		For(kuadrantdnsv1alpha1.SecretTypeKuadrantInmemory).
 		WithZonesInitialisedFor(initDomain).
 		Build()
+	secret.Labels = CommonLabels
+	return secret
+}
+
+func NewDNSPolicy(name, ns string) *kuadrantv1alpha1.DNSPolicy {
+	p := kuadrantv1alpha1.NewDNSPolicy(name, ns)
+	p.Labels = CommonLabels
+	return p
 }
 
 // EndpointsTraversable consumes an array of endpoints and returns a boolean
@@ -501,6 +513,7 @@ func BuildGatewayClass(name, ns, controllerName string) *gatewayapiv1.GatewayCla
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
+			Labels:    CommonLabels,
 		},
 		Spec: gatewayapiv1.GatewayClassSpec{
 			ControllerName: gatewayapiv1.GatewayController(controllerName),
@@ -519,6 +532,7 @@ func NewGatewayBuilder(gwName, gwClassName, ns string) *GatewayBuilder {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      gwName,
 				Namespace: ns,
+				Labels:    CommonLabels,
 			},
 			Spec: gatewayapiv1.GatewaySpec{
 				GatewayClassName: gatewayapiv1.ObjectName(gwClassName),
@@ -589,6 +603,7 @@ func BuildSelfSignedIssuer(name, ns string) (*certmanv1.Issuer, *certmanmetav1.O
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
+			Labels:    CommonLabels,
 		},
 		Spec: createSelfSignedIssuerSpec(),
 	}
@@ -605,6 +620,7 @@ func BuildSelfSignedClusterIssuer(name, ns string) (*certmanv1.ClusterIssuer, *c
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
+			Labels:    CommonLabels,
 		},
 		Spec: createSelfSignedIssuerSpec(),
 	}

@@ -138,7 +138,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 	Context("simple routing strategy", func() {
 
 		BeforeEach(func(ctx SpecContext) {
-			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway(tests.GatewayName)
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
@@ -197,7 +197,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 
 		Context("with default geo", func() {
 			BeforeEach(func(ctx SpecContext) {
-				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+				dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 					WithProviderSecret(*dnsProviderSecret).
 					WithTargetGateway(tests.GatewayName).
 					WithLoadBalancingFor(120, "IE", true)
@@ -317,7 +317,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 
 		Context("without default geo", func() {
 			BeforeEach(func(ctx SpecContext) {
-				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+				dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 					WithProviderSecret(*dnsProviderSecret).
 					WithTargetGateway(tests.GatewayName).
 					WithLoadBalancingFor(120, "IE", false)

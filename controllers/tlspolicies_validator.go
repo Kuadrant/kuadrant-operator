@@ -17,17 +17,17 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
-func NewValidateTLSPoliciesValidatorReconciler(isCertManagerInstalled bool) *ValidateTLSPoliciesValidatorReconciler {
-	return &ValidateTLSPoliciesValidatorReconciler{
+func NewTLSPoliciesValidator(isCertManagerInstalled bool) *TLSPoliciesValidator {
+	return &TLSPoliciesValidator{
 		isCertManagerInstalled: isCertManagerInstalled,
 	}
 }
 
-type ValidateTLSPoliciesValidatorReconciler struct {
+type TLSPoliciesValidator struct {
 	isCertManagerInstalled bool
 }
 
-func (t *ValidateTLSPoliciesValidatorReconciler) Subscription() *controller.Subscription {
+func (t *TLSPoliciesValidator) Subscription() *controller.Subscription {
 	return &controller.Subscription{
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
@@ -40,8 +40,8 @@ func (t *ValidateTLSPoliciesValidatorReconciler) Subscription() *controller.Subs
 	}
 }
 
-func (t *ValidateTLSPoliciesValidatorReconciler) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("ValidateTLSPoliciesValidatorReconciler").WithName("Validate")
+func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("TLSPoliciesValidator").WithName("Validate")
 
 	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1alpha1.TLSPolicy, bool) {
 		p, ok := item.(*kuadrantv1alpha1.TLSPolicy)
@@ -90,7 +90,7 @@ func (t *ValidateTLSPoliciesValidatorReconciler) Validate(ctx context.Context, _
 // isTargetRefsFound Policies are already linked to their targets. If the target ref length and length of targetables by this policy is not the same,
 // then the policy could not find the target
 // TODO: What should happen if multiple target refs is supported in the future in terms of reporting in log and policy status?
-func (t *ValidateTLSPoliciesValidatorReconciler) isTargetRefsFound(topology *machinery.Topology, p *kuadrantv1alpha1.TLSPolicy) error {
+func (t *TLSPoliciesValidator) isTargetRefsFound(topology *machinery.Topology, p *kuadrantv1alpha1.TLSPolicy) error {
 	if len(p.GetTargetRefs()) != len(topology.Targetables().Children(p)) {
 		return kuadrant.NewErrTargetNotFound(p.Kind(), p.GetTargetRef(), apierrors.NewNotFound(kuadrantv1alpha1.TLSPoliciesResource.GroupResource(), p.GetName()))
 	}
@@ -99,7 +99,7 @@ func (t *ValidateTLSPoliciesValidatorReconciler) isTargetRefsFound(topology *mac
 }
 
 // isValidIssuerKind Validates that the Issuer Ref kind is either empty, Issuer or ClusterIssuer
-func (t *ValidateTLSPoliciesValidatorReconciler) isValidIssuerKind(p *kuadrantv1alpha1.TLSPolicy) error {
+func (t *TLSPoliciesValidator) isValidIssuerKind(p *kuadrantv1alpha1.TLSPolicy) error {
 	if !lo.Contains([]string{"", certmanv1.IssuerKind, certmanv1.ClusterIssuerKind}, p.Spec.IssuerRef.Kind) {
 		return kuadrant.NewErrInvalid(p.Kind(), fmt.Errorf(`invalid value %q for issuerRef.kind. Must be empty, %q or %q`,
 			p.Spec.IssuerRef.Kind, certmanv1.IssuerKind, certmanv1.ClusterIssuerKind))
@@ -109,7 +109,7 @@ func (t *ValidateTLSPoliciesValidatorReconciler) isValidIssuerKind(p *kuadrantv1
 }
 
 // isIssuerFound Validates that the Issuer specified can be found in the topology
-func (t *ValidateTLSPoliciesValidatorReconciler) isIssuerFound(topology *machinery.Topology, p *kuadrantv1alpha1.TLSPolicy) error {
+func (t *TLSPoliciesValidator) isIssuerFound(topology *machinery.Topology, p *kuadrantv1alpha1.TLSPolicy) error {
 	_, ok := lo.Find(topology.Objects().Items(), func(item machinery.Object) bool {
 		runtimeObj, ok := item.(*controller.RuntimeObject)
 		if !ok {
@@ -121,15 +121,13 @@ func (t *ValidateTLSPoliciesValidatorReconciler) isIssuerFound(topology *machine
 			return false
 		}
 
-		match := issuer.GetName() == p.Spec.IssuerRef.Name
+		nameMatch := issuer.GetName() == p.Spec.IssuerRef.Name
 		if lo.Contains([]string{"", certmanv1.IssuerKind}, p.Spec.IssuerRef.Kind) {
-			match = match && issuer.GetNamespace() == p.GetNamespace() &&
+			return nameMatch && issuer.GetNamespace() == p.GetNamespace() &&
 				issuer.GetObjectKind().GroupVersionKind().Kind == certmanv1.IssuerKind
-		} else {
-			match = match && issuer.GetObjectKind().GroupVersionKind().Kind == certmanv1.ClusterIssuerKind
 		}
 
-		return match
+		return nameMatch && issuer.GetObjectKind().GroupVersionKind().Kind == certmanv1.ClusterIssuerKind
 	})
 
 	if !ok {

@@ -34,9 +34,9 @@ func PolicyTargetRefFromGateway(gateway *gatewayapiv1.Gateway) *istioapiv1beta1.
 }
 
 func EqualTargetRefs(a, b []*istioapiv1beta1.PolicyTargetReference) bool {
-	return len(a) == len(b) && lo.EveryBy(a, func(sTargetRef *istioapiv1beta1.PolicyTargetReference) bool {
-		return lo.SomeBy(b, func(tTargetRef *istioapiv1beta1.PolicyTargetReference) bool {
-			return sTargetRef.Group == tTargetRef.Group && sTargetRef.Kind == tTargetRef.Kind && sTargetRef.Name == tTargetRef.Name && sTargetRef.Namespace == tTargetRef.Namespace
+	return len(a) == len(b) && lo.EveryBy(a, func(aTargetRef *istioapiv1beta1.PolicyTargetReference) bool {
+		return lo.SomeBy(b, func(bTargetRef *istioapiv1beta1.PolicyTargetReference) bool {
+			return aTargetRef.Group == bTargetRef.Group && aTargetRef.Kind == bTargetRef.Kind && aTargetRef.Name == bTargetRef.Name && aTargetRef.Namespace == bTargetRef.Namespace
 		})
 	})
 }
@@ -133,11 +133,11 @@ func istioTargetRefsIncludeObjectFunc(targetRefs []*istioapiv1beta1.PolicyTarget
 			}
 			group := targetRef.GetGroup()
 			if group == "" {
-				group = machinery.GatewayClassGroupKind.Group
+				group = machinery.GatewayGroupKind.Group
 			}
 			kind := targetRef.GetKind()
 			if kind == "" {
-				kind = machinery.GatewayClassGroupKind.Kind
+				kind = machinery.GatewayGroupKind.Kind
 			}
 			name := targetRef.GetName()
 			if name == "" {

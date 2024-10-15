@@ -47,7 +47,7 @@ func (t *TLSPolicyStatusUpdaterReconciler) Subscription() *controller.Subscripti
 }
 
 func (t *TLSPolicyStatusUpdaterReconciler) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdaterReconciler").WithName("Reconcile")
+	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdaterReconciler").WithName("UpdateStatus")
 
 	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1alpha1.TLSPolicy, bool) {
 		p, ok := item.(*kuadrantv1alpha1.TLSPolicy)

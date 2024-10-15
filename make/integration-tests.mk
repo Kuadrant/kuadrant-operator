@@ -2,6 +2,7 @@ INTEGRATION_COVER_PKGS = ./pkg/...,./controllers/...,./api/...
 INTEGRATION_TESTS_EXTRA_ARGS ?=
 INTEGRATION_TEST_NUM_CORES ?= 4
 INTEGRATION_TEST_NUM_PROCESSES ?= 10
+INTEGRATION_TEST_PACKAGES ?= tests/common/...
 
 ##@ Integration tests
 
@@ -92,4 +93,4 @@ test-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes clust
 		--fail-on-pending \
 		--keep-going \
 		--trace \
-		$(INTEGRATION_TESTS_EXTRA_ARGS) tests/common/...
+		$(INTEGRATION_TESTS_EXTRA_ARGS) $(INTEGRATION_TEST_PACKAGES)

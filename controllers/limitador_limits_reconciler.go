@@ -95,7 +95,7 @@ func (r *limitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 
 	logger.V(1).Info("building limitador limits", "effectivePolicies", len(effectivePolicies.(EffectiveRateLimitPolicies)))
 
-	rateLimitIndex := ratelimit.NewRateLimitIndex()
+	rateLimitIndex := ratelimit.NewIndex()
 
 	for pathID, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {
 		httpRoute, _ := effectivePolicy.Path[3].(*machinery.HTTPRoute) // assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]

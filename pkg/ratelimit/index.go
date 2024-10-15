@@ -12,18 +12,18 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-// NewRateLimitIndex builds an index to manage sets of rate limits, organized by key
-func NewRateLimitIndex() *RateLimitIndex {
-	return &RateLimitIndex{OrderedMap: *orderedmap.NewOrderedMap[string, LimitadorRateLimits]()}
+// NewIndex builds an index to manage sets of rate limits, organized by key
+func NewIndex() *Index {
+	return &Index{OrderedMap: *orderedmap.NewOrderedMap[string, LimitadorRateLimits]()}
 }
 
-// RateLimitIndex stores LimitadorRateLimitss by key
-type RateLimitIndex struct {
+// Index stores LimitadorRateLimitss by key
+type Index struct {
 	sync.RWMutex
 	orderedmap.OrderedMap[string, LimitadorRateLimits]
 }
 
-func (l *RateLimitIndex) Set(key string, rateLimits LimitadorRateLimits) {
+func (l *Index) Set(key string, rateLimits LimitadorRateLimits) {
 	if len(rateLimits) == 0 {
 		return
 	}
@@ -32,7 +32,7 @@ func (l *RateLimitIndex) Set(key string, rateLimits LimitadorRateLimits) {
 	l.OrderedMap.Set(key, rateLimits)
 }
 
-func (l *RateLimitIndex) ToRateLimits() LimitadorRateLimits {
+func (l *Index) ToRateLimits() LimitadorRateLimits {
 	l.RLock()
 	defer l.RUnlock()
 	limitadorRateLimits := make(LimitadorRateLimits, 0)

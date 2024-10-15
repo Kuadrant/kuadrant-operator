@@ -67,6 +67,25 @@ func HostTwo(domain string) string {
 	return fmt.Sprintf("%s.%s", "other.test", domain)
 }
 
+func BuildBasicGatewayClass(gcName string, mutateFns ...func(*gatewayapiv1.GatewayClass)) *gatewayapiv1.GatewayClass {
+	gatewayClass := &gatewayapiv1.GatewayClass{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "GatewayClass",
+			APIVersion: gatewayapiv1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: gcName,
+		},
+		Spec: gatewayapiv1.GatewayClassSpec{
+			ControllerName: gatewayapiv1.GatewayController("test-controller"),
+		},
+	}
+	for _, mutateFn := range mutateFns {
+		mutateFn(gatewayClass)
+	}
+	return gatewayClass
+}
+
 func BuildBasicGateway(gwName, ns string, mutateFns ...func(*gatewayapiv1.Gateway)) *gatewayapiv1.Gateway {
 	gateway := &gatewayapiv1.Gateway{
 		TypeMeta: metav1.TypeMeta{

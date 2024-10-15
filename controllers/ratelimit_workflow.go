@@ -151,7 +151,7 @@ func rateLimitClusterPatch(host string, port int) map[string]any {
 	}
 }
 
-func rateLimitWasmRuleBuilder(pathID string, effectivePolicy EffectiveRateLimitPolicy, state *sync.Map) wasm.RuleBuilderFunc {
+func rateLimitWasmActionBuilder(pathID string, effectivePolicy EffectiveRateLimitPolicy, state *sync.Map) wasm.ActionBuilderFunc {
 	policiesInPath := kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
 
 	// assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]
@@ -159,43 +159,31 @@ func rateLimitWasmRuleBuilder(pathID string, effectivePolicy EffectiveRateLimitP
 
 	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
 
-	return func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, uniquePolicyRuleKey string, policyRule kuadrantv1.MergeableRule) (wasm.Rule, error) {
+	return func(uniquePolicyRuleKey string, policyRule kuadrantv1.MergeableRule) (wasm.Action, error) {
 		source, found := lo.Find(policiesInPath, func(p machinery.Policy) bool {
 			return p.GetLocator() == policyRule.Source
 		})
 		if !found { // should never happen
-			return wasm.Rule{}, fmt.Errorf("could not find source policy %s in path %s", policyRule.Source, pathID)
+			return wasm.Action{}, fmt.Errorf("could not find source policy %s in path %s", policyRule.Source, pathID)
 		}
 		limitIdentifier := LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: source.GetName(), Namespace: source.GetNamespace()}, uniquePolicyRuleKey)
 		limit := policyRule.Spec.(kuadrantv1beta3.Limit)
-		return wasmRuleFromLimit(limit, limitIdentifier, limitsNamespace, httpRouteMatch), nil
+		return wasmActionFromLimit(limit, limitIdentifier, limitsNamespace), nil
 	}
 }
 
-// wasmRuleFromLimit builds a wasm rate-limit rule for a given limit.
-// Conditions are built from the limit top-level conditions and a HTTPRouteMatch.
-// The order of the conditions is as follows:
-//  1. Route-level conditions: HTTP method, path, headers
-//  2. Top-level conditions: 'when' conditions (blended into each block of route-level conditions)
+// wasmActionFromLimit builds a wasm rate-limit action for a given limit.
+// Conditions are built from the limit top-level conditions.
 //
-// The only action of the rule is the rate-limit policy extension, whose data includes the activation of the limit
+// The only action of the rule is the ratelimit service, whose data includes the activation of the limit
 // and any counter qualifier of the limit.
-func wasmRuleFromLimit(limit kuadrantv1beta3.Limit, limitIdentifier, scope string, routeMatch gatewayapiv1.HTTPRouteMatch) wasm.Rule {
-	rule := wasm.Rule{
-		Conditions: wasm.ConditionsFromHTTPRouteMatch(routeMatch, limit.When...),
+func wasmActionFromLimit(limit kuadrantv1beta3.Limit, limitIdentifier, scope string) wasm.Action {
+	return wasm.Action{
+		ServiceName: wasm.RateLimitServiceName,
+		Scope:       scope,
+		Conditions:  wasm.PredicatesFromWhenConditions(limit.When...),
+		Data:        wasmDataFromLimit(limitIdentifier, limit),
 	}
-
-	if data := wasmDataFromLimit(limitIdentifier, limit); data != nil {
-		rule.Actions = []wasm.Action{
-			{
-				Scope:         scope,
-				ExtensionName: wasm.RateLimitExtensionName,
-				Data:          data,
-			},
-		}
-	}
-
-	return rule
 }
 
 func wasmDataFromLimit(limitIdentifier string, limit kuadrantv1beta3.Limit) (data []wasm.DataType) {

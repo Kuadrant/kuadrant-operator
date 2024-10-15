@@ -18,32 +18,31 @@ import (
 )
 
 const (
-	// TODO(guicassolato): move these to github.com/kuadrant/kuadrant-operator/pkg/common (?)
-	RateLimitExtensionName = "limitador"
-	AuthExtensionName      = "authorino"
+	RateLimitServiceName = "ratelimit-service"
+	AuthServiceName      = "auth-service"
 )
 
 func ExtensionName(gatewayName string) string {
 	return fmt.Sprintf("kuadrant-%s", gatewayName)
 }
 
-func BuildWasmConfigForPolicies(policies []Policy) Config {
+func BuildConfigForActionSet(actionSets []ActionSet) Config {
 	return Config{
-		Extensions: map[string]Extension{
-			RateLimitExtensionName: {
+		Services: map[string]Service{
+			RateLimitServiceName: {
+				Type:        RateLimitServiceType,
 				Endpoint:    common.KuadrantRateLimitClusterName,
 				FailureMode: FailureModeAllow,
-				Type:        RateLimitExtensionType,
 			},
 			// TODO: add auth extension
 		},
-		Policies: policies,
+		ActionSets: actionSets,
 	}
 }
 
-type RuleBuilderFunc func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, uniquePolicyRuleKey string, policyRule kuadrantv1.MergeableRule) (Rule, error)
+type ActionBuilderFunc func(uniquePolicyRuleKey string, policyRule kuadrantv1.MergeableRule) (Action, error)
 
-func BuildWasmPoliciesForPath(pathID string, path []machinery.Targetable, policyRules map[string]kuadrantv1.MergeableRule, wasmRuleBuilder RuleBuilderFunc) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
+func BuildActionSetsForPath(pathID string, path []machinery.Targetable, policyRules map[string]kuadrantv1.MergeableRule, actionBuilder ActionBuilderFunc) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
 	// assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]
 	listener, _ := path[2].(*machinery.Listener)
 	httpRoute, _ := path[3].(*machinery.HTTPRoute)
@@ -51,28 +50,30 @@ func BuildWasmPoliciesForPath(pathID string, path []machinery.Targetable, policy
 
 	var err error
 
+	actions := lo.FilterMap(lo.Entries(policyRules), func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) (Action, bool) {
+		action, err := actionBuilder(r.Key, r.Value)
+		if err != nil {
+			errors.Join(err)
+			return Action{}, false
+		}
+		return action, true
+	})
+
 	return lo.FlatMap(kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(listener.Listener, httpRoute.HTTPRoute), func(hostname gatewayapiv1.Hostname, i int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
 		return lo.Map(httpRouteRule.Matches, func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, j int) kuadrantgatewayapi.HTTPRouteMatchConfig {
-			var wasmRules []Rule
-			for uniquePolicyRuleKey, mergeablePolicyRule := range policyRules {
-				wasmRule, err := wasmRuleBuilder(httpRouteMatch, uniquePolicyRuleKey, mergeablePolicyRule)
-				if err != nil {
-					errors.Join(err)
-					continue
-				}
-				wasmRules = append(wasmRules, wasmRule)
-			}
-
 			return kuadrantgatewayapi.HTTPRouteMatchConfig{
 				Hostname:          string(hostname),
 				HTTPRouteMatch:    httpRouteMatch,
 				CreationTimestamp: httpRoute.GetCreationTimestamp(),
 				Namespace:         httpRoute.GetNamespace(),
 				Name:              httpRoute.GetName(),
-				Config: Policy{
-					Name:      fmt.Sprintf("%d-%s-%d", i, pathID, j),
-					Hostnames: []string{string(hostname)},
-					Rules:     wasmRules,
+				Config: ActionSet{
+					Name: fmt.Sprintf("%d-%s-%d", i, pathID, j),
+					RouteRuleConditions: RouteRuleConditions{
+						Hostnames: []string{string(hostname)},
+						Matches:   PredicatesFromHTTPRouteMatch(httpRouteMatch),
+					},
+					Actions: actions,
 				},
 			}
 		})
@@ -110,68 +111,45 @@ func ConfigFromJSON(configJSON *apiextensionsv1.JSON) (*Config, error) {
 	return config, nil
 }
 
-func ConditionsFromHTTPRouteMatch(routeMatch gatewayapiv1.HTTPRouteMatch, otherConditions ...kuadrantv1beta3.WhenCondition) []Condition {
-	var ruleConditions []Condition
-	if routeMatch.Path != nil || routeMatch.Method != nil || len(routeMatch.Headers) > 0 || len(routeMatch.QueryParams) > 0 {
-		ruleConditions = append(ruleConditions, conditionsFromHTTPRouteMatch(routeMatch))
-	}
-
-	// only rule conditions (or no condition at all)
-	if len(otherConditions) == 0 {
-		if len(ruleConditions) == 0 {
-			return nil
+// PredicatesFromWhenConditions builds a list of predicates from a list of (selector, operator, value) when conditions
+func PredicatesFromWhenConditions(when ...kuadrantv1beta3.WhenCondition) []Predicate {
+	return lo.Map(when, func(when kuadrantv1beta3.WhenCondition, _ int) Predicate {
+		return Predicate{
+			Selector: when.Selector,
+			Operator: PatternOperator(when.Operator),
+			Value:    when.Value,
 		}
-		return ruleConditions
-	}
-
-	whenConditionToWasmPatternExpressionFunc := func(when kuadrantv1beta3.WhenCondition, _ int) PatternExpression {
-		return patternExpresionFromWhenCondition(when)
-	}
-
-	// top-level conditions merged into the rule conditions
-	if len(ruleConditions) > 0 {
-		return lo.Map(ruleConditions, func(condition Condition, _ int) Condition {
-			condition.AllOf = append(condition.AllOf, lo.Map(otherConditions, whenConditionToWasmPatternExpressionFunc)...)
-			return condition
-		})
-	}
-
-	// only top-level conditions
-	return []Condition{{AllOf: lo.Map(otherConditions, whenConditionToWasmPatternExpressionFunc)}}
+	})
 }
 
-// conditionsFromHTTPRouteMatch builds a list of conditions from a rule match
-func conditionsFromHTTPRouteMatch(match gatewayapiv1.HTTPRouteMatch) Condition {
-	return Condition{AllOf: patternExpresionsFromMatch(match)}
-}
-
-func patternExpresionsFromMatch(match gatewayapiv1.HTTPRouteMatch) []PatternExpression {
-	expressions := make([]PatternExpression, 0)
+// PredicatesFromHTTPRouteMatch builds a list of conditions from a rule match
+func PredicatesFromHTTPRouteMatch(match gatewayapiv1.HTTPRouteMatch) []Predicate {
+	predicates := make([]Predicate, 0)
 
 	// method
 	if match.Method != nil {
-		expressions = append(expressions, patternExpresionFromMethod(*match.Method))
+		predicates = append(predicates, predicateFromMethod(*match.Method))
 	}
 
 	// path
 	if match.Path != nil {
-		expressions = append(expressions, patternExpresionFromPathMatch(*match.Path))
+		predicates = append(predicates, predicateFromPathMatch(*match.Path))
 	}
 
 	// headers
 	for _, headerMatch := range match.Headers {
 		// Multiple match values are ANDed together
-		expressions = append(expressions, patternExpresionFromHeader(headerMatch))
+		predicates = append(predicates, predicateFromHeader(headerMatch))
 	}
 
 	// TODO(eguzki): query params. Investigate integration with wasm regarding Envoy params
 	// from https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
 	// request.query -> string : The query portion of the URL in the format of “name1=value1&name2=value2”.
 
-	return expressions
+	return predicates
 }
 
-func patternExpresionFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) PatternExpression {
+func predicateFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) Predicate {
 	var (
 		operator = PatternOperator(kuadrantv1beta3.StartsWithOperator) // default value
 		value    = "/"                                                 // default value
@@ -187,36 +165,28 @@ func patternExpresionFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) Pattern
 		}
 	}
 
-	return PatternExpression{
+	return Predicate{
 		Selector: "request.url_path",
 		Operator: operator,
 		Value:    value,
 	}
 }
 
-func patternExpresionFromMethod(method gatewayapiv1.HTTPMethod) PatternExpression {
-	return PatternExpression{
+func predicateFromMethod(method gatewayapiv1.HTTPMethod) Predicate {
+	return Predicate{
 		Selector: "request.method",
 		Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
 		Value:    string(method),
 	}
 }
 
-func patternExpresionFromHeader(headerMatch gatewayapiv1.HTTPHeaderMatch) PatternExpression {
+func predicateFromHeader(headerMatch gatewayapiv1.HTTPHeaderMatch) Predicate {
 	// As for gateway api v1, the only operation type with core support is Exact match.
 	// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPHeaderMatch
 
-	return PatternExpression{
+	return Predicate{
 		Selector: kuadrantv1beta3.ContextSelector(fmt.Sprintf("request.headers.%s", headerMatch.Name)),
 		Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
 		Value:    headerMatch.Value,
-	}
-}
-
-func patternExpresionFromWhenCondition(when kuadrantv1beta3.WhenCondition) PatternExpression {
-	return PatternExpression{
-		Selector: when.Selector,
-		Operator: PatternOperator(when.Operator),
-		Value:    when.Value,
 	}
 }

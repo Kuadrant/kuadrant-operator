@@ -34,19 +34,16 @@ type AuthSchemeSpec struct {
 	// Authentication configs.
 	// At least one config MUST evaluate to a valid identity object for the auth request to be successful.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=10
 	Authentication map[string]AuthenticationSpec `json:"authentication,omitempty"`
 
 	// Metadata sources.
 	// Authorino fetches auth metadata as JSON from sources specified in this config.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=10
 	Metadata map[string]MetadataSpec `json:"metadata,omitempty"`
 
 	// Authorization policies.
 	// All policies MUST evaluate to "allowed = true" for the auth request be successful.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=10
 	Authorization map[string]AuthorizationSpec `json:"authorization,omitempty"`
 
 	// Response items.
@@ -57,7 +54,6 @@ type AuthSchemeSpec struct {
 	// Callback functions.
 	// Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
 	// +optional
-	// +kubebuilder:validation:MaxProperties=10
 	Callbacks map[string]CallbackSpec `json:"callbacks,omitempty"`
 }
 
@@ -101,13 +97,11 @@ type ResponseSpec struct {
 type WrappedSuccessResponseSpec struct {
 	// Custom success response items wrapped as HTTP headers.
 	// For integration of Authorino via proxy, the proxy must use these settings to inject data in the request.
-	// +kubebuilder:validation:MaxProperties=10
 	Headers map[string]HeaderSuccessResponseSpec `json:"headers,omitempty"`
 
 	// Custom success response items wrapped as HTTP headers.
 	// For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata.
 	// See https://www.envoyproxy.io/docs/envoy/latest/configuration/advanced/well_known_dynamic_metadata
-	// +kubebuilder:validation:MaxProperties=10
 	DynamicMetadata map[string]SuccessResponseSpec `json:"dynamicMetadata,omitempty"`
 }
 

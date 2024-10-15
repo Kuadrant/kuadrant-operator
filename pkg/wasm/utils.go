@@ -23,7 +23,7 @@ const (
 	AuthExtensionName      = "authorino"
 )
 
-func WasmExtensionName(gatewayName string) string {
+func ExtensionName(gatewayName string) string {
 	return fmt.Sprintf("kuadrant-%s", gatewayName)
 }
 

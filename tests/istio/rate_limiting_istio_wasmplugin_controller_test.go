@@ -115,7 +115,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -269,7 +269,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -466,7 +466,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -581,7 +581,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			// Wait a bit to catch cases where wasmplugin is created and takes a bit to be created
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey), 20*time.Second, 5*time.Second).Should(BeFalse())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
@@ -676,7 +676,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -755,7 +755,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				// Check wasm plugin
-				wasmPluginKey := client.ObjectKey{Name: wasm.WasmExtensionName(gwB.GetName()), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -785,7 +785,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin for gateway A no longer exists
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -804,7 +804,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// There is not RLP targeting Gateway B or any route parented by Gateway B
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{Name: wasm.WasmExtensionName(gwB.GetName()), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -885,7 +885,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -964,7 +964,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				// Check wasm plugin
-				wasmPluginKey := client.ObjectKey{Name: wasm.WasmExtensionName(gwB.GetName()), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -994,7 +994,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin for gateway A no longer exists
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -1013,7 +1013,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: wasm.WasmExtensionName(gwB.GetName()), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1208,7 +1208,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1299,7 +1299,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1469,7 +1469,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1587,7 +1587,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1793,7 +1793,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1899,7 +1899,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -2079,7 +2079,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -2255,7 +2255,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: wasm.WasmExtensionName(gateway.GetName()), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			// must exist

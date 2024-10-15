@@ -212,6 +212,7 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() []controller.ControllerOpt
 				&egv1alpha1.EnvoyPatchPolicy{},
 				envoygateway.EnvoyPatchPoliciesResource,
 				metav1.NamespaceAll,
+				controller.FilterResourcesByLabel[*egv1alpha1.EnvoyPatchPolicy](fmt.Sprintf("%s=true", rateLimitClusterLabelKey)),
 			)),
 			controller.WithRunnable("envoyextensionpolicy watcher", controller.Watch(
 				&egv1alpha1.EnvoyExtensionPolicy{},
@@ -230,6 +231,7 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() []controller.ControllerOpt
 			),
 			controller.WithObjectLinks(
 				envoygateway.LinkGatewayToEnvoyPatchPolicy,
+				envoygateway.LinkGatewayToEnvoyExtensionPolicy,
 			),
 		)
 		// TODO: add specific tasks to workflow
@@ -268,8 +270,8 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 				istio.AuthorizationPolicyGroupKind,
 			),
 			controller.WithObjectLinks(
-				istio.LinkGatewayToWasmPlugin,
 				istio.LinkGatewayToEnvoyFilter,
+				istio.LinkGatewayToWasmPlugin,
 			),
 		)
 		// TODO: add istio specific tasks to workflow

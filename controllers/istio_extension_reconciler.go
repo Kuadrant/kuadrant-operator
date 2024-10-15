@@ -129,16 +129,16 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	return nil
 }
 
-// buildWasmPolicies returns a map of istio gateway locators to an ordered list of corresponding wasm policies
+// buildWasmConfigs returns a map of istio gateway locators to an ordered list of corresponding wasm policies
 func (r *istioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map) (map[string]wasm.Config, error) {
-	logger := controller.LoggerFromContext(ctx).WithName("istioExtensionReconciler").WithName("buildWasmPolicies")
+	logger := controller.LoggerFromContext(ctx).WithName("istioExtensionReconciler").WithName("buildWasmConfigs")
 
 	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
 	if !ok {
 		return nil, ErrMissingStateEffectiveRateLimitPolicies
 	}
 
-	logger.V(1).Info("building wasm policies for istio extension", "effectivePolicies", len(effectivePolicies.(EffectiveRateLimitPolicies)))
+	logger.V(1).Info("building wasm configs for istio extension", "effectivePolicies", len(effectivePolicies.(EffectiveRateLimitPolicies)))
 
 	wasmPolicies := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
 
@@ -170,7 +170,7 @@ func (r *istioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 	return wasmConfigs, nil
 }
 
-// buildIstioWasmPluginForGateway reconciles the WasmPlugin custom resource for a given gateway and slice of wasm policies
+// buildIstioWasmPluginForGateway builds a desired WasmPlugin custom resource for a given gateway and corresponding wasm config
 func buildIstioWasmPluginForGateway(gateway machinery.Targetable, wasmConfig wasm.Config) *istioclientgoextensionv1alpha1.WasmPlugin {
 	wasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{
 		TypeMeta: metav1.TypeMeta{

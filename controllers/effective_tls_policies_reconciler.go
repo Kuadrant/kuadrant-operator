@@ -178,8 +178,6 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 }
 
 func (t *EffectiveTLSPoliciesReconciler) deleteCertificatesForPolicy(ctx context.Context, topology *machinery.Topology, p *kuadrantv1alpha1.TLSPolicy) error {
-	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTLSPoliciesReconciler").WithName("deleteCertificatesForPolicy")
-
 	certs := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
 		r, ok := item.(*controller.RuntimeObject)
 		if !ok {
@@ -198,7 +196,6 @@ func (t *EffectiveTLSPoliciesReconciler) deleteCertificatesForPolicy(ctx context
 		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(cert.GetNamespace())
 
 		if err := resource.Delete(ctx, cert.Name, metav1.DeleteOptions{}); err != nil {
-			logger.Error(err, "delete certificate", "name", cert.Name)
 			return err
 		}
 	}

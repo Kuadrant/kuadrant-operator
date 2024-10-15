@@ -85,7 +85,7 @@ func NewRateLimitWorkflow(manager ctrlruntime.Manager, client *dynamic.DynamicCl
 
 	if isEnvoyGatewayInstalled {
 		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&envoyGatewayRateLimitClusterReconciler{BaseReconciler: baseReconciler, client: client}).Subscription().Reconcile)
-		// TODO: reconcile envoy extension (EnvoyExtensionPolicy)
+		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&envoyGatewayExtensionReconciler{client: client}).Subscription().Reconcile)
 	}
 
 	return &controller.Workflow{

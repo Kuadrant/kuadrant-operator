@@ -20,6 +20,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 type EffectiveTLSPoliciesReconciler struct {
@@ -79,7 +80,7 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 		isValid, _ := IsTLSPolicyValid(ctx, s, policy)
 		if !isValid {
 			logger.V(1).Info("deleting certs for invalid policy", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
-			if err := t.deleteCertificatesForPolicy(ctx, topology, listeners); err != nil {
+			if err := t.deleteCertificatesForPolicy(ctx, topology, policy); err != nil {
 				logger.Error(err, "unable to delete certs for invalid policy", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
 			}
 			continue
@@ -176,29 +177,29 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 	return nil
 }
 
-func (t *EffectiveTLSPoliciesReconciler) deleteCertificatesForPolicy(ctx context.Context, topology *machinery.Topology, listeners []*machinery.Listener) error {
+func (t *EffectiveTLSPoliciesReconciler) deleteCertificatesForPolicy(ctx context.Context, topology *machinery.Topology, p *kuadrantv1alpha1.TLSPolicy) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTLSPoliciesReconciler").WithName("deleteCertificatesForPolicy")
 
-	for _, l := range listeners {
-		// Get children of listeners
-		objs := topology.Objects().Children(l)
+	certs := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
+		r, ok := item.(*controller.RuntimeObject)
+		if !ok {
+			return nil, false
+		}
+		c, ok := r.Object.(*certmanv1.Certificate)
+		if !ok {
+			return nil, false
+		}
 
-		certs := lo.FilterMap(objs, func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
-			c, ok := item.(*controller.RuntimeObject)
-			if !ok {
-				return nil, false
-			}
-			ce, ok := c.Object.(*certmanv1.Certificate)
-			return ce, ok
-		})
+		// Only want certs owned by this policy
+		return c, utils.IsOwnedBy(c, p)
+	})
 
-		for _, cert := range certs {
-			resource := t.client.Resource(CertManagerCertificatesResource).Namespace(cert.GetNamespace())
+	for _, cert := range certs {
+		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(cert.GetNamespace())
 
-			if err := resource.Delete(ctx, cert.Name, metav1.DeleteOptions{}); err != nil {
-				logger.Error(err, "delete certificate", "name", cert.Name)
-				return err
-			}
+		if err := resource.Delete(ctx, cert.Name, metav1.DeleteOptions{}); err != nil {
+			logger.Error(err, "delete certificate", "name", cert.Name)
+			return err
 		}
 	}
 

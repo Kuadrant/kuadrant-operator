@@ -24,31 +24,34 @@ func TestConfig(t *testing.T) {
 			name:           "basic example",
 			expectedConfig: testBasicConfigExample(),
 			yaml: `
-extensions:
-  limitador:
+services:
+  ratelimit-service:
     type: ratelimit
     endpoint: kuadrant-rate-limiting-service
     failureMode: allow
-policies:
+actionSets:
 - name: rlp-ns-A/rlp-name-A
-  hostnames:
-  - '*.toystore.com'
-  - example.com
-  rules:
-  - conditions:
-    - allOf:
-      - selector: request.host
-        operator: eq
-        value: cars.toystore.com
-    actions:
-    - extension: limitador
-      scope: rlp-ns-A/rlp-name-A
-      data:
-      - static:
-          key: rlp-ns-A/rlp-name-A
-          value: "1"
-      - selector:
-          selector: auth.metadata.username
+  routeRuleConditions:
+    hostnames:
+    - '*.toystore.com'
+    - example.com
+    matches:
+    - selector: request.path
+      operator: startswith
+      value: /cars
+  actions:
+  - service: ratelimit-service
+    scope: rlp-ns-A/rlp-name-A
+    conditions:
+    - selector: source.ip
+      operator: neq
+      value: 127.0.0.1
+    data:
+    - static:
+        key: rlp-ns-A/rlp-name-A
+        value: "1"
+    - selector:
+        selector: auth.metadata.username
 `,
 		},
 	}
@@ -97,13 +100,13 @@ func TestValidActionConfig(t *testing.T) {
 		{
 			name: "valid empty data",
 			expectedAction: &Action{
-				Scope:         "some-scope",
-				ExtensionName: "limitador",
-				Data:          nil,
+				ServiceName: "ratelimit-service",
+				Scope:       "some-scope",
+				Data:        nil,
 			},
 			yaml: `
+service: ratelimit-service
 scope: some-scope
-extension: limitador
 `,
 		},
 	}
@@ -130,8 +133,8 @@ func TestInValidActionConfig(t *testing.T) {
 		{
 			name: "unknown data type",
 			yaml: `
+service: ratelimit-service
 scope: some-scope
-extension: limitador
 data:
 - other:
     key: keyA
@@ -140,8 +143,8 @@ data:
 		{
 			name: "both data types at the same time",
 			yaml: `
+service: ratelimit-service
 scope: some-scope
-extension: limitador
 data:
 - static:
     key: keyA
@@ -163,52 +166,53 @@ data:
 
 func testBasicConfigExample() *Config {
 	return &Config{
-		Extensions: map[string]Extension{
-			RateLimitExtensionName: {
+		Services: map[string]Service{
+			RateLimitServiceName: {
+				Type:        RateLimitServiceType,
 				Endpoint:    common.KuadrantRateLimitClusterName,
 				FailureMode: FailureModeAllow,
-				Type:        RateLimitExtensionType,
 			},
 		},
-		Policies: []Policy{
+		ActionSets: []ActionSet{
 			{
 				Name: "rlp-ns-A/rlp-name-A",
-				Hostnames: []string{
-					"*.toystore.com",
-					"example.com",
+				RouteRuleConditions: RouteRuleConditions{
+					Hostnames: []string{
+						"*.toystore.com",
+						"example.com",
+					},
+					Matches: []Predicate{
+						{
+							Selector: "request.path",
+							Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
+							Value:    "/cars",
+						},
+					},
 				},
-				Rules: []Rule{
+				Actions: []Action{
 					{
-						Conditions: []Condition{
+						ServiceName: RateLimitServiceName,
+						Scope:       "rlp-ns-A/rlp-name-A",
+						Conditions: []Predicate{
 							{
-								AllOf: []PatternExpression{
-									{
-										Selector: "request.host",
-										Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-										Value:    "cars.toystore.com",
+								Selector: "source.ip",
+								Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
+								Value:    "127.0.0.1",
+							},
+						},
+						Data: []DataType{
+							{
+								Value: &Static{
+									Static: StaticSpec{
+										Key:   "rlp-ns-A/rlp-name-A",
+										Value: "1",
 									},
 								},
 							},
-						},
-						Actions: []Action{
 							{
-								Scope:         "rlp-ns-A/rlp-name-A",
-								ExtensionName: RateLimitExtensionName,
-								Data: []DataType{
-									{
-										Value: &Static{
-											Static: StaticSpec{
-												Key:   "rlp-ns-A/rlp-name-A",
-												Value: "1",
-											},
-										},
-									},
-									{
-										Value: &Selector{
-											Selector: SelectorSpec{
-												Selector: "auth.metadata.username",
-											},
-										},
+								Value: &Selector{
+									Selector: SelectorSpec{
+										Selector: "auth.metadata.username",
 									},
 								},
 							},

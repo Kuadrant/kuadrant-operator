@@ -140,7 +140,7 @@ func (r *istioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 
 	logger.V(1).Info("building wasm configs for istio extension", "effectivePolicies", len(effectivePolicies.(EffectiveRateLimitPolicies)))
 
-	wasmPolicies := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
+	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
 
 	// build the wasm policies for each topological path that contains an effective rate limit policy affecting an istio gateway
 	for pathID, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {
@@ -153,17 +153,17 @@ func (r *istioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 			continue
 		}
 
-		wasmPoliciesForPath, err := wasm.BuildWasmPoliciesForPath(pathID, effectivePolicy.Path, effectivePolicy.Spec.Rules(), rateLimitWasmRuleBuilder(pathID, effectivePolicy, state))
+		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(pathID, effectivePolicy.Path, effectivePolicy.Spec.Rules(), rateLimitWasmActionBuilder(pathID, effectivePolicy, state))
 		if err != nil {
 			logger.Error(err, "failed to build wasm policies for path", "pathID", pathID)
 			continue
 		}
-		wasmPolicies.Add(gateway.GetLocator(), wasmPoliciesForPath...)
+		wasmActionSets.Add(gateway.GetLocator(), wasmActionSetsForPath...)
 	}
 
-	wasmConfigs := lo.MapValues(wasmPolicies.Sorted(), func(configs kuadrantgatewayapi.SortableHTTPRouteMatchConfigs, _ string) wasm.Config {
-		return wasm.BuildWasmConfigForPolicies(lo.Map(configs, func(c kuadrantgatewayapi.HTTPRouteMatchConfig, _ int) wasm.Policy {
-			return c.Config.(wasm.Policy)
+	wasmConfigs := lo.MapValues(wasmActionSets.Sorted(), func(configs kuadrantgatewayapi.SortableHTTPRouteMatchConfigs, _ string) wasm.Config {
+		return wasm.BuildConfigForActionSet(lo.Map(configs, func(c kuadrantgatewayapi.HTTPRouteMatchConfig, _ int) wasm.ActionSet {
+			return c.Config.(wasm.ActionSet)
 		}))
 	})
 
@@ -195,7 +195,7 @@ func buildIstioWasmPluginForGateway(gateway machinery.Targetable, wasmConfig was
 		},
 	}
 
-	if len(wasmConfig.Policies) == 0 {
+	if len(wasmConfig.ActionSets) == 0 {
 		utils.TagObjectToDelete(wasmPlugin)
 	} else {
 		pluginConfigStruct, err := wasmConfig.ToStruct()

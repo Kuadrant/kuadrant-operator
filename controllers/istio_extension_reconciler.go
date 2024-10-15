@@ -178,7 +178,7 @@ func buildIstioWasmPluginForGateway(gateway machinery.Targetable, wasmConfig was
 			APIVersion: istioclientgoextensionv1alpha1.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      wasm.WasmExtensionName(gateway.GetName()),
+			Name:      wasm.ExtensionName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
 		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{

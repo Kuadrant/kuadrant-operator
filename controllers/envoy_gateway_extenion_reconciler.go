@@ -177,7 +177,7 @@ func buildEnvoyExtensionPolicyForGateway(gateway machinery.Targetable, wasmConfi
 			APIVersion: envoygatewayv1alpha1.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      wasm.WasmExtensionName(gateway.GetName()),
+			Name:      wasm.ExtensionName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
 		},
 		Spec: envoygatewayv1alpha1.EnvoyExtensionPolicySpec{

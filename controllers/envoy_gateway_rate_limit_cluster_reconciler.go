@@ -26,7 +26,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
-// envoyGatewayRateLimitClusterReconciler reconciles EnvoyGateway EnvoyPatchPolicy custom resources
+// envoyGatewayRateLimitClusterReconciler reconciles Envoy Gateway EnvoyPatchPolicy custom resources
 type envoyGatewayRateLimitClusterReconciler struct {
 	*reconcilers.BaseReconciler
 	client *dynamic.DynamicClient

@@ -9,9 +9,9 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 )
 
-func TestRateLimitIndexSet(t *testing.T) {
+func TestIndexSet(t *testing.T) {
 	t.Run("index rate limits to a key", func(subT *testing.T) {
-		index := NewRateLimitIndex()
+		index := NewIndex()
 
 		index.Set("foo", []limitadorv1alpha1.RateLimit{
 			{Namespace: "ns/rlp-1", MaxValue: 10, Seconds: 1},
@@ -27,7 +27,7 @@ func TestRateLimitIndexSet(t *testing.T) {
 	})
 
 	t.Run("index rate limits to different keys", func(subT *testing.T) {
-		index := NewRateLimitIndex()
+		index := NewIndex()
 
 		index.Set("foo", []limitadorv1alpha1.RateLimit{
 			{Namespace: "ns/rlp-1", MaxValue: 10, Seconds: 1},
@@ -67,7 +67,7 @@ func TestRateLimitIndexSet(t *testing.T) {
 	})
 
 	t.Run("reset rate limits for an existing key", func(subT *testing.T) {
-		index := NewRateLimitIndex()
+		index := NewIndex()
 
 		index.Set("foo", []limitadorv1alpha1.RateLimit{
 			{Namespace: "ns/rlp-1", MaxValue: 10, Seconds: 1},
@@ -90,7 +90,7 @@ func TestRateLimitIndexSet(t *testing.T) {
 	})
 
 	t.Run("add an empty list of limits if a noop", func(subT *testing.T) {
-		idx := NewRateLimitIndex()
+		idx := NewIndex()
 
 		idx.Set("foo", []limitadorv1alpha1.RateLimit{})
 
@@ -101,7 +101,7 @@ func TestRateLimitIndexSet(t *testing.T) {
 	})
 
 	t.Run("add nil list of limits if a noop", func(subT *testing.T) {
-		idx := NewRateLimitIndex()
+		idx := NewIndex()
 
 		idx.Set("foo", []limitadorv1alpha1.RateLimit{})
 
@@ -112,9 +112,9 @@ func TestRateLimitIndexSet(t *testing.T) {
 	})
 }
 
-func TestRateLimitIndexToRateLimits(t *testing.T) {
+func TestIndexToRateLimits(t *testing.T) {
 	t.Run("nil index return empty list", func(subT *testing.T) {
-		idx := NewRateLimitIndex()
+		idx := NewIndex()
 
 		limits := idx.ToRateLimits()
 		if limits == nil {
@@ -126,7 +126,7 @@ func TestRateLimitIndexToRateLimits(t *testing.T) {
 	})
 
 	t.Run("empty index return empty list", func(subT *testing.T) {
-		idx := NewRateLimitIndex()
+		idx := NewIndex()
 
 		limits := idx.ToRateLimits()
 		if limits == nil {

@@ -217,11 +217,6 @@ func expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.G
 			continue
 		}
 
-		hostname := "*"
-		if l.Hostname != nil {
-			hostname = string(*l.Hostname)
-		}
-
 		for _, certRef := range l.TLS.CertificateRefs {
 			secretRef := corev1.ObjectReference{
 				Name: string(certRef.Name),
@@ -233,8 +228,37 @@ func expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.G
 			}
 			// Gateway API hostname explicitly disallows IP addresses, so this
 			// should be OK.
-			tlsHosts[secretRef] = append(tlsHosts[secretRef], hostname)
+			tlsHosts[secretRef] = append(tlsHosts[secretRef], string(*l.Hostname))
 		}
+	}
+
+	certs := make([]*certmanv1.Certificate, 0, len(tlsHosts))
+	for secretRef, hosts := range tlsHosts {
+		certs = append(certs, buildCertManagerCertificate(tlsPolicy, secretRef, hosts))
+	}
+	return certs
+}
+
+func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *kuadrantv1alpha1.TLSPolicy) []*certmanv1.Certificate {
+	tlsHosts := make(map[corev1.ObjectReference][]string)
+
+	hostname := "*"
+	if l.Hostname != nil {
+		hostname = string(*l.Hostname)
+	}
+
+	for _, certRef := range l.TLS.CertificateRefs {
+		secretRef := corev1.ObjectReference{
+			Name: string(certRef.Name),
+		}
+		if certRef.Namespace != nil {
+			secretRef.Namespace = string(*certRef.Namespace)
+		} else {
+			secretRef.Namespace = l.GetNamespace()
+		}
+		// Gateway API hostname explicitly disallows IP addresses, so this
+		// should be OK.
+		tlsHosts[secretRef] = append(tlsHosts[secretRef], hostname)
 	}
 
 	certs := make([]*certmanv1.Certificate, 0, len(tlsHosts))

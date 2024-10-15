@@ -35,11 +35,11 @@ var (
 
 func NewTLSWorkflow(client *dynamic.DynamicClient, scheme *runtime.Scheme, isCertManagerInstalled bool) *controller.Workflow {
 	return &controller.Workflow{
-		Precondition: NewValidateTLSPoliciesValidatorReconciler(isCertManagerInstalled).Subscription().Reconcile,
+		Precondition: NewTLSPoliciesValidator(isCertManagerInstalled).Subscription().Reconcile,
 		Tasks: []controller.ReconcileFunc{
 			NewEffectiveTLSPoliciesReconciler(client, scheme).Subscription().Reconcile,
 		},
-		Postcondition: NewTLSPolicyStatusUpdaterReconciler(client).Subscription().Reconcile,
+		Postcondition: NewTLSPolicyStatusUpdater(client).Subscription().Reconcile,
 	}
 }
 

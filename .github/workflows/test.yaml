@@ -15,6 +15,8 @@ on:
   schedule:
     - cron: "15 1 * * *"
 
+  workflow_dispatch:
+
 jobs:
   unit-tests:
     name: Unit Tests
@@ -102,6 +104,10 @@ jobs:
           flags: controllers-integration
           fail_ci_if_error: false
           verbose: true
+      - name: Check kuadrant status
+        if: always()
+        run: |
+          kubectl get pods -n kuadrant-system
 
   bare-k8s-integration-tests:
     name: Integration Tests for kuadrant-operator/tests/bare_k8s
@@ -241,6 +247,10 @@ jobs:
           flags: ${{ matrix.gatewayapi-provider }}-integration
           fail_ci_if_error: false
           verbose: true
+      - name: Check kuadrant status
+        if: always()
+        run: |
+          kubectl get pods -n kuadrant-system
 
   verify-manifests:
     name: Verify manifests

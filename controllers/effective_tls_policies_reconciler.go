@@ -51,14 +51,11 @@ func (t *EffectiveTLSPoliciesReconciler) Subscription() *controller.Subscription
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 //+kubebuilder:rbac:groups="cert-manager.io",resources=certificates,verbs=get;list;watch;create;update;patch;delete
 
-func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
+func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, events []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTLSPoliciesReconciler").WithName("Reconcile")
 
-	// Get all TLS Policies
-	policies := lo.Filter(topology.Policies().Items(), func(item machinery.Policy, index int) bool {
-		_, ok := item.(*kuadrantv1alpha1.TLSPolicy)
-		return ok
-	})
+	// Get affected TLS Policies
+	policies := GetTLSPoliciesByEvents(topology, events)
 
 	// Get all certs in topology for comparison with expected certs to determine orphaned certs later
 	certs := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
@@ -135,7 +132,7 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 						continue
 					}
 					_, err = resource.Create(ctx, un, metav1.CreateOptions{})
-					if err != nil {
+					if err != nil && !apierrors.IsAlreadyExists(err) {
 						logger.Error(err, "unable to create certificate", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
 					}
 

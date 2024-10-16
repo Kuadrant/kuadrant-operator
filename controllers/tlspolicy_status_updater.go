@@ -46,45 +46,43 @@ func (t *TLSPolicyStatusUpdater) Subscription() *controller.Subscription {
 	}
 }
 
-func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
+func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, events []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("UpdateStatus")
 
-	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1alpha1.TLSPolicy, bool) {
-		p, ok := item.(*kuadrantv1alpha1.TLSPolicy)
-		return p, ok
-	})
+	policies := GetTLSPoliciesByEvents(topology, events)
 
 	for _, policy := range policies {
-		if policy.DeletionTimestamp != nil {
-			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", policy.GetName(), "namespace", policy.GetNamespace(), "uid", policy.GetUID())
+		p := policy.(*kuadrantv1alpha1.TLSPolicy)
+		if p.DeletionTimestamp != nil {
+			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", policy.GetName(), "namespace", policy.GetNamespace(), "uid", p.GetUID())
 			continue
 		}
 
 		newStatus := &kuadrantv1alpha1.TLSPolicyStatus{
 			// Copy initial conditions. Otherwise, status will always be updated
-			Conditions:         slices.Clone(policy.Status.Conditions),
-			ObservedGeneration: policy.Status.ObservedGeneration,
+			Conditions:         slices.Clone(p.Status.Conditions),
+			ObservedGeneration: p.Status.ObservedGeneration,
 		}
 
-		_, err := IsTLSPolicyValid(ctx, s, policy)
-		meta.SetStatusCondition(&newStatus.Conditions, *kuadrant.AcceptedCondition(policy, err))
+		_, err := IsTLSPolicyValid(ctx, s, p)
+		meta.SetStatusCondition(&newStatus.Conditions, *kuadrant.AcceptedCondition(p, err))
 
 		// Do not set enforced condition if Accepted condition is false
 		if meta.IsStatusConditionFalse(newStatus.Conditions, string(gatewayapiv1alpha2.PolicyReasonAccepted)) {
 			meta.RemoveStatusCondition(&newStatus.Conditions, string(kuadrant.PolicyConditionEnforced))
 		} else {
-			enforcedCond := t.enforcedCondition(ctx, policy, topology)
+			enforcedCond := t.enforcedCondition(ctx, p, topology)
 			meta.SetStatusCondition(&newStatus.Conditions, *enforcedCond)
 		}
 
 		// Nothing to do
-		equalStatus := equality.Semantic.DeepEqual(newStatus, policy.Status)
-		if equalStatus && policy.Generation == policy.Status.ObservedGeneration {
+		equalStatus := equality.Semantic.DeepEqual(newStatus, p.Status)
+		if equalStatus && p.Generation == p.Status.ObservedGeneration {
 			logger.V(1).Info("policy status unchanged, skipping update")
 			continue
 		}
-		newStatus.ObservedGeneration = policy.Generation
-		policy.Status = *newStatus
+		newStatus.ObservedGeneration = p.Generation
+		p.Status = *newStatus
 
 		resource := t.Client.Resource(kuadrantv1alpha1.TLSPoliciesResource).Namespace(policy.GetNamespace())
 		un, err := controller.Destruct(policy)
@@ -95,26 +93,26 @@ func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controlle
 
 		_, err = resource.UpdateStatus(ctx, un, metav1.UpdateOptions{})
 		if err != nil {
-			logger.Error(err, "unable to update status for TLSPolicy", "name", policy.GetName(), "namespace", policy.GetNamespace(), "uid", policy.GetUID())
+			logger.Error(err, "unable to update status for TLSPolicy", "name", policy.GetName(), "namespace", policy.GetNamespace(), "uid", p.GetUID())
 		}
 	}
 
 	return nil
 }
 
-func (t *TLSPolicyStatusUpdater) enforcedCondition(ctx context.Context, tlsPolicy *kuadrantv1alpha1.TLSPolicy, topology *machinery.Topology) *metav1.Condition {
-	if err := t.isIssuerReady(ctx, tlsPolicy, topology); err != nil {
-		return kuadrant.EnforcedCondition(tlsPolicy, kuadrant.NewErrUnknown(tlsPolicy.Kind(), err), false)
+func (t *TLSPolicyStatusUpdater) enforcedCondition(ctx context.Context, policy *kuadrantv1alpha1.TLSPolicy, topology *machinery.Topology) *metav1.Condition {
+	if err := t.isIssuerReady(ctx, policy, topology); err != nil {
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err), false)
 	}
 
-	if err := t.isCertificatesReady(tlsPolicy, topology); err != nil {
-		return kuadrant.EnforcedCondition(tlsPolicy, kuadrant.NewErrUnknown(tlsPolicy.Kind(), err), false)
+	if err := t.isCertificatesReady(policy, topology); err != nil {
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err), false)
 	}
 
-	return kuadrant.EnforcedCondition(tlsPolicy, nil, true)
+	return kuadrant.EnforcedCondition(policy, nil, true)
 }
 
-func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, tlsPolicy *kuadrantv1alpha1.TLSPolicy, topology *machinery.Topology) error {
+func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, policy *kuadrantv1alpha1.TLSPolicy, topology *machinery.Topology) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("isIssuerReady")
 
 	// Get all gateways
@@ -125,26 +123,26 @@ func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, tlsPolicy *k
 
 	// Find gateway defined by target ref
 	gw, ok := lo.Find(gws, func(item *machinery.Gateway) bool {
-		if item.GetName() == string(tlsPolicy.GetTargetRef().Name) && item.GetNamespace() == tlsPolicy.GetNamespace() {
+		if item.GetName() == string(policy.GetTargetRef().Name) && item.GetNamespace() == policy.GetNamespace() {
 			return true
 		}
 		return false
 	})
 
 	if !ok {
-		return fmt.Errorf("unable to find target ref %s for policy %s in ns %s in topology", tlsPolicy.GetTargetRef(), tlsPolicy.Name, tlsPolicy.Namespace)
+		return fmt.Errorf("unable to find target ref %s for policy %s in ns %s in topology", policy.GetTargetRef(), policy.Name, policy.Namespace)
 	}
 
 	var conditions []certmanagerv1.IssuerCondition
 
-	switch tlsPolicy.Spec.IssuerRef.Kind {
+	switch policy.Spec.IssuerRef.Kind {
 	case "", certmanagerv1.IssuerKind:
 		objs := topology.Objects().Children(gw)
 		obj, ok := lo.Find(objs, func(o machinery.Object) bool {
-			return o.GroupVersionKind().GroupKind() == CertManagerIssuerKind && o.GetNamespace() == tlsPolicy.GetNamespace() && o.GetName() == tlsPolicy.Spec.IssuerRef.Name
+			return o.GroupVersionKind().GroupKind() == CertManagerIssuerKind && o.GetNamespace() == policy.GetNamespace() && o.GetName() == policy.Spec.IssuerRef.Name
 		})
 		if !ok {
-			err := fmt.Errorf("%s \"%s\" not found", tlsPolicy.Spec.IssuerRef.Kind, tlsPolicy.Spec.IssuerRef.Name)
+			err := fmt.Errorf("%s \"%s\" not found", policy.Spec.IssuerRef.Kind, policy.Spec.IssuerRef.Name)
 			logger.Error(err, "error finding object in topology")
 			return err
 		}
@@ -155,10 +153,10 @@ func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, tlsPolicy *k
 	case certmanagerv1.ClusterIssuerKind:
 		objs := topology.Objects().Children(gw)
 		obj, ok := lo.Find(objs, func(o machinery.Object) bool {
-			return o.GroupVersionKind().GroupKind() == CertManagerClusterIssuerKind && o.GetName() == tlsPolicy.Spec.IssuerRef.Name
+			return o.GroupVersionKind().GroupKind() == CertManagerClusterIssuerKind && o.GetName() == policy.Spec.IssuerRef.Name
 		})
 		if !ok {
-			err := fmt.Errorf("%s \"%s\" not found", tlsPolicy.Spec.IssuerRef.Kind, tlsPolicy.Spec.IssuerRef.Name)
+			err := fmt.Errorf("%s \"%s\" not found", policy.Spec.IssuerRef.Kind, policy.Spec.IssuerRef.Name)
 			logger.Error(err, "error finding object in topology")
 			return err
 		}
@@ -166,7 +164,7 @@ func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, tlsPolicy *k
 		issuer := obj.(*controller.RuntimeObject).Object.(*certmanagerv1.ClusterIssuer)
 		conditions = issuer.Status.Conditions
 	default:
-		return fmt.Errorf(`invalid value %q for issuerRef.kind. Must be empty, %q or %q`, tlsPolicy.Spec.IssuerRef.Kind, certmanagerv1.IssuerKind, certmanagerv1.ClusterIssuerKind)
+		return fmt.Errorf(`invalid value %q for issuerRef.kind. Must be empty, %q or %q`, policy.Spec.IssuerRef.Kind, certmanagerv1.IssuerKind, certmanagerv1.ClusterIssuerKind)
 	}
 
 	transformedCond := utils.Map(conditions, func(c certmanagerv1.IssuerCondition) metav1.Condition {
@@ -174,14 +172,14 @@ func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, tlsPolicy *k
 	})
 
 	if !meta.IsStatusConditionTrue(transformedCond, string(certmanagerv1.IssuerConditionReady)) {
-		return fmt.Errorf("%s not ready", tlsPolicy.Spec.IssuerRef.Kind)
+		return fmt.Errorf("%s not ready", policy.Spec.IssuerRef.Kind)
 	}
 
 	return nil
 }
 
 func (t *TLSPolicyStatusUpdater) isCertificatesReady(p machinery.Policy, topology *machinery.Topology) error {
-	tlsPolicy, ok := p.(*kuadrantv1alpha1.TLSPolicy)
+	policy, ok := p.(*kuadrantv1alpha1.TLSPolicy)
 	if !ok {
 		return errors.New("invalid policy")
 	}
@@ -204,7 +202,7 @@ func (t *TLSPolicyStatusUpdater) isCertificatesReady(p machinery.Policy, topolog
 			continue
 		}
 
-		expectedCertificates := expectedCertificatesForListener(l, tlsPolicy)
+		expectedCertificates := expectedCertificatesForListener(l, policy)
 
 		for _, cert := range expectedCertificates {
 			objs := topology.Objects().Children(l)

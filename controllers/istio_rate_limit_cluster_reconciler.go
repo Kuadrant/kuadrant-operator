@@ -85,6 +85,7 @@ func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	})
 
 	desiredEnvoyFilters := make(map[k8stypes.NamespacedName]struct{})
+	var modifiedGateways []string
 
 	// reconcile istio cluster for gateway
 	for _, gateway := range gateways {
@@ -105,6 +106,7 @@ func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 
 		// create
 		if !found {
+			modifiedGateways = append(modifiedGateways, gateway.GetLocator()) // we only signal the gateway as modified when an envoyfilter is created, because updates won't change the status
 			desiredEnvoyFilterUnstructured, err := controller.Destruct(desiredEnvoyFilter)
 			if err != nil {
 				logger.Error(err, "failed to destruct envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyFilter)
@@ -141,6 +143,8 @@ func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 			// TODO: handle error
 		}
 	}
+
+	state.Store(StateIstioRateLimitClustersModified, modifiedGateways)
 
 	// cleanup istio clusters for gateways that are not in the effective policies
 	staleEnvoyFilters := topology.Objects().Items(func(o machinery.Object) bool {

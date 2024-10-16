@@ -65,6 +65,8 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 		return o.GroupVersionKind().GroupKind() == machinery.GatewayGroupKind
 	})
 
+	var modifiedGateways []string
+
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
@@ -81,6 +83,7 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			if utils.IsObjectTaggedToDelete(desiredWasmPlugin) {
 				continue
 			}
+			modifiedGateways = append(modifiedGateways, gateway.GetLocator()) // we only signal the gateway as modified when a wasmplugin is created, because updates won't change the status
 			desiredWasmPluginUnstructured, err := controller.Destruct(desiredWasmPlugin)
 			if err != nil {
 				logger.Error(err, "failed to destruct wasmplugin object", "gateway", gatewayKey.String(), "wasmplugin", desiredWasmPlugin)
@@ -125,6 +128,8 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 			// TODO: handle error
 		}
 	}
+
+	state.Store(StateIstioExtensionsModified, modifiedGateways)
 
 	return nil
 }

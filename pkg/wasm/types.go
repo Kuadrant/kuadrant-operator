@@ -117,7 +117,7 @@ func (s *ActionSet) EqualTo(other ActionSet) bool {
 
 type RouteRuleConditions struct {
 	Hostnames []string    `json:"hostnames"`
-	Matches   []Predicate `json:"matches"`
+	Matches   []Predicate `json:"matches,omitempty"`
 }
 
 func (r *RouteRuleConditions) EqualTo(other RouteRuleConditions) bool {
@@ -167,7 +167,7 @@ type Action struct {
 	Scope       string `json:"scope"`
 
 	// Conditions that activate the action
-	Conditions []Predicate `json:"conditions"`
+	Conditions []Predicate `json:"conditions,omitempty"`
 
 	// Data to be sent to the service
 	// +optional

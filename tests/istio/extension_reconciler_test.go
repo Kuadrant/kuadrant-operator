@@ -15,6 +15,7 @@ import (
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -69,9 +70,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
-			gatewayClass = tests.BuildBasicGatewayClass(tests.GatewayClassName)
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
@@ -158,14 +161,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Hostnames: []string{"*.example.com"},
 							Matches: []wasm.Predicate{
 								{
-									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/toy",
-								},
-								{
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 									Value:    "GET",
+								},
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toy",
 								},
 							},
 						},
@@ -293,14 +296,16 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			}))
 			Expect(existingWASMConfig.ActionSets).To(HaveLen(6))
 
+			mGateway := &machinery.Gateway{Gateway: gateway}
+			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: httpRoute}
 			basePath := []machinery.Targetable{
 				&machinery.GatewayClass{GatewayClass: gatewayClass},
-				&machinery.Gateway{Gateway: gateway},
-				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: &machinery.Gateway{Gateway: gateway}},
-				&machinery.HTTPRoute{HTTPRoute: httpRoute},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
 			}
-			httpRouteRuleToys := &machinery.HTTPRouteRule{HTTPRouteRule: &httpRoute.Spec.Rules[0]}
-			httpRouteRuleAssets := &machinery.HTTPRouteRule{HTTPRouteRule: &httpRoute.Spec.Rules[1]}
+			httpRouteRuleToys := &machinery.HTTPRouteRule{HTTPRouteRule: &httpRoute.Spec.Rules[0], HTTPRoute: mHTTPRoute}
+			httpRouteRuleAssets := &machinery.HTTPRouteRule{HTTPRouteRule: &httpRoute.Spec.Rules[1], HTTPRoute: mHTTPRoute}
 
 			// GET api.toystore.io/toys*
 			actionSet := existingWASMConfig.ActionSets[0]
@@ -309,14 +314,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
 				wasm.Predicate{
-					Selector: "request.url_path",
-					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-					Value:    "/toys",
-				},
-				wasm.Predicate{
 					Selector: "request.method",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 					Value:    "GET",
+				},
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/toys",
 				},
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
@@ -372,14 +377,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
 				wasm.Predicate{
-					Selector: "request.url_path",
-					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-					Value:    "/toys",
-				},
-				wasm.Predicate{
 					Selector: "request.method",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 					Value:    "POST",
+				},
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/toys",
 				},
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
@@ -493,14 +498,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
 				wasm.Predicate{
-					Selector: "request.url_path",
-					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-					Value:    "/toys",
-				},
-				wasm.Predicate{
 					Selector: "request.method",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 					Value:    "GET",
+				},
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/toys",
 				},
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
@@ -556,14 +561,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
 				wasm.Predicate{
-					Selector: "request.url_path",
-					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-					Value:    "/toys",
-				},
-				wasm.Predicate{
 					Selector: "request.method",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 					Value:    "POST",
+				},
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/toys",
 				},
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
@@ -743,17 +748,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					{
 						Name: fmt.Sprintf("%d-%s-%d", 0, pathID, 0),
 						RouteRuleConditions: wasm.RouteRuleConditions{
-							Hostnames: []string{"*"},
+							Hostnames: []string{"*.example.com"},
 							Matches: []wasm.Predicate{
-								{
-									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/toy",
-								},
 								{
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 									Value:    "GET",
+								},
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toy",
 								},
 							},
 						},
@@ -853,9 +858,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
-			gatewayClass = tests.BuildBasicGatewayClass(tests.GatewayClassName)
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
@@ -968,14 +975,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Hostnames: []string{"*"},
 								Matches: []wasm.Predicate{
 									{
-										Selector: "request.url_path",
-										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-										Value:    "/toy",
-									},
-									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 										Value:    "GET",
+									},
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/toy",
 									},
 								},
 							},
@@ -1181,14 +1188,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Hostnames: []string{"*.example.com"},
 								Matches: []wasm.Predicate{
 									{
-										Selector: "request.url_path",
-										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-										Value:    "/toy",
-									},
-									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 										Value:    "GET",
+									},
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/toy",
 									},
 								},
 							},
@@ -1312,14 +1319,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Hostnames: []string{"*.example.com"},
 								Matches: []wasm.Predicate{
 									{
-										Selector: "request.url_path",
-										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-										Value:    "/toy",
-									},
-									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 										Value:    "GET",
+									},
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/toy",
 									},
 								},
 							},
@@ -1362,9 +1369,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
-			gatewayClass = tests.BuildBasicGatewayClass(tests.GatewayClassName)
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
@@ -1513,14 +1522,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Hostnames: []string{"*.a.example.com"},
 								Matches: []wasm.Predicate{
 									{
-										Selector: "request.url_path",
-										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-										Value:    "/routeA",
-									},
-									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 										Value:    "GET",
+									},
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeA",
 									},
 								},
 							},
@@ -1607,14 +1616,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Hostnames: []string{"*.b.example.com"},
 								Matches: []wasm.Predicate{
 									{
-										Selector: "request.url_path",
-										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-										Value:    "/routeB",
-									},
-									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 										Value:    "GET",
+									},
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeB",
 									},
 								},
 							},
@@ -1657,9 +1666,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
-			gatewayClass = tests.BuildBasicGatewayClass(tests.GatewayClassName)
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
@@ -1783,14 +1794,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Hostnames: []string{"*"},
 								Matches: []wasm.Predicate{
 									{
-										Selector: "request.url_path",
-										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-										Value:    "/routeA",
-									},
-									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 										Value:    "GET",
+									},
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeA",
 									},
 								},
 							},
@@ -1895,14 +1906,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Hostnames: []string{"*.a.example.com"},
 								Matches: []wasm.Predicate{
 									{
-										Selector: "request.url_path",
-										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-										Value:    "/routeA",
-									},
-									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 										Value:    "GET",
+									},
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeA",
 									},
 								},
 							},
@@ -1945,9 +1956,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
-			gatewayClass = tests.BuildBasicGatewayClass(tests.GatewayClassName)
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
@@ -2107,14 +2120,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Hostnames: []string{"*.a.example.com"},
 								Matches: []wasm.Predicate{
 									{
-										Selector: "request.url_path",
-										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-										Value:    "/routeA",
-									},
-									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 										Value:    "GET",
+									},
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeA",
 									},
 								},
 							},
@@ -2216,14 +2229,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Hostnames: []string{"*.a.example.com"},
 								Matches: []wasm.Predicate{
 									{
-										Selector: "request.url_path",
-										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-										Value:    "/routeA",
-									},
-									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 										Value:    "GET",
+									},
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeA",
 									},
 								},
 							},
@@ -2250,14 +2263,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Hostnames: []string{"*"},
 								Matches: []wasm.Predicate{
 									{
-										Selector: "request.url_path",
-										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-										Value:    "/routeB",
-									},
-									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 										Value:    "GET",
+									},
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeB",
 									},
 								},
 							},
@@ -2304,10 +2317,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
-			gatewayClass = tests.BuildBasicGatewayClass(tests.GatewayClassName)
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
 			gateway.Spec.Listeners[0].Hostname = ptr.To(gatewayapiv1.Hostname(gwHostname))
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
@@ -2390,14 +2405,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Hostnames: []string{gwHostname},
 							Matches: []wasm.Predicate{
 								{
-									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/toy",
-								},
-								{
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 									Value:    "GET",
+								},
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toy",
 								},
 							},
 						},
@@ -2434,9 +2449,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
-			gatewayClass = tests.BuildBasicGatewayClass(tests.GatewayClassName)
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
@@ -2467,14 +2484,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Hostnames: []string{hostname},
 							Matches: []wasm.Predicate{
 								{
-									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/toy",
-								},
-								{
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 									Value:    "GET",
+								},
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toy",
 								},
 							},
 						},
@@ -2550,7 +2567,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(gwRLPKey, httpRoute, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "gateway"), "*")))
+			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(gwRLPKey, httpRoute, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "gateway"), "*.example.com")))
 
 			// Create Route RLP
 			routeRLP := &kuadrantv1beta3.RateLimitPolicy{

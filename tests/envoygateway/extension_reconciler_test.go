@@ -13,6 +13,7 @@ import (
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -40,11 +41,13 @@ var _ = Describe("wasm controller", func() {
 
 	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
-		gatewayClass = tests.BuildBasicGatewayClass(tests.GatewayClassName)
+		gatewayClass = &gatewayapiv1.GatewayClass{}
+		err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+		Expect(err).ToNot(HaveOccurred())
 		gateway = tests.NewGatewayBuilder(TestGatewayName, tests.GatewayClassName, testNamespace).
 			WithHTTPListener("test-listener", gwHost).
 			Gateway
-		err := testClient().Create(ctx, gateway)
+		err = testClient().Create(ctx, gateway)
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
@@ -175,17 +178,17 @@ var _ = Describe("wasm controller", func() {
 					{
 						Name: actionSetName,
 						RouteRuleConditions: wasm.RouteRuleConditions{
-							Hostnames: []string{gwHost},
+							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
 							Matches: []wasm.Predicate{
-								{
-									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/toy",
-								},
 								{
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 									Value:    "GET",
+								},
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toy",
 								},
 							},
 						},
@@ -345,14 +348,14 @@ var _ = Describe("wasm controller", func() {
 							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
 							Matches: []wasm.Predicate{
 								{
-									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/toy",
-								},
-								{
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 									Value:    "GET",
+								},
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toy",
 								},
 							},
 						},

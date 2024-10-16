@@ -40,17 +40,15 @@ func (t *TLSPoliciesValidator) Subscription() *controller.Subscription {
 	}
 }
 
-func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
+func (t *TLSPoliciesValidator) Validate(ctx context.Context, events []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPoliciesValidator").WithName("Validate")
 
-	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1alpha1.TLSPolicy, bool) {
-		p, ok := item.(*kuadrantv1alpha1.TLSPolicy)
-		return p, ok
-	})
+	policies := GetTLSPoliciesByEvents(topology, events)
 
 	isPolicyValidErrorMap := make(map[string]error, len(policies))
 
-	for _, p := range policies {
+	for _, policy := range policies {
+		p := policy.(*kuadrantv1alpha1.TLSPolicy)
 		if p.DeletionTimestamp != nil {
 			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", p.Name, "namespace", p.Namespace)
 			continue

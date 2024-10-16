@@ -39,7 +39,6 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -81,7 +80,7 @@ func (r *TargetStatusReconciler) Reconcile(eventCtx context.Context, req ctrl.Re
 
 func (r *TargetStatusReconciler) reconcileResources(ctx context.Context, gw *gatewayapiv1.Gateway) error {
 	policyKinds := map[kuadrantgatewayapi.Policy]client.ObjectList{
-		&kuadrantv1beta2.AuthPolicy{TypeMeta: ctrl.TypeMeta{Kind: "AuthPolicy"}}:           &kuadrantv1beta2.AuthPolicyList{},
+		&kuadrantv1beta3.AuthPolicy{TypeMeta: ctrl.TypeMeta{Kind: "AuthPolicy"}}:           &kuadrantv1beta3.AuthPolicyList{},
 		&kuadrantv1alpha1.DNSPolicy{TypeMeta: ctrl.TypeMeta{Kind: "DNSPolicy"}}:            &kuadrantv1alpha1.DNSPolicyList{},
 		&kuadrantv1alpha1.TLSPolicy{TypeMeta: ctrl.TypeMeta{Kind: "TLSPolicy"}}:            &kuadrantv1alpha1.TLSPolicyList{},
 		&kuadrantv1beta3.RateLimitPolicy{TypeMeta: ctrl.TypeMeta{Kind: "RateLimitPolicy"}}: &kuadrantv1beta3.RateLimitPolicyList{},
@@ -378,7 +377,7 @@ func (r *TargetStatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(httpRouteToParentGatewaysEventMapper.Map),
 		).
 		Watches(
-			&kuadrantv1beta2.AuthPolicy{},
+			&kuadrantv1beta3.AuthPolicy{},
 			handler.EnqueueRequestsFromMapFunc(policyToParentGatewaysEventMapper.Map),
 			builder.WithPredicates(policyStatusChangedPredicate),
 		).

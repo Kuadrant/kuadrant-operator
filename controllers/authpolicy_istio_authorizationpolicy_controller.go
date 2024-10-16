@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -20,7 +19,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistioutils "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
@@ -67,13 +66,13 @@ func (r *AuthPolicyIstioAuthorizationPolicyReconciler) Reconcile(eventCtx contex
 		return ctrl.Result{}, nil
 	}
 
-	topology, err := kuadranttools.TopologyFromGateway(ctx, r.Client(), gw, kuadrantv1beta2.NewAuthPolicyType())
+	topology, err := kuadranttools.TopologyFromGateway(ctx, r.Client(), gw, kuadrantv1beta3.NewAuthPolicyType())
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	topologyIndex := kuadrantgatewayapi.NewTopologyIndexes(topology)
-	policies := lo.FilterMap(topologyIndex.PoliciesFromGateway(gw), func(policy kuadrantgatewayapi.Policy, _ int) (*kuadrantv1beta2.AuthPolicy, bool) {
-		ap, ok := policy.(*kuadrantv1beta2.AuthPolicy)
+	policies := lo.FilterMap(topologyIndex.PoliciesFromGateway(gw), func(policy kuadrantgatewayapi.Policy, _ int) (*kuadrantv1beta3.AuthPolicy, bool) {
+		ap, ok := policy.(*kuadrantv1beta3.AuthPolicy)
 		if !ok {
 			return nil, false
 		}
@@ -99,7 +98,7 @@ func (r *AuthPolicyIstioAuthorizationPolicyReconciler) Reconcile(eventCtx contex
 	return ctrl.Result{}, nil
 }
 
-func (r *AuthPolicyIstioAuthorizationPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, gateway *gatewayapiv1.Gateway, ap *kuadrantv1beta2.AuthPolicy, topologyIndex *kuadrantgatewayapi.TopologyIndexes, topology *kuadrantgatewayapi.Topology) (*istiov1beta1.AuthorizationPolicy, error) {
+func (r *AuthPolicyIstioAuthorizationPolicyReconciler) istioAuthorizationPolicy(ctx context.Context, gateway *gatewayapiv1.Gateway, ap *kuadrantv1beta3.AuthPolicy, topologyIndex *kuadrantgatewayapi.TopologyIndexes, topology *kuadrantgatewayapi.Topology) (*istiov1beta1.AuthorizationPolicy, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("istioAuthorizationPolicy")
 
@@ -164,11 +163,7 @@ func (r *AuthPolicyIstioAuthorizationPolicyReconciler) istioAuthorizationPolicy(
 		routeHostnames = gwHostnames
 	}
 
-	rules, err := istioAuthorizationPolicyRules(ap, route)
-	if err != nil {
-		return nil, err
-	}
-
+	rules := istioAuthorizationPolicyRulesFromHTTPRoute(route)
 	if len(rules) > 0 {
 		// make sure all istio authorizationpolicy rules include the hosts so we don't send a request to authorino for hosts that are not in the scope of the policy
 		hosts := utils.HostnamesToStrings(routeHostnames)
@@ -226,7 +221,7 @@ func (r *AuthPolicyIstioAuthorizationPolicyReconciler) SetupWithManager(mgr ctrl
 			handler.EnqueueRequestsFromMapFunc(httpRouteToParentGatewaysEventMapper.Map),
 		).
 		Watches(
-			&kuadrantv1beta2.AuthPolicy{},
+			&kuadrantv1beta3.AuthPolicy{},
 			handler.EnqueueRequestsFromMapFunc(apToParentGatewaysEventMapper.Map),
 		).
 		Complete(r)
@@ -252,50 +247,13 @@ func istioAuthorizationPolicyLabels(gwKey, apKey client.ObjectKey) map[string]st
 	}
 }
 
-// istioAuthorizationPolicyRules builds the list of Istio AuthorizationPolicy rules from an AuthPolicy and a HTTPRoute.
-// These rules are the conditions that, when matched, will make the gateway to call external authorization.
-// If no rules are specified, the gateway will call external authorization for all requests.
-// If the route selectors specified in the policy do not match any route rules, an error is returned.
-func istioAuthorizationPolicyRules(ap *kuadrantv1beta2.AuthPolicy, route *gatewayapiv1.HTTPRoute) ([]*istiosecurity.Rule, error) {
-	commonSpec := ap.Spec.CommonSpec()
-	// use only the top level route selectors if defined
-	if topLevelRouteSelectors := commonSpec.RouteSelectors; len(topLevelRouteSelectors) > 0 {
-		return istioAuthorizationPolicyRulesFromRouteSelectors(route, topLevelRouteSelectors)
-	}
-	return istioAuthorizationPolicyRulesFromHTTPRoute(route), nil
-}
-
-// istioAuthorizationPolicyRulesFromRouteSelectors builds a list of Istio AuthorizationPolicy rules from an HTTPRoute,
-// filtered to the HTTPRouteRules and hostnames selected by the route selectors.
-func istioAuthorizationPolicyRulesFromRouteSelectors(route *gatewayapiv1.HTTPRoute, routeSelectors []kuadrantv1beta2.RouteSelector) ([]*istiosecurity.Rule, error) {
-	istioRules := []*istiosecurity.Rule{}
-
-	if len(routeSelectors) > 0 {
-		// build conditions from the rules selected by the route selectors
-		for idx := range routeSelectors {
-			routeSelector := routeSelectors[idx]
-			hostnamesForConditions := routeSelector.HostnamesForConditions(route)
-			// TODO(@guicassolato): report about route selectors that match no HTTPRouteRule
-			for _, rule := range routeSelector.SelectRules(route) {
-				istioRules = append(istioRules, istioAuthorizationPolicyRulesFromHTTPRouteRule(rule, hostnamesForConditions)...)
-			}
-		}
-		if len(istioRules) == 0 {
-			return nil, errors.New("cannot match any route rules, check for invalid route selectors in the policy")
-		}
-	}
-
-	return istioRules, nil
-}
-
-// istioAuthorizationPolicyRulesFromHTTPRoute builds a list of Istio AuthorizationPolicy rules from an HTTPRoute,
-// without using route selectors.
+// istioAuthorizationPolicyRulesFromHTTPRoute builds a list of Istio AuthorizationPolicy rules from an HTTPRoute.
+// v1beta2 version of this function used RouteSelectors
+// v1beta3 should use Section Names, once implemented
 func istioAuthorizationPolicyRulesFromHTTPRoute(route *gatewayapiv1.HTTPRoute) []*istiosecurity.Rule {
-	istioRules := []*istiosecurity.Rule{}
-
-	hostnamesForConditions := (&kuadrantv1beta2.RouteSelector{}).HostnamesForConditions(route)
+	istioRules := make([]*istiosecurity.Rule, 0)
 	for _, rule := range route.Spec.Rules {
-		istioRules = append(istioRules, istioAuthorizationPolicyRulesFromHTTPRouteRule(rule, hostnamesForConditions)...)
+		istioRules = append(istioRules, istioAuthorizationPolicyRulesFromHTTPRouteRule(rule, []gatewayapiv1.Hostname{"*"})...)
 	}
 
 	return istioRules

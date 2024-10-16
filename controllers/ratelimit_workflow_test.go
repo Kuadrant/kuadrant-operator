@@ -83,7 +83,6 @@ func TestWasmActionFromLimit(t *testing.T) {
 			expectedAction: wasm.Action{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "my-ns/my-route",
-				Conditions:  []wasm.Predicate{},
 				Data: []wasm.DataType{
 					{
 						Value: &wasm.Static{
@@ -106,7 +105,6 @@ func TestWasmActionFromLimit(t *testing.T) {
 			expectedAction: wasm.Action{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "my-ns/my-route",
-				Conditions:  []wasm.Predicate{},
 				Data: []wasm.DataType{
 					{
 						Value: &wasm.Static{

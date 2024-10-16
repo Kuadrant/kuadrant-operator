@@ -93,7 +93,7 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 
 		desiredEnvoyPatchPolicy, err := r.buildDesiredEnvoyPatchPolicy(limitador, gateway)
 		if err != nil {
-			logger.Error(err, "failed to build desired envoy filter")
+			logger.Error(err, "failed to build desired envoy patch policy")
 			continue
 		}
 		desiredEnvoyPatchPolicies[k8stypes.NamespacedName{Name: desiredEnvoyPatchPolicy.GetName(), Namespace: desiredEnvoyPatchPolicy.GetNamespace()}] = struct{}{}
@@ -108,11 +108,11 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 		if !found {
 			desiredEnvoyPatchPolicyUnstructured, err := controller.Destruct(desiredEnvoyPatchPolicy)
 			if err != nil {
-				logger.Error(err, "failed to destruct envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyPatchPolicy)
+				logger.Error(err, "failed to destruct envoypatchpolicy object", "gateway", gatewayKey.String(), "envoypatchpolicy", desiredEnvoyPatchPolicy)
 				continue
 			}
 			if _, err = resource.Create(ctx, desiredEnvoyPatchPolicyUnstructured, metav1.CreateOptions{}); err != nil {
-				logger.Error(err, "failed to create envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", desiredEnvoyPatchPolicyUnstructured.Object)
+				logger.Error(err, "failed to create envoypatchpolicy object", "gateway", gatewayKey.String(), "envoypatchpolicy", desiredEnvoyPatchPolicyUnstructured.Object)
 				// TODO: handle error
 			}
 			continue
@@ -121,7 +121,7 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 		existingEnvoyPatchPolicy := existingEnvoyPatchPolicyObj.(*controller.RuntimeObject).Object.(*envoygatewayv1alpha1.EnvoyPatchPolicy)
 
 		if equalEnvoyPatchPolicies(existingEnvoyPatchPolicy, desiredEnvoyPatchPolicy) {
-			logger.V(1).Info("envoyfilter object is up to date, nothing to do")
+			logger.V(1).Info("envoypatchpolicy object is up to date, nothing to do")
 			continue
 		}
 
@@ -135,11 +135,11 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 
 		existingEnvoyPatchPolicyUnstructured, err := controller.Destruct(existingEnvoyPatchPolicy)
 		if err != nil {
-			logger.Error(err, "failed to destruct envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyPatchPolicy)
+			logger.Error(err, "failed to destruct envoypatchpolicy object", "gateway", gatewayKey.String(), "envoypatchpolicy", existingEnvoyPatchPolicy)
 			continue
 		}
 		if _, err = resource.Update(ctx, existingEnvoyPatchPolicyUnstructured, metav1.UpdateOptions{}); err != nil {
-			logger.Error(err, "failed to update envoyfilter object", "gateway", gatewayKey.String(), "envoyfilter", existingEnvoyPatchPolicyUnstructured.Object)
+			logger.Error(err, "failed to update envoypatchpolicy object", "gateway", gatewayKey.String(), "envoypatchpolicy", existingEnvoyPatchPolicyUnstructured.Object)
 			// TODO: handle error
 		}
 	}
@@ -152,7 +152,7 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 
 	for _, envoyPatchPolicy := range staleEnvoyPatchPolicies {
 		if err := r.client.Resource(kuadrantenvoygateway.EnvoyPatchPoliciesResource).Namespace(envoyPatchPolicy.GetNamespace()).Delete(ctx, envoyPatchPolicy.GetName(), metav1.DeleteOptions{}); err != nil {
-			logger.Error(err, "failed to delete envoyfilter object", "envoyfilter", fmt.Sprintf("%s/%s", envoyPatchPolicy.GetNamespace(), envoyPatchPolicy.GetName()))
+			logger.Error(err, "failed to delete envoypatchpolicy object", "envoypatchpolicy", fmt.Sprintf("%s/%s", envoyPatchPolicy.GetNamespace(), envoyPatchPolicy.GetName()))
 			// TODO: handle error
 		}
 	}

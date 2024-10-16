@@ -61,20 +61,24 @@ func BuildActionSetsForPath(pathID string, path []machinery.Targetable, policyRu
 
 	return lo.FlatMap(kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(listener.Listener, httpRoute.HTTPRoute), func(hostname gatewayapiv1.Hostname, i int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
 		return lo.Map(httpRouteRule.Matches, func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, j int) kuadrantgatewayapi.HTTPRouteMatchConfig {
+			actionSet := ActionSet{
+				Name:    fmt.Sprintf("%d-%s-%d", i, pathID, j),
+				Actions: actions,
+			}
+			routeRuleConditions := RouteRuleConditions{
+				Hostnames: []string{string(hostname)},
+			}
+			if predicates := PredicatesFromHTTPRouteMatch(httpRouteMatch); len(predicates) > 0 {
+				routeRuleConditions.Matches = predicates
+			}
+			actionSet.RouteRuleConditions = routeRuleConditions
 			return kuadrantgatewayapi.HTTPRouteMatchConfig{
 				Hostname:          string(hostname),
 				HTTPRouteMatch:    httpRouteMatch,
 				CreationTimestamp: httpRoute.GetCreationTimestamp(),
 				Namespace:         httpRoute.GetNamespace(),
 				Name:              httpRoute.GetName(),
-				Config: ActionSet{
-					Name: fmt.Sprintf("%d-%s-%d", i, pathID, j),
-					RouteRuleConditions: RouteRuleConditions{
-						Hostnames: []string{string(hostname)},
-						Matches:   PredicatesFromHTTPRouteMatch(httpRouteMatch),
-					},
-					Actions: actions,
-				},
+				Config:            actionSet,
 			}
 		})
 	}), err

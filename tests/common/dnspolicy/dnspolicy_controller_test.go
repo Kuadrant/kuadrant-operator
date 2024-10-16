@@ -14,7 +14,6 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -516,6 +515,7 @@ var _ = Describe("DNSPolicy controller", func() {
 	})
 
 	Context("valid target and valid gateway status", func() {
+		var policiesBackRefValue, policyBackRefValue string
 
 		BeforeEach(func(ctx SpecContext) {
 			gateway = tests.NewGatewayBuilder(tests.GatewayName, gatewayClass.Name, testNamespace).
@@ -560,11 +560,28 @@ var _ = Describe("DNSPolicy controller", func() {
 
 			recordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameOne)
 			wildcardRecordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameWildcard)
+
+			policyBackRefValue = testNamespace + "/" + dnsPolicy.Name
+			refs, _ := json.Marshal([]client.ObjectKey{{Name: dnsPolicy.Name, Namespace: testNamespace}})
+			policiesBackRefValue = string(refs)
 		})
 
-		It("should have correct status", func(ctx SpecContext) {
+		It("should create dns records and have correct policy status", func(ctx SpecContext) {
 			Eventually(func(g Gomega) {
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+				//Check records
+				recordList := &kuadrantdnsv1alpha1.DNSRecordList{}
+				err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(recordList.Items).To(HaveLen(2))
+
+				dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, dnsRecord)).To(Succeed())
+
+				wildcardDnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, wildcardDnsRecord)).To(Succeed())
+
+				//Check policy status
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Finalizers).To(ContainElement(controllers.DNSPolicyFinalizer))
 				g.Expect(dnsPolicy.Status.Conditions).To(
@@ -582,37 +599,24 @@ var _ = Describe("DNSPolicy controller", func() {
 							"Message": Equal("DNSPolicy has been successfully enforced"),
 						})),
 				)
-			}, tests.TimeoutLong, time.Second).Should(Succeed())
+				g.Expect(dnsPolicy.Status.TotalRecords).To(Equal(int32(2)))
 
-			// ensure there are no policies with not accepted condition
-			// in this case the "enforced" on the policy should be false
-			Eventually(func(g Gomega) {
-				dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
-				err := k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, dnsRecord)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(dnsRecord.Status.Conditions).ToNot(ContainElement(MatchFields(IgnoreExtras, Fields{
-					"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
-					"Status": Equal(metav1.ConditionFalse),
-				})))
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
-		}, testTimeOut)
-
-		It("should set gateway back reference", func(ctx SpecContext) {
-			policyBackRefValue := testNamespace + "/" + dnsPolicy.Name
-			refs, _ := json.Marshal([]client.ObjectKey{{Name: dnsPolicy.Name, Namespace: testNamespace}})
-			policiesBackRefValue := string(refs)
-
-			Eventually(func(g Gomega) {
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
+				//Check gateway back reference"
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
 				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutLong, tests.RetryIntervalMedium, ctx).Should(Succeed())
 		}, testTimeOut)
 
 		It("should remove dns records when listener removed", func(ctx SpecContext) {
-			//get the gateway and remove the listeners
+			Eventually(func(g Gomega) { // DNS records(s) exist
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).To(Succeed())
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
+			//get the gateway and remove the listeners
+			By("removing listener from gateway")
 			Eventually(func() error {
 				existingGateway := &gatewayapiv1.Gateway{}
 				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), existingGateway); err != nil {
@@ -627,17 +631,227 @@ var _ = Describe("DNSPolicy controller", func() {
 
 				patch := client.MergeFrom(existingGateway.DeepCopy())
 				existingGateway.Spec.Listeners = newListeners
-				rec := &kuadrantdnsv1alpha1.DNSRecord{}
-				if err := k8sClient.Patch(ctx, existingGateway, patch); err != nil {
-					return err
-				}
-				//dns record should be removed for non wildcard
-				if err := k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, rec); err != nil && !k8serrors.IsNotFound(err) {
-					return err
-				}
-				return k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, rec)
-			}, time.Second*10, time.Second).Should(BeNil())
+				return k8sClient.Patch(ctx, existingGateway, patch)
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+
+			Eventually(func(g Gomega) { // DNS record should be removed for non wildcard
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).Should(MatchError(ContainSubstring("not found")))
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).To(Succeed())
+
+				//Check policy status
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Status": Equal(metav1.ConditionTrue),
+						}),
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(kuadrant.PolicyConditionEnforced)),
+							"Status": Equal(metav1.ConditionTrue),
+						})),
+				)
+				g.Expect(dnsPolicy.Status.TotalRecords).To(Equal(int32(1)))
+			}, tests.TimeoutLong, time.Second).Should(Succeed())
 		}, testTimeOut)
+
+		It("should remove dns records and gateway back reference on policy deletion", func(ctx SpecContext) {
+			Eventually(func(g Gomega) { // DNS records(s) exist and gateway back references set
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).To(Succeed())
+
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
+
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsPolicy.Finalizers).To(ContainElement(controllers.DNSPolicyFinalizer))
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+
+			By("deleting the dns policy")
+			Expect(k8sClient.Delete(ctx, dnsPolicy)).To(Succeed())
+
+			Eventually(func(g Gomega) { // DNS records(s) do not exist and gateway back references removed
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).Should(MatchError(ContainSubstring("not found")))
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).Should(MatchError(ContainSubstring("not found")))
+
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(gateway.Annotations).ToNot(HaveKey(v1alpha1.DNSPolicyDirectReferenceAnnotationName))
+				g.Expect(gateway.Annotations).ToNot(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+		}, testTimeOut)
+
+		It("should remove dns records on gateway deletion", func(ctx SpecContext) {
+			Eventually(func(g Gomega) { // DNS records(s) exist
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).To(Succeed())
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
+
+			By("deleting the gateway")
+			Expect(k8sClient.Delete(ctx, gateway)).To(Succeed())
+
+			Eventually(func(g Gomega) { // DNS records(s) do not exist
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).Should(MatchError(ContainSubstring("not found")))
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).Should(MatchError(ContainSubstring("not found")))
+
+				//Check policy status
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ConsistOf(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Status": Equal(metav1.ConditionFalse),
+							"Reason": Equal("TargetNotFound"),
+						}),
+					),
+				)
+				//ToDo (mnairn) Theres a bug here, this never gets reset when all records are removed due to target removal
+				//g.Expect(dnsPolicy.Status.TotalRecords).To(Equal(int32(0)))
+			}, tests.TimeoutLong, tests.RetryIntervalMedium).Should(Succeed())
+		}, testTimeOut)
+
+		It("should remove dns records and gateway back reference on policy target ref change [invalid target]", func(ctx SpecContext) {
+			Eventually(func(g Gomega) { // DNS records(s) exist
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).To(Succeed())
+
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
+
+			By("changing the policy target ref")
+			Eventually(func() error {
+				existingDNSpolicy := &v1alpha1.DNSPolicy{}
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), existingDNSpolicy); err != nil {
+					return err
+				}
+				patch := client.MergeFrom(existingDNSpolicy.DeepCopy())
+				existingDNSpolicy.Spec.TargetRef.Name = "doesnotexist"
+				return k8sClient.Patch(ctx, existingDNSpolicy, patch)
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+
+			Eventually(func(g Gomega) { // DNS records(s) do not exist and gateway back references removed
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).Should(MatchError(ContainSubstring("not found")))
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).Should(MatchError(ContainSubstring("not found")))
+
+				//ToDo (mnairn) Theres a bug here, the old gateway target never has these annotations removed
+				//err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
+				//g.Expect(err).NotTo(HaveOccurred())
+				//g.Expect(gateway.Annotations).ToNot(HaveKey(v1alpha1.DNSPolicyDirectReferenceAnnotationName))
+				//g.Expect(gateway.Annotations).ToNot(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
+
+				//Check policy status
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ConsistOf(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Status": Equal(metav1.ConditionFalse),
+							"Reason": Equal("TargetNotFound"),
+						}),
+					),
+				)
+				//ToDo (mnairn) Theres a bug here, this never gets reset when all records are removed due to target removal
+				//g.Expect(dnsPolicy.Status.TotalRecords).To(Equal(int32(0)))
+			}, tests.TimeoutLong, time.Second).Should(Succeed())
+
+		}, testTimeOut)
+
+		It("should remove dns records and gateway back reference on policy target ref change [valid target]", func(ctx SpecContext) {
+			Eventually(func(g Gomega) { // DNS records(s) exist
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).To(Succeed())
+
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
+				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
+
+			testGateway2Name := "test-gateway-2"
+			record2Name := fmt.Sprintf("%s-%s", testGateway2Name, tests.ListenerNameOne)
+			gateway2 := tests.NewGatewayBuilder(testGateway2Name, gatewayClass.Name, testNamespace).
+				WithHTTPListener(tests.ListenerNameOne, tests.HostOne(domain)).
+				Gateway
+
+			By("creating second gateway")
+			Expect(k8sClient.Create(ctx, gateway2)).To(Succeed())
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway2), gateway2)).To(Succeed())
+				gateway2.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
+					{
+						Type: ptr.To(gatewayapiv1.IPAddressType),
+						//Using the same address can cause a panic in the inmemory provider see https://github.com/Kuadrant/dns-operator/issues/272
+						Value: "172.1.1.1",
+					},
+				}
+				gateway2.Status.Listeners = []gatewayapiv1.ListenerStatus{
+					{
+						Name:           tests.ListenerNameOne,
+						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
+						AttachedRoutes: 1,
+						Conditions:     []metav1.Condition{},
+					},
+				}
+				g.Expect(k8sClient.Status().Update(ctx, gateway2)).To(Succeed())
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
+
+			By("changing the policy target ref")
+			Eventually(func() error {
+				existingDNSpolicy := &v1alpha1.DNSPolicy{}
+				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), existingDNSpolicy); err != nil {
+					return err
+				}
+				patch := client.MergeFrom(existingDNSpolicy.DeepCopy())
+				existingDNSpolicy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(testGateway2Name)
+				return k8sClient.Patch(ctx, existingDNSpolicy, patch)
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+
+			Eventually(func(g Gomega) { // DNS records(s) do not exist and gateway back references removed
+				// New dns record exists and old ones removed
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: record2Name, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).Should(Succeed())
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).Should(MatchError(ContainSubstring("not found")))
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).Should(MatchError(ContainSubstring("not found")))
+
+				//Old gateway target has gateway back references removed
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(gateway.Annotations).ToNot(HaveKey(v1alpha1.DNSPolicyDirectReferenceAnnotationName))
+				g.Expect(gateway.Annotations).ToNot(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
+
+				//New gateway target has gateway back references added
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway2), gateway2)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(gateway2.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
+				g.Expect(gateway2.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
+
+				//Check policy status
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Status": Equal(metav1.ConditionTrue),
+						}),
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(kuadrant.PolicyConditionEnforced)),
+							"Status": Equal(metav1.ConditionTrue),
+						}),
+					),
+				)
+				g.Expect(dnsPolicy.Status.TotalRecords).To(Equal(int32(1)))
+			}, tests.TimeoutLong, time.Second).Should(Succeed())
+
+		})
 
 		It("should re-create dns record when listener hostname changes", func(ctx SpecContext) {
 			//get the current dnsrecord and wildcard dnsrecord
@@ -761,53 +975,6 @@ var _ = Describe("DNSPolicy controller", func() {
 			}, tests.TimeoutLong, time.Second).Should(BeNil())
 		}, testTimeOut)
 
-		It("should remove gateway back reference on policy deletion", func(ctx SpecContext) {
-			policyBackRefValue := testNamespace + "/" + dnsPolicy.Name
-			refs, _ := json.Marshal([]client.ObjectKey{{Name: dnsPolicy.Name, Namespace: testNamespace}})
-			policiesBackRefValue := string(refs)
-
-			Eventually(func(g Gomega) {
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
-
-				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(dnsPolicy.Finalizers).To(ContainElement(controllers.DNSPolicyFinalizer))
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
-
-			By("deleting the dns policy")
-			Expect(k8sClient.Delete(ctx, dnsPolicy)).To(BeNil())
-
-			Eventually(func(g Gomega) {
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).ToNot(HaveKey(v1alpha1.DNSPolicyDirectReferenceAnnotationName))
-				g.Expect(gateway.Annotations).ToNot(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
-		}, testTimeOut)
-
-		It("should remove dns record reference on policy deletion even if gateway is removed", func(ctx SpecContext) {
-
-			Eventually(func() error { // DNS record exists
-				return k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})
-			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
-
-			err := k8sClient.Delete(ctx, gateway)
-			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
-
-			err = k8sClient.Delete(ctx, dnsPolicy)
-			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
-
-			//ToDo We cant assume that a dnsrecord reconciler is running that will remove the record or that it will be removed
-			// It's not the responsibility of this operator to do this, so we should just check if it's gone
-			// (in case we are running on a cluster that actually has a dnsrecord reconciler running), or that it is marked for deletion
-			//Eventually(func() error { // DNS record removed
-			//	return k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})
-			//}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(MatchError(ContainSubstring("not found")))
-
-		}, testTimeOut)
 	})
 
 	Context("cel validation", func() {

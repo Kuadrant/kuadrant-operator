@@ -115,15 +115,24 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		if dnsPolicy != nil {
 			err := k8sClient.Delete(ctx, dnsPolicy)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
-			// Wait until dns records are finished deleting since it can't finish deleting without the DNS provider secret
-			Eventually(func(g Gomega) {
-				dnsRecords := &kuadrantdnsv1alpha1.DNSRecordList{}
-				err := k8sClient.List(ctx, dnsRecords, client.InNamespace(testNamespace))
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(dnsRecords.Items).To(HaveLen(0))
-			}).WithContext(ctx).Should(Succeed())
-
 		}
+
+		//Ensure all dns records in the test namespace are deleted
+		dnsRecords := &kuadrantdnsv1alpha1.DNSRecordList{}
+		err := k8sClient.List(ctx, dnsRecords, client.InNamespace(testNamespace))
+		Expect(err).ToNot(HaveOccurred())
+		for _, record := range dnsRecords.Items {
+			err := k8sClient.Delete(ctx, &record, client.PropagationPolicy(metav1.DeletePropagationForeground))
+			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
+		}
+
+		// Wait until dns records are finished deleting since it can't finish deleting without the DNS provider secret
+		Eventually(func(g Gomega) {
+			err := k8sClient.List(ctx, dnsRecords, client.InNamespace(testNamespace))
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(dnsRecords.Items).To(HaveLen(0))
+		}).WithContext(ctx).Should(Succeed())
+
 		if dnsProviderSecret != nil {
 			err := k8sClient.Delete(ctx, dnsProviderSecret)
 			Expect(client.IgnoreNotFound(err)).ToNot(HaveOccurred())
@@ -138,7 +147,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 	Context("simple routing strategy", func() {
 
 		BeforeEach(func(ctx SpecContext) {
-			dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+			dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway(tests.GatewayName)
 			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
@@ -197,7 +206,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 
 		Context("with default geo", func() {
 			BeforeEach(func(ctx SpecContext) {
-				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+				dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 					WithProviderSecret(*dnsProviderSecret).
 					WithTargetGateway(tests.GatewayName).
 					WithLoadBalancingFor(120, "IE", true)
@@ -317,7 +326,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 
 		Context("without default geo", func() {
 			BeforeEach(func(ctx SpecContext) {
-				dnsPolicy = v1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).
+				dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
 					WithProviderSecret(*dnsProviderSecret).
 					WithTargetGateway(tests.GatewayName).
 					WithLoadBalancingFor(120, "IE", false)

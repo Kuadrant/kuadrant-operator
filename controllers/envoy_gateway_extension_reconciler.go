@@ -66,6 +66,8 @@ func (r *envoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 		return o.GroupVersionKind().GroupKind() == machinery.GatewayGroupKind
 	})
 
+	var modifiedGateways []string
+
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
@@ -82,6 +84,7 @@ func (r *envoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			if utils.IsObjectTaggedToDelete(desiredEnvoyExtensionPolicy) {
 				continue
 			}
+			modifiedGateways = append(modifiedGateways, gateway.GetLocator()) // we only signal the gateway as modified when an envoyextensionpolicy is created, because updates won't change the status
 			desiredEnvoyExtensionPolicyUnstructured, err := controller.Destruct(desiredEnvoyExtensionPolicy)
 			if err != nil {
 				logger.Error(err, "failed to destruct envoyextensionpolicy object", "gateway", gatewayKey.String(), "envoyextensionpolicy", desiredEnvoyExtensionPolicy)
@@ -124,6 +127,8 @@ func (r *envoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 			// TODO: handle error
 		}
 	}
+
+	state.Store(StateEnvoyGatewayExtensionsModified, modifiedGateways)
 
 	return nil
 }

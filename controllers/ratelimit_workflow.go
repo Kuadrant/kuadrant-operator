@@ -7,6 +7,7 @@ import (
 	"sync"
 	"unicode"
 
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,10 +43,14 @@ const (
 var (
 	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
 
-	StateRateLimitPolicyValid       = "RateLimitPolicyValid"
-	StateEffectiveRateLimitPolicies = "EffectiveRateLimitPolicies"
+	StateRateLimitPolicyValid                  = "RateLimitPolicyValid"
+	StateEffectiveRateLimitPolicies            = "EffectiveRateLimitPolicies"
+	StateLimitadorLimitsModified               = "LimitadorLimitsModified"
+	StateIstioRateLimitClustersModified        = "IstioRateLimitClustersModified"
+	StateIstioExtensionsModified               = "IstioExtensionsModified"
+	StateEnvoyGatewayRateLimitClustersModified = "EnvoyGatewayRateLimitClustersModified"
+	StateEnvoyGatewayExtensionsModified        = "EnvoyGatewayExtensionsModified"
 
-	ErrMissingTarget                          = fmt.Errorf("target not found")
 	ErrMissingLimitador                       = fmt.Errorf("missing limitador object in the topology")
 	ErrMissingStateEffectiveRateLimitPolicies = fmt.Errorf("missing rate limit effective policies stored in the reconciliation state")
 
@@ -93,6 +98,23 @@ func NewRateLimitWorkflow(manager ctrlruntime.Manager, client *dynamic.DynamicCl
 		Tasks:         []controller.ReconcileFunc{effectiveRateLimitPoliciesWorkflow.Run},
 		Postcondition: (&rateLimitPolicyStatusUpdater{client: client}).Subscription().Reconcile,
 	}
+}
+
+func GetLimitadorFromTopology(topology *machinery.Topology) (*limitadorv1alpha1.Limitador, error) {
+	kuadrant, err := GetKuadrantFromTopology(topology)
+	if err != nil {
+		return nil, err
+	}
+
+	limitadorObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {
+		return child.GroupVersionKind().GroupKind() == kuadrantv1beta1.LimitadorGroupKind
+	})
+	if !found {
+		return nil, ErrMissingLimitador
+	}
+
+	limitador := limitadorObj.(*controller.RuntimeObject).Object.(*limitadorv1alpha1.Limitador)
+	return limitador, nil
 }
 
 func LimitsNamespaceFromRoute(route *gatewayapiv1.HTTPRoute) string {

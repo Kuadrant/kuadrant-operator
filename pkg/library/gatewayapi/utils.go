@@ -9,6 +9,7 @@ import (
 	"github.com/cert-manager/cert-manager/pkg/apis/certmanager"
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -216,4 +217,23 @@ func EqualLocalPolicyTargetReferencesWithSectionName(a, b []gatewayapiv1alpha2.L
 			return aTargetRef.Group == bTargetRef.Group && aTargetRef.Kind == bTargetRef.Kind && aTargetRef.Name == bTargetRef.Name && ptr.Deref(aTargetRef.SectionName, gatewayapiv1alpha2.SectionName("")) == ptr.Deref(bTargetRef.SectionName, gatewayapiv1alpha2.SectionName(""))
 		})
 	})
+}
+
+// PolicyStatusConditionsFromAncestor returns the conditions from a policy status for a given ancestor
+func PolicyStatusConditionsFromAncestor(policyStatus gatewayapiv1alpha2.PolicyStatus, controllerName gatewayapiv1.GatewayController, ancestor gatewayapiv1.ParentReference, defaultNamespace gatewayapiv1.Namespace) []metav1.Condition {
+	if status, found := lo.Find(policyStatus.Ancestors, func(a gatewayapiv1alpha2.PolicyAncestorStatus) bool {
+		defaultGroup := gatewayapiv1alpha2.Group(gatewayapiv1.GroupName)
+		defaultKind := gatewayapiv1alpha2.Kind(machinery.GatewayGroupKind.Kind)
+		defaultSectionName := gatewayapiv1.SectionName("")
+		ref := a.AncestorRef
+		return a.ControllerName == controllerName &&
+			ptr.Deref(ref.Group, defaultGroup) == ptr.Deref(ancestor.Group, defaultGroup) &&
+			ptr.Deref(ref.Kind, defaultKind) == ptr.Deref(ancestor.Kind, defaultKind) &&
+			ptr.Deref(ref.Namespace, defaultNamespace) == ptr.Deref(ancestor.Namespace, defaultNamespace) &&
+			ref.Name == ancestor.Name &&
+			ptr.Deref(ref.SectionName, defaultSectionName) == ptr.Deref(ancestor.SectionName, defaultSectionName)
+	}); found {
+		return status.Conditions
+	}
+	return nil
 }

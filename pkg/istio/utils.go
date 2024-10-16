@@ -4,11 +4,13 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	istioapimetav1alpha1 "istio.io/api/meta/v1alpha1"
 	istioapiv1beta1 "istio.io/api/type/v1beta1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -39,6 +41,15 @@ func EqualTargetRefs(a, b []*istioapiv1beta1.PolicyTargetReference) bool {
 			return aTargetRef.Group == bTargetRef.Group && aTargetRef.Kind == bTargetRef.Kind && aTargetRef.Name == bTargetRef.Name && aTargetRef.Namespace == bTargetRef.Namespace
 		})
 	})
+}
+
+func ConditionToProperConditionFunc(istioCondition *istioapimetav1alpha1.IstioCondition, _ int) metav1.Condition {
+	return metav1.Condition{
+		Type:    istioCondition.GetType(),
+		Status:  metav1.ConditionStatus(istioCondition.GetStatus()),
+		Reason:  istioCondition.GetReason(),
+		Message: istioCondition.GetMessage(),
+	}
 }
 
 func IsEnvoyFilterInstalled(restMapper meta.RESTMapper) (bool, error) {

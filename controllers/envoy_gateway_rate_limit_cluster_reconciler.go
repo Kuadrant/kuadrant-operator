@@ -86,6 +86,7 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 	})
 
 	desiredEnvoyPatchPolicies := make(map[k8stypes.NamespacedName]struct{})
+	var modifiedGateways []string
 
 	// reconcile envoy gateway cluster for gateway
 	for _, gateway := range gateways {
@@ -106,6 +107,7 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 
 		// create
 		if !found {
+			modifiedGateways = append(modifiedGateways, gateway.GetLocator()) // we only signal the gateway as modified when an envoypatchpolicy is created, because updates won't change the status
 			desiredEnvoyPatchPolicyUnstructured, err := controller.Destruct(desiredEnvoyPatchPolicy)
 			if err != nil {
 				logger.Error(err, "failed to destruct envoypatchpolicy object", "gateway", gatewayKey.String(), "envoypatchpolicy", desiredEnvoyPatchPolicy)
@@ -143,6 +145,8 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 			// TODO: handle error
 		}
 	}
+
+	state.Store(StateEnvoyGatewayRateLimitClustersModified, modifiedGateways)
 
 	// cleanup envoy gateway clusters for gateways that are not in the effective policies
 	staleEnvoyPatchPolicies := topology.Objects().Items(func(o machinery.Object) bool {

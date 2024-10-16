@@ -4,8 +4,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kuadrant/policy-machinery/machinery"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -36,6 +37,34 @@ func (e ErrTargetNotFound) Reason() gatewayapiv1alpha2.PolicyConditionReason {
 
 func NewErrTargetNotFound(kind string, targetRef gatewayapiv1alpha2.LocalPolicyTargetReference, err error) ErrTargetNotFound {
 	return ErrTargetNotFound{
+		Kind:      kind,
+		TargetRef: targetRef,
+		Err:       err,
+	}
+}
+
+var _ PolicyError = ErrPolicyTargetNotFound{}
+
+type ErrPolicyTargetNotFound struct {
+	Kind      string
+	TargetRef machinery.PolicyTargetReference
+	Err       error
+}
+
+func (e ErrPolicyTargetNotFound) Error() string {
+	if apierrors.IsNotFound(e.Err) {
+		return fmt.Sprintf("%s target %s was not found", e.Kind, e.TargetRef.GetName())
+	}
+
+	return fmt.Sprintf("%s target %s was not found: %s", e.Kind, e.TargetRef.GetName(), e.Err.Error())
+}
+
+func (e ErrPolicyTargetNotFound) Reason() gatewayapiv1alpha2.PolicyConditionReason {
+	return gatewayapiv1alpha2.PolicyReasonTargetNotFound
+}
+
+func NewErrPolicyTargetNotFound(kind string, targetRef machinery.PolicyTargetReference, err error) ErrPolicyTargetNotFound {
+	return ErrPolicyTargetNotFound{
 		Kind:      kind,
 		TargetRef: targetRef,
 		Err:       err,
@@ -114,7 +143,7 @@ var _ PolicyError = ErrOverridden{}
 
 type ErrOverridden struct {
 	Kind               string
-	OverridingPolicies []client.ObjectKey
+	OverridingPolicies []k8stypes.NamespacedName
 }
 
 func (e ErrOverridden) Error() string {
@@ -125,10 +154,32 @@ func (e ErrOverridden) Reason() gatewayapiv1alpha2.PolicyConditionReason {
 	return PolicyReasonOverridden
 }
 
-func NewErrOverridden(kind string, overridingPolicies []client.ObjectKey) ErrOverridden {
+func NewErrOverridden(kind string, overridingPolicies []k8stypes.NamespacedName) ErrOverridden {
 	return ErrOverridden{
 		Kind:               kind,
 		OverridingPolicies: overridingPolicies,
+	}
+}
+
+var _ PolicyError = ErrOutOfSync{}
+
+type ErrOutOfSync struct {
+	Kind       string
+	Components []string
+}
+
+func (e ErrOutOfSync) Error() string {
+	return fmt.Sprintf("%s waiting for the following components to sync: %s", e.Kind, e.Components)
+}
+
+func (e ErrOutOfSync) Reason() gatewayapiv1alpha2.PolicyConditionReason {
+	return PolicyReasonUnknown
+}
+
+func NewErrOutOfSync(kind string, components []string) ErrOutOfSync {
+	return ErrOutOfSync{
+		Kind:       kind,
+		Components: components,
 	}
 }
 

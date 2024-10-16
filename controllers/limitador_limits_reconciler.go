@@ -36,24 +36,14 @@ func (r *limitadorLimitsReconciler) Subscription() controller.Subscription {
 func (r *limitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("limitadorLimitsReconciler")
 
-	kuadrant, err := GetKuadrantFromTopology(topology)
+	limitador, err := GetLimitadorFromTopology(topology)
 	if err != nil {
-		if errors.Is(err, ErrMissingKuadrant) {
+		if errors.Is(err, ErrMissingKuadrant) || errors.Is(err, ErrMissingLimitador) {
 			logger.V(1).Info(err.Error())
 			return nil
 		}
 		return err
 	}
-
-	limitadorObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {
-		return child.GroupVersionKind().GroupKind() == kuadrantv1beta1.LimitadorGroupKind
-	})
-	if !found {
-		logger.V(1).Info(ErrMissingLimitador.Error())
-		return nil
-	}
-
-	limitador := limitadorObj.(*controller.RuntimeObject).Object.(*limitadorv1alpha1.Limitador)
 
 	desiredLimits, err := r.buildLimitadorLimits(ctx, state)
 	if err != nil {
@@ -65,6 +55,8 @@ func (r *limitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 		logger.V(1).Info("limitador object is up to date, nothing to do")
 		return nil
 	}
+
+	state.Store(StateLimitadorLimitsModified, true)
 
 	limitador.Spec.Limits = desiredLimits
 

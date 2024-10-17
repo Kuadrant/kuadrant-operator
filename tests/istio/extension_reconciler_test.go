@@ -139,10 +139,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
 			// has the correct target ref
-			Expect(existingWasmPlugin.Spec.TargetRef).To(Not(BeNil()))
-			Expect(existingWasmPlugin.Spec.TargetRef.Group).To(Equal("gateway.networking.k8s.io"))
-			Expect(existingWasmPlugin.Spec.TargetRef.Kind).To(Equal("Gateway"))
-			Expect(existingWasmPlugin.Spec.TargetRef.Name).To(Equal(gateway.Name))
+			Expect(existingWasmPlugin.Spec.TargetRefs).To(Not(BeEmpty()))
+			Expect(existingWasmPlugin.Spec.TargetRefs[0].Group).To(Equal("gateway.networking.k8s.io"))
+			Expect(existingWasmPlugin.Spec.TargetRefs[0].Kind).To(Equal("Gateway"))
+			Expect(existingWasmPlugin.Spec.TargetRefs[0].Name).To(Equal(gateway.Name))
 			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
@@ -306,9 +306,67 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			httpRouteRuleToys := &machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[0], Name: "rule-1"}
 			httpRouteRuleAssets := &machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[1], Name: "rule-2"}
 
-			// GET api.toystore.io/toys*
+			// api.toystore.io/assets*
 			actionSet := existingWASMConfig.ActionSets[0]
-			pathID := kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
+			pathID := kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 3, "api.toystore.io")))
+			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
+			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/assets",
+				},
+			))
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions).To(ContainElements(
+				wasm.Action{ // action to activate the 'users' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Conditions: []wasm.Predicate{
+						{
+							Selector: "auth.identity.group",
+							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
+							Value:    "admin",
+						},
+					},
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+									Value: "1",
+								},
+							},
+						},
+						{
+							Value: &wasm.Selector{
+								Selector: wasm.SelectorSpec{
+									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+								},
+							},
+						},
+					},
+				},
+				wasm.Action{ // action to activate the 'all' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+									Value: "1",
+								},
+							},
+						},
+					},
+				},
+			))
+
+			// GET api.toystore.io/toys*
+			actionSet = existingWASMConfig.ActionSets[1]
+			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "api.toystore.io")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
@@ -370,7 +428,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			))
 
 			// POST api.toystore.io/toys*
-			actionSet = existingWASMConfig.ActionSets[1]
+			actionSet = existingWASMConfig.ActionSets[2]
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 2, "api.toystore.io")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
@@ -432,11 +490,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 			))
 
-			// api.toystore.io/assets*
-			actionSet = existingWASMConfig.ActionSets[2]
+			// *.toystore.acme.com/assets*
+			actionSet = existingWASMConfig.ActionSets[3]
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
-			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 3, "api.toystore.io")))
-			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 3, "*.toystore.acme.com")))
+			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
 				wasm.Predicate{
 					Selector: "request.url_path",
@@ -491,7 +549,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			))
 
 			// GET *.toystore.acme.com/toys*
-			actionSet = existingWASMConfig.ActionSets[3]
+			actionSet = existingWASMConfig.ActionSets[4]
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
@@ -554,7 +612,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			))
 
 			// POST *.toystore.acme.com/toys*
-			actionSet = existingWASMConfig.ActionSets[4]
+			actionSet = existingWASMConfig.ActionSets[5]
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 2, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
@@ -568,64 +626,6 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					Selector: "request.url_path",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
 					Value:    "/toys",
-				},
-			))
-			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions).To(ContainElements(
-				wasm.Action{ // action to activate the 'users' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Predicate{
-						{
-							Selector: "auth.identity.group",
-							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-							Value:    "admin",
-						},
-					},
-					Data: []wasm.DataType{
-						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
-									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-									Value: "1",
-								},
-							},
-						},
-						{
-							Value: &wasm.Selector{
-								Selector: wasm.SelectorSpec{
-									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
-								},
-							},
-						},
-					},
-				},
-				wasm.Action{ // action to activate the 'all' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Data: []wasm.DataType{
-						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
-									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-									Value: "1",
-								},
-							},
-						},
-					},
-				},
-			))
-
-			// *.toystore.acme.com/assets*
-			actionSet = existingWASMConfig.ActionSets[5]
-			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
-			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 3, "*.toystore.acme.com")))
-			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
-			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
-				wasm.Predicate{
-					Selector: "request.url_path",
-					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-					Value:    "/assets",
 				},
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))

@@ -59,10 +59,10 @@ func BuildActionSetsForPath(pathID string, path []machinery.Targetable, policyRu
 		return action, true
 	})
 
-	return lo.FlatMap(kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(listener.Listener, httpRoute.HTTPRoute), func(hostname gatewayapiv1.Hostname, i int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
+	return lo.FlatMap(kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(listener.Listener, httpRoute.HTTPRoute), func(hostname gatewayapiv1.Hostname, _ int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
 		return lo.Map(httpRouteRule.Matches, func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, j int) kuadrantgatewayapi.HTTPRouteMatchConfig {
 			actionSet := ActionSet{
-				Name:    fmt.Sprintf("%d-%s-%d", i, pathID, j),
+				Name:    ActionSetNameForPath(pathID, j+1, string(hostname)),
 				Actions: actions,
 			}
 			routeRuleConditions := RouteRuleConditions{
@@ -82,6 +82,10 @@ func BuildActionSetsForPath(pathID string, path []machinery.Targetable, policyRu
 			}
 		})
 	}), err
+}
+
+func ActionSetNameForPath(pathID string, httpRouteMatchIndex int, hostname string) string {
+	return fmt.Sprintf("%s|%d|%s", pathID, httpRouteMatchIndex+1, hostname)
 }
 
 func ConfigFromStruct(structure *_struct.Struct) (*Config, error) {

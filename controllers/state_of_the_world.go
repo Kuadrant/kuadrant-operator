@@ -319,7 +319,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewDNSWorkflow().Run,
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isCertManagerInstalled).Run,
 			NewAuthWorkflow().Run,
-			NewRateLimitWorkflow(b.manager, b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
+			NewRateLimitWorkflow(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isIstioInstalled, b.isGatewayAPIInstalled).Run,
 	}

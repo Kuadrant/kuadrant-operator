@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/utils/ptr"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
@@ -61,8 +62,10 @@ func (r *istioExtensionReconciler) Reconcile(ctx context.Context, _ []controller
 	}
 
 	// reconcile for each gateway based on the desired wasm plugin policies calculated before
-	gateways := topology.Targetables().Items(func(o machinery.Object) bool {
+	gateways := lo.Map(topology.Targetables().Items(func(o machinery.Object) bool {
 		return o.GroupVersionKind().GroupKind() == machinery.GatewayGroupKind
+	}), func(g machinery.Targetable, _ int) *machinery.Gateway {
+		return g.(*machinery.Gateway)
 	})
 
 	var modifiedGateways []string
@@ -174,7 +177,7 @@ func (r *istioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 }
 
 // buildIstioWasmPluginForGateway builds a desired WasmPlugin custom resource for a given gateway and corresponding wasm config
-func buildIstioWasmPluginForGateway(gateway machinery.Targetable, wasmConfig wasm.Config) *istioclientgoextensionv1alpha1.WasmPlugin {
+func buildIstioWasmPluginForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config) *istioclientgoextensionv1alpha1.WasmPlugin {
 	wasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantistio.WasmPluginGroupKind.Kind,
@@ -183,6 +186,16 @@ func buildIstioWasmPluginForGateway(gateway machinery.Targetable, wasmConfig was
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      wasm.ExtensionName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         gateway.GroupVersionKind().GroupVersion().String(),
+					Kind:               gateway.GroupVersionKind().Kind,
+					Name:               gateway.Name,
+					UID:                gateway.UID,
+					BlockOwnerDeletion: ptr.To(true),
+					Controller:         ptr.To(true),
+				},
+			},
 		},
 		Spec: istioextensionsv1alpha1.WasmPlugin{
 			TargetRefs: []*istiov1beta1.PolicyTargetReference{

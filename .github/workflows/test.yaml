@@ -58,8 +58,8 @@ jobs:
         include:
           - gatewayapi-provider: istio
             istio-type: istioctl
-#          - gatewayapi-provider: istio
-#            istio-type: sail
+          - gatewayapi-provider: istio
+            istio-type: sail
           - gatewayapi-provider: envoygateway
       fail-fast: false
     runs-on: ubuntu-latest

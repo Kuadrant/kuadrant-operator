@@ -174,12 +174,8 @@ func rateLimitClusterPatch(host string, port int) map[string]any {
 
 func rateLimitWasmActionBuilder(pathID string, effectivePolicy EffectiveRateLimitPolicy, state *sync.Map) wasm.ActionBuilderFunc {
 	policiesInPath := kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
-
-	// assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]
-	httpRoute, _ := effectivePolicy.Path[3].(*machinery.HTTPRoute)
-
+	_, _, _, httpRoute, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
 	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
-
 	return func(uniquePolicyRuleKey string, policyRule kuadrantv1.MergeableRule) (wasm.Action, error) {
 		source, found := lo.Find(policiesInPath, func(p machinery.Policy) bool {
 			return p.GetLocator() == policyRule.Source

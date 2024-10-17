@@ -18,6 +18,7 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -148,9 +149,7 @@ func (r *istioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 
 	// build the wasm policies for each topological path that contains an effective rate limit policy affecting an istio gateway
 	for pathID, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {
-		// assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]
-		gatewayClass, _ := effectivePolicy.Path[0].(*machinery.GatewayClass)
-		gateway, _ := effectivePolicy.Path[1].(*machinery.Gateway)
+		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
 
 		// ignore if not an istio gateway
 		if gatewayClass.Spec.ControllerName != istioGatewayControllerName {

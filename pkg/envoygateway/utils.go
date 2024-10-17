@@ -2,8 +2,13 @@ package envoygateway
 
 import (
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
+	"github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
+	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -69,4 +74,71 @@ func IsEnvoyGatewayInstalled(restMapper meta.RESTMapper) (bool, error) {
 
 	// EnvoyGateway found
 	return true, nil
+}
+
+func LinkGatewayToEnvoyPatchPolicy(objs controller.Store) machinery.LinkFunc {
+	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), func(obj controller.Object, _ int) machinery.Object {
+		return &machinery.Gateway{Gateway: obj.(*gatewayapiv1.Gateway)}
+	})
+
+	return machinery.LinkFunc{
+		From: machinery.GatewayGroupKind,
+		To:   EnvoyPatchPolicyGroupKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			envoyPatchPolicy := child.(*controller.RuntimeObject).Object.(*egv1alpha1.EnvoyPatchPolicy)
+			namespace := envoyPatchPolicy.GetNamespace()
+			targetRef := envoyPatchPolicy.Spec.TargetRef
+			group := string(targetRef.Group)
+			if group == "" {
+				group = machinery.GatewayGroupKind.Group
+			}
+			kind := string(targetRef.Kind)
+			if kind == "" {
+				kind = machinery.GatewayGroupKind.Kind
+			}
+			name := string(targetRef.Name)
+			if group != machinery.GatewayGroupKind.Group || kind != machinery.GatewayGroupKind.Kind || name == "" {
+				return []machinery.Object{}
+			}
+			return lo.Filter(gateways, func(gateway machinery.Object, _ int) bool {
+				return gateway.GetName() == name && gateway.GetNamespace() == namespace
+			})
+		},
+	}
+}
+
+func LinkGatewayToEnvoyExtensionPolicy(objs controller.Store) machinery.LinkFunc {
+	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), func(obj controller.Object, _ int) machinery.Object {
+		return &machinery.Gateway{Gateway: obj.(*gatewayapiv1.Gateway)}
+	})
+
+	return machinery.LinkFunc{
+		From: machinery.GatewayGroupKind,
+		To:   EnvoyExtensionPolicyGroupKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			envoyExtensionPolicy := child.(*controller.RuntimeObject).Object.(*egv1alpha1.EnvoyExtensionPolicy)
+			return lo.Filter(gateways, func(gateway machinery.Object, _ int) bool {
+				if gateway.GetNamespace() != envoyExtensionPolicy.GetNamespace() {
+					return false
+				}
+				return lo.SomeBy(envoyExtensionPolicy.Spec.TargetRefs, func(targetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName) bool {
+					group := string(targetRef.Group)
+					if group == "" {
+						group = machinery.GatewayGroupKind.Group
+					}
+					kind := string(targetRef.Kind)
+					if kind == "" {
+						kind = machinery.GatewayGroupKind.Kind
+					}
+					name := string(targetRef.Name)
+					if name == "" {
+						return false
+					}
+					return group == machinery.GatewayGroupKind.Group &&
+						kind == machinery.GatewayGroupKind.Kind &&
+						name == gateway.GetName()
+				})
+			})
+		},
+	}
 }

@@ -8,19 +8,22 @@ import (
 	"time"
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
+	"github.com/kuadrant/policy-machinery/machinery"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
+	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
@@ -32,15 +35,19 @@ var _ = Describe("wasm controller", func() {
 	var (
 		testNamespace string
 		gwHost        = fmt.Sprintf("*.toystore-%s.com", rand.String(4))
+		gatewayClass  *gatewayapiv1.GatewayClass
 		gateway       *gatewayapiv1.Gateway
 	)
 
 	BeforeEach(func(ctx SpecContext) {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
+		gatewayClass = &gatewayapiv1.GatewayClass{}
+		err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+		Expect(err).ToNot(HaveOccurred())
 		gateway = tests.NewGatewayBuilder(TestGatewayName, tests.GatewayClassName, testNamespace).
 			WithHTTPListener("test-listener", gwHost).
 			Gateway
-		err := testClient().Create(ctx, gateway)
+		err = testClient().Create(ctx, gateway)
 		Expect(err).ToNot(HaveOccurred())
 
 		Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
@@ -77,8 +84,9 @@ var _ = Describe("wasm controller", func() {
 	Context("RateLimitPolicy attached to the gateway", func() {
 
 		var (
-			gwPolicy *kuadrantv1beta3.RateLimitPolicy
-			gwRoute  *gatewayapiv1.HTTPRoute
+			gwPolicy      *kuadrantv1beta3.RateLimitPolicy
+			gwRoute       *gatewayapiv1.HTTPRoute
+			actionSetName string
 		)
 
 		BeforeEach(func(ctx SpecContext) {
@@ -87,17 +95,30 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(gwRoute))).WithContext(ctx).Should(BeTrue())
 
+			mGateway := &machinery.Gateway{Gateway: gateway}
+			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: gwRoute}
+			pathID := kuadrantv1.PathID([]machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &gwRoute.Spec.Rules[0], Name: "rule-1"},
+			})
+			actionSetName = wasm.ActionSetNameForPath(pathID, 0, string(gwRoute.Spec.Hostnames[0]))
+
 			gwPolicy = policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Name = "gw"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Defaults = &kuadrantv1beta3.RateLimitPolicyCommonSpec{
-					Limits: map[string]kuadrantv1beta3.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta3.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: "minute",
+				policy.Spec.Defaults = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1beta3.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta3.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: "minute",
+									},
 								},
 							},
 						},
@@ -119,7 +140,7 @@ var _ = Describe("wasm controller", func() {
 
 		It("Creates envoyextensionpolicy", func(ctx SpecContext) {
 			extKey := client.ObjectKey{
-				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Name:      wasm.ExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -146,47 +167,41 @@ var _ = Describe("wasm controller", func() {
 			existingWASMConfig, err := wasm.ConfigFromJSON(ext.Spec.Wasm[0].Config)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
-				Extensions: map[string]wasm.Extension{
-					wasm.RateLimitPolicyExtensionName: {
+				Services: map[string]wasm.Service{
+					wasm.RateLimitServiceName: {
+						Type:        wasm.RateLimitServiceType,
 						Endpoint:    common.KuadrantRateLimitClusterName,
 						FailureMode: wasm.FailureModeAllow,
-						Type:        wasm.RateLimitExtensionType,
 					},
 				},
-				Policies: []wasm.Policy{
+				ActionSets: []wasm.ActionSet{
 					{
-						Name:      gwPolicyKey.String(),
-						Hostnames: []string{gwHost},
-						Rules: []wasm.Rule{
-							{
-								Conditions: []wasm.Condition{
-									{
-										AllOf: []wasm.PatternExpression{
-											{
-												Selector: "request.url_path",
-												Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-												Value:    "/toy",
-											},
-											{
-												Selector: "request.method",
-												Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-												Value:    "GET",
-											},
-										},
-									},
+						Name: actionSetName,
+						RouteRuleConditions: wasm.RouteRuleConditions{
+							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
+							Matches: []wasm.Predicate{
+								{
+									Selector: "request.method",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+									Value:    "GET",
 								},
-								Actions: []wasm.Action{
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toy",
+								},
+							},
+						},
+						Actions: []wasm.Action{
+							{
+								ServiceName: wasm.RateLimitServiceName,
+								Scope:       controllers.LimitsNamespaceFromRoute(gwRoute),
+								Data: []wasm.DataType{
 									{
-										Scope:         wasm.LimitsNamespaceFromRLP(gwPolicy),
-										ExtensionName: wasm.RateLimitPolicyExtensionName,
-										Data: []wasm.DataType{
-											{
-												Value: &wasm.Static{
-													Static: wasm.StaticSpec{
-														Key:   wasm.LimitNameToLimitadorIdentifier(gwPolicyKey, "l1"),
-														Value: "1",
-													},
-												},
+										Value: &wasm.Static{
+											Static: wasm.StaticSpec{
+												Key:   controllers.LimitNameToLimitadorIdentifier(gwPolicyKey, "l1"),
+												Value: "1",
 											},
 										},
 									},
@@ -205,7 +220,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			extKey := client.ObjectKey{
-				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Name:      wasm.ExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -222,7 +237,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			extKey := client.ObjectKey{
-				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Name:      wasm.ExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -237,8 +252,9 @@ var _ = Describe("wasm controller", func() {
 	Context("RateLimitPolicy attached to the route", func() {
 
 		var (
-			routePolicy *kuadrantv1beta3.RateLimitPolicy
-			gwRoute     *gatewayapiv1.HTTPRoute
+			routePolicy   *kuadrantv1beta3.RateLimitPolicy
+			gwRoute       *gatewayapiv1.HTTPRoute
+			actionSetName string
 		)
 
 		BeforeEach(func(ctx SpecContext) {
@@ -247,17 +263,30 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(gwRoute))).WithContext(ctx).Should(BeTrue())
 
+			mGateway := &machinery.Gateway{Gateway: gateway}
+			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: gwRoute}
+			pathID := kuadrantv1.PathID([]machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &gwRoute.Spec.Rules[0], Name: "rule-1"},
+			})
+			actionSetName = wasm.ActionSetNameForPath(pathID, 0, string(gwRoute.Spec.Hostnames[0]))
+
 			routePolicy = policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Name = "route"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "HTTPRoute"
 				policy.Spec.TargetRef.Name = TestHTTPRouteName
-				policy.Spec.Defaults = &kuadrantv1beta3.RateLimitPolicyCommonSpec{
-					Limits: map[string]kuadrantv1beta3.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta3.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: "minute",
+				policy.Spec.Defaults = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1beta3.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta3.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: "minute",
+									},
 								},
 							},
 						},
@@ -277,7 +306,7 @@ var _ = Describe("wasm controller", func() {
 
 		It("Creates envoyextensionpolicy", func(ctx SpecContext) {
 			extKey := client.ObjectKey{
-				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Name:      wasm.ExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -305,47 +334,41 @@ var _ = Describe("wasm controller", func() {
 			existingWASMConfig, err := wasm.ConfigFromJSON(ext.Spec.Wasm[0].Config)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
-				Extensions: map[string]wasm.Extension{
-					wasm.RateLimitPolicyExtensionName: {
+				Services: map[string]wasm.Service{
+					wasm.RateLimitServiceName: {
+						Type:        wasm.RateLimitServiceType,
 						Endpoint:    common.KuadrantRateLimitClusterName,
 						FailureMode: wasm.FailureModeAllow,
-						Type:        wasm.RateLimitExtensionType,
 					},
 				},
-				Policies: []wasm.Policy{
+				ActionSets: []wasm.ActionSet{
 					{
-						Name:      routePolicyKey.String(),
-						Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
-						Rules: []wasm.Rule{
-							{
-								Conditions: []wasm.Condition{
-									{
-										AllOf: []wasm.PatternExpression{
-											{
-												Selector: "request.url_path",
-												Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-												Value:    "/toy",
-											},
-											{
-												Selector: "request.method",
-												Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-												Value:    "GET",
-											},
-										},
-									},
+						Name: actionSetName,
+						RouteRuleConditions: wasm.RouteRuleConditions{
+							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
+							Matches: []wasm.Predicate{
+								{
+									Selector: "request.method",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+									Value:    "GET",
 								},
-								Actions: []wasm.Action{
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toy",
+								},
+							},
+						},
+						Actions: []wasm.Action{
+							{
+								ServiceName: wasm.RateLimitServiceName,
+								Scope:       controllers.LimitsNamespaceFromRoute(gwRoute),
+								Data: []wasm.DataType{
 									{
-										Scope:         wasm.LimitsNamespaceFromRLP(routePolicy),
-										ExtensionName: wasm.RateLimitPolicyExtensionName,
-										Data: []wasm.DataType{
-											{
-												Value: &wasm.Static{
-													Static: wasm.StaticSpec{
-														Key:   wasm.LimitNameToLimitadorIdentifier(routePolicyKey, "l1"),
-														Value: "1",
-													},
-												},
+										Value: &wasm.Static{
+											Static: wasm.StaticSpec{
+												Key:   controllers.LimitNameToLimitadorIdentifier(routePolicyKey, "l1"),
+												Value: "1",
 											},
 										},
 									},
@@ -364,7 +387,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			extKey := client.ObjectKey{
-				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Name:      wasm.ExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -382,7 +405,7 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			extKey := client.ObjectKey{
-				Name:      controllers.EnvoyExtensionPolicyName(TestGatewayName),
+				Name:      wasm.ExtensionName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 

@@ -15,10 +15,7 @@ endif
 
 # istioctl tool
 ISTIOCTL=$(shell pwd)/bin/istioctl
-# OSSM 2.6 is based on Istio 1.20.8
-# https://github.com/maistra/istio/blob/maistra-2.6/go.mod#L116-L117
-# https://github.com/maistra/istio/pull/1039
-ISTIOVERSION = 1.20.8
+ISTIOVERSION = 1.22.5
 $(ISTIOCTL):
 	mkdir -p $(shell pwd)/bin
 	$(eval TMP := $(shell mktemp -d))

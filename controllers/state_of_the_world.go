@@ -45,7 +45,16 @@ var (
 	operatorNamespace  = env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
 )
 
+// gateway-api permissions
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
+
+// istio permissions
+//+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=get;list;watch;create;update;patch;delete
+
+// envoy gateway permissions
+//+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoypatchpolicies,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoyextensionpolicies,verbs=get;list;watch;create;update;patch;delete
 
 func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *controller.Controller {
 	// Base options
@@ -203,6 +212,7 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() []controller.ControllerOpt
 				&egv1alpha1.EnvoyPatchPolicy{},
 				envoygateway.EnvoyPatchPoliciesResource,
 				metav1.NamespaceAll,
+				controller.FilterResourcesByLabel[*egv1alpha1.EnvoyPatchPolicy](fmt.Sprintf("%s=true", rateLimitClusterLabelKey)),
 			)),
 			controller.WithRunnable("envoyextensionpolicy watcher", controller.Watch(
 				&egv1alpha1.EnvoyExtensionPolicy{},
@@ -219,7 +229,10 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() []controller.ControllerOpt
 				envoygateway.EnvoyExtensionPolicyGroupKind,
 				envoygateway.SecurityPolicyGroupKind,
 			),
-			// TODO: add object links
+			controller.WithObjectLinks(
+				envoygateway.LinkGatewayToEnvoyPatchPolicy,
+				envoygateway.LinkGatewayToEnvoyExtensionPolicy,
+			),
 		)
 		// TODO: add specific tasks to workflow
 	}
@@ -239,6 +252,7 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 				&istioclientnetworkingv1alpha3.EnvoyFilter{},
 				istio.EnvoyFiltersResource,
 				metav1.NamespaceAll,
+				controller.FilterResourcesByLabel[*istioclientnetworkingv1alpha3.EnvoyFilter](fmt.Sprintf("%s=true", rateLimitClusterLabelKey)),
 			)),
 			controller.WithRunnable("wasmplugin watcher", controller.Watch(
 				&istioclientgoextensionv1alpha1.WasmPlugin{},
@@ -255,7 +269,10 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 				istio.WasmPluginGroupKind,
 				istio.AuthorizationPolicyGroupKind,
 			),
-			// TODO: add object links
+			controller.WithObjectLinks(
+				istio.LinkGatewayToEnvoyFilter,
+				istio.LinkGatewayToWasmPlugin,
+			),
 		)
 		// TODO: add istio specific tasks to workflow
 	}
@@ -303,7 +320,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewDNSWorkflow().Run,
 			NewTLSWorkflow(b.client, b.isCertManagerInstalled).Run,
 			NewAuthWorkflow().Run,
-			NewRateLimitWorkflow().Run,
+			NewRateLimitWorkflow(b.manager, b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isIstioInstalled, b.isGatewayAPIInstalled).Run,
 	}
@@ -407,23 +424,19 @@ func finalStepsWorkflow(client *dynamic.DynamicClient, isIstioInstalled, isEnvoy
 	return workflow
 }
 
-var ErrNoKandrantResource = fmt.Errorf("no kuadrant resources in topology")
+var ErrMissingKuadrant = fmt.Errorf("missing kuadrant object in topology")
 
-// GetKuadrant returns the oldest Kuadrant from the root objects in the topology
-func GetKuadrant(topology *machinery.Topology) (*kuadrantv1beta1.Kuadrant, error) {
-	kuadrantList := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (controller.Object, bool) {
-		k, ok := item.(controller.Object)
-		if ok && k.GetObjectKind().GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind && k.GetDeletionTimestamp() == nil {
-			return k, true
-		}
-		return nil, false
+func GetKuadrantFromTopology(topology *machinery.Topology) (*kuadrantv1beta1.Kuadrant, error) {
+	kuadrants := lo.FilterMap(topology.Objects().Roots(), func(root machinery.Object, _ int) (controller.Object, bool) {
+		o, isSortable := root.(controller.Object)
+		return o, isSortable && root.GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind && o.GetDeletionTimestamp() == nil
 	})
-	if len(kuadrantList) == 0 {
-		return nil, ErrNoKandrantResource
+	if len(kuadrants) == 0 {
+		return nil, ErrMissingKuadrant
 	}
-	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrantList))
-	k, _ := kuadrantList[0].(*kuadrantv1beta1.Kuadrant)
-	return k, nil
+	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrants))
+	kuadrant, _ := kuadrants[0].(*kuadrantv1beta1.Kuadrant)
+	return kuadrant, nil
 }
 
 func isObjectOwnedByGroupKind(o client.Object, groupKind schema.GroupKind) bool {

@@ -1,58 +1,63 @@
 package istio
 
 import (
-	"context"
-
-	"github.com/go-logr/logr"
-	istiocommon "istio.io/api/type/v1beta1"
+	"github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
+	"github.com/samber/lo"
+	istioapimetav1alpha1 "istio.io/api/meta/v1alpha1"
+	istioapiv1beta1 "istio.io/api/type/v1beta1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
-	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 var (
-	EnvoyFiltersResource          = istioclientnetworkingv1alpha3.SchemeGroupVersion.WithResource("envoyfilters")
+	EnvoyFiltersResource          = istioclientgonetworkingv1alpha3.SchemeGroupVersion.WithResource("envoyfilters")
 	WasmPluginsResource           = istioclientgoextensionv1alpha1.SchemeGroupVersion.WithResource("wasmplugins")
 	AuthorizationPoliciesResource = istioclientgosecurityv1beta1.SchemeGroupVersion.WithResource("authorizationpolicies")
 
-	EnvoyFilterGroupKind         = schema.GroupKind{Group: istioclientnetworkingv1alpha3.GroupName, Kind: "EnvoyFilter"}
+	EnvoyFilterGroupKind         = schema.GroupKind{Group: istioclientgonetworkingv1alpha3.GroupName, Kind: "EnvoyFilter"}
 	WasmPluginGroupKind          = schema.GroupKind{Group: istioclientgoextensionv1alpha1.GroupName, Kind: "WasmPlugin"}
 	AuthorizationPolicyGroupKind = schema.GroupKind{Group: istioclientgosecurityv1beta1.GroupName, Kind: "AuthorizationPolicy"}
 )
 
-func WorkloadSelectorFromGateway(ctx context.Context, k8sClient client.Client, gateway *gatewayapiv1.Gateway) *istiocommon.WorkloadSelector {
-	logger, _ := logr.FromContext(ctx)
-	gatewayWorkloadSelector, err := kuadrantgatewayapi.GetGatewayWorkloadSelector(ctx, k8sClient, gateway)
-	if err != nil {
-		logger.V(1).Info("failed to build Istio WorkloadSelector from Gateway service - falling back to Gateway labels")
-		gatewayWorkloadSelector = gateway.Labels
-	}
-	return &istiocommon.WorkloadSelector{
-		MatchLabels: gatewayWorkloadSelector,
-	}
-}
-
-func PolicyTargetRefFromGateway(gateway *gatewayapiv1.Gateway) *istiocommon.PolicyTargetReference {
-	return &istiocommon.PolicyTargetReference{
+func PolicyTargetRefFromGateway(gateway *gatewayapiv1.Gateway) *istioapiv1beta1.PolicyTargetReference {
+	return &istioapiv1beta1.PolicyTargetReference{
 		Group: gatewayapiv1.GroupName,
 		Kind:  "Gateway",
 		Name:  gateway.Name,
 	}
 }
 
+func EqualTargetRefs(a, b []*istioapiv1beta1.PolicyTargetReference) bool {
+	return len(a) == len(b) && lo.EveryBy(a, func(aTargetRef *istioapiv1beta1.PolicyTargetReference) bool {
+		return lo.SomeBy(b, func(bTargetRef *istioapiv1beta1.PolicyTargetReference) bool {
+			return aTargetRef.Group == bTargetRef.Group && aTargetRef.Kind == bTargetRef.Kind && aTargetRef.Name == bTargetRef.Name && aTargetRef.Namespace == bTargetRef.Namespace
+		})
+	})
+}
+
+func ConditionToProperConditionFunc(istioCondition *istioapimetav1alpha1.IstioCondition, _ int) metav1.Condition {
+	return metav1.Condition{
+		Type:    istioCondition.GetType(),
+		Status:  metav1.ConditionStatus(istioCondition.GetStatus()),
+		Reason:  istioCondition.GetReason(),
+		Message: istioCondition.GetMessage(),
+	}
+}
+
 func IsEnvoyFilterInstalled(restMapper meta.RESTMapper) (bool, error) {
 	return utils.IsCRDInstalled(
 		restMapper,
-		istioclientnetworkingv1alpha3.GroupName,
+		istioclientgonetworkingv1alpha3.GroupName,
 		"EnvoyFilter",
-		istioclientnetworkingv1alpha3.SchemeGroupVersion.Version)
+		istioclientgonetworkingv1alpha3.SchemeGroupVersion.Version)
 }
 
 func IsWASMPluginInstalled(restMapper meta.RESTMapper) (bool, error) {
@@ -98,4 +103,65 @@ func IsIstioInstalled(restMapper meta.RESTMapper) (bool, error) {
 
 	// Istio found
 	return true, nil
+}
+
+func LinkGatewayToWasmPlugin(objs controller.Store) machinery.LinkFunc {
+	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), func(obj controller.Object, _ int) machinery.Object {
+		return &machinery.Gateway{Gateway: obj.(*gatewayapiv1.Gateway)}
+	})
+
+	return machinery.LinkFunc{
+		From: machinery.GatewayGroupKind,
+		To:   WasmPluginGroupKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			wasmPlugin := child.(*controller.RuntimeObject).Object.(*istioclientgoextensionv1alpha1.WasmPlugin)
+			return lo.Filter(gateways, istioTargetRefsIncludeObjectFunc(wasmPlugin.Spec.TargetRefs, wasmPlugin.GetNamespace()))
+		},
+	}
+}
+
+func LinkGatewayToEnvoyFilter(objs controller.Store) machinery.LinkFunc {
+	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), func(obj controller.Object, _ int) machinery.Object {
+		return &machinery.Gateway{Gateway: obj.(*gatewayapiv1.Gateway)}
+	})
+
+	return machinery.LinkFunc{
+		From: machinery.GatewayGroupKind,
+		To:   EnvoyFilterGroupKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			envoyFilter := child.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter)
+			return lo.Filter(gateways, istioTargetRefsIncludeObjectFunc(envoyFilter.Spec.TargetRefs, envoyFilter.GetNamespace()))
+		},
+	}
+}
+
+func istioTargetRefsIncludeObjectFunc(targetRefs []*istioapiv1beta1.PolicyTargetReference, defaultNamespace string) func(machinery.Object, int) bool {
+	return func(obj machinery.Object, _ int) bool {
+		groupKind := obj.GroupVersionKind().GroupKind()
+		return lo.SomeBy(targetRefs, func(targetRef *istioapiv1beta1.PolicyTargetReference) bool {
+			if targetRef == nil {
+				return false
+			}
+			group := targetRef.GetGroup()
+			if group == "" {
+				group = machinery.GatewayGroupKind.Group
+			}
+			kind := targetRef.GetKind()
+			if kind == "" {
+				kind = machinery.GatewayGroupKind.Kind
+			}
+			name := targetRef.GetName()
+			if name == "" {
+				return false
+			}
+			namespace := targetRef.GetNamespace()
+			if namespace == "" {
+				namespace = defaultNamespace
+			}
+			return group == groupKind.Group &&
+				kind == groupKind.Kind &&
+				name == obj.GetName() &&
+				namespace == obj.GetNamespace()
+		})
+	}
 }

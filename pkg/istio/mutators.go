@@ -8,7 +8,7 @@ import (
 	istiov1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
+	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 )
 
 func WASMPluginMutator(existingObj, desiredObj client.Object) (bool, error) {

@@ -53,3 +53,25 @@ func HostnamesToStrings(hostnames []gatewayapiv1.Hostname) []string {
 		return string(hostname)
 	})
 }
+
+// SortableHostnames is a slice of hostnames that can be sorted from the most specific to the least specific
+type SortableHostnames []string
+
+func (h SortableHostnames) Len() int           { return len(h) }
+func (h SortableHostnames) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h SortableHostnames) Less(i, j int) bool { return CompareHostnamesSpecificity(h[i], h[j]) }
+
+// CompareHostnamesSpecificity returns true if hostname1 is more specific than hostname2
+func CompareHostnamesSpecificity(hostname1, hostname2 string) bool {
+	labels1 := len(strings.Split(hostname1, "."))
+	labels2 := len(strings.Split(hostname2, "."))
+	if labels1 != labels2 {
+		return labels1 > labels2
+	}
+	hasWildcard1 := strings.HasPrefix(hostname1, "*")
+	hasWildcard2 := strings.HasPrefix(hostname2, "*")
+	if hasWildcard1 != hasWildcard2 {
+		return !hasWildcard1
+	}
+	return hostname1 < hostname2
+}

@@ -155,7 +155,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ActionSets: []wasm.ActionSet{
 					{
-						Name: wasm.ActionSetNameForPath(pathID, 1, "*.example.com"),
+						Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{"*.example.com"},
 							Matches: []wasm.Predicate{
@@ -306,193 +306,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			httpRouteRuleToys := &machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[0], Name: "rule-1"}
 			httpRouteRuleAssets := &machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[1], Name: "rule-2"}
 
-			// api.toystore.io/assets*
+			// *.toystore.acme.com/assets*
 			actionSet := existingWASMConfig.ActionSets[0]
 			pathID := kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
-			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
-			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
-			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
-				wasm.Predicate{
-					Selector: "request.url_path",
-					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-					Value:    "/assets",
-				},
-			))
-			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions).To(ContainElements(
-				wasm.Action{ // action to activate the 'users' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Predicate{
-						{
-							Selector: "auth.identity.group",
-							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-							Value:    "admin",
-						},
-					},
-					Data: []wasm.DataType{
-						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
-									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-									Value: "1",
-								},
-							},
-						},
-						{
-							Value: &wasm.Selector{
-								Selector: wasm.SelectorSpec{
-									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
-								},
-							},
-						},
-					},
-				},
-				wasm.Action{ // action to activate the 'all' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Data: []wasm.DataType{
-						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
-									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-									Value: "1",
-								},
-							},
-						},
-					},
-				},
-			))
-
-			// GET api.toystore.io/toys*
-			actionSet = existingWASMConfig.ActionSets[1]
-			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
-			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
-			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
-			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
-				wasm.Predicate{
-					Selector: "request.method",
-					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-					Value:    "GET",
-				},
-				wasm.Predicate{
-					Selector: "request.url_path",
-					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-					Value:    "/toys",
-				},
-			))
-			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions).To(ContainElements(
-				wasm.Action{ // action to activate the 'users' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Predicate{
-						{
-							Selector: "auth.identity.group",
-							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-							Value:    "admin",
-						},
-					},
-					Data: []wasm.DataType{
-						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
-									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-									Value: "1",
-								},
-							},
-						},
-						{
-							Value: &wasm.Selector{
-								Selector: wasm.SelectorSpec{
-									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
-								},
-							},
-						},
-					},
-				},
-				wasm.Action{ // action to activate the 'all' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Data: []wasm.DataType{
-						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
-									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-									Value: "1",
-								},
-							},
-						},
-					},
-				},
-			))
-
-			// POST api.toystore.io/toys*
-			actionSet = existingWASMConfig.ActionSets[2]
-			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
-			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "api.toystore.io")))
-			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
-			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
-				wasm.Predicate{
-					Selector: "request.method",
-					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-					Value:    "POST",
-				},
-				wasm.Predicate{
-					Selector: "request.url_path",
-					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-					Value:    "/toys",
-				},
-			))
-			Expect(actionSet.Actions).To(HaveLen(2))
-			Expect(actionSet.Actions).To(ContainElements(
-				wasm.Action{ // action to activate the 'users' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Predicate{
-						{
-							Selector: "auth.identity.group",
-							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-							Value:    "admin",
-						},
-					},
-					Data: []wasm.DataType{
-						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
-									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-									Value: "1",
-								},
-							},
-						},
-						{
-							Value: &wasm.Selector{
-								Selector: wasm.SelectorSpec{
-									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
-								},
-							},
-						},
-					},
-				},
-				wasm.Action{ // action to activate the 'all' limit definition
-					ServiceName: wasm.RateLimitServiceName,
-					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Data: []wasm.DataType{
-						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
-									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-									Value: "1",
-								},
-							},
-						},
-					},
-				},
-			))
-
-			// *.toystore.acme.com/assets*
-			actionSet = existingWASMConfig.ActionSets[3]
-			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
@@ -549,7 +365,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			))
 
 			// GET *.toystore.acme.com/toys*
-			actionSet = existingWASMConfig.ActionSets[4]
+			actionSet = existingWASMConfig.ActionSets[1]
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
@@ -612,10 +428,194 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			))
 
 			// POST *.toystore.acme.com/toys*
-			actionSet = existingWASMConfig.ActionSets[5]
+			actionSet = existingWASMConfig.ActionSets[2]
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
+			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
+				wasm.Predicate{
+					Selector: "request.method",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+					Value:    "POST",
+				},
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/toys",
+				},
+			))
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions).To(ContainElements(
+				wasm.Action{ // action to activate the 'users' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Conditions: []wasm.Predicate{
+						{
+							Selector: "auth.identity.group",
+							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
+							Value:    "admin",
+						},
+					},
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+									Value: "1",
+								},
+							},
+						},
+						{
+							Value: &wasm.Selector{
+								Selector: wasm.SelectorSpec{
+									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+								},
+							},
+						},
+					},
+				},
+				wasm.Action{ // action to activate the 'all' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+									Value: "1",
+								},
+							},
+						},
+					},
+				},
+			))
+
+			// api.toystore.io/assets*
+			actionSet = existingWASMConfig.ActionSets[3]
+			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
+			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
+			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/assets",
+				},
+			))
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions).To(ContainElements(
+				wasm.Action{ // action to activate the 'users' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Conditions: []wasm.Predicate{
+						{
+							Selector: "auth.identity.group",
+							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
+							Value:    "admin",
+						},
+					},
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+									Value: "1",
+								},
+							},
+						},
+						{
+							Value: &wasm.Selector{
+								Selector: wasm.SelectorSpec{
+									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+								},
+							},
+						},
+					},
+				},
+				wasm.Action{ // action to activate the 'all' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+									Value: "1",
+								},
+							},
+						},
+					},
+				},
+			))
+
+			// GET api.toystore.io/toys*
+			actionSet = existingWASMConfig.ActionSets[4]
+			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
+			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
+			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
+				wasm.Predicate{
+					Selector: "request.method",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+					Value:    "GET",
+				},
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/toys",
+				},
+			))
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions).To(ContainElements(
+				wasm.Action{ // action to activate the 'users' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Conditions: []wasm.Predicate{
+						{
+							Selector: "auth.identity.group",
+							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
+							Value:    "admin",
+						},
+					},
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+									Value: "1",
+								},
+							},
+						},
+						{
+							Value: &wasm.Selector{
+								Selector: wasm.SelectorSpec{
+									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+								},
+							},
+						},
+					},
+				},
+				wasm.Action{ // action to activate the 'all' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+									Value: "1",
+								},
+							},
+						},
+					},
+				},
+			))
+
+			// POST api.toystore.io/toys*
+			actionSet = existingWASMConfig.ActionSets[5]
+			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "api.toystore.io")))
+			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
 				wasm.Predicate{
 					Selector: "request.method",

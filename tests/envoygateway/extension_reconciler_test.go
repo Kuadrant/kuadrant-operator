@@ -102,9 +102,9 @@ var _ = Describe("wasm controller", func() {
 				mGateway,
 				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
 				mHTTPRoute,
-				&machinery.HTTPRouteRule{HTTPRouteRule: &gwRoute.Spec.Rules[0], HTTPRoute: mHTTPRoute},
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &gwRoute.Spec.Rules[0], Name: "rule-1"},
 			})
-			actionSetName = fmt.Sprintf("%d-%s-%d", 0, pathID, 0) // Hostname: 0, HTTPRouteMatch: 0
+			actionSetName = wasm.ActionSetNameForPath(pathID, 1, string(gwRoute.Spec.Hostnames[0]))
 
 			gwPolicy = policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Name = "gw"
@@ -270,9 +270,9 @@ var _ = Describe("wasm controller", func() {
 				mGateway,
 				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
 				mHTTPRoute,
-				&machinery.HTTPRouteRule{HTTPRouteRule: &gwRoute.Spec.Rules[0], HTTPRoute: mHTTPRoute},
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &gwRoute.Spec.Rules[0], Name: "rule-1"},
 			})
-			actionSetName = fmt.Sprintf("%d-%s-%d", 0, pathID, 0) // Hostname: 0, HTTPRouteMatch: 0
+			actionSetName = wasm.ActionSetNameForPath(pathID, 1, string(gwRoute.Spec.Hostnames[0]))
 
 			routePolicy = policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Name = "route"

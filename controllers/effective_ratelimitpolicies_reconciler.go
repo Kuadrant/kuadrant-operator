@@ -6,11 +6,10 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/samber/lo"
-	"k8s.io/client-go/dynamic"
-
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
+	"github.com/samber/lo"
+	"k8s.io/client-go/dynamic"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"

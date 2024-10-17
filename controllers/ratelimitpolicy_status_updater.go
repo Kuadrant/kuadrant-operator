@@ -25,6 +25,7 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
+	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -181,9 +182,10 @@ func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 
 	// check the status of the gateways' configuration resources
 	affectedGateways := lo.UniqBy(lo.Map(lo.Flatten(lo.Values(affectedPaths)), func(path []machinery.Targetable, _ int) affectedGateway {
-		return affectedGateway{ // assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]
-			gateway:      path[1].(*machinery.Gateway),
-			gatewayClass: path[0].(*machinery.GatewayClass),
+		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(path)
+		return affectedGateway{
+			gateway:      gateway,
+			gatewayClass: gatewayClass,
 		}
 	}), func(g affectedGateway) string {
 		return g.gateway.GetLocator()

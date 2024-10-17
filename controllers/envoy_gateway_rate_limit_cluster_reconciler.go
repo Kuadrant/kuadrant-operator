@@ -76,9 +76,7 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 	}
 
 	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveRateLimitPolicies)), func(effectivePolicy EffectiveRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
-		// assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]
-		gatewayClass, _ := effectivePolicy.Path[0].(*machinery.GatewayClass)
-		gateway, _ := effectivePolicy.Path[1].(*machinery.Gateway)
+		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
 		return gateway, gatewayClass.Spec.ControllerName == envoyGatewayGatewayControllerName
 	}), func(gateway *machinery.Gateway) string {
 		return gateway.GetLocator()

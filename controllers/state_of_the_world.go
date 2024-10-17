@@ -423,23 +423,19 @@ func finalStepsWorkflow(client *dynamic.DynamicClient, isIstioInstalled, isEnvoy
 	return workflow
 }
 
-var ErrNoKandrantResource = fmt.Errorf("no kuadrant resources in topology")
+var ErrMissingKuadrant = fmt.Errorf("missing kuadrant object in topology")
 
-// GetKuadrant returns the oldest Kuadrant from the root objects in the topology
-func GetKuadrant(topology *machinery.Topology) (*kuadrantv1beta1.Kuadrant, error) {
-	kuadrantList := lo.FilterMap(topology.Objects().Roots(), func(item machinery.Object, _ int) (controller.Object, bool) {
-		k, ok := item.(controller.Object)
-		if ok && k.GetObjectKind().GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind && k.GetDeletionTimestamp() == nil {
-			return k, true
-		}
-		return nil, false
+func GetKuadrantFromTopology(topology *machinery.Topology) (*kuadrantv1beta1.Kuadrant, error) {
+	kuadrants := lo.FilterMap(topology.Objects().Roots(), func(root machinery.Object, _ int) (controller.Object, bool) {
+		o, isSortable := root.(controller.Object)
+		return o, isSortable && root.GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind && o.GetDeletionTimestamp() == nil
 	})
-	if len(kuadrantList) == 0 {
-		return nil, ErrNoKandrantResource
+	if len(kuadrants) == 0 {
+		return nil, ErrMissingKuadrant
 	}
-	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrantList))
-	k, _ := kuadrantList[0].(*kuadrantv1beta1.Kuadrant)
-	return k, nil
+	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrants))
+	kuadrant, _ := kuadrants[0].(*kuadrantv1beta1.Kuadrant)
+	return kuadrant, nil
 }
 
 func isObjectOwnedByGroupKind(o client.Object, groupKind schema.GroupKind) bool {
@@ -455,19 +451,4 @@ func isObjectOwnedByGroupKind(o client.Object, groupKind schema.GroupKind) bool 
 	}
 
 	return false
-}
-
-var ErrMissingKuadrant = fmt.Errorf("missing kuadrant object in topology")
-
-func GetKuadrantFromTopology(topology *machinery.Topology) (*kuadrantv1beta1.Kuadrant, error) {
-	kuadrants := lo.FilterMap(topology.Objects().Roots(), func(root machinery.Object, _ int) (controller.Object, bool) {
-		o, isSortable := root.(controller.Object)
-		return o, isSortable && root.GroupVersionKind().GroupKind() == kuadrantv1beta1.KuadrantGroupKind && o.GetDeletionTimestamp() == nil
-	})
-	if len(kuadrants) == 0 {
-		return nil, ErrMissingKuadrant
-	}
-	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrants))
-	kuadrant, _ := kuadrants[0].(*kuadrantv1beta1.Kuadrant)
-	return kuadrant, nil
 }

@@ -309,7 +309,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// api.toystore.io/assets*
 			actionSet := existingWASMConfig.ActionSets[0]
 			pathID := kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
-			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 3, "api.toystore.io")))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
 				wasm.Predicate{
@@ -367,7 +367,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// GET api.toystore.io/toys*
 			actionSet = existingWASMConfig.ActionSets[1]
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
-			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "api.toystore.io")))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
 				wasm.Predicate{
@@ -430,7 +430,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// POST api.toystore.io/toys*
 			actionSet = existingWASMConfig.ActionSets[2]
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
-			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 2, "api.toystore.io")))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "api.toystore.io")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
 				wasm.Predicate{
@@ -493,7 +493,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// *.toystore.acme.com/assets*
 			actionSet = existingWASMConfig.ActionSets[3]
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
-			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 3, "*.toystore.acme.com")))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
 				wasm.Predicate{
@@ -551,7 +551,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// GET *.toystore.acme.com/toys*
 			actionSet = existingWASMConfig.ActionSets[4]
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
-			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "*.toystore.acme.com")))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
 				wasm.Predicate{
@@ -614,7 +614,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// POST *.toystore.acme.com/toys*
 			actionSet = existingWASMConfig.ActionSets[5]
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
-			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 2, "*.toystore.acme.com")))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
 			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
 				wasm.Predicate{
@@ -745,7 +745,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ActionSets: []wasm.ActionSet{
 					{
-						Name: wasm.ActionSetNameForPath(pathID, 1, "*.example.com"),
+						Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{"*.example.com"},
 							Matches: []wasm.Predicate{
@@ -969,7 +969,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 					ActionSets: []wasm.ActionSet{
 						{
-							Name: wasm.ActionSetNameForPath(pathID, 1, "*.example.com"),
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.example.com"},
 								Matches: []wasm.Predicate{
@@ -1182,7 +1182,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 					ActionSets: []wasm.ActionSet{
 						{
-							Name: wasm.ActionSetNameForPath(pathID, 1, "*.example.com"),
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.example.com"},
 								Matches: []wasm.Predicate{
@@ -1313,7 +1313,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 					ActionSets: []wasm.ActionSet{
 						{
-							Name: wasm.ActionSetNameForPath(pathID, 1, "*.example.com"),
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.example.com"},
 								Matches: []wasm.Predicate{
@@ -1516,7 +1516,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 					ActionSets: []wasm.ActionSet{
 						{
-							Name: wasm.ActionSetNameForPath(pathID, 1, "*.a.example.com"),
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
 								Matches: []wasm.Predicate{
@@ -1610,7 +1610,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 					ActionSets: []wasm.ActionSet{
 						{
-							Name: wasm.ActionSetNameForPath(pathID, 1, "*.b.example.com"),
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.b.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.b.example.com"},
 								Matches: []wasm.Predicate{
@@ -1788,7 +1788,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 					ActionSets: []wasm.ActionSet{
 						{
-							Name: wasm.ActionSetNameForPath(pathID, 1, "*.a.example.com"),
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
 								Matches: []wasm.Predicate{
@@ -1900,7 +1900,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 					ActionSets: []wasm.ActionSet{
 						{
-							Name: wasm.ActionSetNameForPath(pathID, 1, "*.a.example.com"),
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
 								Matches: []wasm.Predicate{
@@ -2114,7 +2114,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 					ActionSets: []wasm.ActionSet{
 						{
-							Name: wasm.ActionSetNameForPath(pathID, 1, "*.a.example.com"),
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
 								Matches: []wasm.Predicate{
@@ -2223,7 +2223,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					},
 					ActionSets: []wasm.ActionSet{
 						{
-							Name: wasm.ActionSetNameForPath(pathID, 1, "*.a.example.com"),
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
 								Matches: []wasm.Predicate{
@@ -2257,7 +2257,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							},
 						},
 						{
-							Name: wasm.ActionSetNameForPath(pathID_B, 1, "*.b.example.com"),
+							Name: wasm.ActionSetNameForPath(pathID_B, 0, "*.b.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.b.example.com"},
 								Matches: []wasm.Predicate{
@@ -2399,7 +2399,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ActionSets: []wasm.ActionSet{
 					{
-						Name: wasm.ActionSetNameForPath(pathID, 1, gwHostname),
+						Name: wasm.ActionSetNameForPath(pathID, 0, gwHostname),
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{gwHostname},
 							Matches: []wasm.Predicate{
@@ -2478,7 +2478,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ActionSets: []wasm.ActionSet{
 					{
-						Name: wasm.ActionSetNameForPath(pathID, 1, hostname),
+						Name: wasm.ActionSetNameForPath(pathID, 0, hostname),
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{hostname},
 							Matches: []wasm.Predicate{

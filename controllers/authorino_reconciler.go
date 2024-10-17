@@ -40,9 +40,9 @@ func (r *AuthorinoReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 	logger.Info("reconciling authorino resource", "status", "started")
 	defer logger.Info("reconciling authorino resource", "status", "completed")
 
-	kobj, err := GetKuadrant(topology)
+	kobj, err := GetKuadrantFromTopology(topology)
 	if err != nil {
-		if errors.Is(err, ErrNoKandrantResource) {
+		if errors.Is(err, ErrMissingKuadrant) {
 			logger.Info("kuadrant resource not found, ignoring", "status", "skipping")
 			return err
 		}

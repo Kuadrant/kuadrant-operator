@@ -13,6 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -162,7 +163,10 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, events [
 	}
 
 	// Clean up orphaned certs
-	orphanedCerts, _ := lo.Difference(certs, expectedCerts)
+	uniqueExpectedCerts := lo.UniqBy(expectedCerts, func(item *certmanv1.Certificate) types.UID {
+		return item.GetUID()
+	})
+	orphanedCerts, _ := lo.Difference(certs, uniqueExpectedCerts)
 	for _, orphanedCert := range orphanedCerts {
 		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(orphanedCert.GetNamespace())
 		if err := resource.Delete(ctx, orphanedCert.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
@@ -192,7 +196,7 @@ func (t *EffectiveTLSPoliciesReconciler) deleteCertificatesForPolicy(ctx context
 	for _, cert := range certs {
 		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(cert.GetNamespace())
 
-		if err := resource.Delete(ctx, cert.Name, metav1.DeleteOptions{}); err != nil {
+		if err := resource.Delete(ctx, cert.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			return err
 		}
 	}

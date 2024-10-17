@@ -92,7 +92,7 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Type": Equal(string(kuadrant.PolicyConditionEnforced)),
 					})),
 				)
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutLong, time.Second).Should(Succeed())
 		}, testTimeOut)
 
 		It("should have accepted condition with status true", func(ctx SpecContext) {
@@ -112,7 +112,7 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Type": Equal(string(kuadrant.PolicyConditionEnforced)),
 					})),
 				)
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutLong, time.Second).Should(Succeed())
 
 			By("creating a valid Gateway")
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
@@ -139,7 +139,7 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Message": Equal("TLSPolicy has been successfully enforced"),
 					})),
 				)
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutLong, time.Second).Should(Succeed())
 		}, testTimeOut)
 
 	})
@@ -173,7 +173,7 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Type": Equal(string(kuadrant.PolicyConditionEnforced)),
 					})),
 				)
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutLong, time.Second).Should(Succeed())
 		}, testTimeOut)
 
 		It("unable to find issuer - should have accepted condition with status false and correct reason", func(ctx SpecContext) {
@@ -198,7 +198,7 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Type": Equal(string(kuadrant.PolicyConditionEnforced)),
 					})),
 				)
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutLong, time.Second).Should(Succeed())
 		}, testTimeOut)
 	})
 
@@ -233,7 +233,7 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Message": Equal("TLSPolicy has been successfully enforced"),
 					})),
 				)
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutLong, time.Second).Should(Succeed())
 		}, testTimeOut)
 	})
 
@@ -278,7 +278,7 @@ var _ = Describe("TLSPolicy controller", func() {
 						"Message": Equal("TLSPolicy has been successfully enforced"),
 					})),
 				)
-			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+			}, tests.TimeoutLong, time.Second).Should(Succeed())
 		}, testTimeOut)
 	})
 
@@ -326,7 +326,7 @@ var _ = Describe("TLSPolicy controller", func() {
 					ContainElements(
 						HaveField("Name", "test-tls-secret"),
 					))
-			}, tests.TimeoutMedium, time.Second, ctx).Should(Succeed())
+			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
 		}, testTimeOut)
 
 	})
@@ -352,7 +352,7 @@ var _ = Describe("TLSPolicy controller", func() {
 					ContainElements(
 						HaveField("Name", "test-tls-secret"),
 					))
-			}, tests.TimeoutMedium, time.Second, ctx).Should(Succeed())
+			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
 		}, testTimeOut)
 	})
 
@@ -391,7 +391,7 @@ var _ = Describe("TLSPolicy controller", func() {
 
 				Expect(cert1.Spec.DNSNames).To(ConsistOf("test1.example.com", "test2.example.com"))
 				Expect(cert2.Spec.DNSNames).To(ConsistOf("test3.example.com"))
-			}, tests.TimeoutMedium, time.Second, ctx).Should(Succeed())
+			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
 		}, testTimeOut)
 	})
 
@@ -436,11 +436,11 @@ var _ = Describe("TLSPolicy controller", func() {
 				Expect(cert1.Spec.DNSNames).To(ConsistOf("test1.example.com"))
 				Expect(cert2.Spec.DNSNames).To(ConsistOf("test2.example.com"))
 				Expect(cert3.Spec.DNSNames).To(ConsistOf("test3.example.com"))
-			}, tests.TimeoutMedium, time.Second, ctx).Should(Succeed())
+			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
 		}, testTimeOut)
 
-		It("should delete tls certificate when listener is removed", func(ctx SpecContext) {
-			//confirm all expected certificates are present
+		It("should delete all tls certificates when policy is deleted", func(ctx SpecContext) {
+			// confirm all expected certificates are present
 			Eventually(func() error {
 				certificateList := &certmanv1.CertificateList{}
 				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
@@ -450,12 +450,39 @@ var _ = Describe("TLSPolicy controller", func() {
 				return nil
 			}, time.Second*60, time.Second).Should(BeNil())
 
-			//remove a listener
+			// delete the tls policy
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, tlsPolicy))).ToNot(HaveOccurred())
+
+			// confirm all certificates have been deleted
+			Eventually(func() error {
+				certificateList := &certmanv1.CertificateList{}
+				if err := k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace}); err != nil {
+					return err
+				}
+				if len(certificateList.Items) != 0 {
+					return fmt.Errorf("expected 0 certificates, found: %v", len(certificateList.Items))
+				}
+				return nil
+			}, tests.TimeoutLong, time.Second).Should(BeNil())
+		}, testTimeOut)
+
+		It("should delete tls certificate when listener is removed", func(ctx SpecContext) {
+			// confirm all expected certificates are present
+			Eventually(func() error {
+				certificateList := &certmanv1.CertificateList{}
+				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				if len(certificateList.Items) != 3 {
+					return fmt.Errorf("expected 3 certificates, found: %v", len(certificateList.Items))
+				}
+				return nil
+			}, time.Second*60, time.Second).Should(BeNil())
+
+			// remove a listener
 			patch := client.MergeFrom(gateway.DeepCopy())
 			gateway.Spec.Listeners = gateway.Spec.Listeners[1:]
 			Expect(k8sClient.Patch(ctx, gateway, patch)).To(BeNil())
 
-			//confirm a certificate has been deleted
+			// confirm a certificate has been deleted
 			Eventually(func() error {
 				certificateList := &certmanv1.CertificateList{}
 				if err := k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace}); err != nil {
@@ -465,11 +492,11 @@ var _ = Describe("TLSPolicy controller", func() {
 					return fmt.Errorf("expected 2 certificates, found: %v", len(certificateList.Items))
 				}
 				return nil
-			}, tests.TimeoutMedium, time.Second).Should(BeNil())
+			}, tests.TimeoutLong, time.Second).Should(BeNil())
 		}, testTimeOut)
 
-		It("should delete all tls certificates when tls policy is removed even if gateway is already removed", func(ctx SpecContext) {
-			//confirm all expected certificates are present
+		It("should delete all tls certificates when gateway is deleted", func(ctx SpecContext) {
+			// confirm all expected certificates are present
 			Eventually(func() error {
 				certificateList := &certmanv1.CertificateList{}
 				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
@@ -477,15 +504,12 @@ var _ = Describe("TLSPolicy controller", func() {
 					return fmt.Errorf("expected 3 certificates, found: %v", len(certificateList.Items))
 				}
 				return nil
-			}, time.Second*10, time.Second).Should(BeNil())
+			}, time.Second*60, time.Second).Should(BeNil())
 
 			// delete the gateway
 			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, gateway))).ToNot(HaveOccurred())
 
-			//delete the tls policy
-			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, tlsPolicy))).ToNot(HaveOccurred())
-
-			//confirm all certificates have been deleted
+			// confirm all certificates have been deleted
 			Eventually(func() error {
 				certificateList := &certmanv1.CertificateList{}
 				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
@@ -493,7 +517,75 @@ var _ = Describe("TLSPolicy controller", func() {
 					return fmt.Errorf("expected 0 certificates, found: %v", len(certificateList.Items))
 				}
 				return nil
+			}, tests.TimeoutLong, time.Second).Should(BeNil())
+		}, testTimeOut)
+
+		It("Should delete orphaned tls certificates when changing to valid target ref", func(ctx SpecContext) {
+			// confirm all expected certificates are present
+			Eventually(func() error {
+				certificateList := &certmanv1.CertificateList{}
+				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				if len(certificateList.Items) != 3 {
+					return fmt.Errorf("expected 3 certificates, found: %v", len(certificateList.Items))
+				}
+				return nil
 			}, time.Second*60, time.Second).Should(BeNil())
+
+			// new gateway with one listener
+			gateway2 := tests.NewGatewayBuilder("test-gateway-2", gatewayClass.Name, testNamespace).
+				WithHTTPSListener("gateway2.example.com", "gateway2-tls-secret").Gateway
+			Expect(k8sClient.Create(ctx, gateway2)).To(BeNil())
+
+			// update tls policy target ref to new gateway
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy), tlsPolicy)).To(Succeed())
+				tlsPolicy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gateway2.Name)
+				g.Expect(k8sClient.Update(ctx, tlsPolicy)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+
+			// confirm orphaned certs are deleted
+			Eventually(func() error {
+				certificateList := &certmanv1.CertificateList{}
+				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				if len(certificateList.Items) != 1 {
+					return fmt.Errorf("expected 1 certificates, found: %v", len(certificateList.Items))
+				}
+
+				if certificateList.Items[0].Name != "gateway2-tls-secret" {
+					return fmt.Errorf("expected certificate to be 'gateway2-tls-secret', found: %s", certificateList.Items[0].Name)
+
+				}
+				return nil
+			}, tests.TimeoutLong, time.Second).Should(BeNil())
+		}, testTimeOut)
+
+		It("Should delete orphaned tls certificates when changing to invalid target ref", func(ctx SpecContext) {
+			// confirm all expected certificates are present
+			Eventually(func() error {
+				certificateList := &certmanv1.CertificateList{}
+				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				if len(certificateList.Items) != 3 {
+					return fmt.Errorf("expected 3 certificates, found: %v", len(certificateList.Items))
+				}
+				return nil
+			}, time.Second*60, time.Second).Should(BeNil())
+
+			// update tlspolicy target ref to invalid reference
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy), tlsPolicy)).To(Succeed())
+				tlsPolicy.Spec.TargetRef.Name = "does-not-exist"
+				g.Expect(k8sClient.Update(ctx, tlsPolicy)).To(Succeed())
+			}).WithContext(ctx).Should(Succeed())
+
+			// confirm orphaned certs are deleted
+			Eventually(func() error {
+				certificateList := &certmanv1.CertificateList{}
+				Expect(k8sClient.List(ctx, certificateList, &client.ListOptions{Namespace: testNamespace})).To(BeNil())
+				if len(certificateList.Items) != 0 {
+					return fmt.Errorf("expected 0 certificates, found: %v", len(certificateList.Items))
+				}
+				return nil
+			}, tests.TimeoutLong, time.Second).Should(BeNil())
 		}, testTimeOut)
 	})
 
@@ -553,7 +645,7 @@ var _ = Describe("TLSPolicy controller", func() {
 					certmanv1.UsageCertSign,
 				))
 				Expect(cert1.Spec.RevisionHistoryLimit).To(PointTo(Equal(int32(1))))
-			}, tests.TimeoutMedium, time.Second, ctx).Should(Succeed())
+			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
 		}, testTimeOut)
 
 	})

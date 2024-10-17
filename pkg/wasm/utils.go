@@ -62,7 +62,7 @@ func BuildActionSetsForPath(pathID string, path []machinery.Targetable, policyRu
 	return lo.FlatMap(kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(listener.Listener, httpRoute.HTTPRoute), func(hostname gatewayapiv1.Hostname, _ int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
 		return lo.Map(httpRouteRule.Matches, func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, j int) kuadrantgatewayapi.HTTPRouteMatchConfig {
 			actionSet := ActionSet{
-				Name:    ActionSetNameForPath(pathID, j+1, string(hostname)),
+				Name:    ActionSetNameForPath(pathID, j, string(hostname)),
 				Actions: actions,
 			}
 			routeRuleConditions := RouteRuleConditions{

@@ -12,6 +12,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -92,7 +93,7 @@ func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, events []cont
 		}
 
 		_, err = resource.UpdateStatus(ctx, un, metav1.UpdateOptions{})
-		if err != nil {
+		if err != nil && !apierrors.IsConflict(err) {
 			logger.Error(err, "unable to update status for TLSPolicy", "name", policy.GetName(), "namespace", policy.GetNamespace(), "uid", p.GetUID())
 		}
 	}
@@ -142,7 +143,11 @@ func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, policy *kuad
 			return o.GroupVersionKind().GroupKind() == CertManagerIssuerKind && o.GetNamespace() == policy.GetNamespace() && o.GetName() == policy.Spec.IssuerRef.Name
 		})
 		if !ok {
-			err := fmt.Errorf("%s \"%s\" not found", policy.Spec.IssuerRef.Kind, policy.Spec.IssuerRef.Name)
+			issuerRef := policy.Spec.IssuerRef.Kind
+			if issuerRef == "" {
+				issuerRef = certmanagerv1.IssuerKind
+			}
+			err := fmt.Errorf("%s \"%s\" not found", issuerRef, policy.Spec.IssuerRef.Name)
 			logger.Error(err, "error finding object in topology")
 			return err
 		}

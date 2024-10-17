@@ -245,5 +245,7 @@ func GetTLSPoliciesByEvents(topology *machinery.Topology, events []controller.Re
 	}
 
 	// Return only unique policies as there can be duplicates from multiple events
-	return lo.Uniq(affectedPolicies)
+	return lo.UniqBy(affectedPolicies, func(item machinery.Policy) string {
+		return item.GetLocator()
+	})
 }

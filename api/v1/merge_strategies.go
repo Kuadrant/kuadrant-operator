@@ -20,12 +20,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-
-	"github.com/kuadrant/policy-machinery/controller"
-	"github.com/kuadrant/policy-machinery/machinery"
 )
 
 const (

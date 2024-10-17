@@ -1,6 +1,8 @@
 package wasm
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -85,7 +87,9 @@ func BuildActionSetsForPath(pathID string, path []machinery.Targetable, policyRu
 }
 
 func ActionSetNameForPath(pathID string, httpRouteMatchIndex int, hostname string) string {
-	return fmt.Sprintf("%s|%d|%s", pathID, httpRouteMatchIndex+1, hostname)
+	source := fmt.Sprintf("%s|%d|%s", pathID, httpRouteMatchIndex+1, hostname)
+	hash := sha256.Sum256([]byte(source))
+	return hex.EncodeToString(hash[:])
 }
 
 func ConfigFromStruct(structure *_struct.Struct) (*Config, error) {

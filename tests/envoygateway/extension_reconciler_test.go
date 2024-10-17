@@ -104,7 +104,7 @@ var _ = Describe("wasm controller", func() {
 				mHTTPRoute,
 				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &gwRoute.Spec.Rules[0], Name: "rule-1"},
 			})
-			actionSetName = wasm.ActionSetNameForPath(pathID, 1, string(gwRoute.Spec.Hostnames[0]))
+			actionSetName = wasm.ActionSetNameForPath(pathID, 0, string(gwRoute.Spec.Hostnames[0]))
 
 			gwPolicy = policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Name = "gw"
@@ -272,7 +272,7 @@ var _ = Describe("wasm controller", func() {
 				mHTTPRoute,
 				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &gwRoute.Spec.Rules[0], Name: "rule-1"},
 			})
-			actionSetName = wasm.ActionSetNameForPath(pathID, 1, string(gwRoute.Spec.Hostnames[0]))
+			actionSetName = wasm.ActionSetNameForPath(pathID, 0, string(gwRoute.Spec.Hostnames[0]))
 
 			routePolicy = policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Name = "route"

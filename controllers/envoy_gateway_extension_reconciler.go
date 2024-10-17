@@ -62,8 +62,10 @@ func (r *envoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 	}
 
 	// reconcile for each gateway based on the desired wasm plugin policies calculated before
-	gateways := topology.Targetables().Items(func(o machinery.Object) bool {
+	gateways := lo.Map(topology.Targetables().Items(func(o machinery.Object) bool {
 		return o.GroupVersionKind().GroupKind() == machinery.GatewayGroupKind
+	}), func(g machinery.Targetable, _ int) *machinery.Gateway {
+		return g.(*machinery.Gateway)
 	})
 
 	var modifiedGateways []string
@@ -173,7 +175,7 @@ func (r *envoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 }
 
 // buildEnvoyExtensionPolicyForGateway builds a desired EnvoyExtensionPolicy custom resource for a given gateway and corresponding wasm config
-func buildEnvoyExtensionPolicyForGateway(gateway machinery.Targetable, wasmConfig wasm.Config) *envoygatewayv1alpha1.EnvoyExtensionPolicy {
+func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig wasm.Config) *envoygatewayv1alpha1.EnvoyExtensionPolicy {
 	envoyPolicy := &envoygatewayv1alpha1.EnvoyExtensionPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind.Kind,
@@ -182,6 +184,16 @@ func buildEnvoyExtensionPolicyForGateway(gateway machinery.Targetable, wasmConfi
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      wasm.ExtensionName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         gateway.GroupVersionKind().GroupVersion().String(),
+					Kind:               gateway.GroupVersionKind().Kind,
+					Name:               gateway.Name,
+					UID:                gateway.UID,
+					BlockOwnerDeletion: ptr.To(true),
+					Controller:         ptr.To(true),
+				},
+			},
 		},
 		Spec: envoygatewayv1alpha1.EnvoyExtensionPolicySpec{
 			PolicyTargetReferences: envoygatewayv1alpha1.PolicyTargetReferences{

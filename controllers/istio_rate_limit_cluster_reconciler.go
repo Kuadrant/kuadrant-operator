@@ -17,17 +17,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/utils/ptr"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
 // istioRateLimitClusterReconciler reconciles Istio EnvoyFilter custom resources
 type istioRateLimitClusterReconciler struct {
-	*reconcilers.BaseReconciler
 	client *dynamic.DynamicClient
 }
 
@@ -170,6 +169,16 @@ func (r *istioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *lim
 			Name:      RateLimitClusterName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
 			Labels:    map[string]string{rateLimitClusterLabelKey: "true"},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         gateway.GroupVersionKind().GroupVersion().String(),
+					Kind:               gateway.GroupVersionKind().Kind,
+					Name:               gateway.Name,
+					UID:                gateway.UID,
+					BlockOwnerDeletion: ptr.To(true),
+					Controller:         ptr.To(true),
+				},
+			},
 		},
 		Spec: istioapinetworkingv1alpha3.EnvoyFilter{
 			TargetRefs: []*istiov1beta1.PolicyTargetReference{
@@ -187,10 +196,6 @@ func (r *istioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *lim
 		return nil, err
 	}
 	envoyFilter.Spec.ConfigPatches = configPatches
-
-	if err := r.SetOwnerReference(gateway.Gateway, envoyFilter); err != nil {
-		return nil, err
-	}
 
 	return envoyFilter, nil
 }

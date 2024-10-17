@@ -16,7 +16,6 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
-	ctrlruntime "sigs.k8s.io/controller-runtime"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -26,8 +25,6 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
-	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 )
 
@@ -72,7 +69,7 @@ var (
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
 //+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;patch;delete
 
-func NewRateLimitWorkflow(manager ctrlruntime.Manager, client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) *controller.Workflow {
+func NewRateLimitWorkflow(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) *controller.Workflow {
 	effectiveRateLimitPoliciesWorkflow := &controller.Workflow{
 		Precondition: (&effectiveRateLimitPolicyReconciler{client: client}).Subscription().Reconcile,
 		Tasks: []controller.ReconcileFunc{
@@ -80,15 +77,13 @@ func NewRateLimitWorkflow(manager ctrlruntime.Manager, client *dynamic.DynamicCl
 		},
 	}
 
-	baseReconciler := reconcilers.NewBaseReconciler(manager.GetClient(), manager.GetScheme(), manager.GetAPIReader(), log.Log.WithName("ratelimit"))
-
 	if isIstioInstalled {
-		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&istioRateLimitClusterReconciler{BaseReconciler: baseReconciler, client: client}).Subscription().Reconcile)
+		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&istioRateLimitClusterReconciler{client: client}).Subscription().Reconcile)
 		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&istioExtensionReconciler{client: client}).Subscription().Reconcile)
 	}
 
 	if isEnvoyGatewayInstalled {
-		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&envoyGatewayRateLimitClusterReconciler{BaseReconciler: baseReconciler, client: client}).Subscription().Reconcile)
+		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&envoyGatewayRateLimitClusterReconciler{client: client}).Subscription().Reconcile)
 		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&envoyGatewayExtensionReconciler{client: client}).Subscription().Reconcile)
 	}
 

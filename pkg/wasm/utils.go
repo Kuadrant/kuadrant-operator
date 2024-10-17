@@ -45,12 +45,10 @@ func BuildConfigForActionSet(actionSets []ActionSet) Config {
 type ActionBuilderFunc func(uniquePolicyRuleKey string, policyRule kuadrantv1.MergeableRule) (Action, error)
 
 func BuildActionSetsForPath(pathID string, path []machinery.Targetable, policyRules map[string]kuadrantv1.MergeableRule, actionBuilder ActionBuilderFunc) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
-	// assumes the path is always [gatewayclass, gateway, listener, httproute, httprouterule]
-	listener, _ := path[2].(*machinery.Listener)
-	httpRoute, _ := path[3].(*machinery.HTTPRoute)
-	httpRouteRule, _ := path[4].(*machinery.HTTPRouteRule)
-
-	var err error
+	_, _, listener, httpRoute, httpRouteRule, err := common.ObjectsInRequestPath(path)
+	if err != nil {
+		return nil, err
+	}
 
 	actions := lo.FilterMap(lo.Entries(policyRules), func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) (Action, bool) {
 		action, err := actionBuilder(r.Key, r.Value)

@@ -17,13 +17,12 @@ limitations under the License.
 package v1
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"sort"
 	"strings"
 
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -196,7 +195,7 @@ func PoliciesInPath(path []machinery.Targetable, predicate func(machinery.Policy
 }
 
 func PathID(path []machinery.Targetable) string {
-	s := strings.Join(lo.Map(path, machinery.MapTargetableToLocatorFunc), ">")
-	hash := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(hash[:8])
+	return strings.Join(lo.Map(path, func(t machinery.Targetable, _ int) string {
+		return strings.TrimPrefix(k8stypes.NamespacedName{Namespace: t.GetNamespace(), Name: t.GetName()}.String(), string(k8stypes.Separator))
+	}), "|")
 }

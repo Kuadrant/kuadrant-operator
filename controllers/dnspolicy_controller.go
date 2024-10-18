@@ -76,7 +76,7 @@ func (r *DNSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				if delResErr == nil {
 					delResErr = err
 				}
-				return r.reconcileStatus(ctx, dnsPolicy, kuadrant.NewErrTargetNotFound(dnsPolicy.Kind(), dnsPolicy.GetTargetRef(), delResErr))
+				return ctrl.Result{}, kuadrant.NewErrTargetNotFound(dnsPolicy.Kind(), dnsPolicy.GetTargetRef(), delResErr)
 			}
 			return ctrl.Result{}, err
 		}
@@ -108,13 +108,7 @@ func (r *DNSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	specErr := r.reconcileResources(ctx, dnsPolicy, targetNetworkObject)
 
-	statusResult, statusErr := r.reconcileStatus(ctx, dnsPolicy, specErr)
-
-	if specErr != nil {
-		return ctrl.Result{}, specErr
-	}
-
-	return statusResult, statusErr
+	return ctrl.Result{}, specErr
 }
 
 func (r *DNSPolicyReconciler) reconcileResources(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, targetNetworkObject client.Object) error {

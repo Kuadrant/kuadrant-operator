@@ -17,20 +17,13 @@ limitations under the License.
 package controllers
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/equality"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
@@ -41,37 +34,7 @@ import (
 
 var NegativePolarityConditions []string
 
-func (r *DNSPolicyReconciler) reconcileStatus(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, specErr error) (ctrl.Result, error) {
-	newStatus := r.calculateStatus(ctx, dnsPolicy, specErr)
-
-	equalStatus := equality.Semantic.DeepEqual(newStatus, dnsPolicy.Status)
-	if equalStatus && dnsPolicy.Generation == dnsPolicy.Status.ObservedGeneration {
-		return reconcile.Result{}, nil
-	}
-
-	newStatus.ObservedGeneration = dnsPolicy.Generation
-
-	dnsPolicy.Status = *newStatus
-	updateErr := r.Client().Status().Update(ctx, dnsPolicy)
-	if updateErr != nil {
-		// Ignore conflicts, resource might just be outdated.
-		if apierrors.IsConflict(updateErr) {
-			return ctrl.Result{Requeue: true}, nil
-		}
-		return ctrl.Result{}, updateErr
-	}
-
-	// policy updated in API, emit metrics based on status conditions
-	r.emitConditionMetrics(dnsPolicy)
-
-	if kuadrant.IsTargetNotFound(specErr) {
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	return ctrl.Result{}, nil
-}
-
-func (r *DNSPolicyReconciler) emitConditionMetrics(dnsPolicy *v1alpha1.DNSPolicy) {
+func emitConditionMetrics(dnsPolicy *v1alpha1.DNSPolicy) {
 	readyStatus := meta.FindStatusCondition(dnsPolicy.Status.Conditions, ReadyConditionType)
 	if readyStatus == nil {
 		dnsPolicyReady.WithLabelValues(dnsPolicy.Name, dnsPolicy.Namespace, "true").Set(0)
@@ -88,81 +51,21 @@ func (r *DNSPolicyReconciler) emitConditionMetrics(dnsPolicy *v1alpha1.DNSPolicy
 	}
 }
 
-func (r *DNSPolicyReconciler) calculateStatus(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, specErr error) *v1alpha1.DNSPolicyStatus {
-	newStatus := &v1alpha1.DNSPolicyStatus{
-		// Copy initial conditions. Otherwise, status will always be updated
-		Conditions:         slices.Clone(dnsPolicy.Status.Conditions),
-		ObservedGeneration: dnsPolicy.Status.ObservedGeneration,
-		TotalRecords:       dnsPolicy.Status.TotalRecords,
-	}
-	acceptedCond := kuadrant.AcceptedCondition(dnsPolicy, nil)
-	if !(errors.Is(specErr, ErrNoAddresses) || errors.Is(specErr, ErrNoRoutes)) {
-		acceptedCond = kuadrant.AcceptedCondition(dnsPolicy, specErr)
-	}
-
-	meta.SetStatusCondition(&newStatus.Conditions, *acceptedCond)
-
-	// Do not set enforced condition if Accepted condition is false
-	if meta.IsStatusConditionFalse(newStatus.Conditions, string(v1alpha2.PolicyConditionAccepted)) {
-		meta.RemoveStatusCondition(&newStatus.Conditions, string(kuadrant.PolicyConditionEnforced))
-		return newStatus
-	}
-	var enforcedCondition = kuadrant.EnforcedCondition(dnsPolicy, nil, true)
-	recordList, err := r.filteredRecordList(ctx, dnsPolicy)
-	if err != nil {
-		enforcedCondition = kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown("DNSPolicy", err), false)
-		meta.SetStatusCondition(&newStatus.Conditions, *enforcedCondition)
-		return newStatus
-	}
-
-	enforcedCondition = r.enforcedCondition(recordList, dnsPolicy)
-
-	// add some additional user friendly context
-	if errors.Is(specErr, ErrNoAddresses) && !strings.Contains(enforcedCondition.Message, ErrNoAddresses.Error()) {
-		enforcedCondition.Message = fmt.Sprintf("%s : %s", enforcedCondition.Message, ErrNoAddresses.Error())
-	}
-	if errors.Is(specErr, ErrNoRoutes) && !strings.Contains(enforcedCondition.Message, ErrNoRoutes.Error()) {
-		enforcedCondition.Message = fmt.Sprintf("%s : %s", enforcedCondition.Message, ErrNoRoutes)
-	}
-
-	meta.SetStatusCondition(&newStatus.Conditions, *enforcedCondition)
-	propagateRecordConditions(recordList, newStatus)
-
-	return newStatus
-}
-
-func (r *DNSPolicyReconciler) filteredRecordList(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy) (*kuadrantdnsv1alpha1.DNSRecordList, error) {
-	recordsList := &kuadrantdnsv1alpha1.DNSRecordList{}
-	if err := r.Client().List(ctx, recordsList, &client.ListOptions{Namespace: dnsPolicy.Namespace}); err != nil {
-		return nil, err
-	}
-	// filter down to records controlled by the policy
-	recordsList.Items = utils.Filter(recordsList.Items, func(record kuadrantdnsv1alpha1.DNSRecord) bool {
-		for _, reference := range record.GetOwnerReferences() {
-			if reference.Controller != nil && *reference.Controller && reference.Name == dnsPolicy.Name && reference.UID == dnsPolicy.UID {
-				return true
-			}
-		}
-		return false
-	})
-	return recordsList, nil
-}
-
-func (r *DNSPolicyReconciler) enforcedCondition(recordsList *kuadrantdnsv1alpha1.DNSRecordList, dnsPolicy *v1alpha1.DNSPolicy) *metav1.Condition {
+func enforcedCondition(records []*kuadrantdnsv1alpha1.DNSRecord, dnsPolicy *v1alpha1.DNSPolicy) *metav1.Condition {
 	// there are no controlled DNS records present
-	if len(recordsList.Items) == 0 {
+	if len(records) == 0 {
 		cond := kuadrant.EnforcedCondition(dnsPolicy, nil, true)
 		cond.Message = "DNSPolicy has been successfully enforced : no DNSRecords created based on policy and gateway configuration"
 		return cond
 	}
 
 	// filter not ready records
-	notReadyRecords := utils.Filter(recordsList.Items, func(record kuadrantdnsv1alpha1.DNSRecord) bool {
+	notReadyRecords := utils.Filter(records, func(record *kuadrantdnsv1alpha1.DNSRecord) bool {
 		return meta.IsStatusConditionFalse(record.Status.Conditions, string(kuadrantdnsv1alpha1.ConditionTypeReady))
 	})
 
 	// if there are records and none of the records are ready
-	if len(recordsList.Items) > 0 && len(notReadyRecords) == len(recordsList.Items) {
+	if len(records) > 0 && len(notReadyRecords) == len(records) {
 		return kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(dnsPolicy.Kind(), errors.New("policy is not enforced on any DNSRecord: not a single DNSRecord is ready")), false)
 	}
 
@@ -180,11 +83,11 @@ func (r *DNSPolicyReconciler) enforcedCondition(recordsList *kuadrantdnsv1alpha1
 	return kuadrant.EnforcedCondition(dnsPolicy, nil, true)
 }
 
-func propagateRecordConditions(records *kuadrantdnsv1alpha1.DNSRecordList, policyStatus *v1alpha1.DNSPolicyStatus) {
+func propagateRecordConditions(records []*kuadrantdnsv1alpha1.DNSRecord, policyStatus *v1alpha1.DNSPolicyStatus) {
 	//reset conditions
 	policyStatus.RecordConditions = map[string][]metav1.Condition{}
 
-	for _, record := range records.Items {
+	for _, record := range records {
 		var allConditions []metav1.Condition
 		allConditions = append(allConditions, record.Status.Conditions...)
 		if record.Status.HealthCheck != nil {

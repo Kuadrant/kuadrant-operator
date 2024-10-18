@@ -1,11 +1,17 @@
 package controllers
 
 import (
+	"fmt"
+	"sync"
+
 	"github.com/samber/lo"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -80,4 +86,34 @@ func LinkDNSPolicyToDNSRecord(objs controller.Store) machinery.LinkFunc {
 			return nil
 		},
 	}
+}
+
+func dnsPolicyAcceptedStatusFunc(state *sync.Map) func(policy machinery.Policy) (bool, error) {
+	validatedPolicies, validated := state.Load(StateDNSPolicyAcceptedKey)
+	if !validated {
+		return dnsPolicyAcceptedStatus
+	}
+	validatedPoliciesMap := validatedPolicies.(map[string]error)
+	return func(policy machinery.Policy) (bool, error) {
+		err, pValidated := validatedPoliciesMap[policy.GetLocator()]
+		if pValidated {
+			return err == nil, err
+		}
+		return dnsPolicyAcceptedStatus(policy)
+	}
+}
+
+func dnsPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error) {
+	p, ok := policy.(*v1alpha1.DNSPolicy)
+	if !ok {
+		return
+	}
+	if condition := meta.FindStatusCondition(p.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted)); condition != nil {
+		accepted = condition.Status == metav1.ConditionTrue
+		if !accepted {
+			err = fmt.Errorf(condition.Message)
+		}
+		return
+	}
+	return
 }

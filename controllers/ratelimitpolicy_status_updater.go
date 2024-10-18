@@ -39,7 +39,7 @@ type rateLimitPolicyStatusUpdater struct {
 func (r *rateLimitPolicyStatusUpdater) Subscription() controller.Subscription {
 	return controller.Subscription{
 		ReconcileFunc: r.UpdateStatus,
-		Events: rateLimitEventMatchers,
+		Events:        rateLimitEventMatchers,
 	}
 }
 

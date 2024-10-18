@@ -12,6 +12,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
@@ -78,7 +79,7 @@ func (r *envoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 		resource := r.client.Resource(kuadrantenvoygateway.EnvoyExtensionPoliciesResource).Namespace(desiredEnvoyExtensionPolicy.GetNamespace())
 
 		existingEnvoyExtensionPolicyObj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
-			return child.GroupVersionKind().GroupKind() == kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind && child.GetName() == desiredEnvoyExtensionPolicy.GetName() && child.GetNamespace() == desiredEnvoyExtensionPolicy.GetNamespace()
+			return child.GroupVersionKind().GroupKind() == kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind && child.GetName() == desiredEnvoyExtensionPolicy.GetName() && child.GetNamespace() == desiredEnvoyExtensionPolicy.GetNamespace() && labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredEnvoyExtensionPolicy.GetLabels()))
 		})
 
 		// create
@@ -184,6 +185,7 @@ func buildEnvoyExtensionPolicyForGateway(gateway *machinery.Gateway, wasmConfig 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      wasm.ExtensionName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
+			Labels:    KuadrantManagedObjectLabels(),
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         gateway.GroupVersionKind().GroupVersion().String(),

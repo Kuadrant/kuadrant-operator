@@ -19,6 +19,7 @@ import (
 	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
@@ -40,8 +41,10 @@ import (
 )
 
 var (
+	operatorNamespace       = env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
+	kuadrantManagedLabelKey = "kuadrant.io/managed"
+
 	ConfigMapGroupKind = schema.GroupKind{Group: corev1.GroupName, Kind: "ConfigMap"}
-	operatorNamespace  = env.GetString("OPERATOR_NAMESPACE", "kuadrant-system")
 )
 
 // gateway-api permissions
@@ -211,12 +214,13 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() []controller.ControllerOpt
 				&egv1alpha1.EnvoyPatchPolicy{},
 				envoygateway.EnvoyPatchPoliciesResource,
 				metav1.NamespaceAll,
-				controller.FilterResourcesByLabel[*egv1alpha1.EnvoyPatchPolicy](fmt.Sprintf("%s=true", rateLimitClusterLabelKey)),
+				controller.FilterResourcesByLabel[*egv1alpha1.EnvoyPatchPolicy](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 			)),
 			controller.WithRunnable("envoyextensionpolicy watcher", controller.Watch(
 				&egv1alpha1.EnvoyExtensionPolicy{},
 				envoygateway.EnvoyExtensionPoliciesResource,
 				metav1.NamespaceAll,
+				controller.FilterResourcesByLabel[*egv1alpha1.EnvoyExtensionPolicy](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 			)),
 			controller.WithRunnable("envoysecuritypolicy watcher", controller.Watch(
 				&egv1alpha1.SecurityPolicy{},
@@ -251,12 +255,13 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 				&istioclientnetworkingv1alpha3.EnvoyFilter{},
 				istio.EnvoyFiltersResource,
 				metav1.NamespaceAll,
-				controller.FilterResourcesByLabel[*istioclientnetworkingv1alpha3.EnvoyFilter](fmt.Sprintf("%s=true", rateLimitClusterLabelKey)),
+				controller.FilterResourcesByLabel[*istioclientnetworkingv1alpha3.EnvoyFilter](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 			)),
 			controller.WithRunnable("wasmplugin watcher", controller.Watch(
 				&istioclientgoextensionv1alpha1.WasmPlugin{},
 				istio.WasmPluginsResource,
 				metav1.NamespaceAll,
+				controller.FilterResourcesByLabel[*istioclientgoextensionv1alpha1.WasmPlugin](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 			)),
 			controller.WithRunnable("authorizationpolicy watcher", controller.Watch(
 				&istioclientgosecurityv1beta1.AuthorizationPolicy{},
@@ -436,6 +441,12 @@ func GetKuadrantFromTopology(topology *machinery.Topology) (*kuadrantv1beta1.Kua
 	sort.Sort(controller.ObjectsByCreationTimestamp(kuadrants))
 	kuadrant, _ := kuadrants[0].(*kuadrantv1beta1.Kuadrant)
 	return kuadrant, nil
+}
+
+func KuadrantManagedObjectLabels() labels.Set {
+	return labels.Set(map[string]string{
+		kuadrantManagedLabelKey: "true",
+	})
 }
 
 func isObjectOwnedByGroupKind(o client.Object, groupKind schema.GroupKind) bool {

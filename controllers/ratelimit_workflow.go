@@ -13,6 +13,7 @@ import (
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
@@ -132,6 +133,12 @@ func LimitNameToLimitadorIdentifier(rlpKey k8stypes.NamespacedName, uniqueLimitN
 	identifier += "__" + hex.EncodeToString(hash[:4])
 
 	return identifier
+}
+
+func RateLimitObjectLabels() labels.Set {
+	m := KuadrantManagedObjectLabels()
+	m[rateLimitClusterLabelKey] = "true"
+	return m
 }
 
 func RateLimitClusterName(gatewayName string) string {

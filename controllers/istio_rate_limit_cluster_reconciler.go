@@ -15,6 +15,7 @@ import (
 	istiov1beta1 "istio.io/api/type/v1beta1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
@@ -98,7 +99,7 @@ func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 		resource := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(desiredEnvoyFilter.GetNamespace())
 
 		existingEnvoyFilterObj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
-			return child.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind && child.GetName() == desiredEnvoyFilter.GetName() && child.GetNamespace() == desiredEnvoyFilter.GetNamespace()
+			return child.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind && child.GetName() == desiredEnvoyFilter.GetName() && child.GetNamespace() == desiredEnvoyFilter.GetNamespace() && labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredEnvoyFilter.GetLabels()))
 		})
 
 		// create
@@ -146,7 +147,7 @@ func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	// cleanup istio clusters for gateways that are not in the effective policies
 	staleEnvoyFilters := topology.Objects().Items(func(o machinery.Object) bool {
 		_, desired := desiredEnvoyFilters[k8stypes.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}]
-		return o.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind && !desired
+		return o.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind && labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(RateLimitObjectLabels()) && !desired
 	})
 
 	for _, envoyFilter := range staleEnvoyFilters {
@@ -168,7 +169,7 @@ func (r *istioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *lim
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RateLimitClusterName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
-			Labels:    map[string]string{rateLimitClusterLabelKey: "true"},
+			Labels:    RateLimitObjectLabels(),
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         gateway.GroupVersionKind().GroupVersion().String(),

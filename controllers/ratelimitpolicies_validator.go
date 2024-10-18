@@ -9,6 +9,7 @@ import (
 	"github.com/samber/lo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -22,7 +23,8 @@ func (r *rateLimitPolicyValidator) Subscription() controller.Subscription {
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
-			{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind, EventType: ptr.To(controller.CreateEvent)},
+			{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind, EventType: ptr.To(controller.UpdateEvent)},
 		},
 	}
 }

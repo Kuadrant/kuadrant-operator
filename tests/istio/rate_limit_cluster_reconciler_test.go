@@ -3,7 +3,6 @@
 package istio_test
 
 import (
-	"fmt"
 	"time"
 
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
@@ -19,6 +18,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
+	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/tests"
@@ -32,7 +32,6 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 	var (
 		testNamespace string
 		rlpName       = "toystore-rlp"
-		efName        = fmt.Sprintf("kuadrant-ratelimiting-cluster-%s", TestGatewayName)
 	)
 
 	beforeEachCallback := func(ctx SpecContext) {
@@ -77,7 +76,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 	}, afterEachTimeOut)
 
 	Context("RLP targeting Gateway", func() {
-		It("EnvoyFilter created when RLP exists and deleted with RLP is deleted", func(ctx SpecContext) {
+		It("EnvoyFilter only created if RLP is in the path to a route", func(ctx SpecContext) {
 			// create ratelimitpolicy
 			rlp := &kuadrantv1beta3.RateLimitPolicy{
 				TypeMeta: metav1.TypeMeta{
@@ -89,12 +88,14 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "Gateway",
-						Name:  gatewayapiv1.ObjectName(TestGatewayName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -113,12 +114,24 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(tests.RLPIsAccepted(ctx, testClient(), rlpKey)).WithContext(ctx).Should(BeTrue())
 			Eventually(tests.RLPIsEnforced(ctx, testClient(), rlpKey)).WithContext(ctx).Should(BeFalse())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes"))
 
-			// Check envoy filter
+			// Check envoy filter has not been created
 			Eventually(func() bool {
 				existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
-				efKey := client.ObjectKey{Name: efName, Namespace: testNamespace}
+				efKey := client.ObjectKey{Name: controllers.RateLimitClusterName(TestGatewayName), Namespace: testNamespace}
+				err = testClient().Get(ctx, efKey, existingEF)
+				return apierrors.IsNotFound(err)
+			}).WithContext(ctx).Should(BeTrue())
+
+			route := tests.BuildBasicHttpRoute(TestHTTPRouteName, TestGatewayName, testNamespace, []string{"*.toystore.com"})
+			Expect(k8sClient.Create(ctx, route)).To(Succeed())
+			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(route))).WithContext(ctx).Should(BeTrue())
+
+			// Check envoy filter has been created
+			Eventually(func() bool {
+				existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
+				efKey := client.ObjectKey{Name: controllers.RateLimitClusterName(TestGatewayName), Namespace: testNamespace}
 				err = testClient().Get(ctx, efKey, existingEF)
 				if err != nil {
 					return false
@@ -132,7 +145,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 			// Check envoy filter is gone
 			Eventually(func() bool {
 				existingEF := &istioclientnetworkingv1alpha3.EnvoyFilter{}
-				efKey := client.ObjectKey{Name: efName, Namespace: testNamespace}
+				efKey := client.ObjectKey{Name: controllers.RateLimitClusterName(TestGatewayName), Namespace: testNamespace}
 				err = testClient().Get(ctx, efKey, existingEF)
 				return apierrors.IsNotFound(err)
 			}).WithContext(ctx).Should(BeTrue())

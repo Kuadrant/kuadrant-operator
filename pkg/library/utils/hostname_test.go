@@ -4,6 +4,7 @@ package utils
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -124,6 +125,50 @@ func TestHostnamesToStrings(t *testing.T) {
 			output := HostnamesToStrings(tc.inputHostnames)
 			if !reflect.DeepEqual(tc.expectedOutput, output) {
 				t.Errorf("Unexpected output. Expected %v but got %v", tc.expectedOutput, output)
+			}
+		})
+	}
+}
+
+func TestSortableHostnames(t *testing.T) {
+	testCases := []struct {
+		name           string
+		inputHostnames []string
+		expectedOutput []string
+	}{
+		{
+			name:           "when input is empty then return empty output",
+			inputHostnames: []string{},
+			expectedOutput: []string{},
+		},
+		{
+			name:           "when input has a single precise hostname then return the hostname",
+			inputHostnames: []string{"example.com"},
+			expectedOutput: []string{"example.com"},
+		},
+		{
+			name:           "when input has multiple precise hostnames then return the hostnames ordered lexicographically",
+			inputHostnames: []string{"example.com", "test.com", "localhost"},
+			expectedOutput: []string{"example.com", "test.com", "localhost"},
+		},
+		{
+			name:           "when input has precise and wildcard hostnames then return the hostnames ordered from most specific to least specific",
+			inputHostnames: []string{"*.com", "*.example.com", "*", "other.example.com"},
+			expectedOutput: []string{"other.example.com", "*.example.com", "*.com", "*"},
+		},
+		{
+			name:           "when input contains repeated hostnames then return the equal hostnames adjacent to each other",
+			inputHostnames: []string{"*.com", "other.example.com", "*.example.com", "*", "*.com", "*.example.com", "other.example.com"},
+			expectedOutput: []string{"other.example.com", "other.example.com", "*.example.com", "*.example.com", "*.com", "*.com", "*"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			hostnames := SortableHostnames(tc.inputHostnames)
+			sort.Sort(hostnames)
+			if !reflect.DeepEqual(tc.expectedOutput, tc.expectedOutput) {
+				t.Errorf("Unexpected output. Expected %v but got %v", tc.expectedOutput, tc.expectedOutput)
 			}
 		})
 	}

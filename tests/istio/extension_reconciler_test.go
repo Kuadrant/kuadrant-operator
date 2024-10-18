@@ -8,22 +8,25 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/kuadrant/policy-machinery/machinery"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/rlptools/wasm"
+	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
@@ -59,14 +62,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 
 	Context("Basic tests", func() {
 		var (
-			routeName = "toystore-route"
-			rlpName   = "toystore-rlp"
-			gateway   *gatewayapiv1.Gateway
+			routeName    = "toystore-route"
+			rlpName      = "toystore-rlp"
+			gatewayClass *gatewayapiv1.GatewayClass
+			gateway      *gatewayapiv1.Gateway
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
@@ -80,6 +87,16 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
 
+			mGateway := &machinery.Gateway{Gateway: gateway}
+			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: httpRoute}
+			pathID := kuadrantv1.PathID([]machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[0], Name: "rule-1"},
+			})
+
 			// create ratelimitpolicy
 			rlp := &kuadrantv1beta3.RateLimitPolicy{
 				TypeMeta: metav1.TypeMeta{
@@ -87,12 +104,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1.ObjectName(routeName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -113,61 +132,55 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 			// must exist
 			Expect(err).ToNot(HaveOccurred())
 			// has the correct target ref
-			Expect(existingWasmPlugin.Spec.TargetRef).To(Not(BeNil()))
-			Expect(existingWasmPlugin.Spec.TargetRef.Group).To(Equal("gateway.networking.k8s.io"))
-			Expect(existingWasmPlugin.Spec.TargetRef.Kind).To(Equal("Gateway"))
-			Expect(existingWasmPlugin.Spec.TargetRef.Name).To(Equal(gateway.Name))
+			Expect(existingWasmPlugin.Spec.TargetRefs).To(Not(BeEmpty()))
+			Expect(existingWasmPlugin.Spec.TargetRefs[0].Group).To(Equal("gateway.networking.k8s.io"))
+			Expect(existingWasmPlugin.Spec.TargetRefs[0].Kind).To(Equal("Gateway"))
+			Expect(existingWasmPlugin.Spec.TargetRefs[0].Name).To(Equal(gateway.Name))
 			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
-				Extensions: map[string]wasm.Extension{
-					wasm.RateLimitPolicyExtensionName: {
+				Services: map[string]wasm.Service{
+					wasm.RateLimitServiceName: {
+						Type:        wasm.RateLimitServiceType,
 						Endpoint:    common.KuadrantRateLimitClusterName,
 						FailureMode: wasm.FailureModeAllow,
-						Type:        wasm.RateLimitExtensionType,
 					},
 				},
-				Policies: []wasm.Policy{
+				ActionSets: []wasm.ActionSet{
 					{
-						Name:      rlpKey.String(),
-						Hostnames: []string{"*.example.com"},
-						Rules: []wasm.Rule{
-							{
-								Conditions: []wasm.Condition{
-									{
-										AllOf: []wasm.PatternExpression{
-											{
-												Selector: "request.url_path",
-												Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-												Value:    "/toy",
-											},
-											{
-												Selector: "request.method",
-												Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-												Value:    "GET",
-											},
-										},
-									},
+						Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
+						RouteRuleConditions: wasm.RouteRuleConditions{
+							Hostnames: []string{"*.example.com"},
+							Matches: []wasm.Predicate{
+								{
+									Selector: "request.method",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+									Value:    "GET",
 								},
-								Actions: []wasm.Action{
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toy",
+								},
+							},
+						},
+						Actions: []wasm.Action{
+							{
+								ServiceName: wasm.RateLimitServiceName,
+								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+								Data: []wasm.DataType{
 									{
-										Scope:         wasm.LimitsNamespaceFromRLP(rlp),
-										ExtensionName: wasm.RateLimitPolicyExtensionName,
-										Data: []wasm.DataType{
-											{
-												Value: &wasm.Static{
-													Static: wasm.StaticSpec{
-														Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-														Value: "1",
-													},
-												},
+										Value: &wasm.Static{
+											Static: wasm.StaticSpec{
+												Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+												Value: "1",
 											},
 										},
 									},
@@ -227,12 +240,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1.ObjectName(routeName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"users": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -265,7 +280,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -273,151 +288,391 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig.Extensions).To(HaveKeyWithValue(wasm.RateLimitPolicyExtensionName, wasm.Extension{
+			Expect(existingWASMConfig.Services).To(HaveKeyWithValue(wasm.RateLimitServiceName, wasm.Service{
 				Endpoint:    common.KuadrantRateLimitClusterName,
 				FailureMode: wasm.FailureModeAllow,
-				Type:        wasm.RateLimitExtensionType,
+				Type:        wasm.RateLimitServiceType,
 			}))
-			Expect(existingWASMConfig.Policies).To(HaveLen(1))
-			policy := existingWASMConfig.Policies[0]
-			Expect(policy.Name).To(Equal(rlpKey.String()))
-			Expect(policy.Hostnames).To(Equal([]string{"*.toystore.acme.com", "api.toystore.io"}))
-			Expect(policy.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'users' limit definition
-				Conditions: []wasm.Condition{
-					{
-						AllOf: []wasm.PatternExpression{
-							{
-								Selector: "request.url_path",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-								Value:    "/toys",
-							},
-							{
-								Selector: "request.method",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-								Value:    "GET",
-							},
-							{
-								Selector: "auth.identity.group",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-								Value:    "admin",
-							},
-						},
-					},
-					{
-						AllOf: []wasm.PatternExpression{
-							{
-								Selector: "request.url_path",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-								Value:    "/toys",
-							},
-							{
-								Selector: "request.method",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-								Value:    "POST",
-							},
-							{
-								Selector: "auth.identity.group",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-								Value:    "admin",
-							},
-						},
-					},
-					{
-						AllOf: []wasm.PatternExpression{
-							{
-								Selector: "request.url_path",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-								Value:    "/assets",
-							},
-							{
-								Selector: "auth.identity.group",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-								Value:    "admin",
-							},
-						},
-					},
+			Expect(existingWASMConfig.ActionSets).To(HaveLen(6))
+
+			mGateway := &machinery.Gateway{Gateway: gateway}
+			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: httpRoute}
+			basePath := []machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+			}
+			httpRouteRuleToys := &machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[0], Name: "rule-1"}
+			httpRouteRuleAssets := &machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[1], Name: "rule-2"}
+
+			// *.toystore.acme.com/assets*
+			actionSet := existingWASMConfig.ActionSets[0]
+			pathID := kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "*.toystore.acme.com")))
+			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
+			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/assets",
 				},
-				Actions: []wasm.Action{
-					{
-						Scope:         wasm.LimitsNamespaceFromRLP(rlp),
-						ExtensionName: wasm.RateLimitPolicyExtensionName,
-						Data: []wasm.DataType{
-							{
-								Value: &wasm.Static{
-									Static: wasm.StaticSpec{
-										Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "users"),
-										Value: "1",
-									},
+			))
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions).To(ContainElements(
+				wasm.Action{ // action to activate the 'users' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Conditions: []wasm.Predicate{
+						{
+							Selector: "auth.identity.group",
+							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
+							Value:    "admin",
+						},
+					},
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+									Value: "1",
 								},
 							},
-							{
-								Value: &wasm.Selector{
-									Selector: wasm.SelectorSpec{
-										Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
-									},
+						},
+						{
+							Value: &wasm.Selector{
+								Selector: wasm.SelectorSpec{
+									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
 								},
 							},
 						},
 					},
 				},
-			}))
-			Expect(policy.Rules).To(ContainElement(wasm.Rule{ // rule to activate the 'all' limit definition
-				Conditions: []wasm.Condition{
-					{
-						AllOf: []wasm.PatternExpression{
-							{
-								Selector: "request.url_path",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-								Value:    "/toys",
-							},
-							{
-								Selector: "request.method",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-								Value:    "GET",
-							},
-						},
-					},
-					{
-						AllOf: []wasm.PatternExpression{
-							{
-								Selector: "request.url_path",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-								Value:    "/toys",
-							},
-							{
-								Selector: "request.method",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-								Value:    "POST",
-							},
-						},
-					},
-					{
-						AllOf: []wasm.PatternExpression{
-							{
-								Selector: "request.url_path",
-								Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-								Value:    "/assets",
-							},
-						},
-					},
-				},
-				Actions: []wasm.Action{
-					{
-						Scope:         wasm.LimitsNamespaceFromRLP(rlp),
-						ExtensionName: wasm.RateLimitPolicyExtensionName,
-						Data: []wasm.DataType{
-							{
-								Value: &wasm.Static{
-									Static: wasm.StaticSpec{
-										Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "all"),
-										Value: "1",
-									},
+				wasm.Action{ // action to activate the 'all' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+									Value: "1",
 								},
 							},
 						},
 					},
 				},
-			}))
+			))
+
+			// GET *.toystore.acme.com/toys*
+			actionSet = existingWASMConfig.ActionSets[1]
+			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "*.toystore.acme.com")))
+			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
+			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
+				wasm.Predicate{
+					Selector: "request.method",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+					Value:    "GET",
+				},
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/toys",
+				},
+			))
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions).To(ContainElements(
+				wasm.Action{ // action to activate the 'users' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Conditions: []wasm.Predicate{
+						{
+							Selector: "auth.identity.group",
+							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
+							Value:    "admin",
+						},
+					},
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+									Value: "1",
+								},
+							},
+						},
+						{
+							Value: &wasm.Selector{
+								Selector: wasm.SelectorSpec{
+									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+								},
+							},
+						},
+					},
+				},
+				wasm.Action{ // action to activate the 'all' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+									Value: "1",
+								},
+							},
+						},
+					},
+				},
+			))
+
+			// POST *.toystore.acme.com/toys*
+			actionSet = existingWASMConfig.ActionSets[2]
+			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "*.toystore.acme.com")))
+			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
+			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
+				wasm.Predicate{
+					Selector: "request.method",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+					Value:    "POST",
+				},
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/toys",
+				},
+			))
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions).To(ContainElements(
+				wasm.Action{ // action to activate the 'users' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Conditions: []wasm.Predicate{
+						{
+							Selector: "auth.identity.group",
+							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
+							Value:    "admin",
+						},
+					},
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+									Value: "1",
+								},
+							},
+						},
+						{
+							Value: &wasm.Selector{
+								Selector: wasm.SelectorSpec{
+									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+								},
+							},
+						},
+					},
+				},
+				wasm.Action{ // action to activate the 'all' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+									Value: "1",
+								},
+							},
+						},
+					},
+				},
+			))
+
+			// api.toystore.io/assets*
+			actionSet = existingWASMConfig.ActionSets[3]
+			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
+			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
+			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/assets",
+				},
+			))
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions).To(ContainElements(
+				wasm.Action{ // action to activate the 'users' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Conditions: []wasm.Predicate{
+						{
+							Selector: "auth.identity.group",
+							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
+							Value:    "admin",
+						},
+					},
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+									Value: "1",
+								},
+							},
+						},
+						{
+							Value: &wasm.Selector{
+								Selector: wasm.SelectorSpec{
+									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+								},
+							},
+						},
+					},
+				},
+				wasm.Action{ // action to activate the 'all' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+									Value: "1",
+								},
+							},
+						},
+					},
+				},
+			))
+
+			// GET api.toystore.io/toys*
+			actionSet = existingWASMConfig.ActionSets[4]
+			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
+			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
+			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
+				wasm.Predicate{
+					Selector: "request.method",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+					Value:    "GET",
+				},
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/toys",
+				},
+			))
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions).To(ContainElements(
+				wasm.Action{ // action to activate the 'users' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Conditions: []wasm.Predicate{
+						{
+							Selector: "auth.identity.group",
+							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
+							Value:    "admin",
+						},
+					},
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+									Value: "1",
+								},
+							},
+						},
+						{
+							Value: &wasm.Selector{
+								Selector: wasm.SelectorSpec{
+									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+								},
+							},
+						},
+					},
+				},
+				wasm.Action{ // action to activate the 'all' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+									Value: "1",
+								},
+							},
+						},
+					},
+				},
+			))
+
+			// POST api.toystore.io/toys*
+			actionSet = existingWASMConfig.ActionSets[5]
+			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
+			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "api.toystore.io")))
+			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
+			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
+				wasm.Predicate{
+					Selector: "request.method",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+					Value:    "POST",
+				},
+				wasm.Predicate{
+					Selector: "request.url_path",
+					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+					Value:    "/toys",
+				},
+			))
+			Expect(actionSet.Actions).To(HaveLen(2))
+			Expect(actionSet.Actions).To(ContainElements(
+				wasm.Action{ // action to activate the 'users' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Conditions: []wasm.Predicate{
+						{
+							Selector: "auth.identity.group",
+							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
+							Value:    "admin",
+						},
+					},
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
+									Value: "1",
+								},
+							},
+						},
+						{
+							Value: &wasm.Selector{
+								Selector: wasm.SelectorSpec{
+									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+								},
+							},
+						},
+					},
+				},
+				wasm.Action{ // action to activate the 'all' limit definition
+					ServiceName: wasm.RateLimitServiceName,
+					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Data: []wasm.DataType{
+						{
+							Value: &wasm.Static{
+								Static: wasm.StaticSpec{
+									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
+									Value: "1",
+								},
+							},
+						},
+					},
+				},
+			))
 		}, testTimeOut)
 
 		It("Simple RLP targeting Gateway parented by one HTTPRoute creates wasmplugin", func(ctx SpecContext) {
@@ -427,6 +682,16 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
 
+			mGateway := &machinery.Gateway{Gateway: gateway}
+			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: httpRoute}
+			pathID := kuadrantv1.PathID([]machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[0], Name: "rule-1"},
+			})
+
 			// create ratelimitpolicy
 			rlp := &kuadrantv1beta3.RateLimitPolicy{
 				TypeMeta: metav1.TypeMeta{
@@ -434,12 +699,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "Gateway",
-						Name:  gatewayapiv1.ObjectName(TestGatewayName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -460,7 +727,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -469,47 +736,41 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
-				Extensions: map[string]wasm.Extension{
-					wasm.RateLimitPolicyExtensionName: {
+				Services: map[string]wasm.Service{
+					wasm.RateLimitServiceName: {
 						Endpoint:    common.KuadrantRateLimitClusterName,
 						FailureMode: wasm.FailureModeAllow,
-						Type:        wasm.RateLimitExtensionType,
+						Type:        wasm.RateLimitServiceType,
 					},
 				},
-				Policies: []wasm.Policy{
+				ActionSets: []wasm.ActionSet{
 					{
-						Name:      rlpKey.String(),
-						Hostnames: []string{"*"},
-						Rules: []wasm.Rule{
-							{
-								Conditions: []wasm.Condition{
-									{
-										AllOf: []wasm.PatternExpression{
-											{
-												Selector: "request.url_path",
-												Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-												Value:    "/toy",
-											},
-											{
-												Selector: "request.method",
-												Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-												Value:    "GET",
-											},
-										},
-									},
+						Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
+						RouteRuleConditions: wasm.RouteRuleConditions{
+							Hostnames: []string{"*.example.com"},
+							Matches: []wasm.Predicate{
+								{
+									Selector: "request.method",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+									Value:    "GET",
 								},
-								Actions: []wasm.Action{
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toy",
+								},
+							},
+						},
+						Actions: []wasm.Action{
+							{
+								ServiceName: wasm.RateLimitServiceName,
+								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+								Data: []wasm.DataType{
 									{
-										Scope:         wasm.LimitsNamespaceFromRLP(rlp),
-										ExtensionName: wasm.RateLimitPolicyExtensionName,
-										Data: []wasm.DataType{
-											{
-												Value: &wasm.Static{
-													Static: wasm.StaticSpec{
-														Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-														Value: "1",
-													},
-												},
+										Value: &wasm.Static{
+											Static: wasm.StaticSpec{
+												Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+												Value: "1",
 											},
 										},
 									},
@@ -546,12 +807,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "Gateway",
-						Name:  gatewayapiv1.ObjectName(TestGatewayName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -570,10 +833,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes"))
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			// Wait a bit to catch cases where wasmplugin is created and takes a bit to be created
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey), 20*time.Second, 5*time.Second).Should(BeFalse())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
@@ -588,13 +851,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			routeName       = "route-a"
 			rlpName         = "rlp-a"
 			TestGatewayName = "toystore-gw"
+			gatewayClass    *gatewayapiv1.GatewayClass
 			gateway         *gatewayapiv1.Gateway
 			gwBName         = "gw-b"
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
@@ -623,12 +890,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "Gateway",
-						Name:  gatewayapiv1.ObjectName(TestGatewayName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -646,7 +915,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check RLP status is available
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndNotEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
-			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy has encountered some issues: no free routes to enforce policy"))
+			Expect(tests.RLPEnforcedCondition(ctx, testClient(), rlpKey, kuadrant.PolicyReasonUnknown, "RateLimitPolicy is not in the path to any existing routes"))
 
 			// create Route A -> Gw A
 			httpRoute := tests.BuildBasicHttpRoute(routeName, TestGatewayName, testNamespace, []string{"*.example.com"})
@@ -661,12 +930,22 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gwB)).WithContext(ctx).Should(BeTrue())
 
+			mGateway := &machinery.Gateway{Gateway: gateway}
+			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: httpRoute}
+			pathID := kuadrantv1.PathID([]machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[0], Name: "rule-1"},
+			})
+
 			// Initial state set.
 			// Check wasm plugin for gateway A has configuration from the route
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -681,47 +960,41 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					Extensions: map[string]wasm.Extension{
-						wasm.RateLimitPolicyExtensionName: {
+					Services: map[string]wasm.Service{
+						wasm.RateLimitServiceName: {
 							Endpoint:    common.KuadrantRateLimitClusterName,
 							FailureMode: wasm.FailureModeAllow,
-							Type:        wasm.RateLimitExtensionType,
+							Type:        wasm.RateLimitServiceType,
 						},
 					},
-					Policies: []wasm.Policy{
+					ActionSets: []wasm.ActionSet{
 						{
-							Name:      rlpKey.String(),
-							Hostnames: []string{"*"},
-							Rules: []wasm.Rule{
-								{
-									Conditions: []wasm.Condition{
-										{
-											AllOf: []wasm.PatternExpression{
-												{
-													Selector: "request.url_path",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-													Value:    "/toy",
-												},
-												{
-													Selector: "request.method",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-													Value:    "GET",
-												},
-											},
-										},
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
+							RouteRuleConditions: wasm.RouteRuleConditions{
+								Hostnames: []string{"*.example.com"},
+								Matches: []wasm.Predicate{
+									{
+										Selector: "request.method",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+										Value:    "GET",
 									},
-									Actions: []wasm.Action{
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/toy",
+									},
+								},
+							},
+							Actions: []wasm.Action{
+								{
+									ServiceName: wasm.RateLimitServiceName,
+									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+									Data: []wasm.DataType{
 										{
-											Scope:         wasm.LimitsNamespaceFromRLP(rlpA),
-											ExtensionName: wasm.RateLimitPolicyExtensionName,
-											Data: []wasm.DataType{
-												{
-													Value: &wasm.Static{
-														Static: wasm.StaticSpec{
-															Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-															Value: "1",
-														},
-													},
+											Value: &wasm.Static{
+												Static: wasm.StaticSpec{
+													Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+													Value: "1",
 												},
 											},
 										},
@@ -745,7 +1018,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				// Check wasm plugin
-				wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gwB), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -775,7 +1048,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin for gateway A no longer exists
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -794,7 +1067,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// There is not RLP targeting Gateway B or any route parented by Gateway B
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gwB), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -837,6 +1110,16 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
 
+			mGateway := &machinery.Gateway{Gateway: gateway}
+			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: httpRoute}
+			pathID := kuadrantv1.PathID([]machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[0], Name: "rule-1"},
+			})
+
 			// create RLP A -> Route A
 			rlpA := &kuadrantv1beta3.RateLimitPolicy{
 				TypeMeta: metav1.TypeMeta{
@@ -844,12 +1127,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1.ObjectName(routeName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -873,7 +1158,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -888,47 +1173,41 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					Extensions: map[string]wasm.Extension{
-						wasm.RateLimitPolicyExtensionName: {
+					Services: map[string]wasm.Service{
+						wasm.RateLimitServiceName: {
 							Endpoint:    common.KuadrantRateLimitClusterName,
 							FailureMode: wasm.FailureModeAllow,
-							Type:        wasm.RateLimitExtensionType,
+							Type:        wasm.RateLimitServiceType,
 						},
 					},
-					Policies: []wasm.Policy{
+					ActionSets: []wasm.ActionSet{
 						{
-							Name:      rlpKey.String(),
-							Hostnames: []string{"*.example.com"},
-							Rules: []wasm.Rule{
-								{
-									Conditions: []wasm.Condition{
-										{
-											AllOf: []wasm.PatternExpression{
-												{
-													Selector: "request.url_path",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-													Value:    "/toy",
-												},
-												{
-													Selector: "request.method",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-													Value:    "GET",
-												},
-											},
-										},
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
+							RouteRuleConditions: wasm.RouteRuleConditions{
+								Hostnames: []string{"*.example.com"},
+								Matches: []wasm.Predicate{
+									{
+										Selector: "request.method",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+										Value:    "GET",
 									},
-									Actions: []wasm.Action{
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/toy",
+									},
+								},
+							},
+							Actions: []wasm.Action{
+								{
+									ServiceName: wasm.RateLimitServiceName,
+									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+									Data: []wasm.DataType{
 										{
-											Scope:         wasm.LimitsNamespaceFromRLP(rlpA),
-											ExtensionName: wasm.RateLimitPolicyExtensionName,
-											Data: []wasm.DataType{
-												{
-													Value: &wasm.Static{
-														Static: wasm.StaticSpec{
-															Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-															Value: "1",
-														},
-													},
+											Value: &wasm.Static{
+												Static: wasm.StaticSpec{
+													Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+													Value: "1",
 												},
 											},
 										},
@@ -952,7 +1231,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				// Check wasm plugin
-				wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gwB), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -982,7 +1261,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// Check wasm plugin for gateway A no longer exists
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
-				wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
+				wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
 				if err == nil {
@@ -997,11 +1276,20 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				return true
 			})
 
+			mGateway = &machinery.Gateway{Gateway: gwB}
+			pathID = kuadrantv1.PathID([]machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[0], Name: "rule-1"},
+			})
+
 			// Check wasm plugin for gateway B has configuration from the route
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: controllers.WASMPluginName(gwB), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gwB.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1016,47 +1304,41 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					Extensions: map[string]wasm.Extension{
-						wasm.RateLimitPolicyExtensionName: {
+					Services: map[string]wasm.Service{
+						wasm.RateLimitServiceName: {
 							Endpoint:    common.KuadrantRateLimitClusterName,
 							FailureMode: wasm.FailureModeAllow,
-							Type:        wasm.RateLimitExtensionType,
+							Type:        wasm.RateLimitServiceType,
 						},
 					},
-					Policies: []wasm.Policy{
+					ActionSets: []wasm.ActionSet{
 						{
-							Name:      rlpKey.String(),
-							Hostnames: []string{"*.example.com"},
-							Rules: []wasm.Rule{
-								{
-									Conditions: []wasm.Condition{
-										{
-											AllOf: []wasm.PatternExpression{
-												{
-													Selector: "request.url_path",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-													Value:    "/toy",
-												},
-												{
-													Selector: "request.method",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-													Value:    "GET",
-												},
-											},
-										},
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
+							RouteRuleConditions: wasm.RouteRuleConditions{
+								Hostnames: []string{"*.example.com"},
+								Matches: []wasm.Predicate{
+									{
+										Selector: "request.method",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+										Value:    "GET",
 									},
-									Actions: []wasm.Action{
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/toy",
+									},
+								},
+							},
+							Actions: []wasm.Action{
+								{
+									ServiceName: wasm.RateLimitServiceName,
+									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+									Data: []wasm.DataType{
 										{
-											Scope:         wasm.LimitsNamespaceFromRLP(rlpA),
-											ExtensionName: wasm.RateLimitPolicyExtensionName,
-											Data: []wasm.DataType{
-												{
-													Value: &wasm.Static{
-														Static: wasm.StaticSpec{
-															Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-															Value: "1",
-														},
-													},
+											Value: &wasm.Static{
+												Static: wasm.StaticSpec{
+													Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+													Value: "1",
 												},
 											},
 										},
@@ -1081,12 +1363,16 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 	Context("RLP switches targetRef from one route A to another route B", func() {
 		var (
 			TestGatewayName = "toystore-gw"
+			gatewayClass    *gatewayapiv1.GatewayClass
 			gateway         *gatewayapiv1.Gateway
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
@@ -1165,12 +1451,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1.ObjectName(routeAName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeAName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -1189,12 +1477,22 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			rlpKey := client.ObjectKey{Name: rlpName, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
+			mGateway := &machinery.Gateway{Gateway: gateway}
+			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: httpRouteA}
+			pathID := kuadrantv1.PathID([]machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRouteA.Spec.Rules[0], Name: "rule-1"},
+			})
+
 			// Initial state set.
 			// Check wasm plugin has configuration from the route A
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1209,47 +1507,41 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					Extensions: map[string]wasm.Extension{
-						wasm.RateLimitPolicyExtensionName: {
+					Services: map[string]wasm.Service{
+						wasm.RateLimitServiceName: {
 							Endpoint:    common.KuadrantRateLimitClusterName,
 							FailureMode: wasm.FailureModeAllow,
-							Type:        wasm.RateLimitExtensionType,
+							Type:        wasm.RateLimitServiceType,
 						},
 					},
-					Policies: []wasm.Policy{
+					ActionSets: []wasm.ActionSet{
 						{
-							Name:      rlpKey.String(),
-							Hostnames: []string{"*.a.example.com"},
-							Rules: []wasm.Rule{
-								{
-									Conditions: []wasm.Condition{
-										{
-											AllOf: []wasm.PatternExpression{
-												{
-													Selector: "request.url_path",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-													Value:    "/routeA",
-												},
-												{
-													Selector: "request.method",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-													Value:    "GET",
-												},
-											},
-										},
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
+							RouteRuleConditions: wasm.RouteRuleConditions{
+								Hostnames: []string{"*.a.example.com"},
+								Matches: []wasm.Predicate{
+									{
+										Selector: "request.method",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+										Value:    "GET",
 									},
-									Actions: []wasm.Action{
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeA",
+									},
+								},
+							},
+							Actions: []wasm.Action{
+								{
+									ServiceName: wasm.RateLimitServiceName,
+									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Data: []wasm.DataType{
 										{
-											Scope:         wasm.LimitsNamespaceFromRLP(rlpR),
-											ExtensionName: wasm.RateLimitPolicyExtensionName,
-											Data: []wasm.DataType{
-												{
-													Value: &wasm.Static{
-														Static: wasm.StaticSpec{
-															Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-															Value: "1",
-														},
-													},
+											Value: &wasm.Static{
+												Static: wasm.StaticSpec{
+													Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+													Value: "1",
 												},
 											},
 										},
@@ -1281,11 +1573,20 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				g.Expect(err).ToNot(HaveOccurred())
 			}).WithContext(ctx).Should(Succeed())
 
+			mHTTPRoute = &machinery.HTTPRoute{HTTPRoute: httpRouteB}
+			pathID = kuadrantv1.PathID([]machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRouteB.Spec.Rules[0], Name: "rule-1"},
+			})
+
 			// Check wasm plugin has configuration from the route B
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1300,47 +1601,41 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					Extensions: map[string]wasm.Extension{
-						wasm.RateLimitPolicyExtensionName: {
+					Services: map[string]wasm.Service{
+						wasm.RateLimitServiceName: {
 							Endpoint:    common.KuadrantRateLimitClusterName,
 							FailureMode: wasm.FailureModeAllow,
-							Type:        wasm.RateLimitExtensionType,
+							Type:        wasm.RateLimitServiceType,
 						},
 					},
-					Policies: []wasm.Policy{
+					ActionSets: []wasm.ActionSet{
 						{
-							Name:      rlpKey.String(),
-							Hostnames: []string{"*.b.example.com"},
-							Rules: []wasm.Rule{
-								{
-									Conditions: []wasm.Condition{
-										{
-											AllOf: []wasm.PatternExpression{
-												{
-													Selector: "request.url_path",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-													Value:    "/routeB",
-												},
-												{
-													Selector: "request.method",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-													Value:    "GET",
-												},
-											},
-										},
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.b.example.com"),
+							RouteRuleConditions: wasm.RouteRuleConditions{
+								Hostnames: []string{"*.b.example.com"},
+								Matches: []wasm.Predicate{
+									{
+										Selector: "request.method",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+										Value:    "GET",
 									},
-									Actions: []wasm.Action{
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeB",
+									},
+								},
+							},
+							Actions: []wasm.Action{
+								{
+									ServiceName: wasm.RateLimitServiceName,
+									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteB),
+									Data: []wasm.DataType{
 										{
-											Scope:         wasm.LimitsNamespaceFromRLP(rlpR),
-											ExtensionName: wasm.RateLimitPolicyExtensionName,
-											Data: []wasm.DataType{
-												{
-													Value: &wasm.Static{
-														Static: wasm.StaticSpec{
-															Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-															Value: "1",
-														},
-													},
+											Value: &wasm.Static{
+												Static: wasm.StaticSpec{
+													Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+													Value: "1",
 												},
 											},
 										},
@@ -1365,12 +1660,16 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 	Context("Free Route gets dedicated RLP", func() {
 		var (
 			TestGatewayName = "toystore-gw"
+			gatewayClass    *gatewayapiv1.GatewayClass
 			gateway         *gatewayapiv1.Gateway
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
@@ -1424,12 +1723,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlp1Name, Namespace: testNamespace},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "Gateway",
-						Name:  gatewayapiv1.ObjectName(TestGatewayName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"gatewaylimit": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -1448,12 +1749,22 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			rlp1Key := client.ObjectKey{Name: rlp1Name, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlp1Key)).WithContext(ctx).Should(BeTrue())
 
+			mGateway := &machinery.Gateway{Gateway: gateway}
+			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: httpRouteA}
+			pathID := kuadrantv1.PathID([]machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRouteA.Spec.Rules[0], Name: "rule-1"},
+			})
+
 			// Initial state set.
 			// Check wasm plugin for gateway A has configuration from the route 1
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1468,47 +1779,41 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					Extensions: map[string]wasm.Extension{
-						wasm.RateLimitPolicyExtensionName: {
+					Services: map[string]wasm.Service{
+						wasm.RateLimitServiceName: {
 							Endpoint:    common.KuadrantRateLimitClusterName,
 							FailureMode: wasm.FailureModeAllow,
-							Type:        wasm.RateLimitExtensionType,
+							Type:        wasm.RateLimitServiceType,
 						},
 					},
-					Policies: []wasm.Policy{
+					ActionSets: []wasm.ActionSet{
 						{
-							Name:      rlp1Key.String(),
-							Hostnames: []string{"*"},
-							Rules: []wasm.Rule{
-								{
-									Conditions: []wasm.Condition{
-										{
-											AllOf: []wasm.PatternExpression{
-												{
-													Selector: "request.url_path",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-													Value:    "/routeA",
-												},
-												{
-													Selector: "request.method",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-													Value:    "GET",
-												},
-											},
-										},
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
+							RouteRuleConditions: wasm.RouteRuleConditions{
+								Hostnames: []string{"*.a.example.com"},
+								Matches: []wasm.Predicate{
+									{
+										Selector: "request.method",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+										Value:    "GET",
 									},
-									Actions: []wasm.Action{
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeA",
+									},
+								},
+							},
+							Actions: []wasm.Action{
+								{
+									ServiceName: wasm.RateLimitServiceName,
+									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Data: []wasm.DataType{
 										{
-											Scope:         wasm.LimitsNamespaceFromRLP(rlp1),
-											ExtensionName: wasm.RateLimitPolicyExtensionName,
-											Data: []wasm.DataType{
-												{
-													Value: &wasm.Static{
-														Static: wasm.StaticSpec{
-															Key:   wasm.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
-															Value: "1",
-														},
-													},
+											Value: &wasm.Static{
+												Static: wasm.StaticSpec{
+													Key:   controllers.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
+													Value: "1",
 												},
 											},
 										},
@@ -1540,12 +1845,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlp2Name, Namespace: testNamespace},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1.ObjectName(routeAName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeAName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"routelimit": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -1569,7 +1876,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1584,47 +1891,41 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					Extensions: map[string]wasm.Extension{
-						wasm.RateLimitPolicyExtensionName: {
+					Services: map[string]wasm.Service{
+						wasm.RateLimitServiceName: {
 							Endpoint:    common.KuadrantRateLimitClusterName,
 							FailureMode: wasm.FailureModeAllow,
-							Type:        wasm.RateLimitExtensionType,
+							Type:        wasm.RateLimitServiceType,
 						},
 					},
-					Policies: []wasm.Policy{
+					ActionSets: []wasm.ActionSet{
 						{
-							Name:      rlp2Key.String(),
-							Hostnames: []string{"*.a.example.com"},
-							Rules: []wasm.Rule{
-								{
-									Conditions: []wasm.Condition{
-										{
-											AllOf: []wasm.PatternExpression{
-												{
-													Selector: "request.url_path",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-													Value:    "/routeA",
-												},
-												{
-													Selector: "request.method",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-													Value:    "GET",
-												},
-											},
-										},
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
+							RouteRuleConditions: wasm.RouteRuleConditions{
+								Hostnames: []string{"*.a.example.com"},
+								Matches: []wasm.Predicate{
+									{
+										Selector: "request.method",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+										Value:    "GET",
 									},
-									Actions: []wasm.Action{
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeA",
+									},
+								},
+							},
+							Actions: []wasm.Action{
+								{
+									ServiceName: wasm.RateLimitServiceName,
+									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Data: []wasm.DataType{
 										{
-											Scope:         wasm.LimitsNamespaceFromRLP(rlp2),
-											ExtensionName: wasm.RateLimitPolicyExtensionName,
-											Data: []wasm.DataType{
-												{
-													Value: &wasm.Static{
-														Static: wasm.StaticSpec{
-															Key:   wasm.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
-															Value: "1",
-														},
-													},
+											Value: &wasm.Static{
+												Static: wasm.StaticSpec{
+													Key:   controllers.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
+													Value: "1",
 												},
 											},
 										},
@@ -1649,12 +1950,16 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 	Context("New free route on a Gateway with RLP", func() {
 		var (
 			TestGatewayName = "toystore-gw"
+			gatewayClass    *gatewayapiv1.GatewayClass
 			gateway         *gatewayapiv1.Gateway
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
@@ -1711,12 +2016,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlp1Name, Namespace: testNamespace},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "Gateway",
-						Name:  gatewayapiv1.ObjectName(TestGatewayName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"gatewaylimit": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -1742,12 +2049,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlp2Name, Namespace: testNamespace},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1.ObjectName(routeAName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeAName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"routelimit": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -1766,12 +2075,22 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			rlp2Key := client.ObjectKey{Name: rlp2Name, Namespace: testNamespace}
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlp2Key)).WithContext(ctx).Should(BeTrue())
 
+			mGateway := &machinery.Gateway{Gateway: gateway}
+			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: httpRouteA}
+			pathID := kuadrantv1.PathID([]machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRouteA.Spec.Rules[0], Name: "rule-1"},
+			})
+
 			// Initial state set.
 			// Check wasm plugin for gateway A has configuration from the route A only affected by RLP 2
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1786,47 +2105,41 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				}
 
 				expectedPlugin := &wasm.Config{
-					Extensions: map[string]wasm.Extension{
-						wasm.RateLimitPolicyExtensionName: {
+					Services: map[string]wasm.Service{
+						wasm.RateLimitServiceName: {
 							Endpoint:    common.KuadrantRateLimitClusterName,
 							FailureMode: wasm.FailureModeAllow,
-							Type:        wasm.RateLimitExtensionType,
+							Type:        wasm.RateLimitServiceType,
 						},
 					},
-					Policies: []wasm.Policy{
+					ActionSets: []wasm.ActionSet{
 						{
-							Name:      rlp2Key.String(),
-							Hostnames: []string{"*.a.example.com"},
-							Rules: []wasm.Rule{
-								{
-									Conditions: []wasm.Condition{
-										{
-											AllOf: []wasm.PatternExpression{
-												{
-													Selector: "request.url_path",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-													Value:    "/routeA",
-												},
-												{
-													Selector: "request.method",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-													Value:    "GET",
-												},
-											},
-										},
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
+							RouteRuleConditions: wasm.RouteRuleConditions{
+								Hostnames: []string{"*.a.example.com"},
+								Matches: []wasm.Predicate{
+									{
+										Selector: "request.method",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+										Value:    "GET",
 									},
-									Actions: []wasm.Action{
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeA",
+									},
+								},
+							},
+							Actions: []wasm.Action{
+								{
+									ServiceName: wasm.RateLimitServiceName,
+									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Data: []wasm.DataType{
 										{
-											Scope:         wasm.LimitsNamespaceFromRLP(rlp2),
-											ExtensionName: wasm.RateLimitPolicyExtensionName,
-											Data: []wasm.DataType{
-												{
-													Value: &wasm.Static{
-														Static: wasm.StaticSpec{
-															Key:   wasm.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
-															Value: "1",
-														},
-													},
+											Value: &wasm.Static{
+												Static: wasm.StaticSpec{
+													Key:   controllers.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
+													Value: "1",
 												},
 											},
 										},
@@ -1877,7 +2190,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			// it may take some reconciliation loops to get to that, so checking it with eventually
 			Eventually(func() bool {
 				wasmPluginKey := client.ObjectKey{
-					Name: controllers.WASMPluginName(gateway), Namespace: testNamespace,
+					Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace,
 				}
 				existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 				err := testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -1891,48 +2204,51 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					return false
 				}
 
+				mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: httpRouteB}
+				pathID_B := kuadrantv1.PathID([]machinery.Targetable{
+					&machinery.GatewayClass{GatewayClass: gatewayClass},
+					mGateway,
+					&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+					mHTTPRoute,
+					&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRouteB.Spec.Rules[0], Name: "rule-1"},
+				})
+
 				expectedPlugin := &wasm.Config{
-					Extensions: map[string]wasm.Extension{
-						wasm.RateLimitPolicyExtensionName: {
+					Services: map[string]wasm.Service{
+						wasm.RateLimitServiceName: {
 							Endpoint:    common.KuadrantRateLimitClusterName,
 							FailureMode: wasm.FailureModeAllow,
-							Type:        wasm.RateLimitExtensionType,
+							Type:        wasm.RateLimitServiceType,
 						},
 					},
-					Policies: []wasm.Policy{
-						{ // First RLP 1 as the controller will sort based on RLP name
-							Name:      rlp1Key.String(), // Route B affected by RLP 1 -> Gateway
-							Hostnames: []string{"*"},
-							Rules: []wasm.Rule{
-								{
-									Conditions: []wasm.Condition{
-										{
-											AllOf: []wasm.PatternExpression{
-												{
-													Selector: "request.url_path",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-													Value:    "/routeB",
-												},
-												{
-													Selector: "request.method",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-													Value:    "GET",
-												},
-											},
-										},
+					ActionSets: []wasm.ActionSet{
+						{
+							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
+							RouteRuleConditions: wasm.RouteRuleConditions{
+								Hostnames: []string{"*.a.example.com"},
+								Matches: []wasm.Predicate{
+									{
+										Selector: "request.method",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+										Value:    "GET",
 									},
-									Actions: []wasm.Action{
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeA",
+									},
+								},
+							},
+							Actions: []wasm.Action{
+								{
+									ServiceName: wasm.RateLimitServiceName,
+									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Data: []wasm.DataType{
 										{
-											Scope:         wasm.LimitsNamespaceFromRLP(rlp1),
-											ExtensionName: wasm.RateLimitPolicyExtensionName,
-											Data: []wasm.DataType{
-												{
-													Value: &wasm.Static{
-														Static: wasm.StaticSpec{
-															Key:   wasm.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
-															Value: "1",
-														},
-													},
+											Value: &wasm.Static{
+												Static: wasm.StaticSpec{
+													Key:   controllers.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
+													Value: "1",
 												},
 											},
 										},
@@ -1941,38 +2257,32 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							},
 						},
 						{
-							Name:      rlp2Key.String(), // Route A affected by RLP 1 -> Route A
-							Hostnames: []string{"*.a.example.com"},
-							Rules: []wasm.Rule{
-								{
-									Conditions: []wasm.Condition{
-										{
-											AllOf: []wasm.PatternExpression{
-												{
-													Selector: "request.url_path",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-													Value:    "/routeA",
-												},
-												{
-													Selector: "request.method",
-													Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-													Value:    "GET",
-												},
-											},
-										},
+							Name: wasm.ActionSetNameForPath(pathID_B, 0, "*.b.example.com"),
+							RouteRuleConditions: wasm.RouteRuleConditions{
+								Hostnames: []string{"*.b.example.com"},
+								Matches: []wasm.Predicate{
+									{
+										Selector: "request.method",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+										Value:    "GET",
 									},
-									Actions: []wasm.Action{
+									{
+										Selector: "request.url_path",
+										Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+										Value:    "/routeB",
+									},
+								},
+							},
+							Actions: []wasm.Action{
+								{
+									ServiceName: wasm.RateLimitServiceName,
+									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteB),
+									Data: []wasm.DataType{
 										{
-											Scope:         wasm.LimitsNamespaceFromRLP(rlp2),
-											ExtensionName: wasm.RateLimitPolicyExtensionName,
-											Data: []wasm.DataType{
-												{
-													Value: &wasm.Static{
-														Static: wasm.StaticSpec{
-															Key:   wasm.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
-															Value: "1",
-														},
-													},
+											Value: &wasm.Static{
+												Static: wasm.StaticSpec{
+													Key:   controllers.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
+													Value: "1",
 												},
 											},
 										},
@@ -2000,14 +2310,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			TestGatewayName = "toystore-gw"
 			routeName       = "toystore-route"
 			rlpName         = "rlp-a"
+			gatewayClass    *gatewayapiv1.GatewayClass
 			gateway         *gatewayapiv1.Gateway
 			gwHostname      = "*.gw.example.com"
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
 			gateway.Spec.Listeners[0].Hostname = ptr.To(gatewayapiv1.Hostname(gwHostname))
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
@@ -2029,12 +2343,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: rlpName, Namespace: testNamespace},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1.ObjectName(routeName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -2054,8 +2370,18 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			rlpKey := client.ObjectKeyFromObject(rlp)
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, rlpKey)).WithContext(ctx).Should(BeTrue())
 
+			mGateway := &machinery.Gateway{Gateway: gateway}
+			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: httpRoute}
+			pathID := kuadrantv1.PathID([]machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[0], Name: "rule-1"},
+			})
+
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			err = testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)
@@ -2064,47 +2390,41 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
-				Extensions: map[string]wasm.Extension{
-					wasm.RateLimitPolicyExtensionName: {
+				Services: map[string]wasm.Service{
+					wasm.RateLimitServiceName: {
 						Endpoint:    common.KuadrantRateLimitClusterName,
 						FailureMode: wasm.FailureModeAllow,
-						Type:        wasm.RateLimitExtensionType,
+						Type:        wasm.RateLimitServiceType,
 					},
 				},
-				Policies: []wasm.Policy{
+				ActionSets: []wasm.ActionSet{
 					{
-						Name:      rlpKey.String(),
-						Hostnames: []string{gwHostname},
-						Rules: []wasm.Rule{
-							{
-								Conditions: []wasm.Condition{
-									{
-										AllOf: []wasm.PatternExpression{
-											{
-												Selector: "request.url_path",
-												Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-												Value:    "/toy",
-											},
-											{
-												Selector: "request.method",
-												Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-												Value:    "GET",
-											},
-										},
-									},
+						Name: wasm.ActionSetNameForPath(pathID, 0, gwHostname),
+						RouteRuleConditions: wasm.RouteRuleConditions{
+							Hostnames: []string{gwHostname},
+							Matches: []wasm.Predicate{
+								{
+									Selector: "request.method",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+									Value:    "GET",
 								},
-								Actions: []wasm.Action{
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toy",
+								},
+							},
+						},
+						Actions: []wasm.Action{
+							{
+								ServiceName: wasm.RateLimitServiceName,
+								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+								Data: []wasm.DataType{
 									{
-										Scope:         wasm.LimitsNamespaceFromRLP(rlp),
-										ExtensionName: wasm.RateLimitPolicyExtensionName,
-										Data: []wasm.DataType{
-											{
-												Value: &wasm.Static{
-													Static: wasm.StaticSpec{
-														Key:   wasm.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
-														Value: "1",
-													},
-												},
+										Value: &wasm.Static{
+											Static: wasm.StaticSpec{
+												Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
+												Value: "1",
 											},
 										},
 									},
@@ -2123,59 +2443,67 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			gwRLPName       = "gw-rlp"
 			routeRLPName    = "route-rlp"
 			TestGatewayName = "toystore-gw"
+			gatewayClass    *gatewayapiv1.GatewayClass
 			gateway         *gatewayapiv1.Gateway
 		)
 
 		beforeEachCallback := func(ctx SpecContext) {
+			gatewayClass = &gatewayapiv1.GatewayClass{}
+			err := testClient().Get(ctx, types.NamespacedName{Name: tests.GatewayClassName}, gatewayClass)
+			Expect(err).ToNot(HaveOccurred())
 			gateway = tests.BuildBasicGateway(TestGatewayName, testNamespace)
-			err := testClient().Create(ctx, gateway)
+			err = testClient().Create(ctx, gateway)
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.GatewayIsReady(ctx, testClient(), gateway)).WithContext(ctx).Should(BeTrue())
 		}
 
-		expectedWasmPluginConfig := func(rlpKey client.ObjectKey, rlp *kuadrantv1beta3.RateLimitPolicy, key, hostname string) *wasm.Config {
+		expectedWasmPluginConfig := func(httpRoute *gatewayapiv1.HTTPRoute, key, hostname string) *wasm.Config {
+			mGateway := &machinery.Gateway{Gateway: gateway}
+			mHTTPRoute := &machinery.HTTPRoute{HTTPRoute: httpRoute}
+			pathID := kuadrantv1.PathID([]machinery.Targetable{
+				&machinery.GatewayClass{GatewayClass: gatewayClass},
+				mGateway,
+				&machinery.Listener{Listener: &gateway.Spec.Listeners[0], Gateway: mGateway},
+				mHTTPRoute,
+				&machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[0], Name: "rule-1"},
+			})
+
 			return &wasm.Config{
-				Extensions: map[string]wasm.Extension{
-					wasm.RateLimitPolicyExtensionName: {
+				Services: map[string]wasm.Service{
+					wasm.RateLimitServiceName: {
 						Endpoint:    common.KuadrantRateLimitClusterName,
 						FailureMode: wasm.FailureModeAllow,
-						Type:        wasm.RateLimitExtensionType,
+						Type:        wasm.RateLimitServiceType,
 					},
 				},
-				Policies: []wasm.Policy{
+				ActionSets: []wasm.ActionSet{
 					{
-						Name:      rlpKey.String(),
-						Hostnames: []string{hostname},
-						Rules: []wasm.Rule{
-							{
-								Conditions: []wasm.Condition{
-									{
-										AllOf: []wasm.PatternExpression{
-											{
-												Selector: "request.url_path",
-												Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-												Value:    "/toy",
-											},
-											{
-												Selector: "request.method",
-												Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-												Value:    "GET",
-											},
-										},
-									},
+						Name: wasm.ActionSetNameForPath(pathID, 0, hostname),
+						RouteRuleConditions: wasm.RouteRuleConditions{
+							Hostnames: []string{hostname},
+							Matches: []wasm.Predicate{
+								{
+									Selector: "request.method",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
+									Value:    "GET",
 								},
-								Actions: []wasm.Action{
+								{
+									Selector: "request.url_path",
+									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
+									Value:    "/toy",
+								},
+							},
+						},
+						Actions: []wasm.Action{
+							{
+								ServiceName: wasm.RateLimitServiceName,
+								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+								Data: []wasm.DataType{
 									{
-										Scope:         wasm.LimitsNamespaceFromRLP(rlp),
-										ExtensionName: wasm.RateLimitPolicyExtensionName,
-										Data: []wasm.DataType{
-											{
-												Value: &wasm.Static{
-													Static: wasm.StaticSpec{
-														Key:   key,
-														Value: "1",
-													},
-												},
+										Value: &wasm.Static{
+											Static: wasm.StaticSpec{
+												Key:   key,
+												Value: "1",
 											},
 										},
 									},
@@ -2202,17 +2530,21 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: gwRLPName, Namespace: testNamespace},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "Gateway",
-						Name:  gatewayapiv1.ObjectName(TestGatewayName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  gatewayapiv1.ObjectName(TestGatewayName),
+						},
 					},
-					Defaults: &kuadrantv1beta3.RateLimitPolicyCommonSpec{
-						Limits: map[string]kuadrantv1beta3.Limit{
-							"gateway": {
-								Rates: []kuadrantv1beta3.Rate{
-									{
-										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+					Defaults: &kuadrantv1beta3.MergeableRateLimitPolicySpec{
+						RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
+							Limits: map[string]kuadrantv1beta3.Limit{
+								"gateway": {
+									Rates: []kuadrantv1beta3.Rate{
+										{
+											Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										},
 									},
 								},
 							},
@@ -2227,14 +2559,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Check wasm plugin
-			wasmPluginKey := client.ObjectKey{Name: controllers.WASMPluginName(gateway), Namespace: testNamespace}
+			wasmPluginKey := client.ObjectKey{Name: wasm.ExtensionName(gateway.GetName()), Namespace: testNamespace}
 			Eventually(tests.WasmPluginIsAvailable(ctx, testClient(), wasmPluginKey)).WithContext(ctx).Should(BeTrue())
 			existingWasmPlugin := &istioclientgoextensionv1alpha1.WasmPlugin{}
 			// must exist
 			Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 			existingWASMConfig, err := wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(gwRLPKey, gwRLP, wasm.LimitNameToLimitadorIdentifier(gwRLPKey, "gateway"), "*")))
+			Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(httpRoute, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "gateway"), "*.example.com")))
 
 			// Create Route RLP
 			routeRLP := &kuadrantv1beta3.RateLimitPolicy{
@@ -2243,12 +2575,14 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				ObjectMeta: metav1.ObjectMeta{Name: routeRLPName, Namespace: testNamespace},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1.ObjectName(routeName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(routeName),
+						},
 					},
-					RateLimitPolicyCommonSpec: kuadrantv1beta3.RateLimitPolicyCommonSpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"route": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -2270,7 +2604,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 				existingWASMConfig, err = wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "route"), "*.example.com")))
+				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(httpRoute, controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "route"), "*.example.com")))
 			}).WithContext(ctx).Should(Succeed())
 
 			// Update GW RLP to overrides
@@ -2287,7 +2621,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 				existingWASMConfig, err = wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(routeRLPKey, routeRLP, wasm.LimitNameToLimitadorIdentifier(routeRLPKey, "gateway"), "*.example.com")))
+				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(httpRoute, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "gateway"), "*.example.com")))
 			}).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)

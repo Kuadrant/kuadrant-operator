@@ -5,15 +5,14 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
 	consolev1 "github.com/openshift/api/console/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/utils/env"
 	"k8s.io/utils/ptr"
 	ctrlruntime "sigs.k8s.io/controller-runtime"
-
-	"github.com/kuadrant/policy-machinery/controller"
-	"github.com/kuadrant/policy-machinery/machinery"
 
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -37,9 +36,10 @@ type ConsolePluginReconciler struct {
 func NewConsolePluginReconciler(mgr ctrlruntime.Manager, namespace string) *ConsolePluginReconciler {
 	return &ConsolePluginReconciler{
 		BaseReconciler: reconcilers.NewBaseReconciler(
-			mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
+			mgr.GetClient(),
+			mgr.GetScheme(),
+			mgr.GetAPIReader(),
 			log.Log.WithName("consoleplugin"),
-			mgr.GetEventRecorderFor("ConsolePlugin"),
 		),
 		namespace: namespace,
 	}

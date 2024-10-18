@@ -136,8 +136,13 @@ func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 		}
 	}
 
-	// all rules of the policy have been overridden by at least one other policy
+	// no rules of the policy found in the effective policies
 	if len(affectedPaths) == 0 {
+		// no rules of the policy have been overridden by any other policy
+		if len(overridingPolicies) == 0 {
+			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrNoRoutes(policyKind), false)
+		}
+		// all rules of the policy have been overridden by at least one other policy
 		overridingPoliciesKeys := lo.FilterMap(lo.Uniq(lo.Flatten(lo.Values(overridingPolicies))), func(locator string, _ int) (k8stypes.NamespacedName, bool) {
 			if locator == "" {
 				return k8stypes.NamespacedName{}, false

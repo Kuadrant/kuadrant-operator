@@ -11,6 +11,9 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+
+	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 const (
@@ -58,6 +61,23 @@ func LinkListenerToDNSRecord(objs controller.Store) machinery.LinkFunc {
 				}
 				return nil, false
 			})
+		},
+	}
+}
+
+func LinkDNSPolicyToDNSRecord(objs controller.Store) machinery.LinkFunc {
+	policies := lo.Map(objs.FilterByGroupKind(v1alpha1.DNSPolicyGroupKind), controller.ObjectAs[*v1alpha1.DNSPolicy])
+
+	return machinery.LinkFunc{
+		From: v1alpha1.DNSPolicyGroupKind,
+		To:   DNSRecordGroupKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			if dnsRecord, ok := child.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord); ok {
+				return lo.FilterMap(policies, func(dnsPolicy *v1alpha1.DNSPolicy, _ int) (machinery.Object, bool) {
+					return dnsPolicy, utils.IsOwnedBy(dnsRecord, dnsPolicy)
+				})
+			}
+			return nil
 		},
 	}
 }

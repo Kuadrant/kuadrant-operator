@@ -11,6 +11,7 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -366,7 +367,9 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
 				// must exist
 				Expect(err).ToNot(HaveOccurred())
-				Expect(existingLimitador.Spec.Limits).To(BeEmpty())
+				Expect(lo.Filter(existingLimitador.Spec.Limits, func(l limitadorv1alpha1.RateLimit, _ int) bool { // a hack to isolate test namespaces sharing the same limitador cr
+					return strings.HasPrefix(l.Namespace, fmt.Sprintf("%s/", testNamespace))
+				})).To(BeEmpty())
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})

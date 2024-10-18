@@ -14,6 +14,7 @@ import (
 	"github.com/samber/lo"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
@@ -98,7 +99,7 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 		resource := r.client.Resource(kuadrantenvoygateway.EnvoyPatchPoliciesResource).Namespace(desiredEnvoyPatchPolicy.GetNamespace())
 
 		existingEnvoyPatchPolicyObj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
-			return child.GroupVersionKind().GroupKind() == kuadrantenvoygateway.EnvoyPatchPolicyGroupKind && child.GetName() == desiredEnvoyPatchPolicy.GetName() && child.GetNamespace() == desiredEnvoyPatchPolicy.GetNamespace()
+			return child.GroupVersionKind().GroupKind() == kuadrantenvoygateway.EnvoyPatchPolicyGroupKind && child.GetName() == desiredEnvoyPatchPolicy.GetName() && child.GetNamespace() == desiredEnvoyPatchPolicy.GetNamespace() && labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredEnvoyPatchPolicy.GetLabels()))
 		})
 
 		// create
@@ -147,7 +148,7 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 	// cleanup envoy gateway clusters for gateways that are not in the effective policies
 	staleEnvoyPatchPolicies := topology.Objects().Items(func(o machinery.Object) bool {
 		_, desired := desiredEnvoyPatchPolicies[k8stypes.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}]
-		return o.GroupVersionKind().GroupKind() == kuadrantenvoygateway.EnvoyPatchPolicyGroupKind && !desired
+		return o.GroupVersionKind().GroupKind() == kuadrantenvoygateway.EnvoyPatchPolicyGroupKind && labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(RateLimitObjectLabels()) && !desired
 	})
 
 	for _, envoyPatchPolicy := range staleEnvoyPatchPolicies {
@@ -169,7 +170,7 @@ func (r *envoyGatewayRateLimitClusterReconciler) buildDesiredEnvoyPatchPolicy(li
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RateLimitClusterName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
-			Labels:    map[string]string{rateLimitClusterLabelKey: "true"},
+			Labels:    RateLimitObjectLabels(),
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         gateway.GroupVersionKind().GroupVersion().String(),

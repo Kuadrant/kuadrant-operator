@@ -16,7 +16,7 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	"github.com/kuadrant/dns-operator/pkg/builder"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	v1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	reconcilerutils "github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -26,7 +26,7 @@ var (
 	ErrNoAddresses = fmt.Errorf("no valid status addresses to use on gateway")
 )
 
-func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, gwDiffObj *reconcilerutils.GatewayDiffs) error {
+func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy *v1.DNSPolicy, gwDiffObj *reconcilerutils.GatewayDiffs) error {
 	log := crlog.FromContext(ctx)
 
 	log.V(3).Info("reconciling dns records")
@@ -47,7 +47,7 @@ func (r *DNSPolicyReconciler) reconcileDNSRecords(ctx context.Context, dnsPolicy
 	return nil
 }
 
-func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) error {
+func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1.DNSPolicy) error {
 	log := crlog.FromContext(ctx)
 	clusterID, err := utils.GetClusterUID(ctx, r.Client())
 	if err != nil {
@@ -131,7 +131,7 @@ func (r *DNSPolicyReconciler) reconcileGatewayDNSRecords(ctx context.Context, ga
 	return nil
 }
 
-func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener) (*kuadrantdnsv1alpha1.DNSRecord, error) {
+func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy *v1.DNSPolicy, targetListener gatewayapiv1.Listener) (*kuadrantdnsv1alpha1.DNSRecord, error) {
 	rootHost := string(*targetListener.Hostname)
 	var healthCheckSpec *kuadrantdnsv1alpha1.HealthCheckSpec
 
@@ -170,11 +170,11 @@ func (r *DNSPolicyReconciler) desiredDNSRecord(gateway *gatewayapiv1.Gateway, cl
 	return dnsRecord, nil
 }
 
-func (r *DNSPolicyReconciler) deleteGatewayDNSRecords(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1alpha1.DNSPolicy) error {
+func (r *DNSPolicyReconciler) deleteGatewayDNSRecords(ctx context.Context, gateway *gatewayapiv1.Gateway, dnsPolicy *v1.DNSPolicy) error {
 	return r.deleteDNSRecordsWithLabels(ctx, commonDNSRecordLabels(client.ObjectKeyFromObject(gateway), dnsPolicy), dnsPolicy.Namespace)
 }
 
-func (r *DNSPolicyReconciler) deleteDNSRecords(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy) error {
+func (r *DNSPolicyReconciler) deleteDNSRecords(ctx context.Context, dnsPolicy *v1.DNSPolicy) error {
 	return r.deleteDNSRecordsWithLabels(ctx, policyDNSRecordLabels(dnsPolicy), dnsPolicy.Namespace)
 }
 
@@ -215,7 +215,7 @@ func dnsRecordBasicMutator(existingObj, desiredObj client.Object) (bool, error) 
 	return true, nil
 }
 
-func buildEndpoints(clusterID, hostname string, gateway *gatewayapiv1.Gateway, policy *v1alpha1.DNSPolicy) ([]*externaldns.Endpoint, error) {
+func buildEndpoints(clusterID, hostname string, gateway *gatewayapiv1.Gateway, policy *v1.DNSPolicy) ([]*externaldns.Endpoint, error) {
 	endpointBuilder := builder.NewEndpointsBuilder(NewGatewayWrapper(gateway), hostname)
 
 	if policy.Spec.LoadBalancing != nil {

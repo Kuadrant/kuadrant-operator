@@ -12,7 +12,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/kuadrant/authorino v0.18.0
 	github.com/kuadrant/authorino-operator v0.11.1
-	github.com/kuadrant/dns-operator v0.0.0-20241018131559-f2ce8b6aaaef
+	github.com/kuadrant/dns-operator v0.0.0-20241018153635-382130801432
 	github.com/kuadrant/limitador-operator v0.9.0
 	github.com/kuadrant/policy-machinery v0.5.0
 	github.com/martinlindhe/base36 v1.1.1

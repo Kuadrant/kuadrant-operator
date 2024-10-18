@@ -89,7 +89,7 @@ prod-web   istio   172.18.200.1   True         25s
 Create a Kuadrant `DNSPolicy` to configure DNS:
 ```shell
 kubectl -n my-gateways apply -f - <<EOF
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: prod-web

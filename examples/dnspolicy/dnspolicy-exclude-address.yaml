@@ -1,4 +1,4 @@
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: prod-web
@@ -15,6 +15,6 @@ spec:
     geo: EU
     defaultGeo: true
   excludeAddresses:
-    - "10.89.0.0/16"
-    - "some.local.domain"
-    - "127.0.0.1"
+    - '10.89.0.0/16'
+    - 'some.local.domain'
+    - '127.0.0.1'

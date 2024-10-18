@@ -28,7 +28,7 @@ import (
 	ctrlruntimepredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
@@ -60,16 +60,16 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta1.Kuadrant]{}),
 		)),
 		controller.WithRunnable("dnspolicy watcher", controller.Watch(
-			&kuadrantv1alpha1.DNSPolicy{},
-			kuadrantv1alpha1.DNSPoliciesResource,
+			&kuadrantv1.DNSPolicy{},
+			kuadrantv1.DNSPoliciesResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1alpha1.DNSPolicy]{}),
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.DNSPolicy]{}),
 		)),
 		controller.WithRunnable("tlspolicy watcher", controller.Watch(
-			&kuadrantv1alpha1.TLSPolicy{},
-			kuadrantv1alpha1.TLSPoliciesResource,
+			&kuadrantv1.TLSPolicy{},
+			kuadrantv1.TLSPoliciesResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1alpha1.TLSPolicy]{}),
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.TLSPolicy]{}),
 		)),
 		controller.WithRunnable("authpolicy watcher", controller.Watch(
 			&kuadrantv1beta2.AuthPolicy{},
@@ -102,8 +102,8 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			metav1.NamespaceAll,
 		)),
 		controller.WithPolicyKinds(
-			kuadrantv1alpha1.DNSPolicyGroupKind,
-			kuadrantv1alpha1.TLSPolicyGroupKind,
+			kuadrantv1.DNSPolicyGroupKind,
+			kuadrantv1.TLSPolicyGroupKind,
 			kuadrantv1beta2.AuthPolicyGroupKind,
 			kuadrantv1beta3.RateLimitPolicyGroupKind,
 		),
@@ -319,7 +319,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 
 func certManagerControllerOpts() []controller.ControllerOption {
 	isCertificateOwnedByTLSPolicy := func(c *certmanagerv1.Certificate) bool {
-		return isObjectOwnedByGroupKind(c, kuadrantv1alpha1.TLSPolicyGroupKind)
+		return isObjectOwnedByGroupKind(c, kuadrantv1.TLSPolicyGroupKind)
 	}
 
 	return []controller.ControllerOption{

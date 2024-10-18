@@ -1,4 +1,4 @@
-package v1alpha1
+package v1
 
 // Contains of this file allow the DNSPolicy and TLSPolicy to adhere to the machinery.Policy interface
 

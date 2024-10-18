@@ -5,34 +5,18 @@ metadata:
     alm-examples: |-
       [
         {
-          "apiVersion": "kuadrant.io/v1alpha1",
+          "apiVersion": "kuadrant.io/v1",
           "kind": "DNSPolicy",
           "metadata": {
             "name": "dnspolicy-sample"
           },
           "spec": {
             "healthCheck": {
-              "endpoint": "/",
-              "protocol": "HTTP"
-            },
-            "targetRef": {
-              "group": "gateway.networking.k8s.io",
-              "kind": "Gateway",
-              "name": "example-gateway"
-            }
-          }
-        },
-        {
-          "apiVersion": "kuadrant.io/v1alpha1",
-          "kind": "TLSPolicy",
-          "metadata": {
-            "name": "tlspolicy-sample"
-          },
-          "spec": {
-            "issuerRef": {
-              "group": "cert-manager.io",
-              "kind": "ClusterIssuer",
-              "name": "self-signed-ca"
+              "failureThreshold": 5,
+              "interval": "10s",
+              "path": "/",
+              "port": 443,
+              "protocol": "HTTPS"
             },
             "targetRef": {
               "group": "gateway.networking.k8s.io",
@@ -106,7 +90,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2024-10-18T15:08:50Z"
+    createdAt: "2024-10-18T20:16:38Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
@@ -124,12 +108,9 @@ spec:
       kind: AuthPolicy
       name: authpolicies.kuadrant.io
       version: v1beta2
-    - description: DNSPolicy configures how North-South based traffic should be balanced
-        and reach the gateways
-      displayName: DNSPolicy
-      kind: DNSPolicy
+    - kind: DNSPolicy
       name: dnspolicies.kuadrant.io
-      version: v1alpha1
+      version: v1
     - description: Kuadrant configures installations of Kuadrant Service Protection
         components
       displayName: Kuadrant
@@ -142,12 +123,9 @@ spec:
       kind: RateLimitPolicy
       name: ratelimitpolicies.kuadrant.io
       version: v1beta3
-    - description: TLSPolicy provides tls for gateway listeners by managing the lifecycle
-        of tls certificates
-      displayName: TLSPolicy
-      kind: TLSPolicy
+    - kind: TLSPolicy
       name: tlspolicies.kuadrant.io
-      version: v1alpha1
+      version: v1
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
   displayName: Kuadrant Operator
   icon:

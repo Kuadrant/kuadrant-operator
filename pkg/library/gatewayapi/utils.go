@@ -237,3 +237,28 @@ func PolicyStatusConditionsFromAncestor(policyStatus gatewayapiv1alpha2.PolicySt
 	}
 	return nil
 }
+
+func IsListenerReady(listener *gatewayapiv1.Listener, gateway *gatewayapiv1.Gateway) bool {
+	listenerStatus, found := lo.Find(gateway.Status.Listeners, func(s gatewayapiv1.ListenerStatus) bool {
+		return s.Name == listener.Name
+	})
+	if !found {
+		return false
+	}
+	return meta.IsStatusConditionTrue(listenerStatus.Conditions, string(gatewayapiv1.ListenerConditionProgrammed))
+}
+
+func IsHTTPRouteReady(httpRoute *gatewayapiv1.HTTPRoute, gateway *gatewayapiv1.Gateway, controllerName gatewayapiv1.GatewayController) bool {
+	routeStatus, found := lo.Find(httpRoute.Status.Parents, func(s gatewayapiv1.RouteParentStatus) bool {
+		ref := s.ParentRef
+		return s.ControllerName == controllerName &&
+			ptr.Deref(ref.Group, gatewayapiv1.Group(gatewayapiv1.GroupName)) == gatewayapiv1.Group(gateway.GroupVersionKind().Group) &&
+			ptr.Deref(ref.Kind, gatewayapiv1.Kind(machinery.GatewayGroupKind.Kind)) == gatewayapiv1.Kind(gateway.GroupVersionKind().Kind) &&
+			ptr.Deref(ref.Namespace, gatewayapiv1.Namespace(httpRoute.GetNamespace())) == gatewayapiv1.Namespace(gateway.GetNamespace()) &&
+			ref.Name == gatewayapiv1.ObjectName(gateway.GetName())
+	})
+	if !found {
+		return false
+	}
+	return meta.IsStatusConditionTrue(routeStatus.Conditions, string(gatewayapiv1.RouteConditionAccepted))
+}

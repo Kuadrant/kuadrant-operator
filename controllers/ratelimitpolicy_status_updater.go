@@ -119,6 +119,10 @@ func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 		if len(kuadrantv1.PoliciesInPath(effectivePolicy.Path, func(p machinery.Policy) bool { return p.GetLocator() == policy.GetLocator() })) == 0 {
 			continue
 		}
+		gatewayClass, gateway, listener, httpRoute, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
+		if !kuadrantgatewayapi.IsListenerReady(listener.Listener, gateway.Gateway) || !kuadrantgatewayapi.IsHTTPRouteReady(httpRoute.HTTPRoute, gateway.Gateway, gatewayClass.GatewayClass.Spec.ControllerName) {
+			continue
+		}
 		effectivePolicyRules := effectivePolicy.Spec.Rules()
 		for _, policyRuleKey := range policyRuleKeys {
 			if effectivePolicyRule, ok := effectivePolicyRules[policyRuleKey]; !ok || (ok && effectivePolicyRule.Source != policy.GetLocator()) {

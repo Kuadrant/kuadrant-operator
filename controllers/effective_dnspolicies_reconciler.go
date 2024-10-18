@@ -45,22 +45,17 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 
 // deleteOrphanDNSPolicyRecords deletes any DNSRecord resources created by a DNSPolicy but no longer have a valid path in the topology to that policy.
 func (r *EffectiveDNSPoliciesReconciler) deleteOrphanDNSPolicyRecords(ctx context.Context, topology *machinery.Topology) error {
-	logger := controller.LoggerFromContext(ctx).WithName("effectiveDNSPoliciesReconciler")
+	logger := controller.LoggerFromContext(ctx).WithName("EffectiveDNSPoliciesReconciler")
 	logger.Info("deleting orphan policy DNS records")
 
 	orphanRecords := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, _ int) (machinery.Object, bool) {
 		if item.GroupVersionKind().GroupKind() == DNSRecordGroupKind {
-			policyOwnerRef := getObjectPolicyOwnerReference(item, kuadrantv1alpha1.DNSPolicyGroupKind)
-
-			// Ignore all DNSRecords that weren't created by a DNSPolicy
-			if policyOwnerRef == nil {
-				return nil, false
-			}
-
-			// Any DNSRecord that does not have a link in the topology back to its owner DNSPolicy should be removed
-			if len(topology.All().Paths(policyOwnerRef, item)) == 0 {
-				logger.Info(fmt.Sprintf("dnsrecord object is no longer linked to it's policy owner, dnsrecord: %v, policy: %v", item.GetLocator(), policyOwnerRef.GetLocator()))
-				return item, true
+			if policyOwnerRef := getObjectPolicyOwnerReference(item, kuadrantv1alpha1.DNSPolicyGroupKind); policyOwnerRef != nil {
+				// Any DNSRecord that does not have a link in the topology back to its owner DNSPolicy should be removed
+				if len(topology.All().Paths(policyOwnerRef, item)) == 0 {
+					logger.Info(fmt.Sprintf("dnsrecord object is no longer linked to it's policy owner, dnsrecord: %v, policy: %v", item.GetLocator(), policyOwnerRef.GetLocator()))
+					return item, true
+				}
 			}
 		}
 		return nil, false

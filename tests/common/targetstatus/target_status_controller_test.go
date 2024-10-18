@@ -11,6 +11,7 @@ import (
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -22,10 +23,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
-
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -100,20 +98,6 @@ var _ = Describe("Target status reconciler", func() {
 		return condition.Status == metav1.ConditionTrue && strings.Contains(condition.Message, policyKey.String())
 	}
 
-	routeNotAffected := func(ctx context.Context, routeName, conditionType string, policyKey client.ObjectKey) bool {
-		route := &gatewayapiv1.HTTPRoute{}
-		err := k8sClient.Get(ctx, client.ObjectKey{Name: routeName, Namespace: testNamespace}, route)
-		if err != nil {
-			return false
-		}
-		routeParentStatus, found := utils.Find(route.Status.RouteStatus.Parents, controllers.FindRouteParentStatusFunc(route, client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}, kuadrant.ControllerName))
-		if !found {
-			return false
-		}
-		condition := meta.FindStatusCondition(routeParentStatus.Conditions, conditionType)
-		return condition.Status == metav1.ConditionFalse && strings.Contains(condition.Message, policyKey.String())
-	}
-
 	targetsAffected := func(ctx context.Context, policyKey client.ObjectKey, conditionType string, targetRef gatewayapiv1alpha2.LocalPolicyTargetReference, routeNames ...string) bool {
 		switch string(targetRef.Kind) {
 		case "Gateway":
@@ -137,25 +121,25 @@ var _ = Describe("Target status reconciler", func() {
 		policyAffectedCondition := controllers.PolicyAffectedConditionType("AuthPolicy")
 
 		// policyFactory builds a standards AuthPolicy object that targets the test HTTPRoute by default, with the given mutate functions applied
-		policyFactory := func(mutateFns ...func(policy *kuadrantv1beta2.AuthPolicy)) *kuadrantv1beta2.AuthPolicy {
-			policy := &kuadrantv1beta2.AuthPolicy{
+		policyFactory := func(mutateFns ...func(policy *kuadrantv1beta3.AuthPolicy)) *kuadrantv1beta3.AuthPolicy {
+			policy := &kuadrantv1beta3.AuthPolicy{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "AuthPolicy",
-					APIVersion: kuadrantv1beta2.GroupVersion.String(),
+					APIVersion: kuadrantv1beta3.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "toystore",
 					Namespace: testNamespace,
 				},
-				Spec: kuadrantv1beta2.AuthPolicySpec{
+				Spec: kuadrantv1beta3.AuthPolicySpec{
 					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
 						Kind:  "HTTPRoute",
 						Name:  TestHTTPRouteName,
 					},
-					Defaults: &kuadrantv1beta2.AuthPolicyCommonSpec{
-						AuthScheme: &kuadrantv1beta2.AuthSchemeSpec{
-							Authentication: map[string]kuadrantv1beta2.AuthenticationSpec{
+					Defaults: &kuadrantv1beta3.AuthPolicyCommonSpec{
+						AuthScheme: &kuadrantv1beta3.AuthSchemeSpec{
+							Authentication: map[string]kuadrantv1beta3.AuthenticationSpec{
 								"anonymous": {
 									AuthenticationSpec: authorinoapi.AuthenticationSpec{
 										AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
@@ -176,7 +160,7 @@ var _ = Describe("Target status reconciler", func() {
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if an AuthPolicy is accepted
 		// and the statuses of its target object and other optional route objects have been all updated as affected by the policy
-		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *kuadrantv1beta2.AuthPolicy, routeNames ...string) func() bool {
+		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *kuadrantv1beta3.AuthPolicy, routeNames ...string) func() bool {
 			return func() bool {
 				if !tests.IsAuthPolicyAccepted(ctx, testClient(), policy)() {
 					return false
@@ -192,41 +176,20 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("Adds truthy PolicyAffected status condition if there is at least one policy accepted", func(ctx SpecContext) {
-			routePolicy1 := policyFactory(func(p *kuadrantv1beta2.AuthPolicy) {
+			routePolicy1 := policyFactory(func(p *kuadrantv1beta3.AuthPolicy) {
 				p.Name = "route-auth-1"
 			})
 			Expect(k8sClient.Create(ctx, routePolicy1)).To(Succeed())
 
 			Eventually(policyAcceptedAndTargetsAffected(ctx, routePolicy1)).WithContext(ctx).Should(BeTrue())
 
-			routePolicy2 := policyFactory(func(p *kuadrantv1beta2.AuthPolicy) { // another policy that targets the same route. this policy will not be accepted
+			routePolicy2 := policyFactory(func(p *kuadrantv1beta3.AuthPolicy) { // another policy that targets the same route. this policy will not be accepted
 				p.Name = "route-auth-2"
 			})
 			Expect(k8sClient.Create(ctx, routePolicy2)).To(Succeed())
 
 			Eventually(func() bool {
 				return policyAcceptedAndTargetsAffected(ctx, routePolicy1)() &&
-					!tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy2)() &&
-					!routeAffected(ctx, TestHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy2))
-			}).WithContext(ctx).Should(BeTrue())
-		}, testTimeOut)
-
-		It("Adds falsey PolicyAffected status condition if no policy is accepted", func(ctx SpecContext) {
-			routePolicy1 := policyFactory(func(p *kuadrantv1beta2.AuthPolicy) { // create a policy with an invalid route selector so the policy is not accepted
-				p.Name = "route-auth-1"
-				p.Spec.Defaults.RouteSelectors = []kuadrantv1beta2.RouteSelector{{Hostnames: []gatewayapiv1.Hostname{"invalid.example.com"}}}
-			})
-			Expect(k8sClient.Create(ctx, routePolicy1)).To(Succeed())
-
-			routePolicy2 := policyFactory(func(p *kuadrantv1beta2.AuthPolicy) { // create another policy with an invalid route selector so the policy is not accepted
-				p.Name = "route-auth-2"
-				p.Spec.Defaults.RouteSelectors = []kuadrantv1beta2.RouteSelector{{Hostnames: []gatewayapiv1.Hostname{"invalid.example.com"}}}
-			})
-			Expect(k8sClient.Create(ctx, routePolicy2)).To(Succeed())
-
-			Eventually(func() bool {
-				return !tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy1)() &&
-					routeNotAffected(ctx, TestHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy1)) &&
 					!tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy2)() &&
 					!routeAffected(ctx, TestHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy2))
 			}).WithContext(ctx).Should(BeTrue())
@@ -251,7 +214,7 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("adds PolicyAffected status condition to the targeted gateway and routes", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta2.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gateway-auth"
 				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -264,7 +227,7 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta2.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gateway-auth"
 				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,
@@ -303,7 +266,7 @@ var _ = Describe("Target status reconciler", func() {
 			otherRoute := tests.BuildBasicHttpRoute(otherRouteName, TestGatewayName, testNamespace, []string{randomHostFromGWHost()})
 			Expect(k8sClient.Create(ctx, otherRoute)).To(Succeed())
 
-			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta2.AuthPolicy) {
+			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gateway-auth"
 				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
 					Group: gatewayapiv1.GroupName,

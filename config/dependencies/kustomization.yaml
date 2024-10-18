@@ -10,77 +10,76 @@ patchesStrategicMerge:
   - limitador/delete-ns.yaml
   - dns/delete-ns.yaml
 
-replacements:
-- source:
-    fieldPath: .metadata.namespace
-    group: cert-manager.io
-    kind: Certificate
-    name: authorino-webhook-server-cert
-    version: v1
-  targets:
-  - fieldPaths:
-    - .metadata.annotations.[cert-manager.io/inject-ca-from]
-    options:
-      create: true
-      delimiter: /
-    select:
-      kind: CustomResourceDefinition
-      name: authconfigs.authorino.kuadrant.io
-- source:
-    fieldPath: .metadata.name
-    group: cert-manager.io
-    kind: Certificate
-    name: authorino-webhook-server-cert
-    version: v1
-  targets:
-  - fieldPaths:
-    - .metadata.annotations.[cert-manager.io/inject-ca-from]
-    options:
-      create: true
-      delimiter: /
-      index: 1
-    select:
-      kind: CustomResourceDefinition
-      name: authconfigs.authorino.kuadrant.io
-- source:
-    fieldPath: .metadata.name
-    kind: Service
-    name: authorino-webhooks
-    version: v1
-  targets:
-  - fieldPaths:
-    - .spec.dnsNames.0
-    - .spec.dnsNames.1
-    options:
-      create: true
-      delimiter: .
-    select:
-      group: cert-manager.io
-      kind: Certificate
-      name: authorino-webhook-server-cert
-      version: v1
-- source:
-    fieldPath: .metadata.namespace
-    kind: Service
-    name: authorino-webhooks
-    version: v1
-  targets:
-  - fieldPaths:
-    - .spec.dnsNames.0
-    - .spec.dnsNames.1
-    options:
-      create: true
-      delimiter: .
-      index: 1
-    select:
-      group: cert-manager.io
-      kind: Certificate
-      name: authorino-webhook-server-cert
-      version: v1
-  - fieldPaths:
-    - subjects.0.namespace
-    select:
-      group: rbac.authorization.k8s.io
-      kind: RoleBinding
-      name: authorino-webhooks-manager
-
+# replacements:
+# - source:
+#     fieldPath: .metadata.namespace
+#     group: cert-manager.io
+#     kind: Certificate
+#     name: authorino-webhook-server-cert
+#     version: v1
+#   targets:
+#   - fieldPaths:
+#     - .metadata.annotations.[cert-manager.io/inject-ca-from]
+#     options:
+#       create: true
+#       delimiter: /
+#     select:
+#       kind: CustomResourceDefinition
+#       name: authconfigs.authorino.kuadrant.io
+# - source:
+#     fieldPath: .metadata.name
+#     group: cert-manager.io
+#     kind: Certificate
+#     name: authorino-webhook-server-cert
+#     version: v1
+#   targets:
+#   - fieldPaths:
+#     - .metadata.annotations.[cert-manager.io/inject-ca-from]
+#     options:
+#       create: true
+#       delimiter: /
+#       index: 1
+#     select:
+#       kind: CustomResourceDefinition
+#       name: authconfigs.authorino.kuadrant.io
+# - source:
+#     fieldPath: .metadata.name
+#     kind: Service
+#     name: authorino-webhooks
+#     version: v1
+#   targets:
+#   - fieldPaths:
+#     - .spec.dnsNames.0
+#     - .spec.dnsNames.1
+#     options:
+#       create: true
+#       delimiter: .
+#     select:
+#       group: cert-manager.io
+#       kind: Certificate
+#       name: authorino-webhook-server-cert
+#       version: v1
+# - source:
+#     fieldPath: .metadata.namespace
+#     kind: Service
+#     name: authorino-webhooks
+#     version: v1
+#   targets:
+#   - fieldPaths:
+#     - .spec.dnsNames.0
+#     - .spec.dnsNames.1
+#     options:
+#       create: true
+#       delimiter: .
+#       index: 1
+#     select:
+#       group: cert-manager.io
+#       kind: Certificate
+#       name: authorino-webhook-server-cert
+#       version: v1
+#   - fieldPaths:
+#     - subjects.0.namespace
+#     select:
+#       group: rbac.authorization.k8s.io
+#       kind: RoleBinding
+#       name: authorino-webhooks-manager

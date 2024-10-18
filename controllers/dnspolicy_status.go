@@ -34,14 +34,14 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	v1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 var NegativePolarityConditions []string
 
-func (r *DNSPolicyReconciler) reconcileStatus(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, specErr error) (ctrl.Result, error) {
+func (r *DNSPolicyReconciler) reconcileStatus(ctx context.Context, dnsPolicy *v1.DNSPolicy, specErr error) (ctrl.Result, error) {
 	newStatus := r.calculateStatus(ctx, dnsPolicy, specErr)
 
 	equalStatus := equality.Semantic.DeepEqual(newStatus, dnsPolicy.Status)
@@ -71,7 +71,7 @@ func (r *DNSPolicyReconciler) reconcileStatus(ctx context.Context, dnsPolicy *v1
 	return ctrl.Result{}, nil
 }
 
-func (r *DNSPolicyReconciler) emitConditionMetrics(dnsPolicy *v1alpha1.DNSPolicy) {
+func (r *DNSPolicyReconciler) emitConditionMetrics(dnsPolicy *v1.DNSPolicy) {
 	readyStatus := meta.FindStatusCondition(dnsPolicy.Status.Conditions, ReadyConditionType)
 	if readyStatus == nil {
 		dnsPolicyReady.WithLabelValues(dnsPolicy.Name, dnsPolicy.Namespace, "true").Set(0)
@@ -88,8 +88,8 @@ func (r *DNSPolicyReconciler) emitConditionMetrics(dnsPolicy *v1alpha1.DNSPolicy
 	}
 }
 
-func (r *DNSPolicyReconciler) calculateStatus(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, specErr error) *v1alpha1.DNSPolicyStatus {
-	newStatus := &v1alpha1.DNSPolicyStatus{
+func (r *DNSPolicyReconciler) calculateStatus(ctx context.Context, dnsPolicy *v1.DNSPolicy, specErr error) *v1.DNSPolicyStatus {
+	newStatus := &v1.DNSPolicyStatus{
 		// Copy initial conditions. Otherwise, status will always be updated
 		Conditions:         slices.Clone(dnsPolicy.Status.Conditions),
 		ObservedGeneration: dnsPolicy.Status.ObservedGeneration,
@@ -131,7 +131,7 @@ func (r *DNSPolicyReconciler) calculateStatus(ctx context.Context, dnsPolicy *v1
 	return newStatus
 }
 
-func (r *DNSPolicyReconciler) filteredRecordList(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy) (*kuadrantdnsv1alpha1.DNSRecordList, error) {
+func (r *DNSPolicyReconciler) filteredRecordList(ctx context.Context, dnsPolicy *v1.DNSPolicy) (*kuadrantdnsv1alpha1.DNSRecordList, error) {
 	recordsList := &kuadrantdnsv1alpha1.DNSRecordList{}
 	if err := r.Client().List(ctx, recordsList, &client.ListOptions{Namespace: dnsPolicy.Namespace}); err != nil {
 		return nil, err
@@ -148,7 +148,7 @@ func (r *DNSPolicyReconciler) filteredRecordList(ctx context.Context, dnsPolicy 
 	return recordsList, nil
 }
 
-func (r *DNSPolicyReconciler) enforcedCondition(recordsList *kuadrantdnsv1alpha1.DNSRecordList, dnsPolicy *v1alpha1.DNSPolicy) *metav1.Condition {
+func (r *DNSPolicyReconciler) enforcedCondition(recordsList *kuadrantdnsv1alpha1.DNSRecordList, dnsPolicy *v1.DNSPolicy) *metav1.Condition {
 	// there are no controlled DNS records present
 	if len(recordsList.Items) == 0 {
 		cond := kuadrant.EnforcedCondition(dnsPolicy, nil, true)
@@ -180,7 +180,7 @@ func (r *DNSPolicyReconciler) enforcedCondition(recordsList *kuadrantdnsv1alpha1
 	return kuadrant.EnforcedCondition(dnsPolicy, nil, true)
 }
 
-func propagateRecordConditions(records *kuadrantdnsv1alpha1.DNSRecordList, policyStatus *v1alpha1.DNSPolicyStatus) {
+func propagateRecordConditions(records *kuadrantdnsv1alpha1.DNSRecordList, policyStatus *v1.DNSPolicyStatus) {
 	//reset conditions
 	policyStatus.RecordConditions = map[string][]metav1.Condition{}
 

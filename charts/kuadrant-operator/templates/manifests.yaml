@@ -13243,7 +13243,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         description: DNSPolicy is the Schema for the dnspolicies API
@@ -14423,7 +14423,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         description: TLSPolicy is the Schema for the tlspolicies API

@@ -9,7 +9,7 @@ To prevent a gateway address being published to the DNS provider, you can set th
 Below is an example of a DNSPolicy excluding a hostname:
 
 ```
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: prod-web

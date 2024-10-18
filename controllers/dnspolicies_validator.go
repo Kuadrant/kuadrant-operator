@@ -4,15 +4,15 @@ import (
 	"context"
 	"sync"
 
-	"github.com/kuadrant/policy-machinery/controller"
-	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-)
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
-var (
-	StateDNSPolicyValid = struct{}{}
+	"github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
+
+	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 func NewDNSPoliciesValidator() *DNSPoliciesValidator {
@@ -31,14 +31,25 @@ func (r *DNSPoliciesValidator) Subscription() controller.Subscription {
 	}
 }
 
-func (r *DNSPoliciesValidator) validate(_ context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	policies := topology.Policies().Items(func(o machinery.Object) bool {
-		return o.GroupVersionKind().GroupKind() == kuadrantv1alpha1.DNSPolicyGroupKind
+func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("DNSPoliciesValidator")
+
+	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1alpha1.DNSPolicy, bool) {
+		p, ok := item.(*kuadrantv1alpha1.DNSPolicy)
+		return p, ok
 	})
 
-	state.Store(StateDNSPolicyValid, lo.SliceToMap(policies, func(policy machinery.Policy) (string, bool) {
-		return policy.GetLocator(), len(policy.GetTargetRefs()) == 0 || len(topology.Targetables().Parents(policy)) > 0
+	logger.V(1).Info("validating dns policies", "policies", len(policies))
+
+	state.Store(StateDNSPolicyAcceptedKey, lo.SliceToMap(policies, func(policy *kuadrantv1alpha1.DNSPolicy) (string, error) {
+		if len(policy.GetTargetRefs()) == 0 || len(topology.Targetables().Children(policy)) == 0 {
+			return policy.GetLocator(), kuadrant.NewErrTargetNotFound(policy.Kind(), policy.GetTargetRef(),
+				apierrors.NewNotFound(kuadrantv1alpha1.DNSPoliciesResource.GroupResource(), policy.GetName()))
+		}
+		return policy.GetLocator(), nil
 	}))
+
+	logger.V(1).Info("finished validating dns policies")
 
 	return nil
 }

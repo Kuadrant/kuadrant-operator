@@ -7,9 +7,15 @@ import (
 	"k8s.io/client-go/dynamic"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
+
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+)
+
+const (
+	DNSRecordKind             = "DNSRecord"
+	StateDNSPolicyAcceptedKey = "DNSPolicyValid"
 )
 
 var (
@@ -28,11 +34,9 @@ var (
 func NewDNSWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 	return &controller.Workflow{
 		Precondition: NewDNSPoliciesValidator().Subscription().Reconcile,
-		Tasks: []controller.ReconcileFunc{(&controller.Workflow{
-			Tasks: []controller.ReconcileFunc{
-				NewEffectiveDNSPoliciesReconciler(client).Subscription().Reconcile,
-			},
-		}).Run},
+		Tasks: []controller.ReconcileFunc{
+			NewEffectiveDNSPoliciesReconciler(client).Subscription().Reconcile,
+		},
 		Postcondition: NewDNSPolicyStatusUpdater(client).Subscription().Reconcile,
 	}
 }

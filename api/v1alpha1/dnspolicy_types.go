@@ -18,6 +18,9 @@ package v1alpha1
 
 import (
 	"context"
+	"fmt"
+	"net"
+	"strings"
 
 	dnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -70,8 +73,23 @@ type DNSPolicySpec struct {
 
 	// ExcludeAddresses is a list of addresses (either hostnames, CIDR or IPAddresses) that DNSPolicy should not use as values in the configured DNS provider records. The default is to allow all addresses configured in the Gateway DNSPolicy is targeting
 	// +optional
-	// +kubebuilder:validation:MaxItems=20
-	ExcludeAddresses []string `json:"excludeAddresses,omitempty"`
+	ExcludeAddresses ExcludeAddresses `json:"excludeAddresses,omitempty"`
+}
+
+// +kubebuilder:validation:MaxItems=20
+type ExcludeAddresses []string
+
+func (ea ExcludeAddresses) Validate() error {
+	for _, exclude := range ea {
+		//Only a CIDR will have  / in the address so attempt to parse fail if not valid
+		if strings.Contains(exclude, "/") {
+			_, _, err := net.ParseCIDR(exclude)
+			if err != nil {
+				return fmt.Errorf("could not parse the CIDR from the excludeAddresses field %w", err)
+			}
+		}
+	}
+	return nil
 }
 
 type LoadBalancingSpec struct {

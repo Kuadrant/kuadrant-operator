@@ -141,6 +141,26 @@ func NewErrUnknown(kind string, err error) ErrUnknown {
 
 var _ PolicyError = ErrOverridden{}
 
+type ErrNoRoutes struct {
+	Kind string
+}
+
+func (e ErrNoRoutes) Error() string {
+	return fmt.Sprintf("%s is not in the path to any existing routes", e.Kind)
+}
+
+func (e ErrNoRoutes) Reason() gatewayapiv1alpha2.PolicyConditionReason {
+	return PolicyReasonUnknown
+}
+
+func NewErrNoRoutes(kind string) ErrNoRoutes {
+	return ErrNoRoutes{
+		Kind: kind,
+	}
+}
+
+var _ PolicyError = ErrOverridden{}
+
 type ErrOverridden struct {
 	Kind               string
 	OverridingPolicies []k8stypes.NamespacedName

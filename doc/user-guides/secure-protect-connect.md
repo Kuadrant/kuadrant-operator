@@ -297,7 +297,7 @@ Next, create the DNSPolicy. There are two options here.
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: simple-dnspolicy
@@ -319,7 +319,7 @@ If you want to use a gateway with a shared listener host (IE the same hostname o
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: simple-dnspolicy

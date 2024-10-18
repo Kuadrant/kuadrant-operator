@@ -5,13 +5,12 @@ import (
 	"fmt"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	v1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
 
 // https://cert-manager.io/docs/usage/gateway/#supported-annotations
@@ -67,7 +66,7 @@ func validateGatewayListenerBlock(path *field.Path, l gatewayapiv1.Listener, ing
 
 // translatePolicy updates the Certificate spec using the TLSPolicy spec
 // converted from https://github.com/cert-manager/cert-manager/blob/master/pkg/controller/certificate-shim/helper.go#L63
-func translatePolicy(crt *certmanv1.Certificate, tlsPolicy v1alpha1.TLSPolicySpec) {
+func translatePolicy(crt *certmanv1.Certificate, tlsPolicy v1.TLSPolicySpec) {
 	if tlsPolicy.CommonName != "" {
 		crt.Spec.CommonName = tlsPolicy.CommonName
 	}
@@ -116,7 +115,7 @@ func translatePolicy(crt *certmanv1.Certificate, tlsPolicy v1alpha1.TLSPolicySpe
 }
 
 // validateIssuer validates that the issuer specified exists
-func validateIssuer(ctx context.Context, k8sClient client.Client, policy *v1alpha1.TLSPolicy) error {
+func validateIssuer(ctx context.Context, k8sClient client.Client, policy *v1.TLSPolicy) error {
 	var issuer client.Object
 	issuerNamespace := ""
 	switch policy.Spec.IssuerRef.Kind {

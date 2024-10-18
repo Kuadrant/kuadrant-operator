@@ -51,7 +51,7 @@ import (
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 
 	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
@@ -292,7 +292,7 @@ func BootstrapScheme() *runtime.Scheme {
 	sb := runtime.NewSchemeBuilder(
 		scheme.AddToScheme,
 		kuadrantdnsv1alpha1.AddToScheme,
-		kuadrantv1alpha1.AddToScheme,
+		kuadrantv1.AddToScheme,
 		kuadrantv1beta1.AddToScheme,
 		kuadrantv1beta2.AddToScheme,
 		kuadrantv1beta3.AddToScheme,

@@ -13,7 +13,7 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	"github.com/kuadrant/dns-operator/pkg/builder"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	v1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
 
 const (
@@ -26,7 +26,7 @@ type dnsHelper struct {
 	client.Client
 }
 
-func commonDNSRecordLabels(gwKey client.ObjectKey, p *v1alpha1.DNSPolicy) map[string]string {
+func commonDNSRecordLabels(gwKey client.ObjectKey, p *v1.DNSPolicy) map[string]string {
 	commonLabels := map[string]string{}
 	for k, v := range policyDNSRecordLabels(p) {
 		commonLabels[k] = v
@@ -37,7 +37,7 @@ func commonDNSRecordLabels(gwKey client.ObjectKey, p *v1alpha1.DNSPolicy) map[st
 	return commonLabels
 }
 
-func policyDNSRecordLabels(p *v1alpha1.DNSPolicy) map[string]string {
+func policyDNSRecordLabels(p *v1.DNSPolicy) map[string]string {
 	return map[string]string{
 		p.DirectReferenceAnnotationName():                              p.Name,
 		fmt.Sprintf("%s-namespace", p.DirectReferenceAnnotationName()): p.Namespace,
@@ -117,7 +117,7 @@ func (g GatewayWrapper) GetAddresses() []builder.TargetAddress {
 	return addresses
 }
 
-func (g *GatewayWrapper) RemoveExcludedStatusAddresses(p *v1alpha1.DNSPolicy) error {
+func (g *GatewayWrapper) RemoveExcludedStatusAddresses(p *v1.DNSPolicy) error {
 	g.excludedAddresses = p.Spec.ExcludeAddresses
 	newAddresses := []gatewayapiv1.GatewayStatusAddress{}
 	for _, address := range g.Gateway.Status.Addresses {

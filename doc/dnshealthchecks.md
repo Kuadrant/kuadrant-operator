@@ -15,7 +15,7 @@ To configure a DNS health check, you need to specify the `healthCheck` section o
 * `FailureThreshold`: How many times we can tolerate a failure on this endpoint, before removing the related DNS entry.
 
 ```bash
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: prod-web

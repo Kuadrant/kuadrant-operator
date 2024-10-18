@@ -296,7 +296,7 @@ endef
 
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) crd paths="./api/v1alpha1;./api/v1beta1;./api/v1beta2;./api/v1beta3" output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) crd paths="./api/v1;./api/v1beta1;./api/v1beta2;./api/v1beta3" output:crd:artifacts:config=config/crd/bases
 	$(CONTROLLER_GEN) rbac:roleName=manager-role webhook paths="./..."
 
 .PHONY: dependencies-manifests

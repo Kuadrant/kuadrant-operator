@@ -22,7 +22,7 @@ The `DNSPolicy` spec includes the following parts:
 #### High-level example and field definition
 
 ```yaml
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: my-dns-policy
@@ -162,7 +162,7 @@ When a DNSPolicy targets a Gateway, the policy will be enforced on all gateway l
 Target a Gateway by setting the `spec.targetRef` field of the DNSPolicy as follows:
 
 ```yaml
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: <DNSPolicy name>

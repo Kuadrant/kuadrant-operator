@@ -31,7 +31,7 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	kuadrantdnsbuilder "github.com/kuadrant/dns-operator/pkg/builder"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
@@ -470,8 +470,8 @@ func BuildInMemoryCredentialsSecret(name, ns, initDomain string) *corev1.Secret 
 	return secret
 }
 
-func NewDNSPolicy(name, ns string) *kuadrantv1alpha1.DNSPolicy {
-	p := kuadrantv1alpha1.NewDNSPolicy(name, ns)
+func NewDNSPolicy(name, ns string) *kuadrantv1.DNSPolicy {
+	p := kuadrantv1.NewDNSPolicy(name, ns)
 	p.Labels = CommonLabels
 	return p
 }

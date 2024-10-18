@@ -9,10 +9,10 @@ import (
 	"testing"
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+	v1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
@@ -66,9 +66,9 @@ func TestPropagateRecordConditions(t *testing.T) {
 
 	tests := []struct {
 		Name         string
-		PolicyStatus *v1alpha1.DNSPolicyStatus
+		PolicyStatus *v1.DNSPolicyStatus
 		Records      *kuadrantdnsv1alpha1.DNSRecordList
-		Validate     func(*testing.T, *v1alpha1.DNSPolicyStatus)
+		Validate     func(*testing.T, *v1.DNSPolicyStatus)
 	}{
 		{
 			Name: "Healthy conditions not propagated",
@@ -96,8 +96,8 @@ func TestPropagateRecordConditions(t *testing.T) {
 					},
 				},
 			},
-			PolicyStatus: &v1alpha1.DNSPolicyStatus{},
-			Validate: func(t *testing.T, policyStatus *v1alpha1.DNSPolicyStatus) {
+			PolicyStatus: &v1.DNSPolicyStatus{},
+			Validate: func(t *testing.T, policyStatus *v1.DNSPolicyStatus) {
 				if conditions, ok := policyStatus.RecordConditions[rootHost]; ok {
 					t.Fatalf("expected no probe conditions for root host, found %v", len(conditions))
 				}
@@ -129,8 +129,8 @@ func TestPropagateRecordConditions(t *testing.T) {
 					},
 				},
 			},
-			PolicyStatus: &v1alpha1.DNSPolicyStatus{},
-			Validate: func(t *testing.T, policyStatus *v1alpha1.DNSPolicyStatus) {
+			PolicyStatus: &v1.DNSPolicyStatus{},
+			Validate: func(t *testing.T, policyStatus *v1.DNSPolicyStatus) {
 				if conditions, ok := policyStatus.RecordConditions[rootHost]; !ok {
 					t.Fatalf("expected probe conditions for root host, found none")
 				} else {
@@ -157,19 +157,19 @@ func TestPropagateRecordConditions(t *testing.T) {
 func TestDNSPolicyReconciler_calculateStatus(t *testing.T) {
 	type args struct {
 		ctx       context.Context
-		dnsPolicy *v1alpha1.DNSPolicy
+		dnsPolicy *v1.DNSPolicy
 		specErr   error
 	}
 	tests := []struct {
 		name string
 		args args
-		want *v1alpha1.DNSPolicyStatus
+		want *v1.DNSPolicyStatus
 	}{
 		{
 			name: "Enforced status block removed if policy not Accepted. (Regression test)", // https://github.com/Kuadrant/kuadrant-operator/issues/588
 			args: args{
-				dnsPolicy: &v1alpha1.DNSPolicy{
-					Status: v1alpha1.DNSPolicyStatus{
+				dnsPolicy: &v1.DNSPolicy{
+					Status: v1.DNSPolicyStatus{
 						Conditions: []metav1.Condition{
 							{
 								Message: "not accepted",
@@ -188,7 +188,7 @@ func TestDNSPolicyReconciler_calculateStatus(t *testing.T) {
 				},
 				specErr: kuadrant.NewErrInvalid("DNSPolicy", errors.New("policy Error")),
 			},
-			want: &v1alpha1.DNSPolicyStatus{
+			want: &v1.DNSPolicyStatus{
 				Conditions: []metav1.Condition{
 					{
 						Message: "DNSPolicy target is invalid: policy Error",

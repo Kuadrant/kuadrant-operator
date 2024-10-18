@@ -1,5 +1,5 @@
 ---
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: dnspolicy-sample
@@ -9,5 +9,8 @@ spec:
     group: gateway.networking.k8s.io
     kind: Gateway
   healthCheck:
-    endpoint: /
-    protocol: HTTP
+    path: /
+    protocol: HTTPS
+    port: 443
+    interval: 10s
+    failureThreshold: 5

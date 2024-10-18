@@ -33,7 +33,7 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	v1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
@@ -64,7 +64,7 @@ func (r *DNSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	log.Info("Reconciling DNSPolicy")
 	ctx = crlog.IntoContext(ctx, log)
 
-	previous := &v1alpha1.DNSPolicy{}
+	previous := &v1.DNSPolicy{}
 	if err := r.Client().Get(ctx, req.NamespacedName, previous); err != nil {
 		log.Info("error getting dns policy", "error", err)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -125,7 +125,7 @@ func (r *DNSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return statusResult, statusErr
 }
 
-func (r *DNSPolicyReconciler) reconcileResources(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, targetNetworkObject client.Object) error {
+func (r *DNSPolicyReconciler) reconcileResources(ctx context.Context, dnsPolicy *v1.DNSPolicy, targetNetworkObject client.Object) error {
 	// reconcile based on gateway diffs
 	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), dnsPolicy, targetNetworkObject)
 	if err != nil {
@@ -149,7 +149,7 @@ func (r *DNSPolicyReconciler) reconcileResources(ctx context.Context, dnsPolicy 
 	return nil
 }
 
-func (r *DNSPolicyReconciler) deleteResources(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, targetNetworkObject client.Object) error {
+func (r *DNSPolicyReconciler) deleteResources(ctx context.Context, dnsPolicy *v1.DNSPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
 	if err := r.deleteDNSRecords(ctx, dnsPolicy); err != nil {
 		return err
@@ -182,14 +182,14 @@ func (r *DNSPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	gatewayEventMapper := mappers.NewGatewayEventMapper(
-		v1alpha1.NewDNSPolicyType(),
+		v1.NewDNSPolicyType(),
 		mappers.WithLogger(r.Logger().WithName("gateway.mapper")),
 		mappers.WithClient(mgr.GetClient()),
 	)
 
 	r.dnsHelper = dnsHelper{Client: r.Client()}
 	ctrlr := ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.DNSPolicy{}).
+		For(&v1.DNSPolicy{}).
 		Owns(&kuadrantdnsv1alpha1.DNSRecord{}).
 		Watches(&gatewayapiv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.Map))
 	return ctrlr.Complete(r)

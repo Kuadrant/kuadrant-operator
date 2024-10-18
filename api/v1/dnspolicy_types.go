@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1
 
 import (
 	"context"
@@ -280,9 +280,9 @@ func (p *DNSPolicy) WithTargetGateway(gwName string) *DNSPolicy {
 func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port int, protocol string, failureThreshold int) *DNSPolicy {
 	return p.WithHealthCheck(dnsv1alpha1.HealthCheckSpec{
 		Path:             endpoint,
-		Port:             &port,
+		Port:             port,
 		Protocol:         dnsv1alpha1.Protocol(protocol),
-		FailureThreshold: &failureThreshold,
+		FailureThreshold: failureThreshold,
 	})
 }
 

@@ -267,7 +267,7 @@ Set the `DNSPolicy` for your Gateway as follows:
 
 ```bash
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: ${gatewayName}-dnspolicy

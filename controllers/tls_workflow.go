@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
 
 const (
@@ -80,7 +80,7 @@ func LinkListenerToCertificateFunc(objs controller.Store) machinery.LinkFunc {
 
 func LinkGatewayToIssuerFunc(objs controller.Store) machinery.LinkFunc {
 	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), controller.ObjectAs[*gwapiv1.Gateway])
-	tlsPolicies := lo.Map(objs.FilterByGroupKind(kuadrantv1alpha1.TLSPolicyGroupKind), controller.ObjectAs[*kuadrantv1alpha1.TLSPolicy])
+	tlsPolicies := lo.Map(objs.FilterByGroupKind(kuadrantv1.TLSPolicyGroupKind), controller.ObjectAs[*kuadrantv1.TLSPolicy])
 
 	return machinery.LinkFunc{
 		From: machinery.GatewayGroupKind,
@@ -91,7 +91,7 @@ func LinkGatewayToIssuerFunc(objs controller.Store) machinery.LinkFunc {
 
 			// Policies linked to Issuer
 			// Issuer must be in the same namespace as the policy
-			linkedPolicies := lo.Filter(tlsPolicies, func(p *kuadrantv1alpha1.TLSPolicy, index int) bool {
+			linkedPolicies := lo.Filter(tlsPolicies, func(p *kuadrantv1.TLSPolicy, index int) bool {
 				return p.Spec.IssuerRef.Name == issuer.GetName() && p.GetNamespace() == issuer.GetNamespace() && p.Spec.IssuerRef.Kind == certmanagerv1.IssuerKind
 			})
 
@@ -119,7 +119,7 @@ func LinkGatewayToIssuerFunc(objs controller.Store) machinery.LinkFunc {
 
 func LinkGatewayToClusterIssuerFunc(objs controller.Store) machinery.LinkFunc {
 	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), controller.ObjectAs[*gwapiv1.Gateway])
-	tlsPolicies := lo.Map(objs.FilterByGroupKind(kuadrantv1alpha1.TLSPolicyGroupKind), controller.ObjectAs[*kuadrantv1alpha1.TLSPolicy])
+	tlsPolicies := lo.Map(objs.FilterByGroupKind(kuadrantv1.TLSPolicyGroupKind), controller.ObjectAs[*kuadrantv1.TLSPolicy])
 
 	return machinery.LinkFunc{
 		From: machinery.GatewayGroupKind,
@@ -129,7 +129,7 @@ func LinkGatewayToClusterIssuerFunc(objs controller.Store) machinery.LinkFunc {
 			clusterIssuer := o.Object.(*certmanagerv1.ClusterIssuer)
 
 			// Policies linked to ClusterIssuer
-			linkedPolicies := lo.Filter(tlsPolicies, func(p *kuadrantv1alpha1.TLSPolicy, index int) bool {
+			linkedPolicies := lo.Filter(tlsPolicies, func(p *kuadrantv1.TLSPolicy, index int) bool {
 				return p.Spec.IssuerRef.Name == clusterIssuer.GetName() && p.Spec.IssuerRef.Kind == certmanagerv1.ClusterIssuerKind
 			})
 

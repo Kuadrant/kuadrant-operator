@@ -260,6 +260,8 @@ github.com/kuadrant/authorino-operator v0.11.1 h1:jndTZhiHMU+2Dk0NU+KP2+MUSfvclr
 github.com/kuadrant/authorino-operator v0.11.1/go.mod h1:TeFFdX477vUTMushCojaHpvwPLga4DpErGI2oQbqFIs=
 github.com/kuadrant/dns-operator v0.0.0-20241018131559-f2ce8b6aaaef h1:6P2pC1kOPcrT/22N23Mr3xr3CTHmQQkj3jmOlUEJvO0=
 github.com/kuadrant/dns-operator v0.0.0-20241018131559-f2ce8b6aaaef/go.mod h1:LGG4R3KEz93Ep0CV1/tziCmRk+VtojWUHR9mXkOHZks=
+github.com/kuadrant/dns-operator v0.0.0-20241018153635-382130801432 h1:M5I5+xzYJipFlyxB0ISV3Lk3qT6WzWT5H5eZCr8cbwE=
+github.com/kuadrant/dns-operator v0.0.0-20241018153635-382130801432/go.mod h1:LGG4R3KEz93Ep0CV1/tziCmRk+VtojWUHR9mXkOHZks=
 github.com/kuadrant/limitador-operator v0.9.0 h1:hTQ6CFPayf/sL7cIzwWjCoU8uTn6fzWdsJgKbDlnFts=
 github.com/kuadrant/limitador-operator v0.9.0/go.mod h1:DQOlg9qFOcnWPrwO529JRCMLLOEXJQxkmOes952S/Hw=
 github.com/kuadrant/policy-machinery v0.5.0 h1:hTllNYswhEOFrS/uj8kY4a4wq2W1xL2hagHeftn9TTY=

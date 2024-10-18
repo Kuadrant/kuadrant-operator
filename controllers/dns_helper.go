@@ -27,7 +27,7 @@ type dnsHelper struct {
 }
 
 func commonDNSRecordLabels(gwKey client.ObjectKey, p *v1alpha1.DNSPolicy) map[string]string {
-	commonLabels := map[string]string{}
+	commonLabels := CommonLabels()
 	for k, v := range policyDNSRecordLabels(p) {
 		commonLabels[k] = v
 	}

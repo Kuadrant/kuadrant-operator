@@ -51,14 +51,6 @@ type DNSPolicyReconciler struct {
 	dnsHelper           dnsHelper
 }
 
-//+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnspolicies,verbs=get;list;watch;update;patch;delete
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnspolicies/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnspolicies/finalizers,verbs=update
-
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords/status,verbs=get
-
 func (r *DNSPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Logger().WithValues("DNSPolicy", req.NamespacedName)
 	log.Info("Reconciling DNSPolicy")
@@ -150,11 +142,6 @@ func (r *DNSPolicyReconciler) reconcileResources(ctx context.Context, dnsPolicy 
 }
 
 func (r *DNSPolicyReconciler) deleteResources(ctx context.Context, dnsPolicy *v1alpha1.DNSPolicy, targetNetworkObject client.Object) error {
-	// delete based on gateway diffs
-	if err := r.deleteDNSRecords(ctx, dnsPolicy); err != nil {
-		return err
-	}
-
 	// remove direct back ref
 	if targetNetworkObject != nil {
 		if err := r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, dnsPolicy.DirectReferenceAnnotationName()); err != nil {

@@ -52,11 +52,13 @@ func (t *EffectiveTLSPoliciesReconciler) Subscription() *controller.Subscription
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 //+kubebuilder:rbac:groups="cert-manager.io",resources=certificates,verbs=get;list;watch;create;update;patch;delete
 
-func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, events []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
+func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTLSPoliciesReconciler").WithName("Reconcile")
 
-	// Get affected TLS Policies
-	policies := GetTLSPoliciesByEvents(topology, events)
+	listeners := topology.Targetables().Items(func(object machinery.Object) bool {
+		_, ok := object.(*machinery.Listener)
+		return ok
+	})
 
 	// Get all certs in topology for comparison with expected certs to determine orphaned certs later
 	certs := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
@@ -79,34 +81,34 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, events [
 
 	var expectedCerts []*certmanv1.Certificate
 
-	for _, p := range policies {
-		policy := p.(*kuadrantv1alpha1.TLSPolicy)
+	for _, listener := range listeners {
+		l := listener.(*machinery.Listener)
 
-		// Get all listeners where the gateway contains this policy
-		// TODO: Update when targeting by section name is allowed, the listener will contain the policy rather than the gateway
-		listeners := lo.FilterMap(topology.Targetables().Items(), func(t machinery.Targetable, index int) (*machinery.Listener, bool) {
-			l, ok := t.(*machinery.Listener)
-			return l, ok && lo.Contains(l.Gateway.Policies(), p)
-		})
-
-		// Policy is deleted
-		if policy.DeletionTimestamp != nil {
-			logger.V(1).Info("policy is marked for deletion, nothing to do", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
-			continue
+		policies := l.Policies()
+		if len(policies) == 0 {
+			policies = l.Gateway.Policies()
 		}
 
-		// Policy is not valid
-		isValid, _ := IsTLSPolicyValid(ctx, s, policy)
-		if !isValid {
-			logger.V(1).Info("deleting certs for invalid policy", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
-			if err := t.deleteCertificatesForPolicy(ctx, topology, policy); err != nil {
-				logger.Error(err, "unable to delete certs for invalid policy", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
+		for _, p := range policies {
+			policy := p.(*kuadrantv1alpha1.TLSPolicy)
+
+			// Policy is deleted
+			if policy.DeletionTimestamp != nil {
+				logger.V(1).Info("policy is marked for deletion, nothing to do", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
+				continue
 			}
-			continue
-		}
 
-		// Policy is valid
-		for _, l := range listeners {
+			// Policy is not valid
+			isValid, _ := IsTLSPolicyValid(ctx, s, policy)
+			if !isValid {
+				logger.V(1).Info("deleting certs for invalid policy", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
+				if err := t.deleteCertificatesForPolicy(ctx, topology, policy); err != nil {
+					logger.Error(err, "unable to delete certs for invalid policy", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
+				}
+				continue
+			}
+
+			// Policy is valid
 			// Need to use Gateway as listener hosts can be merged into a singular cert if using the same cert reference
 			expectedCertificates := expectedCertificatesForGateway(ctx, l.Gateway.Gateway, policy)
 

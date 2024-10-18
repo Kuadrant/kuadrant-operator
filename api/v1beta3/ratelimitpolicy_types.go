@@ -27,6 +27,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -398,6 +399,13 @@ type RateLimitPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []RateLimitPolicy `json:"items"`
+}
+
+// DEPRECATED. impl: kuadrant.PolicyList
+func (l *RateLimitPolicyList) GetItems() []kuadrant.Policy {
+	return utils.Map(l.Items, func(item RateLimitPolicy) kuadrant.Policy {
+		return &item
+	})
 }
 
 func init() {

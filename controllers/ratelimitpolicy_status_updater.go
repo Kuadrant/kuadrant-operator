@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 	"sync"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -147,12 +146,9 @@ func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrNoRoutes(policyKind), false)
 		}
 		// all rules of the policy have been overridden by at least one other policy
-		overridingPoliciesKeys := lo.FilterMap(lo.Uniq(lo.Flatten(lo.Values(overridingPolicies))), func(locator string, _ int) (k8stypes.NamespacedName, bool) {
-			if locator == "" {
-				return k8stypes.NamespacedName{}, false
-			}
-			namespacedName := strings.SplitN(strings.TrimPrefix(locator, fmt.Sprintf("%s:", strings.ToLower(policy.GroupVersionKind().GroupKind().String()))), string(k8stypes.Separator), 2) // TODO: machinery.NamespacedNameFromLocator(locator)
-			return k8stypes.NamespacedName{Namespace: namespacedName[0], Name: namespacedName[1]}, true
+		overridingPoliciesKeys := lo.FilterMap(lo.Uniq(lo.Flatten(lo.Values(overridingPolicies))), func(policyLocator string, _ int) (k8stypes.NamespacedName, bool) {
+			policyKey, err := common.NamespacedNameFromLocator(policyLocator)
+			return policyKey, err == nil
 		})
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policyKind, overridingPoliciesKeys), false)
 	}

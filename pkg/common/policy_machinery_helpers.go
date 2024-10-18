@@ -4,9 +4,11 @@ package common
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -93,4 +95,17 @@ func ObjectsInRequestPath(path []machinery.Targetable) (*machinery.GatewayClass,
 	}
 
 	return gatewayClass, gateway, listener, httpRoute, httpRouteRule, nil
+}
+
+// NamespacedNameFromLocator returns a k8s namespaced name from a Policy Machinery object locator
+func NamespacedNameFromLocator(locator string) (k8stypes.NamespacedName, error) {
+	parts := strings.SplitN(locator, ":", 2) // <groupKind>:<namespacedName>
+	if len(parts) != 2 {
+		return k8stypes.NamespacedName{}, fmt.Errorf("invalid locator: %s", locator)
+	}
+	namespacedName := strings.SplitN(parts[1], string(k8stypes.Separator), 2)
+	if len(namespacedName) == 1 {
+		return k8stypes.NamespacedName{Name: namespacedName[0]}, nil
+	}
+	return k8stypes.NamespacedName{Namespace: namespacedName[0], Name: namespacedName[1]}, nil
 }

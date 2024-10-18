@@ -17,7 +17,6 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 const (
@@ -166,86 +165,4 @@ func IsTLSPolicyValid(ctx context.Context, s *sync.Map, policy *kuadrantv1alpha1
 	isPolicyValidErrorMap := store.(map[string]error)
 
 	return isPolicyValidErrorMap[policy.GetLocator()] == nil, isPolicyValidErrorMap[policy.GetLocator()]
-}
-
-func GetTLSPoliciesByEvents(topology *machinery.Topology, events []controller.ResourceEvent) []machinery.Policy {
-	policies := lo.Filter(topology.Policies().Items(), func(item machinery.Policy, index int) bool {
-		_, ok := item.(*kuadrantv1alpha1.TLSPolicy)
-		return ok
-	})
-
-	var affectedPolicies []machinery.Policy
-	for _, event := range events {
-		if event.Kind == machinery.GatewayGroupKind {
-			ob := event.NewObject
-			if ob == nil {
-				ob = event.OldObject
-			}
-
-			g := machinery.Gateway{Gateway: ob.(*gwapiv1.Gateway)}
-
-			affectedPolicies = append(affectedPolicies, lo.Filter(policies, func(item machinery.Policy, index int) bool {
-				for _, tg := range item.GetTargetRefs() {
-					if g.GetLocator() == tg.GetLocator() {
-						return true
-					}
-				}
-				return false
-			})...)
-		}
-
-		if event.Kind == kuadrantv1alpha1.TLSPolicyGroupKind {
-			ob := event.NewObject
-			if ob == nil {
-				ob = event.OldObject
-			}
-
-			affectedPolicies = append(affectedPolicies, lo.Filter(policies, func(item machinery.Policy, index int) bool {
-				return item.GetName() == ob.GetName() && item.GetNamespace() == ob.GetNamespace()
-			})...)
-		}
-
-		if event.Kind == CertManagerCertificateKind {
-			ob := event.NewObject
-			if ob == nil {
-				ob = event.OldObject
-			}
-
-			affectedPolicies = append(affectedPolicies, lo.Filter(policies, func(item machinery.Policy, index int) bool {
-				p := item.(*kuadrantv1alpha1.TLSPolicy)
-				return utils.IsOwnedBy(ob, p)
-			})...)
-		}
-
-		if event.Kind == CertManagerIssuerKind {
-			ob := event.NewObject
-			if ob == nil {
-				ob = event.OldObject
-			}
-
-			affectedPolicies = append(affectedPolicies, lo.Filter(policies, func(item machinery.Policy, index int) bool {
-				p := item.(*kuadrantv1alpha1.TLSPolicy)
-
-				return ob.GetName() == p.Spec.IssuerRef.Name && lo.Contains([]string{"", certmanagerv1.IssuerKind}, p.Spec.IssuerRef.Kind) &&
-					item.GetNamespace() == ob.GetNamespace()
-			})...)
-		}
-
-		if event.Kind == CertManagerClusterIssuerKind {
-			ob := event.NewObject
-			if ob == nil {
-				ob = event.OldObject
-			}
-
-			affectedPolicies = append(affectedPolicies, lo.Filter(policies, func(item machinery.Policy, index int) bool {
-				p := item.(*kuadrantv1alpha1.TLSPolicy)
-				return ob.GetName() == p.Spec.IssuerRef.Name && p.Spec.IssuerRef.Kind == certmanagerv1.ClusterIssuerKind
-			})...)
-		}
-	}
-
-	// Return only unique policies as there can be duplicates from multiple events
-	return lo.UniqBy(affectedPolicies, func(item machinery.Policy) string {
-		return item.GetLocator()
-	})
 }

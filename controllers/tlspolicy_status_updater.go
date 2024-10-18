@@ -47,10 +47,13 @@ func (t *TLSPolicyStatusUpdater) Subscription() *controller.Subscription {
 	}
 }
 
-func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, events []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
+func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("UpdateStatus")
 
-	policies := GetTLSPoliciesByEvents(topology, events)
+	policies := lo.Filter(topology.Policies().Items(), func(item machinery.Policy, index int) bool {
+		_, ok := item.(*kuadrantv1alpha1.TLSPolicy)
+		return ok
+	})
 
 	for _, policy := range policies {
 		p := policy.(*kuadrantv1alpha1.TLSPolicy)

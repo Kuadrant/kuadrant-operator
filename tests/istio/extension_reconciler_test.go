@@ -1629,7 +1629,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Actions: []wasm.Action{
 								{
 									ServiceName: wasm.RateLimitServiceName,
-									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
+									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteB),
 									Data: []wasm.DataType{
 										{
 											Value: &wasm.Static{
@@ -2621,7 +2621,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				g.Expect(testClient().Get(ctx, wasmPluginKey, existingWasmPlugin)).To(Succeed())
 				existingWASMConfig, err = wasm.ConfigFromStruct(existingWasmPlugin.Spec.PluginConfig)
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(httpRoute, controllers.LimitNameToLimitadorIdentifier(routeRLPKey, "gateway"), "*.example.com")))
+				g.Expect(existingWASMConfig).To(Equal(expectedWasmPluginConfig(httpRoute, controllers.LimitNameToLimitadorIdentifier(gwRLPKey, "gateway"), "*.example.com")))
 			}).WithContext(ctx).Should(Succeed())
 
 		}, testTimeOut)

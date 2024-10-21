@@ -100,20 +100,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	Expect(err).NotTo(HaveOccurred())
 
-	tlsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("tlspolicy"),
-		mgr.GetEventRecorderFor("TLSPolicy"),
-	)
-
-	err = (&TLSPolicyReconciler{
-		BaseReconciler:      tlsPolicyBaseReconciler,
-		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-		RestMapper:          mgr.GetRESTMapper(),
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
 	dnsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("dnspolicy"),

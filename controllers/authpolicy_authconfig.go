@@ -150,20 +150,20 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *kuadra
 
 	// authentication
 	if authentication := commonSpec.AuthScheme.Authentication; len(authentication) > 0 {
-		authConfig.Spec.Authentication = authorinoSpecsFromConfigs(authentication, func(config kuadrantv1beta3.AuthenticationSpec) authorinoapi.AuthenticationSpec {
-			return config.AuthenticationSpec
+		authConfig.Spec.Authentication = authorinoSpecsFromConfigs(authentication, func(config authorinoapi.AuthenticationSpec) authorinoapi.AuthenticationSpec {
+			return config
 		})
 	}
 
 	// metadata
 	if metadata := commonSpec.AuthScheme.Metadata; len(metadata) > 0 {
-		authConfig.Spec.Metadata = authorinoSpecsFromConfigs(metadata, func(config kuadrantv1beta3.MetadataSpec) authorinoapi.MetadataSpec { return config.MetadataSpec })
+		authConfig.Spec.Metadata = authorinoSpecsFromConfigs(metadata, func(config authorinoapi.MetadataSpec) authorinoapi.MetadataSpec { return config })
 	}
 
 	// authorization
 	if authorization := commonSpec.AuthScheme.Authorization; len(authorization) > 0 {
-		authConfig.Spec.Authorization = authorinoSpecsFromConfigs(authorization, func(config kuadrantv1beta3.AuthorizationSpec) authorinoapi.AuthorizationSpec {
-			return config.AuthorizationSpec
+		authConfig.Spec.Authorization = authorinoSpecsFromConfigs(authorization, func(config authorinoapi.AuthorizationSpec) authorinoapi.AuthorizationSpec {
+			return config
 		})
 	}
 
@@ -174,10 +174,10 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *kuadra
 			Unauthorized:    response.Unauthorized,
 			Success: authorinoapi.WrappedSuccessResponseSpec{
 				Headers: authorinoSpecsFromConfigs(response.Success.Headers, func(config kuadrantv1beta3.HeaderSuccessResponseSpec) authorinoapi.HeaderSuccessResponseSpec {
-					return authorinoapi.HeaderSuccessResponseSpec{SuccessResponseSpec: config.SuccessResponseSpec.SuccessResponseSpec}
+					return authorinoapi.HeaderSuccessResponseSpec{SuccessResponseSpec: config.SuccessResponseSpec}
 				}),
-				DynamicMetadata: authorinoSpecsFromConfigs(response.Success.DynamicMetadata, func(config kuadrantv1beta3.SuccessResponseSpec) authorinoapi.SuccessResponseSpec {
-					return config.SuccessResponseSpec
+				DynamicMetadata: authorinoSpecsFromConfigs(response.Success.DynamicMetadata, func(config authorinoapi.SuccessResponseSpec) authorinoapi.SuccessResponseSpec {
+					return config
 				}),
 			},
 		}
@@ -185,7 +185,7 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *kuadra
 
 	// callbacks
 	if callbacks := commonSpec.AuthScheme.Callbacks; len(callbacks) > 0 {
-		authConfig.Spec.Callbacks = authorinoSpecsFromConfigs(callbacks, func(config kuadrantv1beta3.CallbackSpec) authorinoapi.CallbackSpec { return config.CallbackSpec })
+		authConfig.Spec.Callbacks = authorinoSpecsFromConfigs(callbacks, func(config authorinoapi.CallbackSpec) authorinoapi.CallbackSpec { return config })
 	}
 
 	return authConfig, nil

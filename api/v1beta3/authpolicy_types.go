@@ -34,17 +34,17 @@ type AuthSchemeSpec struct {
 	// Authentication configs.
 	// At least one config MUST evaluate to a valid identity object for the auth request to be successful.
 	// +optional
-	Authentication map[string]AuthenticationSpec `json:"authentication,omitempty"`
+	Authentication map[string]authorinoapi.AuthenticationSpec `json:"authentication,omitempty"`
 
 	// Metadata sources.
 	// Authorino fetches auth metadata as JSON from sources specified in this config.
 	// +optional
-	Metadata map[string]MetadataSpec `json:"metadata,omitempty"`
+	Metadata map[string]authorinoapi.MetadataSpec `json:"metadata,omitempty"`
 
 	// Authorization policies.
 	// All policies MUST evaluate to "allowed = true" for the auth request be successful.
 	// +optional
-	Authorization map[string]AuthorizationSpec `json:"authorization,omitempty"`
+	Authorization map[string]authorinoapi.AuthorizationSpec `json:"authorization,omitempty"`
 
 	// Response items.
 	// Authorino builds custom responses to the client of the auth request.
@@ -54,25 +54,7 @@ type AuthSchemeSpec struct {
 	// Callback functions.
 	// Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
 	// +optional
-	Callbacks map[string]CallbackSpec `json:"callbacks,omitempty"`
-}
-
-type CommonAuthRuleSpec struct {
-}
-
-type AuthenticationSpec struct {
-	authorinoapi.AuthenticationSpec `json:""`
-	CommonAuthRuleSpec              `json:""`
-}
-
-type MetadataSpec struct {
-	authorinoapi.MetadataSpec `json:""`
-	CommonAuthRuleSpec        `json:""`
-}
-
-type AuthorizationSpec struct {
-	authorinoapi.AuthorizationSpec `json:""`
-	CommonAuthRuleSpec             `json:""`
+	Callbacks map[string]authorinoapi.CallbackSpec `json:"callbacks,omitempty"`
 }
 
 type ResponseSpec struct {
@@ -102,21 +84,11 @@ type WrappedSuccessResponseSpec struct {
 	// Custom success response items wrapped as HTTP headers.
 	// For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata.
 	// See https://www.envoyproxy.io/docs/envoy/latest/configuration/advanced/well_known_dynamic_metadata
-	DynamicMetadata map[string]SuccessResponseSpec `json:"dynamicMetadata,omitempty"`
+	DynamicMetadata map[string]authorinoapi.SuccessResponseSpec `json:"dynamicMetadata,omitempty"`
 }
 
 type HeaderSuccessResponseSpec struct {
-	SuccessResponseSpec `json:""`
-}
-
-type SuccessResponseSpec struct {
 	authorinoapi.SuccessResponseSpec `json:""`
-	CommonAuthRuleSpec               `json:""`
-}
-
-type CallbackSpec struct {
-	authorinoapi.CallbackSpec `json:""`
-	CommonAuthRuleSpec        `json:""`
 }
 
 // Mutual Exclusivity Validation

@@ -139,12 +139,10 @@ var _ = Describe("Target status reconciler", func() {
 					},
 					Defaults: &kuadrantv1beta3.AuthPolicyCommonSpec{
 						AuthScheme: &kuadrantv1beta3.AuthSchemeSpec{
-							Authentication: map[string]kuadrantv1beta3.AuthenticationSpec{
+							Authentication: map[string]authorinoapi.AuthenticationSpec{
 								"anonymous": {
-									AuthenticationSpec: authorinoapi.AuthenticationSpec{
-										AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-											AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
-										},
+									AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+										AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
 									},
 								},
 							},

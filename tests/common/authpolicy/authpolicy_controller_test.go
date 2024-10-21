@@ -431,83 +431,77 @@ var _ = Describe("AuthPolicy controller", func() {
 					},
 				}
 				policy.Spec.CommonSpec().AuthScheme = &kuadrantv1beta3.AuthSchemeSpec{
-					Authentication: map[string]kuadrantv1beta3.AuthenticationSpec{
+					Authentication: map[string]authorinoapi.AuthenticationSpec{
 						"jwt": {
-							AuthenticationSpec: authorinoapi.AuthenticationSpec{
-								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-									Conditions: []authorinoapi.PatternExpressionOrRef{
-										{
-											PatternExpression: authorinoapi.PatternExpression{
-												Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
-												Operator: "neq",
-												Value:    "",
-											},
+							CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+								Conditions: []authorinoapi.PatternExpressionOrRef{
+									{
+										PatternExpression: authorinoapi.PatternExpression{
+											Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
+											Operator: "neq",
+											Value:    "",
 										},
 									},
 								},
-								AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-									Plain: &authorinoapi.PlainIdentitySpec{
-										Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
-									},
+							},
+							AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+								Plain: &authorinoapi.PlainIdentitySpec{
+									Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
 								},
 							},
 						},
 					},
-					Metadata: map[string]kuadrantv1beta3.MetadataSpec{
+					Metadata: map[string]authorinoapi.MetadataSpec{
 						"user-groups": {
-							MetadataSpec: authorinoapi.MetadataSpec{
-								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-									Conditions: []authorinoapi.PatternExpressionOrRef{
-										{
-											PatternExpression: authorinoapi.PatternExpression{
-												Selector: "auth.identity.admin",
-												Operator: authorinoapi.PatternExpressionOperator("neq"),
-												Value:    "true",
-											},
+							CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+								Conditions: []authorinoapi.PatternExpressionOrRef{
+									{
+										PatternExpression: authorinoapi.PatternExpression{
+											Selector: "auth.identity.admin",
+											Operator: authorinoapi.PatternExpressionOperator("neq"),
+											Value:    "true",
 										},
 									},
 								},
-								MetadataMethodSpec: authorinoapi.MetadataMethodSpec{
-									Http: &authorinoapi.HttpEndpointSpec{
-										Url: "http://user-groups/username={auth.identity.username}",
-									},
+							},
+							MetadataMethodSpec: authorinoapi.MetadataMethodSpec{
+								Http: &authorinoapi.HttpEndpointSpec{
+									Url: "http://user-groups/username={auth.identity.username}",
 								},
 							},
 						},
 					},
-					Authorization: map[string]kuadrantv1beta3.AuthorizationSpec{
+					Authorization: map[string]authorinoapi.AuthorizationSpec{
 						"admin-or-privileged": {
-							AuthorizationSpec: authorinoapi.AuthorizationSpec{
-								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-									Conditions: []authorinoapi.PatternExpressionOrRef{
-										{
-											PatternRef: authorinoapi.PatternRef{
-												Name: "authz-and-rl-required",
-											},
+							CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+								Conditions: []authorinoapi.PatternExpressionOrRef{
+									{
+										PatternRef: authorinoapi.PatternRef{
+											Name: "authz-and-rl-required",
 										},
 									},
 								},
-								AuthorizationMethodSpec: authorinoapi.AuthorizationMethodSpec{
-									PatternMatching: &authorinoapi.PatternMatchingAuthorizationSpec{
-										Patterns: []authorinoapi.PatternExpressionOrRef{
-											{
-												Any: []authorinoapi.UnstructuredPatternExpressionOrRef{
-													{
-														PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
-															PatternExpression: authorinoapi.PatternExpression{
-																Selector: "auth.identity.admin",
-																Operator: authorinoapi.PatternExpressionOperator("eq"),
-																Value:    "true",
-															},
+							},
+							AuthorizationMethodSpec: authorinoapi.AuthorizationMethodSpec{
+								PatternMatching: &authorinoapi.PatternMatchingAuthorizationSpec{
+									Patterns: []authorinoapi.PatternExpressionOrRef{
+										{
+											Any: []authorinoapi.UnstructuredPatternExpressionOrRef{
+												{
+													PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
+														PatternExpression: authorinoapi.PatternExpression{
+															Selector: "auth.identity.admin",
+															Operator: authorinoapi.PatternExpressionOperator("eq"),
+															Value:    "true",
 														},
 													},
-													{
-														PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
-															PatternExpression: authorinoapi.PatternExpression{
-																Selector: "auth.metadata.user-groups",
-																Operator: authorinoapi.PatternExpressionOperator("incl"),
-																Value:    "privileged",
-															},
+												},
+												{
+													PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
+														PatternExpression: authorinoapi.PatternExpression{
+															Selector: "auth.metadata.user-groups",
+															Operator: authorinoapi.PatternExpressionOperator("incl"),
+															Value:    "privileged",
 														},
 													},
 												},
@@ -532,49 +526,45 @@ var _ = Describe("AuthPolicy controller", func() {
 						Success: kuadrantv1beta3.WrappedSuccessResponseSpec{
 							Headers: map[string]kuadrantv1beta3.HeaderSuccessResponseSpec{
 								"x-username": {
-									SuccessResponseSpec: kuadrantv1beta3.SuccessResponseSpec{
-										SuccessResponseSpec: authorinoapi.SuccessResponseSpec{
-											CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-												Conditions: []authorinoapi.PatternExpressionOrRef{
-													{
-														PatternExpression: authorinoapi.PatternExpression{
-															Selector: "request.headers.x-propagate-username.@case:lower",
-															Operator: authorinoapi.PatternExpressionOperator("matches"),
-															Value:    "1|yes|true",
-														},
-													},
-												},
-											},
-											AuthResponseMethodSpec: authorinoapi.AuthResponseMethodSpec{
-												Plain: &authorinoapi.PlainAuthResponseSpec{
-													Selector: "auth.identity.username",
-												},
-											},
-										},
-									},
-								},
-							},
-							DynamicMetadata: map[string]kuadrantv1beta3.SuccessResponseSpec{
-								"x-auth-data": {
 									SuccessResponseSpec: authorinoapi.SuccessResponseSpec{
 										CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
 											Conditions: []authorinoapi.PatternExpressionOrRef{
 												{
-													PatternRef: authorinoapi.PatternRef{
-														Name: "authz-and-rl-required",
+													PatternExpression: authorinoapi.PatternExpression{
+														Selector: "request.headers.x-propagate-username.@case:lower",
+														Operator: authorinoapi.PatternExpressionOperator("matches"),
+														Value:    "1|yes|true",
 													},
 												},
 											},
 										},
 										AuthResponseMethodSpec: authorinoapi.AuthResponseMethodSpec{
-											Json: &authorinoapi.JsonAuthResponseSpec{
-												Properties: authorinoapi.NamedValuesOrSelectors{
-													"username": {
-														Selector: "auth.identity.username",
-													},
-													"groups": {
-														Selector: "auth.metadata.user-groups",
-													},
+											Plain: &authorinoapi.PlainAuthResponseSpec{
+												Selector: "auth.identity.username",
+											},
+										},
+									},
+								},
+							},
+							DynamicMetadata: map[string]authorinoapi.SuccessResponseSpec{
+								"x-auth-data": {
+									CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+										Conditions: []authorinoapi.PatternExpressionOrRef{
+											{
+												PatternRef: authorinoapi.PatternRef{
+													Name: "authz-and-rl-required",
+												},
+											},
+										},
+									},
+									AuthResponseMethodSpec: authorinoapi.AuthResponseMethodSpec{
+										Json: &authorinoapi.JsonAuthResponseSpec{
+											Properties: authorinoapi.NamedValuesOrSelectors{
+												"username": {
+													Selector: "auth.identity.username",
+												},
+												"groups": {
+													Selector: "auth.metadata.user-groups",
 												},
 											},
 										},
@@ -583,33 +573,31 @@ var _ = Describe("AuthPolicy controller", func() {
 							},
 						},
 					},
-					Callbacks: map[string]kuadrantv1beta3.CallbackSpec{
+					Callbacks: map[string]authorinoapi.CallbackSpec{
 						"unauthorized-attempt": {
-							CallbackSpec: authorinoapi.CallbackSpec{
-								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-									Conditions: []authorinoapi.PatternExpressionOrRef{
-										{
-											PatternRef: authorinoapi.PatternRef{
-												Name: "authz-and-rl-required",
-											},
+							CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+								Conditions: []authorinoapi.PatternExpressionOrRef{
+									{
+										PatternRef: authorinoapi.PatternRef{
+											Name: "authz-and-rl-required",
 										},
-										{
-											PatternExpression: authorinoapi.PatternExpression{
-												Selector: "auth.authorization.admin-or-privileged",
-												Operator: authorinoapi.PatternExpressionOperator("neq"),
-												Value:    "true",
-											},
+									},
+									{
+										PatternExpression: authorinoapi.PatternExpression{
+											Selector: "auth.authorization.admin-or-privileged",
+											Operator: authorinoapi.PatternExpressionOperator("neq"),
+											Value:    "true",
 										},
 									},
 								},
-								CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
-									Http: &authorinoapi.HttpEndpointSpec{
-										Url:         "http://events/unauthorized",
-										Method:      ptr.To(authorinoapi.HttpMethod("POST")),
-										ContentType: authorinoapi.HttpContentType("application/json"),
-										Body: &authorinoapi.ValueOrSelector{
-											Selector: `\{"identity":{auth.identity},"request-id":{request.id}\}`,
-										},
+							},
+							CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
+								Http: &authorinoapi.HttpEndpointSpec{
+									Url:         "http://events/unauthorized",
+									Method:      ptr.To(authorinoapi.HttpMethod("POST")),
+									ContentType: authorinoapi.HttpContentType("application/json"),
+									Body: &authorinoapi.ValueOrSelector{
+										Selector: `\{"identity":{auth.identity},"request-id":{request.id}\}`,
 									},
 								},
 							},

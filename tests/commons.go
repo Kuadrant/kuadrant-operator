@@ -655,22 +655,20 @@ func KuadrantIsReady(ctx context.Context, cl client.Client, key client.ObjectKey
 
 func BuildBasicAuthScheme() *kuadrantv1beta3.AuthSchemeSpec {
 	return &kuadrantv1beta3.AuthSchemeSpec{
-		Authentication: map[string]kuadrantv1beta3.AuthenticationSpec{
+		Authentication: map[string]authorinoapi.AuthenticationSpec{
 			"apiKey": {
-				AuthenticationSpec: authorinoapi.AuthenticationSpec{
-					AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-						ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
-							Selector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{
-									"app": "toystore",
-								},
+				AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+					ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"app": "toystore",
 							},
 						},
 					},
-					Credentials: authorinoapi.Credentials{
-						AuthorizationHeader: &authorinoapi.Prefixed{
-							Prefix: "APIKEY",
-						},
+				},
+				Credentials: authorinoapi.Credentials{
+					AuthorizationHeader: &authorinoapi.Prefixed{
+						Prefix: "APIKEY",
 					},
 				},
 			},

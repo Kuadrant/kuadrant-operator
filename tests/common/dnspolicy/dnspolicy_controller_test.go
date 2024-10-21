@@ -3,7 +3,6 @@
 package dnspolicy
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
@@ -365,7 +363,6 @@ var _ = Describe("DNSPolicy controller", func() {
 		}, testTimeOut)
 
 		It("should have partially enforced policy if one of the records is not ready", func(ctx SpecContext) {
-
 			// setting up two gateways that have the same host
 			gateway1 := tests.NewGatewayBuilder("test-gateway1", gatewayClass.Name, testNamespace).
 				WithHTTPListener(tests.ListenerNameOne, tests.HostOne(domain)).Gateway
@@ -424,6 +421,20 @@ var _ = Describe("DNSPolicy controller", func() {
 				WithProviderSecret(*dnsProviderSecret).
 				WithTargetGateway("test-gateway1")
 			Expect(k8sClient.Create(ctx, dnsPolicy1)).To(Succeed())
+
+			// policy1 should succeed
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy1), dnsPolicy1)).To(Succeed())
+				// check that policy is enforced with a correct message
+				g.Expect(dnsPolicy1.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
+							"Status":  Equal(metav1.ConditionTrue),
+							"Reason":  Equal(string(kuadrant.PolicyReasonEnforced)),
+							"Message": Equal("DNSPolicy has been successfully enforced"),
+						})))
+			}, tests.TimeoutLong, tests.RetryIntervalMedium).Should(Succeed())
 
 			// create policy2 targeting gateway2 with the load-balanced strategy
 			dnsPolicy2 := tests.NewDNSPolicy("test-dns-policy2", testNamespace).
@@ -516,8 +527,6 @@ var _ = Describe("DNSPolicy controller", func() {
 	})
 
 	Context("valid target and valid gateway status", func() {
-		var policiesBackRefValue, policyBackRefValue string
-
 		BeforeEach(func(ctx SpecContext) {
 			gateway = tests.NewGatewayBuilder(tests.GatewayName, gatewayClass.Name, testNamespace).
 				WithHTTPListener(tests.ListenerNameOne, tests.HostOne(domain)).
@@ -561,10 +570,6 @@ var _ = Describe("DNSPolicy controller", func() {
 
 			recordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameOne)
 			wildcardRecordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameWildcard)
-
-			policyBackRefValue = testNamespace + "/" + dnsPolicy.Name
-			refs, _ := json.Marshal([]client.ObjectKey{{Name: dnsPolicy.Name, Namespace: testNamespace}})
-			policiesBackRefValue = string(refs)
 		})
 
 		It("should create dns records and have correct policy status", func(ctx SpecContext) {
@@ -584,7 +589,6 @@ var _ = Describe("DNSPolicy controller", func() {
 				//Check policy status
 				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(dnsPolicy.Finalizers).To(ContainElement(controllers.DNSPolicyFinalizer))
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElements(
 						MatchFields(IgnoreExtras, Fields{
@@ -601,12 +605,6 @@ var _ = Describe("DNSPolicy controller", func() {
 						})),
 				)
 				g.Expect(dnsPolicy.Status.TotalRecords).To(Equal(int32(2)))
-
-				//Check gateway back reference"
-				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 			}, tests.TimeoutLong, tests.RetryIntervalMedium, ctx).Should(Succeed())
 		}, testTimeOut)
 
@@ -664,12 +662,9 @@ var _ = Describe("DNSPolicy controller", func() {
 
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 
 				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(dnsPolicy.Finalizers).To(ContainElement(controllers.DNSPolicyFinalizer))
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 
 			By("deleting the dns policy")
@@ -681,8 +676,6 @@ var _ = Describe("DNSPolicy controller", func() {
 
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).ToNot(HaveKey(v1alpha1.DNSPolicyDirectReferenceAnnotationName))
-				g.Expect(gateway.Annotations).ToNot(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
 		}, testTimeOut)
 
@@ -723,8 +716,6 @@ var _ = Describe("DNSPolicy controller", func() {
 
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 			By("changing the policy target ref")
@@ -773,8 +764,6 @@ var _ = Describe("DNSPolicy controller", func() {
 
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
-				g.Expect(gateway.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 
 			testGateway2Name := "test-gateway-2"
@@ -822,20 +811,8 @@ var _ = Describe("DNSPolicy controller", func() {
 				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).Should(MatchError(ContainSubstring("not found")))
 				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, &kuadrantdnsv1alpha1.DNSRecord{})).Should(MatchError(ContainSubstring("not found")))
 
-				//Old gateway target has gateway back references removed
-				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway.Annotations).ToNot(HaveKey(v1alpha1.DNSPolicyDirectReferenceAnnotationName))
-				g.Expect(gateway.Annotations).ToNot(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
-
-				//New gateway target has gateway back references added
-				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway2), gateway2)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(gateway2.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyDirectReferenceAnnotationName, policyBackRefValue))
-				g.Expect(gateway2.Annotations).To(HaveKeyWithValue(v1alpha1.DNSPolicyBackReferenceAnnotationName, policiesBackRefValue))
-
 				//Check policy status
-				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElements(

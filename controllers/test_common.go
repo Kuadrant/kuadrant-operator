@@ -87,20 +87,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
-	dnsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-		mgr.GetAPIReader(),
-		log.Log.WithName("dnspolicy"),
-	)
-
-	err = (&DNSPolicyReconciler{
-		BaseReconciler:      dnsPolicyBaseReconciler,
-		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
 	kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),

@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -158,17 +159,16 @@ func GetLabel(obj metav1.Object, key string) string {
 	return obj.GetLabels()[key]
 }
 
-func GetClusterUID(ctx context.Context, c client.Client) (string, error) {
+func GetClusterUID(ctx context.Context, c dynamic.Interface) (string, error) {
 	//Already calculated? return it
 	if clusterUID != "" {
 		return clusterUID, nil
 	}
 
-	ns := &corev1.Namespace{}
-	err := c.Get(ctx, client.ObjectKey{Name: clusterIDNamespace}, ns)
+	un, err := c.Resource(corev1.SchemeGroupVersion.WithResource("namespaces")).Get(ctx, clusterIDNamespace, metav1.GetOptions{})
 	if err != nil {
 		return "", err
 	}
-	clusterUID = string(ns.UID)
+	clusterUID = string(un.GetUID())
 	return clusterUID, nil
 }

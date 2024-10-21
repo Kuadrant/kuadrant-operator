@@ -346,7 +346,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 		Tasks: []controller.ReconcileFunc{
 			NewAuthorinoReconciler(b.client).Subscription().Reconcile,
 			NewLimitadorReconciler(b.client).Subscription().Reconcile,
-			NewDNSWorkflow(b.client).Run,
+			NewDNSWorkflow(b.client, b.manager.GetScheme()).Run,
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isCertManagerInstalled).Run,
 			NewAuthWorkflow().Run,
 			NewRateLimitWorkflow(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,

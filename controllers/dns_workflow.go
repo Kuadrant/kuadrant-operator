@@ -8,6 +8,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -40,11 +41,11 @@ var (
 //+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords/status,verbs=get
 
-func NewDNSWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
+func NewDNSWorkflow(client *dynamic.DynamicClient, scheme *runtime.Scheme) *controller.Workflow {
 	return &controller.Workflow{
 		Precondition: NewDNSPoliciesValidator().Subscription().Reconcile,
 		Tasks: []controller.ReconcileFunc{
-			NewEffectiveDNSPoliciesReconciler(client).Subscription().Reconcile,
+			NewEffectiveDNSPoliciesReconciler(client, scheme).Subscription().Reconcile,
 		},
 		Postcondition: NewDNSPolicyStatusUpdater(client).Subscription().Reconcile,
 	}

@@ -1693,6 +1693,8 @@ spec:
                             properties:
                               dynamicMetadata:
                                 additionalProperties:
+                                  description: Settings of the success custom response
+                                    item.
                                   properties:
                                     cache:
                                       description: |-
@@ -3887,6 +3889,8 @@ spec:
                             properties:
                               dynamicMetadata:
                                 additionalProperties:
+                                  description: Settings of the success custom response
+                                    item.
                                   properties:
                                     cache:
                                       description: |-
@@ -6061,6 +6065,8 @@ spec:
                         properties:
                           dynamicMetadata:
                             additionalProperties:
+                              description: Settings of the success custom response
+                                item.
                               properties:
                                 cache:
                                   description: |-

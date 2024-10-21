@@ -51,6 +51,34 @@ metadata:
         },
         {
           "apiVersion": "kuadrant.io/v1beta3",
+          "kind": "AuthPolicy",
+          "metadata": {
+            "name": "toystore"
+          },
+          "spec": {
+            "rules": {
+              "authentication": {
+                "apikey": {
+                  "apiKey": {
+                    "selector": {}
+                  }
+                },
+                "credentials": {
+                  "authorizationHeader": {
+                    "prefix": "APIKEY"
+                  }
+                }
+              }
+            },
+            "targetRef": {
+              "group": "gateway.networking.k8s.io",
+              "kind": "HTTPRoute",
+              "name": "toystore"
+            }
+          }
+        },
+        {
+          "apiVersion": "kuadrant.io/v1beta3",
           "kind": "RateLimitPolicy",
           "metadata": {
             "name": "toystore"
@@ -78,7 +106,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2024-10-18T15:08:50Z"
+    createdAt: "2024-10-21T15:53:51Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3

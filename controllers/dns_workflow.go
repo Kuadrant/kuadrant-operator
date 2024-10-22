@@ -118,3 +118,12 @@ func dnsPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error)
 	}
 	return
 }
+
+type dnsPolicyTypeFilter func(item machinery.Policy, index int) (*v1alpha1.DNSPolicy, bool)
+
+func dnsPolicyTypeFilterFunc() func(item machinery.Policy, _ int) (*v1alpha1.DNSPolicy, bool) {
+	return func(item machinery.Policy, _ int) (*v1alpha1.DNSPolicy, bool) {
+		p, ok := item.(*v1alpha1.DNSPolicy)
+		return p, ok
+	}
+}

@@ -45,24 +45,19 @@ func (r *EffectiveDNSPoliciesReconciler) Subscription() controller.Subscription 
 	}
 }
 
-type dnsPolicyTypeFilterFunc func(item machinery.Policy, index int) (*kuadrantv1alpha1.DNSPolicy, bool)
-
 func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveDNSPoliciesReconciler")
 
-	policyTypeFilterFunc := func(item machinery.Policy, index int) (*kuadrantv1alpha1.DNSPolicy, bool) {
-		p, ok := item.(*kuadrantv1alpha1.DNSPolicy)
-		return p, ok
-	}
+	policyTypeFilterFunc := dnsPolicyTypeFilterFunc()
+	policyAcceptedFunc := dnsPolicyAcceptedStatusFunc(state)
 
 	policies := lo.FilterMap(topology.Policies().Items(), policyTypeFilterFunc)
-
-	policyAcceptedFunc := dnsPolicyAcceptedStatusFunc(state)
 
 	logger.V(1).Info("updating dns policies", "policies", len(policies))
 
 	for _, policy := range policies {
-		pLogger := logger.WithValues("policy", policy.Name)
+		pLogger := logger.WithValues("policy", policy.GetLocator())
+
 		if policy.GetDeletionTimestamp() != nil {
 			pLogger.V(1).Info("policy marked for deletion, skipping")
 			continue
@@ -191,7 +186,7 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 // listenersForPolicy returns an array of listeners that are targeted by the given policy.
 // If the target is a Listener a single element array containing that listener is returned.
 // If the target is a Gateway all listeners that do not have a DNS policy explicitly attached are returned.
-func (r *EffectiveDNSPoliciesReconciler) listenersForPolicy(_ context.Context, topology *machinery.Topology, policy machinery.Policy, policyTypeFilterFunc dnsPolicyTypeFilterFunc) []*machinery.Listener {
+func (r *EffectiveDNSPoliciesReconciler) listenersForPolicy(_ context.Context, topology *machinery.Topology, policy machinery.Policy, policyTypeFilterFunc dnsPolicyTypeFilter) []*machinery.Listener {
 	return lo.Flatten(lo.FilterMap(topology.Targetables().Items(), func(t machinery.Targetable, _ int) ([]*machinery.Listener, bool) {
 		pTarget := lo.ContainsBy(t.Policies(), func(item machinery.Policy) bool {
 			return item.GetLocator() == policy.GetLocator()

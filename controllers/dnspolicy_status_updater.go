@@ -42,18 +42,18 @@ func (r *DNSPolicyStatusUpdater) Subscription() controller.Subscription {
 func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("DNSPolicyStatusUpdater")
 
-	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1alpha1.DNSPolicy, bool) {
-		p, ok := item.(*kuadrantv1alpha1.DNSPolicy)
-		return p, ok
-	})
-
+	policyTypeFilterFunc := dnsPolicyTypeFilterFunc()
 	policyAcceptedFunc := dnsPolicyAcceptedStatusFunc(state)
+
+	policies := lo.FilterMap(topology.Policies().Items(), policyTypeFilterFunc)
 
 	logger.V(1).Info("updating dns policy statuses", "policies", len(policies))
 
 	for _, policy := range policies {
+		pLogger := logger.WithValues("policy", policy.GetLocator())
+
 		if policy.GetDeletionTimestamp() != nil {
-			logger.V(1).Info("policy marked for deletion, skipping", "name", policy.Name, "namespace", policy.Namespace)
+			pLogger.V(1).Info("policy marked for deletion, skipping")
 			continue
 		}
 
@@ -100,7 +100,7 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 
 		equalStatus := equality.Semantic.DeepEqual(newStatus, policy.Status)
 		if equalStatus && policy.Generation == policy.Status.ObservedGeneration {
-			logger.V(1).Info("policy status unchanged, skipping update")
+			pLogger.V(1).Info("policy status unchanged, skipping update")
 			continue
 		}
 		newStatus.ObservedGeneration = policy.Generation
@@ -108,13 +108,13 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 
 		obj, err := controller.Destruct(policy)
 		if err != nil {
-			logger.Error(err, "unable to destruct policy") // should never happen
+			pLogger.Error(err, "unable to destruct policy") // should never happen
 			continue
 		}
 
 		_, err = r.client.Resource(kuadrantv1alpha1.DNSPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
 		if err != nil {
-			logger.Error(err, "unable to update status for policy", "name", policy.GetName(), "namespace", policy.GetNamespace())
+			pLogger.Error(err, "unable to update status for policy")
 		}
 
 		emitConditionMetrics(policy)

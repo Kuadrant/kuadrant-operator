@@ -238,7 +238,7 @@ Communication is secured and we have some protection for our infrastructure, but
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1beta3
 kind: AuthPolicy
 metadata:
   name: deny-all
@@ -407,7 +407,7 @@ Now, we will override the AuthPolicy to start accepting the API keys:
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1beta3
 kind: AuthPolicy
 metadata:
   name: toystore

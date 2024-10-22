@@ -948,7 +948,7 @@ var _ = Describe("Target status reconciler", func() {
 				if !isTLSPolicyAccepted(ctx, policyKey) {
 					return false
 				}
-				return targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef, routeNames...)
+				return targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef.LocalPolicyTargetReference, routeNames...)
 			}
 		}
 

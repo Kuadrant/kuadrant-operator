@@ -50,10 +50,12 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 						Kind: certmanv1.IssuerKind,
 					},
 				},
-				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-					Name:  gwName,
-					Kind:  "Gateway",
-					Group: gatewayapiv1alpha2.GroupName,
+				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						Name:  gwName,
+						Kind:  "Gateway",
+						Group: gatewayapiv1alpha2.GroupName,
+					},
 				},
 			},
 		}

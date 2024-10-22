@@ -72,10 +72,6 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 	})
 
 	var expectedCerts []*certmanv1.Certificate
-	filterForTLSPolicies := func(p machinery.Policy, _ int) bool {
-		_, ok := p.(*kuadrantv1.TLSPolicy)
-		return ok
-	}
 
 	for _, listener := range listeners {
 		l := listener.(*machinery.Listener)

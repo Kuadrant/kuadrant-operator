@@ -143,3 +143,8 @@ func IsTLSPolicyValid(ctx context.Context, s *sync.Map, policy *kuadrantv1.TLSPo
 
 	return isPolicyValidErrorMap[policy.GetLocator()] == nil, isPolicyValidErrorMap[policy.GetLocator()]
 }
+
+func filterForTLSPolicies(p machinery.Policy, _ int) bool {
+	_, ok := p.(*kuadrantv1.TLSPolicy)
+	return ok
+}

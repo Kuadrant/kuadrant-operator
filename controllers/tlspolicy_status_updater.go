@@ -50,10 +50,7 @@ func (t *TLSPolicyStatusUpdater) Subscription() *controller.Subscription {
 func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("UpdateStatus")
 
-	policies := lo.Filter(topology.Policies().Items(), func(item machinery.Policy, index int) bool {
-		_, ok := item.(*kuadrantv1.TLSPolicy)
-		return ok
-	})
+	policies := lo.Filter(topology.Policies().Items(), filterForTLSPolicies)
 
 	for _, policy := range policies {
 		p := policy.(*kuadrantv1.TLSPolicy)

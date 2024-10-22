@@ -43,10 +43,7 @@ func (t *TLSPoliciesValidator) Subscription() *controller.Subscription {
 func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPoliciesValidator").WithName("Validate")
 
-	policies := lo.Filter(topology.Policies().Items(), func(item machinery.Policy, index int) bool {
-		_, ok := item.(*kuadrantv1.TLSPolicy)
-		return ok
-	})
+	policies := lo.Filter(topology.Policies().Items(), filterForTLSPolicies)
 
 	isPolicyValidErrorMap := make(map[string]error, len(policies))
 

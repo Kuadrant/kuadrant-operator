@@ -159,18 +159,6 @@ rules:
   - update
   - watch
 - apiGroups:
-  - gateway.envoyproxy.io
-  resources:
-  - securitypolicies
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
   - gateway.networking.k8s.io
   resources:
   - gatewayclasses
@@ -221,18 +209,6 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - gateway.networking.k8s.io
-  resources:
-  - referencegrants
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
 - apiGroups:
   - install.istio.io
   resources:
@@ -455,18 +431,6 @@ rules:
   - istios
   verbs:
   - create
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - security.istio.io
-  resources:
-  - authorizationpolicies
-  verbs:
-  - create
-  - delete
   - get
   - list
   - patch

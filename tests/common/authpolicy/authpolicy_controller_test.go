@@ -94,13 +94,17 @@ var _ = Describe("AuthPolicy controller (Serial)", Serial, func() {
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1beta3.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  TestHTTPRouteName,
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  TestHTTPRouteName,
+						},
 					},
-					Defaults: &kuadrantv1beta3.AuthPolicyCommonSpec{
-						AuthScheme: tests.BuildBasicAuthScheme(),
+					Defaults: &kuadrantv1beta3.MergeableAuthPolicySpec{
+						AuthPolicySpecProper: kuadrantv1beta3.AuthPolicySpecProper{
+							AuthScheme: tests.BuildBasicAuthScheme(),
+						},
 					},
 				},
 			}
@@ -182,13 +186,17 @@ var _ = Describe("AuthPolicy controller", func() {
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1beta3.AuthPolicySpec{
-				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "HTTPRoute",
-					Name:  TestHTTPRouteName,
+				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						Group: gatewayapiv1.GroupName,
+						Kind:  "HTTPRoute",
+						Name:  TestHTTPRouteName,
+					},
 				},
-				Defaults: &kuadrantv1beta3.AuthPolicyCommonSpec{
-					AuthScheme: tests.BuildBasicAuthScheme(),
+				Defaults: &kuadrantv1beta3.MergeableAuthPolicySpec{
+					AuthPolicySpecProper: kuadrantv1beta3.AuthPolicySpecProper{
+						AuthScheme: tests.BuildBasicAuthScheme(),
+					},
 				},
 			},
 		}
@@ -230,7 +238,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gwName)
-				policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+				policy.Spec.Proper().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
 			})
 
 			err = k8sClient.Create(ctx, policy)
@@ -407,101 +415,113 @@ var _ = Describe("AuthPolicy controller", func() {
 
 		It("Maps to all fields of the AuthConfig", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
-				policy.Spec.CommonSpec().NamedPatterns = map[string]authorinoapi.PatternExpressions{
-					"internal-source": []authorinoapi.PatternExpression{
-						{
-							Selector: "source.ip",
-							Operator: authorinoapi.PatternExpressionOperator("matches"),
-							Value:    `192\.168\..*`,
+				policy.Spec.Proper().NamedPatterns = map[string]kuadrantv1beta3.MergeablePatternExpressions{
+					"internal-source": {
+						PatternExpressions: []authorinoapi.PatternExpression{
+							{
+								Selector: "source.ip",
+								Operator: authorinoapi.PatternExpressionOperator("matches"),
+								Value:    `192\.168\..*`,
+							},
 						},
 					},
-					"authz-and-rl-required": []authorinoapi.PatternExpression{
-						{
-							Selector: "source.ip",
-							Operator: authorinoapi.PatternExpressionOperator("neq"),
-							Value:    "192.168.0.10",
+					"authz-and-rl-required": {
+						PatternExpressions: []authorinoapi.PatternExpression{
+							{
+								Selector: "source.ip",
+								Operator: authorinoapi.PatternExpressionOperator("neq"),
+								Value:    "192.168.0.10",
+							},
 						},
 					},
 				}
-				policy.Spec.CommonSpec().Conditions = []authorinoapi.PatternExpressionOrRef{
+				policy.Spec.Proper().Conditions = []kuadrantv1beta3.MergeablePatternExpressionOrRef{
 					{
-						PatternRef: authorinoapi.PatternRef{
-							Name: "internal-source",
+						PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
+							PatternRef: authorinoapi.PatternRef{
+								Name: "internal-source",
+							},
 						},
 					},
 				}
-				policy.Spec.CommonSpec().AuthScheme = &kuadrantv1beta3.AuthSchemeSpec{
-					Authentication: map[string]authorinoapi.AuthenticationSpec{
+				policy.Spec.Proper().AuthScheme = &kuadrantv1beta3.AuthSchemeSpec{
+					Authentication: map[string]kuadrantv1beta3.MergeableAuthenticationSpec{
 						"jwt": {
-							CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-								Conditions: []authorinoapi.PatternExpressionOrRef{
-									{
-										PatternExpression: authorinoapi.PatternExpression{
-											Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
-											Operator: "neq",
-											Value:    "",
-										},
-									},
-								},
-							},
-							AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-								Plain: &authorinoapi.PlainIdentitySpec{
-									Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
-								},
-							},
-						},
-					},
-					Metadata: map[string]authorinoapi.MetadataSpec{
-						"user-groups": {
-							CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-								Conditions: []authorinoapi.PatternExpressionOrRef{
-									{
-										PatternExpression: authorinoapi.PatternExpression{
-											Selector: "auth.identity.admin",
-											Operator: authorinoapi.PatternExpressionOperator("neq"),
-											Value:    "true",
-										},
-									},
-								},
-							},
-							MetadataMethodSpec: authorinoapi.MetadataMethodSpec{
-								Http: &authorinoapi.HttpEndpointSpec{
-									Url: "http://user-groups/username={auth.identity.username}",
-								},
-							},
-						},
-					},
-					Authorization: map[string]authorinoapi.AuthorizationSpec{
-						"admin-or-privileged": {
-							CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-								Conditions: []authorinoapi.PatternExpressionOrRef{
-									{
-										PatternRef: authorinoapi.PatternRef{
-											Name: "authz-and-rl-required",
-										},
-									},
-								},
-							},
-							AuthorizationMethodSpec: authorinoapi.AuthorizationMethodSpec{
-								PatternMatching: &authorinoapi.PatternMatchingAuthorizationSpec{
-									Patterns: []authorinoapi.PatternExpressionOrRef{
+							AuthenticationSpec: authorinoapi.AuthenticationSpec{
+								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+									Conditions: []authorinoapi.PatternExpressionOrRef{
 										{
-											Any: []authorinoapi.UnstructuredPatternExpressionOrRef{
-												{
-													PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
-														PatternExpression: authorinoapi.PatternExpression{
-															Selector: "auth.identity.admin",
-															Operator: authorinoapi.PatternExpressionOperator("eq"),
-															Value:    "true",
+											PatternExpression: authorinoapi.PatternExpression{
+												Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
+												Operator: "neq",
+												Value:    "",
+											},
+										},
+									},
+								},
+								AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+									Plain: &authorinoapi.PlainIdentitySpec{
+										Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
+									},
+								},
+							},
+						},
+					},
+					Metadata: map[string]kuadrantv1beta3.MergeableMetadataSpec{
+						"user-groups": {
+							MetadataSpec: authorinoapi.MetadataSpec{
+								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+									Conditions: []authorinoapi.PatternExpressionOrRef{
+										{
+											PatternExpression: authorinoapi.PatternExpression{
+												Selector: "auth.identity.admin",
+												Operator: authorinoapi.PatternExpressionOperator("neq"),
+												Value:    "true",
+											},
+										},
+									},
+								},
+								MetadataMethodSpec: authorinoapi.MetadataMethodSpec{
+									Http: &authorinoapi.HttpEndpointSpec{
+										Url: "http://user-groups/username={auth.identity.username}",
+									},
+								},
+							},
+						},
+					},
+					Authorization: map[string]kuadrantv1beta3.MergeableAuthorizationSpec{
+						"admin-or-privileged": {
+							AuthorizationSpec: authorinoapi.AuthorizationSpec{
+								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+									Conditions: []authorinoapi.PatternExpressionOrRef{
+										{
+											PatternRef: authorinoapi.PatternRef{
+												Name: "authz-and-rl-required",
+											},
+										},
+									},
+								},
+								AuthorizationMethodSpec: authorinoapi.AuthorizationMethodSpec{
+									PatternMatching: &authorinoapi.PatternMatchingAuthorizationSpec{
+										Patterns: []authorinoapi.PatternExpressionOrRef{
+											{
+												Any: []authorinoapi.UnstructuredPatternExpressionOrRef{
+													{
+														PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
+															PatternExpression: authorinoapi.PatternExpression{
+																Selector: "auth.identity.admin",
+																Operator: authorinoapi.PatternExpressionOperator("eq"),
+																Value:    "true",
+															},
 														},
 													},
-												},
-												{
-													PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
-														PatternExpression: authorinoapi.PatternExpression{
-															Selector: "auth.metadata.user-groups",
-															Operator: authorinoapi.PatternExpressionOperator("incl"),
-															Value:    "privileged",
+													{
+														PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
+															PatternExpression: authorinoapi.PatternExpression{
+																Selector: "auth.metadata.user-groups",
+																Operator: authorinoapi.PatternExpressionOperator("incl"),
+																Value:    "privileged",
+															},
 														},
 													},
 												},
@@ -512,59 +532,67 @@ var _ = Describe("AuthPolicy controller", func() {
 							},
 						},
 					},
-					Response: &kuadrantv1beta3.ResponseSpec{
-						Unauthenticated: &authorinoapi.DenyWithSpec{
-							Message: &authorinoapi.ValueOrSelector{
-								Value: k8sruntime.RawExtension{Raw: []byte(`"Missing verified JWT injected by the gateway"`)},
+					Response: &kuadrantv1beta3.MergeableResponseSpec{
+						Unauthenticated: &kuadrantv1beta3.MergeableDenyWithSpec{
+							DenyWithSpec: authorinoapi.DenyWithSpec{
+								Message: &authorinoapi.ValueOrSelector{
+									Value: k8sruntime.RawExtension{Raw: []byte(`"Missing verified JWT injected by the gateway"`)},
+								},
 							},
 						},
-						Unauthorized: &authorinoapi.DenyWithSpec{
-							Message: &authorinoapi.ValueOrSelector{
-								Value: k8sruntime.RawExtension{Raw: []byte(`"User must be admin or member of privileged group"`)},
+						Unauthorized: &kuadrantv1beta3.MergeableDenyWithSpec{
+							DenyWithSpec: authorinoapi.DenyWithSpec{
+								Message: &authorinoapi.ValueOrSelector{
+									Value: k8sruntime.RawExtension{Raw: []byte(`"User must be admin or member of privileged group"`)},
+								},
 							},
 						},
-						Success: kuadrantv1beta3.WrappedSuccessResponseSpec{
-							Headers: map[string]kuadrantv1beta3.HeaderSuccessResponseSpec{
+						Success: kuadrantv1beta3.MergeableWrappedSuccessResponseSpec{
+							Headers: map[string]kuadrantv1beta3.MergeableHeaderSuccessResponseSpec{
 								"x-username": {
+									HeaderSuccessResponseSpec: authorinoapi.HeaderSuccessResponseSpec{
+										SuccessResponseSpec: authorinoapi.SuccessResponseSpec{
+											CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+												Conditions: []authorinoapi.PatternExpressionOrRef{
+													{
+														PatternExpression: authorinoapi.PatternExpression{
+															Selector: "request.headers.x-propagate-username.@case:lower",
+															Operator: authorinoapi.PatternExpressionOperator("matches"),
+															Value:    "1|yes|true",
+														},
+													},
+												},
+											},
+											AuthResponseMethodSpec: authorinoapi.AuthResponseMethodSpec{
+												Plain: &authorinoapi.PlainAuthResponseSpec{
+													Selector: "auth.identity.username",
+												},
+											},
+										},
+									},
+								},
+							},
+							DynamicMetadata: map[string]kuadrantv1beta3.MergeableSuccessResponseSpec{
+								"x-auth-data": {
 									SuccessResponseSpec: authorinoapi.SuccessResponseSpec{
 										CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
 											Conditions: []authorinoapi.PatternExpressionOrRef{
 												{
-													PatternExpression: authorinoapi.PatternExpression{
-														Selector: "request.headers.x-propagate-username.@case:lower",
-														Operator: authorinoapi.PatternExpressionOperator("matches"),
-														Value:    "1|yes|true",
+													PatternRef: authorinoapi.PatternRef{
+														Name: "authz-and-rl-required",
 													},
 												},
 											},
 										},
 										AuthResponseMethodSpec: authorinoapi.AuthResponseMethodSpec{
-											Plain: &authorinoapi.PlainAuthResponseSpec{
-												Selector: "auth.identity.username",
-											},
-										},
-									},
-								},
-							},
-							DynamicMetadata: map[string]authorinoapi.SuccessResponseSpec{
-								"x-auth-data": {
-									CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-										Conditions: []authorinoapi.PatternExpressionOrRef{
-											{
-												PatternRef: authorinoapi.PatternRef{
-													Name: "authz-and-rl-required",
-												},
-											},
-										},
-									},
-									AuthResponseMethodSpec: authorinoapi.AuthResponseMethodSpec{
-										Json: &authorinoapi.JsonAuthResponseSpec{
-											Properties: authorinoapi.NamedValuesOrSelectors{
-												"username": {
-													Selector: "auth.identity.username",
-												},
-												"groups": {
-													Selector: "auth.metadata.user-groups",
+											Json: &authorinoapi.JsonAuthResponseSpec{
+												Properties: authorinoapi.NamedValuesOrSelectors{
+													"username": {
+														Selector: "auth.identity.username",
+													},
+													"groups": {
+														Selector: "auth.metadata.user-groups",
+													},
 												},
 											},
 										},
@@ -573,31 +601,33 @@ var _ = Describe("AuthPolicy controller", func() {
 							},
 						},
 					},
-					Callbacks: map[string]authorinoapi.CallbackSpec{
+					Callbacks: map[string]kuadrantv1beta3.MergeableCallbackSpec{
 						"unauthorized-attempt": {
-							CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
-								Conditions: []authorinoapi.PatternExpressionOrRef{
-									{
-										PatternRef: authorinoapi.PatternRef{
-											Name: "authz-and-rl-required",
+							CallbackSpec: authorinoapi.CallbackSpec{
+								CommonEvaluatorSpec: authorinoapi.CommonEvaluatorSpec{
+									Conditions: []authorinoapi.PatternExpressionOrRef{
+										{
+											PatternRef: authorinoapi.PatternRef{
+												Name: "authz-and-rl-required",
+											},
 										},
-									},
-									{
-										PatternExpression: authorinoapi.PatternExpression{
-											Selector: "auth.authorization.admin-or-privileged",
-											Operator: authorinoapi.PatternExpressionOperator("neq"),
-											Value:    "true",
+										{
+											PatternExpression: authorinoapi.PatternExpression{
+												Selector: "auth.authorization.admin-or-privileged",
+												Operator: authorinoapi.PatternExpressionOperator("neq"),
+												Value:    "true",
+											},
 										},
 									},
 								},
-							},
-							CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
-								Http: &authorinoapi.HttpEndpointSpec{
-									Url:         "http://events/unauthorized",
-									Method:      ptr.To(authorinoapi.HttpMethod("POST")),
-									ContentType: authorinoapi.HttpContentType("application/json"),
-									Body: &authorinoapi.ValueOrSelector{
-										Selector: `\{"identity":{auth.identity},"request-id":{request.id}\}`,
+								CallbackMethodSpec: authorinoapi.CallbackMethodSpec{
+									Http: &authorinoapi.HttpEndpointSpec{
+										Url:         "http://events/unauthorized",
+										Method:      ptr.To(authorinoapi.HttpMethod("POST")),
+										ContentType: authorinoapi.HttpContentType("application/json"),
+										Body: &authorinoapi.ValueOrSelector{
+											Selector: `\{"identity":{auth.identity},"request-id":{request.id}\}`,
+										},
 									},
 								},
 							},
@@ -622,12 +652,12 @@ var _ = Describe("AuthPolicy controller", func() {
 				return err == nil && authConfig.Status.Ready()
 			}).WithContext(ctx).Should(BeTrue())
 			authConfigSpecAsJSON, _ := json.Marshal(authConfig.Spec)
-			Expect(string(authConfigSpecAsJSON)).To(Equal(fmt.Sprintf(`{"hosts":["%s"],"patterns":{"authz-and-rl-required":[{"selector":"source.ip","operator":"neq","value":"192.168.0.10"}],"internal-source":[{"selector":"source.ip","operator":"matches","value":"192\\.168\\..*"}]},"when":[{"patternRef":"internal-source"},{"any":[{"any":[{"all":[{"selector":"request.method","operator":"eq","value":"GET"},{"selector":"request.url_path","operator":"matches","value":"/toy.*"}]}]}]}],"authentication":{"jwt":{"when":[{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt","operator":"neq"}],"credentials":{},"plain":{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt"}}},"metadata":{"user-groups":{"when":[{"selector":"auth.identity.admin","operator":"neq","value":"true"}],"http":{"url":"http://user-groups/username={auth.identity.username}","method":"GET","contentType":"application/x-www-form-urlencoded","credentials":{}}}},"authorization":{"admin-or-privileged":{"when":[{"patternRef":"authz-and-rl-required"}],"patternMatching":{"patterns":[{"any":[{"selector":"auth.identity.admin","operator":"eq","value":"true"},{"selector":"auth.metadata.user-groups","operator":"incl","value":"privileged"}]}]}}},"response":{"unauthenticated":{"message":{"value":"Missing verified JWT injected by the gateway"}},"unauthorized":{"message":{"value":"User must be admin or member of privileged group"}},"success":{"headers":{"x-username":{"when":[{"selector":"request.headers.x-propagate-username.@case:lower","operator":"matches","value":"1|yes|true"}],"plain":{"value":null,"selector":"auth.identity.username"}}},"dynamicMetadata":{"x-auth-data":{"when":[{"patternRef":"authz-and-rl-required"}],"json":{"properties":{"groups":{"value":null,"selector":"auth.metadata.user-groups"},"username":{"value":null,"selector":"auth.identity.username"}}}}}}},"callbacks":{"unauthorized-attempt":{"when":[{"patternRef":"authz-and-rl-required"},{"selector":"auth.authorization.admin-or-privileged","operator":"neq","value":"true"}],"http":{"url":"http://events/unauthorized","method":"POST","body":{"value":null,"selector":"\\{\"identity\":{auth.identity},\"request-id\":{request.id}\\}"},"contentType":"application/json","credentials":{}}}}}`, routeHost)))
+			Expect(string(authConfigSpecAsJSON)).To(Equal(fmt.Sprintf(`{"hosts":["%s"],"patterns":{"authz-and-rl-required":{"allOf":[{"selector":"source.ip","operator":"neq","value":"192.168.0.10"}]},"internal-source":{"allOf":[{"selector":"source.ip","operator":"matches","value":"192\\.168\\..*"}]}},"when":[{"patternRef":"internal-source"},{"any":[{"any":[{"all":[{"selector":"request.method","operator":"eq","value":"GET"},{"selector":"request.url_path","operator":"matches","value":"/toy.*"}]}]}]}],"authentication":{"jwt":{"when":[{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt","operator":"neq"}],"credentials":{},"plain":{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt"}}},"metadata":{"user-groups":{"when":[{"selector":"auth.identity.admin","operator":"neq","value":"true"}],"http":{"url":"http://user-groups/username={auth.identity.username}","method":"GET","contentType":"application/x-www-form-urlencoded","credentials":{}}}},"authorization":{"admin-or-privileged":{"when":[{"patternRef":"authz-and-rl-required"}],"patternMatching":{"patterns":[{"any":[{"selector":"auth.identity.admin","operator":"eq","value":"true"},{"selector":"auth.metadata.user-groups","operator":"incl","value":"privileged"}]}]}}},"response":{"unauthenticated":{"message":{"value":"Missing verified JWT injected by the gateway"}},"unauthorized":{"message":{"value":"User must be admin or member of privileged group"}},"success":{"headers":{"x-username":{"when":[{"selector":"request.headers.x-propagate-username.@case:lower","operator":"matches","value":"1|yes|true"}],"plain":{"value":null,"selector":"auth.identity.username"}}},"filters":{"x-auth-data":{"when":[{"patternRef":"authz-and-rl-required"}],"json":{"properties":{"groups":{"value":null,"selector":"auth.metadata.user-groups"},"username":{"value":null,"selector":"auth.identity.username"}}}}}}},"callbacks":{"unauthorized-attempt":{"when":[{"patternRef":"authz-and-rl-required"},{"selector":"auth.authorization.admin-or-privileged","operator":"neq","value":"true"}],"http":{"url":"http://events/unauthorized","method":"POST","body":{"value":null,"selector":"\\{\"identity\":{auth.identity},\"request-id\":{request.id}\\}"},"contentType":"application/json","credentials":{}}}}}`, routeHost)))
 		}, testTimeOut)
 
 		It("Succeeds when AuthScheme is not defined", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
-				policy.Spec.CommonSpec().AuthScheme = nil
+				policy.Spec.Proper().AuthScheme = nil
 			})
 
 			err := k8sClient.Create(ctx, policy)
@@ -863,7 +893,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Overrides = &kuadrantv1beta3.AuthPolicyCommonSpec{}
+				policy.Spec.Overrides = &kuadrantv1beta3.MergeableAuthPolicySpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -900,7 +930,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Overrides = &kuadrantv1beta3.AuthPolicyCommonSpec{}
+				policy.Spec.Overrides = &kuadrantv1beta3.MergeableAuthPolicySpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -930,7 +960,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Overrides = &kuadrantv1beta3.AuthPolicyCommonSpec{}
+				policy.Spec.Overrides = &kuadrantv1beta3.MergeableAuthPolicySpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -967,7 +997,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+				policy.Spec.Proper().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
 			})
 
 			err = k8sClient.Create(ctx, gatewayPolicy)
@@ -984,7 +1014,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				if err != nil {
 					return false
 				}
-				gatewayPolicy.Spec.Overrides = &kuadrantv1beta3.AuthPolicyCommonSpec{}
+				gatewayPolicy.Spec.Overrides = &kuadrantv1beta3.MergeableAuthPolicySpec{}
 				gatewayPolicy.Spec.Defaults = nil
 				gatewayPolicy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				gatewayPolicy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -1013,7 +1043,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Overrides = &kuadrantv1beta3.AuthPolicyCommonSpec{}
+				policy.Spec.Overrides = &kuadrantv1beta3.MergeableAuthPolicySpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -1034,8 +1064,8 @@ var _ = Describe("AuthPolicy controller", func() {
 					return false
 				}
 				gatewayPolicy.Spec.Overrides = nil
-				gatewayPolicy.Spec.CommonSpec().AuthScheme = tests.BuildBasicAuthScheme()
-				gatewayPolicy.Spec.CommonSpec().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
+				gatewayPolicy.Spec.Proper().AuthScheme = tests.BuildBasicAuthScheme()
+				gatewayPolicy.Spec.Proper().AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
 				err = k8sClient.Update(ctx, gatewayPolicy)
 				logf.Log.V(1).Info("Updating AuthPolicy", "key", client.ObjectKeyFromObject(gatewayPolicy).String(), "error", err)
 				return err == nil
@@ -1049,7 +1079,7 @@ var _ = Describe("AuthPolicy controller", func() {
 
 		It("Blocks creation of AuthPolicies with overrides targeting HTTPRoutes", func(ctx SpecContext) {
 			routePolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
-				policy.Spec.Overrides = &kuadrantv1beta3.AuthPolicyCommonSpec{}
+				policy.Spec.Overrides = &kuadrantv1beta3.MergeableAuthPolicySpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 			})
@@ -1083,10 +1113,12 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 				Namespace: testNamespace,
 			},
 			Spec: kuadrantv1beta3.AuthPolicySpec{
-				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "HTTPRoute",
-					Name:  "my-target",
+				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						Group: gatewayapiv1.GroupName,
+						Kind:  "HTTPRoute",
+						Name:  "my-target",
+					},
 				},
 			},
 		}
@@ -1142,8 +1174,10 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("Valid when only explicit defaults are used", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
-				policy.Spec.Defaults = &kuadrantv1beta3.AuthPolicyCommonSpec{
-					AuthScheme: tests.BuildBasicAuthScheme(),
+				policy.Spec.Defaults = &kuadrantv1beta3.MergeableAuthPolicySpec{
+					AuthPolicySpecProper: kuadrantv1beta3.AuthPolicySpecProper{
+						AuthScheme: tests.BuildBasicAuthScheme(),
+					},
 				}
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
@@ -1151,7 +1185,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("Invalid when both implicit and explicit defaults are used - authScheme", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
-				policy.Spec.Defaults = &kuadrantv1beta3.AuthPolicyCommonSpec{}
+				policy.Spec.Defaults = &kuadrantv1beta3.MergeableAuthPolicySpec{}
 				policy.Spec.AuthScheme = tests.BuildBasicAuthScheme()
 			})
 			err := k8sClient.Create(ctx, policy)
@@ -1161,13 +1195,15 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("Invalid when both implicit and explicit defaults are used - namedPatterns", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
-				policy.Spec.Defaults = &kuadrantv1beta3.AuthPolicyCommonSpec{}
-				policy.Spec.NamedPatterns = map[string]authorinoapi.PatternExpressions{
-					"internal-source": []authorinoapi.PatternExpression{
-						{
-							Selector: "source.ip",
-							Operator: authorinoapi.PatternExpressionOperator("matches"),
-							Value:    `192\.168\..*`,
+				policy.Spec.Defaults = &kuadrantv1beta3.MergeableAuthPolicySpec{}
+				policy.Spec.NamedPatterns = map[string]kuadrantv1beta3.MergeablePatternExpressions{
+					"internal-source": {
+						PatternExpressions: []authorinoapi.PatternExpression{
+							{
+								Selector: "source.ip",
+								Operator: authorinoapi.PatternExpressionOperator("matches"),
+								Value:    `192\.168\..*`,
+							},
 						},
 					},
 				}
@@ -1179,11 +1215,13 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 		It("Invalid when both implicit and explicit defaults are used - conditions", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
-				policy.Spec.Defaults = &kuadrantv1beta3.AuthPolicyCommonSpec{}
-				policy.Spec.Conditions = []authorinoapi.PatternExpressionOrRef{
+				policy.Spec.Defaults = &kuadrantv1beta3.MergeableAuthPolicySpec{}
+				policy.Spec.Conditions = []kuadrantv1beta3.MergeablePatternExpressionOrRef{
 					{
-						PatternRef: authorinoapi.PatternRef{
-							Name: "internal-source",
+						PatternExpressionOrRef: authorinoapi.PatternExpressionOrRef{
+							PatternRef: authorinoapi.PatternRef{
+								Name: "internal-source",
+							},
 						},
 					},
 				}

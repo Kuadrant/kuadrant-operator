@@ -180,13 +180,13 @@ func rateLimitWasmActionBuilder(pathID string, effectivePolicy EffectiveRateLimi
 	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
 	return func(uniquePolicyRuleKey string, policyRule kuadrantv1.MergeableRule) (wasm.Action, error) {
 		source, found := lo.Find(policiesInPath, func(p machinery.Policy) bool {
-			return p.GetLocator() == policyRule.Source
+			return p.GetLocator() == policyRule.GetSource()
 		})
 		if !found { // should never happen
-			return wasm.Action{}, fmt.Errorf("could not find source policy %s in path %s", policyRule.Source, pathID)
+			return wasm.Action{}, fmt.Errorf("could not find source policy %s in path %s", policyRule.GetSource(), pathID)
 		}
 		limitIdentifier := LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: source.GetName(), Namespace: source.GetNamespace()}, uniquePolicyRuleKey)
-		limit := policyRule.Spec.(kuadrantv1beta3.Limit)
+		limit := policyRule.GetSpec().(kuadrantv1beta3.Limit)
 		return wasmActionFromLimit(limit, limitIdentifier, limitsNamespace), nil
 	}
 }

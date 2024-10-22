@@ -32,9 +32,20 @@ const (
 	PolicyRuleMergeStrategy = "merge"
 )
 
-type MergeableRule struct {
-	Spec   any
-	Source string
+// NewMergeableRule creates a new MergeableRule with a default source if the rule does not have one.
+func NewMergeableRule(rule MergeableRule, defaultSource string) MergeableRule {
+	if rule.GetSource() == "" {
+		return rule.WithSource(defaultSource)
+	}
+	return rule
+}
+
+// MergeableRule is a policy rule that contains a spec which can be traced back to its source,
+// i.e. to the policy where the rule spec was defined.
+type MergeableRule interface {
+	GetSpec() any
+	GetSource() string
+	WithSource(string) MergeableRule
 }
 
 // +kubebuilder:object:generate=false
@@ -99,10 +110,7 @@ func PolicyRuleDefaultsMergeStrategy(source, target machinery.Policy) machinery.
 	// add extra rules from the source
 	for ruleID, rule := range sourceMergeablePolicy.Rules() {
 		if _, ok := targetMergeablePolicy.Rules()[ruleID]; !ok {
-			rules[ruleID] = MergeableRule{
-				Spec:   rule.Spec,
-				Source: source.GetLocator(),
-			}
+			rules[ruleID] = rule.WithSource(source.GetLocator())
 		}
 	}
 

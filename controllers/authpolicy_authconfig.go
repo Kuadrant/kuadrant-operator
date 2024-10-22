@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+	"github.com/samber/lo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -131,16 +132,21 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *kuadra
 	// hosts
 	authConfig.Spec.Hosts = hosts
 
-	commonSpec := ap.Spec.CommonSpec()
+	commonSpec := ap.Spec.Proper()
 
 	// named patterns
 	if namedPatterns := commonSpec.NamedPatterns; len(namedPatterns) > 0 {
-		authConfig.Spec.NamedPatterns = namedPatterns
+		authConfig.Spec.NamedPatterns = make(map[string]authorinoapi.PatternExpressions, len(namedPatterns))
+		for name, pattern := range namedPatterns {
+			authConfig.Spec.NamedPatterns[name] = pattern.PatternExpressions
+		}
 	}
 
 	conditionsFromHTTPRoute := authorinoConditionsFromHTTPRoute(route)
 	if len(conditionsFromHTTPRoute) > 0 || len(commonSpec.Conditions) > 0 {
-		authConfig.Spec.Conditions = append(commonSpec.Conditions, conditionsFromHTTPRoute...)
+		authConfig.Spec.Conditions = append(lo.Map(commonSpec.Conditions, func(c kuadrantv1beta3.MergeablePatternExpressionOrRef, _ int) authorinoapi.PatternExpressionOrRef {
+			return c.PatternExpressionOrRef
+		}), conditionsFromHTTPRoute...)
 	}
 
 	// return early if authScheme is nil
@@ -150,34 +156,46 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *kuadra
 
 	// authentication
 	if authentication := commonSpec.AuthScheme.Authentication; len(authentication) > 0 {
-		authConfig.Spec.Authentication = authorinoSpecsFromConfigs(authentication, func(config authorinoapi.AuthenticationSpec) authorinoapi.AuthenticationSpec {
-			return config
+		authConfig.Spec.Authentication = authorinoSpecsFromConfigs(authentication, func(config kuadrantv1beta3.MergeableAuthenticationSpec) authorinoapi.AuthenticationSpec {
+			return config.AuthenticationSpec
 		})
 	}
 
 	// metadata
 	if metadata := commonSpec.AuthScheme.Metadata; len(metadata) > 0 {
-		authConfig.Spec.Metadata = authorinoSpecsFromConfigs(metadata, func(config authorinoapi.MetadataSpec) authorinoapi.MetadataSpec { return config })
+		authConfig.Spec.Metadata = authorinoSpecsFromConfigs(metadata, func(config kuadrantv1beta3.MergeableMetadataSpec) authorinoapi.MetadataSpec {
+			return config.MetadataSpec
+		})
 	}
 
 	// authorization
 	if authorization := commonSpec.AuthScheme.Authorization; len(authorization) > 0 {
-		authConfig.Spec.Authorization = authorinoSpecsFromConfigs(authorization, func(config authorinoapi.AuthorizationSpec) authorinoapi.AuthorizationSpec {
-			return config
+		authConfig.Spec.Authorization = authorinoSpecsFromConfigs(authorization, func(config kuadrantv1beta3.MergeableAuthorizationSpec) authorinoapi.AuthorizationSpec {
+			return config.AuthorizationSpec
 		})
 	}
 
 	// response
 	if response := commonSpec.AuthScheme.Response; response != nil {
+		var unauthenticated *authorinoapi.DenyWithSpec
+		if response.Unauthenticated != nil {
+			unauthenticated = &response.Unauthenticated.DenyWithSpec
+		}
+
+		var unauthorized *authorinoapi.DenyWithSpec
+		if response.Unauthorized != nil {
+			unauthorized = &response.Unauthorized.DenyWithSpec
+		}
+
 		authConfig.Spec.Response = &authorinoapi.ResponseSpec{
-			Unauthenticated: response.Unauthenticated,
-			Unauthorized:    response.Unauthorized,
+			Unauthenticated: unauthenticated,
+			Unauthorized:    unauthorized,
 			Success: authorinoapi.WrappedSuccessResponseSpec{
-				Headers: authorinoSpecsFromConfigs(response.Success.Headers, func(config kuadrantv1beta3.HeaderSuccessResponseSpec) authorinoapi.HeaderSuccessResponseSpec {
+				Headers: authorinoSpecsFromConfigs(response.Success.Headers, func(config kuadrantv1beta3.MergeableHeaderSuccessResponseSpec) authorinoapi.HeaderSuccessResponseSpec {
 					return authorinoapi.HeaderSuccessResponseSpec{SuccessResponseSpec: config.SuccessResponseSpec}
 				}),
-				DynamicMetadata: authorinoSpecsFromConfigs(response.Success.DynamicMetadata, func(config authorinoapi.SuccessResponseSpec) authorinoapi.SuccessResponseSpec {
-					return config
+				DynamicMetadata: authorinoSpecsFromConfigs(response.Success.DynamicMetadata, func(config kuadrantv1beta3.MergeableSuccessResponseSpec) authorinoapi.SuccessResponseSpec {
+					return config.SuccessResponseSpec
 				}),
 			},
 		}
@@ -185,7 +203,9 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *kuadra
 
 	// callbacks
 	if callbacks := commonSpec.AuthScheme.Callbacks; len(callbacks) > 0 {
-		authConfig.Spec.Callbacks = authorinoSpecsFromConfigs(callbacks, func(config authorinoapi.CallbackSpec) authorinoapi.CallbackSpec { return config })
+		authConfig.Spec.Callbacks = authorinoSpecsFromConfigs(callbacks, func(config kuadrantv1beta3.MergeableCallbackSpec) authorinoapi.CallbackSpec {
+			return config.CallbackSpec
+		})
 	}
 
 	return authConfig, nil

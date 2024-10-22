@@ -55,7 +55,6 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
@@ -72,20 +71,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 		log.Log.WithName("kuadrant").WithName("indexer").WithName("routeIndexByGateway"),
 	)
 	Expect(err).ToNot(HaveOccurred())
-
-	authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-		mgr.GetAPIReader(),
-		log.Log.WithName("authpolicy"),
-	)
-
-	err = (&AuthPolicyReconciler{
-		BaseReconciler:      authPolicyBaseReconciler,
-		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-		AffectedPolicyMap:   kuadrant.NewAffectedPolicyMap(),
-	}).SetupWithManager(mgr)
-	Expect(err).NotTo(HaveOccurred())
 
 	kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(),
@@ -114,19 +99,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	Expect(err).NotTo(HaveOccurred())
 
-	authPolicyIstioAuthorizationPolicyReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-		mgr.GetAPIReader(),
-		log.Log.WithName("authpolicy").WithName("istioauthorizationpolicy"),
-	)
-
-	err = (&AuthPolicyIstioAuthorizationPolicyReconciler{
-		BaseReconciler: authPolicyIstioAuthorizationPolicyReconciler,
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
 	targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
@@ -136,32 +108,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	err = (&TargetStatusReconciler{
 		BaseReconciler: targetStatusBaseReconciler,
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
-	authPolicyEnvoySecurityPolicyReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-		mgr.GetAPIReader(),
-		log.Log.WithName("authpolicy").WithName("securitypolicy"),
-	)
-
-	err = (&AuthPolicyEnvoySecurityPolicyReconciler{
-		BaseReconciler: authPolicyEnvoySecurityPolicyReconciler,
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
-	envoySecurityPolicyReferenceGrantReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-		mgr.GetAPIReader(),
-		log.Log.WithName("authpolicy").WithName("referencegrant"),
-	)
-
-	err = (&EnvoySecurityPolicyReferenceGrantReconciler{
-		BaseReconciler: envoySecurityPolicyReferenceGrantReconciler,
 	}).SetupWithManager(mgr)
 
 	Expect(err).NotTo(HaveOccurred())

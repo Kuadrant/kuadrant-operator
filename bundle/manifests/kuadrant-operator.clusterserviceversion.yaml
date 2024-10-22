@@ -106,7 +106,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2024-11-04T15:47:12Z"
+    createdAt: "2024-11-05T09:42:50Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
@@ -309,18 +309,6 @@ spec:
           - update
           - watch
         - apiGroups:
-          - gateway.envoyproxy.io
-          resources:
-          - securitypolicies
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
           - gateway.networking.k8s.io
           resources:
           - gatewayclasses
@@ -371,18 +359,6 @@ spec:
           - get
           - patch
           - update
-        - apiGroups:
-          - gateway.networking.k8s.io
-          resources:
-          - referencegrants
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
         - apiGroups:
           - install.istio.io
           resources:
@@ -605,18 +581,6 @@ spec:
           - istios
           verbs:
           - create
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - security.istio.io
-          resources:
-          - authorizationpolicies
-          verbs:
-          - create
-          - delete
           - get
           - list
           - patch

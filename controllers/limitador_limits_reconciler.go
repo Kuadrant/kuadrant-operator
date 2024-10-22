@@ -94,14 +94,14 @@ func (r *limitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 		limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
 		for limitKey, mergeableLimit := range effectivePolicy.Spec.Rules() {
 			policy, found := lo.Find(kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state)), func(p machinery.Policy) bool {
-				return p.GetLocator() == mergeableLimit.Source
+				return p.GetLocator() == mergeableLimit.GetSource()
 			})
 			if !found { // should never happen
-				logger.Error(fmt.Errorf("origin policy %s not found in path %s", mergeableLimit.Source, pathID), "failed to build limitador limit definition")
+				logger.Error(fmt.Errorf("origin policy %s not found in path %s", mergeableLimit.GetSource(), pathID), "failed to build limitador limit definition")
 				continue
 			}
 			limitIdentifier := LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
-			limit := mergeableLimit.Spec.(kuadrantv1beta3.Limit)
+			limit := mergeableLimit.GetSpec().(kuadrantv1beta3.Limit)
 			rateLimits := lo.Map(limit.Rates, func(rate kuadrantv1beta3.Rate, _ int) limitadorv1alpha1.RateLimit {
 				maxValue, seconds := rate.ToSeconds()
 				return limitadorv1alpha1.RateLimit{

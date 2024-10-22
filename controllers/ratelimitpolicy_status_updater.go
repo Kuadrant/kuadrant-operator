@@ -124,10 +124,10 @@ func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 		}
 		effectivePolicyRules := effectivePolicy.Spec.Rules()
 		for _, policyRuleKey := range policyRuleKeys {
-			if effectivePolicyRule, ok := effectivePolicyRules[policyRuleKey]; !ok || (ok && effectivePolicyRule.Source != policy.GetLocator()) {
+			if effectivePolicyRule, ok := effectivePolicyRules[policyRuleKey]; !ok || (ok && effectivePolicyRule.GetSource() != policy.GetLocator()) {
 				var overriddenBy string
 				if ok { // TODO(guicassolato): !ok → we cannot tell which policy is overriding the rule, this information is lost when the policy rule is dropped during an atomic override
-					overriddenBy = effectivePolicyRule.Source
+					overriddenBy = effectivePolicyRule.GetSource()
 				}
 				overridingPolicies[policyRuleKey] = append(overridingPolicies[policyRuleKey], overriddenBy)
 				continue

@@ -28,14 +28,19 @@ spec:
       name: Enforced
       priority: 2
       type: string
-    - description: Type of the referenced Gateway API resource
+    - description: Kind of the object to which the policy aaplies
       jsonPath: .spec.targetRef.kind
-      name: TargetRefKind
+      name: TargetKind
       priority: 2
       type: string
-    - description: Name of the referenced Gateway API resource
+    - description: Name of the object to which the policy applies
       jsonPath: .spec.targetRef.name
-      name: TargetRefName
+      name: TargetName
+      priority: 2
+      type: string
+    - description: 'Name of the section within the object to which the policy applies '
+      jsonPath: .spec.targetRef.sectionName
+      name: TargetSection
       priority: 2
       type: string
     - jsonPath: .metadata.creationTimestamp
@@ -65,41 +70,45 @@ spec:
           metadata:
             type: object
           spec:
-            description: Mutual Exclusivity Validation
             properties:
               defaults:
                 description: |-
-                  Defaults define explicit default values for this policy and for policies inheriting this policy.
-                  Defaults are mutually exclusive with implicit defaults defined by AuthPolicyCommonSpec.
+                  Rules to apply as defaults. Can be overridden by more specific policiy rules lower in the hierarchy and by less specific policy overrides.
+                  Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
                 properties:
                   patterns:
                     additionalProperties:
-                      items:
-                        properties:
-                          operator:
-                            description: |-
-                              The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
-                              Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
-                            enum:
-                            - eq
-                            - neq
-                            - incl
-                            - excl
-                            - matches
-                            type: string
-                          selector:
-                            description: |-
-                              Path selector to fetch content from the authorization JSON (e.g. 'request.method').
-                              Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
-                              Authorino custom JSON path modifiers are also supported.
-                            type: string
-                          value:
-                            description: |-
-                              The value of reference for the comparison with the content fetched from the authorization JSON.
-                              If used with the "matches" operator, the value must compile to a valid Golang regex.
-                            type: string
-                        type: object
-                      type: array
+                      properties:
+                        allOf:
+                          items:
+                            properties:
+                              operator:
+                                description: |-
+                                  The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
+                                  Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
+                                enum:
+                                - eq
+                                - neq
+                                - incl
+                                - excl
+                                - matches
+                                type: string
+                              selector:
+                                description: |-
+                                  Path selector to fetch content from the authorization JSON (e.g. 'request.method').
+                                  Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
+                                  Authorino custom JSON path modifiers are also supported.
+                                type: string
+                              value:
+                                description: |-
+                                  The value of reference for the comparison with the content fetched from the authorization JSON.
+                                  If used with the "matches" operator, the value must compile to a valid Golang regex.
+                                type: string
+                            type: object
+                          type: array
+                      required:
+                      - allOf
+                      type: object
                     description: Named sets of patterns that can be referred in `when`
                       conditions and in pattern-matching authorization policy rules.
                     type: object
@@ -478,6 +487,7 @@ spec:
                         description: |-
                           Authentication configs.
                           At least one config MUST evaluate to a valid identity object for the auth request to be successful.
+                        maxProperties: 10
                         type: object
                       authorization:
                         additionalProperties:
@@ -1065,6 +1075,7 @@ spec:
                         description: |-
                           Authorization policies.
                           All policies MUST evaluate to "allowed = true" for the auth request be successful.
+                        maxProperties: 10
                         type: object
                       callbacks:
                         additionalProperties:
@@ -1352,6 +1363,7 @@ spec:
                         description: |-
                           Callback functions.
                           Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
+                        maxProperties: 10
                         type: object
                       metadata:
                         additionalProperties:
@@ -1681,6 +1693,7 @@ spec:
                         description: |-
                           Metadata sources.
                           Authorino fetches auth metadata as JSON from sources specified in this config.
+                        maxProperties: 10
                         type: object
                       response:
                         description: |-
@@ -1692,10 +1705,8 @@ spec:
                               Response items to be included in the auth response when the request is authenticated and authorized.
                               For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata and/or inject data in the request.
                             properties:
-                              dynamicMetadata:
+                              filters:
                                 additionalProperties:
-                                  description: Settings of the success custom response
-                                    item.
                                   properties:
                                     cache:
                                       description: |-
@@ -1890,10 +1901,8 @@ spec:
                                       - signingKeyRefs
                                       type: object
                                   type: object
-                                description: |-
-                                  Custom success response items wrapped as HTTP headers.
-                                  For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata.
-                                  See https://www.envoyproxy.io/docs/envoy/latest/configuration/advanced/well_known_dynamic_metadata
+                                description: Custom data made available to other filters
+                                  managed by Kuadrant (i.e. Rate Limit)
                                 type: object
                               headers:
                                 additionalProperties:
@@ -2091,9 +2100,7 @@ spec:
                                       - signingKeyRefs
                                       type: object
                                   type: object
-                                description: |-
-                                  Custom success response items wrapped as HTTP headers.
-                                  For integration of Authorino via proxy, the proxy must use these settings to inject data in the request.
+                                description: Custom headers to inject in the request.
                                 type: object
                             type: object
                           unauthenticated:
@@ -2214,6 +2221,14 @@ spec:
                             type: object
                         type: object
                     type: object
+                  strategy:
+                    default: atomic
+                    description: Strategy defines the merge strategy to apply when
+                      merging this policy with other policies.
+                    enum:
+                    - atomic
+                    - merge
+                    type: string
                   when:
                     description: |-
                       Overall conditions for the AuthPolicy to be enforced.
@@ -2265,37 +2280,42 @@ spec:
                 type: object
               overrides:
                 description: |-
-                  Overrides define explicit override values for this policy.
-                  Overrides are mutually exclusive with explicit and implicit defaults defined by AuthPolicyCommonSpec.
+                  Rules to apply as overrides. Override all policy rules lower in the hierarchy. Can be overridden by less specific policy overrides.
+                  Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
                 properties:
                   patterns:
                     additionalProperties:
-                      items:
-                        properties:
-                          operator:
-                            description: |-
-                              The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
-                              Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
-                            enum:
-                            - eq
-                            - neq
-                            - incl
-                            - excl
-                            - matches
-                            type: string
-                          selector:
-                            description: |-
-                              Path selector to fetch content from the authorization JSON (e.g. 'request.method').
-                              Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
-                              Authorino custom JSON path modifiers are also supported.
-                            type: string
-                          value:
-                            description: |-
-                              The value of reference for the comparison with the content fetched from the authorization JSON.
-                              If used with the "matches" operator, the value must compile to a valid Golang regex.
-                            type: string
-                        type: object
-                      type: array
+                      properties:
+                        allOf:
+                          items:
+                            properties:
+                              operator:
+                                description: |-
+                                  The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
+                                  Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
+                                enum:
+                                - eq
+                                - neq
+                                - incl
+                                - excl
+                                - matches
+                                type: string
+                              selector:
+                                description: |-
+                                  Path selector to fetch content from the authorization JSON (e.g. 'request.method').
+                                  Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
+                                  Authorino custom JSON path modifiers are also supported.
+                                type: string
+                              value:
+                                description: |-
+                                  The value of reference for the comparison with the content fetched from the authorization JSON.
+                                  If used with the "matches" operator, the value must compile to a valid Golang regex.
+                                type: string
+                            type: object
+                          type: array
+                      required:
+                      - allOf
+                      type: object
                     description: Named sets of patterns that can be referred in `when`
                       conditions and in pattern-matching authorization policy rules.
                     type: object
@@ -2674,6 +2694,7 @@ spec:
                         description: |-
                           Authentication configs.
                           At least one config MUST evaluate to a valid identity object for the auth request to be successful.
+                        maxProperties: 10
                         type: object
                       authorization:
                         additionalProperties:
@@ -3261,6 +3282,7 @@ spec:
                         description: |-
                           Authorization policies.
                           All policies MUST evaluate to "allowed = true" for the auth request be successful.
+                        maxProperties: 10
                         type: object
                       callbacks:
                         additionalProperties:
@@ -3548,6 +3570,7 @@ spec:
                         description: |-
                           Callback functions.
                           Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
+                        maxProperties: 10
                         type: object
                       metadata:
                         additionalProperties:
@@ -3877,6 +3900,7 @@ spec:
                         description: |-
                           Metadata sources.
                           Authorino fetches auth metadata as JSON from sources specified in this config.
+                        maxProperties: 10
                         type: object
                       response:
                         description: |-
@@ -3888,10 +3912,8 @@ spec:
                               Response items to be included in the auth response when the request is authenticated and authorized.
                               For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata and/or inject data in the request.
                             properties:
-                              dynamicMetadata:
+                              filters:
                                 additionalProperties:
-                                  description: Settings of the success custom response
-                                    item.
                                   properties:
                                     cache:
                                       description: |-
@@ -4086,10 +4108,8 @@ spec:
                                       - signingKeyRefs
                                       type: object
                                   type: object
-                                description: |-
-                                  Custom success response items wrapped as HTTP headers.
-                                  For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata.
-                                  See https://www.envoyproxy.io/docs/envoy/latest/configuration/advanced/well_known_dynamic_metadata
+                                description: Custom data made available to other filters
+                                  managed by Kuadrant (i.e. Rate Limit)
                                 type: object
                               headers:
                                 additionalProperties:
@@ -4287,9 +4307,7 @@ spec:
                                       - signingKeyRefs
                                       type: object
                                   type: object
-                                description: |-
-                                  Custom success response items wrapped as HTTP headers.
-                                  For integration of Authorino via proxy, the proxy must use these settings to inject data in the request.
+                                description: Custom headers to inject in the request.
                                 type: object
                             type: object
                           unauthenticated:
@@ -4410,6 +4428,14 @@ spec:
                             type: object
                         type: object
                     type: object
+                  strategy:
+                    default: atomic
+                    description: Strategy defines the merge strategy to apply when
+                      merging this policy with other policies.
+                    enum:
+                    - atomic
+                    - merge
+                    type: string
                   when:
                     description: |-
                       Overall conditions for the AuthPolicy to be enforced.
@@ -4461,32 +4487,37 @@ spec:
                 type: object
               patterns:
                 additionalProperties:
-                  items:
-                    properties:
-                      operator:
-                        description: |-
-                          The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
-                          Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
-                        enum:
-                        - eq
-                        - neq
-                        - incl
-                        - excl
-                        - matches
-                        type: string
-                      selector:
-                        description: |-
-                          Path selector to fetch content from the authorization JSON (e.g. 'request.method').
-                          Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
-                          Authorino custom JSON path modifiers are also supported.
-                        type: string
-                      value:
-                        description: |-
-                          The value of reference for the comparison with the content fetched from the authorization JSON.
-                          If used with the "matches" operator, the value must compile to a valid Golang regex.
-                        type: string
-                    type: object
-                  type: array
+                  properties:
+                    allOf:
+                      items:
+                        properties:
+                          operator:
+                            description: |-
+                              The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
+                              Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
+                            enum:
+                            - eq
+                            - neq
+                            - incl
+                            - excl
+                            - matches
+                            type: string
+                          selector:
+                            description: |-
+                              Path selector to fetch content from the authorization JSON (e.g. 'request.method').
+                              Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
+                              Authorino custom JSON path modifiers are also supported.
+                            type: string
+                          value:
+                            description: |-
+                              The value of reference for the comparison with the content fetched from the authorization JSON.
+                              If used with the "matches" operator, the value must compile to a valid Golang regex.
+                            type: string
+                        type: object
+                      type: array
+                  required:
+                  - allOf
+                  type: object
                 description: Named sets of patterns that can be referred in `when`
                   conditions and in pattern-matching authorization policy rules.
                 type: object
@@ -4861,6 +4892,7 @@ spec:
                     description: |-
                       Authentication configs.
                       At least one config MUST evaluate to a valid identity object for the auth request to be successful.
+                    maxProperties: 10
                     type: object
                   authorization:
                     additionalProperties:
@@ -5444,6 +5476,7 @@ spec:
                     description: |-
                       Authorization policies.
                       All policies MUST evaluate to "allowed = true" for the auth request be successful.
+                    maxProperties: 10
                     type: object
                   callbacks:
                     additionalProperties:
@@ -5728,6 +5761,7 @@ spec:
                     description: |-
                       Callback functions.
                       Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
+                    maxProperties: 10
                     type: object
                   metadata:
                     additionalProperties:
@@ -6053,6 +6087,7 @@ spec:
                     description: |-
                       Metadata sources.
                       Authorino fetches auth metadata as JSON from sources specified in this config.
+                    maxProperties: 10
                     type: object
                   response:
                     description: |-
@@ -6064,10 +6099,8 @@ spec:
                           Response items to be included in the auth response when the request is authenticated and authorized.
                           For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata and/or inject data in the request.
                         properties:
-                          dynamicMetadata:
+                          filters:
                             additionalProperties:
-                              description: Settings of the success custom response
-                                item.
                               properties:
                                 cache:
                                   description: |-
@@ -6261,10 +6294,8 @@ spec:
                                   - signingKeyRefs
                                   type: object
                               type: object
-                            description: |-
-                              Custom success response items wrapped as HTTP headers.
-                              For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata.
-                              See https://www.envoyproxy.io/docs/envoy/latest/configuration/advanced/well_known_dynamic_metadata
+                            description: Custom data made available to other filters
+                              managed by Kuadrant (i.e. Rate Limit)
                             type: object
                           headers:
                             additionalProperties:
@@ -6461,9 +6492,7 @@ spec:
                                   - signingKeyRefs
                                   type: object
                               type: object
-                            description: |-
-                              Custom success response items wrapped as HTTP headers.
-                              For integration of Authorino via proxy, the proxy must use these settings to inject data in the request.
+                            description: Custom headers to inject in the request.
                             type: object
                         type: object
                       unauthenticated:
@@ -6585,7 +6614,7 @@ spec:
                     type: object
                 type: object
               targetRef:
-                description: TargetRef identifies an API object to apply policy to.
+                description: Reference to the object to which this policy applies.
                 properties:
                   group:
                     description: Group is the group of the target resource.
@@ -6602,6 +6631,25 @@ spec:
                     description: Name is the name of the target resource.
                     maxLength: 253
                     minLength: 1
+                    type: string
+                  sectionName:
+                    description: |-
+                      SectionName is the name of a section within the target resource. When
+                      unspecified, this targetRef targets the entire resource. In the following
+                      resources, SectionName is interpreted as the following:
+
+
+                      * Gateway: Listener name
+                      * HTTPRoute: HTTPRouteRule name
+                      * Service: Port name
+
+
+                      If a SectionName is specified, but does not exist on the targeted object,
+                      the Policy must fail to attach, and the policy implementation should record
+                      a `ResolvedRefs` or similar Condition in the Policy's status.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                     type: string
                 required:
                 - group
@@ -6667,16 +6715,11 @@ spec:
             type: object
             x-kubernetes-validations:
             - message: Implicit and explicit defaults are mutually exclusive
-              rule: '!(has(self.defaults) && (has(self.patterns) || has(self.when)
-                || has(self.rules)))'
-            - message: Implicit defaults and explicit overrides are mutually exclusive
-              rule: '!(has(self.overrides) && (has(self.patterns) || has(self.when)
-                || has(self.rules)))'
-            - message: Explicit overrides and explicit defaults are mutually exclusive
-              rule: '!(has(self.overrides) && has(self.defaults))'
-            - message: Overrides are not allowed for policies targeting a HTTPRoute
-                resource
-              rule: '!(has(self.overrides) && self.targetRef.kind == ''HTTPRoute'')'
+              rule: '!(has(self.defaults) && has(self.rules))'
+            - message: Overrides and explicit defaults are mutually exclusive
+              rule: '!(has(self.defaults) && has(self.overrides))'
+            - message: Overrides and implicit defaults are mutually exclusive
+              rule: '!(has(self.overrides) && has(self.rules))'
           status:
             properties:
               conditions:
@@ -8572,18 +8615,6 @@ rules:
   - update
   - watch
 - apiGroups:
-  - gateway.envoyproxy.io
-  resources:
-  - securitypolicies
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
   - gateway.networking.k8s.io
   resources:
   - gatewayclasses
@@ -8634,18 +8665,6 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - gateway.networking.k8s.io
-  resources:
-  - referencegrants
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
 - apiGroups:
   - install.istio.io
   resources:
@@ -8868,18 +8887,6 @@ rules:
   - istios
   verbs:
   - create
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - security.istio.io
-  resources:
-  - authorizationpolicies
-  verbs:
-  - create
-  - delete
   - get
   - list
   - patch

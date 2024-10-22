@@ -6,19 +6,14 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
@@ -244,35 +239,4 @@ func (r *AuthPolicyReconciler) reconcileRouteParentGatewayPolicies(ctx context.C
 		go r.Reconcile(context.Background(), request)
 	}
 	return nil
-}
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	ok, err := kuadrantgatewayapi.IsGatewayAPIInstalled(mgr.GetRESTMapper())
-	if err != nil {
-		return err
-	}
-	if !ok {
-		r.Logger().Info("AuthPolicy controller disabled. GatewayAPI was not found")
-		return nil
-	}
-
-	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httproute.mapper")), mappers.WithClient(mgr.GetClient()))
-	gatewayEventMapper := mappers.NewGatewayEventMapper(
-		kuadrantv1beta3.NewAuthPolicyType(),
-		mappers.WithLogger(r.Logger().WithName("gateway.mapper")),
-		mappers.WithClient(mgr.GetClient()),
-	)
-
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&kuadrantv1beta3.AuthPolicy{}).
-		Owns(&authorinoapi.AuthConfig{}).
-		Watches(
-			&gatewayapiv1.HTTPRoute{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return httpRouteEventMapper.MapToPolicy(ctx, object, kuadrantv1beta3.NewAuthPolicyType())
-			}),
-		).
-		Watches(&gatewayapiv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.Map)).
-		Complete(r)
 }

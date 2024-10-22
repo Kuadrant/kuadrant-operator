@@ -123,17 +123,11 @@ func (p *RateLimitPolicy) Empty() bool {
 
 func (p *RateLimitPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 	rules := make(map[string]kuadrantv1.MergeableRule)
+	policyLocator := p.GetLocator()
 
 	for ruleID := range p.Spec.Proper().Limits {
 		limit := p.Spec.Proper().Limits[ruleID]
-		origin := limit.Origin
-		if origin == "" {
-			origin = p.GetLocator()
-		}
-		rules[ruleID] = kuadrantv1.MergeableRule{
-			Spec:   limit,
-			Source: origin,
-		}
+		rules[ruleID] = kuadrantv1.NewMergeableRule(&limit, policyLocator)
 	}
 
 	return rules
@@ -145,10 +139,7 @@ func (p *RateLimitPolicy) SetRules(rules map[string]kuadrantv1.MergeableRule) {
 	}
 
 	for ruleID := range rules {
-		rule := rules[ruleID]
-		limit := rule.Spec.(Limit)
-		limit.Origin = rule.Source
-		p.Spec.Proper().Limits[ruleID] = limit
+		p.Spec.Proper().Limits[ruleID] = *rules[ruleID].(*Limit)
 	}
 }
 
@@ -293,8 +284,8 @@ type Limit struct {
 	// +optional
 	Rates []Rate `json:"rates,omitempty"`
 
-	// origin stores the resource where the limit is originally defined (internal use)
-	Origin string `json:"-"`
+	// Source stores the locator of the policy where the limit is orignaly defined (internal use)
+	Source string `json:"-"`
 }
 
 func (l Limit) CountersAsStringList() []string {
@@ -302,6 +293,21 @@ func (l Limit) CountersAsStringList() []string {
 		return nil
 	}
 	return utils.Map(l.Counters, func(counter ContextSelector) string { return string(counter) })
+}
+
+var _ kuadrantv1.MergeableRule = &Limit{}
+
+func (l *Limit) GetSpec() any {
+	return l
+}
+
+func (l *Limit) GetSource() string {
+	return l.Source
+}
+
+func (l *Limit) WithSource(source string) kuadrantv1.MergeableRule {
+	l.Source = source
+	return l
 }
 
 // +kubebuilder:validation:Enum:=second;minute;hour;day

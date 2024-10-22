@@ -224,8 +224,8 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			machinery.ExpandGatewayListeners(),
 			machinery.WithGatewayAPITopologyLinks(
 				LinkListenerToCertificateFunc(store),
-				LinkGatewayToIssuerFunc(store),
-				LinkGatewayToClusterIssuerFunc(store),
+				LinkTLSPolicyToIssuerFunc(store),
+				LinkTLSPolicyToClusterIssuerFunc(store),
 			),
 		}
 		opts = append(opts, additionalOps...)

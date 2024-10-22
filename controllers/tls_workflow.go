@@ -87,12 +87,11 @@ func LinkListenerToCertificateFunc(objs controller.Store) machinery.LinkFunc {
 	}
 }
 
-func LinkGatewayToIssuerFunc(objs controller.Store) machinery.LinkFunc {
-	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), controller.ObjectAs[*gwapiv1.Gateway])
+func LinkTLSPolicyToIssuerFunc(objs controller.Store) machinery.LinkFunc {
 	tlsPolicies := lo.Map(objs.FilterByGroupKind(kuadrantv1.TLSPolicyGroupKind), controller.ObjectAs[*kuadrantv1.TLSPolicy])
 
 	return machinery.LinkFunc{
-		From: machinery.GatewayGroupKind,
+		From: kuadrantv1.TLSPolicyGroupKind,
 		To:   CertManagerIssuerKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			o := child.(*controller.RuntimeObject)
@@ -100,55 +99,33 @@ func LinkGatewayToIssuerFunc(objs controller.Store) machinery.LinkFunc {
 
 			// Policies linked to Issuer
 			// Issuer must be in the same namespace as the policy
-			linkedPolicies := lo.Filter(tlsPolicies, func(p *kuadrantv1.TLSPolicy, index int) bool {
-				return p.Spec.IssuerRef.Name == issuer.GetName() && p.GetNamespace() == issuer.GetNamespace() && p.Spec.IssuerRef.Kind == certmanagerv1.IssuerKind
+			linkedPolicies := lo.FilterMap(tlsPolicies, func(p *kuadrantv1.TLSPolicy, index int) (machinery.Object, bool) {
+				return p, p.Spec.IssuerRef.Name == issuer.GetName() && p.GetNamespace() == issuer.GetNamespace() && p.Spec.IssuerRef.Kind == certmanagerv1.IssuerKind
 			})
 
-			return findLinkedGatewaysForIssuer(linkedPolicies, gateways)
+			return linkedPolicies
 		},
 	}
 }
 
-func LinkGatewayToClusterIssuerFunc(objs controller.Store) machinery.LinkFunc {
-	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), controller.ObjectAs[*gwapiv1.Gateway])
+func LinkTLSPolicyToClusterIssuerFunc(objs controller.Store) machinery.LinkFunc {
 	tlsPolicies := lo.Map(objs.FilterByGroupKind(kuadrantv1.TLSPolicyGroupKind), controller.ObjectAs[*kuadrantv1.TLSPolicy])
 
 	return machinery.LinkFunc{
-		From: machinery.GatewayGroupKind,
+		From: kuadrantv1.TLSPolicyGroupKind,
 		To:   CertManagerClusterIssuerKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			o := child.(*controller.RuntimeObject)
 			clusterIssuer := o.Object.(*certmanagerv1.ClusterIssuer)
 
 			// Policies linked to ClusterIssuer
-			linkedPolicies := lo.Filter(tlsPolicies, func(p *kuadrantv1.TLSPolicy, index int) bool {
-				return p.Spec.IssuerRef.Name == clusterIssuer.GetName() && p.Spec.IssuerRef.Kind == certmanagerv1.ClusterIssuerKind
+			linkedPolicies := lo.FilterMap(tlsPolicies, func(p *kuadrantv1.TLSPolicy, index int) (machinery.Object, bool) {
+				return p, p.Spec.IssuerRef.Name == clusterIssuer.GetName() && p.Spec.IssuerRef.Kind == certmanagerv1.ClusterIssuerKind
 			})
 
-			return findLinkedGatewaysForIssuer(linkedPolicies, gateways)
+			return linkedPolicies
 		},
 	}
-}
-
-func findLinkedGatewaysForIssuer(linkedPolicies []*kuadrantv1.TLSPolicy, gateways []*gwapiv1.Gateway) []machinery.Object {
-	if len(linkedPolicies) == 0 {
-		return nil
-	}
-
-	// Can infer linked gateways through the policy
-	linkedGateways := lo.Filter(gateways, func(g *gwapiv1.Gateway, index int) bool {
-		for _, l := range linkedPolicies {
-			if string(l.Spec.TargetRef.Name) == g.GetName() && g.GetNamespace() == l.GetNamespace() {
-				return true
-			}
-		}
-
-		return false
-	})
-
-	return lo.Map(linkedGateways, func(item *gwapiv1.Gateway, index int) machinery.Object {
-		return &machinery.Gateway{Gateway: item}
-	})
 }
 
 // Common functions used across multiple reconcilers

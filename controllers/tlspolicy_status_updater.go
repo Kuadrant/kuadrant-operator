@@ -119,29 +119,11 @@ func (t *TLSPolicyStatusUpdater) enforcedCondition(ctx context.Context, policy *
 func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, policy *kuadrantv1.TLSPolicy, topology *machinery.Topology) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("isIssuerReady")
 
-	// Get all gateways
-	gws := lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, index int) (*machinery.Gateway, bool) {
-		gw, ok := item.(*machinery.Gateway)
-		return gw, ok
-	})
-
-	// Find gateway defined by target ref
-	gw, ok := lo.Find(gws, func(item *machinery.Gateway) bool {
-		if item.GetName() == string(policy.GetTargetRef().Name) && item.GetNamespace() == policy.GetNamespace() {
-			return true
-		}
-		return false
-	})
-
-	if !ok {
-		return fmt.Errorf("unable to find target ref %s for policy %s in ns %s in topology", policy.GetTargetRef(), policy.Name, policy.Namespace)
-	}
-
 	var conditions []certmanagerv1.IssuerCondition
 
 	switch policy.Spec.IssuerRef.Kind {
 	case "", certmanagerv1.IssuerKind:
-		objs := topology.Objects().Children(gw)
+		objs := topology.Objects().Children(policy)
 		obj, ok := lo.Find(objs, func(o machinery.Object) bool {
 			return o.GroupVersionKind().GroupKind() == CertManagerIssuerKind && o.GetNamespace() == policy.GetNamespace() && o.GetName() == policy.Spec.IssuerRef.Name
 		})
@@ -159,7 +141,7 @@ func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, policy *kuad
 
 		conditions = issuer.Status.Conditions
 	case certmanagerv1.ClusterIssuerKind:
-		objs := topology.Objects().Children(gw)
+		objs := topology.Objects().Children(policy)
 		obj, ok := lo.Find(objs, func(o machinery.Object) bool {
 			return o.GroupVersionKind().GroupKind() == CertManagerClusterIssuerKind && o.GetName() == policy.Spec.IssuerRef.Name
 		})

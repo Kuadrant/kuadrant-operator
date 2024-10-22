@@ -111,7 +111,7 @@ func (t *TLSPoliciesValidator) isValidIssuerKind(p *kuadrantv1.TLSPolicy) error 
 
 // isIssuerFound Validates that the Issuer specified can be found in the topology
 func (t *TLSPoliciesValidator) isIssuerFound(topology *machinery.Topology, p *kuadrantv1.TLSPolicy) error {
-	_, ok := lo.Find(topology.Objects().Items(), func(item machinery.Object) bool {
+	_, ok := lo.Find(topology.Objects().Children(p), func(item machinery.Object) bool {
 		runtimeObj, ok := item.(*controller.RuntimeObject)
 		if !ok {
 			return false

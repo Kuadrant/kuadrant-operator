@@ -34,10 +34,7 @@ func (r *DNSPoliciesValidator) Subscription() controller.Subscription {
 func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("DNSPoliciesValidator")
 
-	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1alpha1.DNSPolicy, bool) {
-		p, ok := item.(*kuadrantv1alpha1.DNSPolicy)
-		return p, ok
-	})
+	policies := lo.FilterMap(topology.Policies().Items(), dnsPolicyTypeFilterFunc())
 
 	logger.V(1).Info("validating dns policies", "policies", len(policies))
 
@@ -46,14 +43,10 @@ func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.Reso
 			return policy.GetLocator(), kuadrant.NewErrTargetNotFound(policy.Kind(), policy.GetTargetRef(),
 				apierrors.NewNotFound(kuadrantv1alpha1.DNSPoliciesResource.GroupResource(), policy.GetName()))
 		}
-		return policy.GetLocator(), r.policyValid(policy)
+		return policy.GetLocator(), policy.Validate()
 	}))
 
 	logger.V(1).Info("finished validating dns policies")
 
 	return nil
-}
-
-func (r *DNSPoliciesValidator) policyValid(p *kuadrantv1alpha1.DNSPolicy) error {
-	return p.Spec.ExcludeAddresses.Validate()
 }

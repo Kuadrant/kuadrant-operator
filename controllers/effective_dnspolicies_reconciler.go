@@ -45,24 +45,26 @@ func (r *EffectiveDNSPoliciesReconciler) Subscription() controller.Subscription 
 	}
 }
 
-type dnsPolicyTypeFilterFunc func(item machinery.Policy, index int) (*kuadrantv1alpha1.DNSPolicy, bool)
-
 func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveDNSPoliciesReconciler")
 
-	policyTypeFilterFunc := func(item machinery.Policy, index int) (*kuadrantv1alpha1.DNSPolicy, bool) {
-		p, ok := item.(*kuadrantv1alpha1.DNSPolicy)
-		return p, ok
-	}
+	policyTypeFilterFunc := dnsPolicyTypeFilterFunc()
+	policyAcceptedFunc := dnsPolicyAcceptedStatusFunc(state)
 
 	policies := lo.FilterMap(topology.Policies().Items(), policyTypeFilterFunc)
 
-	policyAcceptedFunc := dnsPolicyAcceptedStatusFunc(state)
+	policyErrors := map[string]error{}
 
 	logger.V(1).Info("updating dns policies", "policies", len(policies))
 
+	clusterID, err := utils.GetClusterUID(ctx, r.client)
+	if err != nil {
+		return fmt.Errorf("failed to generate cluster ID: %w", err)
+	}
+
 	for _, policy := range policies {
-		pLogger := logger.WithValues("policy", policy.Name)
+		pLogger := logger.WithValues("policy", policy.GetLocator())
+
 		if policy.GetDeletionTimestamp() != nil {
 			pLogger.V(1).Info("policy marked for deletion, skipping")
 			continue
@@ -83,25 +85,26 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 		}
 
 		var gatewayHasAttachedRoutes = false
-
-		clusterID, err := utils.GetClusterUID(ctx, r.client)
-		if err != nil {
-			return fmt.Errorf("failed to generate cluster ID: %w", err)
-		}
+		var gatewayHasAddresses = false
 
 		for _, listener := range listeners {
 			lLogger := pLogger.WithValues("listener", listener.GetLocator())
 
 			gateway := listener.Gateway
 			if listener.Hostname == nil || *listener.Hostname == "" {
-				lLogger.Info("skipping listener no hostname assigned")
+				lLogger.Info("listener has no hostname assigned, skipping")
 				continue
+			}
+
+			if len(gateway.Status.Addresses) > 0 {
+				gatewayHasAddresses = true
 			}
 
 			hasAttachedRoute := false
 			for _, statusListener := range gateway.Status.Listeners {
 				if string(listener.Name) == string(statusListener.Name) {
 					hasAttachedRoute = statusListener.AttachedRoutes > 0
+					break
 				}
 			}
 			if hasAttachedRoute {
@@ -117,37 +120,37 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 				lLogger.Error(err, "failed to set owner reference on desired record")
 				continue
 			}
-			obj, err := controller.Destruct(desiredRecord)
-			if err != nil {
-				lLogger.Error(err, "unable to destruct dns record") // should never happen
-				continue
-			}
+
 			resource := r.client.Resource(DNSRecordResource).Namespace(desiredRecord.GetNamespace())
 
-			existingRecordObj, ok := lo.Find(topology.Objects().Children(listener), func(o machinery.Object) bool {
+			existingRecordObj, recordExists := lo.Find(topology.Objects().Children(listener), func(o machinery.Object) bool {
 				_, ok := o.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
 				return ok && o.GetNamespace() == listener.GetNamespace() && o.GetName() == dnsRecordName(listener.Gateway.Name, string(listener.Name))
 			})
 
+			if len(desiredRecord.Spec.Endpoints) == 0 {
+				policyErrors[policy.GetLocator()] = ErrNoAddresses
+			}
+
 			//Update
-			if ok {
+			if recordExists {
+				rLogger := lLogger.WithValues("record", existingRecordObj.GetLocator())
+
 				existingRecord := existingRecordObj.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
 
 				//Deal with the potential deletion of a record first
 				if !hasAttachedRoute || len(desiredRecord.Spec.Endpoints) == 0 {
-					if logger.V(1).Enabled() {
-						if !hasAttachedRoute {
-							lLogger.V(1).Info("listener has no attached routes, deleting DNS record for listener")
-						} else {
-							lLogger.V(1).Info("no endpoint addresses for DNSRecord, deleting DNS record for listener")
-						}
+					if !hasAttachedRoute {
+						rLogger.V(1).Info("listener has no attached routes, deleting record for listener")
+					} else {
+						rLogger.V(1).Info("no endpoint addresses for DNSRecord, deleting record for listener")
 					}
 					r.deleteRecord(ctx, existingRecordObj)
 					continue
 				}
 
 				if desiredRecord.Spec.RootHost != existingRecord.Spec.RootHost {
-					lLogger.V(1).Info("listener hostname has changed, deleting DNS record for listener")
+					rLogger.V(1).Info("listener hostname has changed, deleting record for listener")
 					r.deleteRecord(ctx, existingRecordObj)
 					//Break to allow it to try the creation of the desired record
 					break
@@ -155,35 +158,58 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 
 				if reflect.DeepEqual(existingRecord.Spec, desiredRecord.Spec) &&
 					reflect.DeepEqual(existingRecord.OwnerReferences, desiredRecord.OwnerReferences) {
-					lLogger.V(1).Info("dns record is up to date, nothing to do")
+					rLogger.V(1).Info("dns record is up to date, nothing to do")
+					continue
+				}
+				existingRecord.Spec = desiredRecord.Spec
+				existingRecord.OwnerReferences = desiredRecord.OwnerReferences
+
+				un, err := controller.Destruct(existingRecord)
+				if err != nil {
+					lLogger.Error(err, "unable to destruct dns record")
 					continue
 				}
 
-				lLogger.V(1).Info("updating DNS record for listener")
-				_, err = resource.Update(ctx, obj, metav1.UpdateOptions{})
-				if err != nil {
-					lLogger.Error(err, "unable to update dns record")
+				rLogger.V(1).Info("updating DNS record for listener")
+				if _, uErr := resource.Update(ctx, un, metav1.UpdateOptions{}); uErr != nil {
+					rLogger.Error(uErr, "unable to update dns record")
 				}
 				continue
 			}
 
-			if !hasAttachedRoute || len(desiredRecord.Spec.Endpoints) == 0 {
+			if !hasAttachedRoute {
+				lLogger.V(1).Info("listener has no attached routes, skipping record create for listener")
+				continue
+			}
+
+			if len(desiredRecord.Spec.Endpoints) == 0 {
+				lLogger.V(1).Info("record for listener has no addresses, skipping record create for listener")
+				continue
+			}
+
+			un, err := controller.Destruct(desiredRecord)
+			if err != nil {
+				lLogger.Error(err, "unable to destruct dns record")
 				continue
 			}
 
 			//Create
 			lLogger.V(1).Info("creating DNS record for listener")
-			_, err = resource.Create(ctx, obj, metav1.CreateOptions{})
-			if err != nil && !apierrors.IsAlreadyExists(err) {
-				lLogger.Error(err, "unable to create dns record")
+			if _, cErr := resource.Create(ctx, un, metav1.CreateOptions{}); cErr != nil && !apierrors.IsAlreadyExists(cErr) {
+				lLogger.Error(cErr, "unable to create dns record")
 			}
 		}
 
-		if !gatewayHasAttachedRoutes {
+		if !gatewayHasAddresses {
+			pLogger.V(1).Info("gateway has no addresses")
+			policyErrors[policy.GetLocator()] = ErrNoAddresses
+		} else if !gatewayHasAttachedRoutes {
 			pLogger.V(1).Info("gateway has no attached routes")
-			//return ErrNoRoutes
+			policyErrors[policy.GetLocator()] = ErrNoRoutes
 		}
 	}
+
+	state.Store(StateDNSPolicyErrorsKey, policyErrors)
 
 	return r.deleteOrphanDNSRecords(controller.LoggerIntoContext(ctx, logger), topology)
 }
@@ -191,24 +217,20 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 // listenersForPolicy returns an array of listeners that are targeted by the given policy.
 // If the target is a Listener a single element array containing that listener is returned.
 // If the target is a Gateway all listeners that do not have a DNS policy explicitly attached are returned.
-func (r *EffectiveDNSPoliciesReconciler) listenersForPolicy(_ context.Context, topology *machinery.Topology, policy machinery.Policy, policyTypeFilterFunc dnsPolicyTypeFilterFunc) []*machinery.Listener {
-	return lo.Flatten(lo.FilterMap(topology.Targetables().Items(), func(t machinery.Targetable, _ int) ([]*machinery.Listener, bool) {
-		pTarget := lo.ContainsBy(t.Policies(), func(item machinery.Policy) bool {
-			return item.GetLocator() == policy.GetLocator()
-		})
-		if pTarget {
-			if l, ok := t.(*machinery.Listener); ok {
-				return []*machinery.Listener{l}, true
-			}
-			if g, ok := t.(*machinery.Gateway); ok {
-				listeners := lo.FilterMap(topology.Targetables().Children(g), func(t machinery.Targetable, _ int) (*machinery.Listener, bool) {
-					l, lok := t.(*machinery.Listener)
-					lPolicies := lo.FilterMap(l.Policies(), policyTypeFilterFunc)
-					return l, lok && len(lPolicies) == 0
-				})
-				return listeners, true
-			}
+func (r *EffectiveDNSPoliciesReconciler) listenersForPolicy(_ context.Context, topology *machinery.Topology, policy machinery.Policy, policyTypeFilterFunc dnsPolicyTypeFilter) []*machinery.Listener {
+	return lo.Flatten(lo.FilterMap(topology.Targetables().Children(policy), func(t machinery.Targetable, _ int) ([]*machinery.Listener, bool) {
+		if l, ok := t.(*machinery.Listener); ok {
+			return []*machinery.Listener{l}, true
 		}
+		if g, ok := t.(*machinery.Gateway); ok {
+			listeners := lo.FilterMap(topology.Targetables().Children(g), func(t machinery.Targetable, _ int) (*machinery.Listener, bool) {
+				l, lok := t.(*machinery.Listener)
+				lPolicies := lo.FilterMap(l.Policies(), policyTypeFilterFunc)
+				return l, lok && len(lPolicies) == 0
+			})
+			return listeners, true
+		}
+
 		return nil, false
 	}))
 }
@@ -219,6 +241,8 @@ func (r *EffectiveDNSPoliciesReconciler) deleteOrphanDNSRecords(ctx context.Cont
 
 	orphanRecords := lo.Filter(topology.Objects().Items(), func(item machinery.Object, _ int) bool {
 		if item.GroupVersionKind().GroupKind() == DNSRecordGroupKind {
+			rLogger := logger.WithValues("record", item.GetLocator())
+
 			pTargettables := topology.Targetables().Parents(item)
 			pPolicies := topology.Policies().Parents(item)
 
@@ -229,21 +253,24 @@ func (r *EffectiveDNSPoliciesReconciler) deleteOrphanDNSRecords(ctx context.Cont
 				pTargetablesLocs := lo.Map(pTargettables, func(item machinery.Targetable, _ int) string {
 					return item.GetLocator()
 				})
-				logger.V(1).Info("dns record parents", "record", item.GetLocator(), "targetables", pTargetablesLocs, "polices", pPoliciesLocs)
+				rLogger.V(1).Info("dns record parents", "targetables", pTargetablesLocs, "polices", pPoliciesLocs)
 			}
 
 			//Target removed from topology
 			if len(pTargettables) == 0 {
+				rLogger.Info("dns record has not parent targetable, deleting")
 				return true
 			}
 
 			//Policy removed from topology
 			if len(pPolicies) == 0 {
+				rLogger.Info("dns record has not parent policy, deleting")
 				return true
 			}
 
 			//Policy target ref changes
 			if len(topology.All().Paths(pPolicies[0], item)) == 1 { //There will always be at least one DNSPolicy -> DNSRecord
+				rLogger.Info("dns record has no path through a targetable to the policy, deleting", "policy", pPolicies[0])
 				return true
 			}
 
@@ -266,6 +293,8 @@ func (r *EffectiveDNSPoliciesReconciler) deleteRecord(ctx context.Context, obj m
 	if record.GetDeletionTimestamp() != nil {
 		return
 	}
+	logger.Info("deleting dns record", "record", obj.GetLocator())
+
 	resource := r.client.Resource(DNSRecordResource).Namespace(record.GetNamespace())
 	if err := resource.Delete(ctx, record.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		logger.Error(err, "failed to delete DNSRecord", "record", obj.GetLocator())

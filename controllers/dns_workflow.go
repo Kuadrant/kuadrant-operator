@@ -26,11 +26,12 @@ import (
 const (
 	DNSRecordKind             = "DNSRecord"
 	StateDNSPolicyAcceptedKey = "DNSPolicyValid"
+	StateDNSPolicyErrorsKey   = "DNSPolicyErrors"
 )
 
 var (
 	DNSRecordResource  = kuadrantdnsv1alpha1.GroupVersion.WithResource("dnsrecords")
-	DNSRecordGroupKind = schema.GroupKind{Group: kuadrantdnsv1alpha1.GroupVersion.Group, Kind: "DNSRecord"}
+	DNSRecordGroupKind = schema.GroupKind{Group: kuadrantdnsv1alpha1.GroupVersion.Group, Kind: DNSRecordKind}
 )
 
 //+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
@@ -117,4 +118,24 @@ func dnsPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error)
 		return
 	}
 	return
+}
+
+func dnsPolicyErrorFunc(state *sync.Map) func(policy machinery.Policy) error {
+	var policyErrorsMap map[string]error
+	policyErrors, exists := state.Load(StateDNSPolicyErrorsKey)
+	if exists {
+		policyErrorsMap = policyErrors.(map[string]error)
+	}
+	return func(policy machinery.Policy) error {
+		return policyErrorsMap[policy.GetLocator()]
+	}
+}
+
+type dnsPolicyTypeFilter func(item machinery.Policy, index int) (*v1alpha1.DNSPolicy, bool)
+
+func dnsPolicyTypeFilterFunc() func(item machinery.Policy, _ int) (*v1alpha1.DNSPolicy, bool) {
+	return func(item machinery.Policy, _ int) (*v1alpha1.DNSPolicy, bool) {
+		p, ok := item.(*v1alpha1.DNSPolicy)
+		return p, ok
+	}
 }

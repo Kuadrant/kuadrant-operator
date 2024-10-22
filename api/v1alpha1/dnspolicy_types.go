@@ -177,6 +177,10 @@ type DNSPolicy struct {
 	Status DNSPolicyStatus `json:"status,omitempty"`
 }
 
+func (p *DNSPolicy) Validate() error {
+	return p.Spec.ExcludeAddresses.Validate()
+}
+
 func (p *DNSPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
 	return gatewayapiv1.Namespace(p.Namespace)
 }

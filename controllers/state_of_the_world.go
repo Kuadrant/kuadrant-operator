@@ -318,16 +318,11 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() []controller.ControllerOp
 }
 
 func (b *BootOptionsBuilder) getDNSOperatorOptions() []controller.ControllerOption {
-	isDNSRecordOwnedByDNSPolicy := func(c *kuadrantdnsv1alpha1.DNSRecord) bool {
-		return true
-	}
-
 	var opts []controller.ControllerOption
 	opts = append(opts,
 		controller.WithRunnable("dnsrecord watcher", controller.Watch(
 			&kuadrantdnsv1alpha1.DNSRecord{}, DNSRecordResource, metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*kuadrantdnsv1alpha1.DNSRecord](fmt.Sprintf("%s=%s", AppLabelKey, AppLabelValue)),
-			controller.WithPredicates(ctrlruntimepredicate.NewTypedPredicateFuncs(isDNSRecordOwnedByDNSPolicy)))),
+			controller.FilterResourcesByLabel[*kuadrantdnsv1alpha1.DNSRecord](fmt.Sprintf("%s=%s", AppLabelKey, AppLabelValue)))),
 		controller.WithObjectKinds(
 			DNSRecordGroupKind,
 		),

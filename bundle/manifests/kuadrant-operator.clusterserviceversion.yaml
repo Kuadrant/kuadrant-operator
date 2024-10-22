@@ -50,7 +50,7 @@ metadata:
           "spec": {}
         },
         {
-          "apiVersion": "kuadrant.io/v1beta2",
+          "apiVersion": "kuadrant.io/v1beta3",
           "kind": "AuthPolicy",
           "metadata": {
             "name": "toystore"
@@ -106,7 +106,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2024-10-18T15:08:50Z"
+    createdAt: "2024-10-21T15:53:51Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
@@ -118,12 +118,9 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: AuthPolicy enables authentication and authorization for service
-        workloads in a Gateway API network
-      displayName: AuthPolicy
-      kind: AuthPolicy
+    - kind: AuthPolicy
       name: authpolicies.kuadrant.io
-      version: v1beta2
+      version: v1beta3
     - description: DNSPolicy configures how North-South based traffic should be balanced
         and reach the gateways
       displayName: DNSPolicy

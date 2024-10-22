@@ -15,7 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/mappers"
@@ -43,7 +43,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 	ctx := logr.NewContext(eventCtx, logger)
 
 	// fetch the authpolicy
-	ap := &api.AuthPolicy{}
+	ap := &kuadrantv1beta3.AuthPolicy{}
 	if err := r.Client().Get(ctx, req.NamespacedName, ap); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("no AuthPolicy found")
@@ -137,7 +137,7 @@ func (r *AuthPolicyReconciler) Reconcile(eventCtx context.Context, req ctrl.Requ
 }
 
 // validate performs validation before proceeding with the reconcile loop, returning a common.ErrInvalid on any failing validation
-func (r *AuthPolicyReconciler) validate(ap *api.AuthPolicy, targetNetworkObject client.Object) error {
+func (r *AuthPolicyReconciler) validate(ap *kuadrantv1beta3.AuthPolicy, targetNetworkObject client.Object) error {
 	if err := kuadrant.ValidateHierarchicalRules(ap, targetNetworkObject); err != nil {
 		return kuadrant.NewErrInvalid(ap.Kind(), err)
 	}
@@ -145,7 +145,7 @@ func (r *AuthPolicyReconciler) validate(ap *api.AuthPolicy, targetNetworkObject 
 	return nil
 }
 
-func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
+func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *kuadrantv1beta3.AuthPolicy, targetNetworkObject client.Object) error {
 	if err := r.validate(ap, targetNetworkObject); err != nil {
 		return err
 	}
@@ -171,7 +171,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 				continue
 			}
 
-			ref := &api.AuthPolicy{}
+			ref := &kuadrantv1beta3.AuthPolicy{}
 			err = r.Client().Get(ctx, policyKey, ref)
 			if err != nil {
 				return err
@@ -201,7 +201,7 @@ func (r *AuthPolicyReconciler) reconcileResources(ctx context.Context, ap *api.A
 	return nil
 }
 
-func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
+func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *kuadrantv1beta3.AuthPolicy, targetNetworkObject client.Object) error {
 	// delete based on gateway diffs
 	gatewayDiffObj, err := reconcilers.ComputeGatewayDiffs(ctx, r.Client(), ap, targetNetworkObject)
 	if err != nil {
@@ -220,11 +220,11 @@ func (r *AuthPolicyReconciler) deleteResources(ctx context.Context, ap *api.Auth
 }
 
 // Ensures only one RLP targets the network resource
-func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
+func (r *AuthPolicyReconciler) reconcileNetworkResourceDirectBackReference(ctx context.Context, ap *kuadrantv1beta3.AuthPolicy, targetNetworkObject client.Object) error {
 	return r.TargetRefReconciler.ReconcileTargetBackReference(ctx, ap, targetNetworkObject, ap.DirectReferenceAnnotationName())
 }
 
-func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object, ap *api.AuthPolicy) error {
+func (r *AuthPolicyReconciler) deleteNetworkResourceDirectBackReference(ctx context.Context, targetNetworkObject client.Object, ap *kuadrantv1beta3.AuthPolicy) error {
 	return r.TargetRefReconciler.DeleteTargetBackReference(ctx, targetNetworkObject, ap.DirectReferenceAnnotationName())
 }
 
@@ -259,18 +259,18 @@ func (r *AuthPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	httpRouteEventMapper := mappers.NewHTTPRouteEventMapper(mappers.WithLogger(r.Logger().WithName("httproute.mapper")), mappers.WithClient(mgr.GetClient()))
 	gatewayEventMapper := mappers.NewGatewayEventMapper(
-		api.NewAuthPolicyType(),
+		kuadrantv1beta3.NewAuthPolicyType(),
 		mappers.WithLogger(r.Logger().WithName("gateway.mapper")),
 		mappers.WithClient(mgr.GetClient()),
 	)
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&api.AuthPolicy{}).
+		For(&kuadrantv1beta3.AuthPolicy{}).
 		Owns(&authorinoapi.AuthConfig{}).
 		Watches(
 			&gatewayapiv1.HTTPRoute{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-				return httpRouteEventMapper.MapToPolicy(ctx, object, api.NewAuthPolicyType())
+				return httpRouteEventMapper.MapToPolicy(ctx, object, kuadrantv1beta3.NewAuthPolicyType())
 			}),
 		).
 		Watches(&gatewayapiv1.Gateway{}, handler.EnqueueRequestsFromMapFunc(gatewayEventMapper.Map)).

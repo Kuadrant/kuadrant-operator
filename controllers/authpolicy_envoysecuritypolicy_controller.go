@@ -18,7 +18,7 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadranttools"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -58,7 +58,7 @@ func (r *AuthPolicyEnvoySecurityPolicyReconciler) Reconcile(eventCtx context.Con
 		logger.V(1).Info(string(jsonData))
 	}
 
-	topology, err := kuadranttools.TopologyForPolicies(ctx, r.Client(), kuadrantv1beta2.NewAuthPolicyType())
+	topology, err := kuadranttools.TopologyForPolicies(ctx, r.Client(), kuadrantv1beta3.NewAuthPolicyType())
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -194,7 +194,7 @@ func (r *AuthPolicyEnvoySecurityPolicyReconciler) SetupWithManager(mgr ctrl.Mana
 			handler.EnqueueRequestsFromMapFunc(securityPolicyToKuadrantEventMapper.Map),
 		).
 		Watches(
-			&kuadrantv1beta2.AuthPolicy{},
+			&kuadrantv1beta3.AuthPolicy{},
 			handler.EnqueueRequestsFromMapFunc(policyToKuadrantEventMapper.Map),
 		).
 		Watches(

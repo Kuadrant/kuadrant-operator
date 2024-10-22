@@ -9,12 +9,15 @@ import (
 	"strings"
 	"time"
 
-	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
-	. "github.com/onsi/gomega"
-	"sigs.k8s.io/external-dns/endpoint"
-
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	authorinoapi "github.com/kuadrant/authorino/api/v1beta2"
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+	kuadrantdnsbuilder "github.com/kuadrant/dns-operator/pkg/builder"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	. "github.com/onsi/gomega"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -23,21 +26,14 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/external-dns/endpoint"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
-
-	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
-	kuadrantdnsbuilder "github.com/kuadrant/dns-operator/pkg/builder"
-
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta2 "github.com/kuadrant/kuadrant-operator/api/v1beta2"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
 const (
@@ -322,29 +318,29 @@ func WasmPluginIsAvailable(ctx context.Context, cl client.Client, key client.Obj
 	}
 }
 
-func IsAuthPolicyAcceptedAndEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1beta2.AuthPolicy) func() bool {
+func IsAuthPolicyAcceptedAndEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1beta3.AuthPolicy) func() bool {
 	return func() bool {
 		return IsAuthPolicyAccepted(ctx, cl, policy)() && IsAuthPolicyEnforced(ctx, cl, policy)()
 	}
 }
 
-func IsAuthPolicyAcceptedAndNotEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1beta2.AuthPolicy) func() bool {
+func IsAuthPolicyAcceptedAndNotEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1beta3.AuthPolicy) func() bool {
 	return func() bool {
 		return IsAuthPolicyAccepted(ctx, cl, policy)() && !IsAuthPolicyEnforced(ctx, cl, policy)()
 	}
 }
 
-func IsAuthPolicyAccepted(ctx context.Context, cl client.Client, policy *kuadrantv1beta2.AuthPolicy) func() bool {
+func IsAuthPolicyAccepted(ctx context.Context, cl client.Client, policy *kuadrantv1beta3.AuthPolicy) func() bool {
 	return IsAuthPolicyConditionTrue(ctx, cl, policy, string(gatewayapiv1alpha2.PolicyConditionAccepted))
 }
 
-func IsAuthPolicyEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1beta2.AuthPolicy) func() bool {
+func IsAuthPolicyEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1beta3.AuthPolicy) func() bool {
 	return IsAuthPolicyConditionTrue(ctx, cl, policy, string(kuadrant.PolicyConditionEnforced))
 }
 
 func IsAuthPolicyEnforcedCondition(ctx context.Context, cl client.Client, key client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) func() bool {
 	return func() bool {
-		p := &kuadrantv1beta2.AuthPolicy{}
+		p := &kuadrantv1beta3.AuthPolicy{}
 		if err := cl.Get(ctx, key, p); err != nil {
 			return false
 		}
@@ -358,9 +354,9 @@ func IsAuthPolicyEnforcedCondition(ctx context.Context, cl client.Client, key cl
 	}
 }
 
-func IsAuthPolicyConditionTrue(ctx context.Context, cl client.Client, policy *kuadrantv1beta2.AuthPolicy, condition string) func() bool {
+func IsAuthPolicyConditionTrue(ctx context.Context, cl client.Client, policy *kuadrantv1beta3.AuthPolicy, condition string) func() bool {
 	return func() bool {
-		existingPolicy := &kuadrantv1beta2.AuthPolicy{}
+		existingPolicy := &kuadrantv1beta3.AuthPolicy{}
 		err := cl.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)
 		return err == nil && meta.IsStatusConditionTrue(existingPolicy.Status.Conditions, condition)
 	}
@@ -657,24 +653,22 @@ func KuadrantIsReady(ctx context.Context, cl client.Client, key client.ObjectKey
 	}
 }
 
-func BuildBasicAuthScheme() *kuadrantv1beta2.AuthSchemeSpec {
-	return &kuadrantv1beta2.AuthSchemeSpec{
-		Authentication: map[string]kuadrantv1beta2.AuthenticationSpec{
+func BuildBasicAuthScheme() *kuadrantv1beta3.AuthSchemeSpec {
+	return &kuadrantv1beta3.AuthSchemeSpec{
+		Authentication: map[string]authorinoapi.AuthenticationSpec{
 			"apiKey": {
-				AuthenticationSpec: authorinoapi.AuthenticationSpec{
-					AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-						ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
-							Selector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{
-									"app": "toystore",
-								},
+				AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+					ApiKey: &authorinoapi.ApiKeyAuthenticationSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"app": "toystore",
 							},
 						},
 					},
-					Credentials: authorinoapi.Credentials{
-						AuthorizationHeader: &authorinoapi.Prefixed{
-							Prefix: "APIKEY",
-						},
+				},
+				Credentials: authorinoapi.Credentials{
+					AuthorizationHeader: &authorinoapi.Prefixed{
+						Prefix: "APIKEY",
 					},
 				},
 			},

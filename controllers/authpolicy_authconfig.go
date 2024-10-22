@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -15,14 +14,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	api "github.com/kuadrant/kuadrant-operator/api/v1beta2"
+	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) error {
+func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *kuadrantv1beta3.AuthPolicy, targetNetworkObject client.Object) error {
 	logger, err := logr.FromContext(ctx)
 	if err != nil {
 		return err
@@ -46,7 +45,7 @@ func (r *AuthPolicyReconciler) reconcileAuthConfigs(ctx context.Context, ap *api
 	return nil
 }
 
-func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.AuthPolicy, targetNetworkObject client.Object) (*authorinoapi.AuthConfig, error) {
+func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *kuadrantv1beta3.AuthPolicy, targetNetworkObject client.Object) (*authorinoapi.AuthConfig, error) {
 	logger, _ := logr.FromContext(ctx)
 	logger = logger.WithName("desiredAuthConfig")
 
@@ -139,16 +138,9 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 		authConfig.Spec.NamedPatterns = namedPatterns
 	}
 
-	// top-level conditions
-	topLevelConditionsFromRouteSelectors, err := authorinoConditionsFromRouteSelectors(route, commonSpec)
-	if err != nil {
-		return nil, err
-	}
-	if len(topLevelConditionsFromRouteSelectors) == 0 {
-		topLevelConditionsFromRouteSelectors = authorinoConditionsFromHTTPRoute(route)
-	}
-	if len(topLevelConditionsFromRouteSelectors) > 0 || len(commonSpec.Conditions) > 0 {
-		authConfig.Spec.Conditions = append(commonSpec.Conditions, topLevelConditionsFromRouteSelectors...)
+	conditionsFromHTTPRoute := authorinoConditionsFromHTTPRoute(route)
+	if len(conditionsFromHTTPRoute) > 0 || len(commonSpec.Conditions) > 0 {
+		authConfig.Spec.Conditions = append(commonSpec.Conditions, conditionsFromHTTPRoute...)
 	}
 
 	// return early if authScheme is nil
@@ -158,17 +150,21 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 
 	// authentication
 	if authentication := commonSpec.AuthScheme.Authentication; len(authentication) > 0 {
-		authConfig.Spec.Authentication = authorinoSpecsFromConfigs(authentication, func(config api.AuthenticationSpec) authorinoapi.AuthenticationSpec { return config.AuthenticationSpec })
+		authConfig.Spec.Authentication = authorinoSpecsFromConfigs(authentication, func(config authorinoapi.AuthenticationSpec) authorinoapi.AuthenticationSpec {
+			return config
+		})
 	}
 
 	// metadata
 	if metadata := commonSpec.AuthScheme.Metadata; len(metadata) > 0 {
-		authConfig.Spec.Metadata = authorinoSpecsFromConfigs(metadata, func(config api.MetadataSpec) authorinoapi.MetadataSpec { return config.MetadataSpec })
+		authConfig.Spec.Metadata = authorinoSpecsFromConfigs(metadata, func(config authorinoapi.MetadataSpec) authorinoapi.MetadataSpec { return config })
 	}
 
 	// authorization
 	if authorization := commonSpec.AuthScheme.Authorization; len(authorization) > 0 {
-		authConfig.Spec.Authorization = authorinoSpecsFromConfigs(authorization, func(config api.AuthorizationSpec) authorinoapi.AuthorizationSpec { return config.AuthorizationSpec })
+		authConfig.Spec.Authorization = authorinoSpecsFromConfigs(authorization, func(config authorinoapi.AuthorizationSpec) authorinoapi.AuthorizationSpec {
+			return config
+		})
 	}
 
 	// response
@@ -177,11 +173,11 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 			Unauthenticated: response.Unauthenticated,
 			Unauthorized:    response.Unauthorized,
 			Success: authorinoapi.WrappedSuccessResponseSpec{
-				Headers: authorinoSpecsFromConfigs(response.Success.Headers, func(config api.HeaderSuccessResponseSpec) authorinoapi.HeaderSuccessResponseSpec {
-					return authorinoapi.HeaderSuccessResponseSpec{SuccessResponseSpec: config.SuccessResponseSpec.SuccessResponseSpec}
+				Headers: authorinoSpecsFromConfigs(response.Success.Headers, func(config kuadrantv1beta3.HeaderSuccessResponseSpec) authorinoapi.HeaderSuccessResponseSpec {
+					return authorinoapi.HeaderSuccessResponseSpec{SuccessResponseSpec: config.SuccessResponseSpec}
 				}),
-				DynamicMetadata: authorinoSpecsFromConfigs(response.Success.DynamicMetadata, func(config api.SuccessResponseSpec) authorinoapi.SuccessResponseSpec {
-					return config.SuccessResponseSpec
+				DynamicMetadata: authorinoSpecsFromConfigs(response.Success.DynamicMetadata, func(config authorinoapi.SuccessResponseSpec) authorinoapi.SuccessResponseSpec {
+					return config
 				}),
 			},
 		}
@@ -189,14 +185,14 @@ func (r *AuthPolicyReconciler) desiredAuthConfig(ctx context.Context, ap *api.Au
 
 	// callbacks
 	if callbacks := commonSpec.AuthScheme.Callbacks; len(callbacks) > 0 {
-		authConfig.Spec.Callbacks = authorinoSpecsFromConfigs(callbacks, func(config api.CallbackSpec) authorinoapi.CallbackSpec { return config.CallbackSpec })
+		authConfig.Spec.Callbacks = authorinoSpecsFromConfigs(callbacks, func(config authorinoapi.CallbackSpec) authorinoapi.CallbackSpec { return config })
 	}
 
-	return mergeConditionsFromRouteSelectorsIntoConfigs(ap, route, authConfig)
+	return authConfig, nil
 }
 
 // routeGatewayAuthOverrides returns the GW auth policies that has an override field set
-func routeGatewayAuthOverrides(t *kuadrantgatewayapi.Topology, ap *api.AuthPolicy) []client.ObjectKey {
+func routeGatewayAuthOverrides(t *kuadrantgatewayapi.Topology, ap *kuadrantv1beta3.AuthPolicy) []client.ObjectKey {
 	affectedPolicies := getAffectedPolicies(t, ap)
 
 	// Filter the policies where:
@@ -205,7 +201,7 @@ func routeGatewayAuthOverrides(t *kuadrantgatewayapi.Topology, ap *api.AuthPolic
 	// 3. is an overriding policy
 	// 4. is not marked for deletion
 	affectedPolicies = utils.Filter(affectedPolicies, func(policy kuadrantgatewayapi.Policy) bool {
-		p, ok := policy.(*api.AuthPolicy)
+		p, ok := policy.(*kuadrantv1beta3.AuthPolicy)
 		return ok &&
 			p.DeletionTimestamp == nil &&
 			kuadrantgatewayapi.IsTargetRefGateway(policy.GetTargetRef()) &&
@@ -218,7 +214,7 @@ func routeGatewayAuthOverrides(t *kuadrantgatewayapi.Topology, ap *api.AuthPolic
 	})
 }
 
-func getAffectedPolicies(t *kuadrantgatewayapi.Topology, ap *api.AuthPolicy) []kuadrantgatewayapi.Policy {
+func getAffectedPolicies(t *kuadrantgatewayapi.Topology, ap *kuadrantv1beta3.AuthPolicy) []kuadrantgatewayapi.Policy {
 	topologyIndexes := kuadrantgatewayapi.NewTopologyIndexes(t)
 	var affectedPolicies []kuadrantgatewayapi.Policy
 
@@ -254,126 +250,10 @@ func authorinoSpecsFromConfigs[T, U any](configs map[string]U, extractAuthorinoS
 	return specs
 }
 
-func mergeConditionsFromRouteSelectorsIntoConfigs(ap *api.AuthPolicy, route *gatewayapiv1.HTTPRoute, authConfig *authorinoapi.AuthConfig) (*authorinoapi.AuthConfig, error) {
-	commonSpec := ap.Spec.CommonSpec()
-
-	// authentication
-	for name, config := range commonSpec.AuthScheme.Authentication {
-		conditions, err := authorinoConditionsFromRouteSelectors(route, config)
-		if err != nil {
-			return nil, err
-		}
-		if len(conditions) == 0 {
-			continue
-		}
-		c := authConfig.Spec.Authentication[name]
-		c.Conditions = append(c.Conditions, conditions...)
-		authConfig.Spec.Authentication[name] = c
-	}
-
-	// metadata
-	for name, config := range commonSpec.AuthScheme.Metadata {
-		conditions, err := authorinoConditionsFromRouteSelectors(route, config)
-		if err != nil {
-			return nil, err
-		}
-		if len(conditions) == 0 {
-			continue
-		}
-		c := authConfig.Spec.Metadata[name]
-		c.Conditions = append(c.Conditions, conditions...)
-		authConfig.Spec.Metadata[name] = c
-	}
-
-	// authorization
-	for name, config := range commonSpec.AuthScheme.Authorization {
-		conditions, err := authorinoConditionsFromRouteSelectors(route, config)
-		if err != nil {
-			return nil, err
-		}
-		if len(conditions) == 0 {
-			continue
-		}
-		c := authConfig.Spec.Authorization[name]
-		c.Conditions = append(c.Conditions, conditions...)
-		authConfig.Spec.Authorization[name] = c
-	}
-
-	// response
-	if response := commonSpec.AuthScheme.Response; response != nil {
-		// response success headers
-		for name, config := range response.Success.Headers {
-			conditions, err := authorinoConditionsFromRouteSelectors(route, config)
-			if err != nil {
-				return nil, err
-			}
-			if len(conditions) == 0 {
-				continue
-			}
-			c := authConfig.Spec.Response.Success.Headers[name]
-			c.Conditions = append(c.Conditions, conditions...)
-			authConfig.Spec.Response.Success.Headers[name] = c
-		}
-
-		// response success dynamic metadata
-		for name, config := range response.Success.DynamicMetadata {
-			conditions, err := authorinoConditionsFromRouteSelectors(route, config)
-			if err != nil {
-				return nil, err
-			}
-			if len(conditions) == 0 {
-				continue
-			}
-			c := authConfig.Spec.Response.Success.DynamicMetadata[name]
-			c.Conditions = append(c.Conditions, conditions...)
-			authConfig.Spec.Response.Success.DynamicMetadata[name] = c
-		}
-	}
-
-	// callbacks
-	for name, config := range commonSpec.AuthScheme.Callbacks {
-		conditions, err := authorinoConditionsFromRouteSelectors(route, config)
-		if err != nil {
-			return nil, err
-		}
-		if len(conditions) == 0 {
-			continue
-		}
-		c := authConfig.Spec.Callbacks[name]
-		c.Conditions = append(c.Conditions, conditions...)
-		authConfig.Spec.Callbacks[name] = c
-	}
-
-	return authConfig, nil
-}
-
-// authorinoConditionFromRouteSelectors builds a list of Authorino conditions from a config that may specify route selectors
-func authorinoConditionsFromRouteSelectors(route *gatewayapiv1.HTTPRoute, config api.RouteSelectorsGetter) ([]authorinoapi.PatternExpressionOrRef, error) {
-	routeSelectors := config.GetRouteSelectors()
-
-	if len(routeSelectors) == 0 {
-		return nil, nil
-	}
-
-	// build conditions from the rules selected by the route selectors
-	conditions := []authorinoapi.PatternExpressionOrRef{}
-	for idx := range routeSelectors {
-		routeSelector := routeSelectors[idx]
-		hostnamesForConditions := routeSelector.HostnamesForConditions(route)
-		for _, rule := range routeSelector.SelectRules(route) {
-			conditions = append(conditions, authorinoConditionsFromHTTPRouteRule(rule, hostnamesForConditions)...)
-		}
-	}
-	if len(conditions) == 0 {
-		return nil, errors.New("cannot match any route rules, check for invalid route selectors in the policy")
-	}
-	return toAuthorinoOneOfPatternExpressionsOrRefs(conditions), nil
-}
-
 // authorinoConditionsFromHTTPRoute builds a list of Authorino conditions from an HTTPRoute, without using route selectors.
 func authorinoConditionsFromHTTPRoute(route *gatewayapiv1.HTTPRoute) []authorinoapi.PatternExpressionOrRef {
 	conditions := []authorinoapi.PatternExpressionOrRef{}
-	hostnamesForConditions := (&api.RouteSelector{}).HostnamesForConditions(route)
+	hostnamesForConditions := []gatewayapiv1.Hostname{"*"}
 	for _, rule := range route.Spec.Rules {
 		conditions = append(conditions, authorinoConditionsFromHTTPRouteRule(rule, hostnamesForConditions)...)
 	}

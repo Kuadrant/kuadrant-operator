@@ -301,17 +301,21 @@ var _ = Describe("Target status reconciler", func() {
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1beta3.RateLimitPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  gatewayapiv1.ObjectName(TestHTTPRouteName),
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  gatewayapiv1.ObjectName(TestHTTPRouteName),
+						},
 					},
-					Defaults: &kuadrantv1beta3.RateLimitPolicyCommonSpec{
-						Limits: map[string]kuadrantv1beta3.Limit{
-							"l1": {
-								Rates: []kuadrantv1beta3.Rate{
-									{
-										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+					Defaults: &kuadrantv1beta3.MergeableRateLimitPolicySpec{
+						RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
+							Limits: map[string]kuadrantv1beta3.Limit{
+								"l1": {
+									Rates: []kuadrantv1beta3.Rate{
+										{
+											Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										},
 									},
 								},
 							},
@@ -333,7 +337,7 @@ var _ = Describe("Target status reconciler", func() {
 				if !tests.RLPIsAccepted(ctx, testClient(), policyKey)() {
 					return false
 				}
-				return targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef, routeNames...)
+				return targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef.LocalPolicyTargetReference, routeNames...)
 			}
 		}
 
@@ -364,10 +368,12 @@ var _ = Describe("Target status reconciler", func() {
 		It("adds PolicyAffected status condition to the targeted gateway and routes", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "Gateway",
-					Name:  TestGatewayName,
+				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						Group: gatewayapiv1.GroupName,
+						Kind:  "Gateway",
+						Name:  TestGatewayName,
+					},
 				}
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
@@ -377,10 +383,12 @@ var _ = Describe("Target status reconciler", func() {
 		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "Gateway",
-					Name:  TestGatewayName,
+				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						Group: gatewayapiv1.GroupName,
+						Kind:  "Gateway",
+						Name:  TestGatewayName,
+					},
 				}
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
@@ -416,10 +424,12 @@ var _ = Describe("Target status reconciler", func() {
 
 			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Name = "gateway-rlp"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "Gateway",
-					Name:  TestGatewayName,
+				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						Group: gatewayapiv1.GroupName,
+						Kind:  "Gateway",
+						Name:  TestGatewayName,
+					},
 				}
 			})
 			Expect(k8sClient.Create(ctx, gatewayPolicy)).To(Succeed())

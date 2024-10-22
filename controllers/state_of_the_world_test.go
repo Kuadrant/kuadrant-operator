@@ -109,13 +109,13 @@ func TestGetKuadrant(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetKuadrant(tt.args.topology)
+			got, err := GetKuadrantFromTopology(tt.args.topology)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("GetKuadrant() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("GetKuadrantFromTopology() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetKuadrant() got = %v, want %v", got, tt.want)
+				t.Errorf("GetKuadrantFromTopology() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

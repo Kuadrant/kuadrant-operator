@@ -160,7 +160,6 @@ func main() {
 	kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("kuadrant"),
-		mgr.GetEventRecorderFor("Kuadrant"),
 	)
 
 	if err = (&controllers.KuadrantReconciler{
@@ -171,24 +170,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	rateLimitPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("ratelimitpolicy"),
-		mgr.GetEventRecorderFor("RateLimitPolicy"),
-	)
-
-	if err = (&controllers.RateLimitPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-		BaseReconciler:      rateLimitPolicyBaseReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicy")
-		os.Exit(1)
-	}
-
 	authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy"),
-		mgr.GetEventRecorderFor("AuthPolicy"),
 	)
 
 	if err = (&controllers.AuthPolicyReconciler{
@@ -203,7 +187,6 @@ func main() {
 	dnsPolicyBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("dnspolicy"),
-		mgr.GetEventRecorderFor("DNSPolicy"),
 	)
 
 	if err = (&controllers.DNSPolicyReconciler{
@@ -214,23 +197,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	limitadorClusterEnvoyFilterBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("ratelimitpolicy").WithName("envoyfilter"),
-		mgr.GetEventRecorderFor("LimitadorClusterEnvoyFilter"),
-	)
-
-	if err = (&controllers.LimitadorClusterEnvoyFilterReconciler{
-		BaseReconciler: limitadorClusterEnvoyFilterBaseReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "EnvoyFilter")
-		os.Exit(1)
-	}
-
 	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("kuadrant").WithName("gateway"),
-		mgr.GetEventRecorderFor("GatewayKuadrant"),
 	)
 
 	if err = (&controllers.GatewayKuadrantReconciler{
@@ -240,23 +209,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	rateLimitingIstioWASMPluginBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("ratelimitpolicy").WithName("wasmplugin"),
-		mgr.GetEventRecorderFor("RateLimitingIstioWASMPlugin"),
-	)
-
-	if err = (&controllers.RateLimitingIstioWASMPluginReconciler{
-		BaseReconciler: rateLimitingIstioWASMPluginBaseReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "RateLimitingIstioWASMPlugin")
-		os.Exit(1)
-	}
-
 	authPolicyIstioAuthorizationPolicyReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy").WithName("istioauthorizationpolicy"),
-		mgr.GetEventRecorderFor("AuthPolicyIstioAuthorizationPolicy"),
 	)
 	if err = (&controllers.AuthPolicyIstioAuthorizationPolicyReconciler{
 		BaseReconciler: authPolicyIstioAuthorizationPolicyReconciler,
@@ -268,7 +223,6 @@ func main() {
 	targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("targetstatus"),
-		mgr.GetEventRecorderFor("PolicyTargetStatus"),
 	)
 	if err = (&controllers.TargetStatusReconciler{
 		BaseReconciler: targetStatusBaseReconciler,
@@ -277,22 +231,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	policyStatusBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("ratelimitpolicy").WithName("status"),
-		mgr.GetEventRecorderFor("RateLimitPolicyStatus"),
-	)
-	if err = (&controllers.RateLimitPolicyEnforcedStatusReconciler{
-		BaseReconciler: policyStatusBaseReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "RateLimitPolicyEnforcedStatusReconciler")
-		os.Exit(1)
-	}
-
 	authPolicyEnvoySecurityPolicyReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy").WithName("securitypolicy"),
-		mgr.GetEventRecorderFor("AuthPolicyEnvoySecurityPolicy"),
 	)
 	if err = (&controllers.AuthPolicyEnvoySecurityPolicyReconciler{
 		BaseReconciler: authPolicyEnvoySecurityPolicyReconciler,
@@ -304,36 +245,11 @@ func main() {
 	envoySecurityPolicyReferenceGrantReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("authpolicy").WithName("referencegrant"),
-		mgr.GetEventRecorderFor("EnvoySecurityPolicyReferenceGrant"),
 	)
 	if err = (&controllers.EnvoySecurityPolicyReferenceGrantReconciler{
 		BaseReconciler: envoySecurityPolicyReferenceGrantReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "EnvoySecurityPolicyReferenceGrant")
-		os.Exit(1)
-	}
-
-	envoyGatewayWasmReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("envoyGatewayWasmReconciler"),
-		mgr.GetEventRecorderFor("EnvoyGatewayWasmReconciler"),
-	)
-	if err = (&controllers.EnvoyGatewayWasmReconciler{
-		BaseReconciler: envoyGatewayWasmReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "EnvoyGatewayWasmReconciler")
-		os.Exit(1)
-	}
-
-	envoyGatewayLimitadorClusterReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("envoyGatewayLimitadorClusterReconciler"),
-		mgr.GetEventRecorderFor("EnvoyGatewayLimitadorClusterReconciler"),
-	)
-	if err = (&controllers.EnvoyGatewayLimitadorClusterReconciler{
-		BaseReconciler: envoyGatewayLimitadorClusterReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "EnvoyGatewayLimitadorClusterReconciler")
 		os.Exit(1)
 	}
 

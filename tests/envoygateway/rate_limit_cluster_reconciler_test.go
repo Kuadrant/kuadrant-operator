@@ -103,12 +103,14 @@ var _ = Describe("limitador cluster controller", func() {
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Defaults = &kuadrantv1beta3.RateLimitPolicyCommonSpec{
-					Limits: map[string]kuadrantv1beta3.Limit{
-						"l1": {
-							Rates: []kuadrantv1beta3.Rate{
-								{
-									Limit: 1, Duration: 3, Unit: "minute",
+				policy.Spec.Defaults = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1beta3.Limit{
+							"l1": {
+								Rates: []kuadrantv1beta3.Rate{
+									{
+										Limit: 1, Duration: 3, Unit: "minute",
+									},
 								},
 							},
 						},
@@ -130,9 +132,7 @@ var _ = Describe("limitador cluster controller", func() {
 
 		It("Creates envoypatchpolicy for limitador cluster", func(ctx SpecContext) {
 			patchKey := client.ObjectKey{
-				Name: controllers.LimitadorClusterEnvoyPatchPolicyName(
-					controllers.EnvoyExtensionPolicyName(TestGatewayName),
-				),
+				Name:      controllers.RateLimitClusterName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -202,9 +202,7 @@ var _ = Describe("limitador cluster controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			patchKey := client.ObjectKey{
-				Name: controllers.LimitadorClusterEnvoyPatchPolicyName(
-					controllers.EnvoyExtensionPolicyName(TestGatewayName),
-				),
+				Name:      controllers.RateLimitClusterName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 
@@ -221,9 +219,7 @@ var _ = Describe("limitador cluster controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			patchKey := client.ObjectKey{
-				Name: controllers.LimitadorClusterEnvoyPatchPolicyName(
-					controllers.EnvoyExtensionPolicyName(TestGatewayName),
-				),
+				Name:      controllers.RateLimitClusterName(TestGatewayName),
 				Namespace: testNamespace,
 			}
 

@@ -167,6 +167,9 @@ type ErrOverridden struct {
 }
 
 func (e ErrOverridden) Error() string {
+	if len(e.OverridingPolicies) == 0 {
+		return fmt.Sprintf("%s is overridden", e.Kind)
+	}
 	return fmt.Sprintf("%s is overridden by %s", e.Kind, e.OverridingPolicies)
 }
 

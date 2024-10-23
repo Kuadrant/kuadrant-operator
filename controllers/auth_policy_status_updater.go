@@ -8,6 +8,7 @@ import (
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	authorinov1beta2 "github.com/kuadrant/authorino/api/v1beta2"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -121,21 +122,27 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.Auth
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policyKind, ErrMissingStateEffectiveAuthPolicies), false)
 	}
 
+	type affectedGateway struct {
+		gateway      *machinery.Gateway
+		gatewayClass *machinery.GatewayClass
+	}
+
 	// check the state of the rules of the policy in the effective policies
 	policyRuleKeys := lo.Keys(policy.Rules())
-	affectedPaths := map[string][][]machinery.Targetable{} // policyRuleKey → topological paths affected by the policy rule
-	overridingPolicies := map[string][]string{}            // policyRuleKey → locators of policies overriding the policy rule
-	for _, effectivePolicy := range effectivePolicies.(EffectiveAuthPolicies) {
+	overridingPolicies := map[string][]string{}                     // policyRuleKey → locators of policies overriding the policy rule
+	affectedGateways := map[string]affectedGateway{}                // Gateway locator → {GatewayClass, Gateway}
+	affectedHTTPRouteRules := map[string]*machinery.HTTPRouteRule{} // pathID → HTTPRouteRule
+	for pathID, effectivePolicy := range effectivePolicies.(EffectiveAuthPolicies) {
 		if len(kuadrantv1.PoliciesInPath(effectivePolicy.Path, func(p machinery.Policy) bool { return p.GetLocator() == policy.GetLocator() })) == 0 {
 			continue
 		}
-		gatewayClass, gateway, listener, httpRoute, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
+		gatewayClass, gateway, listener, httpRoute, httpRouteRule, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
 		if !kuadrantgatewayapi.IsListenerReady(listener.Listener, gateway.Gateway) || !kuadrantgatewayapi.IsHTTPRouteReady(httpRoute.HTTPRoute, gateway.Gateway, gatewayClass.GatewayClass.Spec.ControllerName) {
 			continue
 		}
 		effectivePolicyRules := effectivePolicy.Spec.Rules()
 		for _, policyRuleKey := range policyRuleKeys {
-			if effectivePolicyRule, ok := effectivePolicyRules[policyRuleKey]; !ok || (ok && effectivePolicyRule.GetSource() != policy.GetLocator()) {
+			if effectivePolicyRule, ok := effectivePolicyRules[policyRuleKey]; !ok || (ok && effectivePolicyRule.GetSource() != policy.GetLocator()) { // policy rule has been overridden by another policy
 				var overriddenBy string
 				if ok { // TODO(guicassolato): !ok → we cannot tell which policy is overriding the rule, this information is lost when the policy rule is dropped during an atomic override
 					overriddenBy = effectivePolicyRule.GetSource()
@@ -143,17 +150,17 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.Auth
 				overridingPolicies[policyRuleKey] = append(overridingPolicies[policyRuleKey], overriddenBy)
 				continue
 			}
-			if affectedPaths[policyRuleKey] == nil {
-				affectedPaths[policyRuleKey] = [][]machinery.Targetable{}
+			// policy rule is in the effective policy, track the Gateway and the HTTPRouteRule affected by the policy
+			affectedGateways[gateway.GetLocator()] = affectedGateway{
+				gateway:      gateway,
+				gatewayClass: gatewayClass,
 			}
-			affectedPaths[policyRuleKey] = append(affectedPaths[policyRuleKey], effectivePolicy.Path)
+			affectedHTTPRouteRules[pathID] = httpRouteRule
 		}
 	}
 
-	// no rules of the policy found in the effective policies
-	if len(affectedPaths) == 0 {
-		// no rules of the policy have been overridden by any other policy
-		if len(overridingPolicies) == 0 {
+	if len(affectedGateways) == 0 { // no rules of the policy found in the effective policies
+		if len(overridingPolicies) == 0 { // no rules of the policy have been overridden by any other policy
 			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrNoRoutes(policyKind), false)
 		}
 		// all rules of the policy have been overridden by at least one other policy
@@ -171,27 +178,23 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.Auth
 	if err != nil {
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policyKind, err), false)
 	}
-	if !meta.IsStatusConditionTrue(lo.Map(authorino.Status.Conditions, authorinoConditionToProperConditionFunc), string(authorinooperatorv1beta1.ConditionReady)) {
+	if !meta.IsStatusConditionTrue(lo.Map(authorino.Status.Conditions, authorinoOperatorConditionToProperConditionFunc), string(authorinooperatorv1beta1.ConditionReady)) {
 		componentsToSync = append(componentsToSync, kuadrantv1beta1.AuthorinoGroupKind.Kind)
 	}
 
-	// TODO: check status of the authconfig
-
-	type affectedGateway struct {
-		gateway      *machinery.Gateway
-		gatewayClass *machinery.GatewayClass
+	// check status of the authconfigs
+	isAuthConfigReady := authConfigReadyStatusFunc(state)
+	for pathID, httpRouteRule := range affectedHTTPRouteRules {
+		authConfigName := authConfigNameForPath(pathID)
+		authConfig, found := lo.Find(topology.Objects().Children(httpRouteRule), func(authConfig machinery.Object) bool {
+			return authConfig.GroupVersionKind().GroupKind() == kuadrantv1beta1.AuthConfigGroupKind && authConfig.GetName() == authConfigName
+		})
+		if !found || !isAuthConfigReady(authConfig.(*controller.RuntimeObject).Object.(*authorinov1beta2.AuthConfig)) {
+			componentsToSync = append(componentsToSync, fmt.Sprintf("%s (%s)", kuadrantv1beta1.AuthConfigGroupKind.Kind, authConfigName))
+		}
 	}
 
 	// check the status of the gateways' configuration resources
-	affectedGateways := lo.UniqBy(lo.Map(lo.Flatten(lo.Values(affectedPaths)), func(path []machinery.Targetable, _ int) affectedGateway {
-		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(path)
-		return affectedGateway{
-			gateway:      gateway,
-			gatewayClass: gatewayClass,
-		}
-	}), func(g affectedGateway) string {
-		return g.gateway.GetLocator()
-	})
 	for _, g := range affectedGateways {
 		switch g.gatewayClass.Spec.ControllerName {
 		case istioGatewayControllerName:
@@ -231,11 +234,41 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.Auth
 	return kuadrant.EnforcedCondition(policy, nil, len(overridingPolicies) == 0)
 }
 
-func authorinoConditionToProperConditionFunc(condition authorinooperatorv1beta1.Condition, _ int) metav1.Condition {
+func authorinoOperatorConditionToProperConditionFunc(condition authorinooperatorv1beta1.Condition, _ int) metav1.Condition {
 	return metav1.Condition{
 		Type:    string(condition.Type),
 		Status:  metav1.ConditionStatus(condition.Status),
 		Reason:  condition.Reason,
 		Message: condition.Message,
 	}
+}
+
+func authorinoConditionToProperConditionFunc(cond authorinov1beta2.AuthConfigStatusCondition, _ int) metav1.Condition {
+	return metav1.Condition{
+		Type:    string(cond.Type),
+		Status:  metav1.ConditionStatus(cond.Status),
+		Reason:  cond.Reason,
+		Message: cond.Message,
+	}
+}
+
+func authConfigReadyStatusFunc(state *sync.Map) func(authConfig *authorinov1beta2.AuthConfig) bool {
+	modifiedAuthConfigs, modified := state.Load(StateModifiedAuthConfigs)
+	if !modified {
+		return authConfigReadyStatus
+	}
+	modifiedAuthConfigsList := modifiedAuthConfigs.([]string)
+	return func(authConfig *authorinov1beta2.AuthConfig) bool {
+		if lo.Contains(modifiedAuthConfigsList, authConfig.GetName()) {
+			return false
+		}
+		return authConfigReadyStatus(authConfig)
+	}
+}
+
+func authConfigReadyStatus(authConfig *authorinov1beta2.AuthConfig) bool {
+	if condition := meta.FindStatusCondition(lo.Map(authConfig.Status.Conditions, authorinoConditionToProperConditionFunc), string(authorinov1beta2.StatusConditionReady)); condition != nil {
+		return condition.Status == metav1.ConditionTrue
+	}
+	return false
 }

@@ -121,10 +121,15 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policyKind, ErrMissingStateEffectiveRateLimitPolicies), false)
 	}
 
+	type affectedGateway struct {
+		gateway      *machinery.Gateway
+		gatewayClass *machinery.GatewayClass
+	}
+
 	// check the state of the rules of the policy in the effective policies
 	policyRuleKeys := lo.Keys(policy.Rules())
-	affectedPaths := map[string][][]machinery.Targetable{} // policyRuleKey → topological paths affected by the policy rule
-	overridingPolicies := map[string][]string{}            // policyRuleKey → locators of policies overriding the policy rule
+	overridingPolicies := map[string][]string{}      // policyRuleKey → locators of policies overriding the policy rule
+	affectedGateways := map[string]affectedGateway{} // Gateway locator → {GatewayClass, Gateway}
 	for _, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {
 		if len(kuadrantv1.PoliciesInPath(effectivePolicy.Path, func(p machinery.Policy) bool { return p.GetLocator() == policy.GetLocator() })) == 0 {
 			continue
@@ -135,7 +140,7 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 		}
 		effectivePolicyRules := effectivePolicy.Spec.Rules()
 		for _, policyRuleKey := range policyRuleKeys {
-			if effectivePolicyRule, ok := effectivePolicyRules[policyRuleKey]; !ok || (ok && effectivePolicyRule.GetSource() != policy.GetLocator()) {
+			if effectivePolicyRule, ok := effectivePolicyRules[policyRuleKey]; !ok || (ok && effectivePolicyRule.GetSource() != policy.GetLocator()) { // policy rule has been overridden by another policy
 				var overriddenBy string
 				if ok { // TODO(guicassolato): !ok → we cannot tell which policy is overriding the rule, this information is lost when the policy rule is dropped during an atomic override
 					overriddenBy = effectivePolicyRule.GetSource()
@@ -143,17 +148,16 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 				overridingPolicies[policyRuleKey] = append(overridingPolicies[policyRuleKey], overriddenBy)
 				continue
 			}
-			if affectedPaths[policyRuleKey] == nil {
-				affectedPaths[policyRuleKey] = [][]machinery.Targetable{}
+			// policy rule is in the effective policy, track the Gateway affected by the policy
+			affectedGateways[gateway.GetLocator()] = affectedGateway{
+				gateway:      gateway,
+				gatewayClass: gatewayClass,
 			}
-			affectedPaths[policyRuleKey] = append(affectedPaths[policyRuleKey], effectivePolicy.Path)
 		}
 	}
 
-	// no rules of the policy found in the effective policies
-	if len(affectedPaths) == 0 {
-		// no rules of the policy have been overridden by any other policy
-		if len(overridingPolicies) == 0 {
+	if len(affectedGateways) == 0 { // no rules of the policy found in the effective policies
+		if len(overridingPolicies) == 0 { // no rules of the policy have been overridden by any other policy
 			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrNoRoutes(policyKind), false)
 		}
 		// all rules of the policy have been overridden by at least one other policy
@@ -179,21 +183,7 @@ func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 		}
 	}
 
-	type affectedGateway struct {
-		gateway      *machinery.Gateway
-		gatewayClass *machinery.GatewayClass
-	}
-
 	// check the status of the gateways' configuration resources
-	affectedGateways := lo.UniqBy(lo.Map(lo.Flatten(lo.Values(affectedPaths)), func(path []machinery.Targetable, _ int) affectedGateway {
-		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(path)
-		return affectedGateway{
-			gateway:      gateway,
-			gatewayClass: gatewayClass,
-		}
-	}), func(g affectedGateway) string {
-		return g.gateway.GetLocator()
-	})
 	for _, g := range affectedGateways {
 		switch g.gatewayClass.Spec.ControllerName {
 		case istioGatewayControllerName:

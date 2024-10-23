@@ -203,7 +203,12 @@ jobs:
     name: Integration Tests for kuadrant-operator/tests/[gatewayapi-provider]
     strategy:
       matrix:
-        gatewayapi-provider: [istio, envoygateway]
+        include:
+          - gatewayapi-provider: istio
+            istio-type: istioctl
+          - gatewayapi-provider: istio
+            istio-type: sail
+          - gatewayapi-provider: envoygateway
       fail-fast: false
     runs-on: ubuntu-latest
     env:
@@ -230,9 +235,9 @@ jobs:
       - name: Check cluster info
         run: |
           kubectl cluster-info dump
-      - name: Run make ${{ matrix.gatewayapi-provider }}-env-setup
+      - name: Run make ${{ matrix.gatewayapi-provider }}-env-setup ISTIO_INSTALL_SAIL=${{ matrix.istio-type == 'sail' && true || false }}
         run: |
-          make ${{ matrix.gatewayapi-provider }}-env-setup
+          make ${{ matrix.gatewayapi-provider }}-env-setup ISTIO_INSTALL_SAIL=${{ matrix.istio-type == 'sail' && true || false }}
       - name: Run integration tests
         run: |
           make test-${{ matrix.gatewayapi-provider }}-env-integration

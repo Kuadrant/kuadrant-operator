@@ -1,0 +1,73 @@
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    control-plane: controller-manager
+  name: authorino-operator-metrics
+  namespace: kuadrant-system
+spec:
+  endpoints:
+    - path: /metrics
+      port: metrics
+      scheme: http
+  selector:
+    matchLabels:
+      control-plane: authorino-operator
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    control-plane: controller-manager
+    app.kubernetes.io/name: servicemonitor
+    app.kubernetes.io/instance: controller-manager-metrics-monitor
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/created-by: dns-operator
+    app.kubernetes.io/part-of: dns-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: dns-operator-metrics-monitor
+  namespace: kuadrant-system
+spec:
+  endpoints:
+    - path: /metrics
+      port: metrics
+      scheme: http
+  selector:
+    matchLabels:
+      control-plane: dns-operator-controller-manager
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    control-plane: controller-manager
+  name: kuadrant-operator-metrics
+  namespace: kuadrant-system
+spec:
+  endpoints:
+    - path: /metrics
+      port: metrics
+      scheme: http
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      app: kuadrant
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    control-plane: controller-manager
+  name: limitador-operator-metrics
+  namespace: kuadrant-system
+spec:
+  endpoints:
+    - path: /metrics
+      port: metrics
+      scheme: http
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+
+      

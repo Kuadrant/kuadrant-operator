@@ -162,6 +162,46 @@ kubectl get gateway ${gatewayName} -n ${gatewayNS} -o=jsonpath='{.status.listene
 
 Kuadrant can help with this by using a TLSPolicy.
 
+### Step 4a - (Optional) Configure metrics to be scraped from the Gateway instance
+
+If you have prometheus in your cluster, set up a metrics proxy service and a ServiceMonitor to configure it to scrape metrics directly from the Gateway pod.
+This must be done in the namespace where a Gateway is running.
+The reason for the metrics proxy service is because the metrics port (15020) is not exposed by the default Service of the Gateway.
+This configuration is required for metrics such as `istio_requests_total`.
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ingress-gateway
+  namespace: ${gatewayNS}
+spec:
+  selector:
+    matchLabels:
+      istio.io/gateway-name: ${gatewayName}
+  endpoints:
+  - port: metrics
+    path: /stats/prometheus
+--- 
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-metrics-proxy
+  namespace: ${gatewayNS}
+  labels:
+    istio.io/gateway-name: ${gatewayName}
+spec:
+  selector:
+    istio.io/gateway-name: ${gatewayName}
+  ports:
+  - name: metrics
+    protocol: TCP
+    port: 15020
+    targetPort: 15020    
+EOF
+```
+
 ### Step 5 - Secure and protect the Gateway with auth, TLS, rate limit, and DNS policies
 
 While your Gateway is now deployed, it has no exposed endpoints and your listener is not programmed. Next, you can set up a `TLSPolicy` that leverages your CertificateIssuer to set up your listener certificates. 

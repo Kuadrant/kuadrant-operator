@@ -7,14 +7,13 @@ import (
 	"sync"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
@@ -31,38 +30,50 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
-type rateLimitPolicyStatusUpdater struct {
+type AuthPolicyStatusUpdater struct {
 	client *dynamic.DynamicClient
 }
 
-func (r *rateLimitPolicyStatusUpdater) Subscription() controller.Subscription {
+// AuthPolicyStatusUpdater reconciles to events with impact to change the status of AuthPolicy resources
+func (r *AuthPolicyStatusUpdater) Subscription() controller.Subscription {
 	return controller.Subscription{
 		ReconcileFunc: r.UpdateStatus,
-		Events:        rateLimitEventMatchers,
+		Events: []controller.ResourceEventMatcher{
+			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
+			{Kind: &machinery.GatewayClassGroupKind},
+			{Kind: &machinery.GatewayGroupKind},
+			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &kuadrantv1beta3.AuthPolicyGroupKind},
+			{Kind: &kuadrantv1beta1.AuthConfigGroupKind},
+			{Kind: &kuadrantistio.EnvoyFilterGroupKind},
+			{Kind: &kuadrantistio.WasmPluginGroupKind},
+			{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
+			{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
+		},
 	}
 }
 
-func (r *rateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("rateLimitPolicyStatusUpdater")
+func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("AuthPolicyStatusUpdater")
 
-	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1beta3.RateLimitPolicy, bool) {
-		p, ok := item.(*kuadrantv1beta3.RateLimitPolicy)
+	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1beta3.AuthPolicy, bool) {
+		p, ok := item.(*kuadrantv1beta3.AuthPolicy)
 		return p, ok
 	})
 
-	policyAcceptedFunc := rateLimitPolicyAcceptedStatusFunc(state)
+	policyAcceptedFunc := authPolicyAcceptedStatusFunc(state)
 
-	logger.V(1).Info("updating rate limit policy statuses", "policies", len(policies))
-	defer logger.V(1).Info("finished updating rate limit policy statuses")
+	logger.V(1).Info("updating authpolicy statuses", "policies", len(policies))
+	defer logger.V(1).Info("finished updating authpolicy statuses")
 
 	for _, policy := range policies {
 		if policy.GetDeletionTimestamp() != nil {
-			logger.V(1).Info("ratelimitpolicy is marked for deletion, skipping", "name", policy.Name, "namespace", policy.Namespace)
+			logger.V(1).Info("authpolicy is marked for deletion, skipping", "name", policy.Name, "namespace", policy.Namespace)
 			continue
 		}
 
 		// copy initial conditions, otherwise status will always be updated
-		newStatus := &kuadrantv1beta3.RateLimitPolicyStatus{
+		newStatus := &kuadrantv1beta3.AuthPolicyStatus{
 			Conditions:         slices.Clone(policy.Status.Conditions),
 			ObservedGeneration: policy.Status.ObservedGeneration,
 		}
@@ -92,9 +103,9 @@ func (r *rateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 			continue
 		}
 
-		_, err = r.client.Resource(kuadrantv1beta3.RateLimitPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+		_, err = r.client.Resource(kuadrantv1beta3.AuthPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
 		if err != nil {
-			logger.Error(err, "unable to update status for ratelimitpolicy", "name", policy.GetName(), "namespace", policy.GetNamespace())
+			logger.Error(err, "unable to update status for authpolicy", "name", policy.GetName(), "namespace", policy.GetNamespace())
 			// TODO: handle error
 		}
 	}
@@ -102,19 +113,19 @@ func (r *rateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 	return nil
 }
 
-func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.RateLimitPolicy, topology *machinery.Topology, state *sync.Map) *metav1.Condition {
-	policyKind := kuadrantv1beta3.RateLimitPolicyGroupKind.Kind
+func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.AuthPolicy, topology *machinery.Topology, state *sync.Map) *metav1.Condition {
+	policyKind := kuadrantv1beta3.AuthPolicyGroupKind.Kind
 
-	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
+	effectivePolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {
-		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policyKind, ErrMissingStateEffectiveRateLimitPolicies), false)
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policyKind, ErrMissingStateEffectiveAuthPolicies), false)
 	}
 
 	// check the state of the rules of the policy in the effective policies
 	policyRuleKeys := lo.Keys(policy.Rules())
 	affectedPaths := map[string][][]machinery.Targetable{} // policyRuleKey → topological paths affected by the policy rule
 	overridingPolicies := map[string][]string{}            // policyRuleKey → locators of policies overriding the policy rule
-	for _, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {
+	for _, effectivePolicy := range effectivePolicies.(EffectiveAuthPolicies) {
 		if len(kuadrantv1.PoliciesInPath(effectivePolicy.Path, func(p machinery.Policy) bool { return p.GetLocator() == policy.GetLocator() })) == 0 {
 			continue
 		}
@@ -155,18 +166,16 @@ func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 
 	var componentsToSync []string
 
-	// check the status of Limitador
-	if limitadorLimitsModified, stateLimitadorLimitsModifiedPresent := state.Load(StateLimitadorLimitsModified); stateLimitadorLimitsModifiedPresent && limitadorLimitsModified.(bool) {
-		componentsToSync = append(componentsToSync, kuadrantv1beta1.LimitadorGroupKind.Kind)
-	} else {
-		limitador, err := GetLimitadorFromTopology(topology)
-		if err != nil {
-			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policyKind, err), false)
-		}
-		if !meta.IsStatusConditionTrue(limitador.Status.Conditions, limitadorv1alpha1.StatusConditionReady) {
-			componentsToSync = append(componentsToSync, kuadrantv1beta1.LimitadorGroupKind.Kind)
-		}
+	// check the status of Authorino
+	authorino, err := GetAuthorinoFromTopology(topology)
+	if err != nil {
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policyKind, err), false)
 	}
+	if !meta.IsStatusConditionTrue(lo.Map(authorino.Status.Conditions, authorinoConditionToProperConditionFunc), string(authorinooperatorv1beta1.ConditionReady)) {
+		componentsToSync = append(componentsToSync, kuadrantv1beta1.AuthorinoGroupKind.Kind)
+	}
+
+	// TODO: check status of the authconfig
 
 	type affectedGateway struct {
 		gateway      *machinery.Gateway
@@ -187,8 +196,8 @@ func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 		switch g.gatewayClass.Spec.ControllerName {
 		case istioGatewayControllerName:
 			// EnvoyFilter
-			istioRateLimitClustersModifiedGateways, _ := state.Load(StateIstioRateLimitClustersModified)
-			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantistio.EnvoyFilterGroupKind, istioRateLimitClustersModifiedGateways, topology, func(obj machinery.Object) bool {
+			istioAuthClustersModifiedGateways, _ := state.Load(StateIstioAuthClustersModified)
+			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantistio.EnvoyFilterGroupKind, istioAuthClustersModifiedGateways, topology, func(obj machinery.Object) bool {
 				// return meta.IsStatusConditionTrue(lo.Map(obj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter).Status.Conditions, kuadrantistio.ConditionToProperConditionFunc), "Ready")
 				return true // Istio won't ever populate the status stanza of EnvoyFilter resources, so we cannot expect to find a given a condition there
 			})...)
@@ -201,8 +210,8 @@ func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 		case envoyGatewayGatewayControllerName:
 			gatewayAncestor := gatewayapiv1.ParentReference{Name: gatewayapiv1.ObjectName(g.gateway.GetName()), Namespace: ptr.To(gatewayapiv1.Namespace(g.gateway.GetNamespace()))}
 			// EnvoyPatchPolicy
-			envoyGatewayRateLimitClustersModifiedGateways, _ := state.Load(StateEnvoyGatewayRateLimitClustersModified)
-			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantenvoygateway.EnvoyPatchPolicyGroupKind, envoyGatewayRateLimitClustersModifiedGateways, topology, func(obj machinery.Object) bool {
+			envoyGatewayAuthClustersModifiedGateways, _ := state.Load(StateEnvoyGatewayAuthClustersModified)
+			componentsToSync = append(componentsToSync, gatewayComponentsToSync(g.gateway, kuadrantenvoygateway.EnvoyPatchPolicyGroupKind, envoyGatewayAuthClustersModifiedGateways, topology, func(obj machinery.Object) bool {
 				return meta.IsStatusConditionTrue(kuadrantgatewayapi.PolicyStatusConditionsFromAncestor(obj.(*controller.RuntimeObject).Object.(*envoygatewayv1alpha1.EnvoyPatchPolicy).Status, envoyGatewayGatewayControllerName, gatewayAncestor, gatewayapiv1.Namespace(obj.GetNamespace())), string(envoygatewayv1alpha1.PolicyConditionProgrammed))
 			})...)
 			// EnvoyExtensionPolicy
@@ -222,15 +231,11 @@ func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 	return kuadrant.EnforcedCondition(policy, nil, len(overridingPolicies) == 0)
 }
 
-func gatewayComponentsToSync(gateway *machinery.Gateway, componentGroupKind schema.GroupKind, modifiedGatewayLocators any, topology *machinery.Topology, requiredCondition func(machinery.Object) bool) []string {
-	missingConditionInTopologyFunc := func() bool {
-		obj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
-			return child.GroupVersionKind().GroupKind() == componentGroupKind
-		})
-		return !found || !requiredCondition(obj)
+func authorinoConditionToProperConditionFunc(condition authorinooperatorv1beta1.Condition, _ int) metav1.Condition {
+	return metav1.Condition{
+		Type:    string(condition.Type),
+		Status:  metav1.ConditionStatus(condition.Status),
+		Reason:  condition.Reason,
+		Message: condition.Message,
 	}
-	if (modifiedGatewayLocators != nil && lo.Contains(modifiedGatewayLocators.([]string), gateway.GetLocator())) || missingConditionInTopologyFunc() {
-		return []string{fmt.Sprintf("%s (%s/%s)", componentGroupKind.Kind, gateway.GetNamespace(), gateway.GetName())}
-	}
-	return nil
 }

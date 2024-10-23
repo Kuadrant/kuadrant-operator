@@ -15,8 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/utils/env"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -24,76 +22,27 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
-	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
 	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 )
 
-const (
-	rateLimitClusterLabelKey = "kuadrant.io/rate-limit-cluster"
-
-	// make these configurable?
-	istioGatewayControllerName        = "istio.io/gateway-controller"
-	envoyGatewayGatewayControllerName = "gateway.envoyproxy.io/gatewayclass-controller"
-)
+const rateLimitObjectLabelKey = "kuadrant.io/ratelimit"
 
 var (
-	WASMFilterImageURL = env.GetString("RELATED_IMAGE_WASMSHIM", "oci://quay.io/kuadrant/wasm-shim:latest")
-
 	StateRateLimitPolicyValid                  = "RateLimitPolicyValid"
 	StateEffectiveRateLimitPolicies            = "EffectiveRateLimitPolicies"
 	StateLimitadorLimitsModified               = "LimitadorLimitsModified"
 	StateIstioRateLimitClustersModified        = "IstioRateLimitClustersModified"
-	StateIstioExtensionsModified               = "IstioExtensionsModified"
 	StateEnvoyGatewayRateLimitClustersModified = "EnvoyGatewayRateLimitClustersModified"
-	StateEnvoyGatewayExtensionsModified        = "EnvoyGatewayExtensionsModified"
 
 	ErrMissingLimitador                       = fmt.Errorf("missing limitador object in the topology")
+	ErrMissingLimitadorServiceInfo            = fmt.Errorf("missing limitador service info in the limitador object")
 	ErrMissingStateEffectiveRateLimitPolicies = fmt.Errorf("missing rate limit effective policies stored in the reconciliation state")
-
-	rateLimitEventMatchers = []controller.ResourceEventMatcher{ // matches reconciliation events that change the rate limit definitions or status of rate limit policies
-		{Kind: &kuadrantv1beta1.KuadrantGroupKind},
-		{Kind: &machinery.GatewayClassGroupKind},
-		{Kind: &machinery.GatewayGroupKind},
-		{Kind: &machinery.HTTPRouteGroupKind},
-		{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind},
-		{Kind: &kuadrantv1beta1.LimitadorGroupKind},
-		{Kind: &kuadrantistio.EnvoyFilterGroupKind},
-		{Kind: &kuadrantistio.WasmPluginGroupKind},
-		{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
-		{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
-	}
 )
 
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
 //+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;patch;delete
-
-func NewRateLimitWorkflow(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) *controller.Workflow {
-	effectiveRateLimitPoliciesWorkflow := &controller.Workflow{
-		Precondition: (&effectiveRateLimitPolicyReconciler{client: client}).Subscription().Reconcile,
-		Tasks: []controller.ReconcileFunc{
-			(&limitadorLimitsReconciler{client: client}).Subscription().Reconcile,
-		},
-	}
-
-	if isIstioInstalled {
-		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&istioRateLimitClusterReconciler{client: client}).Subscription().Reconcile)
-		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&istioExtensionReconciler{client: client}).Subscription().Reconcile)
-	}
-
-	if isEnvoyGatewayInstalled {
-		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&envoyGatewayRateLimitClusterReconciler{client: client}).Subscription().Reconcile)
-		effectiveRateLimitPoliciesWorkflow.Tasks = append(effectiveRateLimitPoliciesWorkflow.Tasks, (&envoyGatewayExtensionReconciler{client: client}).Subscription().Reconcile)
-	}
-
-	return &controller.Workflow{
-		Precondition:  (&rateLimitPolicyValidator{}).Subscription().Reconcile,
-		Tasks:         []controller.ReconcileFunc{effectiveRateLimitPoliciesWorkflow.Run},
-		Postcondition: (&rateLimitPolicyStatusUpdater{client: client}).Subscription().Reconcile,
-	}
-}
 
 func GetLimitadorFromTopology(topology *machinery.Topology) (*limitadorv1alpha1.Limitador, error) {
 	kuadrant, err := GetKuadrantFromTopology(topology)
@@ -137,7 +86,7 @@ func LimitNameToLimitadorIdentifier(rlpKey k8stypes.NamespacedName, uniqueLimitN
 
 func RateLimitObjectLabels() labels.Set {
 	m := KuadrantManagedObjectLabels()
-	m[rateLimitClusterLabelKey] = "true"
+	m[rateLimitObjectLabelKey] = "true"
 	return m
 }
 
@@ -174,21 +123,25 @@ func rateLimitClusterPatch(host string, port int) map[string]any {
 	}
 }
 
-func rateLimitWasmActionBuilder(pathID string, effectivePolicy EffectiveRateLimitPolicy, state *sync.Map) wasm.ActionBuilderFunc {
+func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, state *sync.Map) []wasm.Action {
 	policiesInPath := kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
+
 	_, _, _, httpRoute, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
 	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
-	return func(uniquePolicyRuleKey string, policyRule kuadrantv1.MergeableRule) (wasm.Action, error) {
+
+	return lo.FilterMap(lo.Entries(effectivePolicy.Spec.Rules()), func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) (wasm.Action, bool) {
+		uniquePolicyRuleKey := r.Key
+		policyRule := r.Value
 		source, found := lo.Find(policiesInPath, func(p machinery.Policy) bool {
 			return p.GetLocator() == policyRule.GetSource()
 		})
 		if !found { // should never happen
-			return wasm.Action{}, fmt.Errorf("could not find source policy %s in path %s", policyRule.GetSource(), pathID)
+			return wasm.Action{}, false
 		}
 		limitIdentifier := LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: source.GetName(), Namespace: source.GetNamespace()}, uniquePolicyRuleKey)
-		limit := policyRule.GetSpec().(kuadrantv1beta3.Limit)
-		return wasmActionFromLimit(limit, limitIdentifier, limitsNamespace), nil
-	}
+		limit := policyRule.GetSpec().(*kuadrantv1beta3.Limit)
+		return wasmActionFromLimit(limit, limitIdentifier, limitsNamespace), true
+	})
 }
 
 // wasmActionFromLimit builds a wasm rate-limit action for a given limit.
@@ -196,7 +149,7 @@ func rateLimitWasmActionBuilder(pathID string, effectivePolicy EffectiveRateLimi
 //
 // The only action of the rule is the ratelimit service, whose data includes the activation of the limit
 // and any counter qualifier of the limit.
-func wasmActionFromLimit(limit kuadrantv1beta3.Limit, limitIdentifier, scope string) wasm.Action {
+func wasmActionFromLimit(limit *kuadrantv1beta3.Limit, limitIdentifier, scope string) wasm.Action {
 	action := wasm.Action{
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       scope,
@@ -210,7 +163,7 @@ func wasmActionFromLimit(limit kuadrantv1beta3.Limit, limitIdentifier, scope str
 	return action
 }
 
-func wasmDataFromLimit(limitIdentifier string, limit kuadrantv1beta3.Limit) (data []wasm.DataType) {
+func wasmDataFromLimit(limitIdentifier string, limit *kuadrantv1beta3.Limit) (data []wasm.DataType) {
 	// static key representing the limit
 	data = append(data,
 		wasm.DataType{

@@ -13,7 +13,6 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -42,22 +41,11 @@ func BuildConfigForActionSet(actionSets []ActionSet) Config {
 	}
 }
 
-type ActionBuilderFunc func(uniquePolicyRuleKey string, policyRule kuadrantv1.MergeableRule) (Action, error)
-
-func BuildActionSetsForPath(pathID string, path []machinery.Targetable, policyRules map[string]kuadrantv1.MergeableRule, actionBuilder ActionBuilderFunc) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
+func BuildActionSetsForPath(pathID string, path []machinery.Targetable, actions []Action) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
 	_, _, listener, httpRoute, httpRouteRule, err := common.ObjectsInRequestPath(path)
 	if err != nil {
 		return nil, err
 	}
-
-	actions := lo.FilterMap(lo.Entries(policyRules), func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) (Action, bool) {
-		action, err := actionBuilder(r.Key, r.Value)
-		if err != nil {
-			errors.Join(err)
-			return Action{}, false
-		}
-		return action, true
-	})
 
 	return lo.FlatMap(kuadrantgatewayapi.HostnamesFromListenerAndHTTPRoute(listener.Listener, httpRoute.HTTPRoute), func(hostname gatewayapiv1.Hostname, _ int) []kuadrantgatewayapi.HTTPRouteMatchConfig {
 		return lo.Map(httpRouteRule.Matches, func(httpRouteMatch gatewayapiv1.HTTPRouteMatch, j int) kuadrantgatewayapi.HTTPRouteMatchConfig {

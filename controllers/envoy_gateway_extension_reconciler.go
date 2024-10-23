@@ -27,27 +27,29 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 )
 
-// envoyGatewayExtensionReconciler reconciles Envoy Gateway EnvoyExtensionPolicy custom resources
-type envoyGatewayExtensionReconciler struct {
+// EnvoyGatewayExtensionReconciler reconciles Envoy Gateway EnvoyExtensionPolicy custom resources
+type EnvoyGatewayExtensionReconciler struct {
 	client *dynamic.DynamicClient
 }
 
-func (r *envoyGatewayExtensionReconciler) Subscription() controller.Subscription {
+// EnvoyGatewayExtensionReconciler subscribes to events with potential impact on the Envoy Gateway EnvoyExtensionPolicy custom resources
+func (r *EnvoyGatewayExtensionReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
 		ReconcileFunc: r.Reconcile,
-		Events: []controller.ResourceEventMatcher{ // matches reconciliation events that change the rate limit definitions or status of rate limit policies
+		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &kuadrantv1beta3.AuthPolicyGroupKind},
 			{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind},
 			{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
 		},
 	}
 }
 
-func (r *envoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("envoyGatewayExtensionReconciler")
+func (r *EnvoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayExtensionReconciler")
 
 	logger.V(1).Info("building envoy gateway extension")
 	defer logger.V(1).Info("finished building envoy gateway extension")
@@ -55,7 +57,7 @@ func (r *envoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 	// build wasm plugin configs for each gateway
 	wasmConfigs, err := r.buildWasmConfigs(ctx, state)
 	if err != nil {
-		if errors.Is(err, ErrMissingStateEffectiveRateLimitPolicies) {
+		if errors.Is(err, ErrMissingStateEffectiveAuthPolicies) || errors.Is(err, ErrMissingStateEffectiveRateLimitPolicies) {
 			logger.V(1).Info(err.Error())
 		} else {
 			return err
@@ -137,28 +139,59 @@ func (r *envoyGatewayExtensionReconciler) Reconcile(ctx context.Context, _ []con
 }
 
 // buildWasmConfigs returns a map of envoy gateway gateway locators to an ordered list of corresponding wasm policies
-func (r *envoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map) (map[string]wasm.Config, error) {
-	logger := controller.LoggerFromContext(ctx).WithName("envoyGatewayExtensionReconciler").WithName("buildWasmConfigs")
+func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, state *sync.Map) (map[string]wasm.Config, error) {
+	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayExtensionReconciler").WithName("buildWasmConfigs")
 
-	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
+	effectiveAuthPolicies, ok := state.Load(StateEffectiveAuthPolicies)
+	if !ok {
+		return nil, ErrMissingStateEffectiveAuthPolicies
+	}
+	effectiveAuthPoliciesMap := effectiveAuthPolicies.(EffectiveAuthPolicies)
+
+	effectiveRateLimitPolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
 	if !ok {
 		return nil, ErrMissingStateEffectiveRateLimitPolicies
 	}
+	effectiveRateLimitPoliciesMap := effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)
 
-	logger.V(1).Info("building wasm configs for envoy gateway extension", "effectivePolicies", len(effectivePolicies.(EffectiveRateLimitPolicies)))
+	logger.V(1).Info("building wasm configs for envoy gateway extension", "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap))
+
+	paths := lo.UniqBy(append(
+		lo.Entries(lo.MapValues(effectiveAuthPoliciesMap, func(p EffectiveAuthPolicy, _ string) []machinery.Targetable { return p.Path })),
+		lo.Entries(lo.MapValues(effectiveRateLimitPoliciesMap, func(p EffectiveRateLimitPolicy, _ string) []machinery.Targetable { return p.Path }))...,
+	), func(e lo.Entry[string, []machinery.Targetable]) string { return e.Key })
 
 	wasmActionSets := kuadrantgatewayapi.GrouppedHTTPRouteMatchConfigs{}
 
 	// build the wasm policies for each topological path that contains an effective rate limit policy affecting an envoy gateway gateway
-	for pathID, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {
-		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
+	for i := range paths {
+		pathID := paths[i].Key
+		path := paths[i].Value
+
+		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(path)
 
 		// ignore if not an envoy gateway gateway
 		if gatewayClass.Spec.ControllerName != envoyGatewayGatewayControllerName {
 			continue
 		}
 
-		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(pathID, effectivePolicy.Path, effectivePolicy.Spec.Rules(), rateLimitWasmActionBuilder(pathID, effectivePolicy, state))
+		var actions []wasm.Action
+
+		// auth
+		if effectivePolicy, ok := effectiveAuthPoliciesMap[pathID]; ok {
+			actions = append(actions, buildWasmActionsForAuth(pathID, effectivePolicy)...)
+		}
+
+		// rate limit
+		if effectivePolicy, ok := effectiveRateLimitPoliciesMap[pathID]; ok {
+			actions = append(actions, buildWasmActionsForRateLimit(effectivePolicy, state)...)
+		}
+
+		if len(actions) == 0 {
+			continue
+		}
+
+		wasmActionSetsForPath, err := wasm.BuildActionSetsForPath(pathID, path, actions)
 		if err != nil {
 			logger.Error(err, "failed to build wasm policies for path", "pathID", pathID)
 			continue

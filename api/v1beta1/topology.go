@@ -1,23 +1,28 @@
 package v1beta1
 
 import (
-	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	authorinov1beta2 "github.com/kuadrant/authorino/api/v1beta2"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 var (
-	AuthorinoGroupKind = schema.GroupKind{Group: authorinov1beta1.GroupVersion.Group, Kind: "Authorino"}
-	KuadrantGroupKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "Kuadrant"}
-	LimitadorGroupKind = schema.GroupKind{Group: limitadorv1alpha1.GroupVersion.Group, Kind: "Limitador"}
+	KuadrantGroupKind   = schema.GroupKind{Group: GroupVersion.Group, Kind: "Kuadrant"}
+	LimitadorGroupKind  = schema.GroupKind{Group: limitadorv1alpha1.GroupVersion.Group, Kind: "Limitador"}
+	AuthorinoGroupKind  = schema.GroupKind{Group: authorinooperatorv1beta1.GroupVersion.Group, Kind: "Authorino"}
+	AuthConfigGroupKind = schema.GroupKind{Group: authorinov1beta2.GroupVersion.Group, Kind: "AuthConfig"}
 
-	AuthorinosResource = authorinov1beta1.GroupVersion.WithResource("authorinos")
-	KuadrantsResource  = GroupVersion.WithResource("kuadrants")
-	LimitadorsResource = limitadorv1alpha1.GroupVersion.WithResource("limitadors")
+	KuadrantsResource   = GroupVersion.WithResource("kuadrants")
+	LimitadorsResource  = limitadorv1alpha1.GroupVersion.WithResource("limitadors")
+	AuthorinosResource  = authorinooperatorv1beta1.GroupVersion.WithResource("authorinos")
+	AuthConfigsResource = authorinov1beta2.GroupVersion.WithResource("authconfigs")
+
+	AuthConfigHTTPRouteRuleAnnotation = machinery.HTTPRouteRuleGroupKind.String()
 )
 
 var _ machinery.Object = &Kuadrant{}
@@ -31,7 +36,7 @@ func LinkKuadrantToGatewayClasses(objs controller.Store) machinery.LinkFunc {
 
 	return machinery.LinkFunc{
 		From: KuadrantGroupKind,
-		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GatewayClass"},
+		To:   schema.GroupKind{Group: gatewayapiv1.GroupVersion.Group, Kind: "GatewayClass"},
 		Func: func(_ machinery.Object) []machinery.Object {
 			parents := make([]machinery.Object, len(kuadrants))
 			for _, parent := range kuadrants {
@@ -65,6 +70,25 @@ func LinkKuadrantToAuthorino(objs controller.Store) machinery.LinkFunc {
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.Filter(kuadrants, func(kuadrant machinery.Object, _ int) bool {
 				return kuadrant.GetNamespace() == child.GetNamespace() && child.GetName() == "authorino"
+			})
+		},
+	}
+}
+
+func LinkHTTPRouteRuleToAuthConfig(objs controller.Store) machinery.LinkFunc {
+	httpRoutes := lo.Map(objs.FilterByGroupKind(machinery.HTTPRouteGroupKind), controller.ObjectAs[*gatewayapiv1.HTTPRoute])
+	httpRouteRules := lo.FlatMap(lo.Map(httpRoutes, func(r *gatewayapiv1.HTTPRoute, _ int) *machinery.HTTPRoute {
+		return &machinery.HTTPRoute{HTTPRoute: r}
+	}), machinery.HTTPRouteRulesFromHTTPRouteFunc)
+
+	return machinery.LinkFunc{
+		From: machinery.HTTPRouteRuleGroupKind,
+		To:   AuthConfigGroupKind,
+		Func: func(child machinery.Object) []machinery.Object {
+			return lo.FilterMap(httpRouteRules, func(httpRouteRule *machinery.HTTPRouteRule, _ int) (machinery.Object, bool) {
+				authConfig := child.(*controller.RuntimeObject).Object.(*authorinov1beta2.AuthConfig)
+				annotations := authConfig.GetAnnotations()
+				return httpRouteRule, annotations != nil && annotations[AuthConfigHTTPRouteRuleAnnotation] == httpRouteRule.GetLocator()
 			})
 		},
 	}

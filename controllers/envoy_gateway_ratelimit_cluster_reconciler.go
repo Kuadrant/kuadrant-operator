@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -12,7 +11,6 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -26,15 +24,16 @@ import (
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 )
 
-// envoyGatewayRateLimitClusterReconciler reconciles Envoy Gateway EnvoyPatchPolicy custom resources
-type envoyGatewayRateLimitClusterReconciler struct {
+// EnvoyGatewayRateLimitClusterReconciler reconciles Envoy Gateway EnvoyPatchPolicy custom resources for rate limiting
+type EnvoyGatewayRateLimitClusterReconciler struct {
 	client *dynamic.DynamicClient
 }
 
-func (r *envoyGatewayRateLimitClusterReconciler) Subscription() controller.Subscription {
+// EnvoyGatewayRateLimitClusterReconciler subscribes to events with potential impact on the Envoy Gateway EnvoyPatchPolicy custom resources for rate limiting
+func (r *EnvoyGatewayRateLimitClusterReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
 		ReconcileFunc: r.Reconcile,
-		Events: []controller.ResourceEventMatcher{ // matches reconciliation events that change the rate limit definitions or status of rate limit policies
+		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
@@ -45,8 +44,8 @@ func (r *envoyGatewayRateLimitClusterReconciler) Subscription() controller.Subsc
 	}
 }
 
-func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("envoyGatewayRateLimitClusterReconciler")
+func (r *EnvoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayRateLimitClusterReconciler")
 
 	logger.V(1).Info("building envoy gateway rate limit clusters")
 	defer logger.V(1).Info("finished building envoy gateway rate limit clusters")
@@ -119,7 +118,7 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 
 		existingEnvoyPatchPolicy := existingEnvoyPatchPolicyObj.(*controller.RuntimeObject).Object.(*envoygatewayv1alpha1.EnvoyPatchPolicy)
 
-		if equalEnvoyPatchPolicies(existingEnvoyPatchPolicy, desiredEnvoyPatchPolicy) {
+		if kuadrantenvoygateway.EqualEnvoyPatchPolicies(existingEnvoyPatchPolicy, desiredEnvoyPatchPolicy) {
 			logger.V(1).Info("envoypatchpolicy object is up to date, nothing to do")
 			continue
 		}
@@ -161,7 +160,7 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 	return nil
 }
 
-func (r *envoyGatewayRateLimitClusterReconciler) buildDesiredEnvoyPatchPolicy(limitador *limitadorv1alpha1.Limitador, gateway *machinery.Gateway) (*envoygatewayv1alpha1.EnvoyPatchPolicy, error) {
+func (r *EnvoyGatewayRateLimitClusterReconciler) buildDesiredEnvoyPatchPolicy(limitador *limitadorv1alpha1.Limitador, gateway *machinery.Gateway) (*envoygatewayv1alpha1.EnvoyPatchPolicy, error) {
 	envoyPatchPolicy := &envoygatewayv1alpha1.EnvoyPatchPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantenvoygateway.EnvoyPatchPolicyGroupKind.Kind,
@@ -192,50 +191,11 @@ func (r *envoyGatewayRateLimitClusterReconciler) buildDesiredEnvoyPatchPolicy(li
 		},
 	}
 
-	jsonPatches, err := envoyGatewayEnvoyPatchPolicyClusterPatch(limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC))
+	jsonPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC), rateLimitClusterPatch)
 	if err != nil {
 		return nil, err
 	}
 	envoyPatchPolicy.Spec.JSONPatches = jsonPatches
 
 	return envoyPatchPolicy, nil
-}
-
-// envoyGatewayEnvoyPatchPolicyClusterPatch returns a set envoy config patch that defines the rate limit cluster for the gateway.
-// The rate limit cluster configures the endpoint of the external rate limit service.
-func envoyGatewayEnvoyPatchPolicyClusterPatch(host string, port int) ([]envoygatewayv1alpha1.EnvoyJSONPatchConfig, error) {
-	patchRaw, _ := json.Marshal(rateLimitClusterPatch(host, port))
-	patch := &apiextensionsv1.JSON{}
-	if err := patch.UnmarshalJSON(patchRaw); err != nil {
-		return nil, err
-	}
-
-	return []envoygatewayv1alpha1.EnvoyJSONPatchConfig{
-		{
-			Type: envoygatewayv1alpha1.ClusterEnvoyResourceType,
-			Name: common.KuadrantRateLimitClusterName,
-			Operation: envoygatewayv1alpha1.JSONPatchOperation{
-				Op:    envoygatewayv1alpha1.JSONPatchOperationType("add"),
-				Path:  "",
-				Value: patch,
-			},
-		},
-	}, nil
-}
-
-func equalEnvoyPatchPolicies(a, b *envoygatewayv1alpha1.EnvoyPatchPolicy) bool {
-	if a.Spec.Priority != b.Spec.Priority || a.Spec.TargetRef != b.Spec.TargetRef {
-		return false
-	}
-
-	aJSONPatches := a.Spec.JSONPatches
-	bJSONPatches := b.Spec.JSONPatches
-	if len(aJSONPatches) != len(bJSONPatches) {
-		return false
-	}
-	return lo.EveryBy(aJSONPatches, func(aJSONPatch envoygatewayv1alpha1.EnvoyJSONPatchConfig) bool {
-		return lo.SomeBy(bJSONPatches, func(bJSONPatch envoygatewayv1alpha1.EnvoyJSONPatchConfig) bool {
-			return aJSONPatch.Type == bJSONPatch.Type && aJSONPatch.Name == bJSONPatch.Name && aJSONPatch.Operation == bJSONPatch.Operation
-		})
-	})
 }

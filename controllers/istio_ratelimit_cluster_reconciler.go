@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -26,15 +25,16 @@ import (
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
 )
 
-// istioRateLimitClusterReconciler reconciles Istio EnvoyFilter custom resources
-type istioRateLimitClusterReconciler struct {
+// IstioRateLimitClusterReconciler reconciles Istio EnvoyFilter custom resources for rate limiting
+type IstioRateLimitClusterReconciler struct {
 	client *dynamic.DynamicClient
 }
 
-func (r *istioRateLimitClusterReconciler) Subscription() controller.Subscription {
+// IstioRateLimitClusterReconciler subscribes to events with potential impact on the Istio EnvoyFilter custom resources for rate limiting
+func (r *IstioRateLimitClusterReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
 		ReconcileFunc: r.Reconcile,
-		Events: []controller.ResourceEventMatcher{ // matches reconciliation events that change the rate limit definitions or status of rate limit policies
+		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
@@ -45,8 +45,8 @@ func (r *istioRateLimitClusterReconciler) Subscription() controller.Subscription
 	}
 }
 
-func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("istioRateLimitClusterReconciler")
+func (r *IstioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("IstioRateLimitClusterReconciler")
 
 	logger.V(1).Info("building istio rate limit clusters")
 	defer logger.V(1).Info("finished building istio rate limit clusters")
@@ -119,7 +119,7 @@ func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 
 		existingEnvoyFilter := existingEnvoyFilterObj.(*controller.RuntimeObject).Object.(*istioclientgonetworkingv1alpha3.EnvoyFilter)
 
-		if equalEnvoyFilters(existingEnvoyFilter, desiredEnvoyFilter) {
+		if kuadrantistio.EqualEnvoyFilters(existingEnvoyFilter, desiredEnvoyFilter) {
 			logger.V(1).Info("envoyfilter object is up to date, nothing to do")
 			continue
 		}
@@ -149,7 +149,6 @@ func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 		_, desired := desiredEnvoyFilters[k8stypes.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}]
 		return o.GroupVersionKind().GroupKind() == kuadrantistio.EnvoyFilterGroupKind && labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(RateLimitObjectLabels()) && !desired
 	})
-
 	for _, envoyFilter := range staleEnvoyFilters {
 		if err := r.client.Resource(kuadrantistio.EnvoyFiltersResource).Namespace(envoyFilter.GetNamespace()).Delete(ctx, envoyFilter.GetName(), metav1.DeleteOptions{}); err != nil {
 			logger.Error(err, "failed to delete envoyfilter object", "envoyfilter", fmt.Sprintf("%s/%s", envoyFilter.GetNamespace(), envoyFilter.GetName()))
@@ -160,7 +159,7 @@ func (r *istioRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []con
 	return nil
 }
 
-func (r *istioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *limitadorv1alpha1.Limitador, gateway *machinery.Gateway) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
+func (r *IstioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *limitadorv1alpha1.Limitador, gateway *machinery.Gateway) (*istioclientgonetworkingv1alpha3.EnvoyFilter, error) {
 	envoyFilter := &istioclientgonetworkingv1alpha3.EnvoyFilter{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantistio.EnvoyFilterGroupKind.Kind,
@@ -192,84 +191,15 @@ func (r *istioRateLimitClusterReconciler) buildDesiredEnvoyFilter(limitador *lim
 		},
 	}
 
-	configPatches, err := istioEnvoyFilterClusterPatch(limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC))
+	limitadorService := limitador.Status.Service
+	if limitadorService == nil {
+		return nil, ErrMissingLimitadorServiceInfo
+	}
+	configPatches, err := kuadrantistio.BuildEnvoyFilterClusterPatch(limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC), rateLimitClusterPatch)
 	if err != nil {
 		return nil, err
 	}
 	envoyFilter.Spec.ConfigPatches = configPatches
 
 	return envoyFilter, nil
-}
-
-// istioEnvoyFilterClusterPatch returns an envoy config patch that defines the rate limit cluster for the gateway.
-// The rate limit cluster configures the endpoint of the external rate limit service.
-func istioEnvoyFilterClusterPatch(host string, port int) ([]*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch, error) {
-	patchRaw, _ := json.Marshal(map[string]any{"operation": "ADD", "value": rateLimitClusterPatch(host, port)})
-	patch := &istioapinetworkingv1alpha3.EnvoyFilter_Patch{}
-	if err := patch.UnmarshalJSON(patchRaw); err != nil {
-		return nil, err
-	}
-
-	return []*istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch{
-		{
-			ApplyTo: istioapinetworkingv1alpha3.EnvoyFilter_CLUSTER,
-			Match: &istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch{
-				ObjectTypes: &istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectMatch_Cluster{
-					Cluster: &istioapinetworkingv1alpha3.EnvoyFilter_ClusterMatch{
-						Service: host,
-					},
-				},
-			},
-			Patch: patch,
-		},
-	}, nil
-}
-
-func equalEnvoyFilters(a, b *istioclientgonetworkingv1alpha3.EnvoyFilter) bool {
-	if a.Spec.Priority != b.Spec.Priority || !kuadrantistio.EqualTargetRefs(a.Spec.TargetRefs, b.Spec.TargetRefs) {
-		return false
-	}
-
-	aConfigPatches := a.Spec.ConfigPatches
-	bConfigPatches := b.Spec.ConfigPatches
-	if len(aConfigPatches) != len(bConfigPatches) {
-		return false
-	}
-	return lo.EveryBy(aConfigPatches, func(aConfigPatch *istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch) bool {
-		return lo.SomeBy(bConfigPatches, func(bConfigPatch *istioapinetworkingv1alpha3.EnvoyFilter_EnvoyConfigObjectPatch) bool {
-			if aConfigPatch == nil && bConfigPatch == nil {
-				return true
-			}
-			if (aConfigPatch == nil && bConfigPatch != nil) || (aConfigPatch != nil && bConfigPatch == nil) {
-				return false
-			}
-
-			// apply_to
-			if aConfigPatch.ApplyTo != bConfigPatch.ApplyTo {
-				return false
-			}
-
-			// cluster match
-			aCluster := aConfigPatch.Match.GetCluster()
-			bCluster := bConfigPatch.Match.GetCluster()
-			if aCluster == nil || bCluster == nil {
-				return false
-			}
-			if aCluster.Service != bCluster.Service || aCluster.PortNumber != bCluster.PortNumber || aCluster.Subset != bCluster.Subset {
-				return false
-			}
-
-			// patch
-			aPatch := aConfigPatch.Patch
-			bPatch := bConfigPatch.Patch
-
-			if aPatch.Operation != bPatch.Operation || aPatch.FilterClass != bPatch.FilterClass {
-				return false
-			}
-
-			aPatchJSON, _ := aPatch.Value.MarshalJSON()
-			bPatchJSON, _ := aPatch.Value.MarshalJSON()
-			return string(aPatchJSON) == string(bPatchJSON)
-		})
-	})
 }

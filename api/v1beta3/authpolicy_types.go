@@ -25,6 +25,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	authorinov1beta2 "github.com/kuadrant/authorino/api/v1beta2"
 	"github.com/kuadrant/policy-machinery/machinery"
+	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -487,6 +488,39 @@ func (r *MergeablePatternExpressionOrRef) GetSource() string { return r.Source }
 func (r *MergeablePatternExpressionOrRef) WithSource(source string) kuadrantv1.MergeableRule {
 	r.Source = source
 	return r
+}
+func (r *MergeablePatternExpressionOrRef) ToWhenConditions(namedPatterns map[string]MergeablePatternExpressions) []WhenCondition {
+	if ref := r.PatternRef.Name; ref != "" {
+		if pattern, ok := namedPatterns[ref]; ok {
+			return lo.Map(pattern.PatternExpressions, func(p authorinov1beta2.PatternExpression, _ int) WhenCondition {
+				return WhenCondition{
+					Selector: ContextSelector(p.Selector),
+					Operator: WhenConditionOperator(p.Operator),
+					Value:    p.Value,
+				}
+			})
+		}
+	}
+
+	if allOf := r.All; len(allOf) > 0 {
+		return lo.Map(allOf, func(p authorinov1beta2.UnstructuredPatternExpressionOrRef, _ int) WhenCondition {
+			return WhenCondition{
+				Selector: ContextSelector(p.Selector),
+				Operator: WhenConditionOperator(p.Operator),
+				Value:    p.Value,
+			}
+		})
+	}
+
+	// FIXME: anyOf cannot be represented in the current schema of the wasm config
+
+	return []WhenCondition{
+		{
+			Selector: ContextSelector(r.Selector),
+			Operator: WhenConditionOperator(r.Operator),
+			Value:    r.Value,
+		},
+	}
 }
 
 type MergeableAuthenticationSpec struct {

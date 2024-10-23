@@ -3,11 +3,13 @@
 package common
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -108,4 +110,15 @@ func NamespacedNameFromLocator(locator string) (k8stypes.NamespacedName, error) 
 		return k8stypes.NamespacedName{Name: namespacedName[0]}, nil
 	}
 	return k8stypes.NamespacedName{Namespace: namespacedName[0], Name: namespacedName[1]}, nil
+}
+
+// Destruct converts an object to unstructured type via json
+// Use it alternatively to github.com/policy-machinery/controller.Destruct for complex objects with nested fields
+func Destruct[T any](obj T) (*unstructured.Unstructured, error) {
+	j, _ := json.Marshal(obj)
+	var u map[string]interface{}
+	if err := json.Unmarshal(j, &u); err != nil {
+		return nil, err
+	}
+	return &unstructured.Unstructured{Object: u}, nil
 }

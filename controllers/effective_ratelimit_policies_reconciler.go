@@ -22,19 +22,20 @@ type EffectiveRateLimitPolicy struct {
 
 type EffectiveRateLimitPolicies map[string]EffectiveRateLimitPolicy
 
-type effectiveRateLimitPolicyReconciler struct {
+type EffectiveRateLimitPolicyReconciler struct {
 	client *dynamic.DynamicClient
 }
 
-func (r *effectiveRateLimitPolicyReconciler) Subscription() controller.Subscription {
+// EffectiveRateLimitPolicyReconciler subscribe to the same events as auth because they are used together to compose gateway extension resources
+func (r *EffectiveRateLimitPolicyReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
 		ReconcileFunc: r.Reconcile,
-		Events:        rateLimitEventMatchers,
+		Events:        dataPlaneEffectivePoliciesEventMatchers,
 	}
 }
 
-func (r *effectiveRateLimitPolicyReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("effectiveRateLimitPolicyReconciler")
+func (r *EffectiveRateLimitPolicyReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("EffectiveRateLimitPolicyReconciler")
 
 	kuadrant, err := GetKuadrantFromTopology(topology)
 	if err != nil {
@@ -52,8 +53,8 @@ func (r *effectiveRateLimitPolicyReconciler) Reconcile(ctx context.Context, _ []
 	return nil
 }
 
-func (r *effectiveRateLimitPolicyReconciler) calculateEffectivePolicies(ctx context.Context, topology *machinery.Topology, kuadrant machinery.Object, state *sync.Map) EffectiveRateLimitPolicies {
-	logger := controller.LoggerFromContext(ctx).WithName("effectiveRateLimitPolicyReconciler").WithName("calculateEffectivePolicies")
+func (r *EffectiveRateLimitPolicyReconciler) calculateEffectivePolicies(ctx context.Context, topology *machinery.Topology, kuadrant machinery.Object, state *sync.Map) EffectiveRateLimitPolicies {
+	logger := controller.LoggerFromContext(ctx).WithName("EffectiveRateLimitPolicyReconciler").WithName("calculateEffectivePolicies")
 
 	targetables := topology.Targetables()
 	gatewayClasses := targetables.Children(kuadrant) // assumes only and all valid gateway classes are linked to kuadrant in the topology

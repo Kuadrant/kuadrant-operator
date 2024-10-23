@@ -26,6 +26,7 @@ import (
 const (
 	DNSRecordKind             = "DNSRecord"
 	StateDNSPolicyAcceptedKey = "DNSPolicyValid"
+	StateDNSPolicyErrorsKey   = "DNSPolicyErrors"
 )
 
 var (
@@ -117,6 +118,17 @@ func dnsPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error)
 		return
 	}
 	return
+}
+
+func dnsPolicyErrorFunc(state *sync.Map) func(policy machinery.Policy) error {
+	var policyErrorsMap map[string]error
+	policyErrors, exists := state.Load(StateDNSPolicyErrorsKey)
+	if exists {
+		policyErrorsMap = policyErrors.(map[string]error)
+	}
+	return func(policy machinery.Policy) error {
+		return policyErrorsMap[policy.GetLocator()]
+	}
 }
 
 type dnsPolicyTypeFilter func(item machinery.Policy, index int) (*v1alpha1.DNSPolicy, bool)

@@ -515,11 +515,10 @@ var _ = Describe("DNSPolicy controller", func() {
 							"Message": Equal("DNSPolicy has been accepted"),
 						}),
 						MatchFields(IgnoreExtras, Fields{
-							"Type":   Equal(string(kuadrant.PolicyConditionEnforced)),
-							"Status": Equal(metav1.ConditionTrue),
-							"Reason": Equal(string(kuadrant.PolicyReasonEnforced)),
-							//ToDo: Deal with error messages somehow
-							"Message": ContainSubstring("DNSPolicy has been successfully enforced : no DNSRecords created based on policy and gateway configuration"),
+							"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
+							"Status":  Equal(metav1.ConditionTrue),
+							"Reason":  Equal(string(kuadrant.PolicyReasonEnforced)),
+							"Message": ContainSubstring("DNSPolicy has been successfully enforced : no DNSRecords created based on policy and gateway configuration : no valid status addresses to use on gateway"),
 						})),
 				)
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
@@ -1035,10 +1034,9 @@ var _ = Describe("DNSPolicy controller", func() {
 
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":   Equal(string(kuadrant.PolicyConditionEnforced)),
-						"Status": Equal(metav1.ConditionTrue),
-						//ToDo: Deal with error messages somehow
-						"Message": ContainSubstring("DNSPolicy has been successfully enforced : no DNSRecords created based on policy and gateway configuration"),
+						"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
+						"Status":  Equal(metav1.ConditionTrue),
+						"Message": ContainSubstring("DNSPolicy has been successfully enforced : no DNSRecords created based on policy and gateway configuration : no routes attached to any gateway listeners"),
 					})),
 				)
 			}, tests.TimeoutMedium, time.Second).Should(Succeed())
@@ -1217,14 +1215,18 @@ var _ = Describe("DNSPolicy controller", func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
-						"Status": Equal(metav1.ConditionTrue),
+						"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Status":  Equal(metav1.ConditionTrue),
+						"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+						"Message": Equal("DNSPolicy has been accepted"),
 					})),
 				)
 				g.Expect(dnsPolicy.Status.Conditions).To(
 					ContainElement(MatchFields(IgnoreExtras, Fields{
-						"Type":   Equal(string(kuadrant.PolicyConditionEnforced)),
-						"Status": Equal(metav1.ConditionTrue),
+						"Type":    Equal(string(kuadrant.PolicyConditionEnforced)),
+						"Status":  Equal(metav1.ConditionTrue),
+						"Reason":  Equal(string(kuadrant.PolicyReasonEnforced)),
+						"Message": ContainSubstring("DNSPolicy has been successfully enforced : no DNSRecords created based on policy and gateway configuration : no valid status addresses to use on gateway"),
 					})),
 				)
 				g.Expect(int(dnsPolicy.Status.TotalRecords)).To(Equal(0))

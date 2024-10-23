@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 
@@ -44,6 +45,7 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 
 	policyTypeFilterFunc := dnsPolicyTypeFilterFunc()
 	policyAcceptedFunc := dnsPolicyAcceptedStatusFunc(state)
+	policyErrorFunc := dnsPolicyErrorFunc(state)
 
 	policies := lo.FilterMap(topology.Policies().Items(), policyTypeFilterFunc)
 
@@ -51,6 +53,8 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 
 	for _, policy := range policies {
 		pLogger := logger.WithValues("policy", policy.GetLocator())
+
+		pLogger.V(1).Info("updating dns policy status")
 
 		if policy.GetDeletionTimestamp() != nil {
 			pLogger.V(1).Info("policy marked for deletion, skipping")
@@ -70,28 +74,21 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 		if !accepted {
 			meta.RemoveStatusCondition(&newStatus.Conditions, string(kuadrant.PolicyConditionEnforced))
 		} else {
-			policyRecords := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, _ int) (*kuadrantdnsv1alpha1.DNSRecord, bool) {
+			policyRecords := lo.FilterMap(topology.Objects().Children(policy), func(item machinery.Object, _ int) (*kuadrantdnsv1alpha1.DNSRecord, bool) {
 				if rObj, isObj := item.(*controller.RuntimeObject); isObj {
 					if record, isRec := rObj.Object.(*kuadrantdnsv1alpha1.DNSRecord); isRec {
-						return record, lo.ContainsBy(topology.Policies().Parents(item), func(item machinery.Policy) bool {
-							return item.GetLocator() == policy.GetLocator()
-						})
+						return record, true
 					}
 				}
 				return nil, false
 			})
 
 			enforcedCond := enforcedCondition(policyRecords, policy)
+			if pErr := policyErrorFunc(policy); pErr != nil {
+				pLogger.V(1).Info("adding contextual error to policy enforced status", "err", pErr)
+				enforcedCond.Message = fmt.Sprintf("%s : %s", enforcedCond.Message, pErr.Error())
+			}
 			meta.SetStatusCondition(&newStatus.Conditions, *enforcedCond)
-
-			//ToDo: Deal with messages, these should probably be retrieved from state after the reconciliation task
-			// add some additional user friendly context
-			//if errors.Is(specErr, ErrNoAddresses) && !strings.Contains(eCond.Message, ErrNoAddresses.Error()) {
-			//	eCond.Message = fmt.Sprintf("%s : %s", eCond.Message, ErrNoAddresses.Error())
-			//}
-			//if errors.Is(specErr, ErrNoRoutes) && !strings.Contains(eCond.Message, ErrNoRoutes.Error()) {
-			//	eCond.Message = fmt.Sprintf("%s : %s", eCond.Message, ErrNoRoutes)
-			//}
 
 			propagateRecordConditions(policyRecords, newStatus)
 

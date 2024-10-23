@@ -53,6 +53,8 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 
 	policies := lo.FilterMap(topology.Policies().Items(), policyTypeFilterFunc)
 
+	policyErrors := map[string]error{}
+
 	logger.V(1).Info("updating dns policies", "policies", len(policies))
 
 	for _, policy := range policies {
@@ -78,6 +80,7 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 		}
 
 		var gatewayHasAttachedRoutes = false
+		var gatewayHasAddresses = false
 
 		clusterID, err := utils.GetClusterUID(ctx, r.client)
 		if err != nil {
@@ -89,8 +92,12 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 
 			gateway := listener.Gateway
 			if listener.Hostname == nil || *listener.Hostname == "" {
-				lLogger.Info("skipping listener no hostname assigned")
+				lLogger.Info("listener has no hostname assigned, skipping")
 				continue
+			}
+
+			if len(gateway.Status.Addresses) > 0 {
+				gatewayHasAddresses = true
 			}
 
 			hasAttachedRoute := false
@@ -124,17 +131,23 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 				return ok && o.GetNamespace() == listener.GetNamespace() && o.GetName() == dnsRecordName(listener.Gateway.Name, string(listener.Name))
 			})
 
+			if len(desiredRecord.Spec.Endpoints) == 0 {
+				policyErrors[policy.GetLocator()] = ErrNoAddresses
+			}
+
 			//Update
 			if ok {
+				rLogger := lLogger.WithValues("record", existingRecordObj.GetLocator())
+
 				existingRecord := existingRecordObj.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
 
 				//Deal with the potential deletion of a record first
 				if !hasAttachedRoute || len(desiredRecord.Spec.Endpoints) == 0 {
 					if logger.V(1).Enabled() {
 						if !hasAttachedRoute {
-							lLogger.V(1).Info("listener has no attached routes, deleting DNS record for listener")
+							rLogger.V(1).Info("listener has no attached routes, deleting record for listener")
 						} else {
-							lLogger.V(1).Info("no endpoint addresses for DNSRecord, deleting DNS record for listener")
+							rLogger.V(1).Info("no endpoint addresses for DNSRecord, deleting record for listener")
 						}
 					}
 					r.deleteRecord(ctx, existingRecordObj)
@@ -142,7 +155,7 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 				}
 
 				if desiredRecord.Spec.RootHost != existingRecord.Spec.RootHost {
-					lLogger.V(1).Info("listener hostname has changed, deleting DNS record for listener")
+					rLogger.V(1).Info("listener hostname has changed, deleting record for listener")
 					r.deleteRecord(ctx, existingRecordObj)
 					//Break to allow it to try the creation of the desired record
 					break
@@ -150,35 +163,44 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 
 				if reflect.DeepEqual(existingRecord.Spec, desiredRecord.Spec) &&
 					reflect.DeepEqual(existingRecord.OwnerReferences, desiredRecord.OwnerReferences) {
-					lLogger.V(1).Info("dns record is up to date, nothing to do")
+					rLogger.V(1).Info("dns record is up to date, nothing to do")
 					continue
 				}
 
-				lLogger.V(1).Info("updating DNS record for listener")
-				_, err = resource.Update(ctx, obj, metav1.UpdateOptions{})
-				if err != nil {
-					lLogger.Error(err, "unable to update dns record")
+				rLogger.V(1).Info("updating DNS record for listener")
+				if _, uErr := resource.Update(ctx, obj, metav1.UpdateOptions{}); uErr != nil {
+					rLogger.Error(err, "unable to update dns record")
 				}
 				continue
 			}
 
-			if !hasAttachedRoute || len(desiredRecord.Spec.Endpoints) == 0 {
+			if !hasAttachedRoute {
+				lLogger.V(1).Info("listener has no attached routes, skipping record create for listener")
+				continue
+			}
+
+			if len(desiredRecord.Spec.Endpoints) == 0 {
+				lLogger.V(1).Info("record for listener has no addresses, skipping record create for listener")
 				continue
 			}
 
 			//Create
 			lLogger.V(1).Info("creating DNS record for listener")
-			_, err = resource.Create(ctx, obj, metav1.CreateOptions{})
-			if err != nil && !apierrors.IsAlreadyExists(err) {
+			if _, cErr := resource.Create(ctx, obj, metav1.CreateOptions{}); cErr != nil && !apierrors.IsAlreadyExists(cErr) {
 				lLogger.Error(err, "unable to create dns record")
 			}
 		}
 
-		if !gatewayHasAttachedRoutes {
+		if !gatewayHasAddresses {
+			pLogger.V(1).Info("gateway has no addresses")
+			policyErrors[policy.GetLocator()] = ErrNoAddresses
+		} else if !gatewayHasAttachedRoutes {
 			pLogger.V(1).Info("gateway has no attached routes")
-			//return ErrNoRoutes
+			policyErrors[policy.GetLocator()] = ErrNoRoutes
 		}
 	}
+
+	state.Store(StateDNSPolicyErrorsKey, policyErrors)
 
 	return r.deleteOrphanDNSRecords(controller.LoggerIntoContext(ctx, logger), topology)
 }

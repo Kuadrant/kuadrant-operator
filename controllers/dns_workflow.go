@@ -31,7 +31,7 @@ const (
 
 var (
 	DNSRecordResource  = kuadrantdnsv1alpha1.GroupVersion.WithResource("dnsrecords")
-	DNSRecordGroupKind = schema.GroupKind{Group: kuadrantdnsv1alpha1.GroupVersion.Group, Kind: "DNSRecord"}
+	DNSRecordGroupKind = schema.GroupKind{Group: kuadrantdnsv1alpha1.GroupVersion.Group, Kind: DNSRecordKind}
 )
 
 //+kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch

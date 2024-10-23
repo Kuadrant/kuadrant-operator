@@ -30,12 +30,16 @@ func ExtensionName(gatewayName string) string {
 func BuildConfigForActionSet(actionSets []ActionSet) Config {
 	return Config{
 		Services: map[string]Service{
+			AuthServiceName: {
+				Type:        AuthServiceType,
+				Endpoint:    common.KuadrantAuthClusterName,
+				FailureMode: FailureModeDeny,
+			},
 			RateLimitServiceName: {
 				Type:        RateLimitServiceType,
 				Endpoint:    common.KuadrantRateLimitClusterName,
 				FailureMode: FailureModeAllow,
 			},
-			// TODO: add auth extension
 		},
 		ActionSets: actionSets,
 	}

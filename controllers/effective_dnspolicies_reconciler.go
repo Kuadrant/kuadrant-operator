@@ -57,6 +57,11 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 
 	logger.V(1).Info("updating dns policies", "policies", len(policies))
 
+	clusterID, err := utils.GetClusterUID(ctx, r.client)
+	if err != nil {
+		return fmt.Errorf("failed to generate cluster ID: %w", err)
+	}
+
 	for _, policy := range policies {
 		pLogger := logger.WithValues("policy", policy.GetLocator())
 
@@ -81,11 +86,6 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 
 		var gatewayHasAttachedRoutes = false
 		var gatewayHasAddresses = false
-
-		clusterID, err := utils.GetClusterUID(ctx, r.client)
-		if err != nil {
-			return fmt.Errorf("failed to generate cluster ID: %w", err)
-		}
 
 		for _, listener := range listeners {
 			lLogger := pLogger.WithValues("listener", listener.GetLocator())
@@ -209,23 +209,19 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 // If the target is a Listener a single element array containing that listener is returned.
 // If the target is a Gateway all listeners that do not have a DNS policy explicitly attached are returned.
 func (r *EffectiveDNSPoliciesReconciler) listenersForPolicy(_ context.Context, topology *machinery.Topology, policy machinery.Policy, policyTypeFilterFunc dnsPolicyTypeFilter) []*machinery.Listener {
-	return lo.Flatten(lo.FilterMap(topology.Targetables().Items(), func(t machinery.Targetable, _ int) ([]*machinery.Listener, bool) {
-		pTarget := lo.ContainsBy(t.Policies(), func(item machinery.Policy) bool {
-			return item.GetLocator() == policy.GetLocator()
-		})
-		if pTarget {
-			if l, ok := t.(*machinery.Listener); ok {
-				return []*machinery.Listener{l}, true
-			}
-			if g, ok := t.(*machinery.Gateway); ok {
-				listeners := lo.FilterMap(topology.Targetables().Children(g), func(t machinery.Targetable, _ int) (*machinery.Listener, bool) {
-					l, lok := t.(*machinery.Listener)
-					lPolicies := lo.FilterMap(l.Policies(), policyTypeFilterFunc)
-					return l, lok && len(lPolicies) == 0
-				})
-				return listeners, true
-			}
+	return lo.Flatten(lo.FilterMap(topology.Targetables().Children(policy), func(t machinery.Targetable, _ int) ([]*machinery.Listener, bool) {
+		if l, ok := t.(*machinery.Listener); ok {
+			return []*machinery.Listener{l}, true
 		}
+		if g, ok := t.(*machinery.Gateway); ok {
+			listeners := lo.FilterMap(topology.Targetables().Children(g), func(t machinery.Targetable, _ int) (*machinery.Listener, bool) {
+				l, lok := t.(*machinery.Listener)
+				lPolicies := lo.FilterMap(l.Policies(), policyTypeFilterFunc)
+				return l, lok && len(lPolicies) == 0
+			})
+			return listeners, true
+		}
+
 		return nil, false
 	}))
 }

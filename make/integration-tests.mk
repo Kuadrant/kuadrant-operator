@@ -23,7 +23,6 @@ test-bare-k8s-integration: clean-cov generate fmt vet ginkgo ## Requires only ba
 		--keep-going \
 		--trace \
 		--race \
-		-v \
 		--output-interceptor-mode=none \
 		$(INTEGRATION_TESTS_EXTRA_ARGS) ./tests/bare_k8s/...
 
@@ -44,7 +43,6 @@ test-gatewayapi-env-integration: clean-cov generate fmt vet ginkgo ## Requires k
 		--keep-going \
 		--trace \
 		--race \
-		-v \
 		--output-interceptor-mode=none \
 		$(INTEGRATION_TESTS_EXTRA_ARGS) ./tests/gatewayapi/...
 
@@ -65,7 +63,6 @@ test-istio-env-integration: clean-cov generate fmt vet ginkgo ## Requires kubern
 		--keep-going \
 		--trace \
 		--race \
-		-v \
 		--output-interceptor-mode=none \
 		$(INTEGRATION_TESTS_EXTRA_ARGS) tests/istio/...
 
@@ -85,7 +82,6 @@ test-envoygateway-env-integration: clean-cov generate fmt vet ginkgo ## Requires
 		--keep-going \
 		--trace \
 		--race \
-		-v \
 		--output-interceptor-mode=none \
 		$(INTEGRATION_TESTS_EXTRA_ARGS) tests/envoygateway/...
 
@@ -105,7 +101,7 @@ test-integration: clean-cov generate fmt vet ginkgo ## Requires kubernetes clust
 		--fail-on-pending \
 		--keep-going \
 		--trace \
-		-v \
 		--race \
 		--output-interceptor-mode=none \
+		-v \
 		$(INTEGRATION_TESTS_EXTRA_ARGS) $(INTEGRATION_TEST_PACKAGES)

@@ -105,7 +105,6 @@ func TestMain(m *testing.M) {
 	logger := log.NewLogger(
 		log.SetLevel(log.DebugLevel),
 		log.SetMode(log.ModeDev),
-		log.WriteTo(GinkgoWriter),
 	).WithName("envoygateway_controller_test")
 	log.SetLogger(logger)
 	os.Exit(m.Run())

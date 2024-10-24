@@ -55,17 +55,28 @@ func (o *AffectedPolicyMap) RemoveAffectedPolicy(p Policy) {
 
 // IsPolicyAffected checks if the provided Policy is affected based on the tracking map maintained.
 func (o *AffectedPolicyMap) IsPolicyAffected(p Policy) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
 	return o.policies[p.GetUID()] != nil
 }
 
 // IsPolicyOverridden checks if the provided Policy is affected based on the tracking map maintained.
 // It is overridden if there is policies affecting it
 func (o *AffectedPolicyMap) IsPolicyOverridden(p Policy) bool {
-	return o.IsPolicyAffected(p) && len(o.policies[p.GetUID()]) > 0
+	pAffected := o.IsPolicyAffected(p)
+
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	return pAffected && len(o.policies[p.GetUID()]) > 0
 }
 
 // PolicyAffectedBy returns the clients keys that a policy is Affected by
 func (o *AffectedPolicyMap) PolicyAffectedBy(p Policy) []client.ObjectKey {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
 	return o.policies[p.GetUID()]
 }
 

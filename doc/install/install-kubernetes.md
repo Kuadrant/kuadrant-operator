@@ -113,6 +113,37 @@ kubectl wait --for=jsonpath='{.status.state}'=AtLatestKnown subscription/my-kuad
 
 Kuadrant is now ready to use.
 
+### (Optional) Observability setup (Istio only)
+
+There is a set of example dashboards and alerts in the kuadrant-operator repo that can be used for obserability of the Kuadrant components and gateway.
+To make use of these, first install the example monitoring stack and configuration:
+
+```bash
+kubectl apply -k github.com/Kuadrant/kuadrant-operator/config/observability?ref=main --dry-run=client -o yaml | docker run --rm -i docker.io/ryane/kfilt -i kind=CustomResourceDefinition | kubectl apply --server-side -f -
+kubectl apply -k github.com/Kuadrant/kuadrant-operator/config/observability?ref=main --dry-run=client -o yaml | docker run --rm -i docker.io/ryane/kfilt -x kind=CustomResourceDefinition | kubectl apply -f -
+kubectl apply -k github.com/Kuadrant/kuadrant-operator/config/thanos?ref=main
+kubectl apply -k github.com/Kuadrant/kuadrant-operator/examples/dashboards?ref=main
+kubectl apply -k github.com/Kuadrant/kuadrant-operator/examples/alerts?ref=main
+THANOS_RECEIVE_ROUTER_IP=$(kubectl -n monitoring get svc thanos-receive-router-lb -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+kubectl -n monitoring patch prometheus k8s --type='merge' -p '{"spec":{"remoteWrite":[{"url":"http://'"$THANOS_RECEIVE_ROUTER_IP"':19291/api/v1/receive", "writeRelabelConfigs":[{"action":"replace", "replacement":"'"$KUADRANT_CLUSTER_NAME"'", "targetLabel":"cluster_id"}]}]}}'
+kubectl apply -k github.com/Kuadrant/kuadrant-operator/config/observability/prometheus/monitors/istio?ref=main
+```
+
+This will deploy prometheus, alertmanager and Grafana into the monitoring namespace, along with metrics scrape configuration for Istio and Envoy Proxy. Thanos will also be deployed with prometheus configured to remote write to it.
+
+To access Grafana and Prometheus, you can port forward to the services:
+
+```bash
+kubectl -n monitoring port-forward service/grafana 3000:3000
+```
+
+The Grafana UI can then be found at http://127.0.0.1:3000/ (default user/pass of admin & admin).
+
+```bash
+kubectl -n monitoring port-forward service/prometheus-k8s 9090:9090
+```
+
+The Prometheus UI can then be found at http://127.0.0.1:9090.
 
 ### (Optional) `DNSPolicy` setup
 

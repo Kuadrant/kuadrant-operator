@@ -9,7 +9,7 @@ import (
 
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
-	_struct "google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/structpb"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -82,7 +82,7 @@ func ActionSetNameForPath(pathID string, httpRouteMatchIndex int, hostname strin
 	return hex.EncodeToString(hash[:])
 }
 
-func ConfigFromStruct(structure *_struct.Struct) (*Config, error) {
+func ConfigFromStruct(structure *structpb.Struct) (*Config, error) {
 	if structure == nil {
 		return nil, errors.New("cannot desestructure config from nil")
 	}

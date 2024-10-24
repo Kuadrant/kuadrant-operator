@@ -12,11 +12,7 @@ resources:
 # scrape config.
 # See https://github.com/prometheus-operator/prometheus-operator/issues/3071#issuecomment-763746836
   - prometheus/additional-scrape-configs.yaml
-  #https://istio.io/latest/docs/reference/config/telemetry/#MetricSelector-IstioMetric
-  - prometheus/monitors/service-monitor-limitador-operator.yaml
-  - prometheus/monitors/service-monitor-kuadrant-operator.yaml
-  - prometheus/monitors/service-monitor-authorino-operator.yaml
-  - prometheus/monitors/service-monitor-dns-operator.yaml
+  - prometheus/monitors/operators.yaml
 
 
 patchesStrategicMerge:

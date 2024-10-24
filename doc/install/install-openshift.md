@@ -172,36 +172,56 @@ Wait for Envoy Gateway to become available::
 kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
 ```
 
-### Step 6 - Optional: Configure observability and metrics
+### Step 6 - Optional: Configure observability and metrics (Istio only)
 
-Kuadrant provides a set of example dashboards that use known metrics exported by Kuadrant and Gateway components to provide insight into different components of your APIs and Gateways. While not essential, it is best to set up an OpenShift monitoring stack. This section provides links to OpenShift and Thanos documentation on configuring monitoring and metrics storage.
-
-You can set up user-facing monitoring by following the steps in the OpenShift documentation on [configuring the monitoring stack](https://docs.openshift.com/container-platform/latest/observability/monitoring/configuring-the-monitoring-stack.html).
-
-If you have user workload monitoring enabled, it is best to configure remote writes to a central storage system such as Thanos:
-
-- [OpenShift remote write configuration](https://docs.openshift.com/container-platform/latest/observability/monitoring/configuring-the-monitoring-stack.html#configuring_remote_write_storage_configuring-the-monitoring-stack)
-- [Kube Thanos](https://github.com/thanos-io/kube-thanos)
-
+Kuadrant provides a set of example dashboards that use known metrics exported by Kuadrant and Gateway components to provide insight into different components of your APIs and Gateways. While not essential, it is recommended to set these up.
+First, enable [monitoring for user-defined projects](https://docs.openshift.com/container-platform/4.17/observability/monitoring/enabling-monitoring-for-user-defined-projects.html#enabling-monitoring-for-user-defined-projects_enabling-monitoring-for-user-defined-projects).
+This will allow the scraping of metrics from the gateway and Kuadrant components.
 The [example dashboards and alerts](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/examples/) for observing Kuadrant functionality use low-level CPU metrics and network metrics available from the user monitoring stack in OpenShift. They also use resource state metrics from Gateway API and Kuadrant resources.
 
-To scrape these additional metrics, you can install a `kube-state-metrics instance`, with a custom resource configuration as follows:
+To scrape these additional metrics, you can install a `kube-state-metrics` instance, with a custom resource configuration as follows:
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/config/observability/openshift/kube-state-metrics.yaml
 kubectl apply -k https://github.com/Kuadrant/gateway-api-state-metrics?ref=main
 ```
 
-To enable request metrics in Istio, you must create a `telemetry` resource as follows:
+To enable request metrics in Istio and scrape them, create the following resource:
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/config/observability/prometheus/monitors/istio/service-monitor-istiod.yaml
+```
+
+Some example dashboards show aggregations based on the path of requests.
+By default, Istio metrics don't include labels for request paths.
+However, you can enable them with the below Telemetry resource.
+Note that this may lead to a [high cardinality](https://www.robustperception.io/cardinality-is-key/) label where multiple time-series are generated,
+which can have an impact on performance and resource usage.
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/config/observability/openshift/telemetry.yaml
 ```
 
-If you have Grafana installed in your cluster, you can import the [example dashboards and alerts](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/examples).
+You can configure scraping of metrics from the various Kuadrant operators with the below resources.
 
-For example installation details, see [installing Grafana on OpenShift](https://cloud.redhat.com/experts/o11y/ocp-grafana/). When installed, you must add your Thanos instance as a data source to Grafana. Alternatively, if you are using only the user workload monitoring stack in your OpenShift cluster, and not writing metrics to an external Thanos instance, you can [set up a data source to the thanos-querier route in the OpenShift cluster](https://docs.openshift.com/container-platform/4.15/observability/monitoring/accessing-third-party-monitoring-apis.html#accessing-metrics-from-outside-cluster_accessing-monitoring-apis-by-using-the-cli).
+```bash
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/config/observability/prometheus/monitors/operators.yaml
+```
 
+!!! note
+
+    There is 1 more metrics configuration that needs to be applied so that all relevant metrics are being scraped.
+    That configuration depends on where you deploy your Gateway later.
+    The steps to configure that are detailed in the follow on [Secure, protect, and connect](../user-guides/secure-protect-connect-single-multi-cluster.md) guide.
+
+The [example Grafana dashboards and alerts](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/examples/) for observing Kuadrant functionality use low-level CPU metrics and network metrics available from the user monitoring stack in OpenShift. They also use resource state metrics from Gateway API and Kuadrant resources.
+
+For Grafana installation details, see [installing Grafana on OpenShift](https://cloud.redhat.com/experts/o11y/ocp-grafana/). That guide also explains how to set up a data source for the Thanos Query instance in OpenShift. For more detailed information about accessing the Thanos Query endpoint, see the [OpenShift documentation](https://docs.openshift.com/container-platform/4.17/observability/monitoring/accessing-third-party-monitoring-apis.html#accessing-metrics-from-outside-cluster_accessing-monitoring-apis-by-using-the-cli).
+
+!!! note
+
+    For some dashboard panels to work correctly, HTTPRoutes must include a "service" and "deployment" label with a value that matches the name of the service & deployment being routed to. eg. "service=myapp, deployment=myapp".
+    This allows low level Istio & envoy metrics to be joined with Gateway API state metrics.
 
 ### Step 7 - Setup the catalogsource
 

@@ -345,7 +345,7 @@ run: export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 run: generate fmt vet ## Run a controller from your host.
-	go run -ldflags "-X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" ./main.go
+	go run -ldflags "-X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" --race ./main.go
 
 docker-build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 docker-build: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")

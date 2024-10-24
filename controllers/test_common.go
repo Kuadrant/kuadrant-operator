@@ -99,17 +99,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 
 	Expect(err).NotTo(HaveOccurred())
 
-	targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-		mgr.GetAPIReader(),
-		log.Log.WithName("targetstatus"),
-	)
-
-	err = (&TargetStatusReconciler{
-		BaseReconciler: targetStatusBaseReconciler,
-	}).SetupWithManager(mgr)
-
 	Expect(err).NotTo(HaveOccurred())
 
 	dClient, err := dynamic.NewForConfig(mgr.GetConfig())

@@ -2,8 +2,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
-	"slices"
 	"sync"
 
 	"github.com/kuadrant/policy-machinery/controller"
@@ -14,8 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
@@ -60,7 +56,7 @@ func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, 
 	}
 
 	for _, gw := range gateways {
-		conditions := slices.Clone(gw.Status.Conditions)
+		conditions := gw.Status.DeepCopy().Conditions
 
 		// TODO: What happens for multiple policies of the same kind -
 		// TODO: Should it be conditions per listener?
@@ -88,13 +84,6 @@ func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, 
 
 			// Has policies of kind attached
 			for _, policy := range policies {
-				condition := metav1.Condition{
-					Type:    PolicyAffectedConditionType(policyKind.Kind),
-					Status:  metav1.ConditionTrue,
-					Reason:  string(gatewayapiv1alpha2.PolicyReasonAccepted),
-					Message: fmt.Sprintf("Object affected by %s %s", policyKind, client.ObjectKey{Namespace: policy.GetNamespace(), Name: policy.GetName()}),
-				}
-
 				// TODO: Refine
 				p, ok := policy.(gatewayapi.Policy)
 				if !ok {
@@ -102,15 +91,7 @@ func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, 
 					continue
 				}
 
-				// Set condition if policy is not affected
-				if c := meta.FindStatusCondition(p.GetStatus().GetConditions(), string(gatewayapiv1alpha2.PolicyConditionAccepted)); c == nil || c.Status != metav1.ConditionTrue { // should we aim for 'Enforced' instead?
-					condition.Status = metav1.ConditionFalse
-					condition.Message = fmt.Sprintf("Object unaffected by %s %s, policy is not accepted", policyKind, client.ObjectKey{Namespace: policy.GetNamespace(), Name: policy.GetName()})
-					condition.Reason = PolicyReasonUnknown
-					if c != nil {
-						condition.Reason = c.Reason
-					}
-				}
+				condition := buildPolicyAffectedCondition(p)
 
 				if c := meta.FindStatusCondition(conditions, condition.Type); c != nil && c.Status == condition.Status &&
 					c.Reason == condition.Reason && c.Message == condition.Message && c.ObservedGeneration == gw.GetGeneration() {

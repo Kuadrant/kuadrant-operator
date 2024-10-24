@@ -186,14 +186,23 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/ma
 kubectl apply -k https://github.com/Kuadrant/gateway-api-state-metrics?ref=main
 ```
 
-To enable request metrics in Istio and scrape them, create the following resources:
+To enable request metrics in Istio and scrape them, create the following resource:
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/config/observability/openshift/telemetry.yaml
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/config/observability/prometheus/monitors/istio/service-monitor-istiod.yaml
 ```
 
-You also need to configure scraping of metrics from the various Kuadrant operators.
+Some example dashboards show aggregations based on the path of requests.
+By default, Istio metrics don't include labels for request paths.
+However, you can enable them with the below Telemetry resource.
+Note that this may lead to a [high cardinality](https://www.robustperception.io/cardinality-is-key/) label where multiple time-series are generated,
+which can have an impact on performance and resource usage.
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/config/observability/openshift/telemetry.yaml
+```
+
+You can configure scraping of metrics from the various Kuadrant operators with the below resources.
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/config/observability/prometheus/monitors/operators.yaml
@@ -202,12 +211,17 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/re
 !!! note
 
     There is 1 more metrics configuration that needs to be applied so that all relevant metrics are being scraped.
-    That configuration depends on where you deploy your Gateway.
-    The steps to configure that are detailed in the follow on 'Secure, protect, and connect' guide.
+    That configuration depends on where you deploy your Gateway later.
+    The steps to configure that are detailed in the follow on [Secure, protect, and connect](../user-guides/secure-protect-connect-single-multi-cluster.md) guide.
 
 The [example Grafana dashboards and alerts](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/examples/) for observing Kuadrant functionality use low-level CPU metrics and network metrics available from the user monitoring stack in OpenShift. They also use resource state metrics from Gateway API and Kuadrant resources.
 
-For Grafana installation details, see [installing Grafana on OpenShift](https://cloud.redhat.com/experts/o11y/ocp-grafana/). When installed, you must [set up a data source to the thanos-querier route in the OpenShift cluster](https://docs.openshift.com/container-platform/4.15/observability/monitoring/accessing-third-party-monitoring-apis.html#accessing-metrics-from-outside-cluster_accessing-monitoring-apis-by-using-the-cli).
+For Grafana installation details, see [installing Grafana on OpenShift](https://cloud.redhat.com/experts/o11y/ocp-grafana/). That guide also explains how to set up a data source for the Thanos Query instance in OpenShift. For more detailed information about accessing the Thanos Query endpoint, see the [OpenShift documentation](https://docs.openshift.com/container-platform/4.17/observability/monitoring/accessing-third-party-monitoring-apis.html#accessing-metrics-from-outside-cluster_accessing-monitoring-apis-by-using-the-cli).
+
+!!! note
+
+    For some dashboard panels to work correctly, HTTPRoutes must include a "service" and "deployment" label with a value that matches the name of the service & deployment being routed to. eg. "service=myapp, deployment=myapp".
+    This allows low level Istio & envoy metrics to be joined with Gateway API state metrics.
 
 ### Step 7 - Setup the catalogsource
 

@@ -164,41 +164,58 @@ Kuadrant can help with this by using a TLSPolicy.
 
 ### Step 4a - (Optional) Configure metrics to be scraped from the Gateway instance
 
-If you have prometheus in your cluster, set up a metrics proxy service and a ServiceMonitor to configure it to scrape metrics directly from the Gateway pod.
-This must be done in the namespace where a Gateway is running.
-The reason for the metrics proxy service is because the metrics port (15020) is not exposed by the default Service of the Gateway.
+If you have prometheus in your cluster, set up a PodMonitor to configure it to scrape metrics directly from the Gateway pod.
+This must be done in the namespace where the Gateway is running.
 This configuration is required for metrics such as `istio_requests_total`.
 
 ```bash
 kubectl apply -f - <<EOF
 apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
+kind: PodMonitor
 metadata:
-  name: ingress-gateway
+  name: istio-proxies-monitor
   namespace: ${gatewayNS}
 spec:
   selector:
-    matchLabels:
-      istio.io/gateway-name: ${gatewayName}
-  endpoints:
-  - port: metrics
-    path: /stats/prometheus
---- 
-apiVersion: v1
-kind: Service
-metadata:
-  name: ingress-metrics-proxy
-  namespace: ${gatewayNS}
-  labels:
-    istio.io/gateway-name: ${gatewayName}
-spec:
-  selector:
-    istio.io/gateway-name: ${gatewayName}
-  ports:
-  - name: metrics
-    protocol: TCP
-    port: 15020
-    targetPort: 15020    
+    matchExpressions:
+      - key: istio-prometheus-ignore
+        operator: DoesNotExist
+  podMetricsEndpoints:
+    - path: /stats/prometheus
+      interval: 30s
+      relabelings:
+        - action: keep
+          sourceLabels: ["__meta_kubernetes_pod_container_name"]
+          regex: "istio-proxy"
+        - action: keep
+          sourceLabels:
+            ["__meta_kubernetes_pod_annotationpresent_prometheus_io_scrape"]
+        - action: replace
+          regex: (\d+);(([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4})
+          replacement: "[$2]:$1"
+          sourceLabels:
+            [
+              "__meta_kubernetes_pod_annotation_prometheus_io_port",
+              "__meta_kubernetes_pod_ip",
+            ]
+          targetLabel: "__address__"
+        - action: replace
+          regex: (\d+);((([0-9]+?)(\.|$)){4})
+          replacement: "$2:$1"
+          sourceLabels:
+            [
+              "__meta_kubernetes_pod_annotation_prometheus_io_port",
+              "__meta_kubernetes_pod_ip",
+            ]
+          targetLabel: "__address__"
+        - action: labeldrop
+          regex: "__meta_kubernetes_pod_label_(.+)"
+        - sourceLabels: ["__meta_kubernetes_namespace"]
+          action: replace
+          targetLabel: namespace
+        - sourceLabels: ["__meta_kubernetes_pod_name"]
+          action: replace
+          targetLabel: pod_name
 EOF
 ```
 

@@ -12,7 +12,6 @@ resources:
 # scrape config.
 # See https://github.com/prometheus-operator/prometheus-operator/issues/3071#issuecomment-763746836
   - prometheus/additional-scrape-configs.yaml
-  #https://istio.io/latest/docs/reference/config/telemetry/#MetricSelector-IstioMetric
   - prometheus/monitors/operators.yaml
 
 

@@ -122,15 +122,6 @@ func (r *TargetStatusReconciler) reconcileResourcesForPolicyKind(parentCtx conte
 	if !gatewayPolicyExists {
 		// remove the condition from the gateway
 		conditionType := PolicyAffectedConditionType(policyKind)
-		if c := meta.FindStatusCondition(gw.Status.Conditions, conditionType); c == nil {
-			logger.V(1).Info("condition already absent, skipping", "condition", conditionType)
-		} else {
-			meta.RemoveStatusCondition(&gw.Status.Conditions, conditionType)
-			logger.V(1).Info("removing condition from gateway", "condition", conditionType)
-			if err := r.Client().Status().Update(ctx, gw); err != nil {
-				errs = errors.Join(errs, err)
-			}
-		}
 
 		// remove the condition from the routes not targeted by any policy
 		if policy.PolicyClass() == kuadrantgatewayapi.InheritedPolicy {
@@ -158,21 +149,7 @@ func (r *TargetStatusReconciler) reconcileResourcesForPolicyKind(parentCtx conte
 		}
 
 		// update status of targeted gateway and routes not targeted by any policy
-		if _, updated := reconciledTargets[targetRefKey]; updated { // do not update the same gateway twice
-			return nil
-		}
 		condition := buildPolicyAffectedCondition(policy)
-		if c := meta.FindStatusCondition(gw.Status.Conditions, condition.Type); c != nil && c.Status == condition.Status && c.Reason == condition.Reason && c.Message == condition.Message && c.ObservedGeneration == gw.GetGeneration() {
-			logger.V(1).Info("condition already up-to-date, skipping", "condition", condition.Type, "status", condition.Status)
-		} else {
-			gwCondition := condition.DeepCopy()
-			gwCondition.ObservedGeneration = gw.GetGeneration()
-			meta.SetStatusCondition(&gw.Status.Conditions, *gwCondition)
-			logger.V(1).Info("adding condition to gateway", "condition", condition.Type, "status", condition.Status)
-			if err := r.Client().Status().Update(ctx, gw); err != nil {
-				return err
-			}
-		}
 		// update status of all untargeted routes accepted by the gateway
 		if policy.PolicyClass() == kuadrantgatewayapi.InheritedPolicy {
 			if err := r.updateInheritedGatewayCondition(ctx, topology.GetUntargetedRoutes(gw), condition, gatewayKey, r.addRouteCondition); err != nil {

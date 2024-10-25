@@ -212,7 +212,7 @@ func GetGatewayParentKeys(route *gatewayapiv1.HTTPRoute) []client.ObjectKey {
 }
 
 func EqualLocalPolicyTargetReferencesWithSectionName(a, b []gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName) bool {
-	return len(a) == len(b) && !lo.EveryBy(a, func(aTargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName) bool {
+	return len(a) == len(b) && lo.EveryBy(a, func(aTargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName) bool {
 		return lo.SomeBy(b, func(bTargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName) bool {
 			return aTargetRef.Group == bTargetRef.Group && aTargetRef.Kind == bTargetRef.Kind && aTargetRef.Name == bTargetRef.Name && ptr.Deref(aTargetRef.SectionName, gatewayapiv1alpha2.SectionName("")) == ptr.Deref(bTargetRef.SectionName, gatewayapiv1alpha2.SectionName(""))
 		})

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"sync"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -283,20 +282,20 @@ func equalEnvoyExtensionPolicies(a, b *envoygatewayv1alpha1.EnvoyExtensionPolicy
 	aWasms := a.Spec.Wasm
 	bWasms := b.Spec.Wasm
 
-	return len(aWasms) == len(bWasms) && !lo.EveryBy(aWasms, func(aWasm envoygatewayv1alpha1.Wasm) bool {
+	return len(aWasms) == len(bWasms) && lo.EveryBy(aWasms, func(aWasm envoygatewayv1alpha1.Wasm) bool {
 		return lo.SomeBy(bWasms, func(bWasm envoygatewayv1alpha1.Wasm) bool {
 			if ptr.Deref(aWasm.Name, "") != ptr.Deref(bWasm.Name, "") || ptr.Deref(aWasm.RootID, "") != ptr.Deref(bWasm.RootID, "") || ptr.Deref(aWasm.FailOpen, false) != ptr.Deref(bWasm.FailOpen, false) || aWasm.Code.Type != bWasm.Code.Type || aWasm.Code.Image.URL != bWasm.Code.Image.URL {
 				return false
 			}
-			aWasmConfigJSON, err := wasm.ConfigFromJSON(aWasm.Config)
+			aConfig, err := wasm.ConfigFromJSON(aWasm.Config)
 			if err != nil {
 				return false
 			}
-			bWasmConfigJSON, err := wasm.ConfigFromJSON(bWasm.Config)
+			bConfig, err := wasm.ConfigFromJSON(bWasm.Config)
 			if err != nil {
 				return false
 			}
-			return reflect.DeepEqual(aWasmConfigJSON, bWasmConfigJSON)
+			return aConfig != nil && bConfig != nil && aConfig.EqualTo(bConfig)
 		})
 	})
 }

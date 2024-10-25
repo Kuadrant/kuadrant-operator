@@ -272,6 +272,8 @@ github.com/kuadrant/policy-machinery v0.6.4-0.20241025154236-441b3616a4c2 h1:vBx
 github.com/kuadrant/policy-machinery v0.6.4-0.20241025154236-441b3616a4c2/go.mod h1:ZV4xS0CCxPgu/Xg6gz+YUaS9zqEXKOiAj33bZ67B6Lo=
 github.com/kuadrant/policy-machinery v0.6.4-0.20241025155033-3a07f46a26a5 h1:3LAfrCyso2zSZHyvKcDnXhUZM8covdywnj6/46Ni9SY=
 github.com/kuadrant/policy-machinery v0.6.4-0.20241025155033-3a07f46a26a5/go.mod h1:ZV4xS0CCxPgu/Xg6gz+YUaS9zqEXKOiAj33bZ67B6Lo=
+github.com/kuadrant/policy-machinery v0.6.4 h1:UMdZ2p7WyUdOKcWlJA2w2MzJnB8/Nn4dT6hE9cUcbeg=
+github.com/kuadrant/policy-machinery v0.6.4/go.mod h1:ZV4xS0CCxPgu/Xg6gz+YUaS9zqEXKOiAj33bZ67B6Lo=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 h1:SOEGU9fKiNWd/HOJuq6+3iTQz8KNCLtVX6idSoTLdUw=

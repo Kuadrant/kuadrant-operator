@@ -17,7 +17,6 @@ limitations under the License.
 package v1beta3
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -357,44 +356,6 @@ type AuthPolicySpec struct {
 	// Bare set of policy rules (implicit defaults).
 	// Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
 	AuthPolicySpecProper `json:""`
-}
-
-// UnmarshalJSON unmarshals the AuthPolicySpec from JSON byte array.
-// This should not be needed, but runtime.DefaultUnstructuredConverter.FromUnstructured does not work well with embedded structs.
-func (s *AuthPolicySpec) UnmarshalJSON(j []byte) error {
-	targetRef := struct {
-		gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
-	}{}
-	if err := json.Unmarshal(j, &targetRef); err != nil {
-		return err
-	}
-	s.TargetRef = targetRef.LocalPolicyTargetReferenceWithSectionName
-
-	defaults := &struct {
-		*MergeableAuthPolicySpec `json:"defaults,omitempty"`
-	}{}
-	if err := json.Unmarshal(j, defaults); err != nil {
-		return err
-	}
-	s.Defaults = defaults.MergeableAuthPolicySpec
-
-	overrides := &struct {
-		*MergeableAuthPolicySpec `json:"overrides,omitempty"`
-	}{}
-	if err := json.Unmarshal(j, overrides); err != nil {
-		return err
-	}
-	s.Overrides = overrides.MergeableAuthPolicySpec
-
-	proper := struct {
-		AuthPolicySpecProper `json:""`
-	}{}
-	if err := json.Unmarshal(j, &proper); err != nil {
-		return err
-	}
-	s.AuthPolicySpecProper = proper.AuthPolicySpecProper
-
-	return nil
 }
 
 func (s *AuthPolicySpec) Proper() *AuthPolicySpecProper {

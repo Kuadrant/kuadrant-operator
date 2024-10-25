@@ -17,8 +17,6 @@ limitations under the License.
 package v1beta3
 
 import (
-	"encoding/json"
-
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -200,44 +198,6 @@ type RateLimitPolicySpec struct {
 	// Bare set of policy rules (implicit defaults).
 	// Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
 	RateLimitPolicySpecProper `json:""`
-}
-
-// UnmarshalJSON unmarshals the RateLimitPolicySpec from JSON byte array.
-// This should not be needed, but runtime.DefaultUnstructuredConverter.FromUnstructured does not work well with embedded structs.
-func (s *RateLimitPolicySpec) UnmarshalJSON(j []byte) error {
-	targetRef := struct {
-		gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
-	}{}
-	if err := json.Unmarshal(j, &targetRef); err != nil {
-		return err
-	}
-	s.TargetRef = targetRef.LocalPolicyTargetReferenceWithSectionName
-
-	defaults := &struct {
-		*MergeableRateLimitPolicySpec `json:"defaults,omitempty"`
-	}{}
-	if err := json.Unmarshal(j, defaults); err != nil {
-		return err
-	}
-	s.Defaults = defaults.MergeableRateLimitPolicySpec
-
-	overrides := &struct {
-		*MergeableRateLimitPolicySpec `json:"overrides,omitempty"`
-	}{}
-	if err := json.Unmarshal(j, overrides); err != nil {
-		return err
-	}
-	s.Overrides = overrides.MergeableRateLimitPolicySpec
-
-	proper := struct {
-		RateLimitPolicySpecProper `json:""`
-	}{}
-	if err := json.Unmarshal(j, &proper); err != nil {
-		return err
-	}
-	s.RateLimitPolicySpecProper = proper.RateLimitPolicySpecProper
-
-	return nil
 }
 
 func (s *RateLimitPolicySpec) Proper() *RateLimitPolicySpecProper {

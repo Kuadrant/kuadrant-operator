@@ -87,7 +87,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		// create
 		if !found {
 			modifiedAuthConfigs = append(modifiedAuthConfigs, authConfigName)
-			desiredAuthConfigUnstructured, err := common.Destruct(desiredAuthConfig)
+			desiredAuthConfigUnstructured, err := controller.Destruct(desiredAuthConfig)
 			if err != nil {
 				logger.Error(err, "failed to destruct authconfig object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", desiredAuthConfig)
 				continue
@@ -121,7 +121,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		// update
 		existingAuthConfig.Spec = desiredAuthConfig.Spec
 
-		existingAuthConfigUnstructured, err := common.Destruct(existingAuthConfig)
+		existingAuthConfigUnstructured, err := controller.Destruct(existingAuthConfig)
 		if err != nil {
 			logger.Error(err, "failed to destruct authconfig object", "httpRoute", httpRouteKey.String(), "httpRouteRule", httpRouteRuleKey, "authconfig", existingAuthConfig)
 			continue

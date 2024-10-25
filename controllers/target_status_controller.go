@@ -19,6 +19,8 @@ limitations under the License.
 import (
 	"fmt"
 
+	"github.com/kuadrant/policy-machinery/machinery"
+	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -57,6 +59,28 @@ func buildPolicyAffectedCondition(policy kuadrantgatewayapi.Policy) metav1.Condi
 			condition.Reason = c.Reason
 		}
 	}
+
+	return condition
+}
+
+func PolicyAffectedCondition(policyKind string, policies []machinery.Policy) metav1.Condition {
+	condition := metav1.Condition{
+		Type:   PolicyAffectedConditionType(policyKind),
+		Status: metav1.ConditionTrue,
+		Reason: string(gatewayapiv1alpha2.PolicyReasonAccepted),
+		Message: fmt.Sprintf("Object affected by %s %s", policyKind, lo.Map(policies, func(item machinery.Policy, index int) client.ObjectKey {
+			return client.ObjectKey{Name: item.GetName(), Namespace: item.GetNamespace()}
+		})),
+	}
+
+	//if c := meta.FindStatusCondition(policy.GetStatus().GetConditions(), string(gatewayapiv1alpha2.PolicyConditionAccepted)); c == nil || c.Status != metav1.ConditionTrue { // should we aim for 'Enforced' instead?
+	//	condition.Status = metav1.ConditionFalse
+	//	condition.Message = fmt.Sprintf("Object unaffected by %s %s, policy is not accepted", policyKind, client.ObjectKeyFromObject(policy))
+	//	condition.Reason = PolicyReasonUnknown
+	//	if c != nil {
+	//		condition.Reason = c.Reason
+	//	}
+	//}
 
 	return condition
 }

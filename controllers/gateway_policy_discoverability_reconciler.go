@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/go-logr/logr"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -12,11 +13,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 )
 
 type GatewayPolicyDiscoverabilityReconciler struct {
@@ -43,27 +44,44 @@ func (r *GatewayPolicyDiscoverabilityReconciler) Subscription() *controller.Subs
 func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("GatewayPolicyDiscoverabilityReconciler").WithName("reconcile")
 
+	// Get all the gateways
 	gateways := lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, index int) (*machinery.Gateway, bool) {
 		g, ok := item.(*machinery.Gateway)
 		return g, ok
 	})
 
-	policyKinds := []*schema.GroupKind{
+	// Policy group kinds to reconcile over
+	policyGroupKinds := []*schema.GroupKind{
 		&kuadrantv1beta3.AuthPolicyGroupKind,
 		&kuadrantv1beta3.RateLimitPolicyGroupKind,
 		&kuadrantv1alpha1.TLSPolicyGroupKind,
 		&kuadrantv1alpha1.DNSPolicyGroupKind,
 	}
 
+	// For each gateway
 	for _, gw := range gateways {
-		conditions := gw.Status.DeepCopy().Conditions
+		gwStatus := gw.Status.DeepCopy()
 
-		// TODO: What happens for multiple policies of the same kind -
-		// TODO: Should it be conditions per listener?
-		for _, policyKind := range policyKinds {
-			// Policies targeting gateway and listeners
+		// For each listener in gateway, set/remove the affected by condition in the Listener Status
+		listeners := lo.Map(topology.Targetables().Children(gw), func(item machinery.Targetable, index int) *machinery.Listener {
+			l, _ := item.(*machinery.Listener)
+			return l
+		})
+
+		for _, listener := range listeners {
+			listenerStatus, index, updated := r.buildExpectedListenerStatus(gw, listener, logger, policyGroupKinds)
+			if !updated {
+				continue
+			}
+
+			gwStatus.Listeners[index] = listenerStatus
+		}
+
+		// Set the affected by condition in Gateway conditions
+		for _, policyKind := range policyGroupKinds {
+			// Only want gw policies
 			path := []machinery.Targetable{gw}
-			path = append(path, topology.Targetables().Children(gw)...)
+			//path = append(path, topology.Targetables().Children(gw)...)
 			policies := kuadrantv1.PoliciesInPath(path, func(policy machinery.Policy) bool {
 				// Filter for policies of kind
 				return policy.GroupVersionKind().GroupKind() == *policyKind
@@ -72,47 +90,37 @@ func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, 
 			// No policies of kind attached - remove condition
 			if len(policies) == 0 {
 				conditionType := PolicyAffectedConditionType(policyKind.Kind)
-				c := meta.FindStatusCondition(conditions, conditionType)
+				c := meta.FindStatusCondition(gwStatus.Conditions, conditionType)
 				if c == nil {
-					logger.V(1).Info("condition already absent, skipping", "condition", conditionType)
+					logger.V(1).Info("condition already absent, skipping", "condition", conditionType, "gateway", gw.GetName())
 					continue
 				}
-				meta.RemoveStatusCondition(&conditions, conditionType)
-				logger.V(1).Info("removing condition from gateway", "condition", conditionType)
+				meta.RemoveStatusCondition(&gwStatus.Conditions, conditionType)
+				logger.V(1).Info("removing condition", "condition", conditionType, "gateway", gw.GetName())
 				continue
 			}
 
 			// Has policies of kind attached
-			for _, policy := range policies {
-				// TODO: Refine
-				p, ok := policy.(gatewayapi.Policy)
-				if !ok {
-					logger.V(1).Info("skipping policy status", "policy", policyKind)
-					continue
-				}
+			condition := PolicyAffectedCondition(policyKind.Kind, policies)
 
-				condition := buildPolicyAffectedCondition(p)
-
-				if c := meta.FindStatusCondition(conditions, condition.Type); c != nil && c.Status == condition.Status &&
-					c.Reason == condition.Reason && c.Message == condition.Message && c.ObservedGeneration == gw.GetGeneration() {
-					logger.V(1).Info("condition already up-to-date, skipping", "condition", condition.Type, "status", condition.Status)
-				} else {
-					gwCondition := condition.DeepCopy()
-					gwCondition.ObservedGeneration = gw.GetGeneration()
-					meta.SetStatusCondition(&conditions, *gwCondition)
-					logger.V(1).Info("adding condition to gateway", "condition", condition.Type, "status", condition.Status)
-				}
+			if c := meta.FindStatusCondition(gwStatus.Conditions, condition.Type); c != nil && c.Status == condition.Status &&
+				c.Reason == condition.Reason && c.Message == condition.Message && c.ObservedGeneration == gw.GetGeneration() {
+				logger.V(1).Info("condition already up-to-date, skipping", "condition", condition.Type, "status", condition.Status, "gateway", gw.GetName())
+			} else {
+				condition.ObservedGeneration = gw.GetGeneration()
+				meta.SetStatusCondition(&gwStatus.Conditions, condition)
+				logger.V(1).Info("adding condition", "condition", condition.Type, "status", condition.Status, "gateway", gw.GetName())
 			}
 		}
 
 		// Update GW Status
-		equalStatus := equality.Semantic.DeepEqual(conditions, gw.Status.Conditions)
+		equalStatus := equality.Semantic.DeepEqual(gwStatus, gw.Status)
 		if equalStatus {
-			logger.V(1).Info("gw conditions unchanged, skipping update")
+			logger.V(1).Info("gw status unchanged, skipping update")
 			continue
 		}
 
-		gw.Status.Conditions = conditions
+		gw.Status = *gwStatus
 		obj, err := controller.Destruct(gw.Gateway)
 		if err != nil {
 			logger.Error(err, "unable to destruct gateway") // should never happen
@@ -127,4 +135,57 @@ func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, 
 	}
 
 	return nil
+}
+
+func (r *GatewayPolicyDiscoverabilityReconciler) buildExpectedListenerStatus(gw *machinery.Gateway, listener *machinery.Listener, logger logr.Logger, groupKinds []*schema.GroupKind) (gatewayapiv1.ListenerStatus, int, bool) {
+	listenerStatus, index, found := lo.FindIndexOf(gw.Status.Listeners, func(item gatewayapiv1.ListenerStatus) bool {
+		return item.Name == listener.Name
+	})
+
+	if !found {
+		logger.V(1).Info("unable to find listener status", "listener", listener.GetName())
+		return gatewayapiv1.ListenerStatus{}, index, false
+	}
+
+	updated := false
+
+	// Want policy of both child and parent
+	policies := kuadrantv1.PoliciesInPath([]machinery.Targetable{gw, listener}, func(policy machinery.Policy) bool {
+		return true
+	})
+
+	for _, groupKind := range groupKinds {
+		// Filter for policies of kind
+		policiesOfKind := lo.Filter(policies, func(item machinery.Policy, index int) bool {
+			return item.GroupVersionKind().GroupKind() == *groupKind
+		})
+
+		if len(policiesOfKind) == 0 {
+			conditionType := PolicyAffectedConditionType(groupKind.Kind)
+			c := meta.FindStatusCondition(listenerStatus.Conditions, conditionType)
+			if c == nil {
+				logger.V(1).Info("listener condition already absent, skipping", "condition", conditionType, "listener", listener.GetName())
+				continue
+			}
+			meta.RemoveStatusCondition(&listenerStatus.Conditions, conditionType)
+			logger.V(1).Info("removing condition", "condition", conditionType, "listener", listener.GetName())
+			updated = true
+			continue
+		}
+
+		// Has policies of kind attached
+		condition := PolicyAffectedCondition(groupKind.Kind, policiesOfKind)
+		if c := meta.FindStatusCondition(listenerStatus.Conditions, condition.Type); c != nil && c.Status == condition.Status &&
+			c.Reason == condition.Reason && c.Message == condition.Message && c.ObservedGeneration == gw.GetGeneration() {
+			logger.V(1).Info("condition already up-to-date, skipping", "condition", condition.Type, "status", condition.Status, "listener", listener.GetName())
+			continue
+		}
+
+		condition.ObservedGeneration = gw.GetGeneration()
+		meta.SetStatusCondition(&listenerStatus.Conditions, condition)
+		logger.V(1).Info("adding condition", "condition", condition.Type, "status", condition.Status, "listener", listener.GetName())
+		updated = true
+	}
+
+	return listenerStatus, index, updated
 }

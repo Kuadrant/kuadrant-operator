@@ -13,7 +13,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	dfake "k8s.io/client-go/dynamic/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -466,6 +469,58 @@ func TestIsOwnedBy(t *testing.T) {
 			},
 			expected: false,
 		},
+		{
+			name: "when owned object has owner reference and in same namespace then return true",
+			owned: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "ns1",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "v1",
+							Kind:       "Deployment",
+							Name:       "my-deployment",
+						},
+					},
+				},
+			},
+			owner: &appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Deployment",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-deployment",
+					Namespace: "ns1",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "when owned object has owner reference but in different namespace then return false",
+			owned: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "ns1",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion: "v1",
+							Kind:       "Deployment",
+							Name:       "my-deployment",
+						},
+					},
+				},
+			},
+			owner: &appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Deployment",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-deployment",
+					Namespace: "ns2",
+				},
+			},
+			expected: false,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -849,14 +904,17 @@ func TestGetLabel(t *testing.T) {
 }
 
 func TestGetClusterUID(t *testing.T) {
+	var tScheme = runtime.NewScheme()
+	utilruntime.Must(corev1.AddToScheme(tScheme))
+
 	var testCases = []struct {
 		Name       string
-		Objects    []client.Object
+		Objects    []runtime.Object
 		Validation func(t *testing.T, e error, id string)
 	}{
 		{
 			Name:    "an absent namespace generates an error",
-			Objects: []client.Object{},
+			Objects: []runtime.Object{},
 			Validation: func(t *testing.T, e error, id string) {
 				if !errors.IsNotFound(e) {
 					t.Errorf("expected not found error, got '%v'", e)
@@ -865,7 +923,7 @@ func TestGetClusterUID(t *testing.T) {
 		},
 		{
 			Name: "a UID generates a valid deterministic cluster ID",
-			Objects: []client.Object{
+			Objects: []runtime.Object{
 				&corev1.Namespace{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: clusterIDNamespace,
@@ -887,7 +945,7 @@ func TestGetClusterUID(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			fc := fake.NewClientBuilder().WithObjects(testCase.Objects...).Build()
+			fc := dfake.NewSimpleDynamicClient(tScheme, testCase.Objects...)
 			id, err := GetClusterUID(context.Background(), fc)
 			testCase.Validation(t, err, id)
 		})

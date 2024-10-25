@@ -27,6 +27,16 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
+func getClusterUID(ctx context.Context, c client.Client) (string, error) {
+	ns := &corev1.Namespace{}
+	err := c.Get(ctx, client.ObjectKey{Name: "kube-system"}, ns)
+	if err != nil {
+		return "", err
+	}
+
+	return string(ns.UID), nil
+}
+
 var _ = Describe("DNSPolicy Single Cluster", func() {
 	const (
 		testTimeOut      = SpecTimeout(1 * time.Minute)
@@ -45,7 +55,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 		testNamespace = tests.CreateNamespace(ctx, testClient())
 
 		var err error
-		clusterUID, err := utils.GetClusterUID(ctx, k8sClient)
+		clusterUID, err := getClusterUID(ctx, k8sClient)
 		Expect(err).To(BeNil())
 
 		gatewayClass = tests.BuildGatewayClass("gwc-"+testNamespace, "default", "kuadrant.io/bar")

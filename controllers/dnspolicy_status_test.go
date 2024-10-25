@@ -3,17 +3,14 @@
 package controllers
 
 import (
-	"context"
-	"errors"
 	"reflect"
 	"testing"
 
-	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
 func TestPropagateRecordConditions(t *testing.T) {
@@ -67,28 +64,26 @@ func TestPropagateRecordConditions(t *testing.T) {
 	tests := []struct {
 		Name         string
 		PolicyStatus *v1alpha1.DNSPolicyStatus
-		Records      *kuadrantdnsv1alpha1.DNSRecordList
+		Records      []*kuadrantdnsv1alpha1.DNSRecord
 		Validate     func(*testing.T, *v1alpha1.DNSPolicyStatus)
 	}{
 		{
 			Name: "Healthy conditions not propagated",
-			Records: &kuadrantdnsv1alpha1.DNSRecordList{
-				Items: []kuadrantdnsv1alpha1.DNSRecord{
-					{
-						Spec: kuadrantdnsv1alpha1.DNSRecordSpec{RootHost: rootHost},
-						Status: kuadrantdnsv1alpha1.DNSRecordStatus{
+			Records: []*kuadrantdnsv1alpha1.DNSRecord{
+				{
+					Spec: kuadrantdnsv1alpha1.DNSRecordSpec{RootHost: rootHost},
+					Status: kuadrantdnsv1alpha1.DNSRecordStatus{
+						Conditions: []metav1.Condition{
+							healthyProviderCondition,
+						},
+						HealthCheck: &kuadrantdnsv1alpha1.HealthCheckStatus{
 							Conditions: []metav1.Condition{
-								healthyProviderCondition,
+								healthyProbesCondition,
 							},
-							HealthCheck: &kuadrantdnsv1alpha1.HealthCheckStatus{
-								Conditions: []metav1.Condition{
-									healthyProbesCondition,
-								},
-								Probes: []kuadrantdnsv1alpha1.HealthCheckStatusProbe{
-									{
-										Conditions: []metav1.Condition{
-											healthyProbeCondition,
-										},
+							Probes: []kuadrantdnsv1alpha1.HealthCheckStatusProbe{
+								{
+									Conditions: []metav1.Condition{
+										healthyProbeCondition,
 									},
 								},
 							},
@@ -105,23 +100,21 @@ func TestPropagateRecordConditions(t *testing.T) {
 		},
 		{
 			Name: "Unhealthy conditions are propagated",
-			Records: &kuadrantdnsv1alpha1.DNSRecordList{
-				Items: []kuadrantdnsv1alpha1.DNSRecord{
-					{
-						Spec: kuadrantdnsv1alpha1.DNSRecordSpec{RootHost: rootHost},
-						Status: kuadrantdnsv1alpha1.DNSRecordStatus{
+			Records: []*kuadrantdnsv1alpha1.DNSRecord{
+				{
+					Spec: kuadrantdnsv1alpha1.DNSRecordSpec{RootHost: rootHost},
+					Status: kuadrantdnsv1alpha1.DNSRecordStatus{
+						Conditions: []metav1.Condition{
+							healthyProviderCondition,
+						},
+						HealthCheck: &kuadrantdnsv1alpha1.HealthCheckStatus{
 							Conditions: []metav1.Condition{
-								healthyProviderCondition,
+								unhealthyProbesCondition,
 							},
-							HealthCheck: &kuadrantdnsv1alpha1.HealthCheckStatus{
-								Conditions: []metav1.Condition{
-									unhealthyProbesCondition,
-								},
-								Probes: []kuadrantdnsv1alpha1.HealthCheckStatusProbe{
-									{
-										Conditions: []metav1.Condition{
-											unhealthyProbeCondition,
-										},
+							Probes: []kuadrantdnsv1alpha1.HealthCheckStatusProbe{
+								{
+									Conditions: []metav1.Condition{
+										unhealthyProbeCondition,
 									},
 								},
 							},
@@ -150,62 +143,6 @@ func TestPropagateRecordConditions(t *testing.T) {
 		t.Run(tt.Name, func(t *testing.T) {
 			propagateRecordConditions(tt.Records, tt.PolicyStatus)
 			tt.Validate(t, tt.PolicyStatus)
-		})
-	}
-}
-
-func TestDNSPolicyReconciler_calculateStatus(t *testing.T) {
-	type args struct {
-		ctx       context.Context
-		dnsPolicy *v1alpha1.DNSPolicy
-		specErr   error
-	}
-	tests := []struct {
-		name string
-		args args
-		want *v1alpha1.DNSPolicyStatus
-	}{
-		{
-			name: "Enforced status block removed if policy not Accepted. (Regression test)", // https://github.com/Kuadrant/kuadrant-operator/issues/588
-			args: args{
-				dnsPolicy: &v1alpha1.DNSPolicy{
-					Status: v1alpha1.DNSPolicyStatus{
-						Conditions: []metav1.Condition{
-							{
-								Message: "not accepted",
-								Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
-								Status:  metav1.ConditionFalse,
-								Reason:  string(gatewayapiv1alpha2.PolicyReasonTargetNotFound),
-							},
-							{
-								Message: "DNSPolicy has been successfully enforced",
-								Type:    string(kuadrant.PolicyConditionEnforced),
-								Status:  metav1.ConditionTrue,
-								Reason:  string(kuadrant.PolicyConditionEnforced),
-							},
-						},
-					},
-				},
-				specErr: kuadrant.NewErrInvalid("DNSPolicy", errors.New("policy Error")),
-			},
-			want: &v1alpha1.DNSPolicyStatus{
-				Conditions: []metav1.Condition{
-					{
-						Message: "DNSPolicy target is invalid: policy Error",
-						Type:    string(gatewayapiv1alpha2.PolicyConditionAccepted),
-						Status:  metav1.ConditionFalse,
-						Reason:  string(gatewayapiv1alpha2.PolicyReasonInvalid),
-					},
-				},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &DNSPolicyReconciler{}
-			if got := r.calculateStatus(tt.args.ctx, tt.args.dnsPolicy, tt.args.specErr); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("calculateStatus() = %v, want %v", got, tt.want)
-			}
 		})
 	}
 }

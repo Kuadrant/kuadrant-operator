@@ -156,7 +156,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 	}
 	effectiveRateLimitPoliciesMap := effectiveRateLimitPolicies.(EffectiveRateLimitPolicies)
 
-	logger.V(1).Info("building wasm configs for istio extension", "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap))
+	logger.V(1).Info("building wasm configs for istio extension", "effectiveRateLimitPolicies", len(effectiveAuthPoliciesMap), "effectiveRateLimitPolicies", len(effectiveRateLimitPoliciesMap))
 
 	paths := lo.UniqBy(append(
 		lo.Entries(lo.MapValues(effectiveAuthPoliciesMap, func(p EffectiveAuthPolicy, _ string) []machinery.Targetable { return p.Path })),

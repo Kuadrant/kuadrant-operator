@@ -2,6 +2,7 @@ package envoygateway
 
 import (
 	"encoding/json"
+	"reflect"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -167,7 +168,7 @@ func BuildEnvoyPatchPolicyClusterPatch(host string, port int, clusterPatchBuilde
 }
 
 func EqualEnvoyPatchPolicies(a, b *envoygatewayv1alpha1.EnvoyPatchPolicy) bool {
-	if a.Spec.Priority != b.Spec.Priority || a.Spec.TargetRef != b.Spec.TargetRef {
+	if a.Spec.Type != b.Spec.Type || a.Spec.Priority != b.Spec.Priority || !reflect.DeepEqual(a.Spec.TargetRef, b.Spec.TargetRef) {
 		return false
 	}
 
@@ -178,7 +179,7 @@ func EqualEnvoyPatchPolicies(a, b *envoygatewayv1alpha1.EnvoyPatchPolicy) bool {
 	}
 	return lo.EveryBy(aJSONPatches, func(aJSONPatch envoygatewayv1alpha1.EnvoyJSONPatchConfig) bool {
 		return lo.SomeBy(bJSONPatches, func(bJSONPatch envoygatewayv1alpha1.EnvoyJSONPatchConfig) bool {
-			return aJSONPatch.Type == bJSONPatch.Type && aJSONPatch.Name == bJSONPatch.Name && aJSONPatch.Operation == bJSONPatch.Operation
+			return aJSONPatch.Type == bJSONPatch.Type && aJSONPatch.Name == bJSONPatch.Name && reflect.DeepEqual(aJSONPatch.Operation, bJSONPatch.Operation)
 		})
 	})
 }

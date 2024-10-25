@@ -14,7 +14,7 @@ require (
 	github.com/kuadrant/authorino-operator v0.11.1
 	github.com/kuadrant/dns-operator v0.0.0-20241018131559-f2ce8b6aaaef
 	github.com/kuadrant/limitador-operator v0.9.0
-	github.com/kuadrant/policy-machinery v0.6.1
+	github.com/kuadrant/policy-machinery v0.6.2
 	github.com/martinlindhe/base36 v1.1.1
 	github.com/onsi/ginkgo/v2 v2.20.2
 	github.com/onsi/gomega v1.34.1
@@ -172,7 +172,6 @@ require (
 	google.golang.org/grpc v1.65.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	helm.sh/helm/v3 v3.15.3 // indirect

@@ -18,9 +18,9 @@ var _ machinery.Policy = &DNSPolicy{}
 
 func (p *DNSPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
 	return []machinery.PolicyTargetReference{
-		machinery.LocalPolicyTargetReference{
-			LocalPolicyTargetReference: p.Spec.TargetRef,
-			PolicyNamespace:            p.Namespace,
+		machinery.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReferenceWithSectionName: p.Spec.TargetRef,
+			PolicyNamespace: p.Namespace,
 		},
 	}
 }

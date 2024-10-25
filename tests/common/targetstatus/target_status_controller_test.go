@@ -481,7 +481,7 @@ var _ = Describe("Target status reconciler", func() {
 		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *kuadrantv1alpha1.DNSPolicy) func() bool {
 			return func() bool {
 				policyKey := client.ObjectKeyFromObject(policy)
-				return isDNSPolicyAccepted(ctx, policyKey) && targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef)
+				return isDNSPolicyAccepted(ctx, policyKey) && targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef.LocalPolicyTargetReference)
 			}
 		}
 

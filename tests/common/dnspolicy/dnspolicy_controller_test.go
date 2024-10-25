@@ -840,7 +840,7 @@ var _ = Describe("DNSPolicy controller", func() {
 						})),
 				)
 				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, currentWildcardRec)).To(Succeed())
-				g.Expect(currentRec.Status.Conditions).To(
+				g.Expect(currentWildcardRec.Status.Conditions).To(
 					ContainElements(
 						MatchFields(IgnoreExtras, Fields{
 							"Type":   Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
@@ -1068,6 +1068,146 @@ var _ = Describe("DNSPolicy controller", func() {
 						beforeMatcher,
 					))
 				}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
+			})
+		})
+
+		Context("section name", func() {
+			It("should handle policy with section name", func(ctx SpecContext) {
+				containReadyCondition := ContainElements(
+					MatchFields(IgnoreExtras, Fields{
+						"Type":   Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
+						"Status": Equal(metav1.ConditionTrue),
+					}))
+
+				rootEndpointMatcher := func(dnsName, recordType, setID string, ttl int64, targets ...string) types.GomegaMatcher {
+					return PointTo(MatchFields(IgnoreExtras, Fields{
+						"DNSName":       Equal(dnsName),
+						"Targets":       ConsistOf(targets),
+						"RecordType":    Equal(recordType),
+						"SetIdentifier": Equal(setID),
+						"RecordTTL":     Equal(externaldns.TTL(ttl)),
+					}))
+				}
+
+				//listener 1 & 2 - Default gateway policy has a loadbalancing section so will create loadbalanced records with CNAME Records for the rootHost
+				currentRecRootEndpoint := rootEndpointMatcher(tests.HostOne(domain), "CNAME", "", 300, "klb.test."+domain)
+				currentWildcardRecRootEndpoint := rootEndpointMatcher(tests.HostWildcard(domain), "CNAME", "", 300, "klb."+domain)
+
+				//get the current dnsrecord and wildcard dnsrecord
+				currentRec := &kuadrantdnsv1alpha1.DNSRecord{}
+				currentWildcardRec := &kuadrantdnsv1alpha1.DNSRecord{}
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, currentRec)).To(Succeed())
+					g.Expect(currentRec.Status.Conditions).To(containReadyCondition)
+					g.Expect(currentRec.Spec.Endpoints).To(ContainElement(currentRecRootEndpoint))
+
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, currentWildcardRec)).To(Succeed())
+					g.Expect(currentWildcardRec.Status.Conditions).To(containReadyCondition)
+					g.Expect(currentWildcardRec.Spec.Endpoints).To(ContainElement(currentWildcardRecRootEndpoint))
+				}, tests.TimeoutLong, time.Second).Should(BeNil())
+
+				By("creating a dnspolicy with section name for listener one")
+				dnsPolicyWithSection := tests.NewDNSPolicy("test-dns-policy-with-section-name", testNamespace).
+					WithProviderSecret(*dnsProviderSecret).
+					WithTargetGatewayListener(tests.GatewayName, tests.ListenerNameOne)
+				Expect(k8sClient.Create(ctx, dnsPolicyWithSection)).To(Succeed())
+
+				//listener 1 - Listener policy has no loadbalancing section so will create simple records with A Records for the rootHost
+				newRecRootEndpoint := rootEndpointMatcher(tests.HostOne(domain), "A", "", 60, tests.IPAddressOne, tests.IPAddressTwo)
+				//listener 2 - Default gateway policy has a loadbalancing section so will create loadbalanced records with CNAME Records for the rootHost
+				newWildcardRecRootEndpoint := currentWildcardRecRootEndpoint
+
+				//get the dnsrecord again and verify it's no longer the same DNSRecord resource and the record type for the root host has changed
+				//get the wildcard dnsrecord again and verify the DNSRecord resource is unchanged
+				Eventually(func(g Gomega) {
+					newRec := &kuadrantdnsv1alpha1.DNSRecord{}
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, newRec)).To(Succeed())
+					g.Expect(newRec.Spec.RootHost).To(Equal(currentRec.Spec.RootHost))
+					g.Expect(newRec.UID).ToNot(Equal(currentRec.UID)) // if/when we remove the need for record re-creation on policy changes, these assertions can be removed
+					g.Expect(newRec.Status.Conditions).To(containReadyCondition)
+					g.Expect(newRec.Spec.Endpoints).To(ContainElement(newRecRootEndpoint))
+
+					newWildcardRec := &kuadrantdnsv1alpha1.DNSRecord{}
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, newWildcardRec)).To(Succeed())
+					g.Expect(newWildcardRec.Spec.RootHost).To(Equal(currentWildcardRec.Spec.RootHost))
+					g.Expect(newWildcardRec.UID).To(Equal(currentWildcardRec.UID))
+					g.Expect(newWildcardRec.Status.Conditions).To(containReadyCondition)
+					g.Expect(newWildcardRec.Spec.Endpoints).To(ContainElement(newWildcardRecRootEndpoint))
+
+					//ToDo Add checks for policy affected by on gateway when possible, will require discoverability changes
+
+					currentRec = newRec
+					currentWildcardRec = newWildcardRec
+				}, tests.TimeoutLong, time.Second).Should(BeNil())
+
+				By("updating dnspolicy section name to listener two")
+				Eventually(func() error {
+					existingDNSpolicy := &v1alpha1.DNSPolicy{}
+					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicyWithSection), existingDNSpolicy); err != nil {
+						return err
+					}
+					patch := client.MergeFrom(existingDNSpolicy.DeepCopy())
+					existingDNSpolicy.Spec.TargetRef.SectionName = ptr.To(gatewayapiv1.SectionName(tests.ListenerNameWildcard))
+					return k8sClient.Patch(ctx, existingDNSpolicy, patch)
+				}, tests.TimeoutMedium, time.Second).Should(Succeed())
+
+				//listener 1 - Default gateway policy has a loadbalancing section so will create loadbalanced records with CNAME Records for the rootHost
+				newRecRootEndpoint = rootEndpointMatcher(tests.HostOne(domain), "CNAME", "", 300, "klb.test."+domain)
+				//listener 2 - Listener policy has no loadbalancing section so will create simple records with A Records for the rootHost
+				newWildcardRecRootEndpoint = rootEndpointMatcher(tests.HostWildcard(domain), "A", "", 60, tests.IPAddressOne, tests.IPAddressTwo)
+
+				//get the dnsrecord again and verify it's no longer the same DNSRecord resource and the record type for the root host has changed
+				//get the wildcard dnsrecord and verify it's no longer the same DNSRecord resource and the record type for the root host has changed
+				Eventually(func(g Gomega) {
+					newRec := &kuadrantdnsv1alpha1.DNSRecord{}
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, newRec)).To(Succeed())
+					g.Expect(newRec.Spec.RootHost).To(Equal(currentRec.Spec.RootHost))
+					g.Expect(newRec.UID).ToNot(Equal(currentRec.UID))
+					g.Expect(newRec.Status.Conditions).To(containReadyCondition)
+					g.Expect(newRec.Spec.Endpoints).To(ContainElement(newRecRootEndpoint))
+
+					newWildcardRec := &kuadrantdnsv1alpha1.DNSRecord{}
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, newWildcardRec)).To(Succeed())
+					g.Expect(newWildcardRec.Spec.RootHost).To(Equal(currentWildcardRec.Spec.RootHost))
+					g.Expect(newWildcardRec.UID).ToNot(Equal(currentWildcardRec.UID))
+					g.Expect(newWildcardRec.Status.Conditions).To(containReadyCondition)
+					g.Expect(newWildcardRec.Spec.Endpoints).To(ContainElement(newWildcardRecRootEndpoint))
+
+					//ToDo Add checks for policy affected by on gateway when possible, will require discoverability changes
+
+					currentRec = newRec
+					currentWildcardRec = newWildcardRec
+				}, tests.TimeoutLong, time.Second).Should(BeNil())
+
+				By("deleting the dnspolicy with section name")
+				Expect(k8sClient.Delete(ctx, dnsPolicyWithSection)).To(Succeed())
+
+				//listener 1 & 2 - Default gateway policy has a loadbalancing section so will create loadbalanced records with CNAME Records for the rootHost
+				newRecRootEndpoint = rootEndpointMatcher(tests.HostOne(domain), "CNAME", "", 300, "klb.test."+domain)
+				newWildcardRecRootEndpoint = rootEndpointMatcher(tests.HostWildcard(domain), "CNAME", "", 300, "klb."+domain)
+
+				//get the dnsrecord again and verify the DNSRecord resource is unchanged
+				//get the wildcard dnsrecord and verify it's no longer the same DNSRecord resource and the record type for the root host has changed
+				Eventually(func(g Gomega) {
+					newRec := &kuadrantdnsv1alpha1.DNSRecord{}
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, newRec)).To(Succeed())
+					g.Expect(newRec.Spec.RootHost).To(Equal(currentRec.Spec.RootHost))
+					g.Expect(newRec.UID).To(Equal(currentRec.UID))
+					g.Expect(newRec.Status.Conditions).To(containReadyCondition)
+					g.Expect(newRec.Spec.Endpoints).To(ContainElement(newRecRootEndpoint))
+
+					newWildcardRec := &kuadrantdnsv1alpha1.DNSRecord{}
+					g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, newWildcardRec)).To(Succeed())
+					g.Expect(newWildcardRec.Spec.RootHost).To(Equal(currentWildcardRec.Spec.RootHost))
+					g.Expect(newWildcardRec.UID).ToNot(Equal(currentWildcardRec.UID))
+					g.Expect(newWildcardRec.Status.Conditions).To(containReadyCondition)
+					g.Expect(newWildcardRec.Spec.Endpoints).To(ContainElement(newWildcardRecRootEndpoint))
+
+					//ToDo Add checks for policy affected by on gateway when possible, will require discoverability changes
+
+					currentRec = newRec
+					currentWildcardRec = newWildcardRec
+				}, tests.TimeoutLong, time.Second).Should(BeNil())
 			})
 		})
 

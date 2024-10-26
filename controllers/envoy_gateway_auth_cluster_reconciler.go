@@ -192,7 +192,7 @@ func (r *EnvoyGatewayAuthClusterReconciler) buildDesiredEnvoyPatchPolicy(authori
 	}
 
 	authorinoServiceInfo := authorinoServiceInfoFromAuthorino(authorino)
-	jsonPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(authorinoServiceInfo.Host, int(authorinoServiceInfo.Port), authClusterPatch)
+	jsonPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(common.KuadrantAuthClusterName, authorinoServiceInfo.Host, int(authorinoServiceInfo.Port), authClusterPatch)
 	if err != nil {
 		return nil, err
 	}

@@ -14,7 +14,6 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -147,7 +146,7 @@ func LinkGatewayToEnvoyExtensionPolicy(objs controller.Store) machinery.LinkFunc
 }
 
 // BuildEnvoyPatchPolicyClusterPatch returns an envoy config patch that adds a cluster to the gateway.
-func BuildEnvoyPatchPolicyClusterPatch(host string, port int, clusterPatchBuilder func(string, int) map[string]any) ([]envoygatewayv1alpha1.EnvoyJSONPatchConfig, error) {
+func BuildEnvoyPatchPolicyClusterPatch(name, host string, port int, clusterPatchBuilder func(string, int) map[string]any) ([]envoygatewayv1alpha1.EnvoyJSONPatchConfig, error) {
 	patchRaw, _ := json.Marshal(clusterPatchBuilder(host, port))
 	patch := &apiextensionsv1.JSON{}
 	if err := patch.UnmarshalJSON(patchRaw); err != nil {
@@ -157,7 +156,7 @@ func BuildEnvoyPatchPolicyClusterPatch(host string, port int, clusterPatchBuilde
 	return []envoygatewayv1alpha1.EnvoyJSONPatchConfig{
 		{
 			Type: envoygatewayv1alpha1.ClusterEnvoyResourceType,
-			Name: common.KuadrantRateLimitClusterName,
+			Name: name,
 			Operation: envoygatewayv1alpha1.JSONPatchOperation{
 				Op:    envoygatewayv1alpha1.JSONPatchOperationType("add"),
 				Path:  "",

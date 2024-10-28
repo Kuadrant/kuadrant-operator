@@ -132,6 +132,13 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.Auth
 	overridingPolicies := map[string][]string{}                     // policyRuleKey → locators of policies overriding the policy rule
 	affectedGateways := map[string]affectedGateway{}                // Gateway locator → {GatewayClass, Gateway}
 	affectedHTTPRouteRules := map[string]*machinery.HTTPRouteRule{} // pathID → HTTPRouteRule
+	setAffectedObjects := func(pathID string, gatewayClass *machinery.GatewayClass, gateway *machinery.Gateway, httpRouteRule *machinery.HTTPRouteRule) {
+		affectedGateways[gateway.GetLocator()] = affectedGateway{
+			gateway:      gateway,
+			gatewayClass: gatewayClass,
+		}
+		affectedHTTPRouteRules[pathID] = httpRouteRule
+	}
 	for pathID, effectivePolicy := range effectivePolicies.(EffectiveAuthPolicies) {
 		if len(kuadrantv1.PoliciesInPath(effectivePolicy.Path, func(p machinery.Policy) bool { return p.GetLocator() == policy.GetLocator() })) == 0 {
 			continue
@@ -141,22 +148,23 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.Auth
 			continue
 		}
 		effectivePolicyRules := effectivePolicy.Spec.Rules()
-		for _, policyRuleKey := range policyRuleKeys {
-			if effectivePolicyRule, ok := effectivePolicyRules[policyRuleKey]; !ok || (ok && effectivePolicyRule.GetSource() != policy.GetLocator()) { // policy rule has been overridden by another policy
-				var overriddenBy string
-				if ok { // TODO(guicassolato): !ok → we cannot tell which policy is overriding the rule, this information is lost when the policy rule is dropped during an atomic override
-					overriddenBy = effectivePolicyRule.GetSource()
+		if len(effectivePolicyRules) > 0 {
+			for _, policyRuleKey := range policyRuleKeys {
+				if effectivePolicyRule, ok := effectivePolicyRules[policyRuleKey]; !ok || (ok && effectivePolicyRule.GetSource() != policy.GetLocator()) { // policy rule has been overridden by another policy
+					var overriddenBy string
+					if ok { // TODO(guicassolato): !ok → we cannot tell which policy is overriding the rule, this information is lost when the policy rule is dropped during an atomic override
+						overriddenBy = effectivePolicyRule.GetSource()
+					}
+					overridingPolicies[policyRuleKey] = append(overridingPolicies[policyRuleKey], overriddenBy)
+					continue
 				}
-				overridingPolicies[policyRuleKey] = append(overridingPolicies[policyRuleKey], overriddenBy)
-				continue
+				// policy rule is in the effective policy, track the Gateway and the HTTPRouteRule affected by the policy
+				setAffectedObjects(pathID, gatewayClass, gateway, httpRouteRule)
 			}
-			// policy rule is in the effective policy, track the Gateway and the HTTPRouteRule affected by the policy
-			affectedGateways[gateway.GetLocator()] = affectedGateway{
-				gateway:      gateway,
-				gatewayClass: gatewayClass,
-			}
-			affectedHTTPRouteRules[pathID] = httpRouteRule
+			continue
 		}
+		// effective policy has no rules, track the Gateway and the HTTPRouteRule affected by the policy
+		setAffectedObjects(pathID, gatewayClass, gateway, httpRouteRule)
 	}
 
 	if len(affectedGateways) == 0 { // no rules of the policy found in the effective policies

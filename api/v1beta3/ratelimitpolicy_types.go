@@ -132,7 +132,10 @@ func (p *RateLimitPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 }
 
 func (p *RateLimitPolicy) SetRules(rules map[string]kuadrantv1.MergeableRule) {
-	if len(rules) > 0 && p.Spec.Proper().Limits == nil {
+	// clear all rules of the policy before setting new ones
+	p.Spec.Proper().Limits = nil
+
+	if len(rules) > 0 {
 		p.Spec.Proper().Limits = make(map[string]Limit)
 	}
 

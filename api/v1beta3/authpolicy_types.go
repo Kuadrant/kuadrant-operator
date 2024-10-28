@@ -189,6 +189,11 @@ func (p *AuthPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 }
 
 func (p *AuthPolicy) SetRules(rules map[string]kuadrantv1.MergeableRule) {
+	// clear all rules of the policy before setting new ones
+	p.Spec.Proper().NamedPatterns = nil
+	p.Spec.Proper().Conditions = nil
+	p.Spec.Proper().AuthScheme = nil
+
 	ensureNamedPatterns := func() {
 		if p.Spec.Proper().NamedPatterns == nil {
 			p.Spec.Proper().NamedPatterns = make(map[string]MergeablePatternExpressions)

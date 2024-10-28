@@ -72,7 +72,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		httpRouteKey := k8stypes.NamespacedName{Name: httpRoute.GetName(), Namespace: httpRoute.GetNamespace()}
 		httpRouteRuleKey := httpRouteRule.Name
 
-		authConfigName := authConfigNameForPath(pathID)
+		authConfigName := AuthConfigNameForPath(pathID)
 		desiredAuthConfig := r.buildDesiredAuthConfig(effectivePolicy, authConfigName, authConfigsNamespace)
 		desiredAuthConfigs[k8stypes.NamespacedName{Name: desiredAuthConfig.GetName(), Namespace: desiredAuthConfig.GetNamespace()}] = struct{}{}
 

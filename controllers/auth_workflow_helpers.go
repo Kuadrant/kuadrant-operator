@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
@@ -114,7 +113,7 @@ func authorinoServiceInfoFromAuthorino(authorino *authorinooperatorv1beta1.Autho
 	return info
 }
 
-func authConfigNameForPath(pathID string) string {
+func AuthConfigNameForPath(pathID string) string {
 	hash := sha256.Sum256([]byte(pathID))
 	return hex.EncodeToString(hash[:])
 }
@@ -122,7 +121,7 @@ func authConfigNameForPath(pathID string) string {
 func buildWasmActionsForAuth(pathID string, effectivePolicy EffectiveAuthPolicy) []wasm.Action {
 	action := wasm.Action{
 		ServiceName: wasm.AuthServiceName,
-		Scope:       authConfigNameForPath(pathID),
+		Scope:       AuthConfigNameForPath(pathID),
 	}
 	spec := effectivePolicy.Spec.Spec.Proper()
 	if conditions := wasm.PredicatesFromWhenConditions(lo.FlatMap(spec.Conditions, func(pattern kuadrantv1beta3.MergeablePatternExpressionOrRef, _ int) []kuadrantv1beta3.WhenCondition {
@@ -177,9 +176,4 @@ func authPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error
 		return
 	}
 	return
-}
-
-// TODO: remove this function and replace all calls with the actual config name
-func AuthConfigName(_ k8stypes.NamespacedName) string {
-	return "FIXME"
 }

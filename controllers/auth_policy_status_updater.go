@@ -185,7 +185,7 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.Auth
 	// check status of the authconfigs
 	isAuthConfigReady := authConfigReadyStatusFunc(state)
 	for pathID, httpRouteRule := range affectedHTTPRouteRules {
-		authConfigName := authConfigNameForPath(pathID)
+		authConfigName := AuthConfigNameForPath(pathID)
 		authConfig, found := lo.Find(topology.Objects().Children(httpRouteRule), func(authConfig machinery.Object) bool {
 			return authConfig.GroupVersionKind().GroupKind() == kuadrantv1beta1.AuthConfigGroupKind && authConfig.GetName() == authConfigName
 		})

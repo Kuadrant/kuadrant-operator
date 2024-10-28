@@ -6714,11 +6714,13 @@ spec:
             type: object
             x-kubernetes-validations:
             - message: Implicit and explicit defaults are mutually exclusive
-              rule: '!(has(self.defaults) && has(self.rules))'
-            - message: Overrides and explicit defaults are mutually exclusive
-              rule: '!(has(self.defaults) && has(self.overrides))'
-            - message: Overrides and implicit defaults are mutually exclusive
-              rule: '!(has(self.overrides) && has(self.rules))'
+              rule: '!(has(self.defaults) && (has(self.patterns) || has(self.when)
+                || has(self.rules)))'
+            - message: Implicit defaults and explicit overrides are mutually exclusive
+              rule: '!(has(self.overrides) && (has(self.patterns) || has(self.when)
+                || has(self.rules)))'
+            - message: Explicit overrides and explicit defaults are mutually exclusive
+              rule: '!(has(self.overrides) && has(self.defaults))'
           status:
             properties:
               conditions:

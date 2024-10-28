@@ -334,9 +334,9 @@ func (p *AuthPolicy) TargetProgrammedGatewaysOnly() bool {
 	return true
 }
 
-// +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && has(self.rules))",message="Implicit and explicit defaults are mutually exclusive"
-// +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && has(self.overrides))",message="Overrides and explicit defaults are mutually exclusive"
-// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && has(self.rules))",message="Overrides and implicit defaults are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && (has(self.patterns) || has(self.when) || has(self.rules)))",message="Implicit and explicit defaults are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && (has(self.patterns) || has(self.when) || has(self.rules)))",message="Implicit defaults and explicit overrides are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && has(self.defaults))",message="Explicit overrides and explicit defaults are mutually exclusive"
 type AuthPolicySpec struct {
 	// Reference to the object to which this policy applies.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"

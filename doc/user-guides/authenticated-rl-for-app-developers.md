@@ -118,7 +118,7 @@ Create a Kuadrant `AuthPolicy` to configure the authentication:
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1beta3
 kind: AuthPolicy
 metadata:
   name: toystore

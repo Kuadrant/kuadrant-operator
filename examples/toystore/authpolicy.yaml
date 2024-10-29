@@ -1,5 +1,5 @@
 ---
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1beta3
 kind: AuthPolicy
 metadata:
   name: toystore
@@ -8,12 +8,6 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
-  routeSelectors:
-  - matches:
-    - path:
-        type: Exact
-        value: "/admin/toy"
-      method: DELETE
   rules:
     authentication:
       "apikey":
@@ -33,7 +27,7 @@ spec:
                 "user-id":
                   selector: auth.identity.metadata.annotations.secret\.kuadrant\.io/user-id
 ---
-apiVersion: kuadrant.io/v1beta1
+apiVersion: kuadrant.io/v1beta3
 kind: AuthPolicy
 metadata:
   name: toystore

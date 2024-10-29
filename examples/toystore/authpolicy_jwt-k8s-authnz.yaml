@@ -1,7 +1,7 @@
 # A Kuadrant AuthPolicy to protect an API with authentication based on OpenId Connect (OIDC) ID tokens (signed JWTs)
 # and Kubernetes Service Account tokens combined, and authorization with permissions (bindings) stored in the
 # Kubernetes RBAC, enforced by Authorino, Kuadrant's authorization service.
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1beta3
 kind: AuthPolicy
 metadata:
   name: toystore-protection

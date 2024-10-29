@@ -145,7 +145,7 @@ Create the AuthPolicy to enforce the following auth rules:
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1beta3
 kind: AuthPolicy
 metadata:
   name: toystore
@@ -168,11 +168,6 @@ spec:
           rego: |
             groups := split(object.get(input.auth.identity.metadata.annotations, "kuadrant.io/groups", ""), ",")
             allow { groups[_] == "admins" }
-        routeSelectors:
-        - matches:
-          - path:
-              type: PathPrefix
-              value: "/admin"
 EOF
 ```
 
@@ -232,7 +227,7 @@ Create the policy:
 
 ```sh
 kubectl -n gateway-system apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1beta3
 kind: AuthPolicy
 metadata:
   name: gw-auth

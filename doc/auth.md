@@ -26,7 +26,6 @@ The `AuthPolicy` spec includes the following parts:
 
 * A reference to an existing Gateway API resource (`spec.targetRef`)
 * Authentication/authorization scheme (`spec.rules`)
-* Top-level route selectors (`spec.routeSelectors`)
 * Top-level additional conditions (`spec.when`)
 * List of named patterns (`spec.patterns`)
 
@@ -38,14 +37,14 @@ The auth scheme specify rules for:
 * Custom response items (`spec.rules.response`)
 * Callbacks (`spec.rules.callbacks`)
 
-Each auth rule can declare specific `routeSelectors` and `when` conditions for the rule to apply.
+Each auth rule can declare specific `when` conditions for the rule to apply.
 
 The auth scheme (`rules`), as well as conditions and named patterns can be declared at the top-level level of the spec (with the semantics of _defaults_) or alternatively within explicit `defaults` or `overrides` blocks.
 
 #### High-level example and field definition
 
 ```yaml
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1beta3
 kind: AuthPolicy
 metadata:
   name: my-auth-policy
@@ -57,18 +56,6 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute / Gateway
     name: myroute / mygateway
-
-  # Selectors of HTTPRouteRules within the targeted HTTPRoute that activate the AuthPolicy.
-  # Each element contains a HTTPRouteMatch object that will be used to select HTTPRouteRules that include at least
-  # one identical HTTPRouteMatch.
-  # The HTTPRouteMatch part does not have to be fully identical, but the what's stated in the selector must be
-  # identically stated in the HTTPRouteRule.
-  # Do not use it on AuthPolicies that target a Gateway.
-  routeSelectors:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: "/admin"
 
   # Additional dynamic conditions to trigger the AuthPolicy.
   # Use it for filtering attributes not supported by HTTPRouteRule or with AuthPolicies that target a Gateway.
@@ -99,9 +86,6 @@ spec:
         credentials:
           authorizationHeader:
             prefix: APIKEY
-
-        # Rule-level route selectors.
-        routeSelectors: […]
 
         # Rule-level additional conditions.
         when: […]
@@ -194,7 +178,7 @@ The targeted HTTPRoute's rules and/or hostnames to which the policy must be enfo
 Target a HTTPRoute by setting the `spec.targetRef` field of the AuthPolicy as follows:
 
 ```yaml
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1beta3
 kind: AuthPolicy
 metadata:
   name: my-route-auth
@@ -254,7 +238,7 @@ Inversely, a gateway policy that specify _overrides_ declares a set of rules to 
 Target a Gateway HTTPRoute by setting the `spec.targetRef` field of the AuthPolicy as follows:
 
 ```yaml
-apiVersion: kuadrant.io/v1beta2
+apiVersion: kuadrant.io/v1beta3
 kind: AuthPolicy
 metadata:
   name: my-gw-auth

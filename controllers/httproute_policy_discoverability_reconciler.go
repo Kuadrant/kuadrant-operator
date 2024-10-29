@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,7 +19,6 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -47,7 +45,7 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) Subscription() *controller.Su
 	}
 }
 
-func (r *HTTPRoutePolicyDiscoverabilityReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+func (r *HTTPRoutePolicyDiscoverabilityReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("HTTPRoutePolicyDiscoverabilityReconciler").WithName("reconcile")
 
 	httpRoutes := lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, index int) (*machinery.HTTPRoute, bool) {
@@ -86,7 +84,7 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) reconcile(ctx context.Context
 
 			policies := kuadrantv1.PoliciesInPath(uniquePath, func(policy machinery.Policy) bool {
 				// Filter for policies of kind
-				return policy.GroupVersionKind().GroupKind() == *policyKind
+				return policy.GroupVersionKind().GroupKind() == *policyKind && IsPolicyAccepted(ctx, policy, s)
 			})
 
 			// No policies of kind attached - remove condition
@@ -131,35 +129,17 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) reconcile(ctx context.Context
 					i = utils.Index(routeStatusParents, FindRouteParentStatusFunc(route.HTTPRoute, client.ObjectKey{Namespace: gw.GetNamespace(), Name: gw.GetName()}, kuadrant.ControllerName))
 				}
 
-				reconciledTargets := make(map[types.UID]struct{})
+				condition := PolicyAffectedCondition(policyKind.Kind, policies)
 
-				// TODO - Account for multiple policies - accepted / not accepted
-				for _, policy := range policies {
-					// TODO: Refine
-					p, ok := policy.(gatewayapi.Policy)
-					if !ok {
-						logger.V(1).Info("skipping policy status", "policy", policyKind)
-						continue
-					}
-
-					if _, updated := reconciledTargets[route.GetUID()]; updated { // do not update the same route twice
-						continue
-					}
-
-					condition := buildPolicyAffectedCondition(p)
-
-					if c := meta.FindStatusCondition(routeStatusParents[i].Conditions, condition.Type); c != nil &&
-						c.Status == condition.Status && c.Reason == condition.Reason && c.Message == condition.Message && c.ObservedGeneration == route.GetGeneration() {
-						logger.V(1).Info("condition already up-to-date, skipping", "condition", condition.Type, "status", condition.Status, "name", route.GetName(), "namespace", route.GetNamespace(), "uid", route.GetUID())
-						reconciledTargets[route.GetUID()] = struct{}{}
-						continue
-					}
-
-					condition.ObservedGeneration = route.GetGeneration()
-					meta.SetStatusCondition(&(routeStatusParents[i].Conditions), condition)
-					logger.V(1).Info("adding condition", "condition", condition.Type, "status", condition.Status, "name", route.GetName(), "namespace", route.GetNamespace(), "uid", route.GetUID())
-					reconciledTargets[route.GetUID()] = struct{}{}
+				if c := meta.FindStatusCondition(routeStatusParents[i].Conditions, condition.Type); c != nil &&
+					c.Status == condition.Status && c.Reason == condition.Reason && c.Message == condition.Message && c.ObservedGeneration == route.GetGeneration() {
+					logger.V(1).Info("condition already up-to-date, skipping", "condition", condition.Type, "status", condition.Status, "name", route.GetName(), "namespace", route.GetNamespace(), "uid", route.GetUID())
+					continue
 				}
+
+				condition.ObservedGeneration = route.GetGeneration()
+				meta.SetStatusCondition(&(routeStatusParents[i].Conditions), condition)
+				logger.V(1).Info("adding condition", "condition", condition.Type, "status", condition.Status, "name", route.GetName(), "namespace", route.GetNamespace(), "uid", route.GetUID())
 			}
 		}
 
@@ -184,4 +164,13 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) reconcile(ctx context.Context
 		}
 	}
 	return nil
+}
+
+func FindRouteParentStatusFunc(route *gatewayapiv1.HTTPRoute, gatewayKey client.ObjectKey, controllerName gatewayapiv1.GatewayController) func(gatewayapiv1.RouteParentStatus) bool {
+	return func(p gatewayapiv1.RouteParentStatus) bool {
+		return *p.ParentRef.Kind == ("Gateway") &&
+			p.ControllerName == controllerName &&
+			((p.ParentRef.Namespace == nil && route.GetNamespace() == gatewayKey.Namespace) || string(*p.ParentRef.Namespace) == gatewayKey.Namespace) &&
+			string(p.ParentRef.Name) == gatewayKey.Name
+	}
 }

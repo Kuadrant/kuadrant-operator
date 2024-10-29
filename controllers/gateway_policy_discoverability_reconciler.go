@@ -41,7 +41,7 @@ func (r *GatewayPolicyDiscoverabilityReconciler) Subscription() *controller.Subs
 	}
 }
 
-func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, _ *sync.Map) error {
+func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("GatewayPolicyDiscoverabilityReconciler").WithName("reconcile")
 
 	// Get all the gateways
@@ -69,7 +69,7 @@ func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, 
 		})
 
 		for _, listener := range listeners {
-			listenerStatus, index, updated := r.buildExpectedListenerStatus(gw, listener, logger, policyGroupKinds)
+			listenerStatus, index, updated := r.buildExpectedListenerStatus(ctx, s, gw, listener, logger, policyGroupKinds)
 			if !updated {
 				continue
 			}
@@ -81,10 +81,10 @@ func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, 
 		for _, policyKind := range policyGroupKinds {
 			// Only want gw policies
 			path := []machinery.Targetable{gw}
-			//path = append(path, topology.Targetables().Children(gw)...)
+			// Filter for policies of kind
 			policies := kuadrantv1.PoliciesInPath(path, func(policy machinery.Policy) bool {
-				// Filter for policies of kind
-				return policy.GroupVersionKind().GroupKind() == *policyKind
+				// TODO: Filter by enforced policies?
+				return policy.GroupVersionKind().GroupKind() == *policyKind && IsPolicyAccepted(ctx, policy, s)
 			})
 
 			// No policies of kind attached - remove condition
@@ -137,7 +137,7 @@ func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, 
 	return nil
 }
 
-func (r *GatewayPolicyDiscoverabilityReconciler) buildExpectedListenerStatus(gw *machinery.Gateway, listener *machinery.Listener, logger logr.Logger, groupKinds []*schema.GroupKind) (gatewayapiv1.ListenerStatus, int, bool) {
+func (r *GatewayPolicyDiscoverabilityReconciler) buildExpectedListenerStatus(ctx context.Context, s *sync.Map, gw *machinery.Gateway, listener *machinery.Listener, logger logr.Logger, groupKinds []*schema.GroupKind) (gatewayapiv1.ListenerStatus, int, bool) {
 	listenerStatus, index, found := lo.FindIndexOf(gw.Status.Listeners, func(item gatewayapiv1.ListenerStatus) bool {
 		return item.Name == listener.Name
 	})
@@ -149,7 +149,7 @@ func (r *GatewayPolicyDiscoverabilityReconciler) buildExpectedListenerStatus(gw 
 
 	updated := false
 
-	// Want policy of both child and parent
+	// Want policy of both gateway and listener
 	policies := kuadrantv1.PoliciesInPath([]machinery.Targetable{gw, listener}, func(policy machinery.Policy) bool {
 		return true
 	})
@@ -157,7 +157,8 @@ func (r *GatewayPolicyDiscoverabilityReconciler) buildExpectedListenerStatus(gw 
 	for _, groupKind := range groupKinds {
 		// Filter for policies of kind
 		policiesOfKind := lo.Filter(policies, func(item machinery.Policy, index int) bool {
-			return item.GroupVersionKind().GroupKind() == *groupKind
+			// TODO: Filter by enforced policies?
+			return item.GroupVersionKind().GroupKind() == *groupKind && IsPolicyAccepted(ctx, item, s)
 		})
 
 		if len(policiesOfKind) == 0 {

@@ -139,21 +139,6 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 				existingRecord := existingRecordObj.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
 
 				// Deal with the potential deletion of a record first
-				//
-				// A DNSRecord can't currently support record type changes due to a limitation of the dns operator
-				// https://github.com/Kuadrant/dns-operator/issues/287
-				// If the policy changes, delete the existing record and break out to create the new one.
-				// Note: There should only ever be a single DNSPolicy targeting a unique Gateway/Listener until we
-				// resolve the above issue.
-				pPoliciesLocs := lo.Map(topology.Policies().Parents(existingRecordObj), func(item machinery.Policy, _ int) string {
-					return item.GetLocator()
-				})
-				if !lo.Contains(pPoliciesLocs, policy.GetLocator()) {
-					rLogger.V(1).Info("parent policy has changed, deleting record for listener")
-					r.deleteRecord(ctx, existingRecordObj)
-					break
-				}
-
 				if !hasAttachedRoute || len(desiredRecord.Spec.Endpoints) == 0 {
 					if !hasAttachedRoute {
 						rLogger.V(1).Info("listener has no attached routes, deleting record for listener")
@@ -164,10 +149,9 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 					continue
 				}
 
-				if desiredRecord.Spec.RootHost != existingRecord.Spec.RootHost {
-					rLogger.V(1).Info("listener hostname has changed, deleting record for listener")
+				if !canUpdateDNSRecord(ctx, existingRecord, desiredRecord) {
+					rLogger.V(1).Info("unable to update record, deleting record for listener and re-creating")
 					r.deleteRecord(ctx, existingRecordObj)
-					//Break to allow it to try the creation of the desired record
 					break
 				}
 
@@ -183,7 +167,7 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 					continue
 				}
 
-				rLogger.V(1).Info("updating DNS record for listener")
+				rLogger.V(1).Info("updating record for listener")
 				if _, uErr := resource.Update(ctx, un, metav1.UpdateOptions{}); uErr != nil {
 					rLogger.Error(uErr, "unable to update dns record")
 				}
@@ -312,4 +296,31 @@ func (r *EffectiveDNSPoliciesReconciler) deleteRecord(ctx context.Context, obj m
 	if err := resource.Delete(ctx, record.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		logger.Error(err, "failed to delete DNSRecord", "record", obj.GetLocator())
 	}
+}
+
+// canUpdateDNSRecord returns true if the current record can be updated to the desired.
+func canUpdateDNSRecord(ctx context.Context, current, desired *kuadrantdnsv1alpha1.DNSRecord) bool {
+	logger := controller.LoggerFromContext(ctx)
+
+	// DNSRecord doesn't currently support rootHost changes
+	if current.Spec.RootHost != desired.Spec.RootHost {
+		logger.V(1).Info("root host for existing record has changed")
+		return false
+	}
+
+	// DNSRecord doesn't currently support record type changes due to a limitation of the dns operator
+	// https://github.com/Kuadrant/dns-operator/issues/287
+	for _, curEp := range current.Spec.Endpoints {
+		for _, desEp := range desired.Spec.Endpoints {
+			if curEp.DNSName == desEp.DNSName {
+				if curEp.RecordType != desEp.RecordType {
+					logger.V(1).Info("record type for existing endpoint has changed",
+						"dnsName", curEp.DNSName, "current", curEp.RecordType, "desired", desEp.RecordType)
+					return false
+				}
+			}
+		}
+	}
+
+	return true
 }

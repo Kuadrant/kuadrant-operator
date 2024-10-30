@@ -166,12 +166,10 @@ func (p *AuthPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 		return rules
 	}
 
-	{
-		rule := spec.AuthScheme.Response.Unauthenticated
+	if rule := spec.AuthScheme.Response.Unauthenticated; rule != nil {
 		rules["response.unauthenticated#"] = kuadrantv1.NewMergeableRule(rule, policyLocator)
 	}
-	{
-		rule := spec.AuthScheme.Response.Unauthorized
+	if rule := spec.AuthScheme.Response.Unauthorized; rule != nil {
 		rules["response.unauthorized#"] = kuadrantv1.NewMergeableRule(rule, policyLocator)
 	}
 

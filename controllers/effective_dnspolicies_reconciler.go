@@ -138,7 +138,22 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 
 				existingRecord := existingRecordObj.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord)
 
-				//Deal with the potential deletion of a record first
+				// Deal with the potential deletion of a record first
+				//
+				// A DNSRecord can't currently support record type changes due to a limitation of the dns operator
+				// https://github.com/Kuadrant/dns-operator/issues/287
+				// If the policy changes, delete the existing record and break out to create the new one.
+				// Note: There should only ever be a single DNSPolicy targeting a unique Gateway/Listener until we
+				// resolve the above issue.
+				pPoliciesLocs := lo.Map(topology.Policies().Parents(existingRecordObj), func(item machinery.Policy, _ int) string {
+					return item.GetLocator()
+				})
+				if !lo.Contains(pPoliciesLocs, policy.GetLocator()) {
+					rLogger.V(1).Info("parent policy has changed, deleting record for listener")
+					r.deleteRecord(ctx, existingRecordObj)
+					break
+				}
+
 				if !hasAttachedRoute || len(desiredRecord.Spec.Endpoints) == 0 {
 					if !hasAttachedRoute {
 						rLogger.V(1).Info("listener has no attached routes, deleting record for listener")
@@ -156,13 +171,11 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 					break
 				}
 
-				if reflect.DeepEqual(existingRecord.Spec, desiredRecord.Spec) &&
-					reflect.DeepEqual(existingRecord.OwnerReferences, desiredRecord.OwnerReferences) {
+				if reflect.DeepEqual(existingRecord.Spec, desiredRecord.Spec) {
 					rLogger.V(1).Info("dns record is up to date, nothing to do")
 					continue
 				}
 				existingRecord.Spec = desiredRecord.Spec
-				existingRecord.OwnerReferences = desiredRecord.OwnerReferences
 
 				un, err := controller.Destruct(existingRecord)
 				if err != nil {

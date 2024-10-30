@@ -56,7 +56,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 
 	effectivePolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {
-		logger.Error(ErrMissingStateEffectiveAuthPolicies, "failed to build limitador limits")
+		logger.Error(ErrMissingStateEffectiveAuthPolicies, "failed to reconcile authconfig objects")
 		return nil
 	}
 	effectivePoliciesMap := effectivePolicies.(EffectiveAuthPolicies)

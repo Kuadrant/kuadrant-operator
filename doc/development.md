@@ -253,8 +253,8 @@ Multiple controller integration tests are defined
 | --- | --- | --- | --- |
 | `github.com/kuadrant/kuadrant-operator/tests/bare_k8s` | no gateway provider, no GatewayAPI CRDs. Just Kuadrant API and Kuadrant dependencies. | `make local-k8s-env-setup` | `make test-bare-k8s-integration` |
 | `github.com/kuadrant/kuadrant-operator/tests/gatewayapi` | no gateway provider. GatewayAPI CRDs, Kuadrant API and Kuadrant dependencies. | `make local-gatewayapi-env-setup` | `make test-gatewayapi-env-integration` |
-| `github.com/kuadrant/kuadrant-operator/controllers` | at least one gatewayapi provider. It can be any: istio, envoygateway, ...  | `make local-env-setup GATEWAYAPI_PROVIDER=[istio \| envoygateway]` (Default *istio*) | `make test-integration GATEWAYAPI_PROVIDER=[istio \| envoygateway]` (Default *istio*) |
-| `github.com/kuadrant/kuadrant-operator/tests/istio` | GatewayAPI CRDs, Istio, Kuadrant API and Kuadrant dependencies.  | `make local-env-setup GATEWAYAPI_PROVIDER=istio` | `make test-istio-env-integration` |
+| `github.com/kuadrant/kuadrant-operator/controllers` | at least one gatewayapi provider. It can be any: istio, envoygateway, ...  | `make local-env-setup GATEWAYAPI_PROVIDER=[istio \| envoygateway] [ISTIO_INSTALL_SAIL=false]` (Default *istio*) | `make test-integration GATEWAYAPI_PROVIDER=[istio \| envoygateway]` (Default *istio*) |
+| `github.com/kuadrant/kuadrant-operator/tests/istio` | GatewayAPI CRDs, Istio, Kuadrant API and Kuadrant dependencies.  | `make local-env-setup GATEWAYAPI_PROVIDER=istio [ISTIO_INSTALL_SAIL=false]` | `make test-istio-env-integration` |
 | `github.com/kuadrant/kuadrant-operator/tests/envoygateway` | GatewayAPI CRDs, EnvoyGateway, Kuadrant API and Kuadrant dependencies.  | `make local-env-setup GATEWAYAPI_PROVIDER=envoygateway` | `make test-envoygateway-env-integration` |
 
 ### Lint tests

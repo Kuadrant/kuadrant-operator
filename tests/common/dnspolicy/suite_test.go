@@ -25,11 +25,18 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gstruct"
+	"github.com/onsi/gomega/types"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	externaldns "sigs.k8s.io/external-dns/endpoint"
+
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
@@ -109,3 +116,21 @@ func TestMain(m *testing.M) {
 	log.SetLogger(logger)
 	os.Exit(m.Run())
 }
+
+var (
+	containReadyCondition = ContainElements(
+		MatchFields(IgnoreExtras, Fields{
+			"Type":   Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
+			"Status": Equal(metav1.ConditionTrue),
+		}))
+
+	endpointMatcher = func(dnsName, recordType, setID string, ttl int64, targets ...string) types.GomegaMatcher {
+		return PointTo(MatchFields(IgnoreExtras, Fields{
+			"DNSName":       Equal(dnsName),
+			"Targets":       ConsistOf(targets),
+			"RecordType":    Equal(recordType),
+			"SetIdentifier": Equal(setID),
+			"RecordTTL":     Equal(externaldns.TTL(ttl)),
+		}))
+	}
+)

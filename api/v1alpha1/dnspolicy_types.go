@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -58,7 +59,7 @@ type DNSPolicySpec struct {
 	// targetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'Gateway'"
-	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReference `json:"targetRef"`
+	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	// +optional
 	HealthCheck *dnsv1alpha1.HealthCheckSpec `json:"healthCheck,omitempty"`
@@ -190,7 +191,7 @@ func (p *DNSPolicy) GetRulesHostnames() []string {
 }
 
 func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
-	return p.Spec.TargetRef
+	return p.Spec.TargetRef.LocalPolicyTargetReference
 }
 
 func (p *DNSPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
@@ -252,7 +253,7 @@ func NewDNSPolicy(name, ns string) *DNSPolicy {
 	}
 }
 
-func (p *DNSPolicy) WithTargetRef(targetRef gatewayapiv1alpha2.LocalPolicyTargetReference) *DNSPolicy {
+func (p *DNSPolicy) WithTargetRef(targetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName) *DNSPolicy {
 	p.Spec.TargetRef = targetRef
 	return p
 }
@@ -290,11 +291,20 @@ func (p *DNSPolicy) WithExcludeAddresses(excluded []string) *DNSPolicy {
 //TargetRef
 
 func (p *DNSPolicy) WithTargetGateway(gwName string) *DNSPolicy {
-	return p.WithTargetRef(gatewayapiv1alpha2.LocalPolicyTargetReference{
-		Group: gatewayapiv1.GroupName,
-		Kind:  "Gateway",
-		Name:  gatewayapiv1.ObjectName(gwName),
+	return p.WithTargetRef(gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+		LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			Group: gatewayapiv1.GroupName,
+			Kind:  "Gateway",
+			Name:  gatewayapiv1.ObjectName(gwName),
+		},
+		SectionName: nil,
 	})
+}
+
+func (p *DNSPolicy) WithTargetGatewayListener(gwName string, lName string) *DNSPolicy {
+	p.WithTargetGateway(gwName)
+	p.Spec.TargetRef.SectionName = ptr.To(gatewayapiv1.SectionName(lName))
+	return p
 }
 
 //HealthCheck

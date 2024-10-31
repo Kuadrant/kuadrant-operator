@@ -22,6 +22,11 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
+var (
+	ErrNoRoutes    = fmt.Errorf("no routes attached to any gateway listeners")
+	ErrNoAddresses = fmt.Errorf("no valid status addresses to use on gateway")
+)
+
 func NewEffectiveDNSPoliciesReconciler(client *dynamic.DynamicClient, scheme *runtime.Scheme) *EffectiveDNSPoliciesReconciler {
 	return &EffectiveDNSPoliciesReconciler{
 		client: client,
@@ -75,7 +80,7 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 			continue
 		}
 
-		listeners := r.listenersForPolicy(ctx, topology, policy, policyTypeFilterFunc)
+		listeners := listenersForPolicy(ctx, topology, policy, policyTypeFilterFunc)
 
 		if logger.V(1).Enabled() {
 			listenerLocators := lo.Map(listeners, func(item *machinery.Listener, _ int) string {
@@ -211,27 +216,6 @@ func (r *EffectiveDNSPoliciesReconciler) reconcile(ctx context.Context, _ []cont
 	return r.deleteOrphanDNSRecords(controller.LoggerIntoContext(ctx, logger), topology)
 }
 
-// listenersForPolicy returns an array of listeners that are targeted by the given policy.
-// If the target is a Listener a single element array containing that listener is returned.
-// If the target is a Gateway all listeners that do not have a DNS policy explicitly attached are returned.
-func (r *EffectiveDNSPoliciesReconciler) listenersForPolicy(_ context.Context, topology *machinery.Topology, policy machinery.Policy, policyTypeFilterFunc dnsPolicyTypeFilter) []*machinery.Listener {
-	return lo.Flatten(lo.FilterMap(topology.Targetables().Children(policy), func(t machinery.Targetable, _ int) ([]*machinery.Listener, bool) {
-		if l, ok := t.(*machinery.Listener); ok {
-			return []*machinery.Listener{l}, true
-		}
-		if g, ok := t.(*machinery.Gateway); ok {
-			listeners := lo.FilterMap(topology.Targetables().Children(g), func(t machinery.Targetable, _ int) (*machinery.Listener, bool) {
-				l, lok := t.(*machinery.Listener)
-				lPolicies := lo.FilterMap(l.Policies(), policyTypeFilterFunc)
-				return l, lok && len(lPolicies) == 0
-			})
-			return listeners, true
-		}
-
-		return nil, false
-	}))
-}
-
 // deleteOrphanDNSRecords deletes any DNSRecord resources that exist in the topology but have no parent targettable, policy or path back to the policy.
 func (r *EffectiveDNSPoliciesReconciler) deleteOrphanDNSRecords(ctx context.Context, topology *machinery.Topology) error {
 	logger := controller.LoggerFromContext(ctx).WithName("deleteOrphanDNSRecords")
@@ -296,6 +280,27 @@ func (r *EffectiveDNSPoliciesReconciler) deleteRecord(ctx context.Context, obj m
 	if err := resource.Delete(ctx, record.GetName(), metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		logger.Error(err, "failed to delete DNSRecord", "record", obj.GetLocator())
 	}
+}
+
+// listenersForPolicy returns an array of listeners that are targeted by the given policy.
+// If the target is a Listener a single element array containing that listener is returned.
+// If the target is a Gateway all listeners that do not have a DNS policy explicitly attached are returned.
+func listenersForPolicy(_ context.Context, topology *machinery.Topology, policy machinery.Policy, policyTypeFilterFunc dnsPolicyTypeFilter) []*machinery.Listener {
+	return lo.Flatten(lo.FilterMap(topology.Targetables().Children(policy), func(t machinery.Targetable, _ int) ([]*machinery.Listener, bool) {
+		if l, ok := t.(*machinery.Listener); ok {
+			return []*machinery.Listener{l}, true
+		}
+		if g, ok := t.(*machinery.Gateway); ok {
+			listeners := lo.FilterMap(topology.Targetables().Children(g), func(t machinery.Targetable, _ int) (*machinery.Listener, bool) {
+				l, lok := t.(*machinery.Listener)
+				lPolicies := lo.FilterMap(l.Policies(), policyTypeFilterFunc)
+				return l, lok && len(lPolicies) == 0
+			})
+			return listeners, true
+		}
+
+		return nil, false
+	}))
 }
 
 // canUpdateDNSRecord returns true if the current record can be updated to the desired.

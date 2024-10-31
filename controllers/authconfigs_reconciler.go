@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"sync"
 
-	authorinov1beta2 "github.com/kuadrant/authorino/api/v1beta2"
+	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -98,7 +98,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 			continue
 		}
 
-		existingAuthConfig := existingAuthConfigObj.(*controller.RuntimeObject).Object.(*authorinov1beta2.AuthConfig)
+		existingAuthConfig := existingAuthConfigObj.(*controller.RuntimeObject).Object.(*authorinov1beta3.AuthConfig)
 
 		if equalAuthConfigs(existingAuthConfig, desiredAuthConfig) {
 			logger.V(1).Info("authconfig object is up to date, nothing to do")
@@ -149,13 +149,13 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	return nil
 }
 
-func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy EffectiveAuthPolicy, name, namespace string) *authorinov1beta2.AuthConfig {
+func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy EffectiveAuthPolicy, name, namespace string) *authorinov1beta3.AuthConfig {
 	_, _, _, _, httpRouteRule, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
 
-	authConfig := &authorinov1beta2.AuthConfig{
+	authConfig := &authorinov1beta3.AuthConfig{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "AuthConfig",
-			APIVersion: authorinov1beta2.GroupVersion.String(),
+			APIVersion: authorinov1beta3.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -165,7 +165,7 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy Effective
 			},
 			Labels: AuthObjectLabels(),
 		},
-		Spec: authorinov1beta2.AuthConfigSpec{
+		Spec: authorinov1beta3.AuthConfigSpec{
 			Hosts: []string{name},
 		},
 	}
@@ -174,14 +174,14 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy Effective
 
 	// named patterns
 	if namedPatterns := spec.NamedPatterns; namedPatterns != nil {
-		authConfig.Spec.NamedPatterns = lo.MapValues(spec.NamedPatterns, func(v kuadrantv1beta3.MergeablePatternExpressions, _ string) authorinov1beta2.PatternExpressions {
+		authConfig.Spec.NamedPatterns = lo.MapValues(spec.NamedPatterns, func(v kuadrantv1beta3.MergeablePatternExpressions, _ string) authorinov1beta3.PatternExpressions {
 			return v.PatternExpressions
 		})
 	}
 
 	// top-level conditions
 	if conditions := spec.Conditions; conditions != nil {
-		authConfig.Spec.Conditions = lo.Map(spec.Conditions, func(v kuadrantv1beta3.MergeablePatternExpressionOrRef, _ int) authorinov1beta2.PatternExpressionOrRef {
+		authConfig.Spec.Conditions = lo.Map(spec.Conditions, func(v kuadrantv1beta3.MergeablePatternExpressionOrRef, _ int) authorinov1beta3.PatternExpressionOrRef {
 			return v.PatternExpressionOrRef
 		})
 	}
@@ -194,45 +194,45 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy Effective
 
 	// authentication
 	if authentication := authScheme.Authentication; authentication != nil {
-		authConfig.Spec.Authentication = lo.MapValues(authentication, func(v kuadrantv1beta3.MergeableAuthenticationSpec, _ string) authorinov1beta2.AuthenticationSpec {
+		authConfig.Spec.Authentication = lo.MapValues(authentication, func(v kuadrantv1beta3.MergeableAuthenticationSpec, _ string) authorinov1beta3.AuthenticationSpec {
 			return v.AuthenticationSpec
 		})
 	}
 
 	// metadata
 	if metadata := authScheme.Metadata; metadata != nil {
-		authConfig.Spec.Metadata = lo.MapValues(metadata, func(v kuadrantv1beta3.MergeableMetadataSpec, _ string) authorinov1beta2.MetadataSpec {
+		authConfig.Spec.Metadata = lo.MapValues(metadata, func(v kuadrantv1beta3.MergeableMetadataSpec, _ string) authorinov1beta3.MetadataSpec {
 			return v.MetadataSpec
 		})
 	}
 
 	// authorization
 	if authorization := authScheme.Authorization; authorization != nil {
-		authConfig.Spec.Authorization = lo.MapValues(authorization, func(v kuadrantv1beta3.MergeableAuthorizationSpec, _ string) authorinov1beta2.AuthorizationSpec {
+		authConfig.Spec.Authorization = lo.MapValues(authorization, func(v kuadrantv1beta3.MergeableAuthorizationSpec, _ string) authorinov1beta3.AuthorizationSpec {
 			return v.AuthorizationSpec
 		})
 	}
 
 	// response
 	if response := authScheme.Response; response != nil {
-		var unauthenticated *authorinov1beta2.DenyWithSpec
+		var unauthenticated *authorinov1beta3.DenyWithSpec
 		if response.Unauthenticated != nil {
 			unauthenticated = &response.Unauthenticated.DenyWithSpec
 		}
 
-		var unauthorized *authorinov1beta2.DenyWithSpec
+		var unauthorized *authorinov1beta3.DenyWithSpec
 		if response.Unauthorized != nil {
 			unauthorized = &response.Unauthorized.DenyWithSpec
 		}
 
-		authConfig.Spec.Response = &authorinov1beta2.ResponseSpec{
+		authConfig.Spec.Response = &authorinov1beta3.ResponseSpec{
 			Unauthenticated: unauthenticated,
 			Unauthorized:    unauthorized,
-			Success: authorinov1beta2.WrappedSuccessResponseSpec{
-				Headers: authorinoSpecsFromConfigs(response.Success.Headers, func(config kuadrantv1beta3.MergeableHeaderSuccessResponseSpec) authorinov1beta2.HeaderSuccessResponseSpec {
-					return authorinov1beta2.HeaderSuccessResponseSpec{SuccessResponseSpec: config.SuccessResponseSpec}
+			Success: authorinov1beta3.WrappedSuccessResponseSpec{
+				Headers: authorinoSpecsFromConfigs(response.Success.Headers, func(config kuadrantv1beta3.MergeableHeaderSuccessResponseSpec) authorinov1beta3.HeaderSuccessResponseSpec {
+					return authorinov1beta3.HeaderSuccessResponseSpec{SuccessResponseSpec: config.SuccessResponseSpec}
 				}),
-				DynamicMetadata: authorinoSpecsFromConfigs(response.Success.DynamicMetadata, func(config kuadrantv1beta3.MergeableSuccessResponseSpec) authorinov1beta2.SuccessResponseSpec {
+				DynamicMetadata: authorinoSpecsFromConfigs(response.Success.DynamicMetadata, func(config kuadrantv1beta3.MergeableSuccessResponseSpec) authorinov1beta3.SuccessResponseSpec {
 					return config.SuccessResponseSpec
 				}),
 			},
@@ -241,7 +241,7 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy Effective
 
 	// callbacks
 	if callbacks := authScheme.Callbacks; callbacks != nil {
-		authConfig.Spec.Callbacks = lo.MapValues(callbacks, func(v kuadrantv1beta3.MergeableCallbackSpec, _ string) authorinov1beta2.CallbackSpec {
+		authConfig.Spec.Callbacks = lo.MapValues(callbacks, func(v kuadrantv1beta3.MergeableCallbackSpec, _ string) authorinov1beta3.CallbackSpec {
 			return v.CallbackSpec
 		})
 	}
@@ -263,7 +263,7 @@ func authorinoSpecsFromConfigs[T, U any](configs map[string]U, extractAuthorinoS
 	return specs
 }
 
-func equalAuthConfigs(existing, desired *authorinov1beta2.AuthConfig) bool {
+func equalAuthConfigs(existing, desired *authorinov1beta3.AuthConfig) bool {
 	// httprouterule back ref annotation
 	existingAnnotations := existing.GetAnnotations()
 	desiredAnnotations := desired.GetAnnotations()

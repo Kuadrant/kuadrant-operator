@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	authorinov1beta2 "github.com/kuadrant/authorino/api/v1beta2"
+	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -58,7 +58,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		return types.NamespacedName{Name: authConfigName, Namespace: kuadrantInstallationNS}
 	}
 
-	fetchReadyAuthConfig := func(ctx context.Context, httpRoute *gatewayapiv1.HTTPRoute, httpRouteRuleIndex int, authConfig *authorinov1beta2.AuthConfig) func() bool {
+	fetchReadyAuthConfig := func(ctx context.Context, httpRoute *gatewayapiv1.HTTPRoute, httpRouteRuleIndex int, authConfig *authorinov1beta3.AuthConfig) func() bool {
 		authConfigKey := authConfigKeyForPath(httpRoute, httpRouteRuleIndex)
 		return func() bool {
 			err := k8sClient.Get(ctx, authConfigKey, authConfig)
@@ -149,7 +149,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfig := &authorinov1beta2.AuthConfig{}
+			authConfig := &authorinov1beta3.AuthConfig{}
 			Eventually(fetchReadyAuthConfig(ctx, httpRoute, 0, authConfig)).WithContext(ctx).Should(BeTrue())
 			Expect(authConfig.Spec.Authentication).To(HaveLen(1))
 			Expect(authConfig.Spec.Authentication).To(HaveKeyWithValue("apiKey", policy.Spec.Proper().AuthScheme.Authentication["apiKey"].AuthenticationSpec))
@@ -161,7 +161,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(tests.RouteIsAccepted(ctx, k8sClient, client.ObjectKeyFromObject(otherHTTPRoute))).WithContext(ctx).Should(BeTrue())
 
 			// check authorino other authconfig
-			otherAuthConfig := &authorinov1beta2.AuthConfig{}
+			otherAuthConfig := &authorinov1beta3.AuthConfig{}
 			Eventually(fetchReadyAuthConfig(ctx, otherHTTPRoute, 0, otherAuthConfig)).WithContext(ctx).Should(BeTrue())
 			Expect(otherAuthConfig.Spec.Authentication).To(HaveLen(1))
 			Expect(otherAuthConfig.Spec.Authentication).To(HaveKeyWithValue("apiKey", policy.Spec.Proper().AuthScheme.Authentication["apiKey"].AuthenticationSpec))
@@ -178,7 +178,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfig := &authorinov1beta2.AuthConfig{}
+			authConfig := &authorinov1beta3.AuthConfig{}
 			Eventually(fetchReadyAuthConfig(ctx, httpRoute, 0, authConfig)).WithContext(ctx).Should(BeTrue())
 			Expect(authConfig.Spec.Authentication).To(HaveLen(1))
 			Expect(authConfig.Spec.Authentication).To(HaveKeyWithValue("apiKey", policy.Spec.Proper().AuthScheme.Authentication["apiKey"].AuthenticationSpec))
@@ -217,12 +217,12 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), gwPolicy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfig := &authorinov1beta2.AuthConfig{}
+			authConfig := &authorinov1beta3.AuthConfig{}
 			Eventually(fetchReadyAuthConfig(ctx, httpRoute, 0, authConfig)).WithContext(ctx).Should(BeTrue())
 			Expect(authConfig.Spec.Authentication).To(HaveLen(1))
 			Expect(authConfig.Spec.Authentication).To(HaveKeyWithValue("apiKey", routePolicy.Spec.Proper().AuthScheme.Authentication["apiKey"].AuthenticationSpec))
 
-			otherAuthConfig := &authorinov1beta2.AuthConfig{}
+			otherAuthConfig := &authorinov1beta3.AuthConfig{}
 			Eventually(fetchReadyAuthConfig(ctx, otherRoute, 0, otherAuthConfig)).WithContext(ctx).Should(BeTrue())
 			Expect(otherAuthConfig.Spec.Authentication).To(HaveLen(1))
 			Expect(otherAuthConfig.Spec.Authentication).To(HaveKeyWithValue("apiKey", gwPolicy.Spec.Proper().AuthScheme.Authentication["apiKey"].AuthenticationSpec))
@@ -245,7 +245,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			// check authorino authconfig
 			authConfigKey := authConfigKeyForPath(httpRoute, 0)
 			Eventually(func() bool {
-				err := k8sClient.Get(ctx, authConfigKey, &authorinov1beta2.AuthConfig{})
+				err := k8sClient.Get(ctx, authConfigKey, &authorinov1beta3.AuthConfig{})
 				return apierrors.IsNotFound(err)
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
@@ -254,19 +254,19 @@ var _ = Describe("AuthPolicy controller", func() {
 			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Spec.Proper().NamedPatterns = map[string]kuadrantv1beta3.MergeablePatternExpressions{
 					"internal-source": {
-						PatternExpressions: []authorinov1beta2.PatternExpression{
+						PatternExpressions: []authorinov1beta3.PatternExpression{
 							{
 								Selector: "source.ip",
-								Operator: authorinov1beta2.PatternExpressionOperator("matches"),
+								Operator: authorinov1beta3.PatternExpressionOperator("matches"),
 								Value:    `192\.168\..*`,
 							},
 						},
 					},
 					"authz-and-rl-required": {
-						PatternExpressions: []authorinov1beta2.PatternExpression{
+						PatternExpressions: []authorinov1beta3.PatternExpression{
 							{
 								Selector: "source.ip",
-								Operator: authorinov1beta2.PatternExpressionOperator("neq"),
+								Operator: authorinov1beta3.PatternExpressionOperator("neq"),
 								Value:    "192.168.0.10",
 							},
 						},
@@ -274,8 +274,8 @@ var _ = Describe("AuthPolicy controller", func() {
 				}
 				policy.Spec.Proper().Conditions = []kuadrantv1beta3.MergeablePatternExpressionOrRef{
 					{
-						PatternExpressionOrRef: authorinov1beta2.PatternExpressionOrRef{
-							PatternRef: authorinov1beta2.PatternRef{
+						PatternExpressionOrRef: authorinov1beta3.PatternExpressionOrRef{
+							PatternRef: authorinov1beta3.PatternRef{
 								Name: "internal-source",
 							},
 						},
@@ -284,11 +284,11 @@ var _ = Describe("AuthPolicy controller", func() {
 				policy.Spec.Proper().AuthScheme = &kuadrantv1beta3.AuthSchemeSpec{
 					Authentication: map[string]kuadrantv1beta3.MergeableAuthenticationSpec{
 						"jwt": {
-							AuthenticationSpec: authorinov1beta2.AuthenticationSpec{
-								CommonEvaluatorSpec: authorinov1beta2.CommonEvaluatorSpec{
-									Conditions: []authorinov1beta2.PatternExpressionOrRef{
+							AuthenticationSpec: authorinov1beta3.AuthenticationSpec{
+								CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
+									Conditions: []authorinov1beta3.PatternExpressionOrRef{
 										{
-											PatternExpression: authorinov1beta2.PatternExpression{
+											PatternExpression: authorinov1beta3.PatternExpression{
 												Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
 												Operator: "neq",
 												Value:    "",
@@ -296,8 +296,8 @@ var _ = Describe("AuthPolicy controller", func() {
 										},
 									},
 								},
-								AuthenticationMethodSpec: authorinov1beta2.AuthenticationMethodSpec{
-									Plain: &authorinov1beta2.PlainIdentitySpec{
+								AuthenticationMethodSpec: authorinov1beta3.AuthenticationMethodSpec{
+									Plain: &authorinov1beta3.PlainIdentitySpec{
 										Selector: `filter_metadata.envoy\.filters\.http\.jwt_authn|verified_jwt`,
 									},
 								},
@@ -306,20 +306,20 @@ var _ = Describe("AuthPolicy controller", func() {
 					},
 					Metadata: map[string]kuadrantv1beta3.MergeableMetadataSpec{
 						"user-groups": {
-							MetadataSpec: authorinov1beta2.MetadataSpec{
-								CommonEvaluatorSpec: authorinov1beta2.CommonEvaluatorSpec{
-									Conditions: []authorinov1beta2.PatternExpressionOrRef{
+							MetadataSpec: authorinov1beta3.MetadataSpec{
+								CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
+									Conditions: []authorinov1beta3.PatternExpressionOrRef{
 										{
-											PatternExpression: authorinov1beta2.PatternExpression{
+											PatternExpression: authorinov1beta3.PatternExpression{
 												Selector: "auth.identity.admin",
-												Operator: authorinov1beta2.PatternExpressionOperator("neq"),
+												Operator: authorinov1beta3.PatternExpressionOperator("neq"),
 												Value:    "true",
 											},
 										},
 									},
 								},
-								MetadataMethodSpec: authorinov1beta2.MetadataMethodSpec{
-									Http: &authorinov1beta2.HttpEndpointSpec{
+								MetadataMethodSpec: authorinov1beta3.MetadataMethodSpec{
+									Http: &authorinov1beta3.HttpEndpointSpec{
 										Url: "http://user-groups/username={auth.identity.username}",
 									},
 								},
@@ -328,35 +328,35 @@ var _ = Describe("AuthPolicy controller", func() {
 					},
 					Authorization: map[string]kuadrantv1beta3.MergeableAuthorizationSpec{
 						"admin-or-privileged": {
-							AuthorizationSpec: authorinov1beta2.AuthorizationSpec{
-								CommonEvaluatorSpec: authorinov1beta2.CommonEvaluatorSpec{
-									Conditions: []authorinov1beta2.PatternExpressionOrRef{
+							AuthorizationSpec: authorinov1beta3.AuthorizationSpec{
+								CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
+									Conditions: []authorinov1beta3.PatternExpressionOrRef{
 										{
-											PatternRef: authorinov1beta2.PatternRef{
+											PatternRef: authorinov1beta3.PatternRef{
 												Name: "authz-and-rl-required",
 											},
 										},
 									},
 								},
-								AuthorizationMethodSpec: authorinov1beta2.AuthorizationMethodSpec{
-									PatternMatching: &authorinov1beta2.PatternMatchingAuthorizationSpec{
-										Patterns: []authorinov1beta2.PatternExpressionOrRef{
+								AuthorizationMethodSpec: authorinov1beta3.AuthorizationMethodSpec{
+									PatternMatching: &authorinov1beta3.PatternMatchingAuthorizationSpec{
+										Patterns: []authorinov1beta3.PatternExpressionOrRef{
 											{
-												Any: []authorinov1beta2.UnstructuredPatternExpressionOrRef{
+												Any: []authorinov1beta3.UnstructuredPatternExpressionOrRef{
 													{
-														PatternExpressionOrRef: authorinov1beta2.PatternExpressionOrRef{
-															PatternExpression: authorinov1beta2.PatternExpression{
+														PatternExpressionOrRef: authorinov1beta3.PatternExpressionOrRef{
+															PatternExpression: authorinov1beta3.PatternExpression{
 																Selector: "auth.identity.admin",
-																Operator: authorinov1beta2.PatternExpressionOperator("eq"),
+																Operator: authorinov1beta3.PatternExpressionOperator("eq"),
 																Value:    "true",
 															},
 														},
 													},
 													{
-														PatternExpressionOrRef: authorinov1beta2.PatternExpressionOrRef{
-															PatternExpression: authorinov1beta2.PatternExpression{
+														PatternExpressionOrRef: authorinov1beta3.PatternExpressionOrRef{
+															PatternExpression: authorinov1beta3.PatternExpression{
 																Selector: "auth.metadata.user-groups",
-																Operator: authorinov1beta2.PatternExpressionOperator("incl"),
+																Operator: authorinov1beta3.PatternExpressionOperator("incl"),
 																Value:    "privileged",
 															},
 														},
@@ -371,15 +371,15 @@ var _ = Describe("AuthPolicy controller", func() {
 					},
 					Response: &kuadrantv1beta3.MergeableResponseSpec{
 						Unauthenticated: &kuadrantv1beta3.MergeableDenyWithSpec{
-							DenyWithSpec: authorinov1beta2.DenyWithSpec{
-								Message: &authorinov1beta2.ValueOrSelector{
+							DenyWithSpec: authorinov1beta3.DenyWithSpec{
+								Message: &authorinov1beta3.ValueOrSelector{
 									Value: k8sruntime.RawExtension{Raw: []byte(`"Missing verified JWT injected by the gateway"`)},
 								},
 							},
 						},
 						Unauthorized: &kuadrantv1beta3.MergeableDenyWithSpec{
-							DenyWithSpec: authorinov1beta2.DenyWithSpec{
-								Message: &authorinov1beta2.ValueOrSelector{
+							DenyWithSpec: authorinov1beta3.DenyWithSpec{
+								Message: &authorinov1beta3.ValueOrSelector{
 									Value: k8sruntime.RawExtension{Raw: []byte(`"User must be admin or member of privileged group"`)},
 								},
 							},
@@ -387,21 +387,21 @@ var _ = Describe("AuthPolicy controller", func() {
 						Success: kuadrantv1beta3.MergeableWrappedSuccessResponseSpec{
 							Headers: map[string]kuadrantv1beta3.MergeableHeaderSuccessResponseSpec{
 								"x-username": {
-									HeaderSuccessResponseSpec: authorinov1beta2.HeaderSuccessResponseSpec{
-										SuccessResponseSpec: authorinov1beta2.SuccessResponseSpec{
-											CommonEvaluatorSpec: authorinov1beta2.CommonEvaluatorSpec{
-												Conditions: []authorinov1beta2.PatternExpressionOrRef{
+									HeaderSuccessResponseSpec: authorinov1beta3.HeaderSuccessResponseSpec{
+										SuccessResponseSpec: authorinov1beta3.SuccessResponseSpec{
+											CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
+												Conditions: []authorinov1beta3.PatternExpressionOrRef{
 													{
-														PatternExpression: authorinov1beta2.PatternExpression{
+														PatternExpression: authorinov1beta3.PatternExpression{
 															Selector: "request.headers.x-propagate-username.@case:lower",
-															Operator: authorinov1beta2.PatternExpressionOperator("matches"),
+															Operator: authorinov1beta3.PatternExpressionOperator("matches"),
 															Value:    "1|yes|true",
 														},
 													},
 												},
 											},
-											AuthResponseMethodSpec: authorinov1beta2.AuthResponseMethodSpec{
-												Plain: &authorinov1beta2.PlainAuthResponseSpec{
+											AuthResponseMethodSpec: authorinov1beta3.AuthResponseMethodSpec{
+												Plain: &authorinov1beta3.PlainAuthResponseSpec{
 													Selector: "auth.identity.username",
 												},
 											},
@@ -411,19 +411,19 @@ var _ = Describe("AuthPolicy controller", func() {
 							},
 							DynamicMetadata: map[string]kuadrantv1beta3.MergeableSuccessResponseSpec{
 								"x-auth-data": {
-									SuccessResponseSpec: authorinov1beta2.SuccessResponseSpec{
-										CommonEvaluatorSpec: authorinov1beta2.CommonEvaluatorSpec{
-											Conditions: []authorinov1beta2.PatternExpressionOrRef{
+									SuccessResponseSpec: authorinov1beta3.SuccessResponseSpec{
+										CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
+											Conditions: []authorinov1beta3.PatternExpressionOrRef{
 												{
-													PatternRef: authorinov1beta2.PatternRef{
+													PatternRef: authorinov1beta3.PatternRef{
 														Name: "authz-and-rl-required",
 													},
 												},
 											},
 										},
-										AuthResponseMethodSpec: authorinov1beta2.AuthResponseMethodSpec{
-											Json: &authorinov1beta2.JsonAuthResponseSpec{
-												Properties: authorinov1beta2.NamedValuesOrSelectors{
+										AuthResponseMethodSpec: authorinov1beta3.AuthResponseMethodSpec{
+											Json: &authorinov1beta3.JsonAuthResponseSpec{
+												Properties: authorinov1beta3.NamedValuesOrSelectors{
 													"username": {
 														Selector: "auth.identity.username",
 													},
@@ -440,29 +440,29 @@ var _ = Describe("AuthPolicy controller", func() {
 					},
 					Callbacks: map[string]kuadrantv1beta3.MergeableCallbackSpec{
 						"unauthorized-attempt": {
-							CallbackSpec: authorinov1beta2.CallbackSpec{
-								CommonEvaluatorSpec: authorinov1beta2.CommonEvaluatorSpec{
-									Conditions: []authorinov1beta2.PatternExpressionOrRef{
+							CallbackSpec: authorinov1beta3.CallbackSpec{
+								CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
+									Conditions: []authorinov1beta3.PatternExpressionOrRef{
 										{
-											PatternRef: authorinov1beta2.PatternRef{
+											PatternRef: authorinov1beta3.PatternRef{
 												Name: "authz-and-rl-required",
 											},
 										},
 										{
-											PatternExpression: authorinov1beta2.PatternExpression{
+											PatternExpression: authorinov1beta3.PatternExpression{
 												Selector: "auth.authorization.admin-or-privileged",
-												Operator: authorinov1beta2.PatternExpressionOperator("neq"),
+												Operator: authorinov1beta3.PatternExpressionOperator("neq"),
 												Value:    "true",
 											},
 										},
 									},
 								},
-								CallbackMethodSpec: authorinov1beta2.CallbackMethodSpec{
-									Http: &authorinov1beta2.HttpEndpointSpec{
+								CallbackMethodSpec: authorinov1beta3.CallbackMethodSpec{
+									Http: &authorinov1beta3.HttpEndpointSpec{
 										Url:         "http://events/unauthorized",
-										Method:      ptr.To(authorinov1beta2.HttpMethod("POST")),
-										ContentType: authorinov1beta2.HttpContentType("application/json"),
-										Body: &authorinov1beta2.ValueOrSelector{
+										Method:      ptr.To(authorinov1beta3.HttpMethod("POST")),
+										ContentType: authorinov1beta3.HttpContentType("application/json"),
+										Body: &authorinov1beta3.ValueOrSelector{
 											Selector: `\{"identity":{auth.identity},"request-id":{request.id}\}`,
 										},
 									},
@@ -481,7 +481,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfig := &authorinov1beta2.AuthConfig{}
+			authConfig := &authorinov1beta3.AuthConfig{}
 			Eventually(fetchReadyAuthConfig(ctx, httpRoute, 0, authConfig)).WithContext(ctx).Should(BeTrue())
 			authConfigSpecAsJSON, _ := json.Marshal(authConfig.Spec)
 			Expect(string(authConfigSpecAsJSON)).To(Equal(fmt.Sprintf(`{"hosts":["%s"],"patterns":{"authz-and-rl-required":[{"selector":"source.ip","operator":"neq","value":"192.168.0.10"}],"internal-source":[{"selector":"source.ip","operator":"matches","value":"192\\.168\\..*"}]},"when":[{"patternRef":"internal-source"}],"authentication":{"jwt":{"when":[{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt","operator":"neq"}],"credentials":{},"plain":{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt"}}},"metadata":{"user-groups":{"when":[{"selector":"auth.identity.admin","operator":"neq","value":"true"}],"http":{"url":"http://user-groups/username={auth.identity.username}","method":"GET","contentType":"application/x-www-form-urlencoded","credentials":{}}}},"authorization":{"admin-or-privileged":{"when":[{"patternRef":"authz-and-rl-required"}],"patternMatching":{"patterns":[{"any":[{"selector":"auth.identity.admin","operator":"eq","value":"true"},{"selector":"auth.metadata.user-groups","operator":"incl","value":"privileged"}]}]}}},"response":{"unauthenticated":{"message":{"value":"Missing verified JWT injected by the gateway"}},"unauthorized":{"message":{"value":"User must be admin or member of privileged group"}},"success":{"headers":{"x-username":{"when":[{"selector":"request.headers.x-propagate-username.@case:lower","operator":"matches","value":"1|yes|true"}],"plain":{"value":null,"selector":"auth.identity.username"}}},"dynamicMetadata":{"x-auth-data":{"when":[{"patternRef":"authz-and-rl-required"}],"json":{"properties":{"groups":{"value":null,"selector":"auth.metadata.user-groups"},"username":{"value":null,"selector":"auth.identity.username"}}}}}}},"callbacks":{"unauthorized-attempt":{"when":[{"patternRef":"authz-and-rl-required"},{"selector":"auth.authorization.admin-or-privileged","operator":"neq","value":"true"}],"http":{"url":"http://events/unauthorized","method":"POST","body":{"value":null,"selector":"\\{\"identity\":{auth.identity},\"request-id\":{request.id}\\}"},"contentType":"application/json","credentials":{}}}}}`, authConfig.GetName())))
@@ -524,10 +524,10 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), policy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfigs
-			authConfigPOST_DELETE_admin := &authorinov1beta2.AuthConfig{}
+			authConfigPOST_DELETE_admin := &authorinov1beta3.AuthConfig{}
 			Eventually(fetchReadyAuthConfig(ctx, httpRoute, 0, authConfigPOST_DELETE_admin)).WithContext(ctx).Should(BeTrue())
 
-			authConfigGET_private := &authorinov1beta2.AuthConfig{}
+			authConfigGET_private := &authorinov1beta3.AuthConfig{}
 			Eventually(fetchReadyAuthConfig(ctx, httpRoute, 1, authConfigGET_private)).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 	})
@@ -626,7 +626,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), routePolicy)).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfig := &authorinov1beta2.AuthConfig{}
+			authConfig := &authorinov1beta3.AuthConfig{}
 			Eventually(fetchReadyAuthConfig(ctx, httpRoute, 0, authConfig)).WithContext(ctx).Should(BeTrue())
 			Expect(authConfig.Spec.Authentication).To(HaveLen(1))
 			Expect(authConfig.Spec.Authentication).To(HaveKeyWithValue("apiKey", routePolicy.Spec.Proper().AuthScheme.Authentication["apiKey"].AuthenticationSpec))
@@ -649,7 +649,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(assertAcceptedCondTrueAndEnforcedCond(ctx, gwPolicy, metav1.ConditionFalse, string(kuadrant.PolicyReasonOverridden), fmt.Sprintf("AuthPolicy is overridden by [%s]", routePolicyKey.String()))).WithContext(ctx).Should(BeTrue())
 
 			// check authorino authconfig
-			authConfig = &authorinov1beta2.AuthConfig{}
+			authConfig = &authorinov1beta3.AuthConfig{}
 			Eventually(fetchReadyAuthConfig(ctx, httpRoute, 0, authConfig)).WithContext(ctx).Should(BeTrue())
 			Expect(authConfig.Spec.Authentication).To(HaveLen(1))
 			Expect(authConfig.Spec.Authentication).To(HaveKeyWithValue("apiKey", routePolicy.Spec.Proper().AuthScheme.Authentication["apiKey"].AuthenticationSpec))
@@ -976,10 +976,10 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 				policy.Spec.Defaults = &kuadrantv1beta3.MergeableAuthPolicySpec{}
 				policy.Spec.NamedPatterns = map[string]kuadrantv1beta3.MergeablePatternExpressions{
 					"internal-source": {
-						PatternExpressions: []authorinov1beta2.PatternExpression{
+						PatternExpressions: []authorinov1beta3.PatternExpression{
 							{
 								Selector: "source.ip",
-								Operator: authorinov1beta2.PatternExpressionOperator("matches"),
+								Operator: authorinov1beta3.PatternExpressionOperator("matches"),
 								Value:    `192\.168\..*`,
 							},
 						},
@@ -996,8 +996,8 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 				policy.Spec.Defaults = &kuadrantv1beta3.MergeableAuthPolicySpec{}
 				policy.Spec.Conditions = []kuadrantv1beta3.MergeablePatternExpressionOrRef{
 					{
-						PatternExpressionOrRef: authorinov1beta2.PatternExpressionOrRef{
-							PatternRef: authorinov1beta2.PatternRef{
+						PatternExpressionOrRef: authorinov1beta3.PatternExpressionOrRef{
+							PatternRef: authorinov1beta3.PatternRef{
 								Name: "internal-source",
 							},
 						},

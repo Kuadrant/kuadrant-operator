@@ -9,7 +9,7 @@ import (
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
 	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
-	authorinov1beta2 "github.com/kuadrant/authorino/api/v1beta2"
+	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -114,10 +114,10 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			metav1.NamespaceAll,
 		)),
 		controller.WithRunnable("authconfig watcher", controller.Watch(
-			&authorinov1beta2.AuthConfig{},
+			&authorinov1beta3.AuthConfig{},
 			kuadrantv1beta1.AuthConfigsResource,
 			metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*authorinov1beta2.AuthConfig](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
+			controller.FilterResourcesByLabel[*authorinov1beta3.AuthConfig](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 		)),
 		controller.WithPolicyKinds(
 			kuadrantv1.DNSPolicyGroupKind,

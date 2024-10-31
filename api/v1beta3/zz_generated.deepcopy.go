@@ -21,7 +21,7 @@ limitations under the License.
 package v1beta3
 
 import (
-	"github.com/kuadrant/authorino/api/v1beta2"
+	apiv1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -379,7 +379,7 @@ func (in *MergeablePatternExpressions) DeepCopyInto(out *MergeablePatternExpress
 	*out = *in
 	if in.PatternExpressions != nil {
 		in, out := &in.PatternExpressions, &out.PatternExpressions
-		*out = make(v1beta2.PatternExpressions, len(*in))
+		*out = make(apiv1beta3.PatternExpressions, len(*in))
 		copy(*out, *in)
 	}
 }

@@ -8,7 +8,7 @@ import (
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
-	authorinov1beta2 "github.com/kuadrant/authorino/api/v1beta2"
+	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -197,7 +197,7 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.Auth
 		authConfig, found := lo.Find(topology.Objects().Children(httpRouteRule), func(authConfig machinery.Object) bool {
 			return authConfig.GroupVersionKind().GroupKind() == kuadrantv1beta1.AuthConfigGroupKind && authConfig.GetName() == authConfigName
 		})
-		if !found || !isAuthConfigReady(authConfig.(*controller.RuntimeObject).Object.(*authorinov1beta2.AuthConfig)) {
+		if !found || !isAuthConfigReady(authConfig.(*controller.RuntimeObject).Object.(*authorinov1beta3.AuthConfig)) {
 			componentsToSync = append(componentsToSync, fmt.Sprintf("%s (%s)", kuadrantv1beta1.AuthConfigGroupKind.Kind, authConfigName))
 		}
 	}
@@ -251,7 +251,7 @@ func authorinoOperatorConditionToProperConditionFunc(condition authorinooperator
 	}
 }
 
-func authorinoConditionToProperConditionFunc(cond authorinov1beta2.AuthConfigStatusCondition, _ int) metav1.Condition {
+func authorinoConditionToProperConditionFunc(cond authorinov1beta3.AuthConfigStatusCondition, _ int) metav1.Condition {
 	return metav1.Condition{
 		Type:    string(cond.Type),
 		Status:  metav1.ConditionStatus(cond.Status),
@@ -260,13 +260,13 @@ func authorinoConditionToProperConditionFunc(cond authorinov1beta2.AuthConfigSta
 	}
 }
 
-func authConfigReadyStatusFunc(state *sync.Map) func(authConfig *authorinov1beta2.AuthConfig) bool {
+func authConfigReadyStatusFunc(state *sync.Map) func(authConfig *authorinov1beta3.AuthConfig) bool {
 	modifiedAuthConfigs, modified := state.Load(StateModifiedAuthConfigs)
 	if !modified {
 		return authConfigReadyStatus
 	}
 	modifiedAuthConfigsList := modifiedAuthConfigs.([]string)
-	return func(authConfig *authorinov1beta2.AuthConfig) bool {
+	return func(authConfig *authorinov1beta3.AuthConfig) bool {
 		if lo.Contains(modifiedAuthConfigsList, authConfig.GetName()) {
 			return false
 		}
@@ -274,8 +274,8 @@ func authConfigReadyStatusFunc(state *sync.Map) func(authConfig *authorinov1beta
 	}
 }
 
-func authConfigReadyStatus(authConfig *authorinov1beta2.AuthConfig) bool {
-	if condition := meta.FindStatusCondition(lo.Map(authConfig.Status.Conditions, authorinoConditionToProperConditionFunc), string(authorinov1beta2.StatusConditionReady)); condition != nil {
+func authConfigReadyStatus(authConfig *authorinov1beta3.AuthConfig) bool {
+	if condition := meta.FindStatusCondition(lo.Map(authConfig.Status.Conditions, authorinoConditionToProperConditionFunc), string(authorinov1beta3.StatusConditionReady)); condition != nil {
 		return condition.Status == metav1.ConditionTrue
 	}
 	return false

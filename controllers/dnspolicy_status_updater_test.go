@@ -13,7 +13,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 )
 
-func TestPropagateRecordConditions(t *testing.T) {
+func Test_propagateRecordConditions(t *testing.T) {
 	healthyProviderCondition := metav1.Condition{
 		Type:               "Ready",
 		Status:             "True",

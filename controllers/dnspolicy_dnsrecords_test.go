@@ -1,3 +1,5 @@
+//go:build unit
+
 package controllers_test
 
 import (
@@ -9,7 +11,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/controllers"
 )
 
-func TestRemoveExcludedStatusAddresses(t *testing.T) {
+func TestGatewayWrapper_RemoveExcludedStatusAddresses(t *testing.T) {
 	ipaddress := gatewayapiv1.IPAddressType
 	hostaddress := gatewayapiv1.HostnameAddressType
 	testCases := []struct {

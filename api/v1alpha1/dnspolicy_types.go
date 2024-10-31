@@ -54,7 +54,6 @@ const (
 )
 
 // DNSPolicySpec defines the desired state of DNSPolicy
-// +kubebuilder:validation:XValidation:rule="(!has(oldSelf.loadBalancing) || has(self.loadBalancing)) && (has(oldSelf.loadBalancing) || !has(self.loadBalancing))", message="loadBalancing is immutable"
 type DNSPolicySpec struct {
 	// targetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"

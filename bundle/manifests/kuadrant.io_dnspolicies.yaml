@@ -227,10 +227,6 @@ spec:
             - providerRefs
             - targetRef
             type: object
-            x-kubernetes-validations:
-            - message: loadBalancing is immutable
-              rule: (!has(oldSelf.loadBalancing) || has(self.loadBalancing)) && (has(oldSelf.loadBalancing)
-                || !has(self.loadBalancing))
           status:
             description: DNSPolicyStatus defines the observed state of DNSPolicy
             properties:

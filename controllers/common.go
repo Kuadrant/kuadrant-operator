@@ -9,6 +9,7 @@ import (
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -62,12 +63,21 @@ func IsPolicyAccepted(ctx context.Context, p machinery.Policy, s *sync.Map) bool
 	case *kuadrantv1beta3.RateLimitPolicy:
 		return isRateLimitPolicyAcceptedFunc(s)(p)
 	case *kuadrantv1alpha1.TLSPolicy:
-		isValid, _ := IsTLSPolicyValid(ctx, s, p.(*kuadrantv1alpha1.TLSPolicy))
+		isValid, _ := IsTLSPolicyValid(ctx, s, t)
 		return isValid
 	case *kuadrantv1alpha1.DNSPolicy:
 		isValid, _ := dnsPolicyAcceptedStatusFunc(s)(p)
 		return isValid
 	default:
 		return false
+	}
+}
+
+func policyGroupKinds() []*schema.GroupKind {
+	return []*schema.GroupKind{
+		&kuadrantv1beta3.AuthPolicyGroupKind,
+		&kuadrantv1beta3.RateLimitPolicyGroupKind,
+		&kuadrantv1alpha1.TLSPolicyGroupKind,
+		&kuadrantv1alpha1.DNSPolicyGroupKind,
 	}
 }

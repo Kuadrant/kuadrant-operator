@@ -31,12 +31,8 @@ var (
 				Name: "5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab",
 				RouteRuleConditions: RouteRuleConditions{
 					Hostnames: []string{"other.example.com"},
-					Predicates: []Condition{
-						{
-							Selector: "request.url_path",
-							Operator: "startswith",
-							Value:    "/",
-						},
+					Predicates: []string{
+						"request.url_path.startsWith('/')",
 					},
 				},
 				Actions: []Action{
@@ -67,17 +63,9 @@ var (
 				Name: "21cb3adc608c09a360d62a03fd1afd7cc6f8720999a51d7916927fff26a34ef8",
 				RouteRuleConditions: RouteRuleConditions{
 					Hostnames: []string{"*"},
-					Predicates: []Condition{
-						{
-							Selector: "request.method",
-							Operator: "eq",
-							Value:    "GET",
-						},
-						{
-							Selector: "request.url_path",
-							Operator: "startswith",
-							Value:    "/",
-						},
+					Predicates: []string{
+						"request.method == 'GET'",
+						"request.url_path.startsWith('/')",
 					},
 				},
 				Actions: []Action{
@@ -124,7 +112,7 @@ var (
 			},
 		},
 	}
-	testBasicConfigJSON = `{"services":{"auth-service":{"endpoint":"kuadrant-auth-service","type":"auth","failureMode":"deny"},"ratelimit-service":{"endpoint":"kuadrant-ratelimit-service","type":"ratelimit","failureMode":"allow"}},"actionSets":[{"name":"5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab","routeRuleConditions":{"hostnames":["other.example.com"],"matches":[{"operator":"startswith","selector":"request.url_path","value":"/"}]},"actions":[{"service":"ratelimit-service","scope":"default/other","conditions":[{"operator":"neq","selector":"source.address","value":"127.0.0.1"}],"data":[{"static":{"key":"limit.global__f63bec56","value":"1"}}]}]},{"name":"21cb3adc608c09a360d62a03fd1afd7cc6f8720999a51d7916927fff26a34ef8","routeRuleConditions":{"hostnames":["*"],"matches":[{"operator":"eq","selector":"request.method","value":"GET"},{"operator":"startswith","selector":"request.url_path","value":"/"}]},"actions":[{"service":"auth-service","scope":"e2db39952dd3bc72e152330a2eb15abbd9675c7ac6b54a1a292f07f25f09f138"},{"service":"ratelimit-service","scope":"default/toystore","data":[{"static":{"key":"limit.specific__69ea4d2d","value":"1"}}]},{"service":"ratelimit-service","scope":"default/toystore","conditions":[{"operator":"neq","selector":"source.address","value":"127.0.0.1"}],"data":[{"static":{"key":"limit.global__f63bec56","value":"1"}}]}]}]}`
+	testBasicConfigJSON = `{"services":{"auth-service":{"endpoint":"kuadrant-auth-service","type":"auth","failureMode":"deny"},"ratelimit-service":{"endpoint":"kuadrant-ratelimit-service","type":"ratelimit","failureMode":"allow"}},"actionSets":[{"name":"5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab","routeRuleConditions":{"hostnames":["other.example.com"],"predicates":["request.url_path.startsWith('/')"]},"actions":[{"service":"ratelimit-service","scope":"default/other","conditions":[{"operator":"neq","selector":"source.address","value":"127.0.0.1"}],"data":[{"static":{"key":"limit.global__f63bec56","value":"1"}}]}]},{"name":"21cb3adc608c09a360d62a03fd1afd7cc6f8720999a51d7916927fff26a34ef8","routeRuleConditions":{"hostnames":["*"],"predicates":["request.method == 'GET'","request.url_path.startsWith('/')"]},"actions":[{"service":"auth-service","scope":"e2db39952dd3bc72e152330a2eb15abbd9675c7ac6b54a1a292f07f25f09f138"},{"service":"ratelimit-service","scope":"default/toystore","data":[{"static":{"key":"limit.specific__69ea4d2d","value":"1"}}]},{"service":"ratelimit-service","scope":"default/toystore","conditions":[{"operator":"neq","selector":"source.address","value":"127.0.0.1"}],"data":[{"static":{"key":"limit.global__f63bec56","value":"1"}}]}]}]}`
 	testBasicConfigYAML = `
 services:
   auth-service:
@@ -140,10 +128,8 @@ actionSets:
     routeRuleConditions:
       hostnames:
         - other.example.com
-      matches:
-        - operator: startswith
-          selector: request.url_path
-          value: /
+      predicates:
+        - request.url_path.startsWith('/')
     actions:
       - service: ratelimit-service
         scope: default/other
@@ -159,13 +145,9 @@ actionSets:
     routeRuleConditions:
       hostnames:
         - "*"
-      matches:
-        - operator: eq
-          selector: request.method
-          value: GET
-        - operator: startswith
-          selector: request.url_path
-          value: /
+      predicates:
+        - request.method == 'GET'
+        - request.url_path.startsWith('/')
     actions:
       - service: auth-service
         scope: e2db39952dd3bc72e152330a2eb15abbd9675c7ac6b54a1a292f07f25f09f138

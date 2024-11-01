@@ -62,12 +62,8 @@ func TestConfigEqual(t *testing.T) {
 						Name: "5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab",
 						RouteRuleConditions: RouteRuleConditions{
 							Hostnames: []string{"other.example.com"},
-							Predicates: []Condition{
-								{
-									Selector: "request.url_path",
-									Operator: "startswith",
-									Value:    "/",
-								},
+							Predicates: []string{
+								"request.url_path.startsWith('/')",
 							},
 						},
 						Actions: []Action{
@@ -125,12 +121,8 @@ func TestConfigEqual(t *testing.T) {
 						Name: "5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab",
 						RouteRuleConditions: RouteRuleConditions{
 							Hostnames: []string{"other.example.com"},
-							Predicates: []Condition{
-								{
-									Operator: "startswith",
-									Selector: "request.url_path",
-									Value:    "/",
-								},
+							Predicates: []string{
+								"request.url_path.startsWith('/')",
 							},
 						},
 					},

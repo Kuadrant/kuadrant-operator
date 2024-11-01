@@ -14,7 +14,6 @@ import (
 
 var (
 	PathMatchTypeMap = map[gatewayapiv1.PathMatchType]PatternOperator{
-		gatewayapiv1.PathMatchExact:             PatternOperator(kuadrantv1beta3.EqualOperator),
 		gatewayapiv1.PathMatchPathPrefix:        PatternOperator(kuadrantv1beta3.StartsWithOperator),
 		gatewayapiv1.PathMatchRegularExpression: PatternOperator(kuadrantv1beta3.MatchesOperator),
 	}

@@ -162,6 +162,9 @@ func predicateFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) string {
 	}
 
 	if pathMatch.Type != nil {
+		if *pathMatch.Type == gatewayapiv1.PathMatchExact {
+			return fmt.Sprintf("request.url_path == '%s'", value)
+		}
 		if val, ok := PathMatchTypeMap[*pathMatch.Type]; ok {
 			operator = val
 		}

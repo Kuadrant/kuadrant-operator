@@ -60,7 +60,7 @@ if [ -z $MGC_REF ]; then
 fi
 
 if [ -z $ISTIO_INSTALL_SAIL ]; then
-  ISTIO_INSTALL_SAIL=${ISTIO_INSTALL_SAIL:=false}
+  ISTIO_INSTALL_SAIL=${ISTIO_INSTALL_SAIL:=true}
 fi
 
 export TOOLS_IMAGE=quay.io/kuadrant/mgc-tools:latest

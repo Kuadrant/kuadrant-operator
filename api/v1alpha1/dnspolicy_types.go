@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -25,9 +24,7 @@ import (
 	dnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -36,21 +33,9 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
-var (
-	DNSPolicyGVK schema.GroupVersionKind = schema.GroupVersionKind{
-		Group:   GroupVersion.Group,
-		Version: GroupVersion.Version,
-		Kind:    "DNSPolicy",
-	}
-)
-
 const (
-	DefaultWeight int     = 120
-	DefaultGeo    GeoCode = "default"
-	WildcardGeo   GeoCode = "*"
-
-	DNSPolicyBackReferenceAnnotationName   = "kuadrant.io/dnspolicies"
-	DNSPolicyDirectReferenceAnnotationName = "kuadrant.io/dnspolicy"
+	DefaultGeo  GeoCode = "default"
+	WildcardGeo GeoCode = "*"
 )
 
 // DNSPolicySpec defines the desired state of DNSPolicy
@@ -157,7 +142,6 @@ func (s *DNSPolicyStatus) GetConditions() []metav1.Condition {
 }
 
 var _ kuadrant.Policy = &DNSPolicy{}
-var _ kuadrant.Referrer = &DNSPolicy{}
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -181,10 +165,12 @@ func (p *DNSPolicy) Validate() error {
 	return p.Spec.ExcludeAddresses.Validate()
 }
 
+// Deprecated: kuadrant.Policy.
 func (p *DNSPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
 	return gatewayapiv1.Namespace(p.Namespace)
 }
 
+// Deprecated: kuadrant.Policy.
 func (p *DNSPolicy) GetRulesHostnames() []string {
 	return make([]string, 0)
 }
@@ -193,28 +179,19 @@ func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference
 	return p.Spec.TargetRef.LocalPolicyTargetReference
 }
 
+// Deprecated: kuadrant.Policy.
 func (p *DNSPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
 	return &p.Status
 }
 
+// Deprecated: kuadrant.Policy.
 func (p *DNSPolicy) Kind() string {
-	return NewDNSPolicyType().GetGVK().Kind
+	return DNSPolicyGroupKind.Kind
 }
 
-func (p *DNSPolicy) TargetProgrammedGatewaysOnly() bool {
-	return true
-}
-
+// Deprecated: kuadrant.Policy.
 func (p *DNSPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
 	return kuadrantgatewayapi.DirectPolicy
-}
-
-func (p *DNSPolicy) BackReferenceAnnotationName() string {
-	return NewDNSPolicyType().BackReferenceAnnotationName()
-}
-
-func (p *DNSPolicy) DirectReferenceAnnotationName() string {
-	return NewDNSPolicyType().DirectReferenceAnnotationName()
 }
 
 //+kubebuilder:object:root=true
@@ -226,6 +203,7 @@ type DNSPolicyList struct {
 	Items           []DNSPolicy `json:"items"`
 }
 
+// Deprecated: kuadrant.PolicyList.
 func (l *DNSPolicyList) GetItems() []kuadrant.Policy {
 	return utils.Map(l.Items, func(item DNSPolicy) kuadrant.Policy {
 		return &item
@@ -325,40 +303,4 @@ func (p *DNSPolicy) WithLoadBalancingFor(weight int, geo string, isDefaultGeo bo
 		Geo:        geo,
 		DefaultGeo: isDefaultGeo,
 	})
-}
-
-type dnsPolicyType struct{}
-
-func NewDNSPolicyType() kuadrantgatewayapi.PolicyType {
-	return &dnsPolicyType{}
-}
-
-func (d dnsPolicyType) GetGVK() schema.GroupVersionKind {
-	return DNSPolicyGVK
-}
-
-func (d dnsPolicyType) GetInstance() client.Object {
-	return &DNSPolicy{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       DNSPolicyGVK.Kind,
-			APIVersion: GroupVersion.String(),
-		},
-	}
-}
-
-func (d dnsPolicyType) GetList(ctx context.Context, cl client.Client, listOpts ...client.ListOption) ([]kuadrantgatewayapi.Policy, error) {
-	list := &DNSPolicyList{}
-	err := cl.List(ctx, list, listOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return utils.Map(list.Items, func(p DNSPolicy) kuadrantgatewayapi.Policy { return &p }), nil
-}
-
-func (d dnsPolicyType) BackReferenceAnnotationName() string {
-	return DNSPolicyBackReferenceAnnotationName
-}
-
-func (d dnsPolicyType) DirectReferenceAnnotationName() string {
-	return DNSPolicyDirectReferenceAnnotationName
 }

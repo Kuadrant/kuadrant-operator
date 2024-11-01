@@ -32,8 +32,8 @@ import (
 const (
 	EqualOperator      WhenConditionOperator = "eq"
 	NotEqualOperator   WhenConditionOperator = "neq"
-	StartsWithOperator WhenConditionOperator = "startswith"
-	EndsWithOperator   WhenConditionOperator = "endswith"
+	StartsWithOperator WhenConditionOperator = "startsWith"
+	EndsWithOperator   WhenConditionOperator = "endsWith"
 	IncludeOperator    WhenConditionOperator = "incl"
 	ExcludeOperator    WhenConditionOperator = "excl"
 	MatchesOperator    WhenConditionOperator = "matches"

@@ -31,7 +31,7 @@ var (
 				Name: "5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab",
 				RouteRuleConditions: RouteRuleConditions{
 					Hostnames: []string{"other.example.com"},
-					Matches: []Predicate{
+					Predicates: []Condition{
 						{
 							Selector: "request.url_path",
 							Operator: "startswith",
@@ -43,7 +43,7 @@ var (
 					{
 						ServiceName: "ratelimit-service",
 						Scope:       "default/other",
-						Conditions: []Predicate{
+						Conditions: []Condition{
 							{
 								Selector: "source.address",
 								Operator: "neq",
@@ -67,7 +67,7 @@ var (
 				Name: "21cb3adc608c09a360d62a03fd1afd7cc6f8720999a51d7916927fff26a34ef8",
 				RouteRuleConditions: RouteRuleConditions{
 					Hostnames: []string{"*"},
-					Matches: []Predicate{
+					Predicates: []Condition{
 						{
 							Selector: "request.method",
 							Operator: "eq",
@@ -102,7 +102,7 @@ var (
 					{
 						ServiceName: "ratelimit-service",
 						Scope:       "default/toystore",
-						Conditions: []Predicate{
+						Conditions: []Condition{
 							{
 								Selector: "source.address",
 								Operator: "neq",

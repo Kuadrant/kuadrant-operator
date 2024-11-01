@@ -141,7 +141,7 @@ func TestWasmActionFromLimit(t *testing.T) {
 			expectedAction: wasm.Action{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "my-ns/my-route",
-				Conditions: []wasm.Predicate{
+				Conditions: []wasm.Condition{
 					{
 						Selector: "auth.identity.group",
 						Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),

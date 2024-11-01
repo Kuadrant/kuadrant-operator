@@ -61,7 +61,7 @@ func BuildActionSetsForPath(pathID string, path []machinery.Targetable, actions 
 				Hostnames: []string{string(hostname)},
 			}
 			if predicates := PredicatesFromHTTPRouteMatch(httpRouteMatch); len(predicates) > 0 {
-				routeRuleConditions.Matches = predicates
+				routeRuleConditions.Predicates = predicates
 			}
 			actionSet.RouteRuleConditions = routeRuleConditions
 			return kuadrantgatewayapi.HTTPRouteMatchConfig{
@@ -113,10 +113,10 @@ func ConfigFromJSON(configJSON *apiextensionsv1.JSON) (*Config, error) {
 	return config, nil
 }
 
-// PredicatesFromWhenConditions builds a list of predicates from a list of (selector, operator, value) when conditions
-func PredicatesFromWhenConditions(when ...kuadrantv1beta3.WhenCondition) []Predicate {
-	return lo.Map(when, func(when kuadrantv1beta3.WhenCondition, _ int) Predicate {
-		return Predicate{
+// ConditionsFromWhenConditions builds a list of predicates from a list of (selector, operator, value) when conditions
+func ConditionsFromWhenConditions(when ...kuadrantv1beta3.WhenCondition) []Condition {
+	return lo.Map(when, func(when kuadrantv1beta3.WhenCondition, _ int) Condition {
+		return Condition{
 			Selector: when.Selector,
 			Operator: PatternOperator(when.Operator),
 			Value:    when.Value,
@@ -125,8 +125,8 @@ func PredicatesFromWhenConditions(when ...kuadrantv1beta3.WhenCondition) []Predi
 }
 
 // PredicatesFromHTTPRouteMatch builds a list of conditions from a rule match
-func PredicatesFromHTTPRouteMatch(match gatewayapiv1.HTTPRouteMatch) []Predicate {
-	predicates := make([]Predicate, 0)
+func PredicatesFromHTTPRouteMatch(match gatewayapiv1.HTTPRouteMatch) []string {
+	predicates := make([]string, 0)
 
 	// method
 	if match.Method != nil {
@@ -151,7 +151,7 @@ func PredicatesFromHTTPRouteMatch(match gatewayapiv1.HTTPRouteMatch) []Predicate
 	return predicates
 }
 
-func predicateFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) Predicate {
+func predicateFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) string {
 	var (
 		operator = PatternOperator(kuadrantv1beta3.StartsWithOperator) // default value
 		value    = "/"                                                 // default value
@@ -166,29 +166,15 @@ func predicateFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) Predicate {
 			operator = val
 		}
 	}
-
-	return Predicate{
-		Selector: "request.url_path",
-		Operator: operator,
-		Value:    value,
-	}
+	return fmt.Sprintf("request.url_path.%s('%s')", operator, value)
 }
 
-func predicateFromMethod(method gatewayapiv1.HTTPMethod) Predicate {
-	return Predicate{
-		Selector: "request.method",
-		Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-		Value:    string(method),
-	}
+func predicateFromMethod(method gatewayapiv1.HTTPMethod) string {
+	return fmt.Sprintf("request.method == '%s'", string(method))
 }
 
-func predicateFromHeader(headerMatch gatewayapiv1.HTTPHeaderMatch) Predicate {
+func predicateFromHeader(headerMatch gatewayapiv1.HTTPHeaderMatch) string {
 	// As for gateway api v1, the only operation type with core support is Exact match.
 	// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPHeaderMatch
-
-	return Predicate{
-		Selector: kuadrantv1beta3.ContextSelector(fmt.Sprintf("request.headers.%s", headerMatch.Name)),
-		Operator: PatternOperator(kuadrantv1beta3.EqualOperator),
-		Value:    headerMatch.Value,
-	}
+	return fmt.Sprintf("request.headers['%s'] == '%s'", headerMatch.Name, headerMatch.Value)
 }

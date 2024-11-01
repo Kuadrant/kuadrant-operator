@@ -124,11 +124,23 @@ func buildWasmActionsForAuth(pathID string, effectivePolicy EffectiveAuthPolicy)
 		Scope:       AuthConfigNameForPath(pathID),
 	}
 	spec := effectivePolicy.Spec.Spec.Proper()
-	if conditions := wasm.PredicatesFromWhenConditions(lo.FlatMap(spec.Conditions, func(pattern kuadrantv1beta3.MergeablePatternExpressionOrRef, _ int) []kuadrantv1beta3.WhenCondition {
-		return pattern.ToWhenConditions(spec.NamedPatterns)
-	})...); len(conditions) > 0 {
+
+	predicates := make([]string, 0)
+	whenConditions := make([]kuadrantv1beta3.WhenCondition, 0)
+	for _, condition := range spec.Conditions {
+		if condition.Predicate != "" {
+			predicates = append(predicates, condition.Predicate)
+		} else {
+			whenConditions = append(whenConditions, condition.ToWhenConditions(spec.NamedPatterns)...)
+		}
+	}
+	if len(predicates) > 0 {
+		action.Predicates = predicates
+	}
+	if conditions := wasm.ConditionsFromWhenConditions(whenConditions...); len(conditions) > 0 {
 		action.Conditions = conditions
 	}
+
 	return []wasm.Action{action}
 }
 

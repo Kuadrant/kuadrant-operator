@@ -184,7 +184,7 @@ var _ = Describe("wasm controller", func() {
 						Name: actionSetName,
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
-							Matches: []wasm.Predicate{
+							Predicates: []wasm.Condition{
 								{
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -356,7 +356,7 @@ var _ = Describe("wasm controller", func() {
 						Name: actionSetName,
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
-							Matches: []wasm.Predicate{
+							Predicates: []wasm.Condition{
 								{
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),

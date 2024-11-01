@@ -62,7 +62,7 @@ func TestConfigEqual(t *testing.T) {
 						Name: "5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab",
 						RouteRuleConditions: RouteRuleConditions{
 							Hostnames: []string{"other.example.com"},
-							Matches: []Predicate{
+							Predicates: []Condition{
 								{
 									Selector: "request.url_path",
 									Operator: "startswith",
@@ -74,7 +74,7 @@ func TestConfigEqual(t *testing.T) {
 							{
 								ServiceName: "ratelimit-service",
 								Scope:       "default/other",
-								Conditions: []Predicate{
+								Conditions: []Condition{
 									{
 										Selector: "source.address",
 										Operator: "neq",
@@ -101,7 +101,7 @@ func TestConfigEqual(t *testing.T) {
 					{
 						Actions: []Action{
 							{
-								Conditions: []Predicate{
+								Conditions: []Condition{
 									{
 										Operator: "neq",
 										Selector: "source.address",
@@ -125,7 +125,7 @@ func TestConfigEqual(t *testing.T) {
 						Name: "5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab",
 						RouteRuleConditions: RouteRuleConditions{
 							Hostnames: []string{"other.example.com"},
-							Matches: []Predicate{
+							Predicates: []Condition{
 								{
 									Operator: "startswith",
 									Selector: "request.url_path",

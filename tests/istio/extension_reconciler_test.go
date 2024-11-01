@@ -163,7 +163,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{"*.example.com"},
-							Matches: []wasm.Predicate{
+							Predicates: []wasm.Condition{
 								{
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -316,8 +316,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			pathID := kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
-			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
-				wasm.Predicate{
+			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
+				wasm.Condition{
 					Selector: "request.url_path",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
 					Value:    "/assets",
@@ -328,7 +328,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Predicate{
+					Conditions: []wasm.Condition{
 						{
 							Selector: "auth.identity.group",
 							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
@@ -374,13 +374,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
-			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
-				wasm.Predicate{
+			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
+				wasm.Condition{
 					Selector: "request.method",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 					Value:    "GET",
 				},
-				wasm.Predicate{
+				wasm.Condition{
 					Selector: "request.url_path",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
 					Value:    "/toys",
@@ -391,7 +391,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Predicate{
+					Conditions: []wasm.Condition{
 						{
 							Selector: "auth.identity.group",
 							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
@@ -437,13 +437,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
-			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
-				wasm.Predicate{
+			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
+				wasm.Condition{
 					Selector: "request.method",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 					Value:    "POST",
 				},
-				wasm.Predicate{
+				wasm.Condition{
 					Selector: "request.url_path",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
 					Value:    "/toys",
@@ -454,7 +454,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Predicate{
+					Conditions: []wasm.Condition{
 						{
 							Selector: "auth.identity.group",
 							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
@@ -500,8 +500,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
-			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
-				wasm.Predicate{
+			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
+				wasm.Condition{
 					Selector: "request.url_path",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
 					Value:    "/assets",
@@ -512,7 +512,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Predicate{
+					Conditions: []wasm.Condition{
 						{
 							Selector: "auth.identity.group",
 							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
@@ -558,13 +558,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
-			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
-				wasm.Predicate{
+			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
+				wasm.Condition{
 					Selector: "request.method",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 					Value:    "GET",
 				},
-				wasm.Predicate{
+				wasm.Condition{
 					Selector: "request.url_path",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
 					Value:    "/toys",
@@ -575,7 +575,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Predicate{
+					Conditions: []wasm.Condition{
 						{
 							Selector: "auth.identity.group",
 							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
@@ -621,13 +621,13 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleToys))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "api.toystore.io")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
-			Expect(actionSet.RouteRuleConditions.Matches).To(ContainElements(
-				wasm.Predicate{
+			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
+				wasm.Condition{
 					Selector: "request.method",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
 					Value:    "POST",
 				},
-				wasm.Predicate{
+				wasm.Condition{
 					Selector: "request.url_path",
 					Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
 					Value:    "/toys",
@@ -638,7 +638,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Predicate{
+					Conditions: []wasm.Condition{
 						{
 							Selector: "auth.identity.group",
 							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
@@ -758,7 +758,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{"*.example.com"},
-							Matches: []wasm.Predicate{
+							Predicates: []wasm.Condition{
 								{
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -987,7 +987,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.example.com"},
-								Matches: []wasm.Predicate{
+								Predicates: []wasm.Condition{
 									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -1205,7 +1205,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.example.com"},
-								Matches: []wasm.Predicate{
+								Predicates: []wasm.Condition{
 									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -1341,7 +1341,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.example.com"},
-								Matches: []wasm.Predicate{
+								Predicates: []wasm.Condition{
 									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -1549,7 +1549,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
-								Matches: []wasm.Predicate{
+								Predicates: []wasm.Condition{
 									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -1648,7 +1648,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.b.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.b.example.com"},
-								Matches: []wasm.Predicate{
+								Predicates: []wasm.Condition{
 									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -1831,7 +1831,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
-								Matches: []wasm.Predicate{
+								Predicates: []wasm.Condition{
 									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -1948,7 +1948,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
-								Matches: []wasm.Predicate{
+								Predicates: []wasm.Condition{
 									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -2167,7 +2167,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
-								Matches: []wasm.Predicate{
+								Predicates: []wasm.Condition{
 									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -2281,7 +2281,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
-								Matches: []wasm.Predicate{
+								Predicates: []wasm.Condition{
 									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -2315,7 +2315,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID_B, 0, "*.b.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.b.example.com"},
-								Matches: []wasm.Predicate{
+								Predicates: []wasm.Condition{
 									{
 										Selector: "request.method",
 										Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -2462,7 +2462,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Name: wasm.ActionSetNameForPath(pathID, 0, gwHostname),
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{gwHostname},
-							Matches: []wasm.Predicate{
+							Predicates: []wasm.Condition{
 								{
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
@@ -2546,7 +2546,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Name: wasm.ActionSetNameForPath(pathID, 0, hostname),
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{hostname},
-							Matches: []wasm.Predicate{
+							Predicates: []wasm.Condition{
 								{
 									Selector: "request.method",
 									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),

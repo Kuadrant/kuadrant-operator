@@ -116,12 +116,12 @@ func (s *ActionSet) EqualTo(other ActionSet) bool {
 }
 
 type RouteRuleConditions struct {
-	Hostnames []string    `json:"hostnames"`
-	Matches   []Predicate `json:"matches,omitempty"`
+	Hostnames  []string `json:"hostnames"`
+	Predicates []string `json:"predicates,omitempty"`
 }
 
 func (r *RouteRuleConditions) EqualTo(other RouteRuleConditions) bool {
-	if len(r.Hostnames) != len(other.Hostnames) || len(r.Matches) != len(other.Matches) {
+	if len(r.Hostnames) != len(other.Hostnames) || len(r.Predicates) != len(other.Predicates) {
 		return false
 	}
 
@@ -131,8 +131,8 @@ func (r *RouteRuleConditions) EqualTo(other RouteRuleConditions) bool {
 		}
 	}
 
-	for i := range r.Matches {
-		if !r.Matches[i].EqualTo(other.Matches[i]) {
+	for i := range r.Predicates {
+		if r.Predicates[i] != other.Predicates[i] {
 			return false
 		}
 	}
@@ -140,7 +140,7 @@ func (r *RouteRuleConditions) EqualTo(other RouteRuleConditions) bool {
 	return true
 }
 
-type Predicate struct {
+type Condition struct {
 	// Selector of an attribute from the contextual properties provided by kuadrant
 	// during request and connection processing
 	Selector kuadrantv1beta3.ContextSelector `json:"selector"`
@@ -154,7 +154,7 @@ type Predicate struct {
 	Value string `json:"value"`
 }
 
-func (p *Predicate) EqualTo(other Predicate) bool {
+func (p *Condition) EqualTo(other Condition) bool {
 	return p.Selector == other.Selector &&
 		p.Operator == other.Operator &&
 		p.Value == other.Value
@@ -166,8 +166,11 @@ type Action struct {
 	ServiceName string `json:"service"`
 	Scope       string `json:"scope"`
 
+	// Predicates that activate the action
+	Predicates []string `json:"predicates,omitempty"`
+
 	// Conditions that activate the action
-	Conditions []Predicate `json:"conditions,omitempty"`
+	Conditions []Condition `json:"conditions,omitempty"`
 
 	// Data to be sent to the service
 	// +optional
@@ -175,8 +178,14 @@ type Action struct {
 }
 
 func (a *Action) EqualTo(other Action) bool {
-	if a.Scope != other.Scope || a.ServiceName != other.ServiceName || len(a.Conditions) != len(other.Conditions) || len(a.Data) != len(other.Data) {
+	if a.Scope != other.Scope || a.ServiceName != other.ServiceName || len(a.Predicates) != len(other.Predicates) || len(a.Conditions) != len(other.Conditions) || len(a.Data) != len(other.Data) {
 		return false
+	}
+
+	for i := range a.Predicates {
+		if a.Predicates[i] != other.Predicates[i] {
+			return false
+		}
 	}
 
 	for i := range a.Conditions {

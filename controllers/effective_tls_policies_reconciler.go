@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"sync"
 
@@ -54,11 +53,6 @@ func (t *EffectiveTLSPoliciesReconciler) Subscription() *controller.Subscription
 func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTLSPoliciesReconciler").WithName("Reconcile")
 
-	listeners := topology.Targetables().Items(func(object machinery.Object) bool {
-		_, ok := object.(*machinery.Listener)
-		return ok
-	})
-
 	// Get all certs in the topology for comparison with expected certs to determine orphaned certs later
 	// Only certs owned by TLSPolicies should be in the topology - no need to check again
 	certs := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
@@ -69,6 +63,11 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 		c, ok := r.Object.(*certmanv1.Certificate)
 
 		return c, ok
+	})
+
+	listeners := topology.Targetables().Items(func(object machinery.Object) bool {
+		_, ok := object.(*machinery.Listener)
+		return ok
 	})
 
 	var expectedCerts []*certmanv1.Certificate
@@ -94,16 +93,15 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 			// Policy is not valid
 			isValid, _ := IsTLSPolicyValid(ctx, s, policy)
 			if !isValid {
-				logger.V(1).Info("deleting certs for invalid policy", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
-				if err := t.deleteCertificatesForTargetable(ctx, topology, l); err != nil {
-					logger.Error(err, "unable to delete certs for invalid policy", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
-				}
 				continue
 			}
 
 			// Policy is valid
 			// Need to use Gateway as listener hosts can be merged into a singular cert if using the same cert reference
 			expectedCertificates := expectedCertificatesForGateway(ctx, l.Gateway.Gateway, policy)
+			if policy.Spec.TargetRef.SectionName != nil {
+				expectedCertificates = expectedCertificatesForListener(l, policy)
+			}
 
 			for _, cert := range expectedCertificates {
 				resource := t.client.Resource(CertManagerCertificatesResource).Namespace(cert.GetNamespace())
@@ -173,31 +171,6 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 	return nil
 }
 
-func (t *EffectiveTLSPoliciesReconciler) deleteCertificatesForTargetable(ctx context.Context, topology *machinery.Topology, target machinery.Targetable) error {
-	children := topology.Objects().Children(target)
-
-	certs := lo.FilterMap(children, func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
-		r, ok := item.(*controller.RuntimeObject)
-		if !ok {
-			return nil, false
-		}
-		c, ok := r.Object.(*certmanv1.Certificate)
-
-		return c, ok
-	})
-
-	var deletionErr error
-	for _, cert := range certs {
-		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(cert.GetNamespace())
-
-		if err := resource.Delete(ctx, cert.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-			deletionErr = errors.Join(err)
-		}
-	}
-
-	return deletionErr
-}
-
 func expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.Gateway, tlsPolicy *kuadrantv1.TLSPolicy) []*certmanv1.Certificate {
 	log := crlog.FromContext(ctx)
 
@@ -237,6 +210,12 @@ func expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.G
 }
 
 func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *kuadrantv1.TLSPolicy) []*certmanv1.Certificate {
+	// Not valid - so no need to check if cert is ready since there should not be one created
+	err := validateGatewayListenerBlock(field.NewPath(""), *l.Listener, l.Gateway).ToAggregate()
+	if err != nil {
+		return []*certmanv1.Certificate{}
+	}
+
 	tlsHosts := make(map[corev1.ObjectReference][]string)
 
 	hostname := "*"

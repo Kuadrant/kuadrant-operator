@@ -44,3 +44,102 @@ maintainers:
     name: Jim Fitzpatrick
   - email: chfan@redhat.com
     name: Kevin Chi Fan
+annotations:
+  artifacthub.io/category: networking
+  artifacthub.io/crds: |
+    - kind: Kuadrant
+      version: v1beta1
+      name: kuadrants.kuadrant.io
+      displayName: Kuadrant
+      description: Kuadrant configures installations of Kuadrant Service Protection components.
+    - kind: AuthPolicy
+      version: v1beta1
+      name: authpolicies.kuadrant.io
+      displayName: AuthPolicy
+      description: AuthPolicy enables authentication and authorization for service workloads in a Gateway API network.
+    - kind: RateLimitPolicy
+      version: v1beta1
+      name: ratelimitpolicies.kuadrant.io
+      displayName: RateLimitPolicy
+      description: RateLimitPolicy enables rate limiting for service workloads in a Gateway API network.
+    - kind: DNSPolicy
+      version: v1beta1
+      name: dnspolicies.kuadrant.io
+      displayName: DNSPolicy
+      description: DNSPolicy is the Schema for the dnspolicies API.
+    - kind: TLSPolicy
+      version: v1beta1
+      name: tlspolicies.kuadrant.io
+      displayName: TLSPolicy
+      description: TLSPolicy is the Schema for the tlspolicies API.
+  artifacthub.io/crdsExamples: |
+    - apiVersion: kuadrant.io/v1beta1
+      kind: Kuadrant
+      metadata:
+        name: kuadrant-sample
+      spec: {}
+    - apiVersion: kuadrant.io/v1beta3
+      kind: AuthPolicy
+      metadata:
+        name: toystore
+      spec:
+        targetRef:
+          group: gateway.networking.k8s.io
+          kind: HTTPRoute
+          name: toystore
+        rules:
+          authentication:
+            "apikey":
+              apiKey:
+                selector: {}
+            credentials:
+              authorizationHeader:
+                prefix: APIKEY
+    - apiVersion: kuadrant.io/v1beta3
+      kind: RateLimitPolicy
+      metadata:
+        name: toystore
+      spec:
+        targetRef:
+          group: gateway.networking.k8s.io
+          kind: HTTPRoute
+          name: toystore
+        limits:
+          toys:
+            rates:
+              - limit: 50
+                duration: 1
+                unit: minute
+    - apiVersion: kuadrant.io/v1alpha1
+      kind: DNSPolicy
+      metadata:
+        name: dnspolicy-sample
+      spec:
+        targetRef:
+          name: example-gateway
+          group: gateway.networking.k8s.io
+          kind: Gateway
+        healthCheck:
+          endpoint: /
+          protocol: HTTP
+    - apiVersion: kuadrant.io/v1alpha1
+      kind: TLSPolicy
+      metadata:
+        name: tlspolicy-sample
+      spec:
+        targetRef:
+          name: example-gateway
+          group: gateway.networking.k8s.io
+          kind: Gateway
+        issuerRef:
+          group: cert-manager.io
+          kind: ClusterIssuer
+          name: self-signed-ca
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/links: |
+    - name: Kuadrant
+      url: https://kuadrant.io
+    - name: Github
+      url: https://github.com/Kuadrant/kuadrant-operator
+  artifacthub.io/operator: "true"
+  artifacthub.io/operatorCapabilities: Basic Install

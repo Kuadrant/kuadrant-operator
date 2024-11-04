@@ -44,11 +44,14 @@ func (r *GatewayPolicyDiscoverabilityReconciler) Subscription() *controller.Subs
 func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, syncMap *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("GatewayPolicyDiscoverabilityReconciler").WithName("reconcile")
 
-	gateways := r.extractGateways(topology)
+	gateways := lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, _ int) (*machinery.Gateway, bool) {
+		gw, ok := item.(*machinery.Gateway)
+		return gw, ok
+	})
 	policyKinds := policyGroupKinds()
 
 	for _, gw := range gateways {
-		updatedStatus := r.buildGatewayStatus(ctx, syncMap, gw, topology, logger, policyKinds)
+		updatedStatus := buildGatewayStatus(ctx, syncMap, gw, topology, logger, policyKinds)
 		if !equality.Semantic.DeepEqual(updatedStatus, gw.Status) {
 			gw.Status = *updatedStatus
 			if err := r.updateGatewayStatus(ctx, gw); err != nil {
@@ -60,67 +63,67 @@ func (r *GatewayPolicyDiscoverabilityReconciler) reconcile(ctx context.Context, 
 	return nil
 }
 
-func (r *GatewayPolicyDiscoverabilityReconciler) extractGateways(topology *machinery.Topology) []*machinery.Gateway {
-	return lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, _ int) (*machinery.Gateway, bool) {
-		gw, ok := item.(*machinery.Gateway)
-		return gw, ok
-	})
+func (r *GatewayPolicyDiscoverabilityReconciler) updateGatewayStatus(ctx context.Context, gw *machinery.Gateway) error {
+	obj, err := controller.Destruct(gw.Gateway)
+	if err != nil {
+		return err
+	}
+	_, err = r.Client.Resource(controller.GatewaysResource).Namespace(gw.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+	return err
 }
 
-func (r *GatewayPolicyDiscoverabilityReconciler) buildGatewayStatus(ctx context.Context, syncMap *sync.Map, gw *machinery.Gateway, topology *machinery.Topology, logger logr.Logger, policyKinds []*schema.GroupKind) *gatewayapiv1.GatewayStatus {
+func buildGatewayStatus(ctx context.Context, syncMap *sync.Map, gw *machinery.Gateway, topology *machinery.Topology, logger logr.Logger, policyKinds []*schema.GroupKind) *gatewayapiv1.GatewayStatus {
 	status := gw.Status.DeepCopy()
 
-	for _, listener := range r.extractListeners(topology, gw) {
-		updatedListenerStatus := r.updateListenerStatus(ctx, syncMap, gw, listener, logger, policyKinds)
-		status.Listeners = r.updateListenerList(status.Listeners, updatedListenerStatus)
+	listeners := lo.Map(topology.Targetables().Children(gw), func(item machinery.Targetable, _ int) *machinery.Listener {
+		listener, _ := item.(*machinery.Listener)
+		return listener
+	})
+
+	for _, listener := range listeners {
+		updatedListenerStatus := updateListenerStatus(ctx, syncMap, gw, listener, logger, policyKinds)
+		status.Listeners = updateListenerList(status.Listeners, updatedListenerStatus)
 	}
 
 	for _, policyKind := range policyKinds {
-		r.updatePolicyConditions(ctx, syncMap, gw, policyKind, status, logger)
+		updatePolicyConditions(ctx, syncMap, gw, policyKind, status, logger)
 	}
 
 	return status
 }
 
-func (r *GatewayPolicyDiscoverabilityReconciler) extractListeners(topology *machinery.Topology, gw *machinery.Gateway) []*machinery.Listener {
-	return lo.Map(topology.Targetables().Children(gw), func(item machinery.Targetable, _ int) *machinery.Listener {
-		listener, _ := item.(*machinery.Listener)
-		return listener
-	})
-}
-
-func (r *GatewayPolicyDiscoverabilityReconciler) updateListenerStatus(ctx context.Context, syncMap *sync.Map, gw *machinery.Gateway, listener *machinery.Listener, logger logr.Logger, policyKinds []*schema.GroupKind) gatewayapiv1.ListenerStatus {
-	status, _, exists := r.findListenerStatus(gw.Status.Listeners, listener.Name)
+func updateListenerStatus(ctx context.Context, syncMap *sync.Map, gw *machinery.Gateway, listener *machinery.Listener, logger logr.Logger, policyKinds []*schema.GroupKind) gatewayapiv1.ListenerStatus {
+	status, _, exists := findListenerStatus(gw.Status.Listeners, listener.Name)
 	if !exists {
 		status = gatewayapiv1.ListenerStatus{Name: listener.Name, Conditions: []metav1.Condition{}}
 	}
 
 	for _, kind := range policyKinds {
 		conditionType := PolicyAffectedConditionType(kind.Kind)
-		policies := r.extractAcceptedPolicies(ctx, syncMap, kind, gw, listener)
+		policies := extractAcceptedPolicies(ctx, syncMap, kind, gw, listener)
 
 		if len(policies) == 0 {
-			r.removeConditionIfExists(&status.Conditions, conditionType, logger, listener.GetName())
+			removeConditionIfExists(&status.Conditions, conditionType, logger, listener.GetName())
 		} else {
-			r.addOrUpdateCondition(&status.Conditions, PolicyAffectedCondition(kind.Kind, policies), gw.GetGeneration(), logger)
+			addOrUpdateCondition(&status.Conditions, PolicyAffectedCondition(kind.Kind, policies), gw.GetGeneration(), logger)
 		}
 	}
 
 	return status
 }
 
-func (r *GatewayPolicyDiscoverabilityReconciler) updatePolicyConditions(ctx context.Context, syncMap *sync.Map, gw *machinery.Gateway, policyKind *schema.GroupKind, status *gatewayapiv1.GatewayStatus, logger logr.Logger) {
+func updatePolicyConditions(ctx context.Context, syncMap *sync.Map, gw *machinery.Gateway, policyKind *schema.GroupKind, status *gatewayapiv1.GatewayStatus, logger logr.Logger) {
 	conditionType := PolicyAffectedConditionType(policyKind.Kind)
-	policies := r.extractAcceptedPolicies(ctx, syncMap, policyKind, gw)
+	policies := extractAcceptedPolicies(ctx, syncMap, policyKind, gw)
 
 	if len(policies) == 0 {
-		r.removeConditionIfExists(&status.Conditions, conditionType, logger, gw.GetName())
+		removeConditionIfExists(&status.Conditions, conditionType, logger, gw.GetName())
 	} else {
-		r.addOrUpdateCondition(&status.Conditions, PolicyAffectedCondition(policyKind.Kind, policies), gw.GetGeneration(), logger)
+		addOrUpdateCondition(&status.Conditions, PolicyAffectedCondition(policyKind.Kind, policies), gw.GetGeneration(), logger)
 	}
 }
 
-func (r *GatewayPolicyDiscoverabilityReconciler) addOrUpdateCondition(conditions *[]metav1.Condition, condition metav1.Condition, generation int64, logger logr.Logger) {
+func addOrUpdateCondition(conditions *[]metav1.Condition, condition metav1.Condition, generation int64, logger logr.Logger) {
 	existingCondition := meta.FindStatusCondition(*conditions, condition.Type)
 	if existingCondition != nil && equality.Semantic.DeepEqual(*existingCondition, condition) {
 		logger.V(1).Info("condition unchanged", "condition", condition.Type)
@@ -132,7 +135,7 @@ func (r *GatewayPolicyDiscoverabilityReconciler) addOrUpdateCondition(conditions
 	logger.V(1).Info("updated condition", "condition", condition.Type)
 }
 
-func (r *GatewayPolicyDiscoverabilityReconciler) removeConditionIfExists(conditions *[]metav1.Condition, conditionType string, logger logr.Logger, name string) {
+func removeConditionIfExists(conditions *[]metav1.Condition, conditionType string, logger logr.Logger, name string) {
 	if meta.RemoveStatusCondition(conditions, conditionType) {
 		logger.V(1).Info("removed condition", "condition", conditionType, "name", name)
 	} else {
@@ -140,8 +143,8 @@ func (r *GatewayPolicyDiscoverabilityReconciler) removeConditionIfExists(conditi
 	}
 }
 
-func (r *GatewayPolicyDiscoverabilityReconciler) updateListenerList(listeners []gatewayapiv1.ListenerStatus, updatedStatus gatewayapiv1.ListenerStatus) []gatewayapiv1.ListenerStatus {
-	_, index, exists := r.findListenerStatus(listeners, updatedStatus.Name)
+func updateListenerList(listeners []gatewayapiv1.ListenerStatus, updatedStatus gatewayapiv1.ListenerStatus) []gatewayapiv1.ListenerStatus {
+	_, index, exists := findListenerStatus(listeners, updatedStatus.Name)
 	if exists {
 		listeners[index] = updatedStatus
 	} else {
@@ -150,7 +153,7 @@ func (r *GatewayPolicyDiscoverabilityReconciler) updateListenerList(listeners []
 	return listeners
 }
 
-func (r *GatewayPolicyDiscoverabilityReconciler) findListenerStatus(listeners []gatewayapiv1.ListenerStatus, name gatewayapiv1.SectionName) (gatewayapiv1.ListenerStatus, int, bool) {
+func findListenerStatus(listeners []gatewayapiv1.ListenerStatus, name gatewayapiv1.SectionName) (gatewayapiv1.ListenerStatus, int, bool) {
 	for i, status := range listeners {
 		if status.Name == name {
 			return status, i, true
@@ -159,16 +162,7 @@ func (r *GatewayPolicyDiscoverabilityReconciler) findListenerStatus(listeners []
 	return gatewayapiv1.ListenerStatus{}, -1, false
 }
 
-func (r *GatewayPolicyDiscoverabilityReconciler) updateGatewayStatus(ctx context.Context, gw *machinery.Gateway) error {
-	obj, err := controller.Destruct(gw.Gateway)
-	if err != nil {
-		return err
-	}
-	_, err = r.Client.Resource(controller.GatewaysResource).Namespace(gw.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
-	return err
-}
-
-func (r *GatewayPolicyDiscoverabilityReconciler) extractAcceptedPolicies(ctx context.Context, syncMap *sync.Map, policyKind *schema.GroupKind, targets ...machinery.Targetable) []machinery.Policy {
+func extractAcceptedPolicies(ctx context.Context, syncMap *sync.Map, policyKind *schema.GroupKind, targets ...machinery.Targetable) []machinery.Policy {
 	return kuadrantv1.PoliciesInPath(targets, func(policy machinery.Policy) bool {
 		return policy.GroupVersionKind().GroupKind() == *policyKind && IsPolicyAccepted(ctx, policy, syncMap) // Use enforced policies instead?
 	})

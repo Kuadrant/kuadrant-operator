@@ -60,8 +60,11 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) reconcile(ctx context.Context
 		routeStatusParents := route.Status.DeepCopy().Parents
 
 		for _, policyKind := range policyKinds {
-			path := r.getRoutePath(topology, route)
-			gateways := r.filterGatewaysInPath(path)
+			path := getRoutePath(topology, route)
+			gateways := lo.FilterMap(path, func(item machinery.Targetable, index int) (*machinery.Gateway, bool) {
+				ob, ok := item.(*machinery.Gateway)
+				return ob, ok
+			})
 
 			policies := kuadrantv1.PoliciesInPath(path, func(policy machinery.Policy) bool {
 				return policy.GroupVersionKind().GroupKind() == *policyKind && IsPolicyAccepted(ctx, policy, s)
@@ -76,7 +79,7 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) reconcile(ctx context.Context
 
 		if !equality.Semantic.DeepEqual(routeStatusParents, route.Status.Parents) {
 			route.Status.Parents = routeStatusParents
-			if err := updateRouteStatus(ctx, r.Client, route, logger); err != nil {
+			if err := r.updateRouteStatus(ctx, route, logger); err != nil {
 				logger.Error(err, "unable to update route status", "name", route.GetName(), "namespace", route.GetNamespace(), "uid", route.GetUID())
 			}
 		}
@@ -84,7 +87,17 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) reconcile(ctx context.Context
 	return nil
 }
 
-func (r *HTTPRoutePolicyDiscoverabilityReconciler) getRoutePath(topology *machinery.Topology, route *machinery.HTTPRoute) []machinery.Targetable {
+func (r *HTTPRoutePolicyDiscoverabilityReconciler) updateRouteStatus(ctx context.Context, route *machinery.HTTPRoute, logger logr.Logger) error {
+	obj, err := controller.Destruct(route.HTTPRoute)
+	if err != nil {
+		logger.Error(err, "unable to destruct route", "name", route.GetName(), "namespace", route.GetNamespace(), "uid", route.GetUID())
+		return err
+	}
+	_, err = r.Client.Resource(controller.HTTPRoutesResource).Namespace(route.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+	return err
+}
+
+func getRoutePath(topology *machinery.Topology, route *machinery.HTTPRoute) []machinery.Targetable {
 	path := []machinery.Targetable{route}
 	for _, listener := range topology.Targetables().Parents(route) {
 		path = append(path, listener)
@@ -92,13 +105,6 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) getRoutePath(topology *machin
 	}
 	return lo.UniqBy(path, func(item machinery.Targetable) string {
 		return item.GetLocator()
-	})
-}
-
-func (r *HTTPRoutePolicyDiscoverabilityReconciler) filterGatewaysInPath(path []machinery.Targetable) []*machinery.Gateway {
-	return lo.FilterMap(path, func(item machinery.Targetable, index int) (*machinery.Gateway, bool) {
-		ob, ok := item.(*machinery.Gateway)
-		return ob, ok
 	})
 }
 
@@ -155,16 +161,6 @@ func ensureRouteParentStatus(routeStatusParents *[]gatewayapiv1.RouteParentStatu
 		i = utils.Index(*routeStatusParents, FindRouteParentStatusFunc(route.HTTPRoute, client.ObjectKey{Namespace: gw.GetNamespace(), Name: gw.GetName()}, kuadrant.ControllerName))
 	}
 	return i
-}
-
-func updateRouteStatus(ctx context.Context, client *dynamic.DynamicClient, route *machinery.HTTPRoute, logger logr.Logger) error {
-	obj, err := controller.Destruct(route.HTTPRoute)
-	if err != nil {
-		logger.Error(err, "unable to destruct route", "name", route.GetName(), "namespace", route.GetNamespace(), "uid", route.GetUID())
-		return err
-	}
-	_, err = client.Resource(controller.HTTPRoutesResource).Namespace(route.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
-	return err
 }
 
 func FindRouteParentStatusFunc(route *gatewayapiv1.HTTPRoute, gatewayKey client.ObjectKey, controllerName gatewayapiv1.GatewayController) func(gatewayapiv1.RouteParentStatus) bool {

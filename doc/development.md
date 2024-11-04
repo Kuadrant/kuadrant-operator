@@ -8,6 +8,7 @@
 * [go] version 1.22+
 * [kubernetes] version v1.19+
 * [kubectl] version v1.19+
+* [helm]
 
 ## Build
 
@@ -279,3 +280,4 @@ make uninstall
 [kind]:https://kind.sigs.k8s.io/
 [kubernetes]:https://kubernetes.io/
 [kubectl]:https://kubernetes.io/docs/tasks/tools/#kubectl
+[helm]:https://helm.sh/

@@ -93,7 +93,7 @@ func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.Reso
 // TODO: What should happen if multiple target refs is supported in the future in terms of reporting in log and policy status?
 func (t *TLSPoliciesValidator) isTargetRefsFound(topology *machinery.Topology, p *kuadrantv1alpha1.TLSPolicy) error {
 	if len(p.GetTargetRefs()) != len(topology.Targetables().Children(p)) {
-		return kuadrant.NewErrTargetNotFound(p.Kind(), p.GetTargetRef(), apierrors.NewNotFound(kuadrantv1alpha1.TLSPoliciesResource.GroupResource(), p.GetName()))
+		return kuadrant.NewErrTargetNotFound(kuadrantv1alpha1.TLSPolicyGroupKind.Kind, p.GetTargetRef(), apierrors.NewNotFound(controller.GatewaysResource.GroupResource(), p.GetName()))
 	}
 
 	return nil
@@ -102,7 +102,7 @@ func (t *TLSPoliciesValidator) isTargetRefsFound(topology *machinery.Topology, p
 // isValidIssuerKind Validates that the Issuer Ref kind is either empty, Issuer or ClusterIssuer
 func (t *TLSPoliciesValidator) isValidIssuerKind(p *kuadrantv1alpha1.TLSPolicy) error {
 	if !lo.Contains([]string{"", certmanv1.IssuerKind, certmanv1.ClusterIssuerKind}, p.Spec.IssuerRef.Kind) {
-		return kuadrant.NewErrInvalid(p.Kind(), fmt.Errorf(`invalid value %q for issuerRef.kind. Must be empty, %q or %q`,
+		return kuadrant.NewErrInvalid(kuadrantv1alpha1.TLSPolicyGroupKind.Kind, fmt.Errorf(`invalid value %q for issuerRef.kind. Must be empty, %q or %q`,
 			p.Spec.IssuerRef.Kind, certmanv1.IssuerKind, certmanv1.ClusterIssuerKind))
 	}
 
@@ -132,7 +132,7 @@ func (t *TLSPoliciesValidator) isIssuerFound(topology *machinery.Topology, p *ku
 	})
 
 	if !ok {
-		return kuadrant.NewErrInvalid(p.Kind(), errors.New("unable to find issuer"))
+		return kuadrant.NewErrInvalid(kuadrantv1alpha1.TLSPolicyGroupKind.Kind, errors.New("unable to find issuer"))
 	}
 
 	return nil

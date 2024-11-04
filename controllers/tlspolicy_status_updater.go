@@ -106,11 +106,11 @@ func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controlle
 
 func (t *TLSPolicyStatusUpdater) enforcedCondition(ctx context.Context, policy *kuadrantv1alpha1.TLSPolicy, topology *machinery.Topology) *metav1.Condition {
 	if err := t.isIssuerReady(ctx, policy, topology); err != nil {
-		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err), false)
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(kuadrantv1alpha1.TLSPolicyGroupKind.Kind, err), false)
 	}
 
 	if err := t.isCertificatesReady(policy, topology); err != nil {
-		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policy.Kind(), err), false)
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(kuadrantv1alpha1.TLSPolicyGroupKind.Kind, err), false)
 	}
 
 	return kuadrant.EnforcedCondition(policy, nil, true)

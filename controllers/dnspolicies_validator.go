@@ -40,8 +40,8 @@ func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.Reso
 
 	state.Store(StateDNSPolicyAcceptedKey, lo.SliceToMap(policies, func(policy *kuadrantv1alpha1.DNSPolicy) (string, error) {
 		if len(policy.GetTargetRefs()) == 0 || len(topology.Targetables().Children(policy)) == 0 {
-			return policy.GetLocator(), kuadrant.NewErrTargetNotFound(policy.Kind(), policy.GetTargetRef(),
-				apierrors.NewNotFound(kuadrantv1alpha1.DNSPoliciesResource.GroupResource(), policy.GetName()))
+			return policy.GetLocator(), kuadrant.NewErrTargetNotFound(kuadrantv1alpha1.DNSPolicyGroupKind.Kind, policy.GetTargetRef(),
+				apierrors.NewNotFound(controller.GatewaysResource.GroupResource(), policy.GetName()))
 		}
 		return policy.GetLocator(), policy.Validate()
 	}))

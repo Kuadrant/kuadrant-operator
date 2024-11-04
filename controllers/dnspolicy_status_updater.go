@@ -138,7 +138,7 @@ func enforcedCondition(records []*kuadrantdnsv1alpha1.DNSRecord, dnsPolicy *kuad
 
 	// if there are records and none of the records are ready
 	if len(records) > 0 && len(notReadyRecords) == len(records) {
-		return kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(dnsPolicy.Kind(), errors.New("policy is not enforced on any DNSRecord: not a single DNSRecord is ready")), false)
+		return kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(kuadrantv1alpha1.DNSPolicyGroupKind.Kind, errors.New("policy is not enforced on any DNSRecord: not a single DNSRecord is ready")), false)
 	}
 
 	// some of the records are not ready

@@ -50,7 +50,7 @@ import (
 	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
@@ -85,7 +85,7 @@ func init() {
 	utilruntime.Must(istioapis.AddToScheme(scheme))
 	utilruntime.Must(istiov1alpha1.AddToScheme(scheme))
 	utilruntime.Must(maistraapis.AddToScheme(scheme))
-	utilruntime.Must(kuadrantv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(kuadrantv1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta3.AddToScheme(scheme))
 	utilruntime.Must(kuadrantdnsv1alpha1.AddToScheme(scheme))

@@ -10,7 +10,7 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
 
 func Test_propagateRecordConditions(t *testing.T) {
@@ -63,9 +63,9 @@ func Test_propagateRecordConditions(t *testing.T) {
 
 	tests := []struct {
 		Name         string
-		PolicyStatus *v1alpha1.DNSPolicyStatus
+		PolicyStatus *kuadrantv1.DNSPolicyStatus
 		Records      []*kuadrantdnsv1alpha1.DNSRecord
-		Validate     func(*testing.T, *v1alpha1.DNSPolicyStatus)
+		Validate     func(*testing.T, *kuadrantv1.DNSPolicyStatus)
 	}{
 		{
 			Name: "Healthy conditions not propagated",
@@ -91,8 +91,8 @@ func Test_propagateRecordConditions(t *testing.T) {
 					},
 				},
 			},
-			PolicyStatus: &v1alpha1.DNSPolicyStatus{},
-			Validate: func(t *testing.T, policyStatus *v1alpha1.DNSPolicyStatus) {
+			PolicyStatus: &kuadrantv1.DNSPolicyStatus{},
+			Validate: func(t *testing.T, policyStatus *kuadrantv1.DNSPolicyStatus) {
 				if conditions, ok := policyStatus.RecordConditions[rootHost]; ok {
 					t.Fatalf("expected no probe conditions for root host, found %v", len(conditions))
 				}
@@ -122,8 +122,8 @@ func Test_propagateRecordConditions(t *testing.T) {
 					},
 				},
 			},
-			PolicyStatus: &v1alpha1.DNSPolicyStatus{},
-			Validate: func(t *testing.T, policyStatus *v1alpha1.DNSPolicyStatus) {
+			PolicyStatus: &kuadrantv1.DNSPolicyStatus{},
+			Validate: func(t *testing.T, policyStatus *kuadrantv1.DNSPolicyStatus) {
 				if conditions, ok := policyStatus.RecordConditions[rootHost]; !ok {
 					t.Fatalf("expected probe conditions for root host, found none")
 				} else {

@@ -32,26 +32,16 @@ spec:
         kind: RateLimitPolicy
         name: ratelimitpolicies.kuadrant.io
         version: v1beta3
-      - description: DNSHealthCheckProbe enables performing health checks against a DNS endpoint (A or CNAME record)
-        displayName: DNSHealthCheckProbe
-        kind: DNSHealthCheckProbe
-        name: dnshealthcheckprobes.kuadrant.io
-        version: v1alpha1
       - description: DNSPolicy configures how North-South based traffic should be balanced and reach the gateways
         displayName: DNSPolicy
         kind: DNSPolicy
         name: dnspolicies.kuadrant.io
-        version: v1alpha1
-      - description: DNSRecord represents DNS endpoints for gateway network services
-        displayName: DNSRecord
-        kind: DNSRecord
-        name: dnsrecords.kuadrant.io
-        version: v1alpha1
+        version: v1
       - description: TLSPolicy provides tls for gateway listeners by managing the lifecycle of tls certificates
         displayName: TLSPolicy
         kind: TLSPolicy
         name: tlspolicies.kuadrant.io
-        version: v1alpha1
+        version: v1
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
   displayName: Kuadrant Operator
   icon:

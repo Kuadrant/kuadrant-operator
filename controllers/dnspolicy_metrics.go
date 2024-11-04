@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
 
 const (
@@ -41,7 +41,7 @@ var (
 		[]string{dnsPolicyNameLabel, dnsPolicyNamespaceLabel, dnsPolicyCondition})
 )
 
-func emitConditionMetrics(dnsPolicy *kuadrantv1alpha1.DNSPolicy) {
+func emitConditionMetrics(dnsPolicy *kuadrantv1.DNSPolicy) {
 	readyStatus := meta.FindStatusCondition(dnsPolicy.Status.Conditions, ReadyConditionType)
 	if readyStatus == nil {
 		dnsPolicyReady.WithLabelValues(dnsPolicy.Name, dnsPolicy.Namespace, "true").Set(0)

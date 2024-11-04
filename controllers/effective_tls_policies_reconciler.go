@@ -21,7 +21,7 @@ import (
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
 
 type EffectiveTLSPoliciesReconciler struct {
@@ -37,7 +37,7 @@ func (t *EffectiveTLSPoliciesReconciler) Subscription() *controller.Subscription
 	return &controller.Subscription{
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
-			{Kind: &kuadrantv1alpha1.TLSPolicyGroupKind},
+			{Kind: &kuadrantv1.TLSPolicyGroupKind},
 			{Kind: &CertManagerCertificateKind},
 		},
 		ReconcileFunc: t.Reconcile,
@@ -73,7 +73,7 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 
 	var expectedCerts []*certmanv1.Certificate
 	filterForTLSPolicies := func(p machinery.Policy, _ int) bool {
-		_, ok := p.(*kuadrantv1alpha1.TLSPolicy)
+		_, ok := p.(*kuadrantv1.TLSPolicy)
 		return ok
 	}
 
@@ -87,7 +87,7 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 		}
 
 		for _, p := range policies {
-			policy := p.(*kuadrantv1alpha1.TLSPolicy)
+			policy := p.(*kuadrantv1.TLSPolicy)
 
 			// Policy is deleted
 			if policy.DeletionTimestamp != nil {
@@ -202,7 +202,7 @@ func (t *EffectiveTLSPoliciesReconciler) deleteCertificatesForTargetable(ctx con
 	return deletionErr
 }
 
-func expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.Gateway, tlsPolicy *kuadrantv1alpha1.TLSPolicy) []*certmanv1.Certificate {
+func expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.Gateway, tlsPolicy *kuadrantv1.TLSPolicy) []*certmanv1.Certificate {
 	log := crlog.FromContext(ctx)
 
 	tlsHosts := make(map[corev1.ObjectReference][]string)
@@ -240,7 +240,7 @@ func expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.G
 	return certs
 }
 
-func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *kuadrantv1alpha1.TLSPolicy) []*certmanv1.Certificate {
+func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *kuadrantv1.TLSPolicy) []*certmanv1.Certificate {
 	tlsHosts := make(map[corev1.ObjectReference][]string)
 
 	hostname := "*"
@@ -269,7 +269,7 @@ func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *kuadrantv
 	return certs
 }
 
-func buildCertManagerCertificate(tlsPolicy *kuadrantv1alpha1.TLSPolicy, secretRef corev1.ObjectReference, hosts []string) *certmanv1.Certificate {
+func buildCertManagerCertificate(tlsPolicy *kuadrantv1.TLSPolicy, secretRef corev1.ObjectReference, hosts []string) *certmanv1.Certificate {
 	crt := &certmanv1.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretRef.Name,
@@ -343,7 +343,7 @@ func validateGatewayListenerBlock(path *field.Path, l gatewayapiv1.Listener, ing
 
 // translatePolicy updates the Certificate spec using the TLSPolicy spec
 // converted from https://github.com/cert-manager/cert-manager/blob/master/pkg/controller/certificate-shim/helper.go#L63
-func translatePolicy(crt *certmanv1.Certificate, tlsPolicy kuadrantv1alpha1.TLSPolicySpec) {
+func translatePolicy(crt *certmanv1.Certificate, tlsPolicy kuadrantv1.TLSPolicySpec) {
 	if tlsPolicy.CommonName != "" {
 		crt.Spec.CommonName = tlsPolicy.CommonName
 	}

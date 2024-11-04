@@ -87,7 +87,7 @@ selfsigned-issuer   True    18s
 Create a Kuadrant `TLSPolicy` to configure TLS:
 ```sh
 kubectl apply -n my-gateways -f - <<EOF
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: TLSPolicy
 metadata:
   name: prod-web

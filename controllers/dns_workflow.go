@@ -14,12 +14,11 @@ import (
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 
-	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
-
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -74,14 +73,14 @@ func LinkListenerToDNSRecord(objs controller.Store) machinery.LinkFunc {
 }
 
 func LinkDNSPolicyToDNSRecord(objs controller.Store) machinery.LinkFunc {
-	policies := lo.Map(objs.FilterByGroupKind(v1alpha1.DNSPolicyGroupKind), controller.ObjectAs[*v1alpha1.DNSPolicy])
+	policies := lo.Map(objs.FilterByGroupKind(kuadrantv1.DNSPolicyGroupKind), controller.ObjectAs[*kuadrantv1.DNSPolicy])
 
 	return machinery.LinkFunc{
-		From: v1alpha1.DNSPolicyGroupKind,
+		From: kuadrantv1.DNSPolicyGroupKind,
 		To:   DNSRecordGroupKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			if dnsRecord, ok := child.(*controller.RuntimeObject).Object.(*kuadrantdnsv1alpha1.DNSRecord); ok {
-				return lo.FilterMap(policies, func(dnsPolicy *v1alpha1.DNSPolicy, _ int) (machinery.Object, bool) {
+				return lo.FilterMap(policies, func(dnsPolicy *kuadrantv1.DNSPolicy, _ int) (machinery.Object, bool) {
 					return dnsPolicy, utils.IsOwnedBy(dnsRecord, dnsPolicy)
 				})
 			}
@@ -106,7 +105,7 @@ func dnsPolicyAcceptedStatusFunc(state *sync.Map) func(policy machinery.Policy) 
 }
 
 func dnsPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error) {
-	p, ok := policy.(*v1alpha1.DNSPolicy)
+	p, ok := policy.(*kuadrantv1.DNSPolicy)
 	if !ok {
 		return
 	}
@@ -131,11 +130,11 @@ func dnsPolicyErrorFunc(state *sync.Map) func(policy machinery.Policy) error {
 	}
 }
 
-type dnsPolicyTypeFilter func(item machinery.Policy, index int) (*v1alpha1.DNSPolicy, bool)
+type dnsPolicyTypeFilter func(item machinery.Policy, index int) (*kuadrantv1.DNSPolicy, bool)
 
-func dnsPolicyTypeFilterFunc() func(item machinery.Policy, _ int) (*v1alpha1.DNSPolicy, bool) {
-	return func(item machinery.Policy, _ int) (*v1alpha1.DNSPolicy, bool) {
-		p, ok := item.(*v1alpha1.DNSPolicy)
+func dnsPolicyTypeFilterFunc() func(item machinery.Policy, _ int) (*kuadrantv1.DNSPolicy, bool) {
+	return func(item machinery.Policy, _ int) (*kuadrantv1.DNSPolicy, bool) {
+		p, ok := item.(*kuadrantv1.DNSPolicy)
 		return p, ok
 	}
 }

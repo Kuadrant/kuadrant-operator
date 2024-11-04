@@ -42,6 +42,7 @@ func NewMergeableRule(rule MergeableRule, defaultSource string) MergeableRule {
 
 // MergeableRule is a policy rule that contains a spec which can be traced back to its source,
 // i.e. to the policy where the rule spec was defined.
+// +kubebuilder:object:generate=false
 type MergeableRule interface {
 	GetSpec() any
 	GetSource() string

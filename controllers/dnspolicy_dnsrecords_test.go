@@ -7,7 +7,7 @@ import (
 
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 )
 
@@ -17,7 +17,7 @@ func TestGatewayWrapper_RemoveExcludedStatusAddresses(t *testing.T) {
 	testCases := []struct {
 		Name      string
 		Gateway   *gatewayapiv1.Gateway
-		DNSPolicy *v1alpha1.DNSPolicy
+		DNSPolicy *kuadrantv1.DNSPolicy
 		Validate  func(t *testing.T, g *gatewayapiv1.GatewayStatus)
 		ExpectErr bool
 	}{
@@ -37,8 +37,8 @@ func TestGatewayWrapper_RemoveExcludedStatusAddresses(t *testing.T) {
 					},
 				},
 			},
-			DNSPolicy: &v1alpha1.DNSPolicy{
-				Spec: v1alpha1.DNSPolicySpec{
+			DNSPolicy: &kuadrantv1.DNSPolicy{
+				Spec: kuadrantv1.DNSPolicySpec{
 					ExcludeAddresses: []string{
 						"1.1.1.1",
 					},
@@ -71,8 +71,8 @@ func TestGatewayWrapper_RemoveExcludedStatusAddresses(t *testing.T) {
 					},
 				},
 			},
-			DNSPolicy: &v1alpha1.DNSPolicy{
-				Spec: v1alpha1.DNSPolicySpec{
+			DNSPolicy: &kuadrantv1.DNSPolicy{
+				Spec: kuadrantv1.DNSPolicySpec{
 					ExcludeAddresses: []string{},
 				},
 			},
@@ -102,8 +102,8 @@ func TestGatewayWrapper_RemoveExcludedStatusAddresses(t *testing.T) {
 					},
 				},
 			},
-			DNSPolicy: &v1alpha1.DNSPolicy{
-				Spec: v1alpha1.DNSPolicySpec{
+			DNSPolicy: &kuadrantv1.DNSPolicy{
+				Spec: kuadrantv1.DNSPolicySpec{
 					ExcludeAddresses: []string{
 						"1.1.0.0/16",
 						"10.0.0.1/32",
@@ -141,8 +141,8 @@ func TestGatewayWrapper_RemoveExcludedStatusAddresses(t *testing.T) {
 					},
 				},
 			},
-			DNSPolicy: &v1alpha1.DNSPolicy{
-				Spec: v1alpha1.DNSPolicySpec{
+			DNSPolicy: &kuadrantv1.DNSPolicy{
+				Spec: kuadrantv1.DNSPolicySpec{
 					ExcludeAddresses: []string{
 						"1.1.0.0/161",
 						"example.com",

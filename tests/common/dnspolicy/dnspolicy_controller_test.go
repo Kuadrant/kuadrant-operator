@@ -21,7 +21,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -38,7 +38,7 @@ var _ = Describe("DNSPolicy controller", func() {
 	var dnsProviderSecret *corev1.Secret
 	var testNamespace string
 	var gateway *gatewayapiv1.Gateway
-	var dnsPolicy *v1alpha1.DNSPolicy
+	var dnsPolicy *kuadrantv1.DNSPolicy
 	var recordName, wildcardRecordName string
 	var domain = fmt.Sprintf("example-%s.com", rand.String(6))
 
@@ -105,7 +105,7 @@ var _ = Describe("DNSPolicy controller", func() {
 			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(dnsPolicy.Spec.LoadBalancing).To(BeNil())
-			dnsPolicy.Spec.LoadBalancing = &v1alpha1.LoadBalancingSpec{
+			dnsPolicy.Spec.LoadBalancing = &kuadrantv1.LoadBalancingSpec{
 				Weight:     100,
 				Geo:        "foo",
 				DefaultGeo: false,
@@ -714,7 +714,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 			By("changing the policy target ref")
 			Eventually(func() error {
-				existingDNSpolicy := &v1alpha1.DNSPolicy{}
+				existingDNSpolicy := &kuadrantv1.DNSPolicy{}
 				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), existingDNSpolicy); err != nil {
 					return err
 				}
@@ -782,7 +782,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 			By("changing the policy target ref")
 			Eventually(func() error {
-				existingDNSpolicy := &v1alpha1.DNSPolicy{}
+				existingDNSpolicy := &kuadrantv1.DNSPolicy{}
 				if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), existingDNSpolicy); err != nil {
 					return err
 				}
@@ -1024,7 +1024,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 				By("updating the dnspolicy")
 				Eventually(func() error {
-					existingDNSpolicy := &v1alpha1.DNSPolicy{}
+					existingDNSpolicy := &kuadrantv1.DNSPolicy{}
 					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), existingDNSpolicy); err != nil {
 						return err
 					}
@@ -1173,7 +1173,7 @@ var _ = Describe("DNSPolicy controller", func() {
 
 				By("updating dnspolicy section name to listener two")
 				Eventually(func() error {
-					existingDNSpolicy := &v1alpha1.DNSPolicy{}
+					existingDNSpolicy := &kuadrantv1.DNSPolicy{}
 					if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicyWithSection), existingDNSpolicy); err != nil {
 						return err
 					}

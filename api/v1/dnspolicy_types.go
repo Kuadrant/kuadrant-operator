@@ -14,19 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1
 
 import (
 	"fmt"
 	"net"
 	"strings"
 
-	dnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	dnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
+	"github.com/kuadrant/policy-machinery/machinery"
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -36,6 +39,11 @@ import (
 const (
 	DefaultGeo  GeoCode = "default"
 	WildcardGeo GeoCode = "*"
+)
+
+var (
+	DNSPoliciesResource = GroupVersion.WithResource("dnspolicies")
+	DNSPolicyGroupKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "DNSPolicy"}
 )
 
 // DNSPolicySpec defines the desired state of DNSPolicy
@@ -159,6 +167,31 @@ type DNSPolicy struct {
 
 	Spec   DNSPolicySpec   `json:"spec,omitempty"`
 	Status DNSPolicyStatus `json:"status,omitempty"`
+}
+
+var _ machinery.Policy = &DNSPolicy{}
+
+func (p *DNSPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
+	return []machinery.PolicyTargetReference{
+		machinery.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReferenceWithSectionName: p.Spec.TargetRef,
+			PolicyNamespace: p.Namespace,
+		},
+	}
+}
+
+func (p *DNSPolicy) GetMergeStrategy() machinery.MergeStrategy {
+	return func(policy machinery.Policy, _ machinery.Policy) machinery.Policy {
+		return policy
+	}
+}
+
+func (p *DNSPolicy) Merge(other machinery.Policy) machinery.Policy {
+	return other
+}
+
+func (p *DNSPolicy) GetLocator() string {
+	return machinery.LocatorFromObject(p)
 }
 
 func (p *DNSPolicy) Validate() error {

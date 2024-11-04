@@ -13,7 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/utils/ptr"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
@@ -31,8 +31,8 @@ func (t *TLSPoliciesValidator) Subscription() *controller.Subscription {
 	return &controller.Subscription{
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
-			{Kind: &kuadrantv1alpha1.TLSPolicyGroupKind, EventType: ptr.To(controller.CreateEvent)},
-			{Kind: &kuadrantv1alpha1.TLSPolicyGroupKind, EventType: ptr.To(controller.UpdateEvent)},
+			{Kind: &kuadrantv1.TLSPolicyGroupKind, EventType: ptr.To(controller.CreateEvent)},
+			{Kind: &kuadrantv1.TLSPolicyGroupKind, EventType: ptr.To(controller.UpdateEvent)},
 			{Kind: &CertManagerIssuerKind},
 			{Kind: &CertManagerClusterIssuerKind},
 		},
@@ -44,14 +44,14 @@ func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.Reso
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPoliciesValidator").WithName("Validate")
 
 	policies := lo.Filter(topology.Policies().Items(), func(item machinery.Policy, index int) bool {
-		_, ok := item.(*kuadrantv1alpha1.TLSPolicy)
+		_, ok := item.(*kuadrantv1.TLSPolicy)
 		return ok
 	})
 
 	isPolicyValidErrorMap := make(map[string]error, len(policies))
 
 	for _, policy := range policies {
-		p := policy.(*kuadrantv1alpha1.TLSPolicy)
+		p := policy.(*kuadrantv1.TLSPolicy)
 		if p.DeletionTimestamp != nil {
 			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", p.Name, "namespace", p.Namespace)
 			continue
@@ -91,18 +91,18 @@ func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.Reso
 // isTargetRefsFound Policies are already linked to their targets. If the target ref length and length of targetables by this policy is not the same,
 // then the policy could not find the target
 // TODO: What should happen if multiple target refs is supported in the future in terms of reporting in log and policy status?
-func (t *TLSPoliciesValidator) isTargetRefsFound(topology *machinery.Topology, p *kuadrantv1alpha1.TLSPolicy) error {
+func (t *TLSPoliciesValidator) isTargetRefsFound(topology *machinery.Topology, p *kuadrantv1.TLSPolicy) error {
 	if len(p.GetTargetRefs()) != len(topology.Targetables().Children(p)) {
-		return kuadrant.NewErrTargetNotFound(kuadrantv1alpha1.TLSPolicyGroupKind.Kind, p.GetTargetRef(), apierrors.NewNotFound(controller.GatewaysResource.GroupResource(), p.GetName()))
+		return kuadrant.NewErrTargetNotFound(kuadrantv1.TLSPolicyGroupKind.Kind, p.GetTargetRef(), apierrors.NewNotFound(controller.GatewaysResource.GroupResource(), p.GetName()))
 	}
 
 	return nil
 }
 
 // isValidIssuerKind Validates that the Issuer Ref kind is either empty, Issuer or ClusterIssuer
-func (t *TLSPoliciesValidator) isValidIssuerKind(p *kuadrantv1alpha1.TLSPolicy) error {
+func (t *TLSPoliciesValidator) isValidIssuerKind(p *kuadrantv1.TLSPolicy) error {
 	if !lo.Contains([]string{"", certmanv1.IssuerKind, certmanv1.ClusterIssuerKind}, p.Spec.IssuerRef.Kind) {
-		return kuadrant.NewErrInvalid(kuadrantv1alpha1.TLSPolicyGroupKind.Kind, fmt.Errorf(`invalid value %q for issuerRef.kind. Must be empty, %q or %q`,
+		return kuadrant.NewErrInvalid(kuadrantv1.TLSPolicyGroupKind.Kind, fmt.Errorf(`invalid value %q for issuerRef.kind. Must be empty, %q or %q`,
 			p.Spec.IssuerRef.Kind, certmanv1.IssuerKind, certmanv1.ClusterIssuerKind))
 	}
 
@@ -110,7 +110,7 @@ func (t *TLSPoliciesValidator) isValidIssuerKind(p *kuadrantv1alpha1.TLSPolicy) 
 }
 
 // isIssuerFound Validates that the Issuer specified can be found in the topology
-func (t *TLSPoliciesValidator) isIssuerFound(topology *machinery.Topology, p *kuadrantv1alpha1.TLSPolicy) error {
+func (t *TLSPoliciesValidator) isIssuerFound(topology *machinery.Topology, p *kuadrantv1.TLSPolicy) error {
 	_, ok := lo.Find(topology.Objects().Items(), func(item machinery.Object) bool {
 		runtimeObj, ok := item.(*controller.RuntimeObject)
 		if !ok {
@@ -132,7 +132,7 @@ func (t *TLSPoliciesValidator) isIssuerFound(topology *machinery.Topology, p *ku
 	})
 
 	if !ok {
-		return kuadrant.NewErrInvalid(kuadrantv1alpha1.TLSPolicyGroupKind.Kind, errors.New("unable to find issuer"))
+		return kuadrant.NewErrInvalid(kuadrantv1.TLSPolicyGroupKind.Kind, errors.New("unable to find issuer"))
 	}
 
 	return nil

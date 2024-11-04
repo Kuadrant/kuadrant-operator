@@ -1,5 +1,5 @@
 ---
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: TLSPolicy
 metadata:
   name: tlspolicy-sample

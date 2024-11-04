@@ -20,7 +20,7 @@ import (
 	"k8s.io/utils/ptr"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -37,8 +37,8 @@ func (t *TLSPolicyStatusUpdater) Subscription() *controller.Subscription {
 	return &controller.Subscription{
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
-			{Kind: &kuadrantv1alpha1.TLSPolicyGroupKind, EventType: ptr.To(controller.CreateEvent)},
-			{Kind: &kuadrantv1alpha1.TLSPolicyGroupKind, EventType: ptr.To(controller.UpdateEvent)},
+			{Kind: &kuadrantv1.TLSPolicyGroupKind, EventType: ptr.To(controller.CreateEvent)},
+			{Kind: &kuadrantv1.TLSPolicyGroupKind, EventType: ptr.To(controller.UpdateEvent)},
 			{Kind: &CertManagerCertificateKind},
 			{Kind: &CertManagerIssuerKind},
 			{Kind: &CertManagerClusterIssuerKind},
@@ -51,18 +51,18 @@ func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controlle
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("UpdateStatus")
 
 	policies := lo.Filter(topology.Policies().Items(), func(item machinery.Policy, index int) bool {
-		_, ok := item.(*kuadrantv1alpha1.TLSPolicy)
+		_, ok := item.(*kuadrantv1.TLSPolicy)
 		return ok
 	})
 
 	for _, policy := range policies {
-		p := policy.(*kuadrantv1alpha1.TLSPolicy)
+		p := policy.(*kuadrantv1.TLSPolicy)
 		if p.DeletionTimestamp != nil {
 			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", policy.GetName(), "namespace", policy.GetNamespace(), "uid", p.GetUID())
 			continue
 		}
 
-		newStatus := &kuadrantv1alpha1.TLSPolicyStatus{
+		newStatus := &kuadrantv1.TLSPolicyStatus{
 			// Copy initial conditions. Otherwise, status will always be updated
 			Conditions:         slices.Clone(p.Status.Conditions),
 			ObservedGeneration: p.Status.ObservedGeneration,
@@ -88,7 +88,7 @@ func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controlle
 		newStatus.ObservedGeneration = p.Generation
 		p.Status = *newStatus
 
-		resource := t.Client.Resource(kuadrantv1alpha1.TLSPoliciesResource).Namespace(policy.GetNamespace())
+		resource := t.Client.Resource(kuadrantv1.TLSPoliciesResource).Namespace(policy.GetNamespace())
 		un, err := controller.Destruct(policy)
 		if err != nil {
 			logger.Error(err, "unable to destruct policy")
@@ -104,19 +104,19 @@ func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controlle
 	return nil
 }
 
-func (t *TLSPolicyStatusUpdater) enforcedCondition(ctx context.Context, policy *kuadrantv1alpha1.TLSPolicy, topology *machinery.Topology) *metav1.Condition {
+func (t *TLSPolicyStatusUpdater) enforcedCondition(ctx context.Context, policy *kuadrantv1.TLSPolicy, topology *machinery.Topology) *metav1.Condition {
 	if err := t.isIssuerReady(ctx, policy, topology); err != nil {
-		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(kuadrantv1alpha1.TLSPolicyGroupKind.Kind, err), false)
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(kuadrantv1.TLSPolicyGroupKind.Kind, err), false)
 	}
 
 	if err := t.isCertificatesReady(policy, topology); err != nil {
-		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(kuadrantv1alpha1.TLSPolicyGroupKind.Kind, err), false)
+		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(kuadrantv1.TLSPolicyGroupKind.Kind, err), false)
 	}
 
 	return kuadrant.EnforcedCondition(policy, nil, true)
 }
 
-func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, policy *kuadrantv1alpha1.TLSPolicy, topology *machinery.Topology) error {
+func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, policy *kuadrantv1.TLSPolicy, topology *machinery.Topology) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("isIssuerReady")
 
 	// Get all gateways
@@ -187,7 +187,7 @@ func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, policy *kuad
 }
 
 func (t *TLSPolicyStatusUpdater) isCertificatesReady(p machinery.Policy, topology *machinery.Topology) error {
-	policy, ok := p.(*kuadrantv1alpha1.TLSPolicy)
+	policy, ok := p.(*kuadrantv1.TLSPolicy)
 	if !ok {
 		return errors.New("invalid policy")
 	}

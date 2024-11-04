@@ -16,7 +16,7 @@ import (
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
 
 const (
@@ -89,7 +89,7 @@ func LinkListenerToCertificateFunc(objs controller.Store) machinery.LinkFunc {
 
 func LinkGatewayToIssuerFunc(objs controller.Store) machinery.LinkFunc {
 	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), controller.ObjectAs[*gwapiv1.Gateway])
-	tlsPolicies := lo.Map(objs.FilterByGroupKind(kuadrantv1alpha1.TLSPolicyGroupKind), controller.ObjectAs[*kuadrantv1alpha1.TLSPolicy])
+	tlsPolicies := lo.Map(objs.FilterByGroupKind(kuadrantv1.TLSPolicyGroupKind), controller.ObjectAs[*kuadrantv1.TLSPolicy])
 
 	return machinery.LinkFunc{
 		From: machinery.GatewayGroupKind,
@@ -100,7 +100,7 @@ func LinkGatewayToIssuerFunc(objs controller.Store) machinery.LinkFunc {
 
 			// Policies linked to Issuer
 			// Issuer must be in the same namespace as the policy
-			linkedPolicies := lo.Filter(tlsPolicies, func(p *kuadrantv1alpha1.TLSPolicy, index int) bool {
+			linkedPolicies := lo.Filter(tlsPolicies, func(p *kuadrantv1.TLSPolicy, index int) bool {
 				return p.Spec.IssuerRef.Name == issuer.GetName() && p.GetNamespace() == issuer.GetNamespace() && p.Spec.IssuerRef.Kind == certmanagerv1.IssuerKind
 			})
 
@@ -111,7 +111,7 @@ func LinkGatewayToIssuerFunc(objs controller.Store) machinery.LinkFunc {
 
 func LinkGatewayToClusterIssuerFunc(objs controller.Store) machinery.LinkFunc {
 	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), controller.ObjectAs[*gwapiv1.Gateway])
-	tlsPolicies := lo.Map(objs.FilterByGroupKind(kuadrantv1alpha1.TLSPolicyGroupKind), controller.ObjectAs[*kuadrantv1alpha1.TLSPolicy])
+	tlsPolicies := lo.Map(objs.FilterByGroupKind(kuadrantv1.TLSPolicyGroupKind), controller.ObjectAs[*kuadrantv1.TLSPolicy])
 
 	return machinery.LinkFunc{
 		From: machinery.GatewayGroupKind,
@@ -121,7 +121,7 @@ func LinkGatewayToClusterIssuerFunc(objs controller.Store) machinery.LinkFunc {
 			clusterIssuer := o.Object.(*certmanagerv1.ClusterIssuer)
 
 			// Policies linked to ClusterIssuer
-			linkedPolicies := lo.Filter(tlsPolicies, func(p *kuadrantv1alpha1.TLSPolicy, index int) bool {
+			linkedPolicies := lo.Filter(tlsPolicies, func(p *kuadrantv1.TLSPolicy, index int) bool {
 				return p.Spec.IssuerRef.Name == clusterIssuer.GetName() && p.Spec.IssuerRef.Kind == certmanagerv1.ClusterIssuerKind
 			})
 
@@ -130,7 +130,7 @@ func LinkGatewayToClusterIssuerFunc(objs controller.Store) machinery.LinkFunc {
 	}
 }
 
-func findLinkedGatewaysForIssuer(linkedPolicies []*kuadrantv1alpha1.TLSPolicy, gateways []*gwapiv1.Gateway) []machinery.Object {
+func findLinkedGatewaysForIssuer(linkedPolicies []*kuadrantv1.TLSPolicy, gateways []*gwapiv1.Gateway) []machinery.Object {
 	if len(linkedPolicies) == 0 {
 		return nil
 	}
@@ -153,7 +153,7 @@ func findLinkedGatewaysForIssuer(linkedPolicies []*kuadrantv1alpha1.TLSPolicy, g
 
 // Common functions used across multiple reconcilers
 
-func IsTLSPolicyValid(ctx context.Context, s *sync.Map, policy *kuadrantv1alpha1.TLSPolicy) (bool, error) {
+func IsTLSPolicyValid(ctx context.Context, s *sync.Map, policy *kuadrantv1.TLSPolicy) (bool, error) {
 	logger := controller.LoggerFromContext(ctx).WithName("IsPolicyValid")
 
 	store, ok := s.Load(TLSPolicyAcceptedKey)

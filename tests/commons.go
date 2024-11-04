@@ -30,7 +30,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -466,8 +466,8 @@ func BuildInMemoryCredentialsSecret(name, ns, initDomain string) *corev1.Secret 
 	return secret
 }
 
-func NewDNSPolicy(name, ns string) *kuadrantv1alpha1.DNSPolicy {
-	p := kuadrantv1alpha1.NewDNSPolicy(name, ns)
+func NewDNSPolicy(name, ns string) *kuadrantv1.DNSPolicy {
+	p := kuadrantv1.NewDNSPolicy(name, ns)
 	p.Labels = CommonLabels
 	return p
 }

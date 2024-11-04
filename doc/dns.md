@@ -22,7 +22,7 @@ The `DNSPolicy` spec includes the following parts:
 #### High-level example and field definition
 
 ```yaml
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: my-dns-policy
@@ -30,10 +30,12 @@ spec:
   # reference to an existing networking resource to attach the policy to
   # it can only be a Gateway API Gateway resource
   # it can only refer to objects in the same namespace as the DNSPolicy
+  # it can target a specific listener using sectionName 
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
     name: mygateway
+    sectionName: api # (optional) if not set policy applies to all listeners that do not have a policy attached directly
     
  # reference to an existing secret resource containing provider credentials and configuration
  # it can only refer to Secrets in the same namespace as the DNSPolicy that have the type kuadrant.io/(provider) e.g kuadrant.io/aws

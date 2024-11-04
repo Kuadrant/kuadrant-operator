@@ -12,7 +12,7 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	"github.com/kuadrant/dns-operator/pkg/builder"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
 
 const (
@@ -23,7 +23,7 @@ func dnsRecordName(gatewayName, listenerName string) string {
 	return fmt.Sprintf("%s-%s", gatewayName, listenerName)
 }
 
-func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy *v1alpha1.DNSPolicy, targetListener gatewayapiv1.Listener) (*kuadrantdnsv1alpha1.DNSRecord, error) {
+func desiredDNSRecord(gateway *gatewayapiv1.Gateway, clusterID string, dnsPolicy *kuadrantv1.DNSPolicy, targetListener gatewayapiv1.Listener) (*kuadrantdnsv1alpha1.DNSRecord, error) {
 	rootHost := string(*targetListener.Hostname)
 	var healthCheckSpec *kuadrantdnsv1alpha1.HealthCheckSpec
 
@@ -87,7 +87,7 @@ func (g *GatewayWrapper) GetAddresses() []builder.TargetAddress {
 	return addresses
 }
 
-func (g *GatewayWrapper) RemoveExcludedStatusAddresses(p *v1alpha1.DNSPolicy) error {
+func (g *GatewayWrapper) RemoveExcludedStatusAddresses(p *kuadrantv1.DNSPolicy) error {
 	g.excludedAddresses = p.Spec.ExcludeAddresses
 	newAddresses := []gatewayapiv1.GatewayStatusAddress{}
 	for _, address := range g.Gateway.Status.Addresses {
@@ -120,7 +120,7 @@ func (g *GatewayWrapper) RemoveExcludedStatusAddresses(p *v1alpha1.DNSPolicy) er
 	return nil
 }
 
-func buildEndpoints(clusterID, hostname string, gateway *gatewayapiv1.Gateway, policy *v1alpha1.DNSPolicy) ([]*externaldns.Endpoint, error) {
+func buildEndpoints(clusterID, hostname string, gateway *gatewayapiv1.Gateway, policy *kuadrantv1.DNSPolicy) ([]*externaldns.Endpoint, error) {
 	gw := gateway.DeepCopy()
 	gatewayWrapper := NewGatewayWrapper(gw)
 	// modify the status addresses based on any that need to be excluded

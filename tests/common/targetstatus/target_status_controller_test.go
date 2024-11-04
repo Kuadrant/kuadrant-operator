@@ -24,7 +24,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -741,8 +741,8 @@ var _ = Describe("Target status reconciler", func() {
 		policyAffectedCondition := controllers.PolicyAffectedConditionType("DNSPolicy")
 
 		// policyFactory builds a standards DNSPolicy object that targets the test gateway by default, with the given mutate functions applied
-		policyFactory := func(mutateFns ...func(policy *kuadrantv1alpha1.DNSPolicy)) *kuadrantv1alpha1.DNSPolicy {
-			policy := kuadrantv1alpha1.NewDNSPolicy("test-dns-policy", testNamespace).WithTargetGateway(TestGatewayName)
+		policyFactory := func(mutateFns ...func(policy *kuadrantv1.DNSPolicy)) *kuadrantv1.DNSPolicy {
+			policy := kuadrantv1.NewDNSPolicy("test-dns-policy", testNamespace).WithTargetGateway(TestGatewayName)
 			for _, mutateFn := range mutateFns {
 				mutateFn(policy)
 			}
@@ -750,7 +750,7 @@ var _ = Describe("Target status reconciler", func() {
 		}
 
 		isDNSPolicyAccepted := func(ctx context.Context, policyKey client.ObjectKey) bool {
-			policy := &kuadrantv1alpha1.DNSPolicy{}
+			policy := &kuadrantv1.DNSPolicy{}
 			err := k8sClient.Get(ctx, policyKey, policy)
 			if err != nil {
 				return false
@@ -759,7 +759,7 @@ var _ = Describe("Target status reconciler", func() {
 		}
 
 		isDNSPolicyEnforced := func(ctx context.Context, policyKey client.ObjectKey) bool {
-			policy := &kuadrantv1alpha1.DNSPolicy{}
+			policy := &kuadrantv1.DNSPolicy{}
 			err := k8sClient.Get(ctx, policyKey, policy)
 			if err != nil {
 				return false
@@ -769,7 +769,7 @@ var _ = Describe("Target status reconciler", func() {
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if a DNSPolicy is accepted
 		// and the statuses of its target object has been all updated as affected by the policy
-		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *kuadrantv1alpha1.DNSPolicy, routeNames ...string) func() bool {
+		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *kuadrantv1.DNSPolicy, routeNames ...string) func() bool {
 			return func() bool {
 				policyKey := client.ObjectKeyFromObject(policy)
 				return isDNSPolicyAccepted(ctx, policyKey) && targetsAffected(ctx, policyKey, policyAffectedCondition, policy.Spec.TargetRef.LocalPolicyTargetReference, routeNames...)
@@ -794,7 +794,7 @@ var _ = Describe("Target status reconciler", func() {
 		}, afterEachTimeOut)
 
 		It("adds PolicyAffected status condition to the targeted gateway and child routes", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1alpha1.DNSPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1.DNSPolicy) {
 				policy.Spec.ProviderRefs = append(policy.Spec.ProviderRefs, kuadrantdnsv1alpha1.ProviderRef{
 					Name: dnsProviderSecret.Name,
 				})
@@ -807,7 +807,7 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("removes PolicyAffected status condition from the targeted gateway and child routes when the policy is deleted", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1alpha1.DNSPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1.DNSPolicy) {
 				policy.Spec.ProviderRefs = append(policy.Spec.ProviderRefs, kuadrantdnsv1alpha1.ProviderRef{
 					Name: dnsProviderSecret.Name,
 				})
@@ -835,7 +835,7 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("adds section name polices only to specific listener status conditions", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1alpha1.DNSPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1.DNSPolicy) {
 				policy.Name = "section-dns"
 				policy.Spec.TargetRef.SectionName = ptr.To[gatewayapiv1.SectionName]("test-listener-toystore-com")
 				policy.Spec.ProviderRefs = append(policy.Spec.ProviderRefs, kuadrantdnsv1alpha1.ProviderRef{
@@ -866,7 +866,7 @@ var _ = Describe("Target status reconciler", func() {
 		}, testTimeOut)
 
 		It("gateway policy is also listed with section policy", func(ctx SpecContext) {
-			gwPolicy := policyFactory(func(policy *kuadrantv1alpha1.DNSPolicy) {
+			gwPolicy := policyFactory(func(policy *kuadrantv1.DNSPolicy) {
 				policy.Name = "gateway-dns"
 				policy.Spec.ProviderRefs = append(policy.Spec.ProviderRefs, kuadrantdnsv1alpha1.ProviderRef{
 					Name: dnsProviderSecret.Name,
@@ -876,7 +876,7 @@ var _ = Describe("Target status reconciler", func() {
 			defer k8sClient.Delete(ctx, gwPolicy)
 			Expect(k8sClient.Create(ctx, gwPolicy)).To(Succeed())
 
-			lPolicy := policyFactory(func(policy *kuadrantv1alpha1.DNSPolicy) {
+			lPolicy := policyFactory(func(policy *kuadrantv1.DNSPolicy) {
 				policy.Name = "section-dns"
 				policy.Spec.TargetRef.SectionName = ptr.To[gatewayapiv1.SectionName]("test-listener-toystore-com")
 				policy.Spec.ProviderRefs = append(policy.Spec.ProviderRefs, kuadrantdnsv1alpha1.ProviderRef{
@@ -923,8 +923,8 @@ var _ = Describe("Target status reconciler", func() {
 		var issuerRef *certmanmetav1.ObjectReference
 
 		// policyFactory builds a standards TLSPolicy object that targets the test gateway by default, with the given mutate functions applied
-		policyFactory := func(mutateFns ...func(policy *kuadrantv1alpha1.TLSPolicy)) *kuadrantv1alpha1.TLSPolicy {
-			policy := kuadrantv1alpha1.NewTLSPolicy("test-tls-policy", testNamespace).WithTargetGateway(TestGatewayName).WithIssuerRef(*issuerRef)
+		policyFactory := func(mutateFns ...func(policy *kuadrantv1.TLSPolicy)) *kuadrantv1.TLSPolicy {
+			policy := kuadrantv1.NewTLSPolicy("test-tls-policy", testNamespace).WithTargetGateway(TestGatewayName).WithIssuerRef(*issuerRef)
 			for _, mutateFn := range mutateFns {
 				mutateFn(policy)
 			}
@@ -932,7 +932,7 @@ var _ = Describe("Target status reconciler", func() {
 		}
 
 		isTLSPolicyAccepted := func(ctx context.Context, policyKey client.ObjectKey) bool {
-			policy := &kuadrantv1alpha1.TLSPolicy{}
+			policy := &kuadrantv1.TLSPolicy{}
 			err := k8sClient.Get(ctx, policyKey, policy)
 			if err != nil {
 				return false
@@ -942,7 +942,7 @@ var _ = Describe("Target status reconciler", func() {
 
 		// policyAcceptedAndTargetsAffected returns an assertion function that checks if a TLSPolicy is accepted
 		// and the statuses of its target object has been all updated as affected by the policy
-		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *kuadrantv1alpha1.TLSPolicy, routeNames ...string) func() bool {
+		policyAcceptedAndTargetsAffected := func(ctx context.Context, policy *kuadrantv1.TLSPolicy, routeNames ...string) func() bool {
 			return func() bool {
 				policyKey := client.ObjectKeyFromObject(policy)
 				if !isTLSPolicyAccepted(ctx, policyKey) {

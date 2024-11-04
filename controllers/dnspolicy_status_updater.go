@@ -19,7 +19,7 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -37,7 +37,7 @@ func (r *DNSPolicyStatusUpdater) Subscription() controller.Subscription {
 		ReconcileFunc: r.updateStatus,
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
-			{Kind: &kuadrantv1alpha1.DNSPolicyGroupKind},
+			{Kind: &kuadrantv1.DNSPolicyGroupKind},
 			{Kind: &DNSRecordGroupKind},
 		},
 	}
@@ -65,7 +65,7 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 		}
 
 		// copy initial conditions, otherwise status will always be updated
-		newStatus := &kuadrantv1alpha1.DNSPolicyStatus{
+		newStatus := &kuadrantv1.DNSPolicyStatus{
 			Conditions:         slices.Clone(policy.Status.Conditions),
 			ObservedGeneration: policy.Status.ObservedGeneration,
 		}
@@ -112,7 +112,7 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 			continue
 		}
 
-		_, err = r.client.Resource(kuadrantv1alpha1.DNSPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+		_, err = r.client.Resource(kuadrantv1.DNSPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
 		if err != nil {
 			pLogger.Error(err, "unable to update status for policy")
 		}
@@ -123,7 +123,7 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 	return nil
 }
 
-func enforcedCondition(records []*kuadrantdnsv1alpha1.DNSRecord, dnsPolicy *kuadrantv1alpha1.DNSPolicy) *metav1.Condition {
+func enforcedCondition(records []*kuadrantdnsv1alpha1.DNSRecord, dnsPolicy *kuadrantv1.DNSPolicy) *metav1.Condition {
 	// there are no controlled DNS records present
 	if len(records) == 0 {
 		cond := kuadrant.EnforcedCondition(dnsPolicy, nil, true)
@@ -138,7 +138,7 @@ func enforcedCondition(records []*kuadrantdnsv1alpha1.DNSRecord, dnsPolicy *kuad
 
 	// if there are records and none of the records are ready
 	if len(records) > 0 && len(notReadyRecords) == len(records) {
-		return kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(kuadrantv1alpha1.DNSPolicyGroupKind.Kind, errors.New("policy is not enforced on any DNSRecord: not a single DNSRecord is ready")), false)
+		return kuadrant.EnforcedCondition(dnsPolicy, kuadrant.NewErrUnknown(kuadrantv1.DNSPolicyGroupKind.Kind, errors.New("policy is not enforced on any DNSRecord: not a single DNSRecord is ready")), false)
 	}
 
 	// some of the records are not ready
@@ -157,7 +157,7 @@ func enforcedCondition(records []*kuadrantdnsv1alpha1.DNSRecord, dnsPolicy *kuad
 
 var NegativePolarityConditions []string
 
-func propagateRecordConditions(records []*kuadrantdnsv1alpha1.DNSRecord, policyStatus *kuadrantv1alpha1.DNSPolicyStatus) {
+func propagateRecordConditions(records []*kuadrantdnsv1alpha1.DNSRecord, policyStatus *kuadrantv1.DNSPolicyStatus) {
 	//reset conditions
 	policyStatus.RecordConditions = map[string][]metav1.Condition{}
 

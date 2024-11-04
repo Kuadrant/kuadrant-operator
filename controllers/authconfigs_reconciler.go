@@ -65,7 +65,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	defer logger.V(1).Info("finished reconciling authconfig objects")
 
 	desiredAuthConfigs := make(map[k8stypes.NamespacedName]struct{})
-	var modifiedAuthConfigs []string
+	modifiedAuthConfigs := []string{}
 
 	for pathID, effectivePolicy := range effectivePoliciesMap {
 		_, _, _, httpRoute, httpRouteRule, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
@@ -130,7 +130,9 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		}
 	}
 
-	state.Store(StateModifiedAuthConfigs, modifiedAuthConfigs)
+	if len(modifiedAuthConfigs) > 0 {
+		state.Store(StateModifiedAuthConfigs, modifiedAuthConfigs)
+	}
 
 	// cleanup authconfigs that are not in the effective policies
 	staleAuthConfigs := topology.Objects().Items(func(o machinery.Object) bool {

@@ -8,6 +8,7 @@ linters:
     - revive
     - gosec
     - stylecheck
+    - prealloc
     - tparallel
     - unconvert
     - unparam
@@ -15,7 +16,6 @@ linters:
     - goimports
   disable:
     - errcheck
-    - prealloc
 
 issues:
   exclude-rules:

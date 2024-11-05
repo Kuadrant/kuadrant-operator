@@ -9,7 +9,6 @@ require (
 	github.com/go-logr/logr v1.4.2
 	github.com/goccy/go-yaml v1.12.0
 	github.com/google/go-cmp v0.6.0
-	github.com/google/uuid v1.6.0
 	github.com/kuadrant/authorino v0.18.0
 	github.com/kuadrant/authorino-operator v0.11.1
 	github.com/kuadrant/dns-operator v0.0.0-20241018131559-f2ce8b6aaaef
@@ -92,6 +91,7 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/pprof v0.0.0-20240827171923-fa2c70bbbfe5 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gorilla/websocket v1.5.1 // indirect
 	github.com/gosuri/uitable v0.0.4 // indirect

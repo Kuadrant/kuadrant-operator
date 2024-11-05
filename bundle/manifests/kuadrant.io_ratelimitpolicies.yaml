@@ -110,25 +110,15 @@ spec:
                               duration:
                                 description: Duration defines the time period for
                                   which the Limit specified above applies.
-                                type: integer
+                                pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+                                type: string
                               limit:
                                 description: Limit defines the max value allowed for
                                   a given period of time
                                 type: integer
-                              unit:
-                                description: |-
-                                  Duration defines the time uni
-                                  Possible values are: "second", "minute", "hour", "day"
-                                enum:
-                                - second
-                                - minute
-                                - hour
-                                - day
-                                type: string
                             required:
                             - duration
                             - limit
-                            - unit
                             type: object
                           type: array
                         when:
@@ -198,25 +188,15 @@ spec:
                           duration:
                             description: Duration defines the time period for which
                               the Limit specified above applies.
-                            type: integer
+                            pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+                            type: string
                           limit:
                             description: Limit defines the max value allowed for a
                               given period of time
                             type: integer
-                          unit:
-                            description: |-
-                              Duration defines the time uni
-                              Possible values are: "second", "minute", "hour", "day"
-                            enum:
-                            - second
-                            - minute
-                            - hour
-                            - day
-                            type: string
                         required:
                         - duration
                         - limit
-                        - unit
                         type: object
                       type: array
                     when:
@@ -273,25 +253,15 @@ spec:
                               duration:
                                 description: Duration defines the time period for
                                   which the Limit specified above applies.
-                                type: integer
+                                pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+                                type: string
                               limit:
                                 description: Limit defines the max value allowed for
                                   a given period of time
                                 type: integer
-                              unit:
-                                description: |-
-                                  Duration defines the time uni
-                                  Possible values are: "second", "minute", "hour", "day"
-                                enum:
-                                - second
-                                - minute
-                                - hour
-                                - day
-                                type: string
                             required:
                             - duration
                             - limit
-                            - unit
                             type: object
                           type: array
                         when:

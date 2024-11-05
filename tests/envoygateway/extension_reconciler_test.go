@@ -117,7 +117,7 @@ var _ = Describe("wasm controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: "minute",
+										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -184,9 +184,9 @@ var _ = Describe("wasm controller", func() {
 						Name: actionSetName,
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
-							Predicates: []string{
-								"request.method == 'GET'",
-								"request.url_path.startsWith('/toy')",
+							Predicates: kuadrantv1beta3.WhenPredicates{
+								kuadrantv1beta3.Predicate("request.method == 'GET'"),
+								kuadrantv1beta3.Predicate("request.url_path.startsWith('/toy')"),
 							},
 						},
 						Actions: []wasm.Action{
@@ -195,8 +195,8 @@ var _ = Describe("wasm controller", func() {
 								Scope:       controllers.LimitsNamespaceFromRoute(gwRoute),
 								Data: []wasm.DataType{
 									{
-										Value: &wasm.Static{
-											Static: wasm.StaticSpec{
+										Value: &wasm.Expression{
+											ExpressionItem: wasm.ExpressionItem{
 												Key:   controllers.LimitNameToLimitadorIdentifier(gwPolicyKey, "l1"),
 												Value: "1",
 											},
@@ -282,7 +282,7 @@ var _ = Describe("wasm controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: "minute",
+										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -348,9 +348,9 @@ var _ = Describe("wasm controller", func() {
 						Name: actionSetName,
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
-							Predicates: []string{
-								"request.method == 'GET'",
-								"request.url_path.startsWith('/toy')",
+							Predicates: kuadrantv1beta3.WhenPredicates{
+								kuadrantv1beta3.Predicate("request.method == 'GET'"),
+								kuadrantv1beta3.Predicate("request.url_path.startsWith('/toy')"),
 							},
 						},
 						Actions: []wasm.Action{
@@ -359,8 +359,8 @@ var _ = Describe("wasm controller", func() {
 								Scope:       controllers.LimitsNamespaceFromRoute(gwRoute),
 								Data: []wasm.DataType{
 									{
-										Value: &wasm.Static{
-											Static: wasm.StaticSpec{
+										Value: &wasm.Expression{
+											ExpressionItem: wasm.ExpressionItem{
 												Key:   controllers.LimitNameToLimitadorIdentifier(routePolicyKey, "l1"),
 												Value: "1",
 											},

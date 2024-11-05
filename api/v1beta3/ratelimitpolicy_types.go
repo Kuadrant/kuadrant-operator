@@ -17,6 +17,8 @@ limitations under the License.
 package v1beta3
 
 import (
+	"time"
+
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -343,14 +345,19 @@ func (l *Limit) WithSource(source string) kuadrantv1.MergeableRule {
 	return l
 }
 
-// +kubebuilder:validation:Enum:=second;minute;hour;day
-type TimeUnit string
+// Duration follows Gateway API Duration format: https://gateway-api.sigs.k8s.io/geps/gep-2257/?h=duration#gateway-api-duration-format
+// MUST match the regular expression ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+// MUST be interpreted as specified by Golang's time.ParseDuration
+// +kubebuilder:validation:Pattern=`^([0-9]{1,5}(h|m|s|ms)){1,4}$`
+type Duration string
 
-var timeUnitMap = map[TimeUnit]int{
-	TimeUnit("second"): 1,
-	TimeUnit("minute"): 60,
-	TimeUnit("hour"):   60 * 60,
-	TimeUnit("day"):    60 * 60 * 24,
+func (d Duration) Seconds() int {
+	duration, err := time.ParseDuration(string(d))
+	if err != nil {
+		return 0
+	}
+
+	return int(duration.Seconds())
 }
 
 // Rate defines the actual rate limit that will be used when there is a match
@@ -359,25 +366,13 @@ type Rate struct {
 	Limit int `json:"limit"`
 
 	// Duration defines the time period for which the Limit specified above applies.
-	Duration int `json:"duration"`
-
-	// Duration defines the time uni
-	// Possible values are: "second", "minute", "hour", "day"
-	Unit TimeUnit `json:"unit"`
+	Duration Duration `json:"duration"`
 }
 
 // ToSeconds converts the rate to to Limitador's Limit format (maxValue, seconds)
 func (r Rate) ToSeconds() (maxValue, seconds int) {
 	maxValue = r.Limit
-	seconds = 0
-
-	if tmpSecs, ok := timeUnitMap[r.Unit]; ok && r.Duration > 0 {
-		seconds = tmpSecs * r.Duration
-	}
-
-	if r.Duration < 0 {
-		seconds = 0
-	}
+	seconds = r.Duration.Seconds()
 
 	if r.Limit < 0 {
 		maxValue = 0

@@ -116,7 +116,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -248,7 +248,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"users": {
 								Rates: []kuadrantv1beta3.Rate{
-									{Limit: 50, Duration: 1, Unit: kuadrantv1beta3.TimeUnit("minute")},
+									{Limit: 50, Duration: kuadrantv1beta3.Duration("1m")},
 								},
 								Counters: []kuadrantv1beta3.Counter{{Expression: "auth.identity.username"}},
 								//When:     kuadrantv1beta3.WhenPredicates{kuadrantv1beta3.Predicate("auth.identity.group != admin")},
@@ -256,8 +256,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							},
 							"all": {
 								Rates: []kuadrantv1beta3.Rate{
-									{Limit: 5, Duration: 1, Unit: kuadrantv1beta3.TimeUnit("minute")},
-									{Limit: 100, Duration: 12, Unit: kuadrantv1beta3.TimeUnit("hour")},
+									{Limit: 5, Duration: kuadrantv1beta3.Duration("1m")},
+									{Limit: 100, Duration: kuadrantv1beta3.Duration("12h")},
 								},
 							},
 						},
@@ -645,7 +645,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -750,7 +750,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -833,7 +833,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -1067,7 +1067,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -1385,7 +1385,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -1651,7 +1651,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							"gatewaylimit": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -1770,7 +1770,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							"routelimit": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 4, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										Limit: 4, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -1938,7 +1938,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							"gatewaylimit": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -1971,7 +1971,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							"routelimit": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 4, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										Limit: 4, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -2251,7 +2251,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -2433,7 +2433,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								"gateway": {
 									Rates: []kuadrantv1beta3.Rate{
 										{
-											Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+											Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
 										},
 									},
 								},
@@ -2477,7 +2477,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							"route": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 10, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+										Limit: 10, Duration: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},

@@ -71,7 +71,7 @@ func LinkListenerToCertificateFunc(objs controller.Store) machinery.LinkFunc {
 						} else {
 							certRefNS = string(*certRef.Namespace)
 						}
-						if certRefNS == cert.GetNamespace() && string(certRef.Name) == cert.GetName() {
+						if certRefNS == cert.GetNamespace() && certName(l.Gateway.Name, l.Name) == cert.GetName() {
 							return true
 						}
 					}

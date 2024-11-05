@@ -184,17 +184,9 @@ var _ = Describe("wasm controller", func() {
 						Name: actionSetName,
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
-							Matches: []wasm.Predicate{
-								{
-									Selector: "request.method",
-									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-									Value:    "GET",
-								},
-								{
-									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/toy",
-								},
+							Predicates: []string{
+								"request.method == 'GET'",
+								"request.url_path.startsWith('/toy')",
 							},
 						},
 						Actions: []wasm.Action{
@@ -356,17 +348,9 @@ var _ = Describe("wasm controller", func() {
 						Name: actionSetName,
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
-							Matches: []wasm.Predicate{
-								{
-									Selector: "request.method",
-									Operator: wasm.PatternOperator(kuadrantv1beta3.EqualOperator),
-									Value:    "GET",
-								},
-								{
-									Selector: "request.url_path",
-									Operator: wasm.PatternOperator(kuadrantv1beta3.StartsWithOperator),
-									Value:    "/toy",
-								},
+							Predicates: []string{
+								"request.method == 'GET'",
+								"request.url_path.startsWith('/toy')",
 							},
 						},
 						Actions: []wasm.Action{

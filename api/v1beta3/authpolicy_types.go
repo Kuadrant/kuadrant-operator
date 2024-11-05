@@ -22,7 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
-	authorinov1beta2 "github.com/kuadrant/authorino/api/v1beta2"
+	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -431,7 +431,7 @@ type AuthSchemeSpec struct {
 }
 
 type MergeablePatternExpressions struct {
-	authorinov1beta2.PatternExpressions `json:"allOf"`
+	authorinov1beta3.PatternExpressions `json:"allOf"`
 	Source                              string `json:"-"`
 }
 
@@ -443,7 +443,7 @@ func (r *MergeablePatternExpressions) WithSource(source string) kuadrantv1.Merge
 }
 
 type MergeablePatternExpressionOrRef struct {
-	authorinov1beta2.PatternExpressionOrRef `json:",inline"`
+	authorinov1beta3.PatternExpressionOrRef `json:",inline"`
 	Source                                  string `json:"-"`
 }
 
@@ -456,7 +456,7 @@ func (r *MergeablePatternExpressionOrRef) WithSource(source string) kuadrantv1.M
 func (r *MergeablePatternExpressionOrRef) ToWhenConditions(namedPatterns map[string]MergeablePatternExpressions) []WhenCondition {
 	if ref := r.PatternRef.Name; ref != "" {
 		if pattern, ok := namedPatterns[ref]; ok {
-			return lo.Map(pattern.PatternExpressions, func(p authorinov1beta2.PatternExpression, _ int) WhenCondition {
+			return lo.Map(pattern.PatternExpressions, func(p authorinov1beta3.PatternExpression, _ int) WhenCondition {
 				return WhenCondition{
 					Selector: ContextSelector(p.Selector),
 					Operator: WhenConditionOperator(p.Operator),
@@ -467,7 +467,7 @@ func (r *MergeablePatternExpressionOrRef) ToWhenConditions(namedPatterns map[str
 	}
 
 	if allOf := r.All; len(allOf) > 0 {
-		return lo.Map(allOf, func(p authorinov1beta2.UnstructuredPatternExpressionOrRef, _ int) WhenCondition {
+		return lo.Map(allOf, func(p authorinov1beta3.UnstructuredPatternExpressionOrRef, _ int) WhenCondition {
 			return WhenCondition{
 				Selector: ContextSelector(p.Selector),
 				Operator: WhenConditionOperator(p.Operator),
@@ -488,7 +488,7 @@ func (r *MergeablePatternExpressionOrRef) ToWhenConditions(namedPatterns map[str
 }
 
 type MergeableAuthenticationSpec struct {
-	authorinov1beta2.AuthenticationSpec `json:",inline"`
+	authorinov1beta3.AuthenticationSpec `json:",inline"`
 	Source                              string `json:"-"`
 }
 
@@ -500,7 +500,7 @@ func (r *MergeableAuthenticationSpec) WithSource(source string) kuadrantv1.Merge
 }
 
 type MergeableMetadataSpec struct {
-	authorinov1beta2.MetadataSpec `json:",inline"`
+	authorinov1beta3.MetadataSpec `json:",inline"`
 	Source                        string `json:"-"`
 }
 
@@ -512,7 +512,7 @@ func (r *MergeableMetadataSpec) WithSource(source string) kuadrantv1.MergeableRu
 }
 
 type MergeableAuthorizationSpec struct {
-	authorinov1beta2.AuthorizationSpec `json:",inline"`
+	authorinov1beta3.AuthorizationSpec `json:",inline"`
 	Source                             string `json:"-"`
 }
 
@@ -544,7 +544,7 @@ type MergeableResponseSpec struct {
 }
 
 type MergeableDenyWithSpec struct {
-	authorinov1beta2.DenyWithSpec `json:",inline"`
+	authorinov1beta3.DenyWithSpec `json:",inline"`
 	Source                        string `json:"-"`
 }
 
@@ -564,7 +564,7 @@ type MergeableWrappedSuccessResponseSpec struct {
 }
 
 type MergeableHeaderSuccessResponseSpec struct {
-	authorinov1beta2.HeaderSuccessResponseSpec `json:",inline"`
+	authorinov1beta3.HeaderSuccessResponseSpec `json:",inline"`
 	Source                                     string `json:"-"`
 }
 
@@ -576,7 +576,7 @@ func (r *MergeableHeaderSuccessResponseSpec) WithSource(source string) kuadrantv
 }
 
 type MergeableSuccessResponseSpec struct {
-	authorinov1beta2.SuccessResponseSpec `json:",inline"`
+	authorinov1beta3.SuccessResponseSpec `json:",inline"`
 	Source                               string `json:"-"`
 }
 
@@ -588,7 +588,7 @@ func (r *MergeableSuccessResponseSpec) WithSource(source string) kuadrantv1.Merg
 }
 
 type MergeableCallbackSpec struct {
-	authorinov1beta2.CallbackSpec `json:",inline"`
+	authorinov1beta3.CallbackSpec `json:",inline"`
 	Source                        string `json:"-"`
 }
 

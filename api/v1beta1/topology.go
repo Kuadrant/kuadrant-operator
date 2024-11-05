@@ -2,7 +2,7 @@ package v1beta1
 
 import (
 	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
-	authorinov1beta2 "github.com/kuadrant/authorino/api/v1beta2"
+	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -15,12 +15,12 @@ var (
 	KuadrantGroupKind   = schema.GroupKind{Group: GroupVersion.Group, Kind: "Kuadrant"}
 	LimitadorGroupKind  = schema.GroupKind{Group: limitadorv1alpha1.GroupVersion.Group, Kind: "Limitador"}
 	AuthorinoGroupKind  = schema.GroupKind{Group: authorinooperatorv1beta1.GroupVersion.Group, Kind: "Authorino"}
-	AuthConfigGroupKind = schema.GroupKind{Group: authorinov1beta2.GroupVersion.Group, Kind: "AuthConfig"}
+	AuthConfigGroupKind = schema.GroupKind{Group: authorinov1beta3.GroupVersion.Group, Kind: "AuthConfig"}
 
 	KuadrantsResource   = GroupVersion.WithResource("kuadrants")
 	LimitadorsResource  = limitadorv1alpha1.GroupVersion.WithResource("limitadors")
 	AuthorinosResource  = authorinooperatorv1beta1.GroupVersion.WithResource("authorinos")
-	AuthConfigsResource = authorinov1beta2.GroupVersion.WithResource("authconfigs")
+	AuthConfigsResource = authorinov1beta3.GroupVersion.WithResource("authconfigs")
 
 	AuthConfigHTTPRouteRuleAnnotation = machinery.HTTPRouteRuleGroupKind.String()
 )
@@ -86,7 +86,7 @@ func LinkHTTPRouteRuleToAuthConfig(objs controller.Store) machinery.LinkFunc {
 		To:   AuthConfigGroupKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			return lo.FilterMap(httpRouteRules, func(httpRouteRule *machinery.HTTPRouteRule, _ int) (machinery.Object, bool) {
-				authConfig := child.(*controller.RuntimeObject).Object.(*authorinov1beta2.AuthConfig)
+				authConfig := child.(*controller.RuntimeObject).Object.(*authorinov1beta3.AuthConfig)
 				annotations := authConfig.GetAnnotations()
 				return httpRouteRule, annotations != nil && annotations[AuthConfigHTTPRouteRuleAnnotation] == httpRouteRule.GetLocator()
 			})

@@ -154,7 +154,7 @@ func wasmActionFromLimit(limit *kuadrantv1beta3.Limit, limitIdentifier, scope st
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       scope,
 	}
-	if conditions := wasm.PredicatesFromWhenConditions(limit.When...); len(conditions) > 0 {
+	if conditions := wasm.ConditionsFromWhenConditions(limit.When...); len(conditions) > 0 {
 		action.Conditions = conditions
 	}
 	if data := wasmDataFromLimit(limitIdentifier, limit); len(data) > 0 {

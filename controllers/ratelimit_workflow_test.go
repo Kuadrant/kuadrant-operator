@@ -99,7 +99,7 @@ func TestWasmActionFromLimit(t *testing.T) {
 		{
 			name: "limit with counter qualifiers",
 			limit: &kuadrantv1beta3.Limit{
-				Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
+				Counters: []kuadrantv1beta3.Counter{{Expression: "auth.identity.username"}},
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
@@ -129,7 +129,7 @@ func TestWasmActionFromLimit(t *testing.T) {
 		{
 			name: "limit with counter qualifiers and when predicates",
 			limit: &kuadrantv1beta3.Limit{
-				Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
+				Counters: []kuadrantv1beta3.Counter{{Expression: "auth.identity.username"}},
 				When:     kuadrantv1beta3.WhenPredicates{"auth.identity.group != admin"},
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",

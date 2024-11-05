@@ -81,18 +81,24 @@ spec:
                       properties:
                         counters:
                           description: |-
-                            Counters defines additional rate limit counters based on context qualifiers and well known selectors
+                            Counters defines additional rate limit counters based on CEL expressions which can reference well known selectors
                             TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
                           items:
-                            description: |-
-                              ContextSelector defines one item from the well known attributes
-                              Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
-                              Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-                              They are named by a dot-separated path (e.g. request.path)
-                              Example: "request.path" -> The path portion of the URL
-                            maxLength: 253
-                            minLength: 1
-                            type: string
+                            properties:
+                              expression:
+                                description: |-
+                                  Expression defines one CEL expression
+                                  Expression can use well known attributes
+                                  Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                                  Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                                  They are named by a dot-separated path (e.g. request.path)
+                                  Example: "request.path" -> The path portion of the URL
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                            required:
+                            - expression
+                            type: object
                           type: array
                         rates:
                           description: Rates holds the list of limit rates
@@ -163,18 +169,24 @@ spec:
                   properties:
                     counters:
                       description: |-
-                        Counters defines additional rate limit counters based on context qualifiers and well known selectors
+                        Counters defines additional rate limit counters based on CEL expressions which can reference well known selectors
                         TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
                       items:
-                        description: |-
-                          ContextSelector defines one item from the well known attributes
-                          Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
-                          Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-                          They are named by a dot-separated path (e.g. request.path)
-                          Example: "request.path" -> The path portion of the URL
-                        maxLength: 253
-                        minLength: 1
-                        type: string
+                        properties:
+                          expression:
+                            description: |-
+                              Expression defines one CEL expression
+                              Expression can use well known attributes
+                              Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                              Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                              They are named by a dot-separated path (e.g. request.path)
+                              Example: "request.path" -> The path portion of the URL
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - expression
+                        type: object
                       type: array
                     rates:
                       description: Rates holds the list of limit rates
@@ -232,18 +244,24 @@ spec:
                       properties:
                         counters:
                           description: |-
-                            Counters defines additional rate limit counters based on context qualifiers and well known selectors
+                            Counters defines additional rate limit counters based on CEL expressions which can reference well known selectors
                             TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
                           items:
-                            description: |-
-                              ContextSelector defines one item from the well known attributes
-                              Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
-                              Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-                              They are named by a dot-separated path (e.g. request.path)
-                              Example: "request.path" -> The path portion of the URL
-                            maxLength: 253
-                            minLength: 1
-                            type: string
+                            properties:
+                              expression:
+                                description: |-
+                                  Expression defines one CEL expression
+                                  Expression can use well known attributes
+                                  Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                                  Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                                  They are named by a dot-separated path (e.g. request.path)
+                                  Example: "request.path" -> The path portion of the URL
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                            required:
+                            - expression
+                            type: object
                           type: array
                         rates:
                           description: Rates holds the list of limit rates

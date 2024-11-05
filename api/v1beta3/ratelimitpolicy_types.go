@@ -297,6 +297,10 @@ func (w *WhenPredicatesMergeableRule) WithSource(source string) kuadrantv1.Merge
 	return w
 }
 
+type Counter struct {
+	Expression Expression `json:"expression"`
+}
+
 // Limit represents a complete rate limit configuration
 type Limit struct {
 	// When holds a list of "limist-level" `Predicate`s
@@ -304,10 +308,10 @@ type Limit struct {
 	// +optional
 	When WhenPredicates `json:"when,omitempty"`
 
-	// Counters defines additional rate limit counters based on context qualifiers and well known selectors
+	// Counters defines additional rate limit counters based on CEL expressions which can reference well known selectors
 	// TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
 	// +optional
-	Counters []ContextSelector `json:"counters,omitempty"`
+	Counters []Counter `json:"counters,omitempty"`
 
 	// Rates holds the list of limit rates
 	// +optional
@@ -321,7 +325,7 @@ func (l Limit) CountersAsStringList() []string {
 	if len(l.Counters) == 0 {
 		return nil
 	}
-	return utils.Map(l.Counters, func(counter ContextSelector) string { return string(counter) })
+	return utils.Map(l.Counters, func(counter Counter) string { return string(counter.Expression) })
 }
 
 var _ kuadrantv1.MergeableRule = &Limit{}
@@ -382,6 +386,8 @@ func (r Rate) ToSeconds() (maxValue, seconds int) {
 	return
 }
 
+// TODO(eastizle): WhenConditionn structure must be deleted when authpolicy type no longer references to it
+
 // WhenCondition defines semantics for matching an HTTP request based on conditions
 // https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
 type WhenCondition struct {
@@ -397,6 +403,8 @@ type WhenCondition struct {
 	Value string `json:"value"`
 }
 
+// TODO(eastizle): ContextSelector structure must be deleted when authpolicy type no longer references to it
+
 // ContextSelector defines one item from the well known attributes
 // Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
 // Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
@@ -405,6 +413,16 @@ type WhenCondition struct {
 // +kubebuilder:validation:MinLength=1
 // +kubebuilder:validation:MaxLength=253
 type ContextSelector string
+
+// Expression defines one CEL expression
+// Expression can use well known attributes
+// Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+// Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+// They are named by a dot-separated path (e.g. request.path)
+// Example: "request.path" -> The path portion of the URL
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=253
+type Expression string
 
 // +kubebuilder:validation:Enum:=eq;neq;startswith;endswith;incl;excl;matches
 type WhenConditionOperator string

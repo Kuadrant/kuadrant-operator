@@ -193,8 +193,8 @@ func wasmDataFromLimit(limitIdentifier string, limit *kuadrantv1beta3.Limit) []w
 			wasm.DataType{
 				Value: &wasm.Expression{
 					ExpressionItem: wasm.ExpressionItem{
-						Key:   string(counter),
-						Value: string(counter),
+						Key:   string(counter.Expression),
+						Value: string(counter.Expression),
 					},
 				},
 			},

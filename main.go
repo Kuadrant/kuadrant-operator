@@ -55,7 +55,6 @@ import (
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/version"
@@ -170,20 +169,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	authPolicyBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("authpolicy"),
-	)
-
-	if err = (&controllers.AuthPolicyReconciler{
-		TargetRefReconciler: reconcilers.TargetRefReconciler{Client: mgr.GetClient()},
-		BaseReconciler:      authPolicyBaseReconciler,
-		AffectedPolicyMap:   kuadrant.NewAffectedPolicyMap(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicy")
-		os.Exit(1)
-	}
-
 	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("kuadrant").WithName("gateway"),
@@ -196,17 +181,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	authPolicyIstioAuthorizationPolicyReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("authpolicy").WithName("istioauthorizationpolicy"),
-	)
-	if err = (&controllers.AuthPolicyIstioAuthorizationPolicyReconciler{
-		BaseReconciler: authPolicyIstioAuthorizationPolicyReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicyIstioAuthorizationPolicy")
-		os.Exit(1)
-	}
-
 	targetStatusBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("targetstatus"),
@@ -215,28 +189,6 @@ func main() {
 		BaseReconciler: targetStatusBaseReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "TargetStatusReconciler")
-		os.Exit(1)
-	}
-
-	authPolicyEnvoySecurityPolicyReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("authpolicy").WithName("securitypolicy"),
-	)
-	if err = (&controllers.AuthPolicyEnvoySecurityPolicyReconciler{
-		BaseReconciler: authPolicyEnvoySecurityPolicyReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "AuthPolicyEnvoySecurityPolicy")
-		os.Exit(1)
-	}
-
-	envoySecurityPolicyReferenceGrantReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("authpolicy").WithName("referencegrant"),
-	)
-	if err = (&controllers.EnvoySecurityPolicyReferenceGrantReconciler{
-		BaseReconciler: envoySecurityPolicyReferenceGrantReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "EnvoySecurityPolicyReferenceGrant")
 		os.Exit(1)
 	}
 

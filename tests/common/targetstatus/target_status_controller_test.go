@@ -132,17 +132,23 @@ var _ = Describe("Target status reconciler", func() {
 					Namespace: testNamespace,
 				},
 				Spec: kuadrantv1beta3.AuthPolicySpec{
-					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReference{
-						Group: gatewayapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  TestHTTPRouteName,
+					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+							Group: gatewayapiv1.GroupName,
+							Kind:  "HTTPRoute",
+							Name:  TestHTTPRouteName,
+						},
 					},
-					Defaults: &kuadrantv1beta3.AuthPolicyCommonSpec{
-						AuthScheme: &kuadrantv1beta3.AuthSchemeSpec{
-							Authentication: map[string]authorinoapi.AuthenticationSpec{
-								"anonymous": {
-									AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
-										AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
+					Defaults: &kuadrantv1beta3.MergeableAuthPolicySpec{
+						AuthPolicySpecProper: kuadrantv1beta3.AuthPolicySpecProper{
+							AuthScheme: &kuadrantv1beta3.AuthSchemeSpec{
+								Authentication: map[string]kuadrantv1beta3.MergeableAuthenticationSpec{
+									"anonymous": {
+										AuthenticationSpec: authorinoapi.AuthenticationSpec{
+											AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
+												AnonymousAccess: &authorinoapi.AnonymousAccessSpec{},
+											},
+										},
 									},
 								},
 							},
@@ -163,7 +169,7 @@ var _ = Describe("Target status reconciler", func() {
 				if !tests.IsAuthPolicyAccepted(ctx, testClient(), policy)() {
 					return false
 				}
-				return targetsAffected(ctx, client.ObjectKeyFromObject(policy), policyAffectedCondition, policy.Spec.TargetRef, routeNames...)
+				return targetsAffected(ctx, client.ObjectKeyFromObject(policy), policyAffectedCondition, policy.GetTargetRef(), routeNames...)
 			}
 		}
 
@@ -214,10 +220,12 @@ var _ = Describe("Target status reconciler", func() {
 		It("adds PolicyAffected status condition to the targeted gateway and routes", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gateway-auth"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "Gateway",
-					Name:  TestGatewayName,
+				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						Group: gatewayapiv1.GroupName,
+						Kind:  "Gateway",
+						Name:  TestGatewayName,
+					},
 				}
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
@@ -227,10 +235,12 @@ var _ = Describe("Target status reconciler", func() {
 		It("removes PolicyAffected status condition from the targeted gateway and routes when the policy is deleted", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gateway-auth"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "Gateway",
-					Name:  TestGatewayName,
+				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						Group: gatewayapiv1.GroupName,
+						Kind:  "Gateway",
+						Name:  TestGatewayName,
+					},
 				}
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
@@ -266,10 +276,12 @@ var _ = Describe("Target status reconciler", func() {
 
 			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Name = "gateway-auth"
-				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
-					Group: gatewayapiv1.GroupName,
-					Kind:  "Gateway",
-					Name:  TestGatewayName,
+				policy.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+						Group: gatewayapiv1.GroupName,
+						Kind:  "Gateway",
+						Name:  TestGatewayName,
+					},
 				}
 			})
 			Expect(k8sClient.Create(ctx, gatewayPolicy)).To(Succeed())

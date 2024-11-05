@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
@@ -31,19 +30,31 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
-type rateLimitPolicyStatusUpdater struct {
+type RateLimitPolicyStatusUpdater struct {
 	client *dynamic.DynamicClient
 }
 
-func (r *rateLimitPolicyStatusUpdater) Subscription() controller.Subscription {
+// RateLimitPolicyStatusUpdater subscribe to events with potential impact on the status of RateLimitPolicy resources
+func (r *RateLimitPolicyStatusUpdater) Subscription() controller.Subscription {
 	return controller.Subscription{
 		ReconcileFunc: r.UpdateStatus,
-		Events:        rateLimitEventMatchers,
+		Events: []controller.ResourceEventMatcher{
+			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
+			{Kind: &machinery.GatewayClassGroupKind},
+			{Kind: &machinery.GatewayGroupKind},
+			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1beta1.LimitadorGroupKind},
+			{Kind: &kuadrantistio.EnvoyFilterGroupKind},
+			{Kind: &kuadrantistio.WasmPluginGroupKind},
+			{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
+			{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
+		},
 	}
 }
 
-func (r *rateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("rateLimitPolicyStatusUpdater")
+func (r *RateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("RateLimitPolicyStatusUpdater")
 
 	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1beta3.RateLimitPolicy, bool) {
 		p, ok := item.(*kuadrantv1beta3.RateLimitPolicy)
@@ -52,8 +63,8 @@ func (r *rateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 
 	policyAcceptedFunc := rateLimitPolicyAcceptedStatusFunc(state)
 
-	logger.V(1).Info("updating rate limit policy statuses", "policies", len(policies))
-	defer logger.V(1).Info("finished updating rate limit policy statuses")
+	logger.V(1).Info("updating ratelimitpolicy statuses", "policies", len(policies))
+	defer logger.V(1).Info("finished updating ratelimitpolicy statuses")
 
 	for _, policy := range policies {
 		if policy.GetDeletionTimestamp() != nil {
@@ -102,7 +113,7 @@ func (r *rateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 	return nil
 }
 
-func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.RateLimitPolicy, topology *machinery.Topology, state *sync.Map) *metav1.Condition {
+func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.RateLimitPolicy, topology *machinery.Topology, state *sync.Map) *metav1.Condition {
 	policyKind := kuadrantv1beta3.RateLimitPolicyGroupKind.Kind
 
 	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
@@ -110,10 +121,15 @@ func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrUnknown(policyKind, ErrMissingStateEffectiveRateLimitPolicies), false)
 	}
 
+	type affectedGateway struct {
+		gateway      *machinery.Gateway
+		gatewayClass *machinery.GatewayClass
+	}
+
 	// check the state of the rules of the policy in the effective policies
 	policyRuleKeys := lo.Keys(policy.Rules())
-	affectedPaths := map[string][][]machinery.Targetable{} // policyRuleKey → topological paths affected by the policy rule
-	overridingPolicies := map[string][]string{}            // policyRuleKey → locators of policies overriding the policy rule
+	overridingPolicies := map[string][]string{}      // policyRuleKey → locators of policies overriding the policy rule
+	affectedGateways := map[string]affectedGateway{} // Gateway locator → {GatewayClass, Gateway}
 	for _, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {
 		if len(kuadrantv1.PoliciesInPath(effectivePolicy.Path, func(p machinery.Policy) bool { return p.GetLocator() == policy.GetLocator() })) == 0 {
 			continue
@@ -124,25 +140,24 @@ func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 		}
 		effectivePolicyRules := effectivePolicy.Spec.Rules()
 		for _, policyRuleKey := range policyRuleKeys {
-			if effectivePolicyRule, ok := effectivePolicyRules[policyRuleKey]; !ok || (ok && effectivePolicyRule.Source != policy.GetLocator()) {
+			if effectivePolicyRule, ok := effectivePolicyRules[policyRuleKey]; !ok || (ok && effectivePolicyRule.GetSource() != policy.GetLocator()) { // policy rule has been overridden by another policy
 				var overriddenBy string
 				if ok { // TODO(guicassolato): !ok → we cannot tell which policy is overriding the rule, this information is lost when the policy rule is dropped during an atomic override
-					overriddenBy = effectivePolicyRule.Source
+					overriddenBy = effectivePolicyRule.GetSource()
 				}
 				overridingPolicies[policyRuleKey] = append(overridingPolicies[policyRuleKey], overriddenBy)
 				continue
 			}
-			if affectedPaths[policyRuleKey] == nil {
-				affectedPaths[policyRuleKey] = [][]machinery.Targetable{}
+			// policy rule is in the effective policy, track the Gateway affected by the policy
+			affectedGateways[gateway.GetLocator()] = affectedGateway{
+				gateway:      gateway,
+				gatewayClass: gatewayClass,
 			}
-			affectedPaths[policyRuleKey] = append(affectedPaths[policyRuleKey], effectivePolicy.Path)
 		}
 	}
 
-	// no rules of the policy found in the effective policies
-	if len(affectedPaths) == 0 {
-		// no rules of the policy have been overridden by any other policy
-		if len(overridingPolicies) == 0 {
+	if len(affectedGateways) == 0 { // no rules of the policy found in the effective policies
+		if len(overridingPolicies) == 0 { // no rules of the policy have been overridden by any other policy
 			return kuadrant.EnforcedCondition(policy, kuadrant.NewErrNoRoutes(policyKind), false)
 		}
 		// all rules of the policy have been overridden by at least one other policy
@@ -168,21 +183,7 @@ func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 		}
 	}
 
-	type affectedGateway struct {
-		gateway      *machinery.Gateway
-		gatewayClass *machinery.GatewayClass
-	}
-
 	// check the status of the gateways' configuration resources
-	affectedGateways := lo.UniqBy(lo.Map(lo.Flatten(lo.Values(affectedPaths)), func(path []machinery.Targetable, _ int) affectedGateway {
-		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(path)
-		return affectedGateway{
-			gateway:      gateway,
-			gatewayClass: gatewayClass,
-		}
-	}), func(g affectedGateway) string {
-		return g.gateway.GetLocator()
-	})
 	for _, g := range affectedGateways {
 		switch g.gatewayClass.Spec.ControllerName {
 		case istioGatewayControllerName:
@@ -220,17 +221,4 @@ func (r *rateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3
 	}
 
 	return kuadrant.EnforcedCondition(policy, nil, len(overridingPolicies) == 0)
-}
-
-func gatewayComponentsToSync(gateway *machinery.Gateway, componentGroupKind schema.GroupKind, modifiedGatewayLocators any, topology *machinery.Topology, requiredCondition func(machinery.Object) bool) []string {
-	missingConditionInTopologyFunc := func() bool {
-		obj, found := lo.Find(topology.Objects().Children(gateway), func(child machinery.Object) bool {
-			return child.GroupVersionKind().GroupKind() == componentGroupKind
-		})
-		return !found || !requiredCondition(obj)
-	}
-	if (modifiedGatewayLocators != nil && lo.Contains(modifiedGatewayLocators.([]string), gateway.GetLocator())) || missingConditionInTopologyFunc() {
-		return []string{fmt.Sprintf("%s (%s/%s)", componentGroupKind.Kind, gateway.GetNamespace(), gateway.GetName())}
-	}
-	return nil
 }

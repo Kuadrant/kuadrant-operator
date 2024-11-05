@@ -8,7 +8,8 @@ import (
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
-	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
+	authorinov1beta2 "github.com/kuadrant/authorino/api/v1beta2"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
@@ -17,7 +18,6 @@ import (
 	"github.com/samber/lo"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
-	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -109,9 +109,15 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			metav1.NamespaceAll,
 		)),
 		controller.WithRunnable("authorino watcher", controller.Watch(
-			&authorinov1beta1.Authorino{},
+			&authorinooperatorv1beta1.Authorino{},
 			kuadrantv1beta1.AuthorinosResource,
 			metav1.NamespaceAll,
+		)),
+		controller.WithRunnable("authconfig watcher", controller.Watch(
+			&authorinov1beta2.AuthConfig{},
+			kuadrantv1beta1.AuthConfigsResource,
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*authorinov1beta2.AuthConfig](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 		)),
 		controller.WithPolicyKinds(
 			kuadrantv1alpha1.DNSPolicyGroupKind,
@@ -124,11 +130,13 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			ConfigMapGroupKind,
 			kuadrantv1beta1.LimitadorGroupKind,
 			kuadrantv1beta1.AuthorinoGroupKind,
+			kuadrantv1beta1.AuthConfigGroupKind,
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
 			kuadrantv1beta1.LinkKuadrantToLimitador,
 			kuadrantv1beta1.LinkKuadrantToAuthorino,
+			kuadrantv1beta1.LinkHTTPRouteRuleToAuthConfig,
 		),
 	}
 
@@ -224,15 +232,9 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() []controller.ControllerOpt
 				metav1.NamespaceAll,
 				controller.FilterResourcesByLabel[*egv1alpha1.EnvoyExtensionPolicy](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 			)),
-			controller.WithRunnable("envoysecuritypolicy watcher", controller.Watch(
-				&egv1alpha1.SecurityPolicy{},
-				envoygateway.SecurityPoliciesResource,
-				metav1.NamespaceAll,
-			)),
 			controller.WithObjectKinds(
 				envoygateway.EnvoyPatchPolicyGroupKind,
 				envoygateway.EnvoyExtensionPolicyGroupKind,
-				envoygateway.SecurityPolicyGroupKind,
 			),
 			controller.WithObjectLinks(
 				envoygateway.LinkGatewayToEnvoyPatchPolicy,
@@ -265,15 +267,9 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 				metav1.NamespaceAll,
 				controller.FilterResourcesByLabel[*istioclientgoextensionv1alpha1.WasmPlugin](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 			)),
-			controller.WithRunnable("authorizationpolicy watcher", controller.Watch(
-				&istioclientgosecurityv1beta1.AuthorizationPolicy{},
-				istio.AuthorizationPoliciesResource,
-				metav1.NamespaceAll,
-			)),
 			controller.WithObjectKinds(
 				istio.EnvoyFilterGroupKind,
 				istio.WasmPluginGroupKind,
-				istio.AuthorizationPolicyGroupKind,
 			),
 			controller.WithObjectLinks(
 				istio.LinkGatewayToEnvoyFilter,
@@ -343,8 +339,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewLimitadorReconciler(b.client).Subscription().Reconcile,
 			NewDNSWorkflow(b.client, b.manager.GetScheme()).Run,
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isCertManagerInstalled).Run,
-			NewAuthWorkflow().Run,
-			NewRateLimitWorkflow(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
+			NewDataPlanePoliciesWorkflow(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isIstioInstalled, b.isGatewayAPIInstalled).Run,
 	}

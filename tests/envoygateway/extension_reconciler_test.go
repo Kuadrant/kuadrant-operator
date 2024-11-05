@@ -168,6 +168,11 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
 				Services: map[string]wasm.Service{
+					wasm.AuthServiceName: {
+						Type:        wasm.AuthServiceType,
+						Endpoint:    common.KuadrantAuthClusterName,
+						FailureMode: wasm.FailureModeDeny,
+					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,
 						Endpoint:    common.KuadrantRateLimitClusterName,
@@ -335,6 +340,11 @@ var _ = Describe("wasm controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(existingWASMConfig).To(Equal(&wasm.Config{
 				Services: map[string]wasm.Service{
+					wasm.AuthServiceName: {
+						Type:        wasm.AuthServiceType,
+						Endpoint:    common.KuadrantAuthClusterName,
+						FailureMode: wasm.FailureModeDeny,
+					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,
 						Endpoint:    common.KuadrantRateLimitClusterName,

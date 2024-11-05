@@ -22,19 +22,27 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/ratelimit"
 )
 
-type limitadorLimitsReconciler struct {
+type LimitadorLimitsReconciler struct {
 	client *dynamic.DynamicClient
 }
 
-func (r *limitadorLimitsReconciler) Subscription() controller.Subscription {
+// LimitadorLimitsReconciler reconciles to events with impact to change the state of the Limitador custom resources regarding the definitions for the effective rate limit policies
+func (r *LimitadorLimitsReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
 		ReconcileFunc: r.Reconcile,
-		Events:        rateLimitEventMatchers,
+		Events: []controller.ResourceEventMatcher{
+			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
+			{Kind: &machinery.GatewayClassGroupKind},
+			{Kind: &machinery.GatewayGroupKind},
+			{Kind: &machinery.HTTPRouteGroupKind},
+			{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1beta1.LimitadorGroupKind},
+		},
 	}
 }
 
-func (r *limitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("limitadorLimitsReconciler")
+func (r *LimitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler")
 
 	limitador, err := GetLimitadorFromTopology(topology)
 	if err != nil {
@@ -77,31 +85,32 @@ func (r *limitadorLimitsReconciler) Reconcile(ctx context.Context, _ []controlle
 	return nil
 }
 
-func (r *limitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, state *sync.Map) ([]limitadorv1alpha1.RateLimit, error) {
-	logger := controller.LoggerFromContext(ctx).WithName("limitadorLimitsReconciler").WithName("buildLimitadorLimits")
+func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, state *sync.Map) ([]limitadorv1alpha1.RateLimit, error) {
+	logger := controller.LoggerFromContext(ctx).WithName("LimitadorLimitsReconciler").WithName("buildLimitadorLimits")
 
 	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
 	if !ok {
 		return nil, ErrMissingStateEffectiveRateLimitPolicies
 	}
+	effectivePoliciesMap := effectivePolicies.(EffectiveRateLimitPolicies)
 
-	logger.V(1).Info("building limitador limits", "effectivePolicies", len(effectivePolicies.(EffectiveRateLimitPolicies)))
+	logger.V(1).Info("building limitador limits", "effectivePolicies", len(effectivePoliciesMap))
 
 	rateLimitIndex := ratelimit.NewIndex()
 
-	for pathID, effectivePolicy := range effectivePolicies.(EffectiveRateLimitPolicies) {
+	for pathID, effectivePolicy := range effectivePoliciesMap {
 		_, _, _, httpRoute, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
 		limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
 		for limitKey, mergeableLimit := range effectivePolicy.Spec.Rules() {
 			policy, found := lo.Find(kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state)), func(p machinery.Policy) bool {
-				return p.GetLocator() == mergeableLimit.Source
+				return p.GetLocator() == mergeableLimit.GetSource()
 			})
 			if !found { // should never happen
-				logger.Error(fmt.Errorf("origin policy %s not found in path %s", mergeableLimit.Source, pathID), "failed to build limitador limit definition")
+				logger.Error(fmt.Errorf("origin policy %s not found in path %s", mergeableLimit.GetSource(), pathID), "failed to build limitador limit definition")
 				continue
 			}
 			limitIdentifier := LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
-			limit := mergeableLimit.Spec.(kuadrantv1beta3.Limit)
+			limit := mergeableLimit.GetSpec().(*kuadrantv1beta3.Limit)
 			rateLimits := lo.Map(limit.Rates, func(rate kuadrantv1beta3.Rate, _ int) limitadorv1alpha1.RateLimit {
 				maxValue, seconds := rate.ToSeconds()
 				return limitadorv1alpha1.RateLimit{

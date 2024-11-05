@@ -4,94 +4,183 @@ package wasm
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"sigs.k8s.io/yaml"
-
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 )
 
-func TestConfig(t *testing.T) {
-	testCases := []struct {
-		name           string
-		expectedConfig *Config
-		yaml           string
-	}{
-		{
-			name:           "basic example",
-			expectedConfig: testBasicConfigExample(),
-			yaml: `
-services:
-  ratelimit-service:
-    type: ratelimit
-    endpoint: kuadrant-rate-limiting-service
-    failureMode: allow
-actionSets:
-- name: rlp-ns-A/rlp-name-A
-  routeRuleConditions:
-    hostnames:
-    - '*.toystore.com'
-    - example.com
-    matches:
-    - selector: request.path
-      operator: startswith
-      value: /cars
-  actions:
-  - service: ratelimit-service
-    scope: rlp-ns-A/rlp-name-A
-    conditions:
-    - selector: source.ip
-      operator: neq
-      value: 127.0.0.1
-    data:
-    - static:
-        key: rlp-ns-A/rlp-name-A
-        value: "1"
-    - selector:
-        selector: auth.metadata.username
-`,
-		},
+func TestConfigToJSON(t *testing.T) {
+	config := testBasicConfig
+	j, err := config.ToJSON()
+	if err != nil {
+		t.Fatal(err)
 	}
 
+	convertedConfig, _ := ConfigFromJSON(j)
+
+	if !cmp.Equal(convertedConfig, testBasicConfig) {
+		diff := cmp.Diff(convertedConfig, testBasicConfig)
+		t.Fatalf("unexpected converted wasm config (-want +got):\n%s", diff)
+	}
+}
+
+func TestConfigToStruct(t *testing.T) {
+	config := testBasicConfig
+	s, err := config.ToStruct()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	convertedConfig, _ := ConfigFromStruct(s)
+
+	if !cmp.Equal(testBasicConfig, convertedConfig) {
+		diff := cmp.Diff(testBasicConfig, convertedConfig)
+		t.Fatalf("unexpected converted wasm config (-want +got):\n%s", diff)
+	}
+}
+
+func TestConfigEqual(t *testing.T) {
+	testCases := []struct {
+		name     string
+		config1  *Config
+		config2  *Config
+		expected bool
+	}{
+		{
+			name: "equal configs",
+			config1: &Config{
+				Services: map[string]Service{
+					"ratelimit-service": {
+						Type:        "ratelimit",
+						Endpoint:    "kuadrant-ratelimit-service",
+						FailureMode: "allow",
+					},
+				},
+				ActionSets: []ActionSet{
+					{
+						Name: "5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab",
+						RouteRuleConditions: RouteRuleConditions{
+							Hostnames: []string{"other.example.com"},
+							Matches: []Predicate{
+								{
+									Selector: "request.url_path",
+									Operator: "startswith",
+									Value:    "/",
+								},
+							},
+						},
+						Actions: []Action{
+							{
+								ServiceName: "ratelimit-service",
+								Scope:       "default/other",
+								Conditions: []Predicate{
+									{
+										Selector: "source.address",
+										Operator: "neq",
+										Value:    "127.0.0.1",
+									},
+								},
+								Data: []DataType{
+									{
+										Value: &Static{
+											Static: StaticSpec{
+												Key:   "limit.global__f63bec56",
+												Value: "1",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			config2: &Config{ // same config as config1 with fields orted alphabetically
+				ActionSets: []ActionSet{
+					{
+						Actions: []Action{
+							{
+								Conditions: []Predicate{
+									{
+										Operator: "neq",
+										Selector: "source.address",
+										Value:    "127.0.0.1",
+									},
+								},
+								Data: []DataType{
+									{
+										Value: &Static{
+											Static: StaticSpec{
+												Key:   "limit.global__f63bec56",
+												Value: "1",
+											},
+										},
+									},
+								},
+								ServiceName: "ratelimit-service",
+								Scope:       "default/other",
+							},
+						},
+						Name: "5755da0b3c275ba6b8f553890eb32b04768a703b60ab9a5d7f4e0948e23ef0ab",
+						RouteRuleConditions: RouteRuleConditions{
+							Hostnames: []string{"other.example.com"},
+							Matches: []Predicate{
+								{
+									Operator: "startswith",
+									Selector: "request.url_path",
+									Value:    "/",
+								},
+							},
+						},
+					},
+				},
+				Services: map[string]Service{
+					"ratelimit-service": {
+						Type:        "ratelimit",
+						Endpoint:    "kuadrant-ratelimit-service",
+						FailureMode: "allow",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name:     "different configs",
+			config1:  testBasicConfig,
+			config2:  &Config{},
+			expected: false,
+		},
+	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(subT *testing.T) {
-			var conf Config
-			if err := yaml.Unmarshal([]byte(tc.yaml), &conf); err != nil {
-				subT.Fatal(err)
-			}
-
-			if !cmp.Equal(tc.expectedConfig, &conf) {
-				diff := cmp.Diff(tc.expectedConfig, &conf)
-				subT.Fatalf("unexpected config (-want +got):\n%s", diff)
+			if tc.config1.EqualTo(tc.config2) != tc.expected {
+				subT.Fatalf("unexpected config equality result")
 			}
 		})
 	}
 }
 
-func TestConfigMarshallUnmarshalling(t *testing.T) {
-	conf := testBasicConfigExample()
-	serializedConfig, err := json.Marshal(conf)
+func TestMarshallUnmarshalConfig(t *testing.T) {
+	config := testBasicConfig
+
+	marshalledConfig, err := json.Marshal(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fmt.Println(string(serializedConfig))
-
-	var unMarshalledConf Config
-	if err := json.Unmarshal(serializedConfig, &unMarshalledConf); err != nil {
+	var unmarshalledConfig Config
+	if err := json.Unmarshal(marshalledConfig, &unmarshalledConfig); err != nil {
 		t.Fatal(err)
 	}
 
-	if !cmp.Equal(conf, &unMarshalledConf) {
-		diff := cmp.Diff(conf, &unMarshalledConf)
-		t.Fatalf("unexpected wasm rules (-want +got):\n%s", diff)
+	if !cmp.Equal(config, &unmarshalledConfig) {
+		diff := cmp.Diff(config, &unmarshalledConfig)
+		t.Fatalf("unexpected wasm config (-want +got):\n%s", diff)
 	}
 }
 
-func TestValidActionConfig(t *testing.T) {
+func TestValidAction(t *testing.T) {
 	testCases := []struct {
 		name           string
 		yaml           string
@@ -125,7 +214,7 @@ scope: some-scope
 	}
 }
 
-func TestInValidActionConfig(t *testing.T) {
+func TestInvalidAction(t *testing.T) {
 	testCases := []struct {
 		name string
 		yaml string
@@ -161,65 +250,5 @@ data:
 				subT.Fatal("unmashall should fail")
 			}
 		})
-	}
-}
-
-func testBasicConfigExample() *Config {
-	return &Config{
-		Services: map[string]Service{
-			RateLimitServiceName: {
-				Type:        RateLimitServiceType,
-				Endpoint:    common.KuadrantRateLimitClusterName,
-				FailureMode: FailureModeAllow,
-			},
-		},
-		ActionSets: []ActionSet{
-			{
-				Name: "rlp-ns-A/rlp-name-A",
-				RouteRuleConditions: RouteRuleConditions{
-					Hostnames: []string{
-						"*.toystore.com",
-						"example.com",
-					},
-					Matches: []Predicate{
-						{
-							Selector: "request.path",
-							Operator: PatternOperator(kuadrantv1beta3.StartsWithOperator),
-							Value:    "/cars",
-						},
-					},
-				},
-				Actions: []Action{
-					{
-						ServiceName: RateLimitServiceName,
-						Scope:       "rlp-ns-A/rlp-name-A",
-						Conditions: []Predicate{
-							{
-								Selector: "source.ip",
-								Operator: PatternOperator(kuadrantv1beta3.NotEqualOperator),
-								Value:    "127.0.0.1",
-							},
-						},
-						Data: []DataType{
-							{
-								Value: &Static{
-									Static: StaticSpec{
-										Key:   "rlp-ns-A/rlp-name-A",
-										Value: "1",
-									},
-								},
-							},
-							{
-								Value: &Selector{
-									Selector: SelectorSpec{
-										Selector: "auth.metadata.username",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
 	}
 }

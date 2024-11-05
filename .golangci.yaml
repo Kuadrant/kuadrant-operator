@@ -7,8 +7,8 @@ linters:
     - errorlint
     - revive
     - gosec
-    - prealloc
     - stylecheck
+    - prealloc
     - tparallel
     - unconvert
     - unparam

@@ -2,41 +2,37 @@
 
 This guide walks you through the process of setting up a local Kubernetes cluster with Kuadrant where you will protect [Gateway API](https://gateway-api.sigs.k8s.io/) endpoints by declaring Kuadrant AuthPolicy custom resources.
 
-Two AuthPolicies will be declared:
+Three AuthPolicies will be declared:
 
-| Use case                       | AuthPolicy                                                                                                                                                                                                                                                                                |
-|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **App developer**              | 1 AuthPolicy targeting a HTTPRoute that routes traffic to a sample Toy Store application, and enforces API key authentication to all requests in this route, as well as requires API key owners to be mapped to `groups:admins` metadata to access a specific HTTPRouteRule of the route. |
-| **Platform engineer use-case** | 1 AuthPolicy targeting the `kuadrant-ingressgateway` Gateway that enforces a trivial "deny-all" policy that locks down any other HTTPRoute attached to the Gateway.                                                                                                                       |
+| Use case                       | AuthPolicies                                                                                                                                                                                                                                                                  |
+|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **App developer**              | 2 AuthPolicies targeting a HTTPRoute that routes traffic to a sample "Toy Store" application → enforce API key authentication to all requests in this route; require API key owners to be mapped to `groups:admins` metadata to access a specific HTTPRouteRule of the route. |
+| **Platform engineer use-case** | 1 AuthPolicy targeting the `kuadrant-ingressgateway` Gateway → enforces a trivial "deny-all" policy that locks down any other HTTPRoute attached to the Gateway.                                                                                                              |
 
 Topology:
 
 ```
-                   ┌───────────────┐
-                   │ (AuthPolicy)  │
-                   │    gw-auth    │
-                   └───────┬───────┘
-                           │
-                           ▼
-                ┌─────────────────────────┐
-                │        (Gateway)        │
-                │ kuadrant-ingressgateway │
-          ┌────►│                         │◄───┐
-          │     │            *            │    │
-          │     └─────────────────────────┘    │
-          │                                    │
- ┌────────┴─────────┐                 ┌────────┴─────────┐
- │   (HTTPRoute)    │                 │   (HTTPRoute)    │
- │    toystore      │                 │      other       │
- │                  │                 │                  │
- │ api.toystore.com │                 │ *.other-apps.com │
- └──────────────────┘                 └──────────────────┘
-          ▲
-          │
-  ┌───────┴───────┐
-  │ (AuthPolicy)  │
-  │    toystore   │
-  └───────────────┘
+                            ┌─────────────────────────┐
+                            │        (Gateway)        │   ┌───────────────┐
+                            │ kuadrant-ingressgateway │◄──│ (AuthPolicy)  │
+                            │                         │   │    gw-auth    │
+                            │            *            │   └───────────────┘
+                            └─────────────────────────┘
+                              ▲                      ▲
+                     ┌────────┴─────────┐   ┌────────┴─────────┐
+┌────────────────┐   │   (HTTPRoute)    │   │   (HTTPRoute)    │
+│  (AuthPolicy)  │──►│    toystore      │   │      other       │
+│ toystore-authn │   │                  │   │                  │
+└────────────────┘   │ api.toystore.com │   │ *.other-apps.com │
+                     └──────────────────┘   └──────────────────┘
+                      ▲                ▲
+            ┌─────────┴───────┐ ┌──────┴──────────┐
+            | (HTTPRouteRule) | | (HTTPRouteRule) |   ┌─────────────────┐
+            |     rule-1      | |     rule-2      |◄──│   (AuthPolicy)  │
+            |                 | |                 |   │ toystore-admins │
+            | - GET /cars*    | | - /admins*      |   └─────────────────┘
+            | - GET /dolls*   | └─────────────────┘
+            └─────────────────┘
 ```
 
 ## Requisites
@@ -88,7 +84,7 @@ spec:
   hostnames:
   - api.toystore.com
   rules:
-  - matches:
+  - matches: # rule-1
     - method: GET
       path:
         type: PathPrefix
@@ -100,7 +96,7 @@ spec:
     backendRefs:
     - name: toystore
       port: 80
-  - matches:
+  - matches: # rule-2
     - path:
         type: PathPrefix
         value: "/admin"
@@ -137,31 +133,47 @@ curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/admin -i
 
 ### ③ Protect the Toy Store application (Persona: _App developer_)
 
-Create the AuthPolicy to enforce the following auth rules:
+Create AuthPolicies to enforce the following auth rules:
 - **Authentication:**
   - All users must present a valid API key
 - **Authorization:**
-  - `/admin*` routes require user mapped to the `admins` group (`kuadrant.io/groups=admins` annotation added to the Kubernetes API key Secret)
+  - `/admin*` paths (2nd rule of the HTTPRoute) require user mapped to the `admins` group (`kuadrant.io/groups=admins` annotation added to the Kubernetes API key Secret)
 
 ```sh
 kubectl apply -f - <<EOF
 apiVersion: kuadrant.io/v1beta3
 kind: AuthPolicy
 metadata:
-  name: toystore
+  name: toystore-authn
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
+  defaults:
+    strategy: merge
+    rules:
+      authentication:
+        "api-key-authn":
+          apiKey:
+            selector:
+              matchLabels:
+                app: toystore
+          credentials:
+            authorizationHeader:
+              prefix: APIKEY
+---
+apiVersion: kuadrant.io/v1beta3
+kind: AuthPolicy
+metadata:
+  name: toystore-admins
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: toystore
+    sectionName: rule-2
   rules:
-    authentication:
-      "api-key-authn":
-        apiKey:
-          selector: {}
-        credentials:
-          authorizationHeader:
-            prefix: APIKEY
     authorization:
       "only-admins":
         opa:
@@ -171,10 +183,10 @@ spec:
 EOF
 ```
 
-Create the API keys:
+Create the API keys (must be created in the same namespace as the Kuadrant CR):
 
 ```sh
-kubectl apply -f -<<EOF
+kubectl apply -n kuadrant-system -f -<<EOF
 apiVersion: v1
 kind: Secret
 metadata:
@@ -204,6 +216,8 @@ Send requests to the application protected by Kuadrant:
 ```sh
 curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/cars -i
 # HTTP/1.1 401 Unauthorized
+# www-authenticate: APIKEY realm="api-key-authn"
+# x-ext-auth-reason: credential not found
 ```
 
 ```sh
@@ -214,6 +228,7 @@ curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamaregularuser' http
 ```sh
 curl -H 'Host: api.toystore.com' -H 'Authorization: APIKEY iamaregularuser' http://$GATEWAY_URL/admin -i
 # HTTP/1.1 403 Forbidden
+# x-ext-auth-reason: Unauthorized
 ```
 
 ```sh
@@ -236,22 +251,24 @@ spec:
     group: gateway.networking.k8s.io
     kind: Gateway
     name: kuadrant-ingressgateway
-  rules:
-    authorization:
-      deny-all:
-        opa:
-          rego: "allow = false"
-    response:
-      unauthorized:
-        headers:
-          "content-type":
-            value: application/json
-        body:
-          value: |
-            {
-              "error": "Forbidden",
-              "message": "Access denied by default by the gateway operator. If you are the administrator of the service, create a specific auth policy for the route."
-            }
+  defaults:
+    strategy: atomic
+    rules:
+      authorization:
+        deny-all:
+          opa:
+            rego: "allow = false"
+      response:
+        unauthorized:
+          headers:
+            "content-type":
+              value: application/json
+          body:
+            value: |
+              {
+                "error": "Forbidden",
+                "message": "Access denied by default by the gateway operator. If you are the administrator of the service, create a specific auth policy for the route."
+              }
 EOF
 ```
 
@@ -279,6 +296,14 @@ Send requests to the route protected by the default policy set at the level of t
 ```sh
 curl -H 'Host: foo.other-apps.com' http://$GATEWAY_URL/ -i
 # HTTP/1.1 403 Forbidden
+# content-type: application/json
+# x-ext-auth-reason: Unauthorized
+# […]
+#
+# {
+#   "error": "Forbidden",
+#   "message": "Access denied by default by the gateway operator. If you are the administrator of the service, create a specific auth policy for the route."
+# }
 ```
 
 ## Cleanup

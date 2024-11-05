@@ -6,11 +6,8 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"sync"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -22,63 +19,6 @@ const (
 	PolicyReasonUnknown           gatewayapiv1alpha2.PolicyConditionReason = "Unknown"
 	PolicyReasonMissingDependency gatewayapiv1alpha2.PolicyConditionReason = "MissingDependency"
 )
-
-func NewAffectedPolicyMap() *AffectedPolicyMap {
-	return &AffectedPolicyMap{
-		policies: make(map[types.UID][]client.ObjectKey),
-	}
-}
-
-type AffectedPolicyMap struct {
-	policies map[types.UID][]client.ObjectKey
-	mu       sync.RWMutex
-}
-
-// SetAffectedPolicy sets the provided Policy as Affected in the tracking map.
-func (o *AffectedPolicyMap) SetAffectedPolicy(p Policy, affectedBy []client.ObjectKey) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	if o.policies == nil {
-		o.policies = make(map[types.UID][]client.ObjectKey)
-	}
-	o.policies[p.GetUID()] = affectedBy
-}
-
-// RemoveAffectedPolicy removes the provided Policy from the tracking map of Affected policies.
-func (o *AffectedPolicyMap) RemoveAffectedPolicy(p Policy) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	delete(o.policies, p.GetUID())
-}
-
-// IsPolicyAffected checks if the provided Policy is affected based on the tracking map maintained.
-func (o *AffectedPolicyMap) IsPolicyAffected(p Policy) bool {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	return o.policies[p.GetUID()] != nil
-}
-
-// IsPolicyOverridden checks if the provided Policy is affected based on the tracking map maintained.
-// It is overridden if there is policies affecting it
-func (o *AffectedPolicyMap) IsPolicyOverridden(p Policy) bool {
-	pAffected := o.IsPolicyAffected(p)
-
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	return pAffected && len(o.policies[p.GetUID()]) > 0
-}
-
-// PolicyAffectedBy returns the clients keys that a policy is Affected by
-func (o *AffectedPolicyMap) PolicyAffectedBy(p Policy) []client.ObjectKey {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	return o.policies[p.GetUID()]
-}
 
 // ConditionMarshal marshals the set of conditions as a JSON array, sorted by condition type.
 func ConditionMarshal(conditions []metav1.Condition) ([]byte, error) {

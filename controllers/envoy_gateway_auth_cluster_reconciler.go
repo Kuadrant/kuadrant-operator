@@ -2,17 +2,15 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
 
 	envoygatewayv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	authorinooperatorv1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -26,30 +24,31 @@ import (
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 )
 
-// envoyGatewayRateLimitClusterReconciler reconciles Envoy Gateway EnvoyPatchPolicy custom resources
-type envoyGatewayRateLimitClusterReconciler struct {
+// EnvoyGatewayAuthClusterReconciler reconciles Envoy Gateway EnvoyPatchPolicy custom resources for auth
+type EnvoyGatewayAuthClusterReconciler struct {
 	client *dynamic.DynamicClient
 }
 
-func (r *envoyGatewayRateLimitClusterReconciler) Subscription() controller.Subscription {
+// EnvoyGatewayAuthClusterReconciler subscribes to events with potential impact on the Envoy Gateway EnvoyPatchPolicy custom resources for auth
+func (r *EnvoyGatewayAuthClusterReconciler) Subscription() controller.Subscription {
 	return controller.Subscription{
 		ReconcileFunc: r.Reconcile,
-		Events: []controller.ResourceEventMatcher{ // matches reconciliation events that change the rate limit definitions or status of rate limit policies
+		Events: []controller.ResourceEventMatcher{
 			{Kind: &kuadrantv1beta1.KuadrantGroupKind},
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
-			{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1beta3.AuthPolicyGroupKind},
 			{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
 		},
 	}
 }
 
-func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("envoyGatewayRateLimitClusterReconciler")
+func (r *EnvoyGatewayAuthClusterReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
+	logger := controller.LoggerFromContext(ctx).WithName("EnvoyGatewayAuthClusterReconciler")
 
-	logger.V(1).Info("building envoy gateway rate limit clusters")
-	defer logger.V(1).Info("finished building envoy gateway rate limit clusters")
+	logger.V(1).Info("building envoy gateway auth clusters")
+	defer logger.V(1).Info("finished building envoy gateway auth clusters")
 
 	kuadrant, err := GetKuadrantFromTopology(topology)
 	if err != nil {
@@ -60,22 +59,22 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 		return err
 	}
 
-	limitadorObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {
-		return child.GroupVersionKind().GroupKind() == kuadrantv1beta1.LimitadorGroupKind
+	authorinoObj, found := lo.Find(topology.Objects().Children(kuadrant), func(child machinery.Object) bool {
+		return child.GroupVersionKind().GroupKind() == kuadrantv1beta1.AuthorinoGroupKind
 	})
 	if !found {
-		logger.V(1).Info(ErrMissingLimitador.Error())
+		logger.V(1).Info(ErrMissingAuthorino.Error())
 		return nil
 	}
-	limitador := limitadorObj.(*controller.RuntimeObject).Object.(*limitadorv1alpha1.Limitador)
+	authorino := authorinoObj.(*controller.RuntimeObject).Object.(*authorinooperatorv1beta1.Authorino)
 
-	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
+	effectivePolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {
-		logger.Error(ErrMissingStateEffectiveRateLimitPolicies, "failed to get effective rate limit policies from state")
+		logger.Error(ErrMissingStateEffectiveAuthPolicies, "failed to get effective auth policies from state")
 		return nil
 	}
 
-	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveRateLimitPolicies)), func(effectivePolicy EffectiveRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
+	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveAuthPolicies)), func(effectivePolicy EffectiveAuthPolicy, _ int) (*machinery.Gateway, bool) {
 		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
 		return gateway, gatewayClass.Spec.ControllerName == envoyGatewayGatewayControllerName
 	}), func(gateway *machinery.Gateway) string {
@@ -89,7 +88,7 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 	for _, gateway := range gateways {
 		gatewayKey := k8stypes.NamespacedName{Name: gateway.GetName(), Namespace: gateway.GetNamespace()}
 
-		desiredEnvoyPatchPolicy, err := r.buildDesiredEnvoyPatchPolicy(limitador, gateway)
+		desiredEnvoyPatchPolicy, err := r.buildDesiredEnvoyPatchPolicy(authorino, gateway)
 		if err != nil {
 			logger.Error(err, "failed to build desired envoy patch policy")
 			continue
@@ -119,7 +118,7 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 
 		existingEnvoyPatchPolicy := existingEnvoyPatchPolicyObj.(*controller.RuntimeObject).Object.(*envoygatewayv1alpha1.EnvoyPatchPolicy)
 
-		if equalEnvoyPatchPolicies(existingEnvoyPatchPolicy, desiredEnvoyPatchPolicy) {
+		if kuadrantenvoygateway.EqualEnvoyPatchPolicies(existingEnvoyPatchPolicy, desiredEnvoyPatchPolicy) {
 			logger.V(1).Info("envoypatchpolicy object is up to date, nothing to do")
 			continue
 		}
@@ -143,12 +142,12 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 		}
 	}
 
-	state.Store(StateEnvoyGatewayRateLimitClustersModified, modifiedGateways)
+	state.Store(StateEnvoyGatewayAuthClustersModified, modifiedGateways)
 
 	// cleanup envoy gateway clusters for gateways that are not in the effective policies
 	staleEnvoyPatchPolicies := topology.Objects().Items(func(o machinery.Object) bool {
 		_, desired := desiredEnvoyPatchPolicies[k8stypes.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}]
-		return o.GroupVersionKind().GroupKind() == kuadrantenvoygateway.EnvoyPatchPolicyGroupKind && labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(RateLimitObjectLabels()) && !desired
+		return o.GroupVersionKind().GroupKind() == kuadrantenvoygateway.EnvoyPatchPolicyGroupKind && labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(AuthObjectLabels()) && !desired
 	})
 
 	for _, envoyPatchPolicy := range staleEnvoyPatchPolicies {
@@ -161,16 +160,16 @@ func (r *envoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 	return nil
 }
 
-func (r *envoyGatewayRateLimitClusterReconciler) buildDesiredEnvoyPatchPolicy(limitador *limitadorv1alpha1.Limitador, gateway *machinery.Gateway) (*envoygatewayv1alpha1.EnvoyPatchPolicy, error) {
+func (r *EnvoyGatewayAuthClusterReconciler) buildDesiredEnvoyPatchPolicy(authorino *authorinooperatorv1beta1.Authorino, gateway *machinery.Gateway) (*envoygatewayv1alpha1.EnvoyPatchPolicy, error) {
 	envoyPatchPolicy := &envoygatewayv1alpha1.EnvoyPatchPolicy{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kuadrantenvoygateway.EnvoyPatchPolicyGroupKind.Kind,
 			APIVersion: envoygatewayv1alpha1.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      RateLimitClusterName(gateway.GetName()),
+			Name:      AuthClusterName(gateway.GetName()),
 			Namespace: gateway.GetNamespace(),
-			Labels:    RateLimitObjectLabels(),
+			Labels:    AuthObjectLabels(),
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion:         gateway.GroupVersionKind().GroupVersion().String(),
@@ -192,50 +191,12 @@ func (r *envoyGatewayRateLimitClusterReconciler) buildDesiredEnvoyPatchPolicy(li
 		},
 	}
 
-	jsonPatches, err := envoyGatewayEnvoyPatchPolicyClusterPatch(limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC))
+	authorinoServiceInfo := authorinoServiceInfoFromAuthorino(authorino)
+	jsonPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(common.KuadrantAuthClusterName, authorinoServiceInfo.Host, int(authorinoServiceInfo.Port), authClusterPatch)
 	if err != nil {
 		return nil, err
 	}
 	envoyPatchPolicy.Spec.JSONPatches = jsonPatches
 
 	return envoyPatchPolicy, nil
-}
-
-// envoyGatewayEnvoyPatchPolicyClusterPatch returns a set envoy config patch that defines the rate limit cluster for the gateway.
-// The rate limit cluster configures the endpoint of the external rate limit service.
-func envoyGatewayEnvoyPatchPolicyClusterPatch(host string, port int) ([]envoygatewayv1alpha1.EnvoyJSONPatchConfig, error) {
-	patchRaw, _ := json.Marshal(rateLimitClusterPatch(host, port))
-	patch := &apiextensionsv1.JSON{}
-	if err := patch.UnmarshalJSON(patchRaw); err != nil {
-		return nil, err
-	}
-
-	return []envoygatewayv1alpha1.EnvoyJSONPatchConfig{
-		{
-			Type: envoygatewayv1alpha1.ClusterEnvoyResourceType,
-			Name: common.KuadrantRateLimitClusterName,
-			Operation: envoygatewayv1alpha1.JSONPatchOperation{
-				Op:    envoygatewayv1alpha1.JSONPatchOperationType("add"),
-				Path:  "",
-				Value: patch,
-			},
-		},
-	}, nil
-}
-
-func equalEnvoyPatchPolicies(a, b *envoygatewayv1alpha1.EnvoyPatchPolicy) bool {
-	if a.Spec.Priority != b.Spec.Priority || a.Spec.TargetRef != b.Spec.TargetRef {
-		return false
-	}
-
-	aJSONPatches := a.Spec.JSONPatches
-	bJSONPatches := b.Spec.JSONPatches
-	if len(aJSONPatches) != len(bJSONPatches) {
-		return false
-	}
-	return lo.EveryBy(aJSONPatches, func(aJSONPatch envoygatewayv1alpha1.EnvoyJSONPatchConfig) bool {
-		return lo.SomeBy(bJSONPatches, func(bJSONPatch envoygatewayv1alpha1.EnvoyJSONPatchConfig) bool {
-			return aJSONPatch.Type == bJSONPatch.Type && aJSONPatch.Name == bJSONPatch.Name && aJSONPatch.Operation == bJSONPatch.Operation
-		})
-	})
 }

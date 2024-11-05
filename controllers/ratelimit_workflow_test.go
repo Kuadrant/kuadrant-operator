@@ -70,14 +70,14 @@ func TestLimitNameToLimitadorIdentifier(t *testing.T) {
 func TestWasmActionFromLimit(t *testing.T) {
 	testCases := []struct {
 		name            string
-		limit           kuadrantv1beta3.Limit
+		limit           *kuadrantv1beta3.Limit
 		limitIdentifier string
 		scope           string
 		expectedAction  wasm.Action
 	}{
 		{
 			name:            "limit without conditions nor counters",
-			limit:           kuadrantv1beta3.Limit{},
+			limit:           &kuadrantv1beta3.Limit{},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
 			expectedAction: wasm.Action{
@@ -97,7 +97,7 @@ func TestWasmActionFromLimit(t *testing.T) {
 		},
 		{
 			name: "limit with counter qualifiers",
-			limit: kuadrantv1beta3.Limit{
+			limit: &kuadrantv1beta3.Limit{
 				Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",
@@ -126,7 +126,7 @@ func TestWasmActionFromLimit(t *testing.T) {
 		},
 		{
 			name: "limit with counter qualifiers and when conditions",
-			limit: kuadrantv1beta3.Limit{
+			limit: &kuadrantv1beta3.Limit{
 				Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
 				When: []kuadrantv1beta3.WhenCondition{
 					{

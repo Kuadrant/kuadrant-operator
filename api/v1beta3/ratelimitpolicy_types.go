@@ -17,8 +17,6 @@ limitations under the License.
 package v1beta3
 
 import (
-	"encoding/json"
-
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -123,32 +121,26 @@ func (p *RateLimitPolicy) Empty() bool {
 
 func (p *RateLimitPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 	rules := make(map[string]kuadrantv1.MergeableRule)
+	policyLocator := p.GetLocator()
 
 	for ruleID := range p.Spec.Proper().Limits {
 		limit := p.Spec.Proper().Limits[ruleID]
-		origin := limit.Origin
-		if origin == "" {
-			origin = p.GetLocator()
-		}
-		rules[ruleID] = kuadrantv1.MergeableRule{
-			Spec:   limit,
-			Source: origin,
-		}
+		rules[ruleID] = kuadrantv1.NewMergeableRule(&limit, policyLocator)
 	}
 
 	return rules
 }
 
 func (p *RateLimitPolicy) SetRules(rules map[string]kuadrantv1.MergeableRule) {
-	if len(rules) > 0 && p.Spec.Proper().Limits == nil {
+	// clear all rules of the policy before setting new ones
+	p.Spec.Proper().Limits = nil
+
+	if len(rules) > 0 {
 		p.Spec.Proper().Limits = make(map[string]Limit)
 	}
 
 	for ruleID := range rules {
-		rule := rules[ruleID]
-		limit := rule.Spec.(Limit)
-		limit.Origin = rule.Source
-		p.Spec.Proper().Limits[ruleID] = limit
+		p.Spec.Proper().Limits[ruleID] = *rules[ruleID].(*Limit)
 	}
 }
 
@@ -211,44 +203,6 @@ type RateLimitPolicySpec struct {
 	RateLimitPolicySpecProper `json:""`
 }
 
-// UnmarshalJSON unmarshals the RateLimitPolicySpec from JSON byte array.
-// This should not be needed, but runtime.DefaultUnstructuredConverter.FromUnstructured does not work well with embedded structs.
-func (s *RateLimitPolicySpec) UnmarshalJSON(j []byte) error {
-	targetRef := struct {
-		gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
-	}{}
-	if err := json.Unmarshal(j, &targetRef); err != nil {
-		return err
-	}
-	s.TargetRef = targetRef.LocalPolicyTargetReferenceWithSectionName
-
-	defaults := &struct {
-		*MergeableRateLimitPolicySpec `json:"defaults,omitempty"`
-	}{}
-	if err := json.Unmarshal(j, defaults); err != nil {
-		return err
-	}
-	s.Defaults = defaults.MergeableRateLimitPolicySpec
-
-	overrides := &struct {
-		*MergeableRateLimitPolicySpec `json:"overrides,omitempty"`
-	}{}
-	if err := json.Unmarshal(j, overrides); err != nil {
-		return err
-	}
-	s.Overrides = overrides.MergeableRateLimitPolicySpec
-
-	proper := struct {
-		RateLimitPolicySpecProper `json:""`
-	}{}
-	if err := json.Unmarshal(j, &proper); err != nil {
-		return err
-	}
-	s.RateLimitPolicySpecProper = proper.RateLimitPolicySpecProper
-
-	return nil
-}
-
 func (s *RateLimitPolicySpec) Proper() *RateLimitPolicySpecProper {
 	if s.Defaults != nil {
 		return &s.Defaults.RateLimitPolicySpecProper
@@ -293,8 +247,8 @@ type Limit struct {
 	// +optional
 	Rates []Rate `json:"rates,omitempty"`
 
-	// origin stores the resource where the limit is originally defined (internal use)
-	Origin string `json:"-"`
+	// Source stores the locator of the policy where the limit is orignaly defined (internal use)
+	Source string `json:"-"`
 }
 
 func (l Limit) CountersAsStringList() []string {
@@ -302,6 +256,21 @@ func (l Limit) CountersAsStringList() []string {
 		return nil
 	}
 	return utils.Map(l.Counters, func(counter ContextSelector) string { return string(counter) })
+}
+
+var _ kuadrantv1.MergeableRule = &Limit{}
+
+func (l *Limit) GetSpec() any {
+	return l
+}
+
+func (l *Limit) GetSource() string {
+	return l.Source
+}
+
+func (l *Limit) WithSource(source string) kuadrantv1.MergeableRule {
+	l.Source = source
+	return l
 }
 
 // +kubebuilder:validation:Enum:=second;minute;hour;day

@@ -32,9 +32,20 @@ const (
 	PolicyRuleMergeStrategy = "merge"
 )
 
-type MergeableRule struct {
-	Spec   any
-	Source string
+// NewMergeableRule creates a new MergeableRule with a default source if the rule does not have one.
+func NewMergeableRule(rule MergeableRule, defaultSource string) MergeableRule {
+	if rule.GetSource() == "" {
+		return rule.WithSource(defaultSource)
+	}
+	return rule
+}
+
+// MergeableRule is a policy rule that contains a spec which can be traced back to its source,
+// i.e. to the policy where the rule spec was defined.
+type MergeableRule interface {
+	GetSpec() any
+	GetSource() string
+	WithSource(string) MergeableRule
 }
 
 // +kubebuilder:object:generate=false
@@ -58,13 +69,11 @@ func AtomicDefaultsMergeStrategy(source, target machinery.Policy) machinery.Poli
 		return source
 	}
 
-	mergeableTargetPolicy := target.(MergeablePolicy)
-
-	if !mergeableTargetPolicy.Empty() {
-		return mergeableTargetPolicy.DeepCopyObject().(machinery.Policy)
+	if mergeableTarget := target.(MergeablePolicy); !mergeableTarget.Empty() {
+		return copyMergeablePolicy(mergeableTarget)
 	}
 
-	return source.(MergeablePolicy).DeepCopyObject().(machinery.Policy)
+	return copyMergeablePolicy(source.(MergeablePolicy))
 }
 
 var _ machinery.MergeStrategy = AtomicDefaultsMergeStrategy
@@ -75,7 +84,7 @@ func AtomicOverridesMergeStrategy(source, _ machinery.Policy) machinery.Policy {
 	if source == nil {
 		return nil
 	}
-	return source.(MergeablePolicy).DeepCopyObject().(machinery.Policy)
+	return copyMergeablePolicy(source.(MergeablePolicy))
 }
 
 var _ machinery.MergeStrategy = AtomicOverridesMergeStrategy
@@ -94,15 +103,16 @@ func PolicyRuleDefaultsMergeStrategy(source, target machinery.Policy) machinery.
 	targetMergeablePolicy := target.(MergeablePolicy)
 
 	// copy rules from the target
-	rules := targetMergeablePolicy.Rules()
+	rules := lo.MapValues(targetMergeablePolicy.Rules(), mapRuleWithSourceFunc(target))
 
 	// add extra rules from the source
 	for ruleID, rule := range sourceMergeablePolicy.Rules() {
 		if _, ok := targetMergeablePolicy.Rules()[ruleID]; !ok {
-			rules[ruleID] = MergeableRule{
-				Spec:   rule.Spec,
-				Source: source.GetLocator(),
+			origin := rule.GetSource()
+			if origin == "" {
+				origin = source.GetLocator()
 			}
+			rules[ruleID] = rule.WithSource(origin)
 		}
 	}
 
@@ -121,12 +131,16 @@ func PolicyRuleOverridesMergeStrategy(source, target machinery.Policy) machinery
 	targetMergeablePolicy := target.(MergeablePolicy)
 
 	// copy rules from the source
-	rules := sourceMergeablePolicy.Rules()
+	rules := lo.MapValues(sourceMergeablePolicy.Rules(), mapRuleWithSourceFunc(source))
 
 	// add extra rules from the target
 	for ruleID, rule := range targetMergeablePolicy.Rules() {
 		if _, ok := sourceMergeablePolicy.Rules()[ruleID]; !ok {
-			rules[ruleID] = rule
+			origin := rule.GetSource()
+			if origin == "" {
+				origin = target.GetLocator()
+			}
+			rules[ruleID] = rule.WithSource(origin)
 		}
 	}
 
@@ -197,4 +211,16 @@ func PathID(path []machinery.Targetable) string {
 	return strings.Join(lo.Map(path, func(t machinery.Targetable, _ int) string {
 		return strings.TrimPrefix(k8stypes.NamespacedName{Namespace: t.GetNamespace(), Name: t.GetName()}.String(), string(k8stypes.Separator))
 	}), "|")
+}
+
+func mapRuleWithSourceFunc(source machinery.Policy) func(MergeableRule, string) MergeableRule {
+	return func(rule MergeableRule, _ string) MergeableRule {
+		return rule.WithSource(source.GetLocator())
+	}
+}
+
+func copyMergeablePolicy(policy MergeablePolicy) MergeablePolicy {
+	dup := policy.DeepCopyObject().(MergeablePolicy)
+	dup.SetRules(lo.MapValues(dup.Rules(), mapRuleWithSourceFunc(policy)))
+	return dup
 }

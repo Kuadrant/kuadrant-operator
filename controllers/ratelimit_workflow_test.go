@@ -69,11 +69,12 @@ func TestLimitNameToLimitadorIdentifier(t *testing.T) {
 
 func TestWasmActionFromLimit(t *testing.T) {
 	testCases := []struct {
-		name            string
-		limit           *kuadrantv1beta3.Limit
-		limitIdentifier string
-		scope           string
-		expectedAction  wasm.Action
+		name               string
+		limit              *kuadrantv1beta3.Limit
+		limitIdentifier    string
+		scope              string
+		topLevelPredicates kuadrantv1beta3.WhenPredicates
+		expectedAction     wasm.Action
 	}{
 		{
 			name:            "limit without conditions nor counters",
@@ -85,8 +86,8 @@ func TestWasmActionFromLimit(t *testing.T) {
 				Scope:       "my-ns/my-route",
 				Data: []wasm.DataType{
 					{
-						Value: &wasm.Static{
-							Static: wasm.StaticSpec{
+						Value: &wasm.Expression{
+							ExpressionItem: wasm.ExpressionItem{
 								Key:   "limit.myLimit__d681f6c3",
 								Value: "1",
 							},
@@ -107,17 +108,18 @@ func TestWasmActionFromLimit(t *testing.T) {
 				Scope:       "my-ns/my-route",
 				Data: []wasm.DataType{
 					{
-						Value: &wasm.Static{
-							Static: wasm.StaticSpec{
+						Value: &wasm.Expression{
+							ExpressionItem: wasm.ExpressionItem{
 								Key:   "limit.myLimit__d681f6c3",
 								Value: "1",
 							},
 						},
 					},
 					{
-						Value: &wasm.Selector{
-							Selector: wasm.SelectorSpec{
-								Selector: "auth.identity.username",
+						Value: &wasm.Expression{
+							ExpressionItem: wasm.ExpressionItem{
+								Key:   "auth.identity.username",
+								Value: "auth.identity.username",
 							},
 						},
 					},
@@ -125,42 +127,80 @@ func TestWasmActionFromLimit(t *testing.T) {
 			},
 		},
 		{
-			name: "limit with counter qualifiers and when conditions",
+			name: "limit with counter qualifiers and when predicates",
 			limit: &kuadrantv1beta3.Limit{
 				Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
-				When: []kuadrantv1beta3.WhenCondition{
-					{
-						Selector: kuadrantv1beta3.ContextSelector("auth.identity.group"),
-						Operator: kuadrantv1beta3.NotEqualOperator,
-						Value:    "admin",
-					},
-				},
+				When:     kuadrantv1beta3.WhenPredicates{"auth.identity.group != admin"},
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
 			expectedAction: wasm.Action{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "my-ns/my-route",
-				Conditions: []wasm.Condition{
-					{
-						Selector: "auth.identity.group",
-						Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-						Value:    "admin",
-					},
-				},
+				Predicates:  kuadrantv1beta3.WhenPredicates{"auth.identity.group != admin"},
 				Data: []wasm.DataType{
 					{
-						Value: &wasm.Static{
-							Static: wasm.StaticSpec{
+						Value: &wasm.Expression{
+							ExpressionItem: wasm.ExpressionItem{
 								Key:   "limit.myLimit__d681f6c3",
 								Value: "1",
 							},
 						},
 					},
 					{
-						Value: &wasm.Selector{
-							Selector: wasm.SelectorSpec{
-								Selector: "auth.identity.username",
+						Value: &wasm.Expression{
+							ExpressionItem: wasm.ExpressionItem{
+								Key:   "auth.identity.username",
+								Value: "auth.identity.username",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:               "limit with top level predicates and no when predicates",
+			limit:              &kuadrantv1beta3.Limit{},
+			topLevelPredicates: kuadrantv1beta3.WhenPredicates{"auth.identity.group != admin"},
+			limitIdentifier:    "limit.myLimit__d681f6c3",
+			scope:              "my-ns/my-route",
+			expectedAction: wasm.Action{
+				ServiceName: wasm.RateLimitServiceName,
+				Scope:       "my-ns/my-route",
+				Predicates:  kuadrantv1beta3.WhenPredicates{"auth.identity.group != admin"},
+				Data: []wasm.DataType{
+					{
+						Value: &wasm.Expression{
+							ExpressionItem: wasm.ExpressionItem{
+								Key:   "limit.myLimit__d681f6c3",
+								Value: "1",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "limit with top level predicates and when predicates",
+			limit: &kuadrantv1beta3.Limit{
+				When: kuadrantv1beta3.WhenPredicates{"auth.identity.from-limit"},
+			},
+			topLevelPredicates: kuadrantv1beta3.WhenPredicates{"auth.identity.from-top-level"},
+			limitIdentifier:    "limit.myLimit__d681f6c3",
+			scope:              "my-ns/my-route",
+			expectedAction: wasm.Action{
+				ServiceName: wasm.RateLimitServiceName,
+				Scope:       "my-ns/my-route",
+				Predicates: kuadrantv1beta3.WhenPredicates{
+					"auth.identity.from-top-level",
+					"auth.identity.from-limit",
+				},
+				Data: []wasm.DataType{
+					{
+						Value: &wasm.Expression{
+							ExpressionItem: wasm.ExpressionItem{
+								Key:   "limit.myLimit__d681f6c3",
+								Value: "1",
 							},
 						},
 					},
@@ -171,7 +211,7 @@ func TestWasmActionFromLimit(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			computedRule := wasmActionFromLimit(tc.limit, tc.limitIdentifier, tc.scope)
+			computedRule := wasmActionFromLimit(tc.limit, tc.limitIdentifier, tc.scope, tc.topLevelPredicates)
 			if diff := cmp.Diff(tc.expectedAction, computedRule); diff != "" {
 				t.Errorf("unexpected wasm rule (-want +got):\n%s", diff)
 			}

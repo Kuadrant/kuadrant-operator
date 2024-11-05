@@ -126,41 +126,14 @@ spec:
                           type: array
                         when:
                           description: |-
-                            When holds the list of conditions for the policy to be enforced.
+                            When holds a list of "limist-level" `Predicate`s
                             Called also "soft" conditions as route selectors must also match
                           items:
-                            description: |-
-                              WhenCondition defines semantics for matching an HTTP request based on conditions
-                              https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
-                            properties:
-                              operator:
-                                description: |-
-                                  The binary operator to be applied to the content fetched from the selector
-                                  Possible values are: "eq" (equal to), "neq" (not equal to)
-                                enum:
-                                - eq
-                                - neq
-                                - startswith
-                                - endswith
-                                - incl
-                                - excl
-                                - matches
-                                type: string
-                              selector:
-                                description: |-
-                                  Selector defines one item from the well known selectors
-                                  TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-                                maxLength: 253
-                                minLength: 1
-                                type: string
-                              value:
-                                description: The value of reference for the comparison.
-                                type: string
-                            required:
-                            - operator
-                            - selector
-                            - value
-                            type: object
+                            description: Predicate defines one CEL expression that
+                              must be evaluated to bool
+                            maxLength: 253
+                            minLength: 1
+                            type: string
                           type: array
                       type: object
                     description: Limits holds the struct of limits indexed by a unique
@@ -174,6 +147,15 @@ spec:
                     - atomic
                     - merge
                     type: string
+                  when:
+                    description: When holds a list of "top-level" `Predicate`s
+                    items:
+                      description: Predicate defines one CEL expression that must
+                        be evaluated to bool
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                    type: array
                 type: object
               limits:
                 additionalProperties:
@@ -226,41 +208,14 @@ spec:
                       type: array
                     when:
                       description: |-
-                        When holds the list of conditions for the policy to be enforced.
+                        When holds a list of "limist-level" `Predicate`s
                         Called also "soft" conditions as route selectors must also match
                       items:
-                        description: |-
-                          WhenCondition defines semantics for matching an HTTP request based on conditions
-                          https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
-                        properties:
-                          operator:
-                            description: |-
-                              The binary operator to be applied to the content fetched from the selector
-                              Possible values are: "eq" (equal to), "neq" (not equal to)
-                            enum:
-                            - eq
-                            - neq
-                            - startswith
-                            - endswith
-                            - incl
-                            - excl
-                            - matches
-                            type: string
-                          selector:
-                            description: |-
-                              Selector defines one item from the well known selectors
-                              TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-                            maxLength: 253
-                            minLength: 1
-                            type: string
-                          value:
-                            description: The value of reference for the comparison.
-                            type: string
-                        required:
-                        - operator
-                        - selector
-                        - value
-                        type: object
+                        description: Predicate defines one CEL expression that must
+                          be evaluated to bool
+                        maxLength: 253
+                        minLength: 1
+                        type: string
                       type: array
                   type: object
                 description: Limits holds the struct of limits indexed by a unique
@@ -322,41 +277,14 @@ spec:
                           type: array
                         when:
                           description: |-
-                            When holds the list of conditions for the policy to be enforced.
+                            When holds a list of "limist-level" `Predicate`s
                             Called also "soft" conditions as route selectors must also match
                           items:
-                            description: |-
-                              WhenCondition defines semantics for matching an HTTP request based on conditions
-                              https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
-                            properties:
-                              operator:
-                                description: |-
-                                  The binary operator to be applied to the content fetched from the selector
-                                  Possible values are: "eq" (equal to), "neq" (not equal to)
-                                enum:
-                                - eq
-                                - neq
-                                - startswith
-                                - endswith
-                                - incl
-                                - excl
-                                - matches
-                                type: string
-                              selector:
-                                description: |-
-                                  Selector defines one item from the well known selectors
-                                  TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-                                maxLength: 253
-                                minLength: 1
-                                type: string
-                              value:
-                                description: The value of reference for the comparison.
-                                type: string
-                            required:
-                            - operator
-                            - selector
-                            - value
-                            type: object
+                            description: Predicate defines one CEL expression that
+                              must be evaluated to bool
+                            maxLength: 253
+                            minLength: 1
+                            type: string
                           type: array
                       type: object
                     description: Limits holds the struct of limits indexed by a unique
@@ -370,6 +298,15 @@ spec:
                     - atomic
                     - merge
                     type: string
+                  when:
+                    description: When holds a list of "top-level" `Predicate`s
+                    items:
+                      description: Predicate defines one CEL expression that must
+                        be evaluated to bool
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                    type: array
                 type: object
               targetRef:
                 description: Reference to the object to which this policy applies.
@@ -420,6 +357,15 @@ spec:
                 - message: Invalid targetRef.kind. The only supported values are 'HTTPRoute'
                     and 'Gateway'
                   rule: self.kind == 'HTTPRoute' || self.kind == 'Gateway'
+              when:
+                description: When holds a list of "top-level" `Predicate`s
+                items:
+                  description: Predicate defines one CEL expression that must be evaluated
+                    to bool
+                  maxLength: 253
+                  minLength: 1
+                  type: string
+                type: array
             required:
             - targetRef
             type: object

@@ -129,7 +129,21 @@ func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, stat
 	_, _, _, httpRoute, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
 	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
 
-	return lo.FilterMap(lo.Entries(effectivePolicy.Spec.Rules()), func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) (wasm.Action, bool) {
+	limitRules, topLevelRules := lo.FilterReject(lo.Entries(effectivePolicy.Spec.Rules()),
+		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
+			return r.Key == kuadrantv1beta3.RulesKeyTopLevelPredicates
+		},
+	)
+
+	var topLevelWhenPredicates kuadrantv1beta3.WhenPredicates
+	if len(topLevelRules) > 0 {
+		if len(topLevelRules) > 1 {
+			panic("rate limit policy with multiple top level 'when' predicate lists")
+		}
+		topLevelWhenPredicates = topLevelRules[0].Value.GetSpec().(kuadrantv1beta3.WhenPredicates)
+	}
+
+	return lo.FilterMap(limitRules, func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) (wasm.Action, bool) {
 		uniquePolicyRuleKey := r.Key
 		policyRule := r.Value
 		source, found := lo.Find(policiesInPath, func(p machinery.Policy) bool {
@@ -140,7 +154,7 @@ func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, stat
 		}
 		limitIdentifier := LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: source.GetName(), Namespace: source.GetNamespace()}, uniquePolicyRuleKey)
 		limit := policyRule.GetSpec().(*kuadrantv1beta3.Limit)
-		return wasmActionFromLimit(limit, limitIdentifier, limitsNamespace), true
+		return wasmActionFromLimit(limit, limitIdentifier, limitsNamespace, topLevelWhenPredicates), true
 	})
 }
 
@@ -149,26 +163,27 @@ func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, stat
 //
 // The only action of the rule is the ratelimit service, whose data includes the activation of the limit
 // and any counter qualifier of the limit.
-func wasmActionFromLimit(limit *kuadrantv1beta3.Limit, limitIdentifier, scope string) wasm.Action {
-	action := wasm.Action{
+func wasmActionFromLimit(limit *kuadrantv1beta3.Limit, limitIdentifier, scope string, topLevelPredicates kuadrantv1beta3.WhenPredicates) wasm.Action {
+	action :=  wasm.Action{
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       scope,
+		Predicates:  topLevelPredicates.Extend(limit.When),
+		Data:        wasmDataFromLimit(limitIdentifier, limit),
 	}
 	if conditions := wasm.ConditionsFromWhenConditions(limit.When...); len(conditions) > 0 {
 		action.Conditions = conditions
 	}
-	if data := wasmDataFromLimit(limitIdentifier, limit); len(data) > 0 {
-		action.Data = data
-	}
 	return action
 }
 
-func wasmDataFromLimit(limitIdentifier string, limit *kuadrantv1beta3.Limit) (data []wasm.DataType) {
+func wasmDataFromLimit(limitIdentifier string, limit *kuadrantv1beta3.Limit) []wasm.DataType {
+	data := make([]wasm.DataType, 0)
+
 	// static key representing the limit
 	data = append(data,
 		wasm.DataType{
-			Value: &wasm.Static{
-				Static: wasm.StaticSpec{Key: limitIdentifier, Value: "1"},
+			Value: &wasm.Expression{
+				ExpressionItem: wasm.ExpressionItem{Key: limitIdentifier, Value: "1"},
 			},
 		},
 	)
@@ -176,8 +191,11 @@ func wasmDataFromLimit(limitIdentifier string, limit *kuadrantv1beta3.Limit) (da
 	for _, counter := range limit.Counters {
 		data = append(data,
 			wasm.DataType{
-				Value: &wasm.Selector{
-					Selector: wasm.SelectorSpec{Selector: counter},
+				Value: &wasm.Expression{
+					ExpressionItem: wasm.ExpressionItem{
+						Key:   string(counter),
+						Value: string(counter),
+					},
 				},
 			},
 		)

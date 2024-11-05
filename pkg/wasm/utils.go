@@ -153,8 +153,9 @@ func PredicatesFromHTTPRouteMatch(match gatewayapiv1.HTTPRouteMatch) []string {
 
 func predicateFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) string {
 	var (
-		operator = PatternOperator(kuadrantv1beta3.StartsWithOperator) // default value
-		value    = "/"                                                 // default value
+		attr          = "request.url_path"
+		pathMatchType = gatewayapiv1.PathMatchPathPrefix // default value
+		value         = "/"                              // default value
 	)
 
 	if pathMatch.Value != nil {
@@ -162,14 +163,19 @@ func predicateFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) string {
 	}
 
 	if pathMatch.Type != nil {
-		if *pathMatch.Type == gatewayapiv1.PathMatchExact {
-			return fmt.Sprintf("request.url_path == '%s'", value)
-		}
-		if val, ok := PathMatchTypeMap[*pathMatch.Type]; ok {
-			operator = val
-		}
+		pathMatchType = *pathMatch.Type
 	}
-	return fmt.Sprintf("request.url_path.%s('%s')", operator, value)
+
+	switch pathMatchType {
+	case gatewayapiv1.PathMatchExact:
+		return kuadrantv1beta3.Predicate(fmt.Sprintf("%s == %s", attr, value))
+	case gatewayapiv1.PathMatchPathPrefix:
+		return kuadrantv1beta3.Predicate(fmt.Sprintf("%s.startsWith(%s)", attr, value))
+	case gatewayapiv1.PathMatchRegularExpression:
+		return kuadrantv1beta3.Predicate(fmt.Sprintf("%s.matches(%s)", attr, value))
+	default:
+		return kuadrantv1beta3.Predicate(fmt.Sprintf("%s == %s", attr, value))
+	}
 }
 
 func predicateFromMethod(method gatewayapiv1.HTTPMethod) string {

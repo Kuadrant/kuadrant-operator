@@ -7,16 +7,8 @@ import (
 
 	_struct "google.golang.org/protobuf/types/known/structpb"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
-)
-
-var (
-	PathMatchTypeMap = map[gatewayapiv1.PathMatchType]PatternOperator{
-		gatewayapiv1.PathMatchPathPrefix:        PatternOperator(kuadrantv1beta3.StartsWithOperator),
-		gatewayapiv1.PathMatchRegularExpression: PatternOperator(kuadrantv1beta3.MatchesOperator),
-	}
 )
 
 type Config struct {
@@ -115,8 +107,10 @@ func (s *ActionSet) EqualTo(other ActionSet) bool {
 }
 
 type RouteRuleConditions struct {
-	Hostnames  []string `json:"hostnames"`
-	Predicates []string `json:"predicates,omitempty"`
+	Hostnames []string `json:"hostnames"`
+
+	// +optional
+	Predicates kuadrantv1beta3.WhenPredicates `json:"predicates,omitempty"`
 }
 
 func (r *RouteRuleConditions) EqualTo(other RouteRuleConditions) bool {
@@ -134,6 +128,10 @@ func (r *RouteRuleConditions) EqualTo(other RouteRuleConditions) bool {
 		if r.Predicates[i] != other.Predicates[i] {
 			return false
 		}
+	}
+
+	if !r.Predicates.EqualTo(other.Predicates) {
+		return false
 	}
 
 	return true
@@ -211,6 +209,7 @@ func (d *DataType) UnmarshalJSON(data []byte) error {
 	types := []interface{}{
 		&Static{},
 		&Selector{},
+		&Expression{},
 	}
 
 	var err error
@@ -233,6 +232,8 @@ func (d *DataType) MarshalJSON() ([]byte, error) {
 	case *Static:
 		return json.Marshal(val)
 	case *Selector:
+		return json.Marshal(val)
+	case *Expression:
 		return json.Marshal(val)
 	default:
 		return nil, errors.New("DataType.Value has unknown type")
@@ -277,4 +278,21 @@ type SelectorSpec struct {
 	// If not set and the selector is not found in the context, then no descriptor is generated.
 	// +optional
 	Default *string `json:"default,omitempty"`
+}
+
+type ExpressionItem struct {
+	// Key holds the expression key
+	Key string `json:"key"`
+
+	// Value holds the CEL expression
+	Value string `json:"value"`
+}
+
+func (e ExpressionItem) EqualTo(other ExpressionItem) bool {
+	return e.Key == other.Key && e.Value == other.Value
+}
+
+type Expression struct {
+	// Data to be sent to the service
+	ExpressionItem ExpressionItem `json:"expression"`
 }

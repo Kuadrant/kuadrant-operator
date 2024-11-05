@@ -46,6 +46,9 @@ const (
 var (
 	RateLimitPolicyGroupKind  = schema.GroupKind{Group: SchemeGroupVersion.Group, Kind: "RateLimitPolicy"}
 	RateLimitPoliciesResource = SchemeGroupVersion.WithResource("ratelimitpolicies")
+	// Top level predicate rules key starting with # to prevent conflict with limit names
+	// TODO(eastizle): this coupling between limit names and rule IDs is a bad smell. Merging implementation should be enhanced.
+	RulesKeyTopLevelPredicates = "###_TOP_LEVEL_PREDICATES_###"
 )
 
 // +kubebuilder:object:root=true
@@ -123,6 +126,13 @@ func (p *RateLimitPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 	rules := make(map[string]kuadrantv1.MergeableRule)
 	policyLocator := p.GetLocator()
 
+	if len(p.Spec.Proper().When) > 0 {
+		rules[RulesKeyTopLevelPredicates] = kuadrantv1.NewMergeableRule(
+			&WhenPredicatesMergeableRule{When: p.Spec.Proper().When, Source: policyLocator},
+			policyLocator,
+		)
+	}
+
 	for ruleID := range p.Spec.Proper().Limits {
 		limit := p.Spec.Proper().Limits[ruleID]
 		rules[ruleID] = kuadrantv1.NewMergeableRule(&limit, policyLocator)
@@ -134,13 +144,18 @@ func (p *RateLimitPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 func (p *RateLimitPolicy) SetRules(rules map[string]kuadrantv1.MergeableRule) {
 	// clear all rules of the policy before setting new ones
 	p.Spec.Proper().Limits = nil
+	p.Spec.Proper().When = nil
 
 	if len(rules) > 0 {
 		p.Spec.Proper().Limits = make(map[string]Limit)
 	}
 
 	for ruleID := range rules {
-		p.Spec.Proper().Limits[ruleID] = *rules[ruleID].(*Limit)
+		if ruleID == RulesKeyTopLevelPredicates {
+			p.Spec.Proper().When = rules[ruleID].(*WhenPredicatesMergeableRule).When
+		} else {
+			p.Spec.Proper().Limits[ruleID] = *rules[ruleID].(*Limit)
+		}
 	}
 }
 
@@ -226,17 +241,68 @@ type MergeableRateLimitPolicySpec struct {
 
 // RateLimitPolicySpecProper contains common shared fields for defaults and overrides
 type RateLimitPolicySpecProper struct {
+	// When holds a list of "top-level" `Predicate`s
+	// +optional
+	When WhenPredicates `json:"when,omitempty"`
+
 	// Limits holds the struct of limits indexed by a unique name
 	// +optional
 	Limits map[string]Limit `json:"limits,omitempty"`
 }
 
+// Predicate defines one CEL expression that must be evaluated to bool
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=253
+type Predicate string
+
+type WhenPredicates []Predicate
+
+func (w WhenPredicates) Extend(other WhenPredicates) WhenPredicates {
+	return append(w, other...)
+}
+
+func (w WhenPredicates) EqualTo(other WhenPredicates) bool {
+	if len(w) != len(other) {
+		return false
+	}
+
+	for i := range w {
+		if w[i] != other[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+type WhenPredicatesMergeableRule struct {
+	When WhenPredicates
+
+	// Source stores the locator of the policy where the limit is orignaly defined (internal use)
+	Source string
+}
+
+var _ kuadrantv1.MergeableRule = &WhenPredicatesMergeableRule{}
+
+func (w *WhenPredicatesMergeableRule) GetSpec() any {
+	return w.When
+}
+
+func (w *WhenPredicatesMergeableRule) GetSource() string {
+	return w.Source
+}
+
+func (w *WhenPredicatesMergeableRule) WithSource(source string) kuadrantv1.MergeableRule {
+	w.Source = source
+	return w
+}
+
 // Limit represents a complete rate limit configuration
 type Limit struct {
-	// When holds the list of conditions for the policy to be enforced.
+	// When holds a list of "limist-level" `Predicate`s
 	// Called also "soft" conditions as route selectors must also match
 	// +optional
-	When []WhenCondition `json:"when,omitempty"`
+	When WhenPredicates `json:"when,omitempty"`
 
 	// Counters defines additional rate limit counters based on context qualifiers and well known selectors
 	// TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors

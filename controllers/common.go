@@ -7,7 +7,6 @@ import (
 
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -58,8 +57,7 @@ func PolicyAffectedConditionType(policyKind string) string {
 func IsPolicyAccepted(ctx context.Context, p machinery.Policy, s *sync.Map) bool {
 	switch t := p.(type) {
 	case *kuadrantv1beta3.AuthPolicy:
-		// TODO: update when information is available in state
-		return meta.IsStatusConditionTrue(t.GetStatus().GetConditions(), string(gatewayapiv1alpha2.PolicyConditionAccepted))
+		return isAuthPolicyAcceptedFunc(s)(p)
 	case *kuadrantv1beta3.RateLimitPolicy:
 		return isRateLimitPolicyAcceptedFunc(s)(p)
 	case *kuadrantv1alpha1.TLSPolicy:

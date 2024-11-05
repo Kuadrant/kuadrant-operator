@@ -60,7 +60,8 @@ if [ -z $MGC_REF ]; then
 fi
 
 if [ -z $ISTIO_INSTALL_SAIL ]; then
-  ISTIO_INSTALL_SAIL=${ISTIO_INSTALL_SAIL:=false}
+  ISTIO_INSTALL_SAIL=${ISTIO_INSTALL_SAIL:=true}
+  SAIL_VERSION=${SAIL_VERSION:="0.1.0"}
 fi
 
 export TOOLS_IMAGE=quay.io/kuadrant/mgc-tools:latest
@@ -402,8 +403,12 @@ success "Gateway API installed successfully."
 info "Installing Istio as a Gateway API provider... 🛫"
 if [ "$ISTIO_INSTALL_SAIL" = true ]; then
   info "Installing Istio via Sail"
-  kubectl apply -k ${KUADRANT_ISTIO_KUSTOMIZATION}
-  kubectl -n istio-system wait --for=condition=Available deployment istio-operator --timeout=300s
+  ${HELM_BIN} install sail-operator \
+    --create-namespace \
+    --namespace istio-system \
+    --wait \
+    --timeout=300s \
+    https://github.com/istio-ecosystem/sail-operator/releases/download/${SAIL_VERSION}/sail-operator-${SAIL_VERSION}.tgz
   kubectl apply -f ${KUADRANT_REPO_RAW}/config/dependencies/istio/sail/istio.yaml
 else
   # Create CRD first to prevent race condition with creating CR

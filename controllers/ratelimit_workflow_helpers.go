@@ -129,7 +129,7 @@ func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, stat
 	_, _, _, httpRoute, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
 	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
 
-	limitRules, topLevelRules := lo.FilterReject(lo.Entries(effectivePolicy.Spec.Rules()),
+	topLevelRules, limitRules := lo.FilterReject(lo.Entries(effectivePolicy.Spec.Rules()),
 		func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
 			return r.Key == kuadrantv1beta3.RulesKeyTopLevelPredicates
 		},

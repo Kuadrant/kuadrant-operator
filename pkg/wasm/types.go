@@ -130,11 +130,7 @@ func (r *RouteRuleConditions) EqualTo(other RouteRuleConditions) bool {
 		}
 	}
 
-	if !r.Predicates.EqualTo(other.Predicates) {
-		return false
-	}
-
-	return true
+	return r.Predicates.EqualTo(other.Predicates)
 }
 
 type Condition struct {

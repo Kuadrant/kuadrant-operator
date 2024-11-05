@@ -49,7 +49,6 @@ func (t *EffectiveTLSPoliciesReconciler) Subscription() *controller.Subscription
 //+kubebuilder:rbac:groups=kuadrant.io,resources=tlspolicies/finalizers,verbs=update
 //+kubebuilder:rbac:groups="cert-manager.io",resources=issuers,verbs=get;list;watch;
 //+kubebuilder:rbac:groups="cert-manager.io",resources=clusterissuers,verbs=get;list;watch;
-//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 //+kubebuilder:rbac:groups="cert-manager.io",resources=certificates,verbs=get;list;watch;create;update;patch;delete
 
 func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
@@ -60,7 +59,7 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 		return ok
 	})
 
-	// Get all certs in topology for comparison with expected certs to determine orphaned certs later
+	// Get all certs in the topology for comparison with expected certs to determine orphaned certs later
 	// Only certs owned by TLSPolicies should be in the topology - no need to check again
 	certs := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
 		r, ok := item.(*controller.RuntimeObject)

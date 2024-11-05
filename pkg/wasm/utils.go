@@ -144,9 +144,14 @@ func PredicatesFromHTTPRouteMatch(match gatewayapiv1.HTTPRouteMatch) []string {
 		predicates = append(predicates, predicateFromHeader(headerMatch))
 	}
 
-	// TODO(eguzki): query params. Investigate integration with wasm regarding Envoy params
-	// from https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
-	// request.query -> string : The query portion of the URL in the format of “name1=value1&name2=value2”.
+	// query param, only consider the first in case of repetition, as per spec
+	queryParams := make(map[gatewayapiv1.HTTPHeaderName]bool)
+	for _, queryParamMatch := range match.QueryParams {
+		if !queryParams[queryParamMatch.Name] {
+			queryParams[queryParamMatch.Name] = true
+			predicates = append(predicates, predicateFromQueryParam(queryParamMatch))
+		}
+	}
 
 	return predicates
 }
@@ -180,4 +185,8 @@ func predicateFromHeader(headerMatch gatewayapiv1.HTTPHeaderMatch) string {
 	// As for gateway api v1, the only operation type with core support is Exact match.
 	// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPHeaderMatch
 	return fmt.Sprintf("request.headers['%s'] == '%s'", headerMatch.Name, headerMatch.Value)
+}
+
+func predicateFromQueryParam(queryParam gatewayapiv1.HTTPQueryParamMatch) string {
+	return fmt.Sprintf("decodeQueryString(request.query, false)['%s'] == '%s'", queryParam.Name, queryParam.Value)
 }

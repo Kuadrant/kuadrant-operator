@@ -19,7 +19,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
@@ -32,8 +32,8 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 		gwName          = "kuadrant-gateway"
 	)
 
-	policyFactory := func(mutateFn ...func(policy *kuadrantv1alpha1.TLSPolicy)) *kuadrantv1alpha1.TLSPolicy {
-		p := &kuadrantv1alpha1.TLSPolicy{
+	policyFactory := func(mutateFn ...func(policy *kuadrantv1.TLSPolicy)) *kuadrantv1.TLSPolicy {
+		p := &kuadrantv1.TLSPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: ns,
 				Name:      tlsPolicyName,
@@ -41,10 +41,10 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			},
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "TLSPolicy",
-				APIVersion: kuadrantv1alpha1.GroupVersion.String(),
+				APIVersion: kuadrantv1.GroupVersion.String(),
 			},
-			Spec: kuadrantv1alpha1.TLSPolicySpec{
-				CertificateSpec: kuadrantv1alpha1.CertificateSpec{
+			Spec: kuadrantv1.TLSPolicySpec{
+				CertificateSpec: kuadrantv1.CertificateSpec{
 					IssuerRef: certmanmetav1.ObjectReference{
 						Name: issuerName,
 						Kind: certmanv1.IssuerKind,
@@ -64,7 +64,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 		return p
 	}
 
-	withClusterIssuerMutater := func(p *kuadrantv1alpha1.TLSPolicy) {
+	withClusterIssuerMutater := func(p *kuadrantv1.TLSPolicy) {
 		p.Spec.CertificateSpec.IssuerRef.Kind = certmanv1.ClusterIssuerKind
 	}
 
@@ -212,7 +212,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 		}
 	}
 
-	topologyOpts := func(policy *kuadrantv1alpha1.TLSPolicy, additionalOps ...machinery.GatewayAPITopologyOptionsFunc) []machinery.GatewayAPITopologyOptionsFunc {
+	topologyOpts := func(policy *kuadrantv1.TLSPolicy, additionalOps ...machinery.GatewayAPITopologyOptionsFunc) []machinery.GatewayAPITopologyOptionsFunc {
 		store := make(controller.Store)
 		gw := gwFactory()
 		store[string(gw.UID)] = gw
@@ -234,8 +234,8 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 	}
 
 	type args struct {
-		tlsPolicy *kuadrantv1alpha1.TLSPolicy
-		topology  func(*kuadrantv1alpha1.TLSPolicy) *machinery.Topology
+		tlsPolicy *kuadrantv1.TLSPolicy
+		topology  func(*kuadrantv1.TLSPolicy) *machinery.Topology
 	}
 	tests := []struct {
 		name string
@@ -246,7 +246,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			name: "unable to get issuer",
 			args: args{
 				tlsPolicy: policyFactory(),
-				topology: func(p *kuadrantv1alpha1.TLSPolicy) *machinery.Topology {
+				topology: func(p *kuadrantv1.TLSPolicy) *machinery.Topology {
 					topology, _ := machinery.NewGatewayAPITopology(
 						topologyOpts(p)...,
 					)
@@ -264,7 +264,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			name: "unable to get cluster issuer",
 			args: args{
 				tlsPolicy: policyFactory(withClusterIssuerMutater),
-				topology: func(p *kuadrantv1alpha1.TLSPolicy) *machinery.Topology {
+				topology: func(p *kuadrantv1.TLSPolicy) *machinery.Topology {
 					topology, _ := machinery.NewGatewayAPITopology(
 						topologyOpts(p)...,
 					)
@@ -282,7 +282,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			name: "issuer not ready",
 			args: args{
 				tlsPolicy: policyFactory(),
-				topology: func(p *kuadrantv1alpha1.TLSPolicy) *machinery.Topology {
+				topology: func(p *kuadrantv1.TLSPolicy) *machinery.Topology {
 					opts := topologyOpts(p, machinery.WithGatewayAPITopologyObjects(
 						&controller.RuntimeObject{Object: issuerFactory(issuerNotReadyMutater)},
 					))
@@ -301,7 +301,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			name: "issuer has no ready condition",
 			args: args{
 				tlsPolicy: policyFactory(),
-				topology: func(p *kuadrantv1alpha1.TLSPolicy) *machinery.Topology {
+				topology: func(p *kuadrantv1.TLSPolicy) *machinery.Topology {
 					opts := topologyOpts(p, machinery.WithGatewayAPITopologyObjects(
 						&controller.RuntimeObject{Object: issuerFactory(func(issuer *certmanv1.Issuer) {
 							issuer.Status.Conditions = []certmanv1.IssuerCondition{}
@@ -322,7 +322,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			name: "cluster issuer not ready",
 			args: args{
 				tlsPolicy: policyFactory(withClusterIssuerMutater),
-				topology: func(p *kuadrantv1alpha1.TLSPolicy) *machinery.Topology {
+				topology: func(p *kuadrantv1.TLSPolicy) *machinery.Topology {
 					opts := topologyOpts(p, machinery.WithGatewayAPITopologyObjects(
 						&controller.RuntimeObject{Object: clusterIssuerFactory(clusterIssuerNotReadyMutater)},
 					))
@@ -341,7 +341,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			name: "cluster issuer has no ready condition",
 			args: args{
 				tlsPolicy: policyFactory(withClusterIssuerMutater),
-				topology: func(p *kuadrantv1alpha1.TLSPolicy) *machinery.Topology {
+				topology: func(p *kuadrantv1.TLSPolicy) *machinery.Topology {
 					opts := topologyOpts(p, machinery.WithGatewayAPITopologyObjects(
 						&controller.RuntimeObject{Object: clusterIssuerFactory(func(issuer *certmanv1.ClusterIssuer) {
 							issuer.Status.Conditions = []certmanv1.IssuerCondition{}
@@ -362,7 +362,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			name: "no valid gateways found",
 			args: args{
 				tlsPolicy: policyFactory(),
-				topology: func(_ *kuadrantv1alpha1.TLSPolicy) *machinery.Topology {
+				topology: func(_ *kuadrantv1.TLSPolicy) *machinery.Topology {
 					opts := topologyOpts(policyFactory(), machinery.WithGatewayAPITopologyObjects(
 						&controller.RuntimeObject{Object: issuerFactory()},
 					))
@@ -381,7 +381,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			name: "unable to get certificate",
 			args: args{
 				tlsPolicy: policyFactory(),
-				topology: func(policy *kuadrantv1alpha1.TLSPolicy) *machinery.Topology {
+				topology: func(policy *kuadrantv1.TLSPolicy) *machinery.Topology {
 					opts := topologyOpts(policy, machinery.WithGatewayAPITopologyObjects(
 						&controller.RuntimeObject{Object: issuerFactory()},
 					))
@@ -400,7 +400,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			name: "certificate is not ready",
 			args: args{
 				tlsPolicy: policyFactory(),
-				topology: func(policy *kuadrantv1alpha1.TLSPolicy) *machinery.Topology {
+				topology: func(policy *kuadrantv1.TLSPolicy) *machinery.Topology {
 					opts := topologyOpts(policy, machinery.WithGatewayAPITopologyObjects(
 						&controller.RuntimeObject{Object: issuerFactory()},
 						&controller.RuntimeObject{Object: certificateFactory(certificateNotReadyMutater)},
@@ -420,7 +420,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			name: "certificate has no ready condition",
 			args: args{
 				tlsPolicy: policyFactory(),
-				topology: func(policy *kuadrantv1alpha1.TLSPolicy) *machinery.Topology {
+				topology: func(policy *kuadrantv1.TLSPolicy) *machinery.Topology {
 					opts := topologyOpts(policy, machinery.WithGatewayAPITopologyObjects(
 						&controller.RuntimeObject{Object: issuerFactory()},
 						&controller.RuntimeObject{Object: certificateFactory(func(certificate *certmanv1.Certificate) {
@@ -442,7 +442,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			name: "is enforced",
 			args: args{
 				tlsPolicy: policyFactory(),
-				topology: func(policy *kuadrantv1alpha1.TLSPolicy) *machinery.Topology {
+				topology: func(policy *kuadrantv1.TLSPolicy) *machinery.Topology {
 					opts := topologyOpts(policy, machinery.WithGatewayAPITopologyObjects(
 						&controller.RuntimeObject{Object: issuerFactory()},
 						&controller.RuntimeObject{Object: certificateFactory()},

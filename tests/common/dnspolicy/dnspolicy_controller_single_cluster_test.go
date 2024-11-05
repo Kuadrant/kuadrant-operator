@@ -21,7 +21,7 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
-	"github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/tests"
@@ -47,7 +47,7 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 	var dnsProviderSecret *corev1.Secret
 	var testNamespace string
 	var gateway *gatewayapiv1.Gateway
-	var dnsPolicy *v1alpha1.DNSPolicy
+	var dnsPolicy *kuadrantv1.DNSPolicy
 	var clusterHash, gwHash, recordName, wildcardRecordName string
 	var domain = fmt.Sprintf("example-%s.com", rand.String(6))
 

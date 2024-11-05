@@ -18,7 +18,7 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -44,7 +44,7 @@ func (r *EffectiveDNSPoliciesReconciler) Subscription() controller.Subscription 
 		ReconcileFunc: r.reconcile,
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
-			{Kind: &kuadrantv1alpha1.DNSPolicyGroupKind},
+			{Kind: &kuadrantv1.DNSPolicyGroupKind},
 			{Kind: &DNSRecordGroupKind},
 		},
 	}

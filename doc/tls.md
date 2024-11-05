@@ -23,7 +23,7 @@ The `TLSPolicy` spec includes the following parts:
 [//]: # (ToDo mnairn)
 
 ```yaml
-apiVersion: kuadrant.io/v1alpha1
+apiVersion: kuadrant.io/v1
 kind: TLSPolicy
 metadata:
   name: my-tls-policy

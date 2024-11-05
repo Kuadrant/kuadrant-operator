@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 )
 
@@ -60,10 +60,10 @@ func IsPolicyAccepted(ctx context.Context, p machinery.Policy, s *sync.Map) bool
 		return isAuthPolicyAcceptedFunc(s)(p)
 	case *kuadrantv1beta3.RateLimitPolicy:
 		return isRateLimitPolicyAcceptedFunc(s)(p)
-	case *kuadrantv1alpha1.TLSPolicy:
+	case *kuadrantv1.TLSPolicy:
 		isValid, _ := IsTLSPolicyValid(ctx, s, t)
 		return isValid
-	case *kuadrantv1alpha1.DNSPolicy:
+	case *kuadrantv1.DNSPolicy:
 		isValid, _ := dnsPolicyAcceptedStatusFunc(s)(p)
 		return isValid
 	default:
@@ -75,7 +75,7 @@ func policyGroupKinds() []*schema.GroupKind {
 	return []*schema.GroupKind{
 		&kuadrantv1beta3.AuthPolicyGroupKind,
 		&kuadrantv1beta3.RateLimitPolicyGroupKind,
-		&kuadrantv1alpha1.TLSPolicyGroupKind,
-		&kuadrantv1alpha1.DNSPolicyGroupKind,
+		&kuadrantv1.TLSPolicyGroupKind,
+		&kuadrantv1.DNSPolicyGroupKind,
 	}
 }

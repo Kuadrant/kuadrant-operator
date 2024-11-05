@@ -11,7 +11,7 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
@@ -26,7 +26,7 @@ func (r *DNSPoliciesValidator) Subscription() controller.Subscription {
 		ReconcileFunc: r.validate,
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
-			{Kind: &kuadrantv1alpha1.DNSPolicyGroupKind},
+			{Kind: &kuadrantv1.DNSPolicyGroupKind},
 		},
 	}
 }
@@ -38,9 +38,9 @@ func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.Reso
 
 	logger.V(1).Info("validating dns policies", "policies", len(policies))
 
-	state.Store(StateDNSPolicyAcceptedKey, lo.SliceToMap(policies, func(policy *kuadrantv1alpha1.DNSPolicy) (string, error) {
+	state.Store(StateDNSPolicyAcceptedKey, lo.SliceToMap(policies, func(policy *kuadrantv1.DNSPolicy) (string, error) {
 		if len(policy.GetTargetRefs()) == 0 || len(topology.Targetables().Children(policy)) == 0 {
-			return policy.GetLocator(), kuadrant.NewErrTargetNotFound(kuadrantv1alpha1.DNSPolicyGroupKind.Kind, policy.GetTargetRef(),
+			return policy.GetLocator(), kuadrant.NewErrTargetNotFound(kuadrantv1.DNSPolicyGroupKind.Kind, policy.GetTargetRef(),
 				apierrors.NewNotFound(controller.GatewaysResource.GroupResource(), policy.GetName()))
 		}
 		return policy.GetLocator(), policy.Validate()

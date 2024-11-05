@@ -5,7 +5,7 @@ metadata:
     alm-examples: |-
       [
         {
-          "apiVersion": "kuadrant.io/v1alpha1",
+          "apiVersion": "kuadrant.io/v1",
           "kind": "DNSPolicy",
           "metadata": {
             "name": "dnspolicy-sample"
@@ -23,7 +23,7 @@ metadata:
           }
         },
         {
-          "apiVersion": "kuadrant.io/v1alpha1",
+          "apiVersion": "kuadrant.io/v1",
           "kind": "TLSPolicy",
           "metadata": {
             "name": "tlspolicy-sample"
@@ -106,7 +106,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2024-11-05T09:44:13Z"
+    createdAt: "2024-11-05T10:52:01Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
@@ -126,7 +126,7 @@ spec:
       displayName: DNSPolicy
       kind: DNSPolicy
       name: dnspolicies.kuadrant.io
-      version: v1alpha1
+      version: v1
     - description: Kuadrant configures installations of Kuadrant Service Protection
         components
       displayName: Kuadrant
@@ -144,7 +144,7 @@ spec:
       displayName: TLSPolicy
       kind: TLSPolicy
       name: tlspolicies.kuadrant.io
-      version: v1alpha1
+      version: v1
   description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
   displayName: Kuadrant Operator
   icon:

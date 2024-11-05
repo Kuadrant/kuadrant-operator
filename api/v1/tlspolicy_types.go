@@ -14,18 +14,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1
 
 import (
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/policy-machinery/machinery"
 
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+)
+
+var (
+	TLSPoliciesResource = GroupVersion.WithResource("tlspolicies")
+	TLSPolicyGroupKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "TLSPolicy"}
 )
 
 // TLSPolicySpec defines the desired state of TLSPolicy
@@ -134,6 +143,31 @@ type TLSPolicy struct {
 
 	Spec   TLSPolicySpec   `json:"spec,omitempty"`
 	Status TLSPolicyStatus `json:"status,omitempty"`
+}
+
+var _ machinery.Policy = &TLSPolicy{}
+
+func (p *TLSPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
+	return []machinery.PolicyTargetReference{
+		machinery.LocalPolicyTargetReference{
+			LocalPolicyTargetReference: p.Spec.TargetRef,
+			PolicyNamespace:            p.Namespace,
+		},
+	}
+}
+
+func (p *TLSPolicy) GetMergeStrategy() machinery.MergeStrategy {
+	return func(policy machinery.Policy, _ machinery.Policy) machinery.Policy {
+		return policy
+	}
+}
+
+func (p *TLSPolicy) Merge(other machinery.Policy) machinery.Policy {
+	return other
+}
+
+func (p *TLSPolicy) GetLocator() string {
+	return machinery.LocatorFromObject(p)
 }
 
 // Deprecated: kuadrant.Policy.

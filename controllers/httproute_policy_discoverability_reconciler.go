@@ -18,7 +18,6 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	kuadrantv1alpha1 "github.com/kuadrant/kuadrant-operator/api/v1alpha1"
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -39,8 +38,8 @@ func (r *HTTPRoutePolicyDiscoverabilityReconciler) Subscription() *controller.Su
 			{Kind: &machinery.HTTPRouteGroupKind},
 			{Kind: &kuadrantv1beta3.AuthPolicyGroupKind},
 			{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind},
-			{Kind: &kuadrantv1alpha1.TLSPolicyGroupKind},
-			{Kind: &kuadrantv1alpha1.DNSPolicyGroupKind},
+			{Kind: &kuadrantv1.TLSPolicyGroupKind},
+			{Kind: &kuadrantv1.DNSPolicyGroupKind},
 		},
 		ReconcileFunc: r.reconcile,
 	}

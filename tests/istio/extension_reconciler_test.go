@@ -174,8 +174,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 								Data: []wasm.DataType{
 									{
-										Value: &wasm.Static{
-											Static: wasm.StaticSpec{
+										Value: &wasm.Expression{
+											ExpressionItem: wasm.ExpressionItem{
 												Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 												Value: "1",
 											},
@@ -250,14 +250,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Rates: []kuadrantv1beta3.Rate{
 									{Limit: 50, Duration: 1, Unit: kuadrantv1beta3.TimeUnit("minute")},
 								},
-								Counters: []kuadrantv1beta3.ContextSelector{"auth.identity.username"},
-								When: []kuadrantv1beta3.WhenCondition{
-									{
-										Selector: "auth.identity.group",
-										Operator: kuadrantv1beta3.WhenConditionOperator("neq"),
-										Value:    "admin",
-									},
-								},
+								Counters: []kuadrantv1beta3.Counter{{Expression: "auth.identity.username"}},
+								//When:     kuadrantv1beta3.WhenPredicates{kuadrantv1beta3.Predicate("auth.identity.group != admin")},
+								When: kuadrantv1beta3.WhenPredicates{"auth.identity.group != admin"},
 							},
 							"all": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -316,26 +311,23 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Condition{
-						{
-							Selector: "auth.identity.group",
-							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-							Value:    "admin",
-						},
+					Predicates: kuadrantv1beta3.WhenPredicates{
+						kuadrantv1beta3.Predicate("auth.identity.group != admin"),
 					},
 					Data: []wasm.DataType{
 						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
 									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
 									Value: "1",
 								},
 							},
 						},
 						{
-							Value: &wasm.Selector{
-								Selector: wasm.SelectorSpec{
-									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
+									Key:   "auth.identity.username",
+									Value: "auth.identity.username",
 								},
 							},
 						},
@@ -346,8 +338,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 					Data: []wasm.DataType{
 						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
 									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
 									Value: "1",
 								},
@@ -363,34 +355,31 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
-				"request.method == 'GET'",
-				"request.url_path.startsWith('/toys')",
+				kuadrantv1beta3.Predicate("request.method == 'GET'"),
+				kuadrantv1beta3.Predicate("request.url_path.startsWith('/toys')"),
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
 			Expect(actionSet.Actions).To(ContainElements(
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Condition{
-						{
-							Selector: "auth.identity.group",
-							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-							Value:    "admin",
-						},
+					Predicates: kuadrantv1beta3.WhenPredicates{
+						kuadrantv1beta3.Predicate("auth.identity.group != admin"),
 					},
 					Data: []wasm.DataType{
 						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
 									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
 									Value: "1",
 								},
 							},
 						},
 						{
-							Value: &wasm.Selector{
-								Selector: wasm.SelectorSpec{
-									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
+									Key:   "auth.identity.username",
+									Value: "auth.identity.username",
 								},
 							},
 						},
@@ -401,8 +390,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 					Data: []wasm.DataType{
 						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
 									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
 									Value: "1",
 								},
@@ -418,34 +407,31 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
-				"request.method == 'POST'",
-				"request.url_path.startsWith('/toys')",
+				kuadrantv1beta3.Predicate("request.method == 'POST'"),
+				kuadrantv1beta3.Predicate("request.url_path.startsWith('/toys')"),
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
 			Expect(actionSet.Actions).To(ContainElements(
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Condition{
-						{
-							Selector: "auth.identity.group",
-							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-							Value:    "admin",
-						},
+					Predicates: kuadrantv1beta3.WhenPredicates{
+						kuadrantv1beta3.Predicate("auth.identity.group != admin"),
 					},
 					Data: []wasm.DataType{
 						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
 									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
 									Value: "1",
 								},
 							},
 						},
 						{
-							Value: &wasm.Selector{
-								Selector: wasm.SelectorSpec{
-									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
+									Key:   "auth.identity.username",
+									Value: "auth.identity.username",
 								},
 							},
 						},
@@ -456,8 +442,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 					Data: []wasm.DataType{
 						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
 									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
 									Value: "1",
 								},
@@ -473,33 +459,30 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
-				"request.url_path.startsWith('/assets')",
+				kuadrantv1beta3.Predicate("request.url_path.startsWith('/assets')"),
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
 			Expect(actionSet.Actions).To(ContainElements(
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Condition{
-						{
-							Selector: "auth.identity.group",
-							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-							Value:    "admin",
-						},
+					Predicates: kuadrantv1beta3.WhenPredicates{
+						kuadrantv1beta3.Predicate("auth.identity.group != admin"),
 					},
 					Data: []wasm.DataType{
 						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
 									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
 									Value: "1",
 								},
 							},
 						},
 						{
-							Value: &wasm.Selector{
-								Selector: wasm.SelectorSpec{
-									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
+									Key:   "auth.identity.username",
+									Value: "auth.identity.username",
 								},
 							},
 						},
@@ -510,8 +493,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 					Data: []wasm.DataType{
 						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
 									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
 									Value: "1",
 								},
@@ -527,34 +510,31 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
-				"request.method == 'GET'",
-				"request.url_path.startsWith('/toys')",
+				kuadrantv1beta3.Predicate("request.method == 'GET'"),
+				kuadrantv1beta3.Predicate("request.url_path.startsWith('/toys')"),
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
 			Expect(actionSet.Actions).To(ContainElements(
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Condition{
-						{
-							Selector: "auth.identity.group",
-							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-							Value:    "admin",
-						},
+					Predicates: kuadrantv1beta3.WhenPredicates{
+						kuadrantv1beta3.Predicate("auth.identity.group != admin"),
 					},
 					Data: []wasm.DataType{
 						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
 									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
 									Value: "1",
 								},
 							},
 						},
 						{
-							Value: &wasm.Selector{
-								Selector: wasm.SelectorSpec{
-									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
+									Key:   "auth.identity.username",
+									Value: "auth.identity.username",
 								},
 							},
 						},
@@ -565,8 +545,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 					Data: []wasm.DataType{
 						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
 									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
 									Value: "1",
 								},
@@ -582,34 +562,31 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 1, "api.toystore.io")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
-				"request.method == 'POST'",
-				"request.url_path.startsWith('/toys')",
+				kuadrantv1beta3.Predicate("request.method == 'POST'"),
+				kuadrantv1beta3.Predicate("request.url_path.startsWith('/toys')"),
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
 			Expect(actionSet.Actions).To(ContainElements(
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Conditions: []wasm.Condition{
-						{
-							Selector: "auth.identity.group",
-							Operator: wasm.PatternOperator(kuadrantv1beta3.NotEqualOperator),
-							Value:    "admin",
-						},
+					Predicates: kuadrantv1beta3.WhenPredicates{
+						kuadrantv1beta3.Predicate("auth.identity.group != admin"),
 					},
 					Data: []wasm.DataType{
 						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
 									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "users"),
 									Value: "1",
 								},
 							},
 						},
 						{
-							Value: &wasm.Selector{
-								Selector: wasm.SelectorSpec{
-									Selector: kuadrantv1beta3.ContextSelector("auth.identity.username"),
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
+									Key:   "auth.identity.username",
+									Value: "auth.identity.username",
 								},
 							},
 						},
@@ -620,8 +597,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 					Data: []wasm.DataType{
 						{
-							Value: &wasm.Static{
-								Static: wasm.StaticSpec{
+							Value: &wasm.Expression{
+								ExpressionItem: wasm.ExpressionItem{
 									Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "all"),
 									Value: "1",
 								},
@@ -710,9 +687,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{"*.example.com"},
-							Predicates: []string{
-								"request.method == 'GET'",
-								"request.url_path.startsWith('/toy')",
+							Predicates: kuadrantv1beta3.WhenPredicates{
+								kuadrantv1beta3.Predicate("request.method == 'GET'"),
+								kuadrantv1beta3.Predicate("request.url_path.startsWith('/toy')"),
 							},
 						},
 						Actions: []wasm.Action{
@@ -721,8 +698,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 								Data: []wasm.DataType{
 									{
-										Value: &wasm.Static{
-											Static: wasm.StaticSpec{
+										Value: &wasm.Expression{
+											ExpressionItem: wasm.ExpressionItem{
 												Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 												Value: "1",
 											},
@@ -931,9 +908,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.example.com"},
-								Predicates: []string{
-									"request.method == 'GET'",
-									"request.url_path.startsWith('/toy')",
+								Predicates: kuadrantv1beta3.WhenPredicates{
+									kuadrantv1beta3.Predicate("request.method == 'GET'"),
+									kuadrantv1beta3.Predicate("request.url_path.startsWith('/toy')"),
 								},
 							},
 							Actions: []wasm.Action{
@@ -942,8 +919,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 									Data: []wasm.DataType{
 										{
-											Value: &wasm.Static{
-												Static: wasm.StaticSpec{
+											Value: &wasm.Expression{
+												ExpressionItem: wasm.ExpressionItem{
 													Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 													Value: "1",
 												},
@@ -1141,9 +1118,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.example.com"},
-								Predicates: []string{
-									"request.method == 'GET'",
-									"request.url_path.startsWith('/toy')",
+								Predicates: kuadrantv1beta3.WhenPredicates{
+									kuadrantv1beta3.Predicate("request.method == 'GET'"),
+									kuadrantv1beta3.Predicate("request.url_path.startsWith('/toy')"),
 								},
 							},
 							Actions: []wasm.Action{
@@ -1152,8 +1129,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 									Data: []wasm.DataType{
 										{
-											Value: &wasm.Static{
-												Static: wasm.StaticSpec{
+											Value: &wasm.Expression{
+												ExpressionItem: wasm.ExpressionItem{
 													Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 													Value: "1",
 												},
@@ -1269,9 +1246,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.example.com"},
-								Predicates: []string{
-									"request.method == 'GET'",
-									"request.url_path.startsWith('/toy')",
+								Predicates: kuadrantv1beta3.WhenPredicates{
+									kuadrantv1beta3.Predicate("request.method == 'GET'"),
+									kuadrantv1beta3.Predicate("request.url_path.startsWith('/toy')"),
 								},
 							},
 							Actions: []wasm.Action{
@@ -1280,8 +1257,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 									Data: []wasm.DataType{
 										{
-											Value: &wasm.Static{
-												Static: wasm.StaticSpec{
+											Value: &wasm.Expression{
+												ExpressionItem: wasm.ExpressionItem{
 													Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 													Value: "1",
 												},
@@ -1469,9 +1446,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
-								Predicates: []string{
-									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeA')",
+								Predicates: kuadrantv1beta3.WhenPredicates{
+									kuadrantv1beta3.Predicate("request.method == 'GET'"),
+									kuadrantv1beta3.Predicate("request.url_path.startsWith('/routeA')"),
 								},
 							},
 							Actions: []wasm.Action{
@@ -1480,8 +1457,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
 									Data: []wasm.DataType{
 										{
-											Value: &wasm.Static{
-												Static: wasm.StaticSpec{
+											Value: &wasm.Expression{
+												ExpressionItem: wasm.ExpressionItem{
 													Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 													Value: "1",
 												},
@@ -1560,9 +1537,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.b.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.b.example.com"},
-								Predicates: []string{
-									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeB')",
+								Predicates: kuadrantv1beta3.WhenPredicates{
+									kuadrantv1beta3.Predicate("request.method == 'GET'"),
+									kuadrantv1beta3.Predicate("request.url_path.startsWith('/routeB')"),
 								},
 							},
 							Actions: []wasm.Action{
@@ -1571,8 +1548,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteB),
 									Data: []wasm.DataType{
 										{
-											Value: &wasm.Static{
-												Static: wasm.StaticSpec{
+											Value: &wasm.Expression{
+												ExpressionItem: wasm.ExpressionItem{
 													Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 													Value: "1",
 												},
@@ -1735,9 +1712,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
-								Predicates: []string{
-									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeA')",
+								Predicates: kuadrantv1beta3.WhenPredicates{
+									kuadrantv1beta3.Predicate("request.method == 'GET'"),
+									kuadrantv1beta3.Predicate("request.url_path.startsWith('/routeA')"),
 								},
 							},
 							Actions: []wasm.Action{
@@ -1746,8 +1723,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
 									Data: []wasm.DataType{
 										{
-											Value: &wasm.Static{
-												Static: wasm.StaticSpec{
+											Value: &wasm.Expression{
+												ExpressionItem: wasm.ExpressionItem{
 													Key:   controllers.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
 													Value: "1",
 												},
@@ -1844,9 +1821,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
-								Predicates: []string{
-									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeA')",
+								Predicates: kuadrantv1beta3.WhenPredicates{
+									kuadrantv1beta3.Predicate("request.method == 'GET'"),
+									kuadrantv1beta3.Predicate("request.url_path.startsWith('/routeA')"),
 								},
 							},
 							Actions: []wasm.Action{
@@ -1855,8 +1832,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
 									Data: []wasm.DataType{
 										{
-											Value: &wasm.Static{
-												Static: wasm.StaticSpec{
+											Value: &wasm.Expression{
+												ExpressionItem: wasm.ExpressionItem{
 													Key:   controllers.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
 													Value: "1",
 												},
@@ -2055,9 +2032,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
-								Predicates: []string{
-									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeA')",
+								Predicates: kuadrantv1beta3.WhenPredicates{
+									kuadrantv1beta3.Predicate("request.method == 'GET'"),
+									kuadrantv1beta3.Predicate("request.url_path.startsWith('/routeA')"),
 								},
 							},
 							Actions: []wasm.Action{
@@ -2066,8 +2043,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
 									Data: []wasm.DataType{
 										{
-											Value: &wasm.Static{
-												Static: wasm.StaticSpec{
+											Value: &wasm.Expression{
+												ExpressionItem: wasm.ExpressionItem{
 													Key:   controllers.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
 													Value: "1",
 												},
@@ -2161,9 +2138,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID, 0, "*.a.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.a.example.com"},
-								Predicates: []string{
-									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeA')",
+								Predicates: kuadrantv1beta3.WhenPredicates{
+									kuadrantv1beta3.Predicate("request.method == 'GET'"),
+									kuadrantv1beta3.Predicate("request.url_path.startsWith('/routeA')"),
 								},
 							},
 							Actions: []wasm.Action{
@@ -2172,8 +2149,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteA),
 									Data: []wasm.DataType{
 										{
-											Value: &wasm.Static{
-												Static: wasm.StaticSpec{
+											Value: &wasm.Expression{
+												ExpressionItem: wasm.ExpressionItem{
 													Key:   controllers.LimitNameToLimitadorIdentifier(rlp2Key, "routelimit"),
 													Value: "1",
 												},
@@ -2187,9 +2164,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 							Name: wasm.ActionSetNameForPath(pathID_B, 0, "*.b.example.com"),
 							RouteRuleConditions: wasm.RouteRuleConditions{
 								Hostnames: []string{"*.b.example.com"},
-								Predicates: []string{
-									"request.method == 'GET'",
-									"request.url_path.startsWith('/routeB')",
+								Predicates: kuadrantv1beta3.WhenPredicates{
+									kuadrantv1beta3.Predicate("request.method == 'GET'"),
+									kuadrantv1beta3.Predicate("request.url_path.startsWith('/routeB')"),
 								},
 							},
 							Actions: []wasm.Action{
@@ -2198,8 +2175,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 									Scope:       controllers.LimitsNamespaceFromRoute(httpRouteB),
 									Data: []wasm.DataType{
 										{
-											Value: &wasm.Static{
-												Static: wasm.StaticSpec{
+											Value: &wasm.Expression{
+												ExpressionItem: wasm.ExpressionItem{
 													Key:   controllers.LimitNameToLimitadorIdentifier(rlp1Key, "gatewaylimit"),
 													Value: "1",
 												},
@@ -2326,9 +2303,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Name: wasm.ActionSetNameForPath(pathID, 0, gwHostname),
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{gwHostname},
-							Predicates: []string{
-								"request.method == 'GET'",
-								"request.url_path.startsWith('/toy')",
+							Predicates: kuadrantv1beta3.WhenPredicates{
+								kuadrantv1beta3.Predicate("request.method == 'GET'"),
+								kuadrantv1beta3.Predicate("request.url_path.startsWith('/toy')"),
 							},
 						},
 						Actions: []wasm.Action{
@@ -2337,8 +2314,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 								Data: []wasm.DataType{
 									{
-										Value: &wasm.Static{
-											Static: wasm.StaticSpec{
+										Value: &wasm.Expression{
+											ExpressionItem: wasm.ExpressionItem{
 												Key:   controllers.LimitNameToLimitadorIdentifier(rlpKey, "l1"),
 												Value: "1",
 											},
@@ -2402,9 +2379,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						Name: wasm.ActionSetNameForPath(pathID, 0, hostname),
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{hostname},
-							Predicates: []string{
-								"request.method == 'GET'",
-								"request.url_path.startsWith('/toy')",
+							Predicates: kuadrantv1beta3.WhenPredicates{
+								kuadrantv1beta3.Predicate("request.method == 'GET'"),
+								kuadrantv1beta3.Predicate("request.url_path.startsWith('/toy')"),
 							},
 						},
 						Actions: []wasm.Action{
@@ -2413,8 +2390,8 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 								Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
 								Data: []wasm.DataType{
 									{
-										Value: &wasm.Static{
-											Static: wasm.StaticSpec{
+										Value: &wasm.Expression{
+											ExpressionItem: wasm.ExpressionItem{
 												Key:   key,
 												Value: "1",
 											},

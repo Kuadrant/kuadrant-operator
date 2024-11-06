@@ -178,8 +178,10 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 		certificate.Status = certmanv1.CertificateStatus{
 			Conditions: []certmanv1.CertificateCondition{
 				{
-					Type:   certmanv1.CertificateConditionReady,
-					Status: certmanmetav1.ConditionFalse,
+					Type:    certmanv1.CertificateConditionReady,
+					Status:  certmanmetav1.ConditionFalse,
+					Reason:  "IncorrectCertificate",
+					Message: "Secret was issued for \"another-listener\"",
 				},
 			},
 		}
@@ -417,7 +419,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 				Type:    string(kuadrant.PolicyConditionEnforced),
 				Status:  metav1.ConditionFalse,
 				Reason:  string(kuadrant.PolicyReasonUnknown),
-				Message: fmt.Sprintf("TLSPolicy has encountered some issues: certificate %s not ready", certificateName),
+				Message: fmt.Sprintf("TLSPolicy has encountered some issues: certificate %s is not ready: IncorrectCertificate - Secret was issued for \"another-listener\"", certificateName),
 			},
 		},
 		{

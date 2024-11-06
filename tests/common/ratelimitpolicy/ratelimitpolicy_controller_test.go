@@ -63,7 +63,7 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
+										Limit: 1, Window: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -186,7 +186,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
+										Limit: 1, Window: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -306,7 +306,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 								"l1": {
 									Rates: []kuadrantv1beta3.Rate{
 										{
-											Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
+											Limit: 1, Window: kuadrantv1beta3.Duration("3m"),
 										},
 									},
 								},
@@ -406,7 +406,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 						"l1": {
 							Rates: []kuadrantv1beta3.Rate{
 								{
-									Limit: 10, Duration: kuadrantv1beta3.Duration("5s"),
+									Limit: 10, Window: kuadrantv1beta3.Duration("5s"),
 								},
 							},
 						},
@@ -494,7 +494,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					"route": {
 						Rates: []kuadrantv1beta3.Rate{
 							{
-								Limit: 10, Duration: kuadrantv1beta3.Duration("5s"),
+								Limit: 10, Window: kuadrantv1beta3.Duration("5s"),
 							},
 						},
 					},
@@ -792,7 +792,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							"gw-a-1000rps": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1000, Duration: kuadrantv1beta3.Duration("1s"),
+										Limit: 1000, Window: kuadrantv1beta3.Duration("1s"),
 									},
 								},
 							},
@@ -814,7 +814,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							"gw-b-100rps": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 100, Duration: kuadrantv1beta3.Duration("1s"),
+										Limit: 100, Window: kuadrantv1beta3.Duration("1s"),
 									},
 								},
 							},
@@ -833,7 +833,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					"route-10rps": {
 						Rates: []kuadrantv1beta3.Rate{
 							{
-								Limit: 10, Duration: kuadrantv1beta3.Duration("1s"),
+								Limit: 10, Window: kuadrantv1beta3.Duration("1s"),
 							},
 						},
 					},
@@ -958,7 +958,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Spec.Limits = map[string]kuadrantv1beta3.Limit{
 					"implicit": {
-						Rates: []kuadrantv1beta3.Rate{{Limit: 2, Duration: kuadrantv1beta3.Duration("20s")}},
+						Rates: []kuadrantv1beta3.Rate{{Limit: 2, Window: kuadrantv1beta3.Duration("20s")}},
 					},
 				}
 			})
@@ -971,7 +971,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"explicit": {
-								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Duration: kuadrantv1beta3.Duration("10s")}},
+								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Window: kuadrantv1beta3.Duration("10s")}},
 							},
 						},
 					},
@@ -986,14 +986,14 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"explicit": {
-								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Duration: kuadrantv1beta3.Duration("10s")}},
+								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Window: kuadrantv1beta3.Duration("10s")}},
 							},
 						},
 					},
 				}
 				policy.Spec.Limits = map[string]kuadrantv1beta3.Limit{
 					"implicit": {
-						Rates: []kuadrantv1beta3.Rate{{Limit: 2, Duration: kuadrantv1beta3.Duration("20s")}},
+						Rates: []kuadrantv1beta3.Rate{{Limit: 2, Window: kuadrantv1beta3.Duration("20s")}},
 					},
 				}
 			})
@@ -1008,7 +1008,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"implicit": {
-								Rates: []kuadrantv1beta3.Rate{{Limit: 2, Duration: kuadrantv1beta3.Duration("20s")}},
+								Rates: []kuadrantv1beta3.Rate{{Limit: 2, Window: kuadrantv1beta3.Duration("20s")}},
 							},
 						},
 					},
@@ -1017,7 +1017,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"explicit": {
-								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Duration: kuadrantv1beta3.Duration("10s")}},
+								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Window: kuadrantv1beta3.Duration("10s")}},
 							},
 						},
 					},
@@ -1032,14 +1032,14 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
 				policy.Spec.Limits = map[string]kuadrantv1beta3.Limit{
 					"implicit": {
-						Rates: []kuadrantv1beta3.Rate{{Limit: 2, Duration: kuadrantv1beta3.Duration("20s")}},
+						Rates: []kuadrantv1beta3.Rate{{Limit: 2, Window: kuadrantv1beta3.Duration("20s")}},
 					},
 				}
 				policy.Spec.Overrides = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
 					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"overrides": {
-								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Duration: kuadrantv1beta3.Duration("10s")}},
+								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Window: kuadrantv1beta3.Duration("10s")}},
 							},
 						},
 					},
@@ -1057,7 +1057,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"override": {
-								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Duration: kuadrantv1beta3.Duration("10s")}},
+								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Window: kuadrantv1beta3.Duration("10s")}},
 							},
 						},
 					},

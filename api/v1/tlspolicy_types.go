@@ -21,8 +21,8 @@ import (
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -152,7 +152,7 @@ func (p *TLSPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
 	return []machinery.PolicyTargetReference{
 		machinery.LocalPolicyTargetReferenceWithSectionName{
 			LocalPolicyTargetReferenceWithSectionName: p.Spec.TargetRef,
-			PolicyNamespace:            p.Namespace,
+			PolicyNamespace: p.Namespace,
 		},
 	}
 }

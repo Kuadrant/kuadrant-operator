@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	"github.com/go-logr/logr"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -43,12 +44,6 @@ func (t *EffectiveTLSPoliciesReconciler) Subscription() *controller.Subscription
 	}
 }
 
-type hostPolicy struct {
-	hosts  []string
-	policy []machinery.Policy
-	target machinery.Targetable
-}
-
 type CertTarget struct {
 	cert   *certmanv1.Certificate
 	target machinery.Targetable
@@ -64,64 +59,28 @@ type CertTarget struct {
 func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTLSPoliciesReconciler").WithName("Reconcile")
 
-	// Get all certs in the topology for comparison with expected certs to determine orphaned certs later
-	// Only certs owned by TLSPolicies should be in the topology - no need to check again
-	certs := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
-		r, ok := item.(*controller.RuntimeObject)
-		if !ok {
-			return nil, false
-		}
-		c, ok := r.Object.(*certmanv1.Certificate)
-
-		return c, ok
-	})
-
-	listeners := lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, index int) (*machinery.Listener, bool) {
-		l, ok := item.(*machinery.Listener)
-		return l, ok
-	})
+	certs := getCertificatesFromTopology(topology)
+	listeners := getListenersFromTopology(topology)
 
 	var certTargets []CertTarget
 	for _, l := range listeners {
-		// validate listener
-		err := validateGatewayListenerBlock(field.NewPath(""), *l.Listener, l.Gateway).ToAggregate()
-		if err != nil {
+		if err := validateGatewayListenerBlock(field.NewPath(""), *l.Listener, l.Gateway).ToAggregate(); err != nil {
 			logger.Info("Skipped a listener block: " + err.Error())
 			continue
 		}
 
-		// check for if listener policies
-		policies := lo.Filter(l.Policies(), filterForTLSPolicies)
-
-		// if not, use gateway policies
+		policies := getTLSPoliciesForListener(l)
 		if len(policies) == 0 {
-			policies = lo.Filter(l.Gateway.Policies(), filterForTLSPolicies)
+			continue // No policies to process
 		}
 
-		// no policies - skip
-		if len(policies) == 0 {
-			continue
-		}
-
-		hostname := "*"
-		if l.Hostname != nil {
-			hostname = string(*l.Hostname)
-		}
+		hostname := getListenerHostname(l)
 
 		for _, certRef := range l.TLS.CertificateRefs {
-			secretRef := corev1.ObjectReference{
-				Name: string(certRef.Name),
-			}
-			if certRef.Namespace != nil {
-				secretRef.Namespace = string(*certRef.Namespace)
-			} else {
-				secretRef.Namespace = l.GetNamespace()
-			}
+			secretRef := getSecretReference(certRef, l)
 
-			for _, p := range policies { // TODO - multiple policies - use effective policy instead?
+			for _, p := range policies {
 				tlsPolicy := p.(*kuadrantv1.TLSPolicy)
-
-				// Policy is deleted
 				if tlsPolicy.DeletionTimestamp != nil {
 					logger.V(1).Info("policy is marked for deletion, nothing to do", "name", tlsPolicy.Name, "namespace", tlsPolicy.Namespace, "uid", tlsPolicy.GetUID())
 					continue
@@ -142,7 +101,26 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 		}
 	}
 
-	var expectedCerts []*certmanv1.Certificate
+	expectedCerts := t.reconcileCertificates(ctx, certTargets, topology, logger)
+
+	// Clean up orphaned certs
+	uniqueExpectedCerts := lo.UniqBy(expectedCerts, func(item *certmanv1.Certificate) types.UID {
+		return item.GetUID()
+	})
+	orphanedCerts, _ := lo.Difference(certs, uniqueExpectedCerts)
+	for _, orphanedCert := range orphanedCerts {
+		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(orphanedCert.GetNamespace())
+		if err := resource.Delete(ctx, orphanedCert.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			logger.Error(err, "unable to delete orphaned certificate", "name", orphanedCert.GetName(), "namespace", orphanedCert.GetNamespace(), "uid", orphanedCert.GetUID())
+			continue
+		}
+	}
+
+	return nil
+}
+
+func (t *EffectiveTLSPoliciesReconciler) reconcileCertificates(ctx context.Context, certTargets []CertTarget, topology *machinery.Topology, logger logr.Logger) []*certmanv1.Certificate {
+	expectedCerts := make([]*certmanv1.Certificate, 0, len(certTargets))
 	for _, certTarget := range certTargets {
 		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(certTarget.cert.GetNamespace())
 
@@ -187,21 +165,53 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 			logger.Error(err, "unable to update certificate", "name", certTarget.cert.GetName(), "namespace", certTarget.cert.GetNamespace(), "uid", certTarget.target.GetLocator())
 		}
 	}
+	return expectedCerts
+}
 
-	// Clean up orphaned certs
-	uniqueExpectedCerts := lo.UniqBy(expectedCerts, func(item *certmanv1.Certificate) types.UID {
-		return item.GetUID()
-	})
-	orphanedCerts, _ := lo.Difference(certs, uniqueExpectedCerts)
-	for _, orphanedCert := range orphanedCerts {
-		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(orphanedCert.GetNamespace())
-		if err := resource.Delete(ctx, orphanedCert.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-			logger.Error(err, "unable to delete orphaned certificate", "name", orphanedCert.GetName(), "namespace", orphanedCert.GetNamespace(), "uid", orphanedCert.GetUID())
-			continue
+func getCertificatesFromTopology(topology *machinery.Topology) []*certmanv1.Certificate {
+	return lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
+		r, ok := item.(*controller.RuntimeObject)
+		if !ok {
+			return nil, false
 		}
-	}
+		c, ok := r.Object.(*certmanv1.Certificate)
+		return c, ok
+	})
+}
 
-	return nil
+func getListenersFromTopology(topology *machinery.Topology) []*machinery.Listener {
+	return lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, index int) (*machinery.Listener, bool) {
+		l, ok := item.(*machinery.Listener)
+		return l, ok
+	})
+}
+
+func getTLSPoliciesForListener(l *machinery.Listener) []machinery.Policy {
+	policies := lo.Filter(l.Policies(), filterForTLSPolicies)
+	if len(policies) == 0 {
+		policies = lo.Filter(l.Gateway.Policies(), filterForTLSPolicies)
+	}
+	return policies
+}
+
+func getListenerHostname(l *machinery.Listener) string {
+	hostname := "*"
+	if l.Hostname != nil {
+		hostname = string(*l.Hostname)
+	}
+	return hostname
+}
+
+func getSecretReference(certRef gatewayapiv1.SecretObjectReference, l *machinery.Listener) corev1.ObjectReference {
+	secretRef := corev1.ObjectReference{
+		Name: string(certRef.Name),
+	}
+	if certRef.Namespace != nil {
+		secretRef.Namespace = string(*certRef.Namespace)
+	} else {
+		secretRef.Namespace = l.GetNamespace()
+	}
+	return secretRef
 }
 
 func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *kuadrantv1.TLSPolicy) []*certmanv1.Certificate {

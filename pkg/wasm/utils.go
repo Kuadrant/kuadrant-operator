@@ -188,5 +188,5 @@ func predicateFromHeader(headerMatch gatewayapiv1.HTTPHeaderMatch) string {
 }
 
 func predicateFromQueryParam(queryParam gatewayapiv1.HTTPQueryParamMatch) string {
-	return fmt.Sprintf("decodeQueryString(request.query)['%s'] == '%s'", queryParam.Name, queryParam.Value)
+	return fmt.Sprintf("queryMap(request.query)['%s'] == '%s'", queryParam.Name, queryParam.Value)
 }

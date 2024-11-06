@@ -42,7 +42,7 @@ export KUADRANT_VERSION='vX.Y.Z'
 Before you can use Kuadrant, you must install Gateway API v1 as follows:
 
 ```bash
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml
 ```
 
 ### Step 3 - Install cert-manager
@@ -100,7 +100,7 @@ metadata:
   name: sailoperator
   namespace: gateway-system
 spec:
-  channel: 3.0-dp1
+  channel: candidates
   installPlanApproval: Automatic
   name: sailoperator
   source: community-operators
@@ -122,24 +122,34 @@ To configure the Istio Gateway API provider, run the following command:
 
 ```bash
 kubectl apply -f - <<EOF
-apiVersion: operator.istio.io/v1alpha1
+apiVersion: sailoperator.io/v1alpha1
 kind: Istio
 metadata:
   name: default
 spec:
-  version: v1.21.0
   namespace: gateway-system
-  # Disable autoscaling to reduce dev resources
+  updateStrategy:
+    type: InPlace
+    inactiveRevisionDeletionGracePeriodSeconds: 30
+  version: v1.23.0
   values:
     pilot:
-      autoscaleEnabled: false
+      autoscaleEnabled: false  
 EOF
 ```
+
+More details on what can be configured can be found by executing 
+
+```
+ kubectl explain istio.spec.values
+```
+
+And in documention : [Istio Config](https://istio.io/1.23.0/docs/reference/config/)
 
 Wait for Istio to be ready as follows:
 
 ```bash
-kubectl wait istio/default -n gateway-system --for="condition=Ready=true"
+kubectl wait istio.sailoperator.io/default -n gateway-system --for="condition=Ready=true"
 ```
 
 ### Step 5 - (Optional) Install Envoy Gateway as a Gateway API provider
@@ -294,6 +304,8 @@ After some time, this command should return `complete`.
 The example here is for AWS Route 53. It is important the secret for the DNSProvider is setup in the same namespace as the gateway.
 
 ```bash
+# note ingress-gateway is just an example
+
 kubectl create ns ingress-gateway
 ```
 
@@ -306,6 +318,20 @@ kubectl -n ingress-gateway create secret generic aws-credentials \
 
 For more details on other providers take a look at [DNS Providers](https://docs.kuadrant.io/latest/dns-operator/docs/provider/)
 
+
+#### Setup TLS DNS verification credential
+
+When setting up TLS certs via provider like lets-encrypt, cert-manager will do a DNS based verification. To allow it do this, it will need a similar credential to that one set up for the DNSProvider, but it needs to be created in the cert-manager namespace where the operator is installed.  
+
+
+
+```bash
+kubectl -n cert-manager create secret generic aws-credentials \
+  --type=kuadrant.io/aws \
+  --from-literal=AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+  --from-literal=AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+```
+
 ### Step 9 - Install Kuadrant Components
 
 To trigger your Kuadrant deployment, enter the following command:
@@ -317,6 +343,7 @@ kind: Kuadrant
 metadata:
   name: kuadrant
   namespace: kuadrant-system
+  
 EOF
 ```
 
@@ -343,7 +370,7 @@ This will setup and configure a number of Kuadrant subcomponents. Some of these 
 In this installation we will show how to configure ratelimiting counters to be stored in redis. Before we go further we need to setup a redis secret to use later:
 
 ```bash
-kubectl -n kuadrant-system create secret generic redis-config --from-literal="URL"=$REDIS_URL
+kubectl -n kuadrant-system create secret generic redis-credential --from-literal="URL"=$REDIS_URL
 ```
 
 #### Update limitador config
@@ -358,7 +385,7 @@ spec:
   storage:
     redis:
       configSecretRef:
-        name: redis-config
+        name: redis-credential
 '
 ```
 

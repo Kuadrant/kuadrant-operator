@@ -1,0 +1,10 @@
+apiVersion: limitador.kuadrant.io/v1alpha1
+kind: Limitador
+metadata:
+  name: limitador
+  namespace: kuadrant-system
+spec:
+  storage:
+    redis:
+      configSecretRef:
+        name: redis-credentials

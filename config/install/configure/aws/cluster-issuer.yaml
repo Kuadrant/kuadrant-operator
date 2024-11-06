@@ -1,0 +1,19 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: lets-encrypt-aws
+spec:
+  acme:
+    privateKeySecretRef:
+      name: le-secret
+    server: https://acme-v02.api.letsencrypt.org/directory
+    solvers:
+      - dns01:
+          route53:
+            accessKeyIDSecretRef:
+              key: AWS_ACCESS_KEY_ID
+              name: aws-credentials
+            region: us-east-1 #override if needed
+            secretAccessKeySecretRef:
+              key: AWS_SECRET_ACCESS_KEY
+              name: aws-credentials

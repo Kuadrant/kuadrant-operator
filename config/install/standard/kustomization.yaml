@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml
+  - sail-operator.yaml
+  - ../../deploy/olm
+
+patches:
+  - patch: |-
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: CatalogSource
+      metadata:
+        name: kuadrant-operator-catalog
+      spec:
+        image: quay.io/kuadrant/kuadrant-operator-catalog:1.0.0-rc1  #change this to the version you want to install

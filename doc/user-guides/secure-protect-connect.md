@@ -44,9 +44,12 @@ Here are the steps we will go through:
 
 
 You will need to set the `KUBECTL_CONTEXT` environment variable for the kubectl context of the cluster you are targeting.
+
 If you have followed the single cluster setup, it should be something like below.
 Adjust the name of the cluster accordingly to match the kubernetes cluster you are targeting.
 You can get the current context with `kubectl config current-context`
+
+We use the namespace `kuadrant-system` in this tutorial so ensure that namespace exists before continuing
 
 ```sh
 # Typical single cluster context
@@ -137,10 +140,11 @@ spec:
 EOF
 ```
 
-The TLSPolicy should eventually have an `Accepted` condition.
+The TLSPolicy should eventually have an `Accepted`  and `Enforced` condition.
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT wait tlspolicy api-gateway-tls -n kuadrant-system --for=condition=accepted
+kubectl --context $KUBECTL_CONTEXT wait tlspolicy api-gateway-tls -n kuadrant-system --for=condition=enforced
 ```
 
 Now, if you look at the status of the gateway, you will see the error is gone, and the status of the policy will report the listener as now secured with a TLS certificate and the gateway as affected by the TLS policy.
@@ -219,6 +223,7 @@ spec:
 EOF
 
 kubectl --context $KUBECTL_CONTEXT wait ratelimitpolicy infra-ratelimit -n kuadrant-system --for=condition=accepted
+kubectl --context $KUBECTL_CONTEXT wait ratelimitpolicy infra-ratelimit -n kuadrant-system --for=condition=enforced
 ```
 
 > **Note:** It may take a couple of minutes for the RateLimitPolicy to be applied depending on your cluster.
@@ -343,9 +348,10 @@ The loadbalancing section here has the following attributes:
 - **geo:** This will be the geo used to decide whether to return records defined for this gateway based on the requesting client's location. This should be set even if you have one gateway in a single geo. 
 - **defaultGeo:** For Azure and AWS, this will decide, if there should be a default geo. A default geo acts as a "catch-all" (GCP always sets a catch-all) for clients outside of the defined geo locations. There can only be one default value and so it is important you set `defaultGeo` as true for **one** and **only one** geo code for each of the gateways in that geo. 
 
-Wait for the DNSPolicy to marked as enforced:
+Wait for the DNSPolicy to marked as accepted and enforced:
 
 ```
+kubectl --context $KUBECTL_CONTEXT wait dnspolicy simple-dnspolicy -n kuadrant-system --for=condition=accepted
 kubectl --context $KUBECTL_CONTEXT wait dnspolicy simple-dnspolicy -n kuadrant-system --for=condition=enforced
 ```
 
@@ -434,6 +440,12 @@ spec:
                 "userid":
                   selector: auth.identity.metadata.annotations.secret\.kuadrant\.io/user-id
 EOF
+```
+
+Ensure the new policy is enforced:
+
+```
+kubectl --context $KUBECTL_CONTEXT wait authpolicy toystore --for=condition=enforced
 ```
 
 ### ❽ Override the Gateway's RateLimitPolicy

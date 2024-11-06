@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+## NOTE YOU NEED TO CREATE A gcp-provider-credentials.env file first!
+
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/part-of: kuadrant
+    app.kubernetes.io/managed-by: kustomize
+
+secretGenerator:
+  - name: gcp-provider-credentials
+    namespace: kuadrant-system
+    envs:
+      - gcp-credentials.env
+    type: 'kuadrant.io/gcp'
+  - name: gcp-provider-credentials
+    namespace: cert-manager
+    envs:
+      - gcp-credentials.env
+    type: 'kuadrant.io/gcp'
+  - name: gcp-provider-credentials
+    namespace: gateway-system
+    envs:
+      - gcp-credentials.env
+    type: 'kuadrant.io/gcp'

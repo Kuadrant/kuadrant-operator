@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -12,6 +13,7 @@ import (
 	"github.com/samber/lo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -65,6 +67,12 @@ func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.Reso
 			continue
 		}
 
+		// Validate if there's a conflicting policy
+		if err := t.isConflict(policies, p); err != nil {
+			isPolicyValidErrorMap[p.GetLocator()] = err
+			continue
+		}
+
 		// Validate IssuerRef kind is correct
 		if err := t.isValidIssuerKind(p); err != nil {
 			isPolicyValidErrorMap[p.GetLocator()] = err
@@ -91,6 +99,22 @@ func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.Reso
 func (t *TLSPoliciesValidator) isTargetRefsFound(topology *machinery.Topology, p *kuadrantv1.TLSPolicy) error {
 	if len(p.GetTargetRefs()) != len(topology.Targetables().Children(p)) {
 		return kuadrant.NewErrTargetNotFound(kuadrantv1.TLSPolicyGroupKind.Kind, p.GetTargetRef(), apierrors.NewNotFound(controller.GatewaysResource.GroupResource(), p.GetName()))
+	}
+
+	return nil
+}
+
+// isConflict Validates if there's already an older policy with the same target ref
+func (t *TLSPoliciesValidator) isConflict(policies []machinery.Policy, p *kuadrantv1.TLSPolicy) error {
+	conflictingP, ok := lo.Find(policies, func(item machinery.Policy) bool {
+		conflictTLSPolicy := item.(*kuadrantv1.TLSPolicy)
+		return p != conflictTLSPolicy && conflictTLSPolicy.DeletionTimestamp == nil &&
+			conflictTLSPolicy.CreationTimestamp.Before(&p.CreationTimestamp) &&
+			reflect.DeepEqual(conflictTLSPolicy.GetTargetRefs(), p.GetTargetRefs())
+	})
+
+	if ok {
+		return kuadrant.NewErrConflict(kuadrantv1.TLSPolicyGroupKind.Kind, client.ObjectKeyFromObject(conflictingP.(*kuadrantv1.TLSPolicy)).String(), errors.New("conflicting policy"))
 	}
 
 	return nil

@@ -25,12 +25,14 @@ import (
 
 func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 	const (
-		ns              = "default"
-		tlsPolicyName   = "kuadrant-tls-policy"
-		issuerName      = "kuadrant-issuer"
-		certificateName = "kuadrant-certifcate"
-		gwName          = "kuadrant-gateway"
+		ns            = "default"
+		tlsPolicyName = "kuadrant-tls-policy"
+		issuerName    = "kuadrant-issuer"
+		gwName        = "kuadrant-gateway"
+		listenerName  = "http"
 	)
+
+	var certificateName = certName(gwName, listenerName)
 
 	policyFactory := func(mutateFn ...func(policy *kuadrantv1.TLSPolicy)) *kuadrantv1.TLSPolicy {
 		p := &kuadrantv1.TLSPolicy{
@@ -197,13 +199,13 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 			Spec: gatewayapiv1.GatewaySpec{
 				Listeners: []gatewayapiv1.Listener{
 					{
-						Name:     "http",
+						Name:     listenerName,
 						Hostname: ptr.To[gatewayapiv1.Hostname]("localhost"),
 						TLS: &gatewayapiv1.GatewayTLSConfig{
 							CertificateRefs: []gatewayapiv1.SecretObjectReference{{
 								Group:     ptr.To[gatewayapiv1.Group]("core"),
 								Kind:      ptr.To[gatewayapiv1.Kind]("Secret"),
-								Name:      certificateName,
+								Name:      gatewayapiv1.ObjectName(certificateName),
 								Namespace: ptr.To[gatewayapiv1.Namespace]("default"),
 							}},
 							Mode: ptr.To(gatewayapiv1.TLSModeTerminate),

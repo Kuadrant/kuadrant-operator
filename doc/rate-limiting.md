@@ -202,36 +202,26 @@ spec:
     "toystore-all":
       rates:
       - limit: 5000
-        duration: 1
-        unit: second
+        window: 1s
 
     "toystore-api-per-username":
       rates:
       - limit: 100
-        duration: 1
-        unit: second
+        window: 1s
       - limit: 1000
-        duration: 1
-        unit: minute
+        window: 1m
       counters:
-      - auth.identity.username
+      - expression: auth.identity.username
       when:
-      - selector: request.host
-        operator: eq
-        value: "api.toystore.com"
+      - predicate: request.host == 'api.toystore.com'
 
     "toystore-admin-unverified-users":
       rates:
       - limit: 250
-        duration: 1
-        unit: second
+        window: 1s
       when:
-      - selector: request.host
-        operator: eq
-        value: "admin.toystore.com"
-      - selector: auth.identity.email_verified
-        operator: eq
-        value: "false"
+      - predicate: request.host == 'admin.toystore.com'
+      - predicate: !auth.identity.email_verified
 ```
 
 | Request to           | Rate limits enforced                                         |
@@ -258,90 +248,8 @@ Check out the following user guides for examples of rate limiting services with 
 
 ### Known limitations
 
-* One HTTPRoute can only be targeted by one RateLimitPolicy.
-* One Gateway can only be targeted by one RateLimitPolicy.
 * RateLimitPolicies can only target HTTPRoutes/Gateways defined within the same namespace of the RateLimitPolicy.
 * 2+ RateLimitPolicies cannot target network resources that define/inherit the same exact hostname.
-
-#### Limitation: Multiple network resources with identical hostnames
-
-Kuadrant currently does not support multiple RateLimitPolicies simultaneously targeting network resources that declare identical hostnames. This includes multiple HTTPRoutes that specify the same hostnames in the `spec.hostnames` field, as well as HTTPRoutes that specify a hostname that is identical to a hostname specified in a listener of one of the route's parent gateways or HTTPRoutes that don't specify any hostname at all thus inheriting the hostnames from the parent gateways. In any of these cases, **a maximum of one RateLimitPolicy targeting any of those resources that specify identical hostnames is allowed**.
-
-Moreover, having **multiple resources that declare identical hostnames** may lead to unexpected behavior and therefore **should be avoided**.
-
-This limitation is rooted at the underlying components configured by Kuadrant for the implementation of its policies and the lack of information in the data plane regarding the exact route that honored by the API gateway in cases of conflicting hostnames.
-
-To exemplify one way this limitation can impact deployments, consider the following topology:
-
-```
-                 ┌──────────────┐
-                 │   Gateway    │
-                 ├──────────────┤
-          ┌─────►│ listeners:   │◄──────┐
-          │      │ - host: *.io │       │
-          │      └──────────────┘       │
-          │                             │
-          │                             │
-┌─────────┴─────────┐        ┌──────────┴────────┐
-│     HTTPRoute     │        │     HTTPRoute     │
-│     (route-a)     │        │     (route-b)     │
-├───────────────────┤        ├───────────────────┤
-│ hostnames:        │        │ hostnames:        │
-│ - app.io          │        │ - app.io          │
-│ rules:            │        │ rules:            │
-│ - matches:        │        │ - matches:        │
-│   - path:         │        │   - path:         │
-│       value: /foo │        │       value: /bar │
-└───────────────────┘        └───────────────────┘
-          ▲                            ▲
-          │                            │
- ┌────────┴────────┐           ┌───────┴─────────┐
- │ RateLimitPolicy │           │ RateLimitPolicy │
- │   (policy-1)    │           │   (policy-2)    │
- └─────────────────┘           └─────────────────┘
-```
-
-In the example above, with the `policy-1` resource created before `policy-2`, `policy-2` will be enforced on all requests to `app.io/bar` while `policy-1` will **not** be enforced at all. I.e. `app.io/foo` will not be rate-limited. Nevertheless, both policies will report status condition as `Enforced`.
-
-Notice the enforcement of `policy-2` and no enforcement of `policy-1` is the opposite behavior as the [analogous problem with the Kuadrant AuthPolicy](auth.md#limitation-multiple-network-resources-with-identical-hostnames).
-
-A different way the limitation applies is when two or more routes of a gateway declare the exact same hostname and a gateway policy is defined with expectation to set default rules for the cases not covered by more specific policies. E.g.:
-
-```
-                                    ┌─────────────────┐
-                         ┌──────────┤ RateLimitPolicy │
-                         │          │    (policy-2)   │
-                         ▼          └─────────────────┘
-                 ┌──────────────┐
-                 │   Gateway    │
-                 ├──────────────┤
-          ┌─────►│ listeners:   │◄──────┐
-          │      │ - host: *.io │       │
-          │      └──────────────┘       │
-          │                             │
-          │                             │
-┌─────────┴─────────┐        ┌──────────┴────────┐
-│     HTTPRoute     │        │     HTTPRoute     │
-│     (route-a)     │        │     (route-b)     │
-├───────────────────┤        ├───────────────────┤
-│ hostnames:        │        │ hostnames:        │
-│ - app.io          │        │ - app.io          │
-│ rules:            │        │ rules:            │
-│ - matches:        │        │ - matches:        │
-│   - path:         │        │   - path:         │
-│       value: /foo │        │       value: /bar │
-└───────────────────┘        └───────────────────┘
-          ▲
-          │
- ┌────────┴────────┐
- │ RateLimitPolicy │
- │   (policy-1)    │
- └─────────────────┘
-```
-
-Once again, both policies will report status condition as `Enforced`. However, in this case, only `policy-1` will be enforced on requests to `app.io/foo`, while `policy-2` will **not** be enforced at all. I.e. `app.io/bar` will not be not rate-limited. This is same behavior as the [analogous problem with the Kuadrant AuthPolicy](auth.md#limitation-multiple-network-resources-with-identical-hostnames).
-
-To avoid these problems, use different hostnames in each route.
 
 ## Implementation details
 
@@ -392,60 +300,45 @@ metadata:
 spec:
   phase: STATS
   pluginConfig:
-    extensions:
-      limitador:
-        endpoint: kuadrant-rate-limiting-service
-        failureMode: allow
+    services:
+      ratelimit-service:
         type: ratelimit
-    policies:
-    - hostnames:
-      - '*.toystore.website'
-      - '*.toystore.io'
-      name: gateway-system/app-rlp
-      rules:
-      - actions:
-        - data:
-          - static:
+        endpoint: ratelimit-cluster
+        failureMode: allow
+    actionSets:
+      - name: some_name_0
+        routeRuleConditions:
+          hostnames: 
+          - '*.toystore.website'
+          - '*.toystore.io'
+          predicates:
+          - request.url_path.startsWith("/assets")
+        actions:
+        - service: ratelimit-service
+          scope: gateway-system/app-rlp
+          predicates:
+          - request.host.endsWith('.toystore.website')
+          data:
+          - expression:
               key: limit.toystore_assets_all_domains__b61ee8e6
               value: "1"
-          extension: limitador
+      - name: some_name_1
+        routeRuleConditions:
+          hostnames: 
+          - '*.toystore.website'
+          - '*.toystore.io'
+          predicates:
+          - request.url_path.startsWith("/v1")
+        actions:
+        - service: ratelimit-service
           scope: gateway-system/app-rlp
-        conditions:
-        - allOf:
-          - operator: startswith
-            selector: request.url_path
-            value: /assets
-          - operator: endswith
-            selector: request.host
-            value: .toystore.website
-      - actions:
-        - data:
-          - static:
+          predicates:
+          - request.host.endsWith('.toystore.website')
+          - auth.identity.username == ""
+          data:
+          - expression:
               key: limit.toystore_v1_website_unauthenticated__377837ee
               value: "1"
-          extension: limitador
-          scope: gateway-system/app-rlp
-        conditions:
-        - allOf:
-          - operator: startswith
-            selector: request.url_path
-            value: /v1
-          - operator: endswith
-            selector: request.host
-            value: .toystore.website
-          - operator: eq
-            selector: auth.identity.username
-            value: ""
-        - allOf:
-          - operator: startswith
-            selector: request.url_path
-            value: /assets
-          - operator: endswith
-            selector: request.host
-            value: .toystore.website
-          - operator: eq
-            selector: auth.identity.username
-            value: ""
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway

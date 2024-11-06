@@ -113,8 +113,7 @@ spec:
     "global":
       rates:
       - limit: 5
-        duration: 10
-        unit: second
+        window: 10s
 EOF
 ```
 

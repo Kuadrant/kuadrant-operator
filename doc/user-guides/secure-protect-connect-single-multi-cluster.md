@@ -307,8 +307,7 @@ spec:
       "low-limit":
         rates:
         - limit: 2
-          duration: 10
-          unit: second
+          window: 10s
 EOF
 ```
 

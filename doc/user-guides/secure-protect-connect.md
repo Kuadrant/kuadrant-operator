@@ -215,8 +215,7 @@ spec:
     "global":
       rates:
       - limit: 5
-        duration: 10
-        unit: second
+        window: 10s
 EOF
 
 kubectl --context $KUBECTL_CONTEXT wait ratelimitpolicy infra-ratelimit -n kuadrant-system --for=condition=accepted
@@ -456,23 +455,17 @@ spec:
     "general-user":
       rates:
       - limit: 1
-        duration: 3
-        unit: second
+        window: 3s
       counters:
-      - metadata.filter_metadata.envoy\.filters\.http\.ext_authz.identity.userid
+      - expression: auth.identity.userid
       when:
-      - selector: metadata.filter_metadata.envoy\.filters\.http\.ext_authz.identity.userid
-        operator: neq
-        value: bob
+      - predicate: "auth.identity.userid != 'bob'"
     "bob-limit":
       rates:
       - limit: 2
-        duration: 3
-        unit: second
+        window: 3s
       when:
-      - selector: metadata.filter_metadata.envoy\.filters\.http\.ext_authz.identity.userid
-        operator: eq
-        value: bob
+      - predicate: "auth.identity.userid == 'bob'"
 EOF
 ```
 

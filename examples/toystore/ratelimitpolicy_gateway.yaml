@@ -12,19 +12,13 @@ spec:
     "expensive-operation":
       rates:
       - limit: 2
-        duration: 30
-        unit: second
+        window: 30s
       when:
-      - selector: request.method
-        operator: eq
-        value: POST
+      - predicate: "request.method == 'POST'"
 
     "limit-per-ip":
       rates:
       - limit: 5
-        duration: 30
-        unit: second
+        window: 30s
       when:
-      - selector: source.ip
-        operator: eq
-        value: source.address
+      - predicate: "source.id == source.address"

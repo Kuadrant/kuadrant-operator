@@ -12,5 +12,4 @@ spec:
     toys:
       rates:
       - limit: 50
-        duration: 1
-        unit: minute
+        window: 1m

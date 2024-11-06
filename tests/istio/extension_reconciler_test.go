@@ -341,6 +341,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'all' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Predicates: []string{
+						"source.remote_address != '192.168.1.1'",
+						"auth.identity.username != 'root'",
+					},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -368,7 +372,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Predicates:  []string{"auth.identity.group != 'admin'"},
+					Predicates: []string{
+						"source.remote_address != '192.168.1.1'",
+						"auth.identity.username != 'root'",
+						"auth.identity.group != 'admin'",
+					},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -391,6 +399,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'all' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Predicates: []string{
+						"source.remote_address != '192.168.1.1'",
+						"auth.identity.username != 'root'",
+					},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -418,7 +430,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Predicates:  []string{"auth.identity.group != 'admin'"},
+					Predicates: []string{
+						"source.remote_address != '192.168.1.1'",
+						"auth.identity.username != 'root'",
+						"auth.identity.group != 'admin'",
+					},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -441,6 +457,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'all' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Predicates: []string{
+						"source.remote_address != '192.168.1.1'",
+						"auth.identity.username != 'root'",
+					},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -467,7 +487,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Predicates:  []string{"auth.identity.group != 'admin'"},
+					Predicates: []string{
+						"source.remote_address != '192.168.1.1'",
+						"auth.identity.username != 'root'",
+						"auth.identity.group != 'admin'",
+					},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -490,6 +514,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'all' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Predicates: []string{
+						"source.remote_address != '192.168.1.1'",
+						"auth.identity.username != 'root'",
+					},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -517,7 +545,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Predicates:  []string{"auth.identity.group != 'admin'"},
+					Predicates: []string{
+						"source.remote_address != '192.168.1.1'",
+						"auth.identity.username != 'root'",
+						"auth.identity.group != 'admin'",
+					},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -540,6 +572,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'all' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Predicates: []string{
+						"source.remote_address != '192.168.1.1'",
+						"auth.identity.username != 'root'",
+					},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -567,7 +603,11 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Predicates:  []string{"auth.identity.group != 'admin'"},
+					Predicates: []string{
+						"source.remote_address != '192.168.1.1'",
+						"auth.identity.username != 'root'",
+						"auth.identity.group != 'admin'",
+					},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -590,6 +630,10 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'all' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
+					Predicates: []string{
+						"source.remote_address != '192.168.1.1'",
+						"auth.identity.username != 'root'",
+					},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{

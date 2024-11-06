@@ -123,7 +123,7 @@ spec:
                           type: array
                         when:
                           description: |-
-                            When holds a list of "limist-level" `Predicate`s
+                            When holds a list of "limit-level" `Predicate`s
                             Called also "soft" conditions as route selectors must also match
                           items:
                             description: Predicate defines one CEL expression that
@@ -211,7 +211,7 @@ spec:
                       type: array
                     when:
                       description: |-
-                        When holds a list of "limist-level" `Predicate`s
+                        When holds a list of "limit-level" `Predicate`s
                         Called also "soft" conditions as route selectors must also match
                       items:
                         description: Predicate defines one CEL expression that must
@@ -281,7 +281,7 @@ spec:
                           type: array
                         when:
                           description: |-
-                            When holds a list of "limist-level" `Predicate`s
+                            When holds a list of "limit-level" `Predicate`s
                             Called also "soft" conditions as route selectors must also match
                           items:
                             description: Predicate defines one CEL expression that

@@ -207,7 +207,6 @@ func (t *TLSPolicyStatusUpdater) isCertificatesReady(p machinery.Policy, topolog
 			if cond.Status != metav1.ConditionTrue {
 				return fmt.Errorf("certificate %s is not ready: %s - %s", cert.Name, cond.Reason, cond.Message)
 			}
-
 		}
 	}
 

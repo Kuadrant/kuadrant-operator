@@ -164,16 +164,12 @@ func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, stat
 // The only action of the rule is the ratelimit service, whose data includes the activation of the limit
 // and any counter qualifier of the limit.
 func wasmActionFromLimit(limit *kuadrantv1beta3.Limit, limitIdentifier, scope string, topLevelPredicates kuadrantv1beta3.WhenPredicates) wasm.Action {
-	action :=  wasm.Action{
+	return wasm.Action{
 		ServiceName: wasm.RateLimitServiceName,
 		Scope:       scope,
 		Predicates:  topLevelPredicates.Extend(limit.When).Into(),
 		Data:        wasmDataFromLimit(limitIdentifier, limit),
 	}
-	if conditions := wasm.ConditionsFromWhenConditions(limit.When...); len(conditions) > 0 {
-		action.Conditions = conditions
-	}
-	return action
 }
 
 func wasmDataFromLimit(limitIdentifier string, limit *kuadrantv1beta3.Limit) []wasm.DataType {

@@ -160,7 +160,7 @@ type Action struct {
 	Scope       string `json:"scope"`
 
 	// Conditions that activate the action
-	Conditions []Predicate `json:"conditions,omitempty"`
+	Conditions []Condition `json:"conditions,omitempty"`
 
 	// When holds a list of CEL `Predicate`s
 	// +optional

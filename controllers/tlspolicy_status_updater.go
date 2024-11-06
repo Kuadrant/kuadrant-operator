@@ -205,7 +205,11 @@ func (t *TLSPolicyStatusUpdater) isCertificatesReady(p machinery.Policy, topolog
 			}
 
 			if cond.Status != metav1.ConditionTrue {
-				return fmt.Errorf("certificate %s is not ready: %s - %s", cert.Name, cond.Reason, cond.Message)
+				msg := fmt.Sprintf("certificate %s is not ready: %s - %s", cert.Name, cond.Reason, cond.Message)
+				if cond.Reason == "IncorrectCertificate" {
+					msg = fmt.Sprintf("%s. Shared TLS cerficiates refs between listners not supported. Use unique certificates refs in the Gateway listeners to fully enforce policy", msg)
+				}
+				return errors.New(msg)
 			}
 		}
 	}

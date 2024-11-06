@@ -419,7 +419,7 @@ func TestTLSPolicyStatusTask_enforcedCondition(t *testing.T) {
 				Type:    string(kuadrant.PolicyConditionEnforced),
 				Status:  metav1.ConditionFalse,
 				Reason:  string(kuadrant.PolicyReasonUnknown),
-				Message: fmt.Sprintf("TLSPolicy has encountered some issues: certificate %s is not ready: IncorrectCertificate - Secret was issued for \"another-listener\"", certificateName),
+				Message: fmt.Sprintf("TLSPolicy has encountered some issues: certificate %s is not ready: IncorrectCertificate - Secret was issued for \"another-listener\". Shared TLS cerficiates refs between listners not supported. Use unique certificates refs in the Gateway listeners to fully enforce policy", certificateName),
 			},
 		},
 		{

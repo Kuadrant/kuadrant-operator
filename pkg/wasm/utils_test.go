@@ -6,9 +6,12 @@ import (
 	"errors"
 	"testing"
 
+	"gotest.tools/assert"
+
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/types/known/structpb"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -247,4 +250,52 @@ func TestConfigFromStruct(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPredicatesFromHTTPRouteMatch(t *testing.T) {
+	queryParams := make([]gatewayapiv1.HTTPQueryParamMatch, 0)
+	queryParamMatch := gatewayapiv1.QueryParamMatchExact
+	queryParams = append(queryParams, gatewayapiv1.HTTPQueryParamMatch{
+		Type:  &queryParamMatch,
+		Name:  "foo",
+		Value: "bar",
+	})
+	queryParams = append(queryParams, gatewayapiv1.HTTPQueryParamMatch{
+		Type:  &queryParamMatch,
+		Name:  "foo",
+		Value: "baz",
+	}) // this param will be ignored, as `foo` was defined above to match `bar`
+	queryParams = append(queryParams, gatewayapiv1.HTTPQueryParamMatch{
+		Type:  &queryParamMatch,
+		Name:  "kua",
+		Value: "drant",
+	})
+
+	headerMatch := gatewayapiv1.HeaderMatchExact
+	header := gatewayapiv1.HTTPHeaderMatch{
+		Type:  &headerMatch,
+		Name:  "x-auth",
+		Value: "kuadrant",
+	}
+
+	method := gatewayapiv1.HTTPMethodTrace
+
+	pathMatch := gatewayapiv1.PathMatchPathPrefix
+	path := "/admin"
+	predicates := PredicatesFromHTTPRouteMatch(gatewayapiv1.HTTPRouteMatch{
+		Path: &gatewayapiv1.HTTPPathMatch{
+			Type:  &pathMatch,
+			Value: &path,
+		},
+		Headers:     []gatewayapiv1.HTTPHeaderMatch{header},
+		QueryParams: queryParams,
+		Method:      &method,
+	})
+
+	assert.Equal(t, predicates[0], "request.method == 'TRACE'")
+	assert.Equal(t, predicates[1], "request.url_path.startsWith('/admin')")
+	assert.Equal(t, predicates[2], "request.headers['x-auth'] == 'kuadrant'")
+	assert.Equal(t, predicates[3], "queryMap(request.query)['foo'] == 'bar'")
+	assert.Equal(t, predicates[4], "queryMap(request.query)['kua'] == 'drant'")
+	assert.Equal(t, len(predicates), 5)
 }

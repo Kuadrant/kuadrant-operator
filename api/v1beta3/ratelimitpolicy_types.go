@@ -315,7 +315,7 @@ type Counter struct {
 
 // Limit represents a complete rate limit configuration
 type Limit struct {
-	// When holds a list of "limist-level" `Predicate`s
+	// When holds a list of "limit-level" `Predicate`s
 	// Called also "soft" conditions as route selectors must also match
 	// +optional
 	When WhenPredicates `json:"when,omitempty"`

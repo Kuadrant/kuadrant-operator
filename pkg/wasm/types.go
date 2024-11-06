@@ -110,7 +110,7 @@ type RouteRuleConditions struct {
 	Hostnames []string `json:"hostnames"`
 
 	// +optional
-	Predicates kuadrantv1beta3.WhenPredicates `json:"predicates,omitempty"`
+	Predicates []string `json:"predicates,omitempty"`
 }
 
 func (r *RouteRuleConditions) EqualTo(other RouteRuleConditions) bool {
@@ -130,7 +130,7 @@ func (r *RouteRuleConditions) EqualTo(other RouteRuleConditions) bool {
 		}
 	}
 
-	return r.Predicates.EqualTo(other.Predicates)
+	return true
 }
 
 type Condition struct {
@@ -159,11 +159,12 @@ type Action struct {
 	ServiceName string `json:"service"`
 	Scope       string `json:"scope"`
 
-	// Predicates that activate the action
-	Predicates []string `json:"predicates,omitempty"`
-
 	// Conditions that activate the action
-	Conditions []Condition `json:"conditions,omitempty"`
+	Conditions []Predicate `json:"conditions,omitempty"`
+
+	// When holds a list of CEL `Predicate`s
+	// +optional
+	Predicates []string `json:"predicates,omitempty"`
 
 	// Data to be sent to the service
 	// +optional
@@ -171,18 +172,22 @@ type Action struct {
 }
 
 func (a *Action) EqualTo(other Action) bool {
-	if a.Scope != other.Scope || a.ServiceName != other.ServiceName || len(a.Predicates) != len(other.Predicates) || len(a.Conditions) != len(other.Conditions) || len(a.Data) != len(other.Data) {
+	if a.Scope != other.Scope ||
+		a.ServiceName != other.ServiceName ||
+		len(a.Conditions) != len(other.Conditions) ||
+		len(a.Predicates) != len(other.Predicates) ||
+		len(a.Data) != len(other.Data) {
 		return false
-	}
-
-	for i := range a.Predicates {
-		if a.Predicates[i] != other.Predicates[i] {
-			return false
-		}
 	}
 
 	for i := range a.Conditions {
 		if !a.Conditions[i].EqualTo(other.Conditions[i]) {
+			return false
+		}
+	}
+
+	for i := range a.Predicates {
+		if a.Predicates[i] != other.Predicates[i] {
 			return false
 		}
 	}

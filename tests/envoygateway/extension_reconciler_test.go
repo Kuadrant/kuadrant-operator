@@ -117,7 +117,7 @@ var _ = Describe("wasm controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
+										Limit: 1, Window: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -184,9 +184,9 @@ var _ = Describe("wasm controller", func() {
 						Name: actionSetName,
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
-							Predicates: kuadrantv1beta3.WhenPredicates{
-								kuadrantv1beta3.Predicate("request.method == 'GET'"),
-								kuadrantv1beta3.Predicate("request.url_path.startsWith('/toy')"),
+							Predicates: []string{
+								"request.method == 'GET'",
+								"request.url_path.startsWith('/toy')",
 							},
 						},
 						Actions: []wasm.Action{
@@ -282,7 +282,7 @@ var _ = Describe("wasm controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
+										Limit: 1, Window: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -348,9 +348,9 @@ var _ = Describe("wasm controller", func() {
 						Name: actionSetName,
 						RouteRuleConditions: wasm.RouteRuleConditions{
 							Hostnames: []string{string(gwRoute.Spec.Hostnames[0])},
-							Predicates: kuadrantv1beta3.WhenPredicates{
-								kuadrantv1beta3.Predicate("request.method == 'GET'"),
-								kuadrantv1beta3.Predicate("request.url_path.startsWith('/toy')"),
+							Predicates: []string{
+								"request.method == 'GET'",
+								"request.url_path.startsWith('/toy')",
 							},
 						},
 						Actions: []wasm.Action{

@@ -130,14 +130,14 @@ func TestWasmActionFromLimit(t *testing.T) {
 			name: "limit with counter qualifiers and when predicates",
 			limit: &kuadrantv1beta3.Limit{
 				Counters: []kuadrantv1beta3.Counter{{Expression: "auth.identity.username"}},
-				When:     kuadrantv1beta3.WhenPredicates{"auth.identity.group != admin"},
+				When:     kuadrantv1beta3.NewWhenPredicates("auth.identity.group != admin"),
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
 			expectedAction: wasm.Action{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "my-ns/my-route",
-				Predicates:  kuadrantv1beta3.WhenPredicates{"auth.identity.group != admin"},
+				Predicates:  []string{"auth.identity.group != admin"},
 				Data: []wasm.DataType{
 					{
 						Value: &wasm.Expression{
@@ -161,13 +161,13 @@ func TestWasmActionFromLimit(t *testing.T) {
 		{
 			name:               "limit with top level predicates and no when predicates",
 			limit:              &kuadrantv1beta3.Limit{},
-			topLevelPredicates: kuadrantv1beta3.WhenPredicates{"auth.identity.group != admin"},
+			topLevelPredicates: kuadrantv1beta3.NewWhenPredicates("auth.identity.group != admin"),
 			limitIdentifier:    "limit.myLimit__d681f6c3",
 			scope:              "my-ns/my-route",
 			expectedAction: wasm.Action{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "my-ns/my-route",
-				Predicates:  kuadrantv1beta3.WhenPredicates{"auth.identity.group != admin"},
+				Predicates:  []string{"auth.identity.group != admin"},
 				Data: []wasm.DataType{
 					{
 						Value: &wasm.Expression{
@@ -183,15 +183,15 @@ func TestWasmActionFromLimit(t *testing.T) {
 		{
 			name: "limit with top level predicates and when predicates",
 			limit: &kuadrantv1beta3.Limit{
-				When: kuadrantv1beta3.WhenPredicates{"auth.identity.from-limit"},
+				When: kuadrantv1beta3.NewWhenPredicates("auth.identity.from-limit"),
 			},
-			topLevelPredicates: kuadrantv1beta3.WhenPredicates{"auth.identity.from-top-level"},
+			topLevelPredicates: kuadrantv1beta3.NewWhenPredicates("auth.identity.from-top-level"),
 			limitIdentifier:    "limit.myLimit__d681f6c3",
 			scope:              "my-ns/my-route",
 			expectedAction: wasm.Action{
 				ServiceName: wasm.RateLimitServiceName,
 				Scope:       "my-ns/my-route",
-				Predicates: kuadrantv1beta3.WhenPredicates{
+				Predicates: []string{
 					"auth.identity.from-top-level",
 					"auth.identity.from-limit",
 				},

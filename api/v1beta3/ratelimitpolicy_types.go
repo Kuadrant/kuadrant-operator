@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/kuadrant/policy-machinery/machinery"
+	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -253,28 +254,37 @@ type RateLimitPolicySpecProper struct {
 }
 
 // Predicate defines one CEL expression that must be evaluated to bool
-// +kubebuilder:validation:MinLength=1
-// +kubebuilder:validation:MaxLength=253
-type Predicate string
+type Predicate struct {
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Predicate string `json:"predicate"`
+}
+
+func NewPredicate(predicate string) Predicate {
+	return Predicate{Predicate: predicate}
+}
 
 type WhenPredicates []Predicate
+
+func NewWhenPredicates(predicates ...string) WhenPredicates {
+	whenPredicates := make(WhenPredicates, 0)
+	for _, predicate := range predicates {
+		whenPredicates = append(whenPredicates, NewPredicate(predicate))
+	}
+
+	return whenPredicates
+}
 
 func (w WhenPredicates) Extend(other WhenPredicates) WhenPredicates {
 	return append(w, other...)
 }
 
-func (w WhenPredicates) EqualTo(other WhenPredicates) bool {
-	if len(w) != len(other) {
-		return false
+func (w WhenPredicates) Into() []string {
+	if w == nil {
+		return nil
 	}
 
-	for i := range w {
-		if w[i] != other[i] {
-			return false
-		}
-	}
-
-	return true
+	return lo.Map(w, func(p Predicate, _ int) string { return p.Predicate })
 }
 
 type WhenPredicatesMergeableRule struct {
@@ -365,14 +375,14 @@ type Rate struct {
 	// Limit defines the max value allowed for a given period of time
 	Limit int `json:"limit"`
 
-	// Duration defines the time period for which the Limit specified above applies.
-	Duration Duration `json:"duration"`
+	// Window defines the time period for which the Limit specified above applies.
+	Window Duration `json:"window"`
 }
 
 // ToSeconds converts the rate to to Limitador's Limit format (maxValue, seconds)
 func (r Rate) ToSeconds() (maxValue, seconds int) {
 	maxValue = r.Limit
-	seconds = r.Duration.Seconds()
+	seconds = r.Window.Seconds()
 
 	if r.Limit < 0 {
 		maxValue = 0

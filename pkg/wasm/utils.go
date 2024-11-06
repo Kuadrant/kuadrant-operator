@@ -168,13 +168,13 @@ func predicateFromPathMatch(pathMatch gatewayapiv1.HTTPPathMatch) string {
 
 	switch pathMatchType {
 	case gatewayapiv1.PathMatchExact:
-		return kuadrantv1beta3.Predicate(fmt.Sprintf("%s == '%s'", attr, value))
+		return fmt.Sprintf("%s == '%s'", attr, value)
 	case gatewayapiv1.PathMatchPathPrefix:
-		return kuadrantv1beta3.Predicate(fmt.Sprintf("%s.startsWith('%s')", attr, value))
+		return fmt.Sprintf("%s.startsWith('%s')", attr, value)
 	case gatewayapiv1.PathMatchRegularExpression:
-		return kuadrantv1beta3.Predicate(fmt.Sprintf("%s.matches('%s')", attr, value))
+		return fmt.Sprintf("%s.matches('%s')", attr, value)
 	default:
-		return kuadrantv1beta3.Predicate(fmt.Sprintf("%s == '%s'", attr, value))
+		return fmt.Sprintf("%s == '%s'", attr, value)
 	}
 }
 

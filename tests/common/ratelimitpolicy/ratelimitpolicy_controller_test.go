@@ -406,7 +406,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 						"l1": {
 							Rates: []kuadrantv1beta3.Rate{
 								{
-									Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
+									Limit: 10, Duration: kuadrantv1beta3.Duration("5s"),
 								},
 							},
 						},
@@ -494,7 +494,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 					"route": {
 						Rates: []kuadrantv1beta3.Rate{
 							{
-								Limit: 1, Duration: kuadrantv1beta3.Duration("3m"),
+								Limit: 10, Duration: kuadrantv1beta3.Duration("5s"),
 							},
 						},
 					},

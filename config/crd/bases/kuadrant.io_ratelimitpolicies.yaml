@@ -106,18 +106,18 @@ spec:
                             description: Rate defines the actual rate limit that will
                               be used when there is a match
                             properties:
-                              duration:
-                                description: Duration defines the time period for
-                                  which the Limit specified above applies.
-                                pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
-                                type: string
                               limit:
                                 description: Limit defines the max value allowed for
                                   a given period of time
                                 type: integer
+                              window:
+                                description: Window defines the time period for which
+                                  the Limit specified above applies.
+                                pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+                                type: string
                             required:
-                            - duration
                             - limit
+                            - window
                             type: object
                           type: array
                         when:
@@ -127,9 +127,14 @@ spec:
                           items:
                             description: Predicate defines one CEL expression that
                               must be evaluated to bool
-                            maxLength: 253
-                            minLength: 1
-                            type: string
+                            properties:
+                              predicate:
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                            required:
+                            - predicate
+                            type: object
                           type: array
                       type: object
                     description: Limits holds the struct of limits indexed by a unique
@@ -148,9 +153,14 @@ spec:
                     items:
                       description: Predicate defines one CEL expression that must
                         be evaluated to bool
-                      maxLength: 253
-                      minLength: 1
-                      type: string
+                      properties:
+                        predicate:
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - predicate
+                      type: object
                     type: array
                 type: object
               limits:
@@ -184,18 +194,18 @@ spec:
                         description: Rate defines the actual rate limit that will
                           be used when there is a match
                         properties:
-                          duration:
-                            description: Duration defines the time period for which
-                              the Limit specified above applies.
-                            pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
-                            type: string
                           limit:
                             description: Limit defines the max value allowed for a
                               given period of time
                             type: integer
+                          window:
+                            description: Window defines the time period for which
+                              the Limit specified above applies.
+                            pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+                            type: string
                         required:
-                        - duration
                         - limit
+                        - window
                         type: object
                       type: array
                     when:
@@ -205,9 +215,14 @@ spec:
                       items:
                         description: Predicate defines one CEL expression that must
                           be evaluated to bool
-                        maxLength: 253
-                        minLength: 1
-                        type: string
+                        properties:
+                          predicate:
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - predicate
+                        type: object
                       type: array
                   type: object
                 description: Limits holds the struct of limits indexed by a unique
@@ -249,18 +264,18 @@ spec:
                             description: Rate defines the actual rate limit that will
                               be used when there is a match
                             properties:
-                              duration:
-                                description: Duration defines the time period for
-                                  which the Limit specified above applies.
-                                pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
-                                type: string
                               limit:
                                 description: Limit defines the max value allowed for
                                   a given period of time
                                 type: integer
+                              window:
+                                description: Window defines the time period for which
+                                  the Limit specified above applies.
+                                pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+                                type: string
                             required:
-                            - duration
                             - limit
+                            - window
                             type: object
                           type: array
                         when:
@@ -270,9 +285,14 @@ spec:
                           items:
                             description: Predicate defines one CEL expression that
                               must be evaluated to bool
-                            maxLength: 253
-                            minLength: 1
-                            type: string
+                            properties:
+                              predicate:
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                            required:
+                            - predicate
+                            type: object
                           type: array
                       type: object
                     description: Limits holds the struct of limits indexed by a unique
@@ -291,9 +311,14 @@ spec:
                     items:
                       description: Predicate defines one CEL expression that must
                         be evaluated to bool
-                      maxLength: 253
-                      minLength: 1
-                      type: string
+                      properties:
+                        predicate:
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - predicate
+                      type: object
                     type: array
                 type: object
               targetRef:
@@ -350,9 +375,14 @@ spec:
                 items:
                   description: Predicate defines one CEL expression that must be evaluated
                     to bool
-                  maxLength: 253
-                  minLength: 1
-                  type: string
+                  properties:
+                    predicate:
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                  required:
+                  - predicate
+                  type: object
                 type: array
             required:
             - targetRef

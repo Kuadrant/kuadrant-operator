@@ -248,7 +248,6 @@ type RateLimitPolicySpecProper struct {
 // Predicate defines one CEL expression that must be evaluated to bool
 type Predicate struct {
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=253
 	Predicate string `json:"predicate"`
 }
 
@@ -390,7 +389,6 @@ func (r Rate) ToSeconds() (maxValue, seconds int) {
 // They are named by a dot-separated path (e.g. request.path)
 // Example: "request.path" -> The path portion of the URL
 // +kubebuilder:validation:MinLength=1
-// +kubebuilder:validation:MaxLength=253
 type Expression string
 
 type RateLimitPolicyStatus struct {

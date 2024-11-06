@@ -7906,7 +7906,6 @@ spec:
                                   Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
                                   They are named by a dot-separated path (e.g. request.path)
                                   Example: "request.path" -> The path portion of the URL
-                                maxLength: 253
                                 minLength: 1
                                 type: string
                             required:
@@ -7942,7 +7941,6 @@ spec:
                               must be evaluated to bool
                             properties:
                               predicate:
-                                maxLength: 253
                                 minLength: 1
                                 type: string
                             required:
@@ -7968,7 +7966,6 @@ spec:
                         be evaluated to bool
                       properties:
                         predicate:
-                          maxLength: 253
                           minLength: 1
                           type: string
                       required:
@@ -7994,7 +7991,6 @@ spec:
                               Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
                               They are named by a dot-separated path (e.g. request.path)
                               Example: "request.path" -> The path portion of the URL
-                            maxLength: 253
                             minLength: 1
                             type: string
                         required:
@@ -8030,7 +8026,6 @@ spec:
                           be evaluated to bool
                         properties:
                           predicate:
-                            maxLength: 253
                             minLength: 1
                             type: string
                         required:
@@ -8064,7 +8059,6 @@ spec:
                                   Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
                                   They are named by a dot-separated path (e.g. request.path)
                                   Example: "request.path" -> The path portion of the URL
-                                maxLength: 253
                                 minLength: 1
                                 type: string
                             required:
@@ -8100,7 +8094,6 @@ spec:
                               must be evaluated to bool
                             properties:
                               predicate:
-                                maxLength: 253
                                 minLength: 1
                                 type: string
                             required:
@@ -8126,7 +8119,6 @@ spec:
                         be evaluated to bool
                       properties:
                         predicate:
-                          maxLength: 253
                           minLength: 1
                           type: string
                       required:
@@ -8190,7 +8182,6 @@ spec:
                     to bool
                   properties:
                     predicate:
-                      maxLength: 253
                       minLength: 1
                       type: string
                   required:

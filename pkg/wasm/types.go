@@ -289,10 +289,6 @@ type ExpressionItem struct {
 	Value string `json:"value"`
 }
 
-func (e ExpressionItem) EqualTo(other ExpressionItem) bool {
-	return e.Key == other.Key && e.Value == other.Value
-}
-
 type Expression struct {
 	// Data to be sent to the service
 	ExpressionItem ExpressionItem `json:"expression"`

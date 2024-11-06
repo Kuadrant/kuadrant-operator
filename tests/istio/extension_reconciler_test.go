@@ -213,9 +213,9 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 				{
 					Matches: []gatewayapiv1.HTTPRouteMatch{
-						{ // /assets*
+						{ // /assets
 							Path: &gatewayapiv1.HTTPPathMatch{
-								Type:  ptr.To(gatewayapiv1.PathMatchPathPrefix),
+								Type:  ptr.To(gatewayapiv1.PathMatchExact),
 								Value: ptr.To("/assets"),
 							},
 						},
@@ -245,13 +245,17 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						},
 					},
 					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
+						When: kuadrantv1beta3.NewWhenPredicates(
+							"source.remote_address != '192.168.1.1'",
+							"auth.identity.username != 'root'",
+						),
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"users": {
 								Rates: []kuadrantv1beta3.Rate{
 									{Limit: 50, Window: kuadrantv1beta3.Duration("1m")},
 								},
 								Counters: []kuadrantv1beta3.Counter{{Expression: "auth.identity.username"}},
-								When:     kuadrantv1beta3.NewWhenPredicates("auth.identity.group != admin"),
+								When:     kuadrantv1beta3.NewWhenPredicates("auth.identity.group != 'admin'"),
 							},
 							"all": {
 								Rates: []kuadrantv1beta3.Rate{
@@ -297,20 +301,24 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 			httpRouteRuleToys := &machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[0], Name: "rule-1"}
 			httpRouteRuleAssets := &machinery.HTTPRouteRule{HTTPRoute: mHTTPRoute, HTTPRouteRule: &httpRoute.Spec.Rules[1], Name: "rule-2"}
 
-			// *.toystore.acme.com/assets*
+			// *.toystore.acme.com/assets
 			actionSet := existingWASMConfig.ActionSets[0]
 			pathID := kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "*.toystore.acme.com")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"*.toystore.acme.com"}))
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
-				"request.url_path.startsWith('/assets')",
+				"request.url_path == '/assets'",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
 			Expect(actionSet.Actions).To(ContainElements(
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Predicates:  []string{"auth.identity.group != admin"},
+					Predicates: []string{
+						"source.remote_address != '192.168.1.1'",
+						"auth.identity.username != 'root'",
+						"auth.identity.group != 'admin'",
+					},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -360,7 +368,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Predicates:  []string{"auth.identity.group != admin"},
+					Predicates:  []string{"auth.identity.group != 'admin'"},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -410,7 +418,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Predicates:  []string{"auth.identity.group != admin"},
+					Predicates:  []string{"auth.identity.group != 'admin'"},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -446,20 +454,20 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				},
 			))
 
-			// api.toystore.io/assets*
+			// api.toystore.io/assets
 			actionSet = existingWASMConfig.ActionSets[3]
 			pathID = kuadrantv1.PathID(append(basePath, httpRouteRuleAssets))
 			Expect(actionSet.Name).To(Equal(wasm.ActionSetNameForPath(pathID, 0, "api.toystore.io")))
 			Expect(actionSet.RouteRuleConditions.Hostnames).To(Equal([]string{"api.toystore.io"}))
 			Expect(actionSet.RouteRuleConditions.Predicates).To(ContainElements(
-				"request.url_path.startsWith('/assets')",
+				"request.url_path == '/assets'",
 			))
 			Expect(actionSet.Actions).To(HaveLen(2))
 			Expect(actionSet.Actions).To(ContainElements(
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Predicates:  []string{"auth.identity.group != admin"},
+					Predicates:  []string{"auth.identity.group != 'admin'"},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -509,7 +517,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Predicates:  []string{"auth.identity.group != admin"},
+					Predicates:  []string{"auth.identity.group != 'admin'"},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{
@@ -559,7 +567,7 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 				wasm.Action{ // action to activate the 'users' limit definition
 					ServiceName: wasm.RateLimitServiceName,
 					Scope:       controllers.LimitsNamespaceFromRoute(httpRoute),
-					Predicates:  []string{"auth.identity.group != admin"},
+					Predicates:  []string{"auth.identity.group != 'admin'"},
 					Data: []wasm.DataType{
 						{
 							Value: &wasm.Expression{

@@ -158,7 +158,7 @@ spec:
             selector: auth.identity.sub
     response:
       success:
-        dynamicMetadata:
+        filters:
           "identity":
             json:
               properties:

@@ -140,7 +140,7 @@ spec:
             prefix: APIKEY
     response:
       success:
-        dynamicMetadata:
+        filters:
           "identity":
             json:
               properties:

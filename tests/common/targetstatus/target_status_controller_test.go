@@ -1030,7 +1030,7 @@ var _ = Describe("Target status reconciler", func() {
 			Expect(k8sClient.Create(ctx, gwPolicy)).To(Succeed())
 
 			lPolicy := policyFactory(func(policy *kuadrantv1.TLSPolicy) {
-				policy.Name = "section-dns"
+				policy.Name = "section-tls"
 				policy.Spec.TargetRef.SectionName = ptr.To[gatewayapiv1.SectionName]("test-listener-toystore-com")
 			})
 

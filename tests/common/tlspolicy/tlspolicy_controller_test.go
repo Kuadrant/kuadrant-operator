@@ -804,7 +804,6 @@ var _ = Describe("TLSPolicy controller", func() {
 				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test1.example.com", Namespace: testNamespace}, cert)
 				g.Expect(err).ToNot(HaveOccurred())
 
-				// Should list both hostnames
 				g.Expect(cert.Spec.DNSNames).To(ConsistOf("test1.example.com"))
 			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
 
@@ -921,7 +920,7 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(cond.Status).To(Equal(certmanmetav1.ConditionFalse))
 				g.Expect(cond.Reason).To(Equal("IncorrectCertificate"))
 			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
-		})
+		}, testTimeOut)
 
 		It("should report duplication in affected policy - section policies", func(ctx SpecContext) {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
@@ -999,6 +998,39 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(cond.Status).To(Equal(certmanmetav1.ConditionFalse))
 				g.Expect(cond.Reason).To(Equal("IncorrectCertificate"))
 			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
+		}, testTimeOut)
+	})
+
+	Context("Multiple policies with same target ref", func() {
+		BeforeEach(func(ctx SpecContext) {
+			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+				WithHTTPSListener("test1.example.com", "test1-tls-secret").Gateway
+			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
 		})
+
+		It("Should conflict on the second created policy", func(ctx context.Context) {
+			p1 := kuadrantv1.NewTLSPolicy("test-tls-policy", testNamespace).
+				WithTargetGateway(gateway.Name).
+				WithIssuerRef(*issuerRef)
+			Expect(k8sClient.Create(ctx, p1)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p1), p1)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(p1.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
+
+			p2 := kuadrantv1.NewTLSPolicy("test-tls-policy-2", testNamespace).
+				WithTargetGateway(gateway.Name).
+				WithIssuerRef(*issuerRef)
+			Expect(k8sClient.Create(ctx, p2)).To(Succeed())
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p2), p2)).To(Succeed())
+				cond := meta.FindStatusCondition(p2.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(cond.Reason).To(Equal(string(gatewayapiv1alpha2.PolicyReasonConflicted)))
+				g.Expect(cond.Message).To(Equal(fmt.Sprintf("TLSPolicy is conflicted by %s: conflicting policy", client.ObjectKeyFromObject(p1).String())))
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
 	})
 })

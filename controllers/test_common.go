@@ -54,7 +54,6 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
 func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
@@ -70,21 +69,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 		log.Log.WithName("kuadrant").WithName("indexer").WithName("routeIndexByGateway"),
 	)
 	Expect(err).ToNot(HaveOccurred())
-
-	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-		mgr.GetAPIReader(),
-		log.Log.WithName("kuadrant").WithName("gateway"),
-	)
-
-	err = (&GatewayKuadrantReconciler{
-		BaseReconciler: gatewayKuadrantBaseReconciler,
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
-	Expect(err).NotTo(HaveOccurred())
 
 	dClient, err := dynamic.NewForConfig(mgr.GetConfig())
 	Expect(err).NotTo(HaveOccurred())

@@ -54,7 +54,6 @@ import (
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/version"
 	//+kubebuilder:scaffold:imports
@@ -151,18 +150,6 @@ func main() {
 		log.Log.WithName("kuadrant").WithName("indexer").WithName("routeIndexByGateway"),
 	); err != nil {
 		setupLog.Error(err, "unable to add indexer")
-		os.Exit(1)
-	}
-
-	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("kuadrant").WithName("gateway"),
-	)
-
-	if err = (&controllers.GatewayKuadrantReconciler{
-		BaseReconciler: gatewayKuadrantBaseReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "GatewayKuadrant")
 		os.Exit(1)
 	}
 

@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/kuadrant/policy-machinery/machinery"
-	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -120,16 +119,14 @@ func (p *RateLimitPolicy) Empty() bool {
 func (p *RateLimitPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 	rules := make(map[string]kuadrantv1.MergeableRule)
 	policyLocator := p.GetLocator()
+	spec := p.Spec.Proper()
 
-	if len(p.Spec.Proper().When) > 0 {
-		rules[RulesKeyTopLevelPredicates] = kuadrantv1.NewMergeableRule(
-			&WhenPredicatesMergeableRule{When: p.Spec.Proper().When, Source: policyLocator},
-			policyLocator,
-		)
+	if whenPredicates := spec.MergeableWhenPredicates; len(whenPredicates.Predicates) > 0 {
+		rules[RulesKeyTopLevelPredicates] = kuadrantv1.NewMergeableRule(&whenPredicates, policyLocator)
 	}
 
-	for ruleID := range p.Spec.Proper().Limits {
-		limit := p.Spec.Proper().Limits[ruleID]
+	for ruleID := range spec.Limits {
+		limit := spec.Limits[ruleID]
 		rules[ruleID] = kuadrantv1.NewMergeableRule(&limit, policyLocator)
 	}
 
@@ -139,7 +136,7 @@ func (p *RateLimitPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 func (p *RateLimitPolicy) SetRules(rules map[string]kuadrantv1.MergeableRule) {
 	// clear all rules of the policy before setting new ones
 	p.Spec.Proper().Limits = nil
-	p.Spec.Proper().When = nil
+	p.Spec.Proper().Predicates = nil
 
 	if len(rules) > 0 {
 		p.Spec.Proper().Limits = make(map[string]Limit)
@@ -147,7 +144,7 @@ func (p *RateLimitPolicy) SetRules(rules map[string]kuadrantv1.MergeableRule) {
 
 	for ruleID := range rules {
 		if ruleID == RulesKeyTopLevelPredicates {
-			p.Spec.Proper().When = rules[ruleID].(*WhenPredicatesMergeableRule).When
+			p.Spec.Proper().MergeableWhenPredicates = *rules[ruleID].(*MergeableWhenPredicates)
 		} else {
 			p.Spec.Proper().Limits[ruleID] = *rules[ruleID].(*Limit)
 		}
@@ -238,66 +235,11 @@ type MergeableRateLimitPolicySpec struct {
 type RateLimitPolicySpecProper struct {
 	// When holds a list of "top-level" `Predicate`s
 	// +optional
-	When WhenPredicates `json:"when,omitempty"`
+	MergeableWhenPredicates `json:""`
 
 	// Limits holds the struct of limits indexed by a unique name
 	// +optional
 	Limits map[string]Limit `json:"limits,omitempty"`
-}
-
-// Predicate defines one CEL expression that must be evaluated to bool
-type Predicate struct {
-	// +kubebuilder:validation:MinLength=1
-	Predicate string `json:"predicate"`
-}
-
-func NewPredicate(predicate string) Predicate {
-	return Predicate{Predicate: predicate}
-}
-
-type WhenPredicates []Predicate
-
-func NewWhenPredicates(predicates ...string) WhenPredicates {
-	whenPredicates := make(WhenPredicates, 0)
-	for _, predicate := range predicates {
-		whenPredicates = append(whenPredicates, NewPredicate(predicate))
-	}
-
-	return whenPredicates
-}
-
-func (w WhenPredicates) Extend(other WhenPredicates) WhenPredicates {
-	return append(w, other...)
-}
-
-func (w WhenPredicates) Into() []string {
-	if w == nil {
-		return nil
-	}
-
-	return lo.Map(w, func(p Predicate, _ int) string { return p.Predicate })
-}
-
-type WhenPredicatesMergeableRule struct {
-	When WhenPredicates
-
-	// Source stores the locator of the policy where the limit is orignaly defined (internal use)
-	Source string
-}
-
-var _ kuadrantv1.MergeableRule = &WhenPredicatesMergeableRule{}
-
-func (w *WhenPredicatesMergeableRule) GetSpec() any {
-	return w.When
-}
-
-func (w *WhenPredicatesMergeableRule) GetSource() string {
-	return w.Source
-}
-
-func (w *WhenPredicatesMergeableRule) WithSource(source string) kuadrantv1.MergeableRule {
-	w.Source = source
-	return w
 }
 
 type Counter struct {

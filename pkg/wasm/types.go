@@ -7,8 +7,6 @@ import (
 
 	_struct "google.golang.org/protobuf/types/known/structpb"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 )
 
 type Config struct {
@@ -133,36 +131,11 @@ func (r *RouteRuleConditions) EqualTo(other RouteRuleConditions) bool {
 	return true
 }
 
-type Condition struct {
-	// Selector of an attribute from the contextual properties provided by kuadrant
-	// during request and connection processing
-	Selector kuadrantv1beta3.ContextSelector `json:"selector"`
-
-	// The binary operator to be applied to the content fetched from context, for comparison with "value".
-	// Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
-	// TODO build comprehensive list of operators
-	Operator PatternOperator `json:"operator"`
-
-	// The value of reference for the comparison with the content fetched from the context.
-	Value string `json:"value"`
-}
-
-func (p *Condition) EqualTo(other Condition) bool {
-	return p.Selector == other.Selector &&
-		p.Operator == other.Operator &&
-		p.Value == other.Value
-}
-
-type PatternOperator kuadrantv1beta3.WhenConditionOperator
-
 type Action struct {
 	ServiceName string `json:"service"`
 	Scope       string `json:"scope"`
 
-	// Conditions that activate the action
-	Conditions []Condition `json:"conditions,omitempty"`
-
-	// When holds a list of CEL `Predicate`s
+	// Predicates holds a list of CEL predicates
 	// +optional
 	Predicates []string `json:"predicates,omitempty"`
 
@@ -174,16 +147,9 @@ type Action struct {
 func (a *Action) EqualTo(other Action) bool {
 	if a.Scope != other.Scope ||
 		a.ServiceName != other.ServiceName ||
-		len(a.Conditions) != len(other.Conditions) ||
 		len(a.Predicates) != len(other.Predicates) ||
 		len(a.Data) != len(other.Data) {
 		return false
-	}
-
-	for i := range a.Conditions {
-		if !a.Conditions[i].EqualTo(other.Conditions[i]) {
-			return false
-		}
 	}
 
 	for i := range a.Predicates {
@@ -209,7 +175,6 @@ func (d *DataType) UnmarshalJSON(data []byte) error {
 	// Precisely one of "static", "selector" must be set.
 	types := []interface{}{
 		&Static{},
-		&Selector{},
 		&Expression{},
 	}
 
@@ -231,8 +196,6 @@ func (d *DataType) UnmarshalJSON(data []byte) error {
 func (d *DataType) MarshalJSON() ([]byte, error) {
 	switch val := d.Value.(type) {
 	case *Static:
-		return json.Marshal(val)
-	case *Selector:
 		return json.Marshal(val)
 	case *Expression:
 		return json.Marshal(val)
@@ -257,28 +220,9 @@ type Static struct {
 	Static StaticSpec `json:"static"`
 }
 
-type Selector struct {
-	Selector SelectorSpec `json:"selector"`
-}
-
 type StaticSpec struct {
 	Value string `json:"value"`
 	Key   string `json:"key"`
-}
-
-type SelectorSpec struct {
-	// Selector of an attribute from the contextual properties provided by kuadrant
-	// during request and connection processing
-	Selector kuadrantv1beta3.ContextSelector `json:"selector"`
-
-	// If not set it defaults to `selector` field value as the descriptor key.
-	// +optional
-	Key *string `json:"key,omitempty"`
-
-	// An optional value to use if the selector is not found in the context.
-	// If not set and the selector is not found in the context, then no descriptor is generated.
-	// +optional
-	Default *string `json:"default,omitempty"`
 }
 
 type ExpressionItem struct {

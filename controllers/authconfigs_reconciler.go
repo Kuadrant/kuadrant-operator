@@ -179,13 +179,6 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy Effective
 		})
 	}
 
-	// top-level conditions
-	if conditions := spec.Conditions; conditions != nil {
-		authConfig.Spec.Conditions = lo.Map(spec.Conditions, func(v kuadrantv1beta3.MergeablePatternExpressionOrRef, _ int) authorinov1beta3.PatternExpressionOrRef {
-			return v.PatternExpressionOrRef
-		})
-	}
-
 	// return early if authScheme is nil
 	authScheme := spec.AuthScheme
 	if authScheme == nil {

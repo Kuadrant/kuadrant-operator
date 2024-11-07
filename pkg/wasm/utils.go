@@ -13,7 +13,6 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 )
@@ -111,17 +110,6 @@ func ConfigFromJSON(configJSON *apiextensionsv1.JSON) (*Config, error) {
 	}
 
 	return config, nil
-}
-
-// ConditionsFromWhenConditions builds a list of predicates from a list of (selector, operator, value) when conditions
-func ConditionsFromWhenConditions(when ...kuadrantv1beta3.WhenCondition) []Condition {
-	return lo.Map(when, func(when kuadrantv1beta3.WhenCondition, _ int) Condition {
-		return Condition{
-			Selector: when.Selector,
-			Operator: PatternOperator(when.Operator),
-			Value:    when.Value,
-		}
-	})
 }
 
 // PredicatesFromHTTPRouteMatch builds a list of conditions from a rule match

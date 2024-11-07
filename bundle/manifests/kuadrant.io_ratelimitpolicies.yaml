@@ -148,7 +148,10 @@ spec:
                     - merge
                     type: string
                   when:
-                    description: When holds a list of "top-level" `Predicate`s
+                    description: |-
+                      Overall conditions for the policy to be enforced.
+                      If omitted, the policy will be enforced at all requests to the protected routes.
+                      If present, all conditions must match for the policy to be enforced.
                     items:
                       description: Predicate defines one CEL expression that must
                         be evaluated to bool
@@ -301,7 +304,10 @@ spec:
                     - merge
                     type: string
                   when:
-                    description: When holds a list of "top-level" `Predicate`s
+                    description: |-
+                      Overall conditions for the policy to be enforced.
+                      If omitted, the policy will be enforced at all requests to the protected routes.
+                      If present, all conditions must match for the policy to be enforced.
                     items:
                       description: Predicate defines one CEL expression that must
                         be evaluated to bool
@@ -364,7 +370,10 @@ spec:
                     and 'Gateway'
                   rule: self.kind == 'HTTPRoute' || self.kind == 'Gateway'
               when:
-                description: When holds a list of "top-level" `Predicate`s
+                description: |-
+                  Overall conditions for the policy to be enforced.
+                  If omitted, the policy will be enforced at all requests to the protected routes.
+                  If present, all conditions must match for the policy to be enforced.
                 items:
                   description: Predicate defines one CEL expression that must be evaluated
                     to bool

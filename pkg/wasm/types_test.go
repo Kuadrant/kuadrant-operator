@@ -70,12 +70,8 @@ func TestConfigEqual(t *testing.T) {
 							{
 								ServiceName: "ratelimit-service",
 								Scope:       "default/other",
-								Conditions: []Condition{
-									{
-										Selector: "source.address",
-										Operator: "neq",
-										Value:    "127.0.0.1",
-									},
+								Predicates: []string{
+									"source.address != '127.0.0.1'",
 								},
 								Data: []DataType{
 									{
@@ -97,12 +93,8 @@ func TestConfigEqual(t *testing.T) {
 					{
 						Actions: []Action{
 							{
-								Conditions: []Condition{
-									{
-										Operator: "neq",
-										Selector: "source.address",
-										Value:    "127.0.0.1",
-									},
+								Predicates: []string{
+									"source.address != '127.0.0.1'",
 								},
 								Data: []DataType{
 									{

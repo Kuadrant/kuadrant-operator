@@ -156,19 +156,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("kuadrant"),
-	)
-
-	if err = (&controllers.KuadrantReconciler{
-		BaseReconciler: kuadrantBaseReconciler,
-		RestMapper:     mgr.GetRESTMapper(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Kuadrant")
-		os.Exit(1)
-	}
-
 	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
 		log.Log.WithName("kuadrant").WithName("gateway"),

@@ -107,10 +107,10 @@
 
 ##### SuccessResponseSpec
 
-| **Field**         | **Type**                                                 | **Required** | **Description**                                                                                                                                   |
-|-------------------|----------------------------------------------------------|:------------:|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| `headers`         | Map<String: [SuccessResponseItem](#successresponseitem)> | No           | Custom success response items wrapped as HTTP headers to be injected in the request.                                                              |
-| `dynamicMetadata` | Map<String: [SuccessResponseItem](#successresponseitem)> | No           | Custom success response items wrapped as Envoy Dynamic Metadata. Use it to pass data along to other proxy filters, such as the rate-limit filter. |
+| **Field** | **Type**                                                 | **Required** | **Description**                                                                                      |
+|-----------|----------------------------------------------------------|:------------:|------------------------------------------------------------------------------------------------------|
+| `headers` | Map<String: [SuccessResponseItem](#successresponseitem)> |      No      | Custom success response items wrapped as HTTP headers to be injected in the request.                 |
+| `filters` | Map<String: [SuccessResponseItem](#successresponseitem)> |      No      | Custom success response items made available to other filters managed by Kuadrant (i.e. Rate Limit). |
 
 ###### SuccessResponseItem
 

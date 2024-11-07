@@ -20,7 +20,7 @@ spec:
           prefix: APIKEY
     response:
       success:
-        dynamicMetadata:
+        filters:
           "ext_auth_data":
             json:
               properties:

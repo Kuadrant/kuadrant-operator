@@ -289,11 +289,6 @@ define update-csv-config
 	$(YQ) eval '$(3) = strenv(V)' -i $2
 endef
 
-define update-operator-dependencies
-	V=`$(PROJECT_PATH)/utils/parse-bundle-version.sh $(OPM) $(YQ) $2` \
-	$(YQ) eval '(.dependencies[] | select(.value.packageName == "$1").value.version) = strenv(V)' -i bundle/metadata/dependencies.yaml
-endef
-
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) crd paths="./api/v1beta1;./api/v1" output:crd:artifacts:config=config/crd/bases
@@ -414,15 +409,17 @@ bundle: $(OPM) $(YQ) manifests dependencies-manifests kustomize operator-sdk ## 
 bundle-post-generate: OPENSHIFT_VERSIONS_ANNOTATION_KEY="com.redhat.openshift.versions"
 # Supports Openshift v4.12+ (https://redhat-connect.gitbook.io/certified-operator-guide/ocp-deployment/operator-metadata/bundle-directory/managing-openshift-versions)
 bundle-post-generate: OPENSHIFT_SUPPORTED_VERSIONS="v4.12"
-bundle-post-generate:
+bundle-post-generate: $(YQ) $(OPM)
 	# Set Openshift version in bundle annotations
 	$(YQ) -i '.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] = $(OPENSHIFT_SUPPORTED_VERSIONS)' bundle/metadata/annotations.yaml
 	$(YQ) -i '(.annotations[$(OPENSHIFT_VERSIONS_ANNOTATION_KEY)] | key) headComment = "Custom annotations"' bundle/metadata/annotations.yaml
 	# Update operator dependencies
-	# TODO(eguzki): run only if not default one. Avoid bundle parsing if version is known in advance
-	$(call update-operator-dependencies,limitador-operator,$(LIMITADOR_OPERATOR_BUNDLE_IMG))
-	$(call update-operator-dependencies,authorino-operator,$(AUTHORINO_OPERATOR_BUNDLE_IMG))
-	$(call update-operator-dependencies,dns-operator,$(DNS_OPERATOR_BUNDLE_IMG))
+	PATH=$(PROJECT_PATH)/bin:$$PATH; \
+			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh limitador-operator $(LIMITADOR_OPERATOR_BUNDLE_IMG)
+	PATH=$(PROJECT_PATH)/bin:$$PATH; \
+			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh authorino-operator $(AUTHORINO_OPERATOR_BUNDLE_IMG)
+	PATH=$(PROJECT_PATH)/bin:$$PATH; \
+			 $(PROJECT_PATH)/utils/update-operator-dependencies.sh dns-operator $(DNS_OPERATOR_BUNDLE_IMG)
 
 .PHONY: bundle-ignore-createdAt
 bundle-ignore-createdAt:

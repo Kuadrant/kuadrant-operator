@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"sync"
 
-	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/go-logr/logr"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -45,7 +45,7 @@ func (t *EffectiveTLSPoliciesReconciler) Subscription() *controller.Subscription
 }
 
 type CertTarget struct {
-	cert   *certmanv1.Certificate
+	cert   *certmanagerv1.Certificate
 	target machinery.Targetable
 }
 
@@ -104,7 +104,7 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 	expectedCerts := t.reconcileCertificates(ctx, certTargets, topology, logger)
 
 	// Clean up orphaned certs
-	uniqueExpectedCerts := lo.UniqBy(expectedCerts, func(item *certmanv1.Certificate) types.UID {
+	uniqueExpectedCerts := lo.UniqBy(expectedCerts, func(item *certmanagerv1.Certificate) types.UID {
 		return item.GetUID()
 	})
 	orphanedCerts, _ := lo.Difference(certs, uniqueExpectedCerts)
@@ -119,8 +119,8 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 	return nil
 }
 
-func (t *EffectiveTLSPoliciesReconciler) reconcileCertificates(ctx context.Context, certTargets []CertTarget, topology *machinery.Topology, logger logr.Logger) []*certmanv1.Certificate {
-	expectedCerts := make([]*certmanv1.Certificate, 0, len(certTargets))
+func (t *EffectiveTLSPoliciesReconciler) reconcileCertificates(ctx context.Context, certTargets []CertTarget, topology *machinery.Topology, logger logr.Logger) []*certmanagerv1.Certificate {
+	expectedCerts := make([]*certmanagerv1.Certificate, 0, len(certTargets))
 	for _, certTarget := range certTargets {
 		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(certTarget.cert.GetNamespace())
 
@@ -147,7 +147,7 @@ func (t *EffectiveTLSPoliciesReconciler) reconcileCertificates(ctx context.Conte
 		}
 
 		// Update
-		tCert := obj.(*controller.RuntimeObject).Object.(*certmanv1.Certificate)
+		tCert := obj.(*controller.RuntimeObject).Object.(*certmanagerv1.Certificate)
 		expectedCerts = append(expectedCerts, tCert)
 		if reflect.DeepEqual(tCert.Spec, certTarget.cert.Spec) {
 			logger.V(1).Info("skipping update, cert specs are the same, nothing to do")
@@ -168,13 +168,13 @@ func (t *EffectiveTLSPoliciesReconciler) reconcileCertificates(ctx context.Conte
 	return expectedCerts
 }
 
-func getCertificatesFromTopology(topology *machinery.Topology) []*certmanv1.Certificate {
-	return lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
+func getCertificatesFromTopology(topology *machinery.Topology) []*certmanagerv1.Certificate {
+	return lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanagerv1.Certificate, bool) {
 		r, ok := item.(*controller.RuntimeObject)
 		if !ok {
 			return nil, false
 		}
-		c, ok := r.Object.(*certmanv1.Certificate)
+		c, ok := r.Object.(*certmanagerv1.Certificate)
 		return c, ok
 	})
 }
@@ -214,52 +214,22 @@ func getSecretReference(certRef gatewayapiv1.SecretObjectReference, l *machinery
 	return secretRef
 }
 
-func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *kuadrantv1.TLSPolicy) []*certmanv1.Certificate {
-	// Not valid - so no need to check if cert is ready since there should not be one created
-	err := validateGatewayListenerBlock(field.NewPath(""), *l.Listener, l.Gateway).ToAggregate()
-	if err != nil {
-		return []*certmanv1.Certificate{}
-	}
-
-	certs := make([]*certmanv1.Certificate, 0)
-
-	hostname := "*"
-	if l.Hostname != nil {
-		hostname = string(*l.Hostname)
-	}
-
-	for _, certRef := range l.TLS.CertificateRefs {
-		secretRef := corev1.ObjectReference{
-			Name: string(certRef.Name),
-		}
-		if certRef.Namespace != nil {
-			secretRef.Namespace = string(*certRef.Namespace)
-		} else {
-			secretRef.Namespace = l.GetNamespace()
-		}
-		// Gateway API hostname explicitly disallows IP addresses, so this
-		// should be OK.
-		certs = append(certs, buildCertManagerCertificate(l, tlsPolicy, secretRef, []string{hostname}))
-	}
-
-	return certs
-}
-
-func buildCertManagerCertificate(l *machinery.Listener, tlsPolicy *kuadrantv1.TLSPolicy, secretRef corev1.ObjectReference, hosts []string) *certmanv1.Certificate {
-	crt := &certmanv1.Certificate{
+func buildCertManagerCertificate(l *machinery.Listener, tlsPolicy *kuadrantv1.TLSPolicy, secretRef corev1.ObjectReference, hosts []string) *certmanagerv1.Certificate {
+	crt := &certmanagerv1.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      certName(l.Gateway.Name, l.Name),
 			Namespace: secretRef.Namespace,
+			Labels:    CommonLabels(),
 		},
 		TypeMeta: metav1.TypeMeta{
-			Kind:       certmanv1.CertificateKind,
-			APIVersion: certmanv1.SchemeGroupVersion.String(),
+			Kind:       certmanagerv1.CertificateKind,
+			APIVersion: certmanagerv1.SchemeGroupVersion.String(),
 		},
-		Spec: certmanv1.CertificateSpec{
+		Spec: certmanagerv1.CertificateSpec{
 			DNSNames:   hosts,
 			SecretName: secretRef.Name,
 			IssuerRef:  tlsPolicy.Spec.IssuerRef,
-			Usages:     certmanv1.DefaultKeyUsages(),
+			Usages:     certmanagerv1.DefaultKeyUsages(),
 		},
 	}
 	translatePolicy(crt, tlsPolicy.Spec)
@@ -319,7 +289,7 @@ func validateGatewayListenerBlock(path *field.Path, l gatewayapiv1.Listener, ing
 
 // translatePolicy updates the Certificate spec using the TLSPolicy spec
 // converted from https://github.com/cert-manager/cert-manager/blob/master/pkg/controller/certificate-shim/helper.go#L63
-func translatePolicy(crt *certmanv1.Certificate, tlsPolicy kuadrantv1.TLSPolicySpec) {
+func translatePolicy(crt *certmanagerv1.Certificate, tlsPolicy kuadrantv1.TLSPolicySpec) {
 	if tlsPolicy.CommonName != "" {
 		crt.Spec.CommonName = tlsPolicy.CommonName
 	}
@@ -346,7 +316,7 @@ func translatePolicy(crt *certmanv1.Certificate, tlsPolicy kuadrantv1.TLSPolicyS
 
 	if tlsPolicy.PrivateKey != nil {
 		if crt.Spec.PrivateKey == nil {
-			crt.Spec.PrivateKey = &certmanv1.CertificatePrivateKey{}
+			crt.Spec.PrivateKey = &certmanagerv1.CertificatePrivateKey{}
 		}
 
 		if tlsPolicy.PrivateKey.Algorithm != "" {

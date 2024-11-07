@@ -15,6 +15,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -215,4 +216,25 @@ func (t *TLSPolicyStatusUpdater) isCertificatesReady(p machinery.Policy, topolog
 	}
 
 	return nil
+}
+
+func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *kuadrantv1.TLSPolicy) []*certmanagerv1.Certificate {
+	// Not valid - so no need to check if cert is ready since there should not be one created
+	err := validateGatewayListenerBlock(field.NewPath(""), *l.Listener, l.Gateway).ToAggregate()
+	if err != nil {
+		return []*certmanagerv1.Certificate{}
+	}
+
+	certs := make([]*certmanagerv1.Certificate, 0)
+
+	hostname := getListenerHostname(l)
+
+	for _, certRef := range l.TLS.CertificateRefs {
+		secretRef := getSecretReference(certRef, l)
+		// Gateway API hostname explicitly disallows IP addresses, so this
+		// should be OK.
+		certs = append(certs, buildCertManagerCertificate(l, tlsPolicy, secretRef, []string{hostname}))
+	}
+
+	return certs
 }

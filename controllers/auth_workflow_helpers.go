@@ -125,20 +125,8 @@ func buildWasmActionsForAuth(pathID string, effectivePolicy EffectiveAuthPolicy)
 	}
 	spec := effectivePolicy.Spec.Spec.Proper()
 
-	predicates := make([]string, 0)
-	whenConditions := make([]kuadrantv1beta3.WhenCondition, 0)
-	for _, condition := range spec.Conditions {
-		if condition.Predicate != "" {
-			predicates = append(predicates, condition.Predicate)
-		} else {
-			whenConditions = append(whenConditions, condition.ToWhenConditions(spec.NamedPatterns)...)
-		}
-	}
-	if len(predicates) > 0 {
-		action.Predicates = predicates
-	}
-	if conditions := wasm.ConditionsFromWhenConditions(whenConditions...); len(conditions) > 0 {
-		action.Conditions = conditions
+	if whenPredicates := spec.Predicates; len(whenPredicates) > 0 {
+		action.Predicates = whenPredicates.Into()
 	}
 
 	return []wasm.Action{action}

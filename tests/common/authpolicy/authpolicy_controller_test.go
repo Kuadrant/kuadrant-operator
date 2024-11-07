@@ -272,13 +272,9 @@ var _ = Describe("AuthPolicy controller", func() {
 						},
 					},
 				}
-				policy.Spec.Proper().Conditions = []kuadrantv1beta3.MergeablePatternExpressionOrRef{
-					{
-						PatternExpressionOrRef: authorinov1beta3.PatternExpressionOrRef{
-							PatternRef: authorinov1beta3.PatternRef{
-								Name: "internal-source",
-							},
-						},
+				policy.Spec.Proper().MergeableWhenPredicates = kuadrantv1beta3.MergeableWhenPredicates{
+					Predicates: kuadrantv1beta3.WhenPredicates{
+						{Predicate: `source.ip.matches("^192\.168\..*")`},
 					},
 				}
 				policy.Spec.Proper().AuthScheme = &kuadrantv1beta3.AuthSchemeSpec{
@@ -484,7 +480,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			authConfig := &authorinov1beta3.AuthConfig{}
 			Eventually(fetchReadyAuthConfig(ctx, httpRoute, 0, authConfig)).WithContext(ctx).Should(BeTrue())
 			authConfigSpecAsJSON, _ := json.Marshal(authConfig.Spec)
-			Expect(string(authConfigSpecAsJSON)).To(Equal(fmt.Sprintf(`{"hosts":["%s"],"patterns":{"authz-and-rl-required":[{"selector":"source.ip","operator":"neq","value":"192.168.0.10"}],"internal-source":[{"selector":"source.ip","operator":"matches","value":"192\\.168\\..*"}]},"when":[{"patternRef":"internal-source"}],"authentication":{"jwt":{"when":[{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt","operator":"neq"}],"credentials":{},"plain":{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt"}}},"metadata":{"user-groups":{"when":[{"selector":"auth.identity.admin","operator":"neq","value":"true"}],"http":{"url":"http://user-groups/username={auth.identity.username}","method":"GET","contentType":"application/x-www-form-urlencoded","credentials":{}}}},"authorization":{"admin-or-privileged":{"when":[{"patternRef":"authz-and-rl-required"}],"patternMatching":{"patterns":[{"any":[{"selector":"auth.identity.admin","operator":"eq","value":"true"},{"selector":"auth.metadata.user-groups","operator":"incl","value":"privileged"}]}]}}},"response":{"unauthenticated":{"message":{"value":"Missing verified JWT injected by the gateway"}},"unauthorized":{"message":{"value":"User must be admin or member of privileged group"}},"success":{"headers":{"x-username":{"when":[{"selector":"request.headers.x-propagate-username.@case:lower","operator":"matches","value":"1|yes|true"}],"plain":{"value":null,"selector":"auth.identity.username"}}},"dynamicMetadata":{"x-auth-data":{"when":[{"patternRef":"authz-and-rl-required"}],"json":{"properties":{"groups":{"value":null,"selector":"auth.metadata.user-groups"},"username":{"value":null,"selector":"auth.identity.username"}}}}}}},"callbacks":{"unauthorized-attempt":{"when":[{"patternRef":"authz-and-rl-required"},{"selector":"auth.authorization.admin-or-privileged","operator":"neq","value":"true"}],"http":{"url":"http://events/unauthorized","method":"POST","body":{"value":null,"selector":"\\{\"identity\":{auth.identity},\"request-id\":{request.id}\\}"},"contentType":"application/json","credentials":{}}}}}`, authConfig.GetName())))
+			Expect(string(authConfigSpecAsJSON)).To(Equal(fmt.Sprintf(`{"hosts":["%s"],"patterns":{"authz-and-rl-required":[{"selector":"source.ip","operator":"neq","value":"192.168.0.10"}],"internal-source":[{"selector":"source.ip","operator":"matches","value":"192\\.168\\..*"}]},"authentication":{"jwt":{"when":[{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt","operator":"neq"}],"credentials":{},"plain":{"selector":"filter_metadata.envoy\\.filters\\.http\\.jwt_authn|verified_jwt"}}},"metadata":{"user-groups":{"when":[{"selector":"auth.identity.admin","operator":"neq","value":"true"}],"http":{"url":"http://user-groups/username={auth.identity.username}","method":"GET","contentType":"application/x-www-form-urlencoded","credentials":{}}}},"authorization":{"admin-or-privileged":{"when":[{"patternRef":"authz-and-rl-required"}],"patternMatching":{"patterns":[{"any":[{"selector":"auth.identity.admin","operator":"eq","value":"true"},{"selector":"auth.metadata.user-groups","operator":"incl","value":"privileged"}]}]}}},"response":{"unauthenticated":{"message":{"value":"Missing verified JWT injected by the gateway"}},"unauthorized":{"message":{"value":"User must be admin or member of privileged group"}},"success":{"headers":{"x-username":{"when":[{"selector":"request.headers.x-propagate-username.@case:lower","operator":"matches","value":"1|yes|true"}],"plain":{"value":null,"selector":"auth.identity.username"}}},"dynamicMetadata":{"x-auth-data":{"when":[{"patternRef":"authz-and-rl-required"}],"json":{"properties":{"groups":{"value":null,"selector":"auth.metadata.user-groups"},"username":{"value":null,"selector":"auth.identity.username"}}}}}}},"callbacks":{"unauthorized-attempt":{"when":[{"patternRef":"authz-and-rl-required"},{"selector":"auth.authorization.admin-or-privileged","operator":"neq","value":"true"}],"http":{"url":"http://events/unauthorized","method":"POST","body":{"value":null,"selector":"\\{\"identity\":{auth.identity},\"request-id\":{request.id}\\}"},"contentType":"application/json","credentials":{}}}}}`, authConfig.GetName())))
 		}, testTimeOut)
 
 		It("Succeeds when AuthScheme is not defined", func(ctx SpecContext) {
@@ -994,13 +990,9 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		It("Invalid when both implicit and explicit defaults are used - conditions", func(ctx SpecContext) {
 			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
 				policy.Spec.Defaults = &kuadrantv1beta3.MergeableAuthPolicySpec{}
-				policy.Spec.Conditions = []kuadrantv1beta3.MergeablePatternExpressionOrRef{
-					{
-						PatternExpressionOrRef: authorinov1beta3.PatternExpressionOrRef{
-							PatternRef: authorinov1beta3.PatternRef{
-								Name: "internal-source",
-							},
-						},
+				policy.Spec.MergeableWhenPredicates = kuadrantv1beta3.MergeableWhenPredicates{
+					Predicates: kuadrantv1beta3.WhenPredicates{
+						{Predicate: `source.ip.matches("^192\.168\..*")`},
 					},
 				}
 			})

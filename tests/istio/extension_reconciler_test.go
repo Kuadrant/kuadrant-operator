@@ -245,10 +245,12 @@ var _ = Describe("Rate Limiting WasmPlugin controller", func() {
 						},
 					},
 					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-						When: kuadrantv1beta3.NewWhenPredicates(
-							"source.remote_address != '192.168.1.1'",
-							"auth.identity.username != 'root'",
-						),
+						MergeableWhenPredicates: kuadrantv1beta3.MergeableWhenPredicates{
+							Predicates: kuadrantv1beta3.NewWhenPredicates(
+								"source.remote_address != '192.168.1.1'",
+								"auth.identity.username != 'root'",
+							),
+						},
 						Limits: map[string]kuadrantv1beta3.Limit{
 							"users": {
 								Rates: []kuadrantv1beta3.Rate{

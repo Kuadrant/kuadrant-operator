@@ -24,7 +24,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	authorinov1beta3 "github.com/kuadrant/authorino/api/v1beta3"
 	"github.com/kuadrant/policy-machinery/machinery"
-	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -41,43 +40,6 @@ const (
 	AuthPolicyBackReferenceAnnotationName   = "kuadrant.io/authpolicies"
 	AuthPolicyDirectReferenceAnnotationName = "kuadrant.io/authpolicy"
 )
-
-const (
-	EqualOperator      WhenConditionOperator = "eq"
-	NotEqualOperator   WhenConditionOperator = "neq"
-	StartsWithOperator WhenConditionOperator = "startsWith"
-	EndsWithOperator   WhenConditionOperator = "endsWith"
-	IncludeOperator    WhenConditionOperator = "incl"
-	ExcludeOperator    WhenConditionOperator = "excl"
-	MatchesOperator    WhenConditionOperator = "matches"
-)
-
-// +kubebuilder:validation:Enum:=eq;neq;startswith;endswith;incl;excl;matches
-type WhenConditionOperator string
-
-// ContextSelector defines one item from the well known attributes
-// Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
-// Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-// They are named by a dot-separated path (e.g. request.path)
-// Example: "request.path" -> The path portion of the URL
-// +kubebuilder:validation:MinLength=1
-// +kubebuilder:validation:MaxLength=253
-type ContextSelector string
-
-// WhenCondition defines semantics for matching an HTTP request based on conditions
-// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
-type WhenCondition struct {
-	// Selector defines one item from the well known selectors
-	// TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-	Selector ContextSelector `json:"selector"`
-
-	// The binary operator to be applied to the content fetched from the selector
-	// Possible values are: "eq" (equal to), "neq" (not equal to)
-	Operator WhenConditionOperator `json:"operator"`
-
-	// The value of reference for the comparison.
-	Value string `json:"value"`
-}
 
 var (
 	AuthPolicyGroupKind  = schema.GroupKind{Group: SchemeGroupVersion.Group, Kind: "AuthPolicy"}
@@ -170,9 +132,8 @@ func (p *AuthPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 		rules[fmt.Sprintf("patterns#%s", ruleID)] = kuadrantv1.NewMergeableRule(&rule, policyLocator)
 	}
 
-	for ruleID := range spec.Conditions {
-		rule := spec.Conditions[ruleID]
-		rules[fmt.Sprintf("conditions#%d", ruleID)] = kuadrantv1.NewMergeableRule(&rule, policyLocator)
+	if whenPredicates := spec.MergeableWhenPredicates; len(whenPredicates.Predicates) > 0 {
+		rules["conditions#"] = kuadrantv1.NewMergeableRule(&whenPredicates, policyLocator)
 	}
 
 	if spec.AuthScheme == nil {
@@ -226,7 +187,7 @@ func (p *AuthPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 func (p *AuthPolicy) SetRules(rules map[string]kuadrantv1.MergeableRule) {
 	// clear all rules of the policy before setting new ones
 	p.Spec.Proper().NamedPatterns = nil
-	p.Spec.Proper().Conditions = nil
+	p.Spec.Proper().Predicates = nil
 	p.Spec.Proper().AuthScheme = nil
 
 	ensureNamedPatterns := func() {
@@ -305,7 +266,7 @@ func (p *AuthPolicy) SetRules(rules map[string]kuadrantv1.MergeableRule) {
 			ensureNamedPatterns()
 			p.Spec.Proper().NamedPatterns[ruleID] = *rule.(*MergeablePatternExpressions)
 		case "conditions":
-			p.Spec.Proper().Conditions = append(p.Spec.Proper().Conditions, *rule.(*MergeablePatternExpressionOrRef))
+			p.Spec.Proper().MergeableWhenPredicates = *rule.(*MergeableWhenPredicates)
 		case "authentication":
 			ensureAuthentication()
 			p.Spec.Proper().AuthScheme.Authentication[ruleID] = *rule.(*MergeableAuthenticationSpec)
@@ -429,7 +390,7 @@ type AuthPolicySpecProper struct {
 	// If omitted, the AuthPolicy will be enforced at all requests to the protected routes.
 	// If present, all conditions must match for the AuthPolicy to be enforced; otherwise, the authorization service skips the AuthPolicy and returns to the auth request with status OK.
 	// +optional
-	Conditions []MergeablePatternExpressionOrRef `json:"when,omitempty"`
+	MergeableWhenPredicates `json:""`
 
 	// The auth rules of the policy.
 	// See Authorino's AuthConfig CRD for more details.
@@ -489,39 +450,6 @@ func (r *MergeablePatternExpressionOrRef) GetSource() string { return r.Source }
 func (r *MergeablePatternExpressionOrRef) WithSource(source string) kuadrantv1.MergeableRule {
 	r.Source = source
 	return r
-}
-func (r *MergeablePatternExpressionOrRef) ToWhenConditions(namedPatterns map[string]MergeablePatternExpressions) []WhenCondition {
-	if ref := r.PatternRef.Name; ref != "" {
-		if pattern, ok := namedPatterns[ref]; ok {
-			return lo.Map(pattern.PatternExpressions, func(p authorinov1beta3.PatternExpression, _ int) WhenCondition {
-				return WhenCondition{
-					Selector: ContextSelector(p.Selector),
-					Operator: WhenConditionOperator(p.Operator),
-					Value:    p.Value,
-				}
-			})
-		}
-	}
-
-	if allOf := r.All; len(allOf) > 0 {
-		return lo.Map(allOf, func(p authorinov1beta3.UnstructuredPatternExpressionOrRef, _ int) WhenCondition {
-			return WhenCondition{
-				Selector: ContextSelector(p.Selector),
-				Operator: WhenConditionOperator(p.Operator),
-				Value:    p.Value,
-			}
-		})
-	}
-
-	// FIXME: anyOf cannot be represented in the current schema of the wasm config
-
-	return []WhenCondition{
-		{
-			Selector: ContextSelector(r.Selector),
-			Operator: WhenConditionOperator(r.Operator),
-			Value:    r.Value,
-		},
-	}
 }
 
 type MergeableAuthenticationSpec struct {

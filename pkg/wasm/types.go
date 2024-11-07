@@ -7,16 +7,8 @@ import (
 
 	_struct "google.golang.org/protobuf/types/known/structpb"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
-)
-
-var (
-	PathMatchTypeMap = map[gatewayapiv1.PathMatchType]PatternOperator{
-		gatewayapiv1.PathMatchPathPrefix:        PatternOperator(kuadrantv1beta3.StartsWithOperator),
-		gatewayapiv1.PathMatchRegularExpression: PatternOperator(kuadrantv1beta3.MatchesOperator),
-	}
 )
 
 type Config struct {
@@ -115,7 +107,9 @@ func (s *ActionSet) EqualTo(other ActionSet) bool {
 }
 
 type RouteRuleConditions struct {
-	Hostnames  []string `json:"hostnames"`
+	Hostnames []string `json:"hostnames"`
+
+	// +optional
 	Predicates []string `json:"predicates,omitempty"`
 }
 
@@ -165,11 +159,12 @@ type Action struct {
 	ServiceName string `json:"service"`
 	Scope       string `json:"scope"`
 
-	// Predicates that activate the action
-	Predicates []string `json:"predicates,omitempty"`
-
 	// Conditions that activate the action
 	Conditions []Condition `json:"conditions,omitempty"`
+
+	// When holds a list of CEL `Predicate`s
+	// +optional
+	Predicates []string `json:"predicates,omitempty"`
 
 	// Data to be sent to the service
 	// +optional
@@ -177,18 +172,22 @@ type Action struct {
 }
 
 func (a *Action) EqualTo(other Action) bool {
-	if a.Scope != other.Scope || a.ServiceName != other.ServiceName || len(a.Predicates) != len(other.Predicates) || len(a.Conditions) != len(other.Conditions) || len(a.Data) != len(other.Data) {
+	if a.Scope != other.Scope ||
+		a.ServiceName != other.ServiceName ||
+		len(a.Conditions) != len(other.Conditions) ||
+		len(a.Predicates) != len(other.Predicates) ||
+		len(a.Data) != len(other.Data) {
 		return false
-	}
-
-	for i := range a.Predicates {
-		if a.Predicates[i] != other.Predicates[i] {
-			return false
-		}
 	}
 
 	for i := range a.Conditions {
 		if !a.Conditions[i].EqualTo(other.Conditions[i]) {
+			return false
+		}
+	}
+
+	for i := range a.Predicates {
+		if a.Predicates[i] != other.Predicates[i] {
 			return false
 		}
 	}
@@ -211,6 +210,7 @@ func (d *DataType) UnmarshalJSON(data []byte) error {
 	types := []interface{}{
 		&Static{},
 		&Selector{},
+		&Expression{},
 	}
 
 	var err error
@@ -233,6 +233,8 @@ func (d *DataType) MarshalJSON() ([]byte, error) {
 	case *Static:
 		return json.Marshal(val)
 	case *Selector:
+		return json.Marshal(val)
+	case *Expression:
 		return json.Marshal(val)
 	default:
 		return nil, errors.New("DataType.Value has unknown type")
@@ -277,4 +279,17 @@ type SelectorSpec struct {
 	// If not set and the selector is not found in the context, then no descriptor is generated.
 	// +optional
 	Default *string `json:"default,omitempty"`
+}
+
+type ExpressionItem struct {
+	// Key holds the expression key
+	Key string `json:"key"`
+
+	// Value holds the CEL expression
+	Value string `json:"value"`
+}
+
+type Expression struct {
+	// Data to be sent to the service
+	ExpressionItem ExpressionItem `json:"expression"`
 }

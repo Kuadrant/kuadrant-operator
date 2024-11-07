@@ -134,12 +134,9 @@ spec:
     "create-toy":
       rates:
       - limit: 5
-        duration: 10
-        unit: second
+        window: 10s
       when:
-      - selector: request.method
-        operator: eq
-        value: "POST"
+      - predicate: "request.method == 'POST'"
 EOF
 ```
 

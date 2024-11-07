@@ -7894,18 +7894,23 @@ spec:
                       properties:
                         counters:
                           description: |-
-                            Counters defines additional rate limit counters based on context qualifiers and well known selectors
+                            Counters defines additional rate limit counters based on CEL expressions which can reference well known selectors
                             TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
                           items:
-                            description: |-
-                              ContextSelector defines one item from the well known attributes
-                              Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
-                              Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-                              They are named by a dot-separated path (e.g. request.path)
-                              Example: "request.path" -> The path portion of the URL
-                            maxLength: 253
-                            minLength: 1
-                            type: string
+                            properties:
+                              expression:
+                                description: |-
+                                  Expression defines one CEL expression
+                                  Expression can use well known attributes
+                                  Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                                  Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                                  They are named by a dot-separated path (e.g. request.path)
+                                  Example: "request.path" -> The path portion of the URL
+                                minLength: 1
+                                type: string
+                            required:
+                            - expression
+                            type: object
                           type: array
                         rates:
                           description: Rates holds the list of limit rates
@@ -7913,66 +7918,33 @@ spec:
                             description: Rate defines the actual rate limit that will
                               be used when there is a match
                             properties:
-                              duration:
-                                description: Duration defines the time period for
-                                  which the Limit specified above applies.
-                                type: integer
                               limit:
                                 description: Limit defines the max value allowed for
                                   a given period of time
                                 type: integer
-                              unit:
-                                description: |-
-                                  Duration defines the time uni
-                                  Possible values are: "second", "minute", "hour", "day"
-                                enum:
-                                - second
-                                - minute
-                                - hour
-                                - day
+                              window:
+                                description: Window defines the time period for which
+                                  the Limit specified above applies.
+                                pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
                                 type: string
                             required:
-                            - duration
                             - limit
-                            - unit
+                            - window
                             type: object
                           type: array
                         when:
                           description: |-
-                            When holds the list of conditions for the policy to be enforced.
+                            When holds a list of "limit-level" `Predicate`s
                             Called also "soft" conditions as route selectors must also match
                           items:
-                            description: |-
-                              WhenCondition defines semantics for matching an HTTP request based on conditions
-                              https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                            description: Predicate defines one CEL expression that
+                              must be evaluated to bool
                             properties:
-                              operator:
-                                description: |-
-                                  The binary operator to be applied to the content fetched from the selector
-                                  Possible values are: "eq" (equal to), "neq" (not equal to)
-                                enum:
-                                - eq
-                                - neq
-                                - startswith
-                                - endswith
-                                - incl
-                                - excl
-                                - matches
-                                type: string
-                              selector:
-                                description: |-
-                                  Selector defines one item from the well known selectors
-                                  TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-                                maxLength: 253
+                              predicate:
                                 minLength: 1
                                 type: string
-                              value:
-                                description: The value of reference for the comparison.
-                                type: string
                             required:
-                            - operator
-                            - selector
-                            - value
+                            - predicate
                             type: object
                           type: array
                       type: object
@@ -7987,6 +7959,19 @@ spec:
                     - atomic
                     - merge
                     type: string
+                  when:
+                    description: When holds a list of "top-level" `Predicate`s
+                    items:
+                      description: Predicate defines one CEL expression that must
+                        be evaluated to bool
+                      properties:
+                        predicate:
+                          minLength: 1
+                          type: string
+                      required:
+                      - predicate
+                      type: object
+                    type: array
                 type: object
               limits:
                 additionalProperties:
@@ -7994,18 +7979,23 @@ spec:
                   properties:
                     counters:
                       description: |-
-                        Counters defines additional rate limit counters based on context qualifiers and well known selectors
+                        Counters defines additional rate limit counters based on CEL expressions which can reference well known selectors
                         TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
                       items:
-                        description: |-
-                          ContextSelector defines one item from the well known attributes
-                          Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
-                          Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-                          They are named by a dot-separated path (e.g. request.path)
-                          Example: "request.path" -> The path portion of the URL
-                        maxLength: 253
-                        minLength: 1
-                        type: string
+                        properties:
+                          expression:
+                            description: |-
+                              Expression defines one CEL expression
+                              Expression can use well known attributes
+                              Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                              Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                              They are named by a dot-separated path (e.g. request.path)
+                              Example: "request.path" -> The path portion of the URL
+                            minLength: 1
+                            type: string
+                        required:
+                        - expression
+                        type: object
                       type: array
                     rates:
                       description: Rates holds the list of limit rates
@@ -8013,66 +8003,33 @@ spec:
                         description: Rate defines the actual rate limit that will
                           be used when there is a match
                         properties:
-                          duration:
-                            description: Duration defines the time period for which
-                              the Limit specified above applies.
-                            type: integer
                           limit:
                             description: Limit defines the max value allowed for a
                               given period of time
                             type: integer
-                          unit:
-                            description: |-
-                              Duration defines the time uni
-                              Possible values are: "second", "minute", "hour", "day"
-                            enum:
-                            - second
-                            - minute
-                            - hour
-                            - day
+                          window:
+                            description: Window defines the time period for which
+                              the Limit specified above applies.
+                            pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
                             type: string
                         required:
-                        - duration
                         - limit
-                        - unit
+                        - window
                         type: object
                       type: array
                     when:
                       description: |-
-                        When holds the list of conditions for the policy to be enforced.
+                        When holds a list of "limit-level" `Predicate`s
                         Called also "soft" conditions as route selectors must also match
                       items:
-                        description: |-
-                          WhenCondition defines semantics for matching an HTTP request based on conditions
-                          https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                        description: Predicate defines one CEL expression that must
+                          be evaluated to bool
                         properties:
-                          operator:
-                            description: |-
-                              The binary operator to be applied to the content fetched from the selector
-                              Possible values are: "eq" (equal to), "neq" (not equal to)
-                            enum:
-                            - eq
-                            - neq
-                            - startswith
-                            - endswith
-                            - incl
-                            - excl
-                            - matches
-                            type: string
-                          selector:
-                            description: |-
-                              Selector defines one item from the well known selectors
-                              TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-                            maxLength: 253
+                          predicate:
                             minLength: 1
                             type: string
-                          value:
-                            description: The value of reference for the comparison.
-                            type: string
                         required:
-                        - operator
-                        - selector
-                        - value
+                        - predicate
                         type: object
                       type: array
                   type: object
@@ -8090,18 +8047,23 @@ spec:
                       properties:
                         counters:
                           description: |-
-                            Counters defines additional rate limit counters based on context qualifiers and well known selectors
+                            Counters defines additional rate limit counters based on CEL expressions which can reference well known selectors
                             TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
                           items:
-                            description: |-
-                              ContextSelector defines one item from the well known attributes
-                              Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
-                              Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-                              They are named by a dot-separated path (e.g. request.path)
-                              Example: "request.path" -> The path portion of the URL
-                            maxLength: 253
-                            minLength: 1
-                            type: string
+                            properties:
+                              expression:
+                                description: |-
+                                  Expression defines one CEL expression
+                                  Expression can use well known attributes
+                                  Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+                                  Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+                                  They are named by a dot-separated path (e.g. request.path)
+                                  Example: "request.path" -> The path portion of the URL
+                                minLength: 1
+                                type: string
+                            required:
+                            - expression
+                            type: object
                           type: array
                         rates:
                           description: Rates holds the list of limit rates
@@ -8109,66 +8071,33 @@ spec:
                             description: Rate defines the actual rate limit that will
                               be used when there is a match
                             properties:
-                              duration:
-                                description: Duration defines the time period for
-                                  which the Limit specified above applies.
-                                type: integer
                               limit:
                                 description: Limit defines the max value allowed for
                                   a given period of time
                                 type: integer
-                              unit:
-                                description: |-
-                                  Duration defines the time uni
-                                  Possible values are: "second", "minute", "hour", "day"
-                                enum:
-                                - second
-                                - minute
-                                - hour
-                                - day
+                              window:
+                                description: Window defines the time period for which
+                                  the Limit specified above applies.
+                                pattern: ^([0-9]{1,5}(h|m|s|ms)){1,4}$
                                 type: string
                             required:
-                            - duration
                             - limit
-                            - unit
+                            - window
                             type: object
                           type: array
                         when:
                           description: |-
-                            When holds the list of conditions for the policy to be enforced.
+                            When holds a list of "limit-level" `Predicate`s
                             Called also "soft" conditions as route selectors must also match
                           items:
-                            description: |-
-                              WhenCondition defines semantics for matching an HTTP request based on conditions
-                              https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+                            description: Predicate defines one CEL expression that
+                              must be evaluated to bool
                             properties:
-                              operator:
-                                description: |-
-                                  The binary operator to be applied to the content fetched from the selector
-                                  Possible values are: "eq" (equal to), "neq" (not equal to)
-                                enum:
-                                - eq
-                                - neq
-                                - startswith
-                                - endswith
-                                - incl
-                                - excl
-                                - matches
-                                type: string
-                              selector:
-                                description: |-
-                                  Selector defines one item from the well known selectors
-                                  TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-                                maxLength: 253
+                              predicate:
                                 minLength: 1
                                 type: string
-                              value:
-                                description: The value of reference for the comparison.
-                                type: string
                             required:
-                            - operator
-                            - selector
-                            - value
+                            - predicate
                             type: object
                           type: array
                       type: object
@@ -8183,6 +8112,19 @@ spec:
                     - atomic
                     - merge
                     type: string
+                  when:
+                    description: When holds a list of "top-level" `Predicate`s
+                    items:
+                      description: Predicate defines one CEL expression that must
+                        be evaluated to bool
+                      properties:
+                        predicate:
+                          minLength: 1
+                          type: string
+                      required:
+                      - predicate
+                      type: object
+                    type: array
                 type: object
               targetRef:
                 description: Reference to the object to which this policy applies.
@@ -8233,6 +8175,19 @@ spec:
                 - message: Invalid targetRef.kind. The only supported values are 'HTTPRoute'
                     and 'Gateway'
                   rule: self.kind == 'HTTPRoute' || self.kind == 'Gateway'
+              when:
+                description: When holds a list of "top-level" `Predicate`s
+                items:
+                  description: Predicate defines one CEL expression that must be evaluated
+                    to bool
+                  properties:
+                    predicate:
+                      minLength: 1
+                      type: string
+                  required:
+                  - predicate
+                  type: object
+                type: array
             required:
             - targetRef
             type: object

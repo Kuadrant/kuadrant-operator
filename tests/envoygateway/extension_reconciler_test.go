@@ -117,7 +117,7 @@ var _ = Describe("wasm controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: "minute",
+										Limit: 1, Window: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -195,8 +195,8 @@ var _ = Describe("wasm controller", func() {
 								Scope:       controllers.LimitsNamespaceFromRoute(gwRoute),
 								Data: []wasm.DataType{
 									{
-										Value: &wasm.Static{
-											Static: wasm.StaticSpec{
+										Value: &wasm.Expression{
+											ExpressionItem: wasm.ExpressionItem{
 												Key:   controllers.LimitNameToLimitadorIdentifier(gwPolicyKey, "l1"),
 												Value: "1",
 											},
@@ -282,7 +282,7 @@ var _ = Describe("wasm controller", func() {
 							"l1": {
 								Rates: []kuadrantv1beta3.Rate{
 									{
-										Limit: 1, Duration: 3, Unit: "minute",
+										Limit: 1, Window: kuadrantv1beta3.Duration("3m"),
 									},
 								},
 							},
@@ -359,8 +359,8 @@ var _ = Describe("wasm controller", func() {
 								Scope:       controllers.LimitsNamespaceFromRoute(gwRoute),
 								Data: []wasm.DataType{
 									{
-										Value: &wasm.Static{
-											Static: wasm.StaticSpec{
+										Value: &wasm.Expression{
+											ExpressionItem: wasm.ExpressionItem{
 												Key:   controllers.LimitNameToLimitadorIdentifier(routePolicyKey, "l1"),
 												Value: "1",
 											},

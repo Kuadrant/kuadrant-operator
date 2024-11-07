@@ -17,7 +17,10 @@ limitations under the License.
 package v1beta3
 
 import (
+	"time"
+
 	"github.com/kuadrant/policy-machinery/machinery"
+	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -30,14 +33,6 @@ import (
 )
 
 const (
-	EqualOperator      WhenConditionOperator = "eq"
-	NotEqualOperator   WhenConditionOperator = "neq"
-	StartsWithOperator WhenConditionOperator = "startsWith"
-	EndsWithOperator   WhenConditionOperator = "endsWith"
-	IncludeOperator    WhenConditionOperator = "incl"
-	ExcludeOperator    WhenConditionOperator = "excl"
-	MatchesOperator    WhenConditionOperator = "matches"
-
 	// TODO: remove after fixing the integration tests that still depend on these
 	RateLimitPolicyBackReferenceAnnotationName   = "kuadrant.io/ratelimitpolicies"
 	RateLimitPolicyDirectReferenceAnnotationName = "kuadrant.io/ratelimitpolicy"
@@ -46,6 +41,9 @@ const (
 var (
 	RateLimitPolicyGroupKind  = schema.GroupKind{Group: SchemeGroupVersion.Group, Kind: "RateLimitPolicy"}
 	RateLimitPoliciesResource = SchemeGroupVersion.WithResource("ratelimitpolicies")
+	// Top level predicate rules key starting with # to prevent conflict with limit names
+	// TODO(eastizle): this coupling between limit names and rule IDs is a bad smell. Merging implementation should be enhanced.
+	RulesKeyTopLevelPredicates = "###_TOP_LEVEL_PREDICATES_###"
 )
 
 // +kubebuilder:object:root=true
@@ -123,6 +121,13 @@ func (p *RateLimitPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 	rules := make(map[string]kuadrantv1.MergeableRule)
 	policyLocator := p.GetLocator()
 
+	if len(p.Spec.Proper().When) > 0 {
+		rules[RulesKeyTopLevelPredicates] = kuadrantv1.NewMergeableRule(
+			&WhenPredicatesMergeableRule{When: p.Spec.Proper().When, Source: policyLocator},
+			policyLocator,
+		)
+	}
+
 	for ruleID := range p.Spec.Proper().Limits {
 		limit := p.Spec.Proper().Limits[ruleID]
 		rules[ruleID] = kuadrantv1.NewMergeableRule(&limit, policyLocator)
@@ -134,13 +139,18 @@ func (p *RateLimitPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 func (p *RateLimitPolicy) SetRules(rules map[string]kuadrantv1.MergeableRule) {
 	// clear all rules of the policy before setting new ones
 	p.Spec.Proper().Limits = nil
+	p.Spec.Proper().When = nil
 
 	if len(rules) > 0 {
 		p.Spec.Proper().Limits = make(map[string]Limit)
 	}
 
 	for ruleID := range rules {
-		p.Spec.Proper().Limits[ruleID] = *rules[ruleID].(*Limit)
+		if ruleID == RulesKeyTopLevelPredicates {
+			p.Spec.Proper().When = rules[ruleID].(*WhenPredicatesMergeableRule).When
+		} else {
+			p.Spec.Proper().Limits[ruleID] = *rules[ruleID].(*Limit)
+		}
 	}
 }
 
@@ -226,22 +236,85 @@ type MergeableRateLimitPolicySpec struct {
 
 // RateLimitPolicySpecProper contains common shared fields for defaults and overrides
 type RateLimitPolicySpecProper struct {
+	// When holds a list of "top-level" `Predicate`s
+	// +optional
+	When WhenPredicates `json:"when,omitempty"`
+
 	// Limits holds the struct of limits indexed by a unique name
 	// +optional
 	Limits map[string]Limit `json:"limits,omitempty"`
 }
 
+// Predicate defines one CEL expression that must be evaluated to bool
+type Predicate struct {
+	// +kubebuilder:validation:MinLength=1
+	Predicate string `json:"predicate"`
+}
+
+func NewPredicate(predicate string) Predicate {
+	return Predicate{Predicate: predicate}
+}
+
+type WhenPredicates []Predicate
+
+func NewWhenPredicates(predicates ...string) WhenPredicates {
+	whenPredicates := make(WhenPredicates, 0)
+	for _, predicate := range predicates {
+		whenPredicates = append(whenPredicates, NewPredicate(predicate))
+	}
+
+	return whenPredicates
+}
+
+func (w WhenPredicates) Extend(other WhenPredicates) WhenPredicates {
+	return append(w, other...)
+}
+
+func (w WhenPredicates) Into() []string {
+	if w == nil {
+		return nil
+	}
+
+	return lo.Map(w, func(p Predicate, _ int) string { return p.Predicate })
+}
+
+type WhenPredicatesMergeableRule struct {
+	When WhenPredicates
+
+	// Source stores the locator of the policy where the limit is orignaly defined (internal use)
+	Source string
+}
+
+var _ kuadrantv1.MergeableRule = &WhenPredicatesMergeableRule{}
+
+func (w *WhenPredicatesMergeableRule) GetSpec() any {
+	return w.When
+}
+
+func (w *WhenPredicatesMergeableRule) GetSource() string {
+	return w.Source
+}
+
+func (w *WhenPredicatesMergeableRule) WithSource(source string) kuadrantv1.MergeableRule {
+	w.Source = source
+	return w
+}
+
+type Counter struct {
+	Expression Expression `json:"expression"`
+}
+
 // Limit represents a complete rate limit configuration
 type Limit struct {
-	// When holds the list of conditions for the policy to be enforced.
+	// When holds a list of "limit-level" `Predicate`s
 	// Called also "soft" conditions as route selectors must also match
 	// +optional
-	When []WhenCondition `json:"when,omitempty"`
+	When WhenPredicates `json:"when,omitempty"`
 
-	// Counters defines additional rate limit counters based on context qualifiers and well known selectors
+	// Counters defines additional rate limit counters based on CEL expressions which can reference well known selectors
 	// TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
 	// +optional
-	Counters []ContextSelector `json:"counters,omitempty"`
+	Counters []Counter `json:"counters,omitempty"`
 
 	// Rates holds the list of limit rates
 	// +optional
@@ -255,7 +328,7 @@ func (l Limit) CountersAsStringList() []string {
 	if len(l.Counters) == 0 {
 		return nil
 	}
-	return utils.Map(l.Counters, func(counter ContextSelector) string { return string(counter) })
+	return utils.Map(l.Counters, func(counter Counter) string { return string(counter.Expression) })
 }
 
 var _ kuadrantv1.MergeableRule = &Limit{}
@@ -273,14 +346,19 @@ func (l *Limit) WithSource(source string) kuadrantv1.MergeableRule {
 	return l
 }
 
-// +kubebuilder:validation:Enum:=second;minute;hour;day
-type TimeUnit string
+// Duration follows Gateway API Duration format: https://gateway-api.sigs.k8s.io/geps/gep-2257/?h=duration#gateway-api-duration-format
+// MUST match the regular expression ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+// MUST be interpreted as specified by Golang's time.ParseDuration
+// +kubebuilder:validation:Pattern=`^([0-9]{1,5}(h|m|s|ms)){1,4}$`
+type Duration string
 
-var timeUnitMap = map[TimeUnit]int{
-	TimeUnit("second"): 1,
-	TimeUnit("minute"): 60,
-	TimeUnit("hour"):   60 * 60,
-	TimeUnit("day"):    60 * 60 * 24,
+func (d Duration) Seconds() int {
+	duration, err := time.ParseDuration(string(d))
+	if err != nil {
+		return 0
+	}
+
+	return int(duration.Seconds())
 }
 
 // Rate defines the actual rate limit that will be used when there is a match
@@ -288,26 +366,14 @@ type Rate struct {
 	// Limit defines the max value allowed for a given period of time
 	Limit int `json:"limit"`
 
-	// Duration defines the time period for which the Limit specified above applies.
-	Duration int `json:"duration"`
-
-	// Duration defines the time uni
-	// Possible values are: "second", "minute", "hour", "day"
-	Unit TimeUnit `json:"unit"`
+	// Window defines the time period for which the Limit specified above applies.
+	Window Duration `json:"window"`
 }
 
 // ToSeconds converts the rate to to Limitador's Limit format (maxValue, seconds)
 func (r Rate) ToSeconds() (maxValue, seconds int) {
 	maxValue = r.Limit
-	seconds = 0
-
-	if tmpSecs, ok := timeUnitMap[r.Unit]; ok && r.Duration > 0 {
-		seconds = tmpSecs * r.Duration
-	}
-
-	if r.Duration < 0 {
-		seconds = 0
-	}
+	seconds = r.Window.Seconds()
 
 	if r.Limit < 0 {
 		maxValue = 0
@@ -316,32 +382,14 @@ func (r Rate) ToSeconds() (maxValue, seconds int) {
 	return
 }
 
-// WhenCondition defines semantics for matching an HTTP request based on conditions
-// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
-type WhenCondition struct {
-	// Selector defines one item from the well known selectors
-	// TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-	Selector ContextSelector `json:"selector"`
-
-	// The binary operator to be applied to the content fetched from the selector
-	// Possible values are: "eq" (equal to), "neq" (not equal to)
-	Operator WhenConditionOperator `json:"operator"`
-
-	// The value of reference for the comparison.
-	Value string `json:"value"`
-}
-
-// ContextSelector defines one item from the well known attributes
+// Expression defines one CEL expression
+// Expression can use well known attributes
 // Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
 // Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
 // They are named by a dot-separated path (e.g. request.path)
 // Example: "request.path" -> The path portion of the URL
 // +kubebuilder:validation:MinLength=1
-// +kubebuilder:validation:MaxLength=253
-type ContextSelector string
-
-// +kubebuilder:validation:Enum:=eq;neq;startswith;endswith;incl;excl;matches
-type WhenConditionOperator string
+type Expression string
 
 type RateLimitPolicyStatus struct {
 	// ObservedGeneration reflects the generation of the most recently observed spec.

@@ -42,6 +42,43 @@ const (
 	AuthPolicyDirectReferenceAnnotationName = "kuadrant.io/authpolicy"
 )
 
+const (
+	EqualOperator      WhenConditionOperator = "eq"
+	NotEqualOperator   WhenConditionOperator = "neq"
+	StartsWithOperator WhenConditionOperator = "startsWith"
+	EndsWithOperator   WhenConditionOperator = "endsWith"
+	IncludeOperator    WhenConditionOperator = "incl"
+	ExcludeOperator    WhenConditionOperator = "excl"
+	MatchesOperator    WhenConditionOperator = "matches"
+)
+
+// +kubebuilder:validation:Enum:=eq;neq;startswith;endswith;incl;excl;matches
+type WhenConditionOperator string
+
+// ContextSelector defines one item from the well known attributes
+// Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
+// Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+// They are named by a dot-separated path (e.g. request.path)
+// Example: "request.path" -> The path portion of the URL
+// +kubebuilder:validation:MinLength=1
+// +kubebuilder:validation:MaxLength=253
+type ContextSelector string
+
+// WhenCondition defines semantics for matching an HTTP request based on conditions
+// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
+type WhenCondition struct {
+	// Selector defines one item from the well known selectors
+	// TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
+	Selector ContextSelector `json:"selector"`
+
+	// The binary operator to be applied to the content fetched from the selector
+	// Possible values are: "eq" (equal to), "neq" (not equal to)
+	Operator WhenConditionOperator `json:"operator"`
+
+	// The value of reference for the comparison.
+	Value string `json:"value"`
+}
+
 var (
 	AuthPolicyGroupKind  = schema.GroupKind{Group: SchemeGroupVersion.Group, Kind: "AuthPolicy"}
 	AuthPoliciesResource = SchemeGroupVersion.WithResource("authpolicies")

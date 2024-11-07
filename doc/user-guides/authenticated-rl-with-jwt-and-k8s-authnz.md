@@ -334,10 +334,9 @@ spec:
     "per-user":
       rates:
       - limit: 5
-        duration: 10
-        unit: second
+        window: 10s
       counters:
-      - metadata.filter_metadata.envoy\.filters\.http\.ext_authz.identity.userid
+      - expression: auth.identity.userid
 EOF
 ```
 

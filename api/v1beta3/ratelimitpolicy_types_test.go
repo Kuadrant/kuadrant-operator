@@ -14,74 +14,50 @@ func TestConvertRateIntoSeconds(t *testing.T) {
 		expectedSeconds  int
 	}{
 		{
-			name: "seconds",
-			rate: Rate{
-				Limit: 5, Duration: 2, Unit: TimeUnit("second"),
-			},
+			name:             "seconds",
+			rate:             Rate{Limit: 5, Window: Duration("2s")},
 			expectedMaxValue: 5,
 			expectedSeconds:  2,
 		},
 		{
-			name: "minutes",
-			rate: Rate{
-				Limit: 5, Duration: 2, Unit: TimeUnit("minute"),
-			},
+			name:             "minutes",
+			rate:             Rate{Limit: 5, Window: Duration("2m")},
 			expectedMaxValue: 5,
 			expectedSeconds:  2 * 60,
 		},
 		{
-			name: "hours",
-			rate: Rate{
-				Limit: 5, Duration: 2, Unit: TimeUnit("hour"),
-			},
+			name:             "hours",
+			rate:             Rate{Limit: 5, Window: Duration("2h")},
 			expectedMaxValue: 5,
 			expectedSeconds:  2 * 60 * 60,
 		},
 		{
-			name: "day",
-			rate: Rate{
-				Limit: 5, Duration: 2, Unit: TimeUnit("day"),
-			},
-			expectedMaxValue: 5,
-			expectedSeconds:  2 * 60 * 60 * 24,
-		},
-		{
-			name: "negative limit",
-			rate: Rate{
-				Limit: -5, Duration: 2, Unit: TimeUnit("second"),
-			},
+			name:             "negative limit",
+			rate:             Rate{Limit: -5, Window: Duration("2s")},
 			expectedMaxValue: 0,
 			expectedSeconds:  2,
 		},
 		{
-			name: "negative duration",
-			rate: Rate{
-				Limit: 5, Duration: -2, Unit: TimeUnit("second"),
-			},
-			expectedMaxValue: 5,
-			expectedSeconds:  0,
-		},
-		{
-			name: "limit  is 0",
-			rate: Rate{
-				Limit: 0, Duration: 2, Unit: TimeUnit("second"),
-			},
+			name:             "limit  is 0",
+			rate:             Rate{Limit: 0, Window: Duration("2s")},
 			expectedMaxValue: 0,
 			expectedSeconds:  2,
 		},
 		{
-			name: "rate is 0",
-			rate: Rate{
-				Limit: 5, Duration: 0, Unit: TimeUnit("second"),
-			},
+			name:             "rate is 0",
+			rate:             Rate{Limit: 5, Window: Duration("0s")},
 			expectedMaxValue: 5,
 			expectedSeconds:  0,
 		},
 		{
-			name: "unexpected time unit",
-			rate: Rate{
-				Limit: 5, Duration: 2, Unit: TimeUnit("unknown"),
-			},
+			name:             "invalid duration 01",
+			rate:             Rate{Limit: 5, Window: Duration("unknown")},
+			expectedMaxValue: 5,
+			expectedSeconds:  0,
+		},
+		{
+			name:             "invalid duration 02",
+			rate:             Rate{Limit: 5, Window: Duration("5d")},
 			expectedMaxValue: 5,
 			expectedSeconds:  0,
 		},

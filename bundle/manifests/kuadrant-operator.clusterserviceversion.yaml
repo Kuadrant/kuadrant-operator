@@ -88,9 +88,8 @@ metadata:
               "toys": {
                 "rates": [
                   {
-                    "duration": 1,
                     "limit": 50,
-                    "unit": "minute"
+                    "window": "1m"
                   }
                 ]
               }
@@ -106,7 +105,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2024-11-05T10:52:01Z"
+    createdAt: "2024-11-06T17:24:27Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3

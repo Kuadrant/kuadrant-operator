@@ -213,21 +213,15 @@ spec:
     "alice-limit":
       rates:
       - limit: 5
-        duration: 10
-        unit: second
+        window: 10s
       when:
-      - selector: metadata.filter_metadata.envoy\.filters\.http\.ext_authz.identity.userid
-        operator: eq
-        value: alice
+      - predicate: "auth.identity.userid == 'alice'"
     "bob-limit":
       rates:
       - limit: 2
-        duration: 10
-        unit: second
+        window: 10s
       when:
-      - selector: metadata.filter_metadata.envoy\.filters\.http\.ext_authz.identity.userid
-        operator: eq
-        value: bob
+      - predicate: "auth.identity.userid == 'bob'"
 EOF
 ```
 

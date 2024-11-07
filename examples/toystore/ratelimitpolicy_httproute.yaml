@@ -11,51 +11,31 @@ spec:
     "global":
       rates:
       - limit: 6
-        duration: 30
-        unit: second
+        window: 30s
     "get-toy":
       when:
-      - selector: request.method
-        operator: eq
-        value: "GET"
-      - selector: request.path
-        operator: eq
-        value: "/toy"
+      - predicate: "request.method == 'GET'"
+      - predicate: "request.path == '/toy'"
       rates:
       - limit: 5
-        duration: 30
-        unit: second
+        window: 1m
     "admin-post-toy-per-user":
       rates:
       - limit: 2
-        duration: 30
-        unit: second
+        window: 30s
       counters:
-      - metadata.filter_metadata.envoy\.filters\.http\.ext_authz.username
+      - expression: "auth.identity.username"
       when:
-      - selector: request.method
-        operator: eq
-        value: "GET"
-      - selector: request.path
-        operator: eq
-        value: "/admin/toy"
-      - selector: metadata.filter_metadata.envoy\.filters\.http\.ext_authz.admin
-        operator: eq
-        value: "true"
+      - predicate: "request.method == 'GET'"
+      - predicate: "request.path == '/admin/toy'"
+      - predicate: "auth.identity.group == 'admin'"
     "admin-delete-per-user":
       rates:
       - limit: 2
-        duration: 30
-        unit: second
+        window: 30s
       counters:
-      - metadata.filter_metadata.envoy\.filters\.http\.ext_authz.username
+      - expression: "auth.identity.username"
       when:
-      - selector: request.method
-        operator: eq
-        value: "DELETE"
-      - selector: request.path
-        operator: eq
-        value: "/admin/toy"
-      - selector: metadata.filter_metadata.envoy\.filters\.http\.ext_authz.admin
-        operator: eq
-        value: "true"
+      - predicate: "request.method == 'DELETE'"
+      - predicate: "request.path == '/admin/toy'"
+      - predicate: "auth.identity.group == 'admin'"

@@ -1,14 +1,5 @@
 # The RateLimitPolicy Custom Resource Definition (CRD)
 
-- [RateLimitPolicy](#ratelimitpolicy)
-- [RateLimitPolicySpec](#ratelimitpolicyspec)
-    - [RateLimitPolicyCommonSpec](#rateLimitPolicyCommonSpec)
-    - [Limit](#limit)
-        - [RateLimit](#ratelimit)
-        - [WhenCondition](#whencondition)
-- [RateLimitPolicyStatus](#ratelimitpolicystatus)
-    - [ConditionSpec](#conditionspec)
-
 ## RateLimitPolicy
 
 | **Field** | **Type**                                        | **Required** | **Description**                                       |
@@ -29,31 +20,35 @@
 
 | **Field** | **Type**                     | **Required** | **Description**                                                                                                              |
 |-----------|------------------------------|--------------|------------------------------------------------------------------------------------------------------------------------------|
+| `when`    | [][Predicate](#predicate)    | No           | List of dynamic predicates to activate the policy. All expression must evaluate to true for the policy to be applied         |
 | `limits`  | Map<String: [Limit](#limit)> | No           | Explicit Limit definitions. This field is mutually exclusive with [RateLimitPolicySpec](#ratelimitpolicyspec) `limits` field |
+
+### Predicate
+
+| **Field** | **Type**                     | **Required** | **Description**                                                                                                              |
+|----------------|-------------------------|--------------|------------------------------------------------------------------------------------------------------------------------------|
+| `predicate`    | String                  | Yes          | Defines one CEL expression that must be evaluated to bool                                                                    |
+
+### Counter
+
+| **Field** | **Type**                     | **Required** | **Description**                                                                                                               |
+|-----------------|-------------------------|--------------|------------------------------------------------------------------------------------------------------------------------------|
+| `expression`    | String                  | Yes          | Defines one CEL expression that will be used as rate limiting counter                                                        |
 
 ### Limit
 
 | **Field**        | **Type**                                            | **Required** | **Description**                                                                                                                                                                                                                                                                                                  |
 |------------------|-----------------------------------------------------|:------------:|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `rates`          | [][RateLimit](#ratelimit)                           |      No      | List of rate limits associated with the limit definition                                                                                                                                                                                                                                                         |
-| `counters`       | []String                                            |      No      | List of rate limit counter qualifiers. Items must be a valid [Well-known attribute](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md). Each distinct value resolved in the data plane starts a separate counter for each rate limit.                                        |
-| `when`           | [][WhenCondition](#whencondition)                   |      No      | List of additional dynamic conditions (expressions) to activate the limit. All expression must evaluate to true for the limit to be applied. Use it for filtering attributes that cannot be expressed in the targeted HTTPRoute's `spec.hostnames` and `spec.rules.matches` fields, or when targeting a Gateway. |
+| `counters`       | [][Counter](#counter)                               |      No      | List of rate limit counter qualifiers. Items must be a valid [Well-known attribute](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md). Each distinct value resolved in the data plane starts a separate counter for each rate limit.                                        |
+| `when`           | [][Predicate](#predicate)                           |      No      | List of dynamic predicates to activate the limit. All expression must evaluate to true for the limit to be applied                                                                        |
 
 #### RateLimit
 
 | **Field**  | **Type** | **Required** | **Description**                                                                        |
 |------------|----------|:------------:|----------------------------------------------------------------------------------------|
 | `limit`    | Number   |     Yes      | Maximum value allowed within the given period of time (duration)                       |
-| `duration` | Number   |     Yes      | The period of time in the specified unit that the limit applies                        |
-| `unit`     | String   |     Yes      | Unit of time for the duration of the limit. One-of: "second", "minute", "hour", "day". |
-
-#### WhenCondition
-
-| **Field**  | **Type** | **Required** | **Description**                                                                                                                                                                                                 |
-|------------|----------|:------------:|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `selector` | String   |     Yes      | A valid [Well-known attribute](https://github.com/Kuadrant/architecture/blob/main/rfcs/0002-well-known-attributes.md) whose resolved value in the data plane will be compared to `value`, using the `operator`. |
-| `operator` | String   |     Yes      | The binary operator to be applied to the resolved value specified by the selector. One-of: "eq" (equal to), "neq" (not equal to)                                                                                |
-| `value`    | String   |     Yes      | The static value to be compared to the one resolved from the selector.                                                                                                                                          |
+| `window`   | String   |     Yes      | The period of time that the limit applies. Follows [Gateway API Duration format](https://gateway-api.sigs.k8s.io/geps/gep-2257/?h=duration#gateway-api-duration-format) |
 
 ## RateLimitPolicyStatus
 

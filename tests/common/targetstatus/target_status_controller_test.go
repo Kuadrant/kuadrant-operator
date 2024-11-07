@@ -474,7 +474,7 @@ var _ = Describe("Target status reconciler", func() {
 								"l1": {
 									Rates: []kuadrantv1beta3.Rate{
 										{
-											Limit: 1, Duration: 3, Unit: kuadrantv1beta3.TimeUnit("minute"),
+											Limit: 1, Window: kuadrantv1beta3.Duration("3m"),
 										},
 									},
 								},

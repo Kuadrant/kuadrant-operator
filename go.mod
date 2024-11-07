@@ -19,7 +19,7 @@ require (
 	github.com/onsi/gomega v1.34.1
 	github.com/openshift/api v0.0.0-20240926211938-f89ab92f1597
 	github.com/prometheus/client_golang v1.20.2
-	github.com/samber/lo v1.39.0
+	github.com/samber/lo v1.47.0
 	go.uber.org/zap v1.27.0
 	google.golang.org/protobuf v1.34.2
 	gotest.tools v2.2.0+incompatible

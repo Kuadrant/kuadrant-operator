@@ -101,7 +101,16 @@ func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 	for pathID, effectivePolicy := range effectivePoliciesMap {
 		_, _, _, httpRoute, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
 		limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
-		for limitKey, mergeableLimit := range effectivePolicy.Spec.Rules() {
+
+		limitRules := lo.Filter(lo.Entries(effectivePolicy.Spec.Rules()),
+			func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
+				return r.Key != kuadrantv1beta3.RulesKeyTopLevelPredicates
+			},
+		)
+
+		for _, limitRule := range limitRules {
+			limitKey := limitRule.Key
+			mergeableLimit := limitRule.Value
 			policy, found := lo.Find(kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state)), func(p machinery.Policy) bool {
 				return p.GetLocator() == mergeableLimit.GetSource()
 			})

@@ -992,5 +992,77 @@ var _ = Describe("Target status reconciler", func() {
 				g.Expect(routeAffected(ctx, TestHTTPRouteName, policyAffectedCondition, policyKey)).Should(BeFalse())
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
+
+		It("adds section name polices only to specific listener status conditions", func(ctx SpecContext) {
+			policy := policyFactory(func(policy *kuadrantv1.TLSPolicy) {
+				policy.Name = "section-tls"
+				policy.Spec.TargetRef.SectionName = ptr.To[gatewayapiv1.SectionName]("test-listener-toystore-com")
+			})
+			policyKey := client.ObjectKeyFromObject(policy)
+			defer k8sClient.Delete(ctx, policy)
+			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+			Eventually(func(g Gomega) {
+				gateway := &gatewayapiv1.Gateway{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}, gateway)).To(Succeed())
+				condition := meta.FindStatusCondition(gateway.Status.Conditions, policyAffectedCondition)
+				// Should not be in gw conditions
+				g.Expect(condition).To(BeNil())
+
+				g.Expect(lo.EveryBy(gateway.Status.Listeners, func(item gatewayapiv1.ListenerStatus) bool {
+					lCond := meta.FindStatusCondition(item.Conditions, policyAffectedCondition)
+					if item.Name == *policy.Spec.TargetRef.SectionName {
+						// Target section should include condition
+						return lCond != nil && lCond.Status == metav1.ConditionTrue && strings.Contains(lCond.Message, policyKey.String())
+					}
+
+					// all other sections should not have the condition
+					return lCond == nil
+				})).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("gateway policy is also listed with section policy", func(ctx SpecContext) {
+			gwPolicy := policyFactory(func(policy *kuadrantv1.TLSPolicy) {
+				policy.Name = "gateway-tls"
+			})
+			gwPolicyKey := client.ObjectKeyFromObject(gwPolicy)
+			defer k8sClient.Delete(ctx, gwPolicy)
+			Expect(k8sClient.Create(ctx, gwPolicy)).To(Succeed())
+
+			lPolicy := policyFactory(func(policy *kuadrantv1.TLSPolicy) {
+				policy.Name = "section-dns"
+				policy.Spec.TargetRef.SectionName = ptr.To[gatewayapiv1.SectionName]("test-listener-toystore-com")
+			})
+
+			lPolicyKey := client.ObjectKeyFromObject(lPolicy)
+			defer k8sClient.Delete(ctx, lPolicy)
+			Expect(k8sClient.Create(ctx, lPolicy)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				gateway := &gatewayapiv1.Gateway{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: TestGatewayName, Namespace: testNamespace}, gateway)).To(Succeed())
+				condition := meta.FindStatusCondition(gateway.Status.Conditions, policyAffectedCondition)
+				// Gateway should list the condition with only the gw policy
+				g.Expect(condition).ToNot(BeNil())
+				g.Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(condition.Message).To(ContainSubstring(gwPolicyKey.String()))
+				g.Expect(condition.Message).ToNot(ContainSubstring(lPolicyKey.String()))
+
+				// Listeners
+				g.Expect(lo.EveryBy(gateway.Status.Listeners, func(item gatewayapiv1.ListenerStatus) bool {
+					lCond := meta.FindStatusCondition(item.Conditions, policyAffectedCondition)
+					if item.Name == *lPolicy.Spec.TargetRef.SectionName {
+						// Target section should include condition
+						return lCond != nil && lCond.Status == metav1.ConditionTrue && strings.Contains(lCond.Message, lPolicyKey.String()) && strings.Contains(lCond.Message, gwPolicyKey.String())
+					}
+
+					// all other sections list only the gw policy
+					return lCond != nil && lCond.Status == metav1.ConditionTrue && !strings.Contains(lCond.Message, lPolicyKey.String()) && strings.Contains(lCond.Message, gwPolicyKey.String())
+				})).To(BeTrue())
+
+				// Route
+				g.Expect(routeAffected(ctx, TestHTTPRouteName, policyAffectedCondition, gwPolicyKey, lPolicyKey)).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
+		}, testTimeOut)
 	})
 })

@@ -18,11 +18,15 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
-func NewDNSPoliciesValidator() *DNSPoliciesValidator {
-	return &DNSPoliciesValidator{}
+func NewDNSPoliciesValidator(isDNSOperatorInstalled bool) *DNSPoliciesValidator {
+	return &DNSPoliciesValidator{
+		isDNSOperatorInstalled: isDNSOperatorInstalled,
+	}
 }
 
-type DNSPoliciesValidator struct{}
+type DNSPoliciesValidator struct {
+	isDNSOperatorInstalled bool
+}
 
 func (r *DNSPoliciesValidator) Subscription() controller.Subscription {
 	return controller.Subscription{
@@ -45,6 +49,10 @@ func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.Reso
 	logger.V(1).Info("validating dns policies", "policies", len(policies))
 
 	state.Store(StateDNSPolicyAcceptedKey, lo.SliceToMap(policies, func(p machinery.Policy) (string, error) {
+		if !r.isDNSOperatorInstalled {
+			return p.GetLocator(), kuadrant.NewErrDependencyNotInstalled("DNS Operator")
+		}
+
 		policy := p.(*kuadrantv1.DNSPolicy)
 
 		if err := isTargetRefsFound(topology, policy); err != nil {

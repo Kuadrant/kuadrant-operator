@@ -38,6 +38,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift/consoleplugin"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 )
 
 var (
@@ -177,6 +178,7 @@ type BootOptionsBuilder struct {
 	isIstioInstalled         bool
 	isCertManagerInstalled   bool
 	isConsolePluginInstalled bool
+	isDNSOperatorInstalled   bool
 }
 
 func (b *BootOptionsBuilder) getOptions() []controller.ControllerOption {
@@ -323,18 +325,24 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() []controller.ControllerOp
 
 func (b *BootOptionsBuilder) getDNSOperatorOptions() []controller.ControllerOption {
 	var opts []controller.ControllerOption
-	opts = append(opts,
-		controller.WithRunnable("dnsrecord watcher", controller.Watch(
-			&kuadrantdnsv1alpha1.DNSRecord{}, DNSRecordResource, metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*kuadrantdnsv1alpha1.DNSRecord](fmt.Sprintf("%s=%s", AppLabelKey, AppLabelValue)))),
-		controller.WithObjectKinds(
-			DNSRecordGroupKind,
-		),
-		controller.WithObjectLinks(
-			LinkListenerToDNSRecord,
-			LinkDNSPolicyToDNSRecord,
-		),
-	)
+	var err error
+	b.isDNSOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), kuadrantdnsv1alpha1.GroupVersion.Group, "DNSRecord", kuadrantdnsv1alpha1.GroupVersion.Version)
+	if err != nil || !b.isDNSOperatorInstalled {
+		b.logger.Info("dns operator is not installed, skipping related watches and reconcilers", "err", err)
+	} else {
+		opts = append(opts,
+			controller.WithRunnable("dnsrecord watcher", controller.Watch(
+				&kuadrantdnsv1alpha1.DNSRecord{}, DNSRecordResource, metav1.NamespaceAll,
+				controller.FilterResourcesByLabel[*kuadrantdnsv1alpha1.DNSRecord](fmt.Sprintf("%s=%s", AppLabelKey, AppLabelValue)))),
+			controller.WithObjectKinds(
+				DNSRecordGroupKind,
+			),
+			controller.WithObjectLinks(
+				LinkListenerToDNSRecord,
+				LinkDNSPolicyToDNSRecord,
+			),
+		)
+	}
 
 	return opts
 }
@@ -345,7 +353,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 		Tasks: []controller.ReconcileFunc{
 			NewAuthorinoReconciler(b.client).Subscription().Reconcile,
 			NewLimitadorReconciler(b.client).Subscription().Reconcile,
-			NewDNSWorkflow(b.client, b.manager.GetScheme()).Run,
+			NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isDNSOperatorInstalled).Run,
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isCertManagerInstalled).Run,
 			NewDataPlanePoliciesWorkflow(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
 			NewKuadrantStatusUpdater(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Subscription().Reconcile,

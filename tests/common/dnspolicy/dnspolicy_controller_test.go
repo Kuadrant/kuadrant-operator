@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kuadrant/kuadrant-operator/controllers"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
 	"github.com/onsi/gomega/types"
 	"k8s.io/apimachinery/pkg/util/rand"
 
-	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
@@ -21,6 +21,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -1242,6 +1243,143 @@ var _ = Describe("DNSPolicy controller", func() {
 			})
 		})
 
+	})
+
+	// there is no need to replicate cases form the "valid target and valid gateway status" context
+	// from the policy pov healthchecks can only affect the "SubResourcesHealthy" condition
+	Context("valid target and valid gateway status with healthchecks", func() {
+		BeforeEach(func(ctx SpecContext) {
+			gateway = tests.NewGatewayBuilder(tests.GatewayName, gatewayClass.Name, testNamespace).
+				WithHTTPListener(tests.ListenerNameOne, tests.HostOne(domain)).
+				WithHTTPListener(tests.ListenerNameWildcard, tests.HostWildcard(domain)).
+				Gateway
+			dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
+				WithProviderSecret(*dnsProviderSecret).
+				WithTargetGateway(tests.GatewayName).
+				WithLoadBalancingFor(100, "foo", true).
+				WithHealthCheckFor("/health", 80, string(kuadrantdnsv1alpha1.HttpProtocol), 1)
+
+			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
+			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())
+				gateway.Status.Addresses = []gatewayapiv1.GatewayStatusAddress{
+					{
+						Type:  ptr.To(gatewayapiv1.IPAddressType),
+						Value: tests.IPAddressOne,
+					},
+					{
+						Type:  ptr.To(gatewayapiv1.IPAddressType),
+						Value: tests.IPAddressTwo,
+					},
+				}
+				gateway.Status.Listeners = []gatewayapiv1.ListenerStatus{
+					{
+						Name:           tests.ListenerNameOne,
+						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
+						AttachedRoutes: 1,
+						Conditions:     []metav1.Condition{},
+					},
+					{
+						Name:           tests.ListenerNameWildcard,
+						SupportedKinds: []gatewayapiv1.RouteGroupKind{},
+						AttachedRoutes: 1,
+						Conditions:     []metav1.Condition{},
+					},
+				}
+				g.Expect(k8sClient.Status().Update(ctx, gateway)).To(Succeed())
+			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
+
+			recordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameOne)
+			wildcardRecordName = fmt.Sprintf("%s-%s", tests.GatewayName, tests.ListenerNameWildcard)
+		})
+
+		It("should create records with enforced and not healthy status", func(ctx SpecContext) {
+			Eventually(func(g Gomega) {
+				//Check records
+				recordList := &kuadrantdnsv1alpha1.DNSRecordList{}
+				err := k8sClient.List(ctx, recordList, &client.ListOptions{Namespace: testNamespace})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(recordList.Items).To(HaveLen(2))
+
+				// This record should not be ready - we are not publishing unhealthy EPs
+				dnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: recordName, Namespace: testNamespace}, dnsRecord)).To(Succeed())
+				g.Expect(dnsRecord.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":    Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
+							"Status":  Equal(metav1.ConditionFalse),
+							"Reason":  Equal(string(kuadrantdnsv1alpha1.ConditionReasonUnhealthy)),
+							"Message": Equal("Not publishing unhealthy records"),
+						}),
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(kuadrantdnsv1alpha1.ConditionTypeHealthy)),
+							"Status": Equal(metav1.ConditionFalse),
+							"Reason": Equal(string(kuadrantdnsv1alpha1.ConditionReasonUnhealthy)),
+							"Message": And(
+								ContainSubstring("Not healthy addresses"),
+								ContainSubstring(tests.IPAddressOne),
+								ContainSubstring(tests.IPAddressTwo)),
+						}),
+					),
+				)
+
+				// This record should be ready - we are not creating checks for wildcards
+				wildcardDnsRecord := &kuadrantdnsv1alpha1.DNSRecord{}
+				g.Expect(k8sClient.Get(ctx, client.ObjectKey{Name: wildcardRecordName, Namespace: testNamespace}, wildcardDnsRecord)).To(Succeed())
+				g.Expect(wildcardDnsRecord.Status.Conditions).To(
+					And(
+						ContainElement(
+							MatchFields(IgnoreExtras, Fields{
+								"Type":    Equal(string(kuadrantdnsv1alpha1.ConditionTypeReady)),
+								"Status":  Equal(metav1.ConditionTrue),
+								"Reason":  Equal(string(kuadrantdnsv1alpha1.ConditionReasonProviderSuccess)),
+								"Message": Equal("Provider ensured the dns record"),
+							}),
+						),
+						Not(ContainElement(
+							MatchFields(IgnoreExtras, Fields{
+								"Type": Equal(string(kuadrantdnsv1alpha1.ConditionTypeHealthy)),
+							}),
+						)),
+					),
+				)
+
+				//Check policy status
+				err = k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Status":  Equal(metav1.ConditionTrue),
+							"Reason":  Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Message": Equal("DNSPolicy has been accepted"),
+						}),
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(kuadrant.PolicyConditionEnforced)),
+							"Status": Equal(metav1.ConditionTrue),
+							"Reason": Equal(string(kuadrant.PolicyReasonEnforced)),
+							"Message": And(
+								ContainSubstring("DNSPolicy has been partially enforced. Not ready DNSRecords are:"),
+								ContainSubstring(recordName),
+								Not(ContainSubstring(wildcardRecordName))),
+						}),
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(controllers.PolicyConditionSubResourcesHealthy)),
+							"Status": Equal(metav1.ConditionFalse),
+							"Reason": Equal(string(kuadrant.PolicyReasonUnknown)),
+							"Message": And(
+								ContainSubstring("DNSPolicy has encountered some issues: not all sub-resources of policy are passing the policy defined health check. Not healthy DNSRecords are:"),
+								ContainSubstring(recordName),
+								Not(ContainSubstring(wildcardRecordName))), // explicitly make sure that we have no probes for the wildcard record
+						})),
+				)
+				g.Expect(dnsPolicy.Status.TotalRecords).To(Equal(int32(2)))
+			}, tests.TimeoutLong, tests.RetryIntervalMedium, ctx).Should(Succeed())
+		}, testTimeOut)
 	})
 
 	Context("cel validation", func() {

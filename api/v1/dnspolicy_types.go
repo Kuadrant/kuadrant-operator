@@ -322,9 +322,9 @@ func (p *DNSPolicy) WithTargetGatewayListener(gwName string, lName string) *DNSP
 func (p *DNSPolicy) WithHealthCheckFor(endpoint string, port int, protocol string, failureThreshold int) *DNSPolicy {
 	return p.WithHealthCheck(dnsv1alpha1.HealthCheckSpec{
 		Path:             endpoint,
-		Port:             &port,
+		Port:             port,
 		Protocol:         dnsv1alpha1.Protocol(protocol),
-		FailureThreshold: &failureThreshold,
+		FailureThreshold: failureThreshold,
 	})
 }
 

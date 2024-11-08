@@ -93,6 +93,13 @@ func (r *DNSPolicyStatusUpdater) updateStatus(ctx context.Context, _ []controlle
 			}
 			meta.SetStatusCondition(&newStatus.Conditions, *enforcedCond)
 
+			if policy.Spec.HealthCheck != nil {
+				healthyCond := healthyCondition(policyRecords, policy)
+				meta.SetStatusCondition(&newStatus.Conditions, *healthyCond)
+			} else {
+				meta.RemoveStatusCondition(&newStatus.Conditions, string(PolicyConditionSubResourcesHealthy))
+			}
+
 			propagateRecordConditions(policyRecords, newStatus)
 
 			newStatus.TotalRecords = int32(len(policyRecords))
@@ -153,6 +160,36 @@ func enforcedCondition(records []*kuadrantdnsv1alpha1.DNSRecord, dnsPolicy *kuad
 	}
 	// all records are ready
 	return kuadrant.EnforcedCondition(dnsPolicy, nil, true)
+}
+
+func healthyCondition(records []*kuadrantdnsv1alpha1.DNSRecord, dnsPolicy *kuadrantv1.DNSPolicy) *metav1.Condition {
+	// if we don't have records - consider healthy
+	if len(records) == 0 {
+		cond := dnsPolicyHealthyCondition(dnsPolicy, nil)
+		cond.Message = "No sub-resources present"
+		return cond
+	}
+
+	// filter not healthy records
+	notHealthyRecords := utils.Filter(records, func(record *kuadrantdnsv1alpha1.DNSRecord) bool {
+		return meta.IsStatusConditionFalse(record.Status.Conditions, string(kuadrantdnsv1alpha1.ConditionTypeHealthy))
+	})
+
+	// all records are healthy
+	if len(notHealthyRecords) == 0 {
+		cond := dnsPolicyHealthyCondition(dnsPolicy, nil)
+		cond.Message = "All sub-resources are healthy"
+		return cond
+	}
+
+	cond := dnsPolicyHealthyCondition(dnsPolicy, kuadrant.NewErrUnknown(kuadrantv1.DNSPolicyGroupKind.Kind, errors.New("not all sub-resources of policy are passing the policy defined health check")))
+	additionalMessage := ". Not healthy DNSRecords are: "
+	for _, record := range notHealthyRecords {
+		additionalMessage += fmt.Sprintf("%s ", record.Name)
+	}
+	cond.Message += additionalMessage
+
+	return cond
 }
 
 var NegativePolarityConditions []string

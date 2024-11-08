@@ -31,7 +31,7 @@ import (
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
-var _ = Describe("Target status reconciler", func() {
+var _ = Describe("Policy discoverability reconciler", func() {
 	const (
 		testTimeOut      = SpecTimeout(2 * time.Minute)
 		afterEachTimeOut = NodeTimeout(3 * time.Minute)
@@ -203,15 +203,13 @@ var _ = Describe("Target status reconciler", func() {
 
 			Eventually(policyAcceptedAndTargetsAffected(ctx, routePolicy1)).WithContext(ctx).Should(BeTrue())
 
-			routePolicy2 := policyFactory(func(p *kuadrantv1.AuthPolicy) { // another policy that targets the same route. this policy will not be accepted
+			routePolicy2 := policyFactory(func(p *kuadrantv1.AuthPolicy) { // another policy that targets the same route
 				p.Name = "route-auth-2"
 			})
 			Expect(k8sClient.Create(ctx, routePolicy2)).To(Succeed())
 
 			Eventually(func() bool {
-				return policyAcceptedAndTargetsAffected(ctx, routePolicy1)() &&
-					!tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy2)() &&
-					!routeAffected(ctx, TestHTTPRouteName, policyAffectedCondition, client.ObjectKeyFromObject(routePolicy2))
+				return policyAcceptedAndTargetsAffected(ctx, routePolicy1)() && policyAcceptedAndTargetsAffected(ctx, routePolicy2)()
 			}).WithContext(ctx).Should(BeTrue())
 		}, testTimeOut)
 

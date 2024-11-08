@@ -2,11 +2,14 @@ package controllers
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"sync"
 
 	"github.com/samber/lo"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -34,19 +37,54 @@ func (r *DNSPoliciesValidator) Subscription() controller.Subscription {
 func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("DNSPoliciesValidator")
 
-	policies := lo.FilterMap(topology.Policies().Items(), dnsPolicyTypeFilterFunc())
+	policies := lo.Filter(topology.Policies().Items(), func(p machinery.Policy, _ int) bool {
+		_, ok := p.(*kuadrantv1.DNSPolicy)
+		return ok
+	})
 
 	logger.V(1).Info("validating dns policies", "policies", len(policies))
 
-	state.Store(StateDNSPolicyAcceptedKey, lo.SliceToMap(policies, func(policy *kuadrantv1.DNSPolicy) (string, error) {
-		if len(policy.GetTargetRefs()) == 0 || len(topology.Targetables().Children(policy)) == 0 {
-			return policy.GetLocator(), kuadrant.NewErrTargetNotFound(kuadrantv1.DNSPolicyGroupKind.Kind, policy.GetTargetRef(),
-				apierrors.NewNotFound(controller.GatewaysResource.GroupResource(), policy.GetName()))
+	state.Store(StateDNSPolicyAcceptedKey, lo.SliceToMap(policies, func(p machinery.Policy) (string, error) {
+		policy := p.(*kuadrantv1.DNSPolicy)
+
+		if err := isTargetRefsFound(topology, policy); err != nil {
+			return policy.GetLocator(), err
 		}
+
+		if err := isConflict(policies, policy); err != nil {
+			return policy.GetLocator(), err
+		}
+
 		return policy.GetLocator(), policy.Validate()
 	}))
 
 	logger.V(1).Info("finished validating dns policies")
+
+	return nil
+}
+
+// isTargetRefsFound Policies are already linked to their targets.
+// If the target ref length and length of targetables by this policy is not the same, then the policy could not find the target.
+func isTargetRefsFound(topology *machinery.Topology, p *kuadrantv1.DNSPolicy) error {
+	if len(p.GetTargetRefs()) != len(topology.Targetables().Children(p)) {
+		return kuadrant.NewErrTargetNotFound(kuadrantv1.DNSPolicyGroupKind.Kind, p.Spec.TargetRef.LocalPolicyTargetReference, apierrors.NewNotFound(controller.GatewaysResource.GroupResource(), p.GetName()))
+	}
+
+	return nil
+}
+
+// isConflict Validates if there's already an older policy with the same target ref
+func isConflict(policies []machinery.Policy, p *kuadrantv1.DNSPolicy) error {
+	conflictingP, ok := lo.Find(policies, func(item machinery.Policy) bool {
+		policy := item.(*kuadrantv1.DNSPolicy)
+		return p != policy && policy.DeletionTimestamp == nil &&
+			policy.CreationTimestamp.Before(&p.CreationTimestamp) &&
+			reflect.DeepEqual(policy.GetTargetRefs(), p.GetTargetRefs())
+	})
+
+	if ok {
+		return kuadrant.NewErrConflict(kuadrantv1.DNSPolicyGroupKind.Kind, client.ObjectKeyFromObject(conflictingP.(*kuadrantv1.DNSPolicy)).String(), errors.New("conflicting policy"))
+	}
 
 	return nil
 }

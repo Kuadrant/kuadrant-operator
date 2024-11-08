@@ -175,6 +175,7 @@ func (p *TLSPolicy) Kind() string {
 	return TLSPolicyGroupKind.Kind
 }
 
+// Deprecated: Use GetTargetRefs instead
 func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
 	return p.Spec.TargetRef.LocalPolicyTargetReference
 }

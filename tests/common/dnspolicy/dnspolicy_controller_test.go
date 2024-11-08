@@ -1660,4 +1660,96 @@ var _ = Describe("DNSPolicy controller", func() {
 			}, tests.TimeoutMedium, tests.RetryIntervalMedium).Should(Succeed())
 		})
 	})
+
+	Context("multiple policies with same target ref", func() {
+		BeforeEach(func(ctx SpecContext) {
+			gateway = tests.NewGatewayBuilder(tests.GatewayName, gatewayClass.Name, testNamespace).
+				WithHTTPListener(tests.ListenerNameOne, tests.HostOne(domain)).
+				Gateway
+			Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
+		})
+
+		It("should conflict on the second created policy", func(ctx SpecContext) {
+			By("creating a dns policy")
+			dnsPolicy = tests.NewDNSPolicy("test-dns-policy", testNamespace).
+				WithProviderSecret(*dnsProviderSecret).
+				WithTargetGateway(gateway.Name)
+			Expect(k8sClient.Create(ctx, dnsPolicy)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				//Check policy is accepted and enforced
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)).To(Succeed())
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Status": Equal(metav1.ConditionTrue),
+						}),
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(kuadrant.PolicyConditionEnforced)),
+							"Status": Equal(metav1.ConditionTrue),
+						}),
+					),
+				)
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+
+			By("creating a second dns policy")
+			dnsPolicy2 := tests.NewDNSPolicy("test-dns-policy-2", testNamespace).
+				WithProviderSecret(*dnsProviderSecret).
+				WithTargetGateway(gateway.Name)
+			Expect(k8sClient.Create(ctx, dnsPolicy2)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				//Check second policy is not accepted or enforced
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy2), dnsPolicy2)).To(Succeed())
+				g.Expect(dnsPolicy2.Status.Conditions).To(
+					ContainElement(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":    Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Status":  Equal(metav1.ConditionFalse),
+							"Reason":  Equal(string(gatewayapiv1alpha2.PolicyReasonConflicted)),
+							"Message": Equal(fmt.Sprintf("DNSPolicy is conflicted by %s: conflicting policy", client.ObjectKeyFromObject(dnsPolicy).String())),
+						}),
+					),
+				)
+				g.Expect(dnsPolicy2.Status.Conditions).ToNot(ContainElement(MatchFields(IgnoreExtras, Fields{
+					"Type": Equal(string(kuadrant.PolicyConditionEnforced)),
+				})))
+				//Check first policy is still accepted and enforced
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy), dnsPolicy)).To(Succeed())
+				g.Expect(dnsPolicy.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Status": Equal(metav1.ConditionTrue),
+						}),
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(kuadrant.PolicyConditionEnforced)),
+							"Status": Equal(metav1.ConditionTrue),
+						}),
+					),
+				)
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+
+			By("deleting the first dns policy")
+			Expect(k8sClient.Delete(ctx, dnsPolicy)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				//Check second policy is now accepted and enforced
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(dnsPolicy2), dnsPolicy2)).To(Succeed())
+				g.Expect(dnsPolicy2.Status.Conditions).To(
+					ContainElements(
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(gatewayapiv1alpha2.PolicyConditionAccepted)),
+							"Status": Equal(metav1.ConditionTrue),
+						}),
+						MatchFields(IgnoreExtras, Fields{
+							"Type":   Equal(string(kuadrant.PolicyConditionEnforced)),
+							"Status": Equal(metav1.ConditionTrue),
+						}),
+					),
+				)
+			}, tests.TimeoutMedium, time.Second).Should(Succeed())
+		}, testTimeOut)
+	})
 })

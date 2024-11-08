@@ -98,7 +98,7 @@ func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.Reso
 // TODO: What should happen if multiple target refs is supported in the future in terms of reporting in log and policy status?
 func (t *TLSPoliciesValidator) isTargetRefsFound(topology *machinery.Topology, p *kuadrantv1.TLSPolicy) error {
 	if len(p.GetTargetRefs()) != len(topology.Targetables().Children(p)) {
-		return kuadrant.NewErrTargetNotFound(kuadrantv1.TLSPolicyGroupKind.Kind, p.GetTargetRef(), apierrors.NewNotFound(controller.GatewaysResource.GroupResource(), p.GetName()))
+		return kuadrant.NewErrTargetNotFound(kuadrantv1.TLSPolicyGroupKind.Kind, p.Spec.TargetRef.LocalPolicyTargetReference, apierrors.NewNotFound(controller.GatewaysResource.GroupResource(), p.GetName()))
 	}
 
 	return nil

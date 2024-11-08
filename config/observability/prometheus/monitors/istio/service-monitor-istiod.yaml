@@ -2,11 +2,11 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: istiod
-  namespace: istio-system
+  namespace: gateway-system
 spec:
   namespaceSelector:
     matchNames:
-    - istio-system
+    - gateway-system
   selector:
     matchLabels:
       app: istiod

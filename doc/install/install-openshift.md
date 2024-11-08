@@ -183,7 +183,7 @@ To scrape these additional metrics, you can install a `kube-state-metrics` insta
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/main/config/observability/openshift/kube-state-metrics.yaml
-kubectl apply -k https://github.com/Kuadrant/gateway-api-state-metrics?ref=main
+kubectl apply -k https://github.com/Kuadrant/gateway-api-state-metrics/config/kuadrant?ref=0.5.0
 ```
 
 To enable request metrics in Istio and scrape them, create the following resource:
@@ -205,6 +205,7 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/ma
 You can configure scraping of metrics from the various Kuadrant operators with the below resources.
 
 ```bash
+kubectl create ns kuadrant-system
 kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/refs/heads/main/config/observability/prometheus/monitors/operators.yaml
 ```
 
@@ -225,7 +226,8 @@ For Grafana installation details, see [installing Grafana on OpenShift](https://
 
 ### Step 7 - Setup the catalogsource
 
-Before installing the Kuadrant Operator, you must enter the following commands to set up secrets that you will use later:
+Before installing the Kuadrant Operator, you must enter the following commands to set up secrets that you will use later.
+If you haven't aleady created the `kuadrant-system` namespace during the optional observability setup, do that first:
 
 ```bash
 kubectl create ns kuadrant-system

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta3
+package v1
 
 import (
 	"fmt"
@@ -29,7 +29,6 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -42,8 +41,8 @@ const (
 )
 
 var (
-	AuthPolicyGroupKind  = schema.GroupKind{Group: SchemeGroupVersion.Group, Kind: "AuthPolicy"}
-	AuthPoliciesResource = SchemeGroupVersion.WithResource("authpolicies")
+	AuthPolicyGroupKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "AuthPolicy"}
+	AuthPoliciesResource = GroupVersion.WithResource("authpolicies")
 )
 
 // +kubebuilder:object:root=true
@@ -81,7 +80,7 @@ func (p *AuthPolicy) GetLocator() string {
 
 // TODO: remove
 func (p *AuthPolicy) IsAtomicOverride() bool {
-	return p.Spec.Overrides != nil && p.Spec.Overrides.Strategy == kuadrantv1.AtomicMergeStrategy
+	return p.Spec.Overrides != nil && p.Spec.Overrides.Strategy == AtomicMergeStrategy
 }
 
 // DEPRECATED: Use GetTargetRefs instead
@@ -100,12 +99,12 @@ func (p *AuthPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
 
 func (p *AuthPolicy) GetMergeStrategy() machinery.MergeStrategy {
 	if spec := p.Spec.Defaults; spec != nil {
-		return kuadrantv1.DefaultsMergeStrategy(spec.Strategy)
+		return DefaultsMergeStrategy(spec.Strategy)
 	}
 	if spec := p.Spec.Overrides; spec != nil {
-		return kuadrantv1.OverridesMergeStrategy(spec.Strategy)
+		return OverridesMergeStrategy(spec.Strategy)
 	}
-	return kuadrantv1.AtomicDefaultsMergeStrategy
+	return AtomicDefaultsMergeStrategy
 }
 
 func (p *AuthPolicy) Merge(other machinery.Policy) machinery.Policy {
@@ -116,24 +115,24 @@ func (p *AuthPolicy) Merge(other machinery.Policy) machinery.Policy {
 	return source.GetMergeStrategy()(source, p)
 }
 
-var _ kuadrantv1.MergeablePolicy = &AuthPolicy{}
+var _ MergeablePolicy = &AuthPolicy{}
 
 func (p *AuthPolicy) Empty() bool {
 	return p.Spec.Proper().AuthScheme == nil
 }
 
-func (p *AuthPolicy) Rules() map[string]kuadrantv1.MergeableRule {
-	rules := make(map[string]kuadrantv1.MergeableRule)
+func (p *AuthPolicy) Rules() map[string]MergeableRule {
+	rules := make(map[string]MergeableRule)
 	policyLocator := p.GetLocator()
 	spec := p.Spec.Proper()
 
 	for ruleID := range spec.NamedPatterns {
 		rule := spec.NamedPatterns[ruleID]
-		rules[fmt.Sprintf("patterns#%s", ruleID)] = kuadrantv1.NewMergeableRule(&rule, policyLocator)
+		rules[fmt.Sprintf("patterns#%s", ruleID)] = NewMergeableRule(&rule, policyLocator)
 	}
 
 	if whenPredicates := spec.MergeableWhenPredicates; len(whenPredicates.Predicates) > 0 {
-		rules["conditions#"] = kuadrantv1.NewMergeableRule(&whenPredicates, policyLocator)
+		rules["conditions#"] = NewMergeableRule(&whenPredicates, policyLocator)
 	}
 
 	if spec.AuthScheme == nil {
@@ -142,22 +141,22 @@ func (p *AuthPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 
 	for ruleID := range spec.AuthScheme.Authentication {
 		rule := spec.AuthScheme.Authentication[ruleID]
-		rules[fmt.Sprintf("authentication#%s", ruleID)] = kuadrantv1.NewMergeableRule(&rule, policyLocator)
+		rules[fmt.Sprintf("authentication#%s", ruleID)] = NewMergeableRule(&rule, policyLocator)
 	}
 
 	for ruleID := range spec.AuthScheme.Metadata {
 		rule := spec.AuthScheme.Metadata[ruleID]
-		rules[fmt.Sprintf("metadata#%s", ruleID)] = kuadrantv1.NewMergeableRule(&rule, policyLocator)
+		rules[fmt.Sprintf("metadata#%s", ruleID)] = NewMergeableRule(&rule, policyLocator)
 	}
 
 	for ruleID := range spec.AuthScheme.Authorization {
 		rule := spec.AuthScheme.Authorization[ruleID]
-		rules[fmt.Sprintf("authorization#%s", ruleID)] = kuadrantv1.NewMergeableRule(&rule, policyLocator)
+		rules[fmt.Sprintf("authorization#%s", ruleID)] = NewMergeableRule(&rule, policyLocator)
 	}
 
 	for ruleID := range spec.AuthScheme.Callbacks {
 		rule := spec.AuthScheme.Callbacks[ruleID]
-		rules[fmt.Sprintf("callbacks#%s", ruleID)] = kuadrantv1.NewMergeableRule(&rule, policyLocator)
+		rules[fmt.Sprintf("callbacks#%s", ruleID)] = NewMergeableRule(&rule, policyLocator)
 	}
 
 	if spec.AuthScheme.Response == nil {
@@ -165,26 +164,26 @@ func (p *AuthPolicy) Rules() map[string]kuadrantv1.MergeableRule {
 	}
 
 	if rule := spec.AuthScheme.Response.Unauthenticated; rule != nil {
-		rules["response.unauthenticated#"] = kuadrantv1.NewMergeableRule(rule, policyLocator)
+		rules["response.unauthenticated#"] = NewMergeableRule(rule, policyLocator)
 	}
 	if rule := spec.AuthScheme.Response.Unauthorized; rule != nil {
-		rules["response.unauthorized#"] = kuadrantv1.NewMergeableRule(rule, policyLocator)
+		rules["response.unauthorized#"] = NewMergeableRule(rule, policyLocator)
 	}
 
 	for ruleID := range spec.AuthScheme.Response.Success.Headers {
 		rule := spec.AuthScheme.Response.Success.Headers[ruleID]
-		rules[fmt.Sprintf("response.success.headers#%s", ruleID)] = kuadrantv1.NewMergeableRule(&rule, policyLocator)
+		rules[fmt.Sprintf("response.success.headers#%s", ruleID)] = NewMergeableRule(&rule, policyLocator)
 	}
 
 	for ruleID := range spec.AuthScheme.Response.Success.DynamicMetadata {
 		rule := spec.AuthScheme.Response.Success.DynamicMetadata[ruleID]
-		rules[fmt.Sprintf("response.success.metadata#%s", ruleID)] = kuadrantv1.NewMergeableRule(&rule, policyLocator)
+		rules[fmt.Sprintf("response.success.metadata#%s", ruleID)] = NewMergeableRule(&rule, policyLocator)
 	}
 
 	return rules
 }
 
-func (p *AuthPolicy) SetRules(rules map[string]kuadrantv1.MergeableRule) {
+func (p *AuthPolicy) SetRules(rules map[string]MergeableRule) {
 	// clear all rules of the policy before setting new ones
 	p.Spec.Proper().NamedPatterns = nil
 	p.Spec.Proper().Predicates = nil
@@ -435,7 +434,7 @@ type MergeablePatternExpressions struct {
 
 func (r *MergeablePatternExpressions) GetSpec() any      { return r.PatternExpressions }
 func (r *MergeablePatternExpressions) GetSource() string { return r.Source }
-func (r *MergeablePatternExpressions) WithSource(source string) kuadrantv1.MergeableRule {
+func (r *MergeablePatternExpressions) WithSource(source string) MergeableRule {
 	r.Source = source
 	return r
 }
@@ -447,7 +446,7 @@ type MergeablePatternExpressionOrRef struct {
 
 func (r *MergeablePatternExpressionOrRef) GetSpec() any      { return r.PatternExpressionOrRef }
 func (r *MergeablePatternExpressionOrRef) GetSource() string { return r.Source }
-func (r *MergeablePatternExpressionOrRef) WithSource(source string) kuadrantv1.MergeableRule {
+func (r *MergeablePatternExpressionOrRef) WithSource(source string) MergeableRule {
 	r.Source = source
 	return r
 }
@@ -459,7 +458,7 @@ type MergeableAuthenticationSpec struct {
 
 func (r *MergeableAuthenticationSpec) GetSpec() any      { return r.AuthenticationSpec }
 func (r *MergeableAuthenticationSpec) GetSource() string { return r.Source }
-func (r *MergeableAuthenticationSpec) WithSource(source string) kuadrantv1.MergeableRule {
+func (r *MergeableAuthenticationSpec) WithSource(source string) MergeableRule {
 	r.Source = source
 	return r
 }
@@ -471,7 +470,7 @@ type MergeableMetadataSpec struct {
 
 func (r *MergeableMetadataSpec) GetSpec() any      { return r.MetadataSpec }
 func (r *MergeableMetadataSpec) GetSource() string { return r.Source }
-func (r *MergeableMetadataSpec) WithSource(source string) kuadrantv1.MergeableRule {
+func (r *MergeableMetadataSpec) WithSource(source string) MergeableRule {
 	r.Source = source
 	return r
 }
@@ -483,7 +482,7 @@ type MergeableAuthorizationSpec struct {
 
 func (r *MergeableAuthorizationSpec) GetSpec() any      { return r.AuthorizationSpec }
 func (r *MergeableAuthorizationSpec) GetSource() string { return r.Source }
-func (r *MergeableAuthorizationSpec) WithSource(source string) kuadrantv1.MergeableRule {
+func (r *MergeableAuthorizationSpec) WithSource(source string) MergeableRule {
 	r.Source = source
 	return r
 }
@@ -515,7 +514,7 @@ type MergeableDenyWithSpec struct {
 
 func (r *MergeableDenyWithSpec) GetSpec() any      { return r.DenyWithSpec }
 func (r *MergeableDenyWithSpec) GetSource() string { return r.Source }
-func (r *MergeableDenyWithSpec) WithSource(source string) kuadrantv1.MergeableRule {
+func (r *MergeableDenyWithSpec) WithSource(source string) MergeableRule {
 	r.Source = source
 	return r
 }
@@ -535,7 +534,7 @@ type MergeableHeaderSuccessResponseSpec struct {
 
 func (r *MergeableHeaderSuccessResponseSpec) GetSpec() any      { return r.HeaderSuccessResponseSpec }
 func (r *MergeableHeaderSuccessResponseSpec) GetSource() string { return r.Source }
-func (r *MergeableHeaderSuccessResponseSpec) WithSource(source string) kuadrantv1.MergeableRule {
+func (r *MergeableHeaderSuccessResponseSpec) WithSource(source string) MergeableRule {
 	r.Source = source
 	return r
 }
@@ -547,7 +546,7 @@ type MergeableSuccessResponseSpec struct {
 
 func (r *MergeableSuccessResponseSpec) GetSpec() any      { return r.SuccessResponseSpec }
 func (r *MergeableSuccessResponseSpec) GetSource() string { return r.Source }
-func (r *MergeableSuccessResponseSpec) WithSource(source string) kuadrantv1.MergeableRule {
+func (r *MergeableSuccessResponseSpec) WithSource(source string) MergeableRule {
 	r.Source = source
 	return r
 }
@@ -559,7 +558,7 @@ type MergeableCallbackSpec struct {
 
 func (r *MergeableCallbackSpec) GetSpec() any      { return r.CallbackSpec }
 func (r *MergeableCallbackSpec) GetSource() string { return r.Source }
-func (r *MergeableCallbackSpec) WithSource(source string) kuadrantv1.MergeableRule {
+func (r *MergeableCallbackSpec) WithSource(source string) MergeableRule {
 	r.Source = source
 	return r
 }

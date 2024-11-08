@@ -10,8 +10,8 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/env"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
 )
@@ -34,9 +34,9 @@ var (
 		{Kind: &machinery.GatewayClassGroupKind},
 		{Kind: &machinery.GatewayGroupKind},
 		{Kind: &machinery.HTTPRouteGroupKind},
-		{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind},
+		{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 		{Kind: &kuadrantv1beta1.LimitadorGroupKind},
-		{Kind: &kuadrantv1beta3.AuthPolicyGroupKind},
+		{Kind: &kuadrantv1.AuthPolicyGroupKind},
 		{Kind: &kuadrantv1beta1.AuthConfigGroupKind},
 		{Kind: &kuadrantistio.EnvoyFilterGroupKind},
 		{Kind: &kuadrantistio.WasmPluginGroupKind},

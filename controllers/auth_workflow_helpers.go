@@ -15,8 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 )
@@ -164,7 +164,7 @@ func authPolicyAcceptedStatusFunc(state *sync.Map) func(policy machinery.Policy)
 }
 
 func authPolicyAcceptedStatus(policy machinery.Policy) (accepted bool, err error) {
-	p, ok := policy.(*kuadrantv1beta3.AuthPolicy)
+	p, ok := policy.(*kuadrantv1.AuthPolicy)
 	if !ok {
 		return
 	}

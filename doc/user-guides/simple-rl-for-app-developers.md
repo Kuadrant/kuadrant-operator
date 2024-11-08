@@ -121,7 +121,7 @@ Create a Kuadrant `RateLimitPolicy` to configure rate limiting:
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
 metadata:
   name: toystore

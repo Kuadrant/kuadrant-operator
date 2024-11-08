@@ -27,7 +27,6 @@ import (
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/tests"
@@ -85,17 +84,17 @@ var _ = Describe("AuthPolicy controller", func() {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
-	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta3.AuthPolicy)) *kuadrantv1beta3.AuthPolicy {
-		policy := &kuadrantv1beta3.AuthPolicy{
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1.AuthPolicy)) *kuadrantv1.AuthPolicy {
+		policy := &kuadrantv1.AuthPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "AuthPolicy",
-				APIVersion: kuadrantv1beta3.GroupVersion.String(),
+				APIVersion: kuadrantv1.GroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "toystore",
 				Namespace: testNamespace,
 			},
-			Spec: kuadrantv1beta3.AuthPolicySpec{
+			Spec: kuadrantv1.AuthPolicySpec{
 				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
 					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
@@ -103,8 +102,8 @@ var _ = Describe("AuthPolicy controller", func() {
 						Name:  TestHTTPRouteName,
 					},
 				},
-				Defaults: &kuadrantv1beta3.MergeableAuthPolicySpec{
-					AuthPolicySpecProper: kuadrantv1beta3.AuthPolicySpecProper{
+				Defaults: &kuadrantv1.MergeableAuthPolicySpec{
+					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
 						AuthScheme: tests.BuildBasicAuthScheme(),
 					},
 				},
@@ -133,7 +132,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Attaches policy to the Gateway", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -201,7 +200,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(otherRoute))).WithContext(ctx).Should(BeTrue())
 
 			// attach policy to the gatewaay
-			gwPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+			gwPolicy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -251,8 +250,8 @@ var _ = Describe("AuthPolicy controller", func() {
 		}, testTimeOut)
 
 		It("Maps to all fields of the AuthConfig", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
-				policy.Spec.Proper().NamedPatterns = map[string]kuadrantv1beta3.MergeablePatternExpressions{
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.Proper().NamedPatterns = map[string]kuadrantv1.MergeablePatternExpressions{
 					"internal-source": {
 						PatternExpressions: []authorinov1beta3.PatternExpression{
 							{
@@ -272,13 +271,13 @@ var _ = Describe("AuthPolicy controller", func() {
 						},
 					},
 				}
-				policy.Spec.Proper().MergeableWhenPredicates = kuadrantv1beta3.MergeableWhenPredicates{
-					Predicates: kuadrantv1beta3.WhenPredicates{
+				policy.Spec.Proper().MergeableWhenPredicates = kuadrantv1.MergeableWhenPredicates{
+					Predicates: kuadrantv1.WhenPredicates{
 						{Predicate: `source.ip.matches("^192\.168\..*")`},
 					},
 				}
-				policy.Spec.Proper().AuthScheme = &kuadrantv1beta3.AuthSchemeSpec{
-					Authentication: map[string]kuadrantv1beta3.MergeableAuthenticationSpec{
+				policy.Spec.Proper().AuthScheme = &kuadrantv1.AuthSchemeSpec{
+					Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
 						"jwt": {
 							AuthenticationSpec: authorinov1beta3.AuthenticationSpec{
 								CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
@@ -300,7 +299,7 @@ var _ = Describe("AuthPolicy controller", func() {
 							},
 						},
 					},
-					Metadata: map[string]kuadrantv1beta3.MergeableMetadataSpec{
+					Metadata: map[string]kuadrantv1.MergeableMetadataSpec{
 						"user-groups": {
 							MetadataSpec: authorinov1beta3.MetadataSpec{
 								CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
@@ -322,7 +321,7 @@ var _ = Describe("AuthPolicy controller", func() {
 							},
 						},
 					},
-					Authorization: map[string]kuadrantv1beta3.MergeableAuthorizationSpec{
+					Authorization: map[string]kuadrantv1.MergeableAuthorizationSpec{
 						"admin-or-privileged": {
 							AuthorizationSpec: authorinov1beta3.AuthorizationSpec{
 								CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
@@ -365,23 +364,23 @@ var _ = Describe("AuthPolicy controller", func() {
 							},
 						},
 					},
-					Response: &kuadrantv1beta3.MergeableResponseSpec{
-						Unauthenticated: &kuadrantv1beta3.MergeableDenyWithSpec{
+					Response: &kuadrantv1.MergeableResponseSpec{
+						Unauthenticated: &kuadrantv1.MergeableDenyWithSpec{
 							DenyWithSpec: authorinov1beta3.DenyWithSpec{
 								Message: &authorinov1beta3.ValueOrSelector{
 									Value: k8sruntime.RawExtension{Raw: []byte(`"Missing verified JWT injected by the gateway"`)},
 								},
 							},
 						},
-						Unauthorized: &kuadrantv1beta3.MergeableDenyWithSpec{
+						Unauthorized: &kuadrantv1.MergeableDenyWithSpec{
 							DenyWithSpec: authorinov1beta3.DenyWithSpec{
 								Message: &authorinov1beta3.ValueOrSelector{
 									Value: k8sruntime.RawExtension{Raw: []byte(`"User must be admin or member of privileged group"`)},
 								},
 							},
 						},
-						Success: kuadrantv1beta3.MergeableWrappedSuccessResponseSpec{
-							Headers: map[string]kuadrantv1beta3.MergeableHeaderSuccessResponseSpec{
+						Success: kuadrantv1.MergeableWrappedSuccessResponseSpec{
+							Headers: map[string]kuadrantv1.MergeableHeaderSuccessResponseSpec{
 								"x-username": {
 									HeaderSuccessResponseSpec: authorinov1beta3.HeaderSuccessResponseSpec{
 										SuccessResponseSpec: authorinov1beta3.SuccessResponseSpec{
@@ -405,7 +404,7 @@ var _ = Describe("AuthPolicy controller", func() {
 									},
 								},
 							},
-							DynamicMetadata: map[string]kuadrantv1beta3.MergeableSuccessResponseSpec{
+							DynamicMetadata: map[string]kuadrantv1.MergeableSuccessResponseSpec{
 								"x-auth-data": {
 									SuccessResponseSpec: authorinov1beta3.SuccessResponseSpec{
 										CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
@@ -434,7 +433,7 @@ var _ = Describe("AuthPolicy controller", func() {
 							},
 						},
 					},
-					Callbacks: map[string]kuadrantv1beta3.MergeableCallbackSpec{
+					Callbacks: map[string]kuadrantv1.MergeableCallbackSpec{
 						"unauthorized-attempt": {
 							CallbackSpec: authorinov1beta3.CallbackSpec{
 								CommonEvaluatorSpec: authorinov1beta3.CommonEvaluatorSpec{
@@ -484,7 +483,7 @@ var _ = Describe("AuthPolicy controller", func() {
 		}, testTimeOut)
 
 		It("Succeeds when AuthScheme is not defined", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Spec.Proper().AuthScheme = nil
 			})
 
@@ -529,9 +528,9 @@ var _ = Describe("AuthPolicy controller", func() {
 	})
 
 	Context("AuthPolicy accepted condition reasons", func() {
-		assertAcceptedCondFalseAndEnforcedCondNil := func(ctx context.Context, policy *kuadrantv1beta3.AuthPolicy, reason, message string) func() bool {
+		assertAcceptedCondFalseAndEnforcedCondNil := func(ctx context.Context, policy *kuadrantv1.AuthPolicy, reason, message string) func() bool {
 			return func() bool {
-				existingPolicy := &kuadrantv1beta3.AuthPolicy{}
+				existingPolicy := &kuadrantv1.AuthPolicy{}
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)
 				if err != nil {
 					return false
@@ -568,9 +567,9 @@ var _ = Describe("AuthPolicy controller", func() {
 	Context("AuthPolicy enforced condition reasons", func() {
 		var httpRoute *gatewayapiv1.HTTPRoute
 
-		assertAcceptedCondTrueAndEnforcedCond := func(ctx context.Context, policy *kuadrantv1beta3.AuthPolicy, conditionStatus metav1.ConditionStatus, reason, message string) func() bool {
+		assertAcceptedCondTrueAndEnforcedCond := func(ctx context.Context, policy *kuadrantv1.AuthPolicy, conditionStatus metav1.ConditionStatus, reason, message string) func() bool {
 			return func() bool {
-				existingPolicy := &kuadrantv1beta3.AuthPolicy{}
+				existingPolicy := &kuadrantv1.AuthPolicy{}
 				err := k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)
 				if err != nil {
 					return false
@@ -628,7 +627,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			Expect(authConfig.Spec.Authentication).To(HaveKeyWithValue("apiKey", routePolicy.Spec.Proper().AuthScheme.Authentication["apiKey"].AuthenticationSpec))
 
 			// attach policy to the gatewaay
-			gwPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+			gwPolicy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -669,12 +668,12 @@ var _ = Describe("AuthPolicy controller", func() {
 		})
 
 		It("Gateway AuthPolicy has overrides and Route AuthPolicy is added.", func(ctx SpecContext) {
-			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+			gatewayPolicy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Overrides = &kuadrantv1beta3.MergeableAuthPolicySpec{}
+				policy.Spec.Overrides = &kuadrantv1.MergeableAuthPolicySpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -708,12 +707,12 @@ var _ = Describe("AuthPolicy controller", func() {
 			// check policy status
 			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy)).WithContext(ctx).Should(BeTrue())
 
-			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+			gatewayPolicy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Overrides = &kuadrantv1beta3.MergeableAuthPolicySpec{}
+				policy.Spec.Overrides = &kuadrantv1.MergeableAuthPolicySpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -739,12 +738,12 @@ var _ = Describe("AuthPolicy controller", func() {
 			// check policy status
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), routePolicy)).WithContext(ctx).Should(BeTrue())
 
-			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+			gatewayPolicy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Overrides = &kuadrantv1beta3.MergeableAuthPolicySpec{}
+				policy.Spec.Overrides = &kuadrantv1.MergeableAuthPolicySpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -777,7 +776,7 @@ var _ = Describe("AuthPolicy controller", func() {
 			// check policy status
 			Eventually(tests.IsAuthPolicyAccepted(ctx, testClient(), routePolicy)).WithContext(ctx).Should(BeTrue())
 
-			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+			gatewayPolicy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
@@ -799,7 +798,7 @@ var _ = Describe("AuthPolicy controller", func() {
 				if err != nil {
 					return false
 				}
-				gatewayPolicy.Spec.Overrides = &kuadrantv1beta3.MergeableAuthPolicySpec{}
+				gatewayPolicy.Spec.Overrides = &kuadrantv1.MergeableAuthPolicySpec{}
 				gatewayPolicy.Spec.Defaults = nil
 				gatewayPolicy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				gatewayPolicy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -824,12 +823,12 @@ var _ = Describe("AuthPolicy controller", func() {
 			// check policy status
 			Eventually(tests.IsAuthPolicyAcceptedAndEnforced(ctx, testClient(), routePolicy)).WithContext(ctx).Should(BeTrue())
 
-			gatewayPolicy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+			gatewayPolicy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Name = "gw-auth"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Overrides = &kuadrantv1beta3.MergeableAuthPolicySpec{}
+				policy.Spec.Overrides = &kuadrantv1.MergeableAuthPolicySpec{}
 				policy.Spec.Defaults = nil
 				policy.Spec.Overrides.AuthScheme = tests.BuildBasicAuthScheme()
 				policy.Spec.Overrides.AuthScheme.Authentication["apiKey"].ApiKey.Selector.MatchLabels["admin"] = "yes"
@@ -880,13 +879,13 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
-	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta3.AuthPolicy)) *kuadrantv1beta3.AuthPolicy {
-		policy := &kuadrantv1beta3.AuthPolicy{
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1.AuthPolicy)) *kuadrantv1.AuthPolicy {
+		policy := &kuadrantv1.AuthPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "my-policy",
 				Namespace: testNamespace,
 			},
-			Spec: kuadrantv1beta3.AuthPolicySpec{
+			Spec: kuadrantv1.AuthPolicySpec{
 				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
 					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
@@ -912,7 +911,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("Valid policy targeting Gateway", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
 			})
 			err := k8sClient.Create(ctx, policy)
@@ -920,7 +919,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("Invalid Target Ref Group", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Spec.TargetRef.Group = "not-gateway.networking.k8s.io"
 			})
 			err := k8sClient.Create(ctx, policy)
@@ -929,7 +928,7 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("Invalid Target Ref Kind", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Spec.TargetRef.Kind = "TCPRoute"
 			})
 			err := k8sClient.Create(ctx, policy)
@@ -940,16 +939,16 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 
 	Context("Defaults mutual exclusivity validation", func() {
 		It("Valid when only implicit defaults are used", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
 				policy.Spec.AuthScheme = tests.BuildBasicAuthScheme()
 			})
 			Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 		})
 
 		It("Valid when only explicit defaults are used", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
-				policy.Spec.Defaults = &kuadrantv1beta3.MergeableAuthPolicySpec{
-					AuthPolicySpecProper: kuadrantv1beta3.AuthPolicySpecProper{
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.Defaults = &kuadrantv1.MergeableAuthPolicySpec{
+					AuthPolicySpecProper: kuadrantv1.AuthPolicySpecProper{
 						AuthScheme: tests.BuildBasicAuthScheme(),
 					},
 				}
@@ -958,8 +957,8 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("Invalid when both implicit and explicit defaults are used - authScheme", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
-				policy.Spec.Defaults = &kuadrantv1beta3.MergeableAuthPolicySpec{}
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.Defaults = &kuadrantv1.MergeableAuthPolicySpec{}
 				policy.Spec.AuthScheme = tests.BuildBasicAuthScheme()
 			})
 			err := k8sClient.Create(ctx, policy)
@@ -968,9 +967,9 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("Invalid when both implicit and explicit defaults are used - namedPatterns", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
-				policy.Spec.Defaults = &kuadrantv1beta3.MergeableAuthPolicySpec{}
-				policy.Spec.NamedPatterns = map[string]kuadrantv1beta3.MergeablePatternExpressions{
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.Defaults = &kuadrantv1.MergeableAuthPolicySpec{}
+				policy.Spec.NamedPatterns = map[string]kuadrantv1.MergeablePatternExpressions{
 					"internal-source": {
 						PatternExpressions: []authorinov1beta3.PatternExpression{
 							{
@@ -988,10 +987,10 @@ var _ = Describe("AuthPolicy CEL Validations", func() {
 		})
 
 		It("Invalid when both implicit and explicit defaults are used - conditions", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.AuthPolicy) {
-				policy.Spec.Defaults = &kuadrantv1beta3.MergeableAuthPolicySpec{}
-				policy.Spec.MergeableWhenPredicates = kuadrantv1beta3.MergeableWhenPredicates{
-					Predicates: kuadrantv1beta3.WhenPredicates{
+			policy := policyFactory(func(policy *kuadrantv1.AuthPolicy) {
+				policy.Spec.Defaults = &kuadrantv1.MergeableAuthPolicySpec{}
+				policy.Spec.MergeableWhenPredicates = kuadrantv1.MergeableWhenPredicates{
+					Predicates: kuadrantv1.WhenPredicates{
 						{Predicate: `source.ip.matches("^192\.168\..*")`},
 					},
 				}

@@ -1,5 +1,5 @@
 ---
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: toystore
@@ -27,7 +27,7 @@ spec:
                 "user-id":
                   selector: auth.identity.metadata.annotations.secret\.kuadrant\.io/user-id
 ---
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: toystore

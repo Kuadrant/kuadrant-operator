@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
@@ -24,11 +24,11 @@ type HTTPRouteParentRefsEventMapper struct {
 }
 
 func (m *HTTPRouteParentRefsEventMapper) MapToRateLimitPolicy(obj client.Object) []reconcile.Request {
-	return m.mapToPolicyRequest(obj, "ratelimitpolicy", &kuadrantv1beta3.RateLimitPolicyList{})
+	return m.mapToPolicyRequest(obj, "ratelimitpolicy", &kuadrantv1.RateLimitPolicyList{})
 }
 
 func (m *HTTPRouteParentRefsEventMapper) MapToAuthPolicy(obj client.Object) []reconcile.Request {
-	return m.mapToPolicyRequest(obj, "authpolicy", &kuadrantv1beta3.AuthPolicyList{})
+	return m.mapToPolicyRequest(obj, "authpolicy", &kuadrantv1.AuthPolicyList{})
 }
 
 func (m *HTTPRouteParentRefsEventMapper) mapToPolicyRequest(obj client.Object, policyKind string, policyList client.ObjectList) []reconcile.Request {

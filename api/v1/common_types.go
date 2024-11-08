@@ -1,9 +1,7 @@
-package v1beta3
+package v1
 
 import (
 	"github.com/samber/lo"
-
-	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 )
 
 func NewPredicate(predicate string) Predicate {
@@ -50,7 +48,7 @@ type MergeableWhenPredicates struct {
 	Source string `json:"-"`
 }
 
-var _ kuadrantv1.MergeableRule = &MergeableWhenPredicates{}
+var _ MergeableRule = &MergeableWhenPredicates{}
 
 func (p *MergeableWhenPredicates) GetSpec() any {
 	return p.Predicates
@@ -60,7 +58,7 @@ func (p *MergeableWhenPredicates) GetSource() string {
 	return p.Source
 }
 
-func (p *MergeableWhenPredicates) WithSource(source string) kuadrantv1.MergeableRule {
+func (p *MergeableWhenPredicates) WithSource(source string) MergeableRule {
 	p.Source = source
 	return p
 }

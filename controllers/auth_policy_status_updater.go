@@ -23,7 +23,6 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
@@ -44,7 +43,7 @@ func (r *AuthPolicyStatusUpdater) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
-			{Kind: &kuadrantv1beta3.AuthPolicyGroupKind},
+			{Kind: &kuadrantv1.AuthPolicyGroupKind},
 			{Kind: &kuadrantv1beta1.AuthConfigGroupKind},
 			{Kind: &kuadrantistio.EnvoyFilterGroupKind},
 			{Kind: &kuadrantistio.WasmPluginGroupKind},
@@ -57,8 +56,8 @@ func (r *AuthPolicyStatusUpdater) Subscription() controller.Subscription {
 func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("AuthPolicyStatusUpdater")
 
-	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1beta3.AuthPolicy, bool) {
-		p, ok := item.(*kuadrantv1beta3.AuthPolicy)
+	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1.AuthPolicy, bool) {
+		p, ok := item.(*kuadrantv1.AuthPolicy)
 		return p, ok
 	})
 
@@ -74,7 +73,7 @@ func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controll
 		}
 
 		// copy initial conditions, otherwise status will always be updated
-		newStatus := &kuadrantv1beta3.AuthPolicyStatus{
+		newStatus := &kuadrantv1.AuthPolicyStatus{
 			Conditions:         slices.Clone(policy.Status.Conditions),
 			ObservedGeneration: policy.Status.ObservedGeneration,
 		}
@@ -104,7 +103,7 @@ func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controll
 			continue
 		}
 
-		_, err = r.client.Resource(kuadrantv1beta3.AuthPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+		_, err = r.client.Resource(kuadrantv1.AuthPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
 		if err != nil {
 			logger.Error(err, "unable to update status for authpolicy", "name", policy.GetName(), "namespace", policy.GetNamespace())
 			// TODO: handle error
@@ -114,8 +113,8 @@ func (r *AuthPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controll
 	return nil
 }
 
-func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.AuthPolicy, topology *machinery.Topology, state *sync.Map) *metav1.Condition {
-	policyKind := kuadrantv1beta3.AuthPolicyGroupKind.Kind
+func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolicy, topology *machinery.Topology, state *sync.Map) *metav1.Condition {
+	policyKind := kuadrantv1.AuthPolicyGroupKind.Kind
 
 	effectivePolicies, ok := state.Load(StateEffectiveAuthPolicies)
 	if !ok {

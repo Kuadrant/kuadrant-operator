@@ -45,7 +45,7 @@ The limit definitions (`limits`) can be declared at the top-level level of the s
 #### High-level example and field definition
 
 ```yaml
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
 metadata:
   name: my-rate-limit-policy
@@ -99,7 +99,7 @@ When a RateLimitPolicy targets a HTTPRoute, the policy is enforced to all traffi
 Target a HTTPRoute by setting the `spec.targetRef` field of the RateLimitPolicy as follows:
 
 ```yaml
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
 metadata:
   name: <RateLimitPolicy name>
@@ -134,7 +134,7 @@ Inversely, a gateway policy that specify _overrides_ declares a set of rules to 
 Target a Gateway HTTPRoute by setting the `spec.targetRef` field of the RateLimitPolicy as follows:
 
 ```yaml
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
 metadata:
   name: <RateLimitPolicy name>

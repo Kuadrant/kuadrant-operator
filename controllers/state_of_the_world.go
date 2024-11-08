@@ -32,7 +32,6 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -109,16 +108,16 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.TLSPolicy]{}),
 		)),
 		controller.WithRunnable("authpolicy watcher", controller.Watch(
-			&kuadrantv1beta3.AuthPolicy{},
-			kuadrantv1beta3.AuthPoliciesResource,
+			&kuadrantv1.AuthPolicy{},
+			kuadrantv1.AuthPoliciesResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta3.AuthPolicy]{}),
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.AuthPolicy]{}),
 		)),
 		controller.WithRunnable("ratelimitpolicy watcher", controller.Watch(
-			&kuadrantv1beta3.RateLimitPolicy{},
-			kuadrantv1beta3.RateLimitPoliciesResource,
+			&kuadrantv1.RateLimitPolicy{},
+			kuadrantv1.RateLimitPoliciesResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta3.RateLimitPolicy]{}),
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.RateLimitPolicy]{}),
 		)),
 		controller.WithRunnable("topology configmap watcher", controller.Watch(
 			&corev1.ConfigMap{},
@@ -147,8 +146,8 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithPolicyKinds(
 			kuadrantv1.DNSPolicyGroupKind,
 			kuadrantv1.TLSPolicyGroupKind,
-			kuadrantv1beta3.AuthPolicyGroupKind,
-			kuadrantv1beta3.RateLimitPolicyGroupKind,
+			kuadrantv1.AuthPolicyGroupKind,
+			kuadrantv1.RateLimitPolicyGroupKind,
 		),
 		controller.WithObjectKinds(
 			kuadrantv1beta1.KuadrantGroupKind,

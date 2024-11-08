@@ -16,8 +16,8 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
@@ -35,7 +35,7 @@ func (r *AuthConfigsReconciler) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
-			{Kind: &kuadrantv1beta3.AuthPolicyGroupKind},
+			{Kind: &kuadrantv1.AuthPolicyGroupKind},
 			{Kind: &kuadrantv1beta1.AuthConfigGroupKind},
 		},
 	}
@@ -174,7 +174,7 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy Effective
 
 	// named patterns
 	if namedPatterns := spec.NamedPatterns; namedPatterns != nil {
-		authConfig.Spec.NamedPatterns = lo.MapValues(spec.NamedPatterns, func(v kuadrantv1beta3.MergeablePatternExpressions, _ string) authorinov1beta3.PatternExpressions {
+		authConfig.Spec.NamedPatterns = lo.MapValues(spec.NamedPatterns, func(v kuadrantv1.MergeablePatternExpressions, _ string) authorinov1beta3.PatternExpressions {
 			return v.PatternExpressions
 		})
 	}
@@ -187,21 +187,21 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy Effective
 
 	// authentication
 	if authentication := authScheme.Authentication; authentication != nil {
-		authConfig.Spec.Authentication = lo.MapValues(authentication, func(v kuadrantv1beta3.MergeableAuthenticationSpec, _ string) authorinov1beta3.AuthenticationSpec {
+		authConfig.Spec.Authentication = lo.MapValues(authentication, func(v kuadrantv1.MergeableAuthenticationSpec, _ string) authorinov1beta3.AuthenticationSpec {
 			return v.AuthenticationSpec
 		})
 	}
 
 	// metadata
 	if metadata := authScheme.Metadata; metadata != nil {
-		authConfig.Spec.Metadata = lo.MapValues(metadata, func(v kuadrantv1beta3.MergeableMetadataSpec, _ string) authorinov1beta3.MetadataSpec {
+		authConfig.Spec.Metadata = lo.MapValues(metadata, func(v kuadrantv1.MergeableMetadataSpec, _ string) authorinov1beta3.MetadataSpec {
 			return v.MetadataSpec
 		})
 	}
 
 	// authorization
 	if authorization := authScheme.Authorization; authorization != nil {
-		authConfig.Spec.Authorization = lo.MapValues(authorization, func(v kuadrantv1beta3.MergeableAuthorizationSpec, _ string) authorinov1beta3.AuthorizationSpec {
+		authConfig.Spec.Authorization = lo.MapValues(authorization, func(v kuadrantv1.MergeableAuthorizationSpec, _ string) authorinov1beta3.AuthorizationSpec {
 			return v.AuthorizationSpec
 		})
 	}
@@ -222,10 +222,10 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy Effective
 			Unauthenticated: unauthenticated,
 			Unauthorized:    unauthorized,
 			Success: authorinov1beta3.WrappedSuccessResponseSpec{
-				Headers: authorinoSpecsFromConfigs(response.Success.Headers, func(config kuadrantv1beta3.MergeableHeaderSuccessResponseSpec) authorinov1beta3.HeaderSuccessResponseSpec {
+				Headers: authorinoSpecsFromConfigs(response.Success.Headers, func(config kuadrantv1.MergeableHeaderSuccessResponseSpec) authorinov1beta3.HeaderSuccessResponseSpec {
 					return authorinov1beta3.HeaderSuccessResponseSpec{SuccessResponseSpec: config.SuccessResponseSpec}
 				}),
-				DynamicMetadata: authorinoSpecsFromConfigs(response.Success.DynamicMetadata, func(config kuadrantv1beta3.MergeableSuccessResponseSpec) authorinov1beta3.SuccessResponseSpec {
+				DynamicMetadata: authorinoSpecsFromConfigs(response.Success.DynamicMetadata, func(config kuadrantv1.MergeableSuccessResponseSpec) authorinov1beta3.SuccessResponseSpec {
 					return config.SuccessResponseSpec
 				}),
 			},
@@ -234,7 +234,7 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy Effective
 
 	// callbacks
 	if callbacks := authScheme.Callbacks; callbacks != nil {
-		authConfig.Spec.Callbacks = lo.MapValues(callbacks, func(v kuadrantv1beta3.MergeableCallbackSpec, _ string) authorinov1beta3.CallbackSpec {
+		authConfig.Spec.Callbacks = lo.MapValues(callbacks, func(v kuadrantv1.MergeableCallbackSpec, _ string) authorinov1beta3.CallbackSpec {
 			return v.CallbackSpec
 		})
 	}

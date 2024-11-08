@@ -26,12 +26,12 @@ spec:
         displayName: AuthPolicy
         kind: AuthPolicy
         name: authpolicies.kuadrant.io
-        version: v1beta2
+        version: v1
       - description: RateLimitPolicy enables rate limiting for service workloads in a Gateway API network
         displayName: RateLimitPolicy
         kind: RateLimitPolicy
         name: ratelimitpolicies.kuadrant.io
-        version: v1beta3
+        version: v1
       - description: DNSPolicy configures how North-South based traffic should be balanced and reach the gateways
         displayName: DNSPolicy
         kind: DNSPolicy

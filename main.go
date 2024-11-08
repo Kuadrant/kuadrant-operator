@@ -31,30 +31,22 @@ import (
 	consolev1 "github.com/openshift/api/console/v1"
 	istioextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istionetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
-	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
-	istioapis "istio.io/istio/operator/pkg/apis"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/utils/env"
-	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
-	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/controllers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 	"github.com/kuadrant/kuadrant-operator/pkg/log"
 	"github.com/kuadrant/kuadrant-operator/version"
 	//+kubebuilder:scaffold:imports
@@ -75,15 +67,9 @@ func init() {
 	utilruntime.Must(authorinoopapi.AddToScheme(scheme))
 	utilruntime.Must(authorinoapi.AddToScheme(scheme))
 	utilruntime.Must(istionetworkingv1alpha3.AddToScheme(scheme))
-	utilruntime.Must(istiosecurityv1beta1.AddToScheme(scheme))
-	utilruntime.Must(istiov1alpha1.AddToScheme(scheme))
 	utilruntime.Must(gatewayapiv1.Install(scheme))
-	utilruntime.Must(gatewayapiv1beta1.Install(scheme))
 	utilruntime.Must(istioextensionv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(apiextv1.AddToScheme(scheme))
-	utilruntime.Must(istioapis.AddToScheme(scheme))
-	utilruntime.Must(istiov1alpha1.AddToScheme(scheme))
-	utilruntime.Must(maistraapis.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantv1beta1.AddToScheme(scheme))
 	utilruntime.Must(kuadrantdnsv1alpha1.AddToScheme(scheme))
@@ -143,26 +129,6 @@ func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
-	}
-
-	if err = fieldindexers.HTTPRouteIndexByGateway(
-		mgr,
-		log.Log.WithName("kuadrant").WithName("indexer").WithName("routeIndexByGateway"),
-	); err != nil {
-		setupLog.Error(err, "unable to add indexer")
-		os.Exit(1)
-	}
-
-	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(), mgr.GetScheme(), mgr.GetAPIReader(),
-		log.Log.WithName("kuadrant").WithName("gateway"),
-	)
-
-	if err = (&controllers.GatewayKuadrantReconciler{
-		BaseReconciler: gatewayKuadrantBaseReconciler,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "GatewayKuadrant")
 		os.Exit(1)
 	}
 

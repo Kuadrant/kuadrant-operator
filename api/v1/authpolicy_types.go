@@ -26,18 +26,10 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
-)
-
-const (
-	// TODO: remove after fixing the integration tests that still depend on these
-	AuthPolicyBackReferenceAnnotationName   = "kuadrant.io/authpolicies"
-	AuthPolicyDirectReferenceAnnotationName = "kuadrant.io/authpolicy"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
 var (
@@ -78,12 +70,7 @@ func (p *AuthPolicy) GetLocator() string {
 	return machinery.LocatorFromObject(p)
 }
 
-// TODO: remove
-func (p *AuthPolicy) IsAtomicOverride() bool {
-	return p.Spec.Overrides != nil && p.Spec.Overrides.Strategy == AtomicMergeStrategy
-}
-
-// DEPRECATED: Use GetTargetRefs instead
+// Deprecated: Use GetTargetRefs instead
 func (p *AuthPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
 	return p.Spec.TargetRef.LocalPolicyTargetReference
 }
@@ -294,44 +281,12 @@ func (p *AuthPolicy) SetRules(rules map[string]MergeableRule) {
 	}
 }
 
-// DEPRECATED. impl: kuadrant.Policy
 func (p *AuthPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
 	return &p.Status
 }
 
-// DEPRECATED. impl: kuadrant.Policy
-func (p *AuthPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
-	return kuadrantgatewayapi.InheritedPolicy
-}
-
-// DEPRECATED. impl: kuadrant.Policy
-func (p *AuthPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
-	return gatewayapiv1.Namespace(p.GetNamespace())
-}
-
-// DEPRECATED. impl: kuadrant.Policy
-func (p *AuthPolicy) GetRulesHostnames() []string {
-	return []string{}
-}
-
-// DEPRECATED. impl: kuadrant.Policy
 func (p *AuthPolicy) Kind() string {
 	return AuthPolicyGroupKind.Kind
-}
-
-// TODO: remove
-func (p *AuthPolicy) BackReferenceAnnotationName() string {
-	return AuthPolicyBackReferenceAnnotationName
-}
-
-// TODO: remove
-func (p *AuthPolicy) DirectReferenceAnnotationName() string {
-	return AuthPolicyDirectReferenceAnnotationName
-}
-
-// TODO: remove
-func (p *AuthPolicy) TargetProgrammedGatewaysOnly() bool {
-	return true
 }
 
 // +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && (has(self.patterns) || has(self.when) || has(self.rules)))",message="Implicit and explicit defaults are mutually exclusive"
@@ -435,18 +390,6 @@ type MergeablePatternExpressions struct {
 func (r *MergeablePatternExpressions) GetSpec() any      { return r.PatternExpressions }
 func (r *MergeablePatternExpressions) GetSource() string { return r.Source }
 func (r *MergeablePatternExpressions) WithSource(source string) MergeableRule {
-	r.Source = source
-	return r
-}
-
-type MergeablePatternExpressionOrRef struct {
-	authorinov1beta3.PatternExpressionOrRef `json:",inline"`
-	Source                                  string `json:"-"`
-}
-
-func (r *MergeablePatternExpressionOrRef) GetSpec() any      { return r.PatternExpressionOrRef }
-func (r *MergeablePatternExpressionOrRef) GetSource() string { return r.Source }
-func (r *MergeablePatternExpressionOrRef) WithSource(source string) MergeableRule {
 	r.Source = source
 	return r
 }
@@ -607,13 +550,6 @@ type AuthPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AuthPolicy `json:"items"`
-}
-
-// DEPRECATED. impl: kuadrant.PolicyList
-func (l *AuthPolicyList) GetItems() []kuadrant.Policy {
-	return utils.Map(l.Items, func(item AuthPolicy) kuadrant.Policy {
-		return &item
-	})
 }
 
 func init() {

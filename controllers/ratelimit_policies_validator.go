@@ -12,7 +12,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
 type RateLimitPolicyValidator struct{}

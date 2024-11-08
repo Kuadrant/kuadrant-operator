@@ -20,8 +20,8 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 )
 
 func NewDNSPolicyStatusUpdater(client *dynamic.DynamicClient) *DNSPolicyStatusUpdater {

@@ -8637,26 +8637,20 @@ rules:
   resources:
   - gatewayclasses
   verbs:
+  - get
   - list
   - watch
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
   - gateways
+  - httproutes
   verbs:
-  - create
-  - delete
   - get
   - list
   - patch
   - update
   - watch
-- apiGroups:
-  - gateway.networking.k8s.io
-  resources:
-  - gateways/finalizers
-  verbs:
-  - update
 - apiGroups:
   - gateway.networking.k8s.io
   resources:
@@ -8667,36 +8661,14 @@ rules:
   - patch
   - update
 - apiGroups:
-  - gateway.networking.k8s.io
-  resources:
-  - httproutes
-  verbs:
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - install.istio.io
-  resources:
-  - istiooperators
-  verbs:
-  - create
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
   - kuadrant.io
   resources:
   - authpolicies
-  - dnsrecords
+  - dnspolicies
   - kuadrants
   - ratelimitpolicies
+  - tlspolicies
   verbs:
-  - create
-  - delete
   - get
   - list
   - patch
@@ -8707,7 +8679,6 @@ rules:
   resources:
   - authpolicies/finalizers
   - dnspolicies/finalizers
-  - kuadrants/finalizers
   - ratelimitpolicies/finalizers
   - tlspolicies/finalizers
   verbs:
@@ -8727,9 +8698,9 @@ rules:
 - apiGroups:
   - kuadrant.io
   resources:
-  - dnspolicies
-  - tlspolicies
+  - dnsrecords
   verbs:
+  - create
   - delete
   - get
   - list
@@ -8746,29 +8717,6 @@ rules:
   - limitador.kuadrant.io
   resources:
   - limitadors
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - maistra.io
-  resources:
-  - servicemeshcontrolplanes
-  verbs:
-  - get
-  - list
-  - patch
-  - update
-  - use
-  - watch
-- apiGroups:
-  - maistra.io
-  resources:
-  - servicemeshmembers
   verbs:
   - create
   - delete
@@ -8796,17 +8744,6 @@ rules:
   verbs:
   - create
   - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - operator.istio.io
-  resources:
-  - istios
-  verbs:
-  - create
   - get
   - list
   - patch

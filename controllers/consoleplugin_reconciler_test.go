@@ -23,7 +23,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	controllersfake "github.com/kuadrant/kuadrant-operator/controllers/fake"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift/consoleplugin"
 )

@@ -22,7 +22,7 @@ import (
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/controllers"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
@@ -152,7 +152,7 @@ var _ = Describe("limitador cluster controller", func() {
 			Expect(patch.Spec.Type).To(Equal(egv1alpha1.JSONPatchEnvoyPatchType))
 			Expect(patch.Spec.JSONPatches).To(HaveLen(1))
 			Expect(patch.Spec.JSONPatches[0].Type).To(Equal(egv1alpha1.ClusterEnvoyResourceType))
-			Expect(patch.Spec.JSONPatches[0].Name).To(Equal(common.KuadrantRateLimitClusterName))
+			Expect(patch.Spec.JSONPatches[0].Name).To(Equal(kuadrant.KuadrantRateLimitClusterName))
 			Expect(patch.Spec.JSONPatches[0].Operation.Op).To(Equal(egv1alpha1.JSONPatchOperationType("add")))
 
 			// Check patch value
@@ -168,13 +168,13 @@ var _ = Describe("limitador cluster controller", func() {
 
 			Expect(existingPatchValue).To(Equal(
 				map[string]any{
-					"name":                   common.KuadrantRateLimitClusterName,
+					"name":                   kuadrant.KuadrantRateLimitClusterName,
 					"type":                   "STRICT_DNS",
 					"connect_timeout":        "1s",
 					"lb_policy":              "ROUND_ROBIN",
 					"http2_protocol_options": map[string]any{},
 					"load_assignment": map[string]any{
-						"cluster_name": common.KuadrantRateLimitClusterName,
+						"cluster_name": kuadrant.KuadrantRateLimitClusterName,
 						"endpoints": []any{
 							map[string]any{
 								"lb_endpoints": []any{

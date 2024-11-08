@@ -25,36 +25,29 @@ package controllers
 import (
 	"encoding/json"
 
-	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	consolev1 "github.com/openshift/api/console/v1"
-	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
-	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
-	istiosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
-	istioapis "istio.io/istio/operator/pkg/apis"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
-	istiov1alpha1 "maistra.io/istio-operator/api/v1alpha1"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
+	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	authorinoopapi "github.com/kuadrant/authorino-operator/api/v1beta1"
 	authorinoapi "github.com/kuadrant/authorino/api/v1beta3"
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
+	consolev1 "github.com/openshift/api/console/v1"
+	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
+	istioclientnetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
 
 func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
@@ -64,27 +57,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 		Metrics:                metricsserver.Options{BindAddress: "0"},
 	})
 	Expect(err).ToNot(HaveOccurred())
-
-	err = fieldindexers.HTTPRouteIndexByGateway(
-		mgr,
-		log.Log.WithName("kuadrant").WithName("indexer").WithName("routeIndexByGateway"),
-	)
-	Expect(err).ToNot(HaveOccurred())
-
-	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-		mgr.GetAPIReader(),
-		log.Log.WithName("kuadrant").WithName("gateway"),
-	)
-
-	err = (&GatewayKuadrantReconciler{
-		BaseReconciler: gatewayKuadrantBaseReconciler,
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
-	Expect(err).NotTo(HaveOccurred())
 
 	dClient, err := dynamic.NewForConfig(mgr.GetConfig())
 	Expect(err).NotTo(HaveOccurred())
@@ -122,17 +94,12 @@ func BootstrapScheme() *runtime.Scheme {
 		kuadrantv1.AddToScheme,
 		kuadrantv1beta1.AddToScheme,
 		gatewayapiv1.Install,
-		gatewayapiv1beta1.Install,
 		authorinoopapi.AddToScheme,
 		authorinoapi.AddToScheme,
-		istioapis.AddToScheme,
-		istiov1alpha1.AddToScheme,
-		istiosecurityv1beta1.AddToScheme,
 		limitadorv1alpha1.AddToScheme,
 		istioclientnetworkingv1alpha3.AddToScheme,
 		istioclientgoextensionv1alpha1.AddToScheme,
 		certmanv1.AddToScheme,
-		maistraapis.AddToScheme,
 		egv1alpha1.AddToScheme,
 		consolev1.AddToScheme,
 	)

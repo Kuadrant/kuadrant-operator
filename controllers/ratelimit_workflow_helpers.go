@@ -20,7 +20,8 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
 	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 )
 
@@ -37,11 +38,6 @@ var (
 	ErrMissingLimitadorServiceInfo            = fmt.Errorf("missing limitador service info in the limitador object")
 	ErrMissingStateEffectiveRateLimitPolicies = fmt.Errorf("missing rate limit effective policies stored in the reconciliation state")
 )
-
-//+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
-//+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;patch;delete
 
 func GetLimitadorFromTopology(topology *machinery.Topology) (*limitadorv1alpha1.Limitador, error) {
 	kuadrant, err := GetKuadrantFromTopology(topology)
@@ -95,13 +91,13 @@ func RateLimitClusterName(gatewayName string) string {
 
 func rateLimitClusterPatch(host string, port int) map[string]any {
 	return map[string]any{
-		"name":                   common.KuadrantRateLimitClusterName,
+		"name":                   kuadrant.KuadrantRateLimitClusterName,
 		"type":                   "STRICT_DNS",
 		"connect_timeout":        "1s",
 		"lb_policy":              "ROUND_ROBIN",
 		"http2_protocol_options": map[string]any{},
 		"load_assignment": map[string]any{
-			"cluster_name": common.KuadrantRateLimitClusterName,
+			"cluster_name": kuadrant.KuadrantRateLimitClusterName,
 			"endpoints": []map[string]any{
 				{
 					"lb_endpoints": []map[string]any{
@@ -125,7 +121,7 @@ func rateLimitClusterPatch(host string, port int) map[string]any {
 func buildWasmActionsForRateLimit(effectivePolicy EffectiveRateLimitPolicy, state *sync.Map) []wasm.Action {
 	policiesInPath := kuadrantv1.PoliciesInPath(effectivePolicy.Path, isRateLimitPolicyAcceptedAndNotDeletedFunc(state))
 
-	_, _, _, httpRoute, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
+	_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
 	limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
 
 	topLevelRules, limitRules := lo.FilterReject(lo.Entries(effectivePolicy.Spec.Rules()),

@@ -23,11 +23,12 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/pkg/authorino"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
 )
 
 type AuthPolicyStatusUpdater struct {
@@ -44,7 +45,7 @@ func (r *AuthPolicyStatusUpdater) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind},
-			{Kind: &kuadrantv1beta1.AuthConfigGroupKind},
+			{Kind: &kuadrantauthorino.AuthConfigGroupKind},
 			{Kind: &kuadrantistio.EnvoyFilterGroupKind},
 			{Kind: &kuadrantistio.WasmPluginGroupKind},
 			{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
@@ -142,7 +143,7 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolic
 		if len(kuadrantv1.PoliciesInPath(effectivePolicy.Path, func(p machinery.Policy) bool { return p.GetLocator() == policy.GetLocator() })) == 0 {
 			continue
 		}
-		gatewayClass, gateway, listener, httpRoute, httpRouteRule, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
+		gatewayClass, gateway, listener, httpRoute, httpRouteRule, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
 		if !kuadrantgatewayapi.IsListenerReady(listener.Listener, gateway.Gateway) || !kuadrantgatewayapi.IsHTTPRouteReady(httpRoute.HTTPRoute, gateway.Gateway, gatewayClass.GatewayClass.Spec.ControllerName) {
 			continue
 		}
@@ -172,7 +173,7 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolic
 		}
 		// all rules of the policy have been overridden by at least one other policy
 		overridingPoliciesKeys := lo.FilterMap(lo.Uniq(lo.Flatten(lo.Values(overridingPolicies))), func(policyLocator string, _ int) (k8stypes.NamespacedName, bool) {
-			policyKey, err := common.NamespacedNameFromLocator(policyLocator)
+			policyKey, err := kuadrantpolicymachinery.NamespacedNameFromLocator(policyLocator)
 			return policyKey, err == nil
 		})
 		return kuadrant.EnforcedCondition(policy, kuadrant.NewErrOverridden(policyKind, overridingPoliciesKeys), false)
@@ -194,10 +195,10 @@ func (r *AuthPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.AuthPolic
 	for pathID, httpRouteRule := range affectedHTTPRouteRules {
 		authConfigName := AuthConfigNameForPath(pathID)
 		authConfig, found := lo.Find(topology.Objects().Children(httpRouteRule), func(authConfig machinery.Object) bool {
-			return authConfig.GroupVersionKind().GroupKind() == kuadrantv1beta1.AuthConfigGroupKind && authConfig.GetName() == authConfigName
+			return authConfig.GroupVersionKind().GroupKind() == kuadrantauthorino.AuthConfigGroupKind && authConfig.GetName() == authConfigName
 		})
 		if !found || !isAuthConfigReady(authConfig.(*controller.RuntimeObject).Object.(*authorinov1beta3.AuthConfig)) {
-			componentsToSync = append(componentsToSync, fmt.Sprintf("%s (%s)", kuadrantv1beta1.AuthConfigGroupKind.Kind, authConfigName))
+			componentsToSync = append(componentsToSync, fmt.Sprintf("%s (%s)", kuadrantauthorino.AuthConfigGroupKind.Kind, authConfigName))
 		}
 	}
 

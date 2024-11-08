@@ -15,12 +15,14 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
 type LimitadorReconciler struct {
 	Client *dynamic.DynamicClient
 }
+
+//+kubebuilder:rbac:groups=limitador.kuadrant.io,resources=limitadors,verbs=get;list;watch;create;update;patch;delete
 
 func NewLimitadorReconciler(client *dynamic.DynamicClient) *LimitadorReconciler {
 	return &LimitadorReconciler{Client: client}
@@ -69,7 +71,7 @@ func (r *LimitadorReconciler) Reconcile(ctx context.Context, _ []controller.Reso
 			APIVersion: "limitador.kuadrant.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.LimitadorName,
+			Name:      kuadrant.LimitadorName,
 			Namespace: kobj.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{

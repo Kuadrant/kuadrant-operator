@@ -20,7 +20,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/authorino"
 )
 
 const (
@@ -173,8 +173,8 @@ func checkLimitadorReady(limitadorObj *limitadorv1alpha1.Limitador) *string {
 	return nil
 }
 
-func checkAuthorinoAvailable(authorino *authorinov1beta1.Authorino) *string {
-	readyCondition := common.FindAuthorinoStatusCondition(authorino.Status.Conditions, "Ready")
+func checkAuthorinoAvailable(authorinoObj *authorinov1beta1.Authorino) *string {
+	readyCondition := authorino.FindAuthorinoStatusCondition(authorinoObj.Status.Conditions, "Ready")
 	if readyCondition == nil {
 		tmp := "Ready condition not found"
 		return &tmp

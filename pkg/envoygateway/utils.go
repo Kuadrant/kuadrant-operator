@@ -14,7 +14,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 )
 
 var (
@@ -41,24 +41,8 @@ func IsEnvoyExtensionPolicyInstalled(restMapper meta.RESTMapper) (bool, error) {
 		envoygatewayv1alpha1.GroupVersion.Version)
 }
 
-func IsEnvoyGatewaySecurityPolicyInstalled(restMapper meta.RESTMapper) (bool, error) {
-	return utils.IsCRDInstalled(
-		restMapper,
-		envoygatewayv1alpha1.GroupName,
-		envoygatewayv1alpha1.KindSecurityPolicy,
-		envoygatewayv1alpha1.GroupVersion.Version)
-}
-
 func IsEnvoyGatewayInstalled(restMapper meta.RESTMapper) (bool, error) {
-	ok, err := IsEnvoyGatewaySecurityPolicyInstalled(restMapper)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, nil
-	}
-
-	ok, err = IsEnvoyExtensionPolicyInstalled(restMapper)
+	ok, err := IsEnvoyExtensionPolicyInstalled(restMapper)
 	if err != nil {
 		return false, err
 	}

@@ -19,8 +19,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/controllers"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
@@ -59,7 +58,7 @@ var _ = Describe("Limitador Cluster EnvoyFilter controller", func() {
 		// Check Limitador Status is Ready
 		Eventually(func() bool {
 			limitador := &limitadorv1alpha1.Limitador{}
-			err := testClient().Get(ctx, client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}, limitador)
+			err := testClient().Get(ctx, client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: kuadrantInstallationNS}, limitador)
 			if err != nil {
 				return false
 			}

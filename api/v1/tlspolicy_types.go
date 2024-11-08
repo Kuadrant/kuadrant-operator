@@ -28,9 +28,8 @@ import (
 
 	"github.com/kuadrant/policy-machinery/machinery"
 
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
 var (
@@ -176,27 +175,10 @@ func (p *TLSPolicy) Kind() string {
 	return TLSPolicyGroupKind.Kind
 }
 
-// Deprecated: kuadrant.Policy.
-func (p *TLSPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
-	return kuadrantgatewayapi.DirectPolicy
-}
-
-// Deprecated: kuadrant.Policy.
-func (p *TLSPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
-	return gatewayapiv1.Namespace(p.Namespace)
-}
-
-// Deprecated: kuadrant.Policy.
-func (p *TLSPolicy) GetRulesHostnames() []string {
-	return make([]string, 0)
-}
-
-// DEPRECATED: Use GetTargetRefs instead
 func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
 	return p.Spec.TargetRef.LocalPolicyTargetReference
 }
 
-// Deprecated: kuadrant.Policy.
 func (p *TLSPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
 	return &p.Status
 }
@@ -208,13 +190,6 @@ type TLSPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TLSPolicy `json:"items"`
-}
-
-// Deprecated: kuadrant.PolicyList.
-func (l *TLSPolicyList) GetItems() []kuadrant.Policy {
-	return utils.Map(l.Items, func(item TLSPolicy) kuadrant.Policy {
-		return &item
-	})
 }
 
 func init() {

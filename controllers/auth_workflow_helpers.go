@@ -17,7 +17,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 )
 
@@ -33,11 +33,6 @@ var (
 	ErrMissingAuthorino                  = fmt.Errorf("missing authorino object in the topology")
 	ErrMissingStateEffectiveAuthPolicies = fmt.Errorf("missing auth effective policies stored in the reconciliation state")
 )
-
-//+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies/finalizers,verbs=update
-//+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
 
 func GetAuthorinoFromTopology(topology *machinery.Topology) (*authorinooperatorv1beta1.Authorino, error) {
 	kuadrant, err := GetKuadrantFromTopology(topology)
@@ -68,13 +63,13 @@ func AuthClusterName(gatewayName string) string {
 
 func authClusterPatch(host string, port int) map[string]any {
 	return map[string]any{
-		"name":                   common.KuadrantAuthClusterName,
+		"name":                   kuadrant.KuadrantAuthClusterName,
 		"type":                   "STRICT_DNS",
 		"connect_timeout":        "1s",
 		"lb_policy":              "ROUND_ROBIN",
 		"http2_protocol_options": map[string]any{},
 		"load_assignment": map[string]any{
-			"cluster_name": common.KuadrantAuthClusterName,
+			"cluster_name": kuadrant.KuadrantAuthClusterName,
 			"endpoints": []map[string]any{
 				{
 					"lb_endpoints": []map[string]any{

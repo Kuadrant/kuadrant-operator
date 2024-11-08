@@ -21,9 +21,11 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
 )
+
+//+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
 
 // IstioAuthClusterReconciler reconciles Istio EnvoyFilter custom resources for auth
 type IstioAuthClusterReconciler struct {
@@ -76,7 +78,7 @@ func (r *IstioAuthClusterReconciler) Reconcile(ctx context.Context, _ []controll
 	}
 
 	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveAuthPolicies)), func(effectivePolicy EffectiveAuthPolicy, _ int) (*machinery.Gateway, bool) {
-		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
+		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
 		return gateway, gatewayClass.Spec.ControllerName == istioGatewayControllerName
 	}), func(gateway *machinery.Gateway) string {
 		return gateway.GetLocator()

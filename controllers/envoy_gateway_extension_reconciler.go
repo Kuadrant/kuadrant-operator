@@ -19,12 +19,14 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 )
+
+//+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoyextensionpolicies,verbs=get;list;watch;create;update;patch;delete
 
 // EnvoyGatewayExtensionReconciler reconciles Envoy Gateway EnvoyExtensionPolicy custom resources
 type EnvoyGatewayExtensionReconciler struct {
@@ -167,7 +169,7 @@ func (r *EnvoyGatewayExtensionReconciler) buildWasmConfigs(ctx context.Context, 
 		pathID := paths[i].Key
 		path := paths[i].Value
 
-		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(path)
+		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
 
 		// ignore if not an envoy gateway gateway
 		if gatewayClass.Spec.ControllerName != envoyGatewayGatewayControllerName {

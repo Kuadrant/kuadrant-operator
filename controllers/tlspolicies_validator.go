@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
 func NewTLSPoliciesValidator(isCertManagerInstalled bool) *TLSPoliciesValidator {

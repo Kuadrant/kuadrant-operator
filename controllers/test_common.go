@@ -72,20 +72,6 @@ func SetupKuadrantOperatorForTest(s *runtime.Scheme, cfg *rest.Config) {
 	)
 	Expect(err).ToNot(HaveOccurred())
 
-	kuadrantBaseReconciler := reconcilers.NewBaseReconciler(
-		mgr.GetClient(),
-		mgr.GetScheme(),
-		mgr.GetAPIReader(),
-		log.Log.WithName("kuadrant-controller"),
-	)
-
-	err = (&KuadrantReconciler{
-		BaseReconciler: kuadrantBaseReconciler,
-		RestMapper:     mgr.GetRESTMapper(),
-	}).SetupWithManager(mgr)
-
-	Expect(err).NotTo(HaveOccurred())
-
 	gatewayKuadrantBaseReconciler := reconcilers.NewBaseReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),

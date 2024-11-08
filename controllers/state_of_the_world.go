@@ -111,23 +111,6 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*corev1.ConfigMap]{}),
 			controller.FilterResourcesByLabel[*corev1.ConfigMap](fmt.Sprintf("%s=true", kuadrant.TopologyLabel)),
 		)),
-		// TODO: Move as boot options for Limitador and Authorino as there can be a possibility that the operators are not installed
-		controller.WithRunnable("limitador watcher", controller.Watch(
-			&limitadorv1alpha1.Limitador{},
-			kuadrantv1beta1.LimitadorsResource,
-			metav1.NamespaceAll,
-		)),
-		controller.WithRunnable("authorino watcher", controller.Watch(
-			&authorinooperatorv1beta1.Authorino{},
-			kuadrantv1beta1.AuthorinosResource,
-			metav1.NamespaceAll,
-		)),
-		controller.WithRunnable("authconfig watcher", controller.Watch(
-			&authorinov1beta3.AuthConfig{},
-			authorino.AuthConfigsResource,
-			metav1.NamespaceAll,
-			controller.FilterResourcesByLabel[*authorinov1beta3.AuthConfig](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
-		)),
 		controller.WithPolicyKinds(
 			kuadrantv1.DNSPolicyGroupKind,
 			kuadrantv1.TLSPolicyGroupKind,
@@ -137,15 +120,9 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		controller.WithObjectKinds(
 			kuadrantv1beta1.KuadrantGroupKind,
 			ConfigMapGroupKind,
-			kuadrantv1beta1.LimitadorGroupKind,
-			kuadrantv1beta1.AuthorinoGroupKind,
-			authorino.AuthConfigGroupKind,
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
-			kuadrantv1beta1.LinkKuadrantToLimitador,
-			kuadrantv1beta1.LinkKuadrantToAuthorino,
-			authorino.LinkHTTPRouteRuleToAuthConfig,
 		),
 	}
 
@@ -173,12 +150,14 @@ type BootOptionsBuilder struct {
 	client  *dynamic.DynamicClient
 
 	// Internal configurations
-	isGatewayAPIInstalled    bool
-	isEnvoyGatewayInstalled  bool
-	isIstioInstalled         bool
-	isCertManagerInstalled   bool
-	isConsolePluginInstalled bool
-	isDNSOperatorInstalled   bool
+	isGatewayAPIInstalled        bool
+	isEnvoyGatewayInstalled      bool
+	isIstioInstalled             bool
+	isCertManagerInstalled       bool
+	isConsolePluginInstalled     bool
+	isDNSOperatorInstalled       bool
+	isLimitadorOperatorInstalled bool
+	isAuthorinoOperatorInstalled bool
 }
 
 func (b *BootOptionsBuilder) getOptions() []controller.ControllerOption {
@@ -189,6 +168,8 @@ func (b *BootOptionsBuilder) getOptions() []controller.ControllerOption {
 	opts = append(opts, b.getCertManagerOptions()...)
 	opts = append(opts, b.getConsolePluginOptions()...)
 	opts = append(opts, b.getDNSOperatorOptions()...)
+	opts = append(opts, b.getLimitadorOperatorOptions()...)
+	opts = append(opts, b.getAuthorinoOperatorOptions()...)
 
 	return opts
 }
@@ -251,7 +232,6 @@ func (b *BootOptionsBuilder) getEnvoyGatewayOptions() []controller.ControllerOpt
 				envoygateway.LinkGatewayToEnvoyExtensionPolicy,
 			),
 		)
-		// TODO: add specific tasks to workflow
 	}
 
 	return opts
@@ -286,7 +266,6 @@ func (b *BootOptionsBuilder) getIstioOptions() []controller.ControllerOption {
 				istio.LinkGatewayToWasmPlugin,
 			),
 		)
-		// TODO: add istio specific tasks to workflow
 	}
 
 	return opts
@@ -326,7 +305,7 @@ func (b *BootOptionsBuilder) getConsolePluginOptions() []controller.ControllerOp
 func (b *BootOptionsBuilder) getDNSOperatorOptions() []controller.ControllerOption {
 	var opts []controller.ControllerOption
 	var err error
-	b.isDNSOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), kuadrantdnsv1alpha1.GroupVersion.Group, "DNSRecord", kuadrantdnsv1alpha1.GroupVersion.Version)
+	b.isDNSOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), DNSRecordGroupKind.Group, DNSRecordGroupKind.Kind, kuadrantdnsv1alpha1.GroupVersion.Version)
 	if err != nil || !b.isDNSOperatorInstalled {
 		b.logger.Info("dns operator is not installed, skipping related watches and reconcilers", "err", err)
 	} else {
@@ -347,6 +326,71 @@ func (b *BootOptionsBuilder) getDNSOperatorOptions() []controller.ControllerOpti
 	return opts
 }
 
+func (b *BootOptionsBuilder) getLimitadorOperatorOptions() []controller.ControllerOption {
+	var opts []controller.ControllerOption
+	var err error
+	b.isLimitadorOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), kuadrantv1beta1.LimitadorGroupKind.Group, kuadrantv1beta1.LimitadorGroupKind.Kind, limitadorv1alpha1.GroupVersion.Version)
+	if err != nil || !b.isLimitadorOperatorInstalled {
+		b.logger.Info("limitador operator is not installed, skipping related watches and reconcilers", "err", err)
+	} else {
+		opts = append(opts,
+			controller.WithRunnable("limitador watcher", controller.Watch(
+				&limitadorv1alpha1.Limitador{},
+				kuadrantv1beta1.LimitadorsResource,
+				metav1.NamespaceAll,
+			)),
+			controller.WithObjectKinds(
+				kuadrantv1beta1.LimitadorGroupKind,
+			),
+			controller.WithObjectLinks(
+				kuadrantv1beta1.LinkKuadrantToLimitador,
+			),
+		)
+	}
+
+	return opts
+}
+
+func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() []controller.ControllerOption {
+	var opts []controller.ControllerOption
+	var err error
+	b.isAuthorinoOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), kuadrantv1beta1.AuthorinoGroupKind.Group, kuadrantv1beta1.AuthorinoGroupKind.Kind, authorinooperatorv1beta1.GroupVersion.Version)
+	if err != nil || !b.isAuthorinoOperatorInstalled {
+		b.logger.Info("authorino operator is not installed, skipping related watches and reconcilers", "err", err)
+		return opts
+	}
+
+	b.isAuthorinoOperatorInstalled, err = utils.IsCRDInstalled(b.manager.GetRESTMapper(), authorino.AuthConfigGroupKind.Group, authorino.AuthConfigGroupKind.Kind, authorinov1beta3.GroupVersion.Version)
+	if err != nil || !b.isAuthorinoOperatorInstalled {
+		b.logger.Info("authorino operator is not installed, skipping related watches and reconcilers", "err", err)
+		return opts
+	}
+
+	opts = append(opts,
+		controller.WithRunnable("authorino watcher", controller.Watch(
+			&authorinooperatorv1beta1.Authorino{},
+			kuadrantv1beta1.AuthorinosResource,
+			metav1.NamespaceAll,
+		)),
+		controller.WithRunnable("authconfig watcher", controller.Watch(
+			&authorinov1beta3.AuthConfig{},
+			authorino.AuthConfigsResource,
+			metav1.NamespaceAll,
+			controller.FilterResourcesByLabel[*authorinov1beta3.AuthConfig](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
+		)),
+		controller.WithObjectKinds(
+			kuadrantv1beta1.AuthorinoGroupKind,
+			authorino.AuthConfigGroupKind,
+		),
+		controller.WithObjectLinks(
+			kuadrantv1beta1.LinkKuadrantToAuthorino,
+			authorino.LinkHTTPRouteRuleToAuthConfig,
+		),
+	)
+
+	return opts
+}
+
 func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
 		Precondition: initWorkflow(b.client).Run,
@@ -355,7 +399,7 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 			NewLimitadorReconciler(b.client).Subscription().Reconcile,
 			NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isDNSOperatorInstalled).Run,
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isCertManagerInstalled).Run,
-			NewDataPlanePoliciesWorkflow(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
+			NewDataPlanePoliciesWorkflow(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
 			NewKuadrantStatusUpdater(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Subscription().Reconcile,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isIstioInstalled, b.isGatewayAPIInstalled).Run,

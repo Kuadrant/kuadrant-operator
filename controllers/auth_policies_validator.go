@@ -15,7 +15,9 @@ import (
 	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
-type AuthPolicyValidator struct{}
+type AuthPolicyValidator struct {
+	isAuthorinoOperatorInstalled bool
+}
 
 // AuthPolicyValidator subscribes to events with potential to flip the validity of auth policies
 func (r *AuthPolicyValidator) Subscription() controller.Subscription {
@@ -41,6 +43,9 @@ func (r *AuthPolicyValidator) Validate(ctx context.Context, _ []controller.Resou
 	defer logger.V(1).Info("finished validating auth policies")
 
 	state.Store(StateAuthPolicyValid, lo.SliceToMap(policies, func(policy machinery.Policy) (string, error) {
+		if !r.isAuthorinoOperatorInstalled {
+			return policy.GetLocator(), kuadrant.NewErrDependencyNotInstalled("Authorino Operator")
+		}
 		var err error
 		if len(policy.GetTargetRefs()) > 0 && len(topology.Targetables().Children(policy)) == 0 {
 			ref := policy.GetTargetRefs()[0]

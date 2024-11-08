@@ -108,8 +108,7 @@ annotations:
           toys:
             rates:
               - limit: 50
-                duration: 1
-                unit: minute
+                window: 1m
     - apiVersion: kuadrant.io/v1
       kind: DNSPolicy
       metadata:

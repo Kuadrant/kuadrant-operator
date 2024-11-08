@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	corev1 "k8s.io/api/core/v1"
@@ -18,6 +19,7 @@ import (
 
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
 	"github.com/kuadrant/kuadrant-operator/pkg/authorino"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
 const (
@@ -25,12 +27,14 @@ const (
 )
 
 type KuadrantStatusUpdater struct {
-	Client     *dynamic.DynamicClient
-	HasGateway bool
+	Client                       *dynamic.DynamicClient
+	HasGateway                   bool
+	isLimitadorOperatorInstalled bool
+	isAuthorinoOperatorInstalled bool
 }
 
-func NewKuadrantStatusUpdater(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) *KuadrantStatusUpdater {
-	return &KuadrantStatusUpdater{Client: client, HasGateway: isIstioInstalled || isEnvoyGatewayInstalled}
+func NewKuadrantStatusUpdater(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled bool) *KuadrantStatusUpdater {
+	return &KuadrantStatusUpdater{Client: client, HasGateway: isIstioInstalled || isEnvoyGatewayInstalled, isLimitadorOperatorInstalled: isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled: isAuthorinoOperatorInstalled}
 }
 
 func (r *KuadrantStatusUpdater) Subscription() *controller.Subscription {
@@ -120,7 +124,14 @@ func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, log
 	if !r.HasGateway {
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = "GatewayAPIProviderNotFound"
-		cond.Message = "GatewayAPI provider not found"
+		cond.Message = kuadrant.NewErrDependencyNotInstalled("GatewayAPI provider").Error()
+		return cond
+	}
+
+	if !r.isLimitadorOperatorInstalled {
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "LimitadorAPIProviderNotFound"
+		cond.Message = kuadrant.NewErrDependencyNotInstalled("Limitador Operator").Error()
 		return cond
 	}
 
@@ -166,7 +177,7 @@ func checkAuthorinoAvailable(topology *machinery.Topology, logger logr.Logger) *
 		return ptr.To("authorino resoure not in topology")
 	}
 
-	readyCondition := authorino.FindAuthorinoStatusCondition(authorinoObj.Status.Conditions, "Ready")
+	readyCondition := authorino.FindAuthorinoStatusCondition(authorinoObj.Status.Conditions, limitadorv1alpha1.StatusConditionReady)
 	if readyCondition == nil {
 		return ptr.To("Ready condition not found")
 	}

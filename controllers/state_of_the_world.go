@@ -395,12 +395,10 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
 		Precondition: initWorkflow(b.client).Run,
 		Tasks: []controller.ReconcileFunc{
-			NewAuthorinoReconciler(b.client).Subscription().Reconcile,
-			NewLimitadorReconciler(b.client).Subscription().Reconcile,
 			NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isDNSOperatorInstalled).Run,
 			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isCertManagerInstalled).Run,
 			NewDataPlanePoliciesWorkflow(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
-			NewKuadrantStatusUpdater(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Subscription().Reconcile,
+			NewKuadrantStatusUpdater(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
 		},
 		Postcondition: finalStepsWorkflow(b.client, b.isIstioInstalled, b.isGatewayAPIInstalled).Run,
 	}
@@ -409,6 +407,17 @@ func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
 			NewConsolePluginReconciler(b.manager, operatorNamespace).Subscription().Reconcile,
 		)
+	}
+
+	if b.isLimitadorOperatorInstalled {
+		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
+			NewLimitadorReconciler(b.client).Subscription().Reconcile,
+		)
+	}
+
+	if b.isAuthorinoOperatorInstalled {
+		mainWorkflow.Tasks = append(mainWorkflow.Tasks,
+			NewAuthorinoReconciler(b.client).Subscription().Reconcile)
 	}
 
 	return mainWorkflow.Run

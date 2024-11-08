@@ -15,7 +15,9 @@ import (
 	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
-type RateLimitPolicyValidator struct{}
+type RateLimitPolicyValidator struct {
+	isLimitadorOperatorInstalled bool
+}
 
 // RateLimitPolicyValidator subscribes to events with potential to flip the validity of rate limit policies
 func (r *RateLimitPolicyValidator) Subscription() controller.Subscription {
@@ -41,6 +43,10 @@ func (r *RateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.
 	defer logger.V(1).Info("finished validating rate limit policies")
 
 	state.Store(StateRateLimitPolicyValid, lo.SliceToMap(policies, func(policy machinery.Policy) (string, error) {
+		if !r.isLimitadorOperatorInstalled {
+			return policy.GetLocator(), kuadrant.NewErrDependencyNotInstalled("Limitador Operator")
+		}
+
 		var err error
 		if len(policy.GetTargetRefs()) > 0 && len(topology.Targetables().Children(policy)) == 0 {
 			ref := policy.GetTargetRefs()[0]

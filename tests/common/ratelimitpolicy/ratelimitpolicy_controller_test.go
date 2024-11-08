@@ -20,7 +20,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -39,17 +39,17 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 		gateway       *gatewayapiv1.Gateway
 	)
 
-	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta3.RateLimitPolicy)) *kuadrantv1beta3.RateLimitPolicy {
-		policy := &kuadrantv1beta3.RateLimitPolicy{
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1.RateLimitPolicy)) *kuadrantv1.RateLimitPolicy {
+		policy := &kuadrantv1.RateLimitPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "RateLimitPolicy",
-				APIVersion: kuadrantv1beta3.GroupVersion.String(),
+				APIVersion: kuadrantv1.GroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      rlpName,
 				Namespace: testNamespace,
 			},
-			Spec: kuadrantv1beta3.RateLimitPolicySpec{
+			Spec: kuadrantv1.RateLimitPolicySpec{
 				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
 					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
@@ -57,13 +57,13 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 						Name:  gatewayapiv1.ObjectName(routeName),
 					},
 				},
-				Defaults: &kuadrantv1beta3.MergeableRateLimitPolicySpec{
-					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1beta3.Limit{
+				Defaults: &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
 							"l1": {
-								Rates: []kuadrantv1beta3.Rate{
+								Rates: []kuadrantv1.Rate{
 									{
-										Limit: 1, Window: kuadrantv1beta3.Duration("3m"),
+										Limit: 1, Window: kuadrantv1.Duration("3m"),
 									},
 								},
 							},
@@ -95,9 +95,9 @@ var _ = Describe("RateLimitPolicy controller (Serial)", Serial, func() {
 	Context("RLP Enforced Reasons", func() {
 		const limitadorDeploymentName = "limitador-limitador"
 
-		assertAcceptedCondTrueAndEnforcedCond := func(ctx context.Context, policy *kuadrantv1beta3.RateLimitPolicy, conditionStatus metav1.ConditionStatus, reason, message string) func(g Gomega) {
+		assertAcceptedCondTrueAndEnforcedCond := func(ctx context.Context, policy *kuadrantv1.RateLimitPolicy, conditionStatus metav1.ConditionStatus, reason, message string) func(g Gomega) {
 			return func(g Gomega) {
-				existingPolicy := &kuadrantv1beta3.RateLimitPolicy{}
+				existingPolicy := &kuadrantv1.RateLimitPolicy{}
 				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)).To(Succeed())
 				acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
 				g.Expect(acceptedCond).ToNot(BeNil())
@@ -162,17 +162,17 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		gateway       *gatewayapiv1.Gateway
 	)
 
-	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta3.RateLimitPolicy)) *kuadrantv1beta3.RateLimitPolicy {
-		policy := &kuadrantv1beta3.RateLimitPolicy{
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1.RateLimitPolicy)) *kuadrantv1.RateLimitPolicy {
+		policy := &kuadrantv1.RateLimitPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "RateLimitPolicy",
-				APIVersion: kuadrantv1beta3.GroupVersion.String(),
+				APIVersion: kuadrantv1.GroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      rlpName,
 				Namespace: testNamespace,
 			},
-			Spec: kuadrantv1beta3.RateLimitPolicySpec{
+			Spec: kuadrantv1.RateLimitPolicySpec{
 				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
 					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
@@ -180,13 +180,13 @@ var _ = Describe("RateLimitPolicy controller", func() {
 						Name:  gatewayapiv1.ObjectName(routeName),
 					},
 				},
-				Defaults: &kuadrantv1beta3.MergeableRateLimitPolicySpec{
-					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1beta3.Limit{
+				Defaults: &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
 							"l1": {
-								Rates: []kuadrantv1beta3.Rate{
+								Rates: []kuadrantv1.Rate{
 									{
-										Limit: 1, Window: kuadrantv1beta3.Duration("3m"),
+										Limit: 1, Window: kuadrantv1.Duration("3m"),
 									},
 								},
 							},
@@ -283,16 +283,16 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
 
 			// create ratelimitpolicy
-			rlp := &kuadrantv1beta3.RateLimitPolicy{
+			rlp := &kuadrantv1.RateLimitPolicy{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "RateLimitPolicy",
-					APIVersion: kuadrantv1beta3.GroupVersion.String(),
+					APIVersion: kuadrantv1.GroupVersion.String(),
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      rlpName,
 					Namespace: testNamespace,
 				},
-				Spec: kuadrantv1beta3.RateLimitPolicySpec{
+				Spec: kuadrantv1.RateLimitPolicySpec{
 					TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
 						LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
 							Group: gatewayapiv1.Group("gateway.networking.k8s.io"),
@@ -300,13 +300,13 @@ var _ = Describe("RateLimitPolicy controller", func() {
 							Name:  gatewayapiv1.ObjectName(TestGatewayName),
 						},
 					},
-					Defaults: &kuadrantv1beta3.MergeableRateLimitPolicySpec{
-						RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-							Limits: map[string]kuadrantv1beta3.Limit{
+					Defaults: &kuadrantv1.MergeableRateLimitPolicySpec{
+						RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+							Limits: map[string]kuadrantv1.Limit{
 								"l1": {
-									Rates: []kuadrantv1beta3.Rate{
+									Rates: []kuadrantv1.Rate{
 										{
-											Limit: 1, Window: kuadrantv1beta3.Duration("3m"),
+											Limit: 1, Window: kuadrantv1.Duration("3m"),
 										},
 									},
 								},
@@ -348,7 +348,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 		It("Creates all the resources for a basic Gateway and RateLimitPolicy when missing a HTTPRoute attached to the Gateway", func(ctx SpecContext) {
 			// create ratelimitpolicy
-			rlp := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			rlp := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(TestGatewayName)
 			})
@@ -377,8 +377,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 	Context("RLP Defaults", func() {
 		Describe("Route policy defaults taking precedence over Gateway policy defaults", func() {
 			var (
-				gwRLP    *kuadrantv1beta3.RateLimitPolicy
-				routeRLP *kuadrantv1beta3.RateLimitPolicy
+				gwRLP    *kuadrantv1.RateLimitPolicy
+				routeRLP *kuadrantv1.RateLimitPolicy
 			)
 
 			BeforeEach(func(ctx SpecContext) {
@@ -391,7 +391,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
 
 				// create GW RLP
-				gwRLP = policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+				gwRLP = policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 					policy.Spec.TargetRef.Kind = "Gateway"
 					policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(TestGatewayName)
 				})
@@ -400,13 +400,13 @@ var _ = Describe("RateLimitPolicy controller", func() {
 				Eventually(assertPolicyIsAcceptedAndEnforced(ctx, gwRLPKey)).WithContext(ctx).Should(BeTrue())
 
 				// Create HTTPRoute RLP with new default limits
-				routeRLP = policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+				routeRLP = policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 					policy.Name = "httproute-rlp"
-					policy.Spec.Proper().Limits = map[string]kuadrantv1beta3.Limit{
+					policy.Spec.Proper().Limits = map[string]kuadrantv1.Limit{
 						"l1": {
-							Rates: []kuadrantv1beta3.Rate{
+							Rates: []kuadrantv1.Rate{
 								{
-									Limit: 10, Window: kuadrantv1beta3.Duration("5s"),
+									Limit: 10, Window: kuadrantv1.Duration("5s"),
 								},
 							},
 						},
@@ -444,7 +444,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		})
 
 		It("Explicit defaults - no underlying routes to enforce policy", func(ctx SpecContext) {
-			gwRLP := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			gwRLP := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(TestGatewayName)
 			})
@@ -456,7 +456,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		}, testTimeOut)
 
 		It("Implicit defaults - no underlying routes to enforce policy", func(ctx SpecContext) {
-			gwRLP := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			gwRLP := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(TestGatewayName)
 				policy.Spec.RateLimitPolicySpecProper = *policy.Spec.Defaults.RateLimitPolicySpecProper.DeepCopy()
@@ -472,8 +472,8 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 	Context("RLP Overrides", func() {
 		var httpRoute *gatewayapiv1.HTTPRoute
-		var gwRLP *kuadrantv1beta3.RateLimitPolicy
-		var routeRLP *kuadrantv1beta3.RateLimitPolicy
+		var gwRLP *kuadrantv1.RateLimitPolicy
+		var routeRLP *kuadrantv1.RateLimitPolicy
 
 		BeforeEach(func(ctx SpecContext) {
 			// create httproute
@@ -481,20 +481,20 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Expect(k8sClient.Create(ctx, httpRoute)).To(Succeed())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(httpRoute))).WithContext(ctx).Should(BeTrue())
 
-			gwRLP = policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			gwRLP = policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(TestGatewayName)
 				policy.Spec.Overrides = policy.Spec.Defaults.DeepCopy()
 				policy.Spec.Defaults = nil
 			})
 
-			routeRLP = policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			routeRLP = policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Name = "httproute-rlp"
-				policy.Spec.Proper().Limits = map[string]kuadrantv1beta3.Limit{
+				policy.Spec.Proper().Limits = map[string]kuadrantv1.Limit{
 					"route": {
-						Rates: []kuadrantv1beta3.Rate{
+						Rates: []kuadrantv1.Rate{
 							{
-								Limit: 10, Window: kuadrantv1beta3.Duration("5s"),
+								Limit: 10, Window: kuadrantv1.Duration("5s"),
 							},
 						},
 					},
@@ -570,7 +570,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			Eventually(assertPolicyIsAcceptedAndEnforced(ctx, routeRLPKey)).WithContext(ctx).Should(BeTrue())
 
 			// Create GW RLP with defaults
-			gwRLP = policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			gwRLP = policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(TestGatewayName)
 			})
@@ -678,10 +678,10 @@ var _ = Describe("RateLimitPolicy controller", func() {
 	})
 
 	Context("RLP accepted condition reasons", func() {
-		assertAcceptedConditionTrue := func(rlp *kuadrantv1beta3.RateLimitPolicy) func() bool {
+		assertAcceptedConditionTrue := func(rlp *kuadrantv1.RateLimitPolicy) func() bool {
 			return func() bool {
 				rlpKey := client.ObjectKeyFromObject(rlp)
-				existingRLP := &kuadrantv1beta3.RateLimitPolicy{}
+				existingRLP := &kuadrantv1.RateLimitPolicy{}
 				err := k8sClient.Get(context.Background(), rlpKey, existingRLP)
 				if err != nil {
 					return false
@@ -691,10 +691,10 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			}
 		}
 
-		assertAcceptedConditionFalse := func(ctx context.Context, rlp *kuadrantv1beta3.RateLimitPolicy, reason, message string) func(g Gomega) {
+		assertAcceptedConditionFalse := func(ctx context.Context, rlp *kuadrantv1.RateLimitPolicy, reason, message string) func(g Gomega) {
 			return func(g Gomega) {
 				rlpKey := client.ObjectKeyFromObject(rlp)
-				existingRLP := &kuadrantv1beta3.RateLimitPolicy{}
+				existingRLP := &kuadrantv1.RateLimitPolicy{}
 				g.Expect(k8sClient.Get(ctx, rlpKey, existingRLP)).To(Succeed())
 
 				cond := meta.FindStatusCondition(existingRLP.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
@@ -725,7 +725,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			Eventually(assertAcceptedConditionTrue(rlp), time.Minute, 5*time.Second).Should(BeTrue())
 
-			rlp2 := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			rlp2 := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Name = "conflicting-rlp"
 			})
 			Expect(k8sClient.Create(ctx, rlp2)).To(Succeed())
@@ -781,18 +781,18 @@ var _ = Describe("RateLimitPolicy controller", func() {
 		})
 
 		It("It defines route policy limits with gateway policy overrides", func(ctx SpecContext) {
-			rlpGatewayA := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			rlpGatewayA := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.ObjectMeta.Name = gatewayAName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gatewayAName)
 				policy.Spec.Defaults = nil
-				policy.Spec.Overrides = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
-					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1beta3.Limit{
+				policy.Spec.Overrides = &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
 							"gw-a-1000rps": {
-								Rates: []kuadrantv1beta3.Rate{
+								Rates: []kuadrantv1.Rate{
 									{
-										Limit: 1000, Window: kuadrantv1beta3.Duration("1s"),
+										Limit: 1000, Window: kuadrantv1.Duration("1s"),
 									},
 								},
 							},
@@ -803,18 +803,18 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			err := k8sClient.Create(ctx, rlpGatewayA)
 			Expect(err).ToNot(HaveOccurred())
 
-			rlpGatewayB := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			rlpGatewayB := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.ObjectMeta.Name = gatewayBName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(gatewayBName)
 				policy.Spec.Defaults = nil
-				policy.Spec.Overrides = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
-					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1beta3.Limit{
+				policy.Spec.Overrides = &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
 							"gw-b-100rps": {
-								Rates: []kuadrantv1beta3.Rate{
+								Rates: []kuadrantv1.Rate{
 									{
-										Limit: 100, Window: kuadrantv1beta3.Duration("1s"),
+										Limit: 100, Window: kuadrantv1.Duration("1s"),
 									},
 								},
 							},
@@ -825,15 +825,15 @@ var _ = Describe("RateLimitPolicy controller", func() {
 			err = k8sClient.Create(ctx, rlpGatewayB)
 			Expect(err).ToNot(HaveOccurred())
 
-			rlpTargetedRoute := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			rlpTargetedRoute := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.ObjectMeta.Name = targetedRouteName
 				policy.Spec.TargetRef.Kind = "HTTPRoute"
 				policy.Spec.TargetRef.Name = gatewayapiv1.ObjectName(targetedRouteName)
-				policy.Spec.Proper().Limits = map[string]kuadrantv1beta3.Limit{
+				policy.Spec.Proper().Limits = map[string]kuadrantv1.Limit{
 					"route-10rps": {
-						Rates: []kuadrantv1beta3.Rate{
+						Rates: []kuadrantv1.Rate{
 							{
-								Limit: 10, Window: kuadrantv1beta3.Duration("1s"),
+								Limit: 10, Window: kuadrantv1.Duration("1s"),
 							},
 						},
 					},
@@ -896,13 +896,13 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
-	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta3.RateLimitPolicy)) *kuadrantv1beta3.RateLimitPolicy {
-		policy := &kuadrantv1beta3.RateLimitPolicy{
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1.RateLimitPolicy)) *kuadrantv1.RateLimitPolicy {
+		policy := &kuadrantv1.RateLimitPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "my-policy",
 				Namespace: testNamespace,
 			},
-			Spec: kuadrantv1beta3.RateLimitPolicySpec{
+			Spec: kuadrantv1.RateLimitPolicySpec{
 				TargetRef: gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
 					LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
 						Group: gatewayapiv1.GroupName,
@@ -927,7 +927,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 		}, testTimeOut)
 
 		It("Valid policy targeting Gateway", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
 			})
 			err := k8sClient.Create(ctx, policy)
@@ -935,7 +935,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 		}, testTimeOut)
 
 		It("Invalid Target Ref Group", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Spec.TargetRef.Group = "not-gateway.networking.k8s.io"
 			})
 			err := k8sClient.Create(ctx, policy)
@@ -944,7 +944,7 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 		}, testTimeOut)
 
 		It("Invalid Target Ref Kind", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "TCPRoute"
 			})
 			err := k8sClient.Create(ctx, policy)
@@ -955,10 +955,10 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 
 	Context("Defaults / Override validation", func() {
 		It("Valid - only implicit defaults defined", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
-				policy.Spec.Limits = map[string]kuadrantv1beta3.Limit{
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
+				policy.Spec.Limits = map[string]kuadrantv1.Limit{
 					"implicit": {
-						Rates: []kuadrantv1beta3.Rate{{Limit: 2, Window: kuadrantv1beta3.Duration("20s")}},
+						Rates: []kuadrantv1.Rate{{Limit: 2, Window: kuadrantv1.Duration("20s")}},
 					},
 				}
 			})
@@ -966,12 +966,12 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 		}, testTimeOut)
 
 		It("Valid - only explicit defaults defined", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
-				policy.Spec.Defaults = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
-					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1beta3.Limit{
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
+				policy.Spec.Defaults = &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
 							"explicit": {
-								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Window: kuadrantv1beta3.Duration("10s")}},
+								Rates: []kuadrantv1.Rate{{Limit: 1, Window: kuadrantv1.Duration("10s")}},
 							},
 						},
 					},
@@ -981,19 +981,19 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 		}, testTimeOut)
 
 		It("Invalid - implicit and explicit defaults are mutually exclusive", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
-				policy.Spec.Defaults = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
-					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1beta3.Limit{
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
+				policy.Spec.Defaults = &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
 							"explicit": {
-								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Window: kuadrantv1beta3.Duration("10s")}},
+								Rates: []kuadrantv1.Rate{{Limit: 1, Window: kuadrantv1.Duration("10s")}},
 							},
 						},
 					},
 				}
-				policy.Spec.Limits = map[string]kuadrantv1beta3.Limit{
+				policy.Spec.Limits = map[string]kuadrantv1.Limit{
 					"implicit": {
-						Rates: []kuadrantv1beta3.Rate{{Limit: 2, Window: kuadrantv1beta3.Duration("20s")}},
+						Rates: []kuadrantv1.Rate{{Limit: 2, Window: kuadrantv1.Duration("20s")}},
 					},
 				}
 			})
@@ -1003,21 +1003,21 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 		}, testTimeOut)
 
 		It("Invalid - explicit default and override defined", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
-				policy.Spec.Defaults = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
-					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1beta3.Limit{
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
+				policy.Spec.Defaults = &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
 							"implicit": {
-								Rates: []kuadrantv1beta3.Rate{{Limit: 2, Window: kuadrantv1beta3.Duration("20s")}},
+								Rates: []kuadrantv1.Rate{{Limit: 2, Window: kuadrantv1.Duration("20s")}},
 							},
 						},
 					},
 				}
-				policy.Spec.Overrides = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
-					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1beta3.Limit{
+				policy.Spec.Overrides = &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
 							"explicit": {
-								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Window: kuadrantv1beta3.Duration("10s")}},
+								Rates: []kuadrantv1.Rate{{Limit: 1, Window: kuadrantv1.Duration("10s")}},
 							},
 						},
 					},
@@ -1029,17 +1029,17 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 		}, testTimeOut)
 
 		It("Invalid - implicit default and override defined", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
-				policy.Spec.Limits = map[string]kuadrantv1beta3.Limit{
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
+				policy.Spec.Limits = map[string]kuadrantv1.Limit{
 					"implicit": {
-						Rates: []kuadrantv1beta3.Rate{{Limit: 2, Window: kuadrantv1beta3.Duration("20s")}},
+						Rates: []kuadrantv1.Rate{{Limit: 2, Window: kuadrantv1.Duration("20s")}},
 					},
 				}
-				policy.Spec.Overrides = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
-					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1beta3.Limit{
+				policy.Spec.Overrides = &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
 							"overrides": {
-								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Window: kuadrantv1beta3.Duration("10s")}},
+								Rates: []kuadrantv1.Rate{{Limit: 1, Window: kuadrantv1.Duration("10s")}},
 							},
 						},
 					},
@@ -1051,13 +1051,13 @@ var _ = Describe("RateLimitPolicy CEL Validations", func() {
 		}, testTimeOut)
 
 		It("Valid - policy override targeting Gateway", func(ctx SpecContext) {
-			policy := policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			policy := policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Spec.TargetRef.Kind = "Gateway"
-				policy.Spec.Overrides = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
-					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1beta3.Limit{
+				policy.Spec.Overrides = &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
 							"override": {
-								Rates: []kuadrantv1beta3.Rate{{Limit: 1, Window: kuadrantv1beta3.Duration("10s")}},
+								Rates: []kuadrantv1.Rate{{Limit: 1, Window: kuadrantv1.Duration("10s")}},
 							},
 						},
 					},

@@ -141,7 +141,7 @@ Create AuthPolicies to enforce the following auth rules:
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: toystore-authn
@@ -163,7 +163,7 @@ spec:
             authorizationHeader:
               prefix: APIKEY
 ---
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: toystore-admins
@@ -242,7 +242,7 @@ Create the policy:
 
 ```sh
 kubectl -n gateway-system apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: gw-auth

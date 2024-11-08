@@ -201,7 +201,7 @@ We have a secure communication in place. However, there is nothing limiting user
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
 metadata:
   name: infra-ratelimit
@@ -237,7 +237,7 @@ Communication is secured and we have some protection for our infrastructure, but
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: deny-all
@@ -406,7 +406,7 @@ Now, we will override the AuthPolicy to start accepting the API keys:
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: toystore
@@ -442,7 +442,7 @@ The gateway limits are a good set of limits for the general case, but as the dev
 
 ```sh
 kubectl --context $KUBECTL_CONTEXT apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
 metadata:
   name: toystore

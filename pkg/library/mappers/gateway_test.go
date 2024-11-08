@@ -18,7 +18,7 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -38,7 +38,7 @@ func TestNewGatewayEventMapper(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = kuadrantv1beta3.AddToScheme(testScheme)
+	err = kuadrantv1.AddToScheme(testScheme)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,16 +114,16 @@ type rateLimitPolicyType struct{}
 
 func (r rateLimitPolicyType) GetGVK() schema.GroupVersionKind {
 	return schema.GroupVersionKind{
-		Group:   kuadrantv1beta3.GroupVersion.Group,
-		Version: kuadrantv1beta3.GroupVersion.Version,
+		Group:   kuadrantv1.GroupVersion.Group,
+		Version: kuadrantv1.GroupVersion.Version,
 		Kind:    "RateLimitPolicy",
 	}
 }
 func (r rateLimitPolicyType) GetInstance() client.Object {
-	return &kuadrantv1beta3.RateLimitPolicy{
+	return &kuadrantv1.RateLimitPolicy{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       kuadrantv1beta3.RateLimitPolicyGroupKind.Kind,
-			APIVersion: kuadrantv1beta3.GroupVersion.String(),
+			Kind:       kuadrantv1.RateLimitPolicyGroupKind.Kind,
+			APIVersion: kuadrantv1.GroupVersion.String(),
 		},
 	}
 }
@@ -137,10 +137,10 @@ func (r rateLimitPolicyType) DirectReferenceAnnotationName() string {
 }
 
 func (r rateLimitPolicyType) GetList(ctx context.Context, cl client.Client, listOpts ...client.ListOption) ([]kuadrantgatewayapi.Policy, error) {
-	rlpList := &kuadrantv1beta3.RateLimitPolicyList{}
+	rlpList := &kuadrantv1.RateLimitPolicyList{}
 	err := cl.List(ctx, rlpList, listOpts...)
 	if err != nil {
 		return nil, err
 	}
-	return utils.Map(rlpList.Items, func(p kuadrantv1beta3.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p }), nil
+	return utils.Map(rlpList.Items, func(p kuadrantv1.RateLimitPolicy) kuadrantgatewayapi.Policy { return &p }), nil
 }

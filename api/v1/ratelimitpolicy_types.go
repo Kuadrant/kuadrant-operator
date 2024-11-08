@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta3
+package v1
 
 import (
 	"time"
@@ -25,7 +25,6 @@ import (
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
@@ -38,8 +37,8 @@ const (
 )
 
 var (
-	RateLimitPolicyGroupKind  = schema.GroupKind{Group: SchemeGroupVersion.Group, Kind: "RateLimitPolicy"}
-	RateLimitPoliciesResource = SchemeGroupVersion.WithResource("ratelimitpolicies")
+	RateLimitPolicyGroupKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "RateLimitPolicy"}
+	RateLimitPoliciesResource = GroupVersion.WithResource("ratelimitpolicies")
 	// Top level predicate rules key starting with # to prevent conflict with limit names
 	// TODO(eastizle): this coupling between limit names and rule IDs is a bad smell. Merging implementation should be enhanced.
 	RulesKeyTopLevelPredicates = "###_TOP_LEVEL_PREDICATES_###"
@@ -94,12 +93,12 @@ func (p *RateLimitPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
 
 func (p *RateLimitPolicy) GetMergeStrategy() machinery.MergeStrategy {
 	if spec := p.Spec.Defaults; spec != nil {
-		return kuadrantv1.DefaultsMergeStrategy(spec.Strategy)
+		return DefaultsMergeStrategy(spec.Strategy)
 	}
 	if spec := p.Spec.Overrides; spec != nil {
-		return kuadrantv1.OverridesMergeStrategy(spec.Strategy)
+		return OverridesMergeStrategy(spec.Strategy)
 	}
-	return kuadrantv1.AtomicDefaultsMergeStrategy
+	return AtomicDefaultsMergeStrategy
 }
 
 func (p *RateLimitPolicy) Merge(other machinery.Policy) machinery.Policy {
@@ -110,30 +109,30 @@ func (p *RateLimitPolicy) Merge(other machinery.Policy) machinery.Policy {
 	return source.GetMergeStrategy()(source, p)
 }
 
-var _ kuadrantv1.MergeablePolicy = &RateLimitPolicy{}
+var _ MergeablePolicy = &RateLimitPolicy{}
 
 func (p *RateLimitPolicy) Empty() bool {
 	return len(p.Spec.Proper().Limits) == 0
 }
 
-func (p *RateLimitPolicy) Rules() map[string]kuadrantv1.MergeableRule {
-	rules := make(map[string]kuadrantv1.MergeableRule)
+func (p *RateLimitPolicy) Rules() map[string]MergeableRule {
+	rules := make(map[string]MergeableRule)
 	policyLocator := p.GetLocator()
 	spec := p.Spec.Proper()
 
 	if whenPredicates := spec.MergeableWhenPredicates; len(whenPredicates.Predicates) > 0 {
-		rules[RulesKeyTopLevelPredicates] = kuadrantv1.NewMergeableRule(&whenPredicates, policyLocator)
+		rules[RulesKeyTopLevelPredicates] = NewMergeableRule(&whenPredicates, policyLocator)
 	}
 
 	for ruleID := range spec.Limits {
 		limit := spec.Limits[ruleID]
-		rules[ruleID] = kuadrantv1.NewMergeableRule(&limit, policyLocator)
+		rules[ruleID] = NewMergeableRule(&limit, policyLocator)
 	}
 
 	return rules
 }
 
-func (p *RateLimitPolicy) SetRules(rules map[string]kuadrantv1.MergeableRule) {
+func (p *RateLimitPolicy) SetRules(rules map[string]MergeableRule) {
 	// clear all rules of the policy before setting new ones
 	p.Spec.Proper().Limits = nil
 	p.Spec.Proper().Predicates = nil
@@ -273,7 +272,7 @@ func (l Limit) CountersAsStringList() []string {
 	return utils.Map(l.Counters, func(counter Counter) string { return string(counter.Expression) })
 }
 
-var _ kuadrantv1.MergeableRule = &Limit{}
+var _ MergeableRule = &Limit{}
 
 func (l *Limit) GetSpec() any {
 	return l
@@ -283,7 +282,7 @@ func (l *Limit) GetSource() string {
 	return l.Source
 }
 
-func (l *Limit) WithSource(source string) kuadrantv1.MergeableRule {
+func (l *Limit) WithSource(source string) MergeableRule {
 	l.Source = source
 	return l
 }

@@ -16,7 +16,6 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/ratelimit"
@@ -35,7 +34,7 @@ func (r *LimitadorLimitsReconciler) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
-			{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1beta1.LimitadorGroupKind},
 		},
 	}
@@ -104,7 +103,7 @@ func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 
 		limitRules := lo.Filter(lo.Entries(effectivePolicy.Spec.Rules()),
 			func(r lo.Entry[string, kuadrantv1.MergeableRule], _ int) bool {
-				return r.Key != kuadrantv1beta3.RulesKeyTopLevelPredicates
+				return r.Key != kuadrantv1.RulesKeyTopLevelPredicates
 			},
 		)
 
@@ -119,8 +118,8 @@ func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 				continue
 			}
 			limitIdentifier := LimitNameToLimitadorIdentifier(k8stypes.NamespacedName{Name: policy.GetName(), Namespace: policy.GetNamespace()}, limitKey)
-			limit := mergeableLimit.GetSpec().(*kuadrantv1beta3.Limit)
-			rateLimits := lo.Map(limit.Rates, func(rate kuadrantv1beta3.Rate, _ int) limitadorv1alpha1.RateLimit {
+			limit := mergeableLimit.GetSpec().(*kuadrantv1.Limit)
+			rateLimits := lo.Map(limit.Rates, func(rate kuadrantv1.Rate, _ int) limitadorv1alpha1.RateLimit {
 				maxValue, seconds := rate.ToSeconds()
 				return limitadorv1alpha1.RateLimit{
 					Namespace:  limitsNamespace,

@@ -38,7 +38,7 @@ return an OVER_LIMIT response if any of them are over limit.
 
 ```yaml
 ---
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
 metadata:
   name: my-rate-limit-policy

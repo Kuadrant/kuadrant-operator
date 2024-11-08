@@ -19,8 +19,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/controllers"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	"github.com/kuadrant/kuadrant-operator/tests"
@@ -52,17 +52,17 @@ var _ = Describe("limitador cluster controller", func() {
 		tests.DeleteNamespace(ctx, testClient(), testNamespace)
 	}, afterEachTimeOut)
 
-	policyFactory := func(mutateFns ...func(policy *kuadrantv1beta3.RateLimitPolicy)) *kuadrantv1beta3.RateLimitPolicy {
-		policy := &kuadrantv1beta3.RateLimitPolicy{
+	policyFactory := func(mutateFns ...func(policy *kuadrantv1.RateLimitPolicy)) *kuadrantv1.RateLimitPolicy {
+		policy := &kuadrantv1.RateLimitPolicy{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "RateLimitPolicy",
-				APIVersion: kuadrantv1beta3.GroupVersion.String(),
+				APIVersion: kuadrantv1.GroupVersion.String(),
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "rlp",
 				Namespace: testNamespace,
 			},
-			Spec: kuadrantv1beta3.RateLimitPolicySpec{},
+			Spec: kuadrantv1.RateLimitPolicySpec{},
 		}
 
 		for _, mutateFn := range mutateFns {
@@ -88,7 +88,7 @@ var _ = Describe("limitador cluster controller", func() {
 	Context("RateLimitPolicy attached to the gateway", func() {
 
 		var (
-			gwPolicy *kuadrantv1beta3.RateLimitPolicy
+			gwPolicy *kuadrantv1.RateLimitPolicy
 			gwRoute  *gatewayapiv1.HTTPRoute
 		)
 
@@ -98,18 +98,18 @@ var _ = Describe("limitador cluster controller", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Eventually(tests.RouteIsAccepted(ctx, testClient(), client.ObjectKeyFromObject(gwRoute))).WithContext(ctx).Should(BeTrue())
 
-			gwPolicy = policyFactory(func(policy *kuadrantv1beta3.RateLimitPolicy) {
+			gwPolicy = policyFactory(func(policy *kuadrantv1.RateLimitPolicy) {
 				policy.Name = "gw"
 				policy.Spec.TargetRef.Group = gatewayapiv1.GroupName
 				policy.Spec.TargetRef.Kind = "Gateway"
 				policy.Spec.TargetRef.Name = TestGatewayName
-				policy.Spec.Defaults = &kuadrantv1beta3.MergeableRateLimitPolicySpec{
-					RateLimitPolicySpecProper: kuadrantv1beta3.RateLimitPolicySpecProper{
-						Limits: map[string]kuadrantv1beta3.Limit{
+				policy.Spec.Defaults = &kuadrantv1.MergeableRateLimitPolicySpec{
+					RateLimitPolicySpecProper: kuadrantv1.RateLimitPolicySpecProper{
+						Limits: map[string]kuadrantv1.Limit{
 							"l1": {
-								Rates: []kuadrantv1beta3.Rate{
+								Rates: []kuadrantv1.Rate{
 									{
-										Limit: 1, Window: kuadrantv1beta3.Duration("3m"),
+										Limit: 1, Window: kuadrantv1.Duration("3m"),
 									},
 								},
 							},

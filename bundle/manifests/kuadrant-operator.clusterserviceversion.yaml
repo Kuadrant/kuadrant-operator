@@ -6,6 +6,34 @@ metadata:
       [
         {
           "apiVersion": "kuadrant.io/v1",
+          "kind": "AuthPolicy",
+          "metadata": {
+            "name": "toystore"
+          },
+          "spec": {
+            "rules": {
+              "authentication": {
+                "apikey": {
+                  "apiKey": {
+                    "selector": {}
+                  }
+                },
+                "credentials": {
+                  "authorizationHeader": {
+                    "prefix": "APIKEY"
+                  }
+                }
+              }
+            },
+            "targetRef": {
+              "group": "gateway.networking.k8s.io",
+              "kind": "HTTPRoute",
+              "name": "toystore"
+            }
+          }
+        },
+        {
+          "apiVersion": "kuadrant.io/v1",
           "kind": "DNSPolicy",
           "metadata": {
             "name": "dnspolicy-sample"
@@ -19,6 +47,30 @@ metadata:
               "group": "gateway.networking.k8s.io",
               "kind": "Gateway",
               "name": "example-gateway"
+            }
+          }
+        },
+        {
+          "apiVersion": "kuadrant.io/v1",
+          "kind": "RateLimitPolicy",
+          "metadata": {
+            "name": "toystore"
+          },
+          "spec": {
+            "limits": {
+              "toys": {
+                "rates": [
+                  {
+                    "limit": 50,
+                    "window": "1m"
+                  }
+                ]
+              }
+            },
+            "targetRef": {
+              "group": "gateway.networking.k8s.io",
+              "kind": "HTTPRoute",
+              "name": "toystore"
             }
           }
         },
@@ -48,64 +100,12 @@ metadata:
             "name": "kuadrant-sample"
           },
           "spec": {}
-        },
-        {
-          "apiVersion": "kuadrant.io/v1beta3",
-          "kind": "AuthPolicy",
-          "metadata": {
-            "name": "toystore"
-          },
-          "spec": {
-            "rules": {
-              "authentication": {
-                "apikey": {
-                  "apiKey": {
-                    "selector": {}
-                  }
-                },
-                "credentials": {
-                  "authorizationHeader": {
-                    "prefix": "APIKEY"
-                  }
-                }
-              }
-            },
-            "targetRef": {
-              "group": "gateway.networking.k8s.io",
-              "kind": "HTTPRoute",
-              "name": "toystore"
-            }
-          }
-        },
-        {
-          "apiVersion": "kuadrant.io/v1beta3",
-          "kind": "RateLimitPolicy",
-          "metadata": {
-            "name": "toystore"
-          },
-          "spec": {
-            "limits": {
-              "toys": {
-                "rates": [
-                  {
-                    "limit": 50,
-                    "window": "1m"
-                  }
-                ]
-              }
-            },
-            "targetRef": {
-              "group": "gateway.networking.k8s.io",
-              "kind": "HTTPRoute",
-              "name": "toystore"
-            }
-          }
         }
       ]
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2024-11-07T16:48:25Z"
+    createdAt: "2024-11-08T14:46:34Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
@@ -117,9 +117,12 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - kind: AuthPolicy
+    - description: AuthPolicy enables authentication and authorization for service
+        workloads in a Gateway API network
+      displayName: AuthPolicy
+      kind: AuthPolicy
       name: authpolicies.kuadrant.io
-      version: v1beta3
+      version: v1
     - description: DNSPolicy configures how North-South based traffic should be balanced
         and reach the gateways
       displayName: DNSPolicy
@@ -137,7 +140,7 @@ spec:
       displayName: RateLimitPolicy
       kind: RateLimitPolicy
       name: ratelimitpolicies.kuadrant.io
-      version: v1beta3
+      version: v1
     - description: TLSPolicy provides tls for gateway listeners by managing the lifecycle
         of tls certificates
       displayName: TLSPolicy

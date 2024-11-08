@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 )
 
@@ -24,8 +24,8 @@ func (r *RateLimitPolicyValidator) Subscription() controller.Subscription {
 		Events: []controller.ResourceEventMatcher{
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
-			{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind, EventType: ptr.To(controller.CreateEvent)},
-			{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind, EventType: ptr.To(controller.UpdateEvent)},
+			{Kind: &kuadrantv1.RateLimitPolicyGroupKind, EventType: ptr.To(controller.CreateEvent)},
+			{Kind: &kuadrantv1.RateLimitPolicyGroupKind, EventType: ptr.To(controller.UpdateEvent)},
 		},
 	}
 }
@@ -34,7 +34,7 @@ func (r *RateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.
 	logger := controller.LoggerFromContext(ctx).WithName("RateLimitPolicyValidator")
 
 	policies := topology.Policies().Items(func(o machinery.Object) bool {
-		return o.GroupVersionKind().GroupKind() == kuadrantv1beta3.RateLimitPolicyGroupKind
+		return o.GroupVersionKind().GroupKind() == kuadrantv1.RateLimitPolicyGroupKind
 	})
 
 	logger.V(1).Info("validating rate limit policies", "policies", len(policies))
@@ -51,7 +51,7 @@ func (r *RateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.
 			case machinery.HTTPRouteGroupKind.Kind:
 				res = controller.HTTPRoutesResource.GroupResource()
 			}
-			err = kuadrant.NewErrPolicyTargetNotFound(kuadrantv1beta3.RateLimitPolicyGroupKind.Kind, ref, apierrors.NewNotFound(res, ref.GetName()))
+			err = kuadrant.NewErrPolicyTargetNotFound(kuadrantv1.RateLimitPolicyGroupKind.Kind, ref, apierrors.NewNotFound(res, ref.GetName()))
 		}
 		return policy.GetLocator(), err
 	}))

@@ -12,12 +12,11 @@ import (
 	"k8s.io/client-go/dynamic"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 )
 
 type EffectiveAuthPolicy struct {
 	Path []machinery.Targetable
-	Spec kuadrantv1beta3.AuthPolicy
+	Spec kuadrantv1.AuthPolicy
 }
 
 type EffectiveAuthPolicies map[string]EffectiveAuthPolicy
@@ -71,7 +70,7 @@ func (r *EffectiveAuthPolicyReconciler) calculateEffectivePolicies(ctx context.C
 		for _, httpRouteRule := range httpRouteRules {
 			paths := targetables.Paths(gatewayClass, httpRouteRule) // this may be expensive in clusters with many gateway classes - an alternative is to deep search the topology for httprouterules from each gatewayclass, keeping record of the paths
 			for i := range paths {
-				if effectivePolicy := kuadrantv1.EffectivePolicyForPath[*kuadrantv1beta3.AuthPolicy](paths[i], isAuthPolicyAcceptedAndNotDeletedFunc(state)); effectivePolicy != nil {
+				if effectivePolicy := kuadrantv1.EffectivePolicyForPath[*kuadrantv1.AuthPolicy](paths[i], isAuthPolicyAcceptedAndNotDeletedFunc(state)); effectivePolicy != nil {
 					pathID := kuadrantv1.PathID(paths[i])
 					effectivePolicies[pathID] = EffectiveAuthPolicy{
 						Path: paths[i],
@@ -80,7 +79,7 @@ func (r *EffectiveAuthPolicyReconciler) calculateEffectivePolicies(ctx context.C
 					if logger.V(1).Enabled() {
 						jsonEffectivePolicy, _ := json.Marshal(effectivePolicy)
 						pathLocators := lo.Map(paths[i], machinery.MapTargetableToLocatorFunc)
-						logger.V(1).Info("effective policy", "kind", kuadrantv1beta3.AuthPolicyGroupKind.Kind, "pathID", pathID, "path", pathLocators, "effectivePolicy", string(jsonEffectivePolicy))
+						logger.V(1).Info("effective policy", "kind", kuadrantv1.AuthPolicyGroupKind.Kind, "pathID", pathID, "path", pathLocators, "effectivePolicy", string(jsonEffectivePolicy))
 					}
 				}
 			}

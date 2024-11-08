@@ -32,7 +32,6 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
 )
 
@@ -274,7 +273,7 @@ func RLPIsEnforced(ctx context.Context, cl client.Client, rlpKey client.ObjectKe
 
 func RLPIsConditionTrue(ctx context.Context, cl client.Client, rlpKey client.ObjectKey, condition string) func() bool {
 	return func() bool {
-		existingRLP := &kuadrantv1beta3.RateLimitPolicy{}
+		existingRLP := &kuadrantv1.RateLimitPolicy{}
 		err := cl.Get(ctx, rlpKey, existingRLP)
 		if err != nil {
 			logf.Log.V(1).Error(err, "ratelimitpolicy not read", "rlp", rlpKey)
@@ -286,7 +285,7 @@ func RLPIsConditionTrue(ctx context.Context, cl client.Client, rlpKey client.Obj
 }
 
 func RLPEnforcedCondition(ctx context.Context, cl client.Client, rlpKey client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) bool {
-	p := &kuadrantv1beta3.RateLimitPolicy{}
+	p := &kuadrantv1.RateLimitPolicy{}
 	if err := cl.Get(ctx, rlpKey, p); err != nil {
 		return false
 	}
@@ -318,29 +317,29 @@ func WasmPluginIsAvailable(ctx context.Context, cl client.Client, key client.Obj
 	}
 }
 
-func IsAuthPolicyAcceptedAndEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1beta3.AuthPolicy) func() bool {
+func IsAuthPolicyAcceptedAndEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1.AuthPolicy) func() bool {
 	return func() bool {
 		return IsAuthPolicyAccepted(ctx, cl, policy)() && IsAuthPolicyEnforced(ctx, cl, policy)()
 	}
 }
 
-func IsAuthPolicyAcceptedAndNotEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1beta3.AuthPolicy) func() bool {
+func IsAuthPolicyAcceptedAndNotEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1.AuthPolicy) func() bool {
 	return func() bool {
 		return IsAuthPolicyAccepted(ctx, cl, policy)() && !IsAuthPolicyEnforced(ctx, cl, policy)()
 	}
 }
 
-func IsAuthPolicyAccepted(ctx context.Context, cl client.Client, policy *kuadrantv1beta3.AuthPolicy) func() bool {
+func IsAuthPolicyAccepted(ctx context.Context, cl client.Client, policy *kuadrantv1.AuthPolicy) func() bool {
 	return IsAuthPolicyConditionTrue(ctx, cl, policy, string(gatewayapiv1alpha2.PolicyConditionAccepted))
 }
 
-func IsAuthPolicyEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1beta3.AuthPolicy) func() bool {
+func IsAuthPolicyEnforced(ctx context.Context, cl client.Client, policy *kuadrantv1.AuthPolicy) func() bool {
 	return IsAuthPolicyConditionTrue(ctx, cl, policy, string(kuadrant.PolicyConditionEnforced))
 }
 
 func IsAuthPolicyEnforcedCondition(ctx context.Context, cl client.Client, key client.ObjectKey, reason gatewayapiv1alpha2.PolicyConditionReason, message string) func() bool {
 	return func() bool {
-		p := &kuadrantv1beta3.AuthPolicy{}
+		p := &kuadrantv1.AuthPolicy{}
 		if err := cl.Get(ctx, key, p); err != nil {
 			return false
 		}
@@ -354,9 +353,9 @@ func IsAuthPolicyEnforcedCondition(ctx context.Context, cl client.Client, key cl
 	}
 }
 
-func IsAuthPolicyConditionTrue(ctx context.Context, cl client.Client, policy *kuadrantv1beta3.AuthPolicy, condition string) func() bool {
+func IsAuthPolicyConditionTrue(ctx context.Context, cl client.Client, policy *kuadrantv1.AuthPolicy, condition string) func() bool {
 	return func() bool {
-		existingPolicy := &kuadrantv1beta3.AuthPolicy{}
+		existingPolicy := &kuadrantv1.AuthPolicy{}
 		err := cl.Get(ctx, client.ObjectKeyFromObject(policy), existingPolicy)
 		return err == nil && meta.IsStatusConditionTrue(existingPolicy.Status.Conditions, condition)
 	}
@@ -364,7 +363,7 @@ func IsAuthPolicyConditionTrue(ctx context.Context, cl client.Client, policy *ku
 
 func RLPIsNotAccepted(ctx context.Context, k8sClient client.Client, rlpKey client.ObjectKey) func() bool {
 	return func() bool {
-		existingRLP := &kuadrantv1beta3.RateLimitPolicy{}
+		existingRLP := &kuadrantv1.RateLimitPolicy{}
 		err := k8sClient.Get(ctx, rlpKey, existingRLP)
 		if err != nil {
 			logf.Log.V(1).Info("ratelimitpolicy not read", "rlp", rlpKey, "error", err)
@@ -653,9 +652,9 @@ func KuadrantIsReady(ctx context.Context, cl client.Client, key client.ObjectKey
 	}
 }
 
-func BuildBasicAuthScheme() *kuadrantv1beta3.AuthSchemeSpec {
-	return &kuadrantv1beta3.AuthSchemeSpec{
-		Authentication: map[string]kuadrantv1beta3.MergeableAuthenticationSpec{
+func BuildBasicAuthScheme() *kuadrantv1.AuthSchemeSpec {
+	return &kuadrantv1.AuthSchemeSpec{
+		Authentication: map[string]kuadrantv1.MergeableAuthenticationSpec{
 			"apiKey": {
 				AuthenticationSpec: authorinoapi.AuthenticationSpec{
 					AuthenticationMethodSpec: authorinoapi.AuthenticationMethodSpec{
@@ -679,7 +678,7 @@ func BuildBasicAuthScheme() *kuadrantv1beta3.AuthSchemeSpec {
 }
 
 func IsRLPAcceptedAndEnforced(g Gomega, ctx context.Context, cl client.Client, policyKey client.ObjectKey) {
-	existingPolicy := &kuadrantv1beta3.RateLimitPolicy{}
+	existingPolicy := &kuadrantv1.RateLimitPolicy{}
 	g.Expect(cl.Get(ctx, policyKey, existingPolicy)).To(Succeed())
 
 	acceptedCond := meta.FindStatusCondition(existingPolicy.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))

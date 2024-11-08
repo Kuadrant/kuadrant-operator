@@ -17,8 +17,8 @@ import (
 	"k8s.io/utils/ptr"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
@@ -40,8 +40,8 @@ func (r *EnvoyGatewayExtensionReconciler) Subscription() controller.Subscription
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
-			{Kind: &kuadrantv1beta3.AuthPolicyGroupKind},
-			{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1.AuthPolicyGroupKind},
+			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 			{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
 		},
 	}

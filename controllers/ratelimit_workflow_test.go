@@ -9,7 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
+	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 )
 
@@ -70,15 +70,15 @@ func TestLimitNameToLimitadorIdentifier(t *testing.T) {
 func TestWasmActionFromLimit(t *testing.T) {
 	testCases := []struct {
 		name               string
-		limit              *kuadrantv1beta3.Limit
+		limit              *kuadrantv1.Limit
 		limitIdentifier    string
 		scope              string
-		topLevelPredicates kuadrantv1beta3.WhenPredicates
+		topLevelPredicates kuadrantv1.WhenPredicates
 		expectedAction     wasm.Action
 	}{
 		{
 			name:            "limit without conditions nor counters",
-			limit:           &kuadrantv1beta3.Limit{},
+			limit:           &kuadrantv1.Limit{},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
 			expectedAction: wasm.Action{
@@ -98,8 +98,8 @@ func TestWasmActionFromLimit(t *testing.T) {
 		},
 		{
 			name: "limit with counter qualifiers",
-			limit: &kuadrantv1beta3.Limit{
-				Counters: []kuadrantv1beta3.Counter{{Expression: "auth.identity.username"}},
+			limit: &kuadrantv1.Limit{
+				Counters: []kuadrantv1.Counter{{Expression: "auth.identity.username"}},
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
@@ -128,9 +128,9 @@ func TestWasmActionFromLimit(t *testing.T) {
 		},
 		{
 			name: "limit with counter qualifiers and when predicates",
-			limit: &kuadrantv1beta3.Limit{
-				Counters: []kuadrantv1beta3.Counter{{Expression: "auth.identity.username"}},
-				When:     kuadrantv1beta3.NewWhenPredicates("auth.identity.group != admin"),
+			limit: &kuadrantv1.Limit{
+				Counters: []kuadrantv1.Counter{{Expression: "auth.identity.username"}},
+				When:     kuadrantv1.NewWhenPredicates("auth.identity.group != admin"),
 			},
 			limitIdentifier: "limit.myLimit__d681f6c3",
 			scope:           "my-ns/my-route",
@@ -160,8 +160,8 @@ func TestWasmActionFromLimit(t *testing.T) {
 		},
 		{
 			name:               "limit with top level predicates and no when predicates",
-			limit:              &kuadrantv1beta3.Limit{},
-			topLevelPredicates: kuadrantv1beta3.NewWhenPredicates("auth.identity.group != admin"),
+			limit:              &kuadrantv1.Limit{},
+			topLevelPredicates: kuadrantv1.NewWhenPredicates("auth.identity.group != admin"),
 			limitIdentifier:    "limit.myLimit__d681f6c3",
 			scope:              "my-ns/my-route",
 			expectedAction: wasm.Action{
@@ -182,10 +182,10 @@ func TestWasmActionFromLimit(t *testing.T) {
 		},
 		{
 			name: "limit with top level predicates and when predicates",
-			limit: &kuadrantv1beta3.Limit{
-				When: kuadrantv1beta3.NewWhenPredicates("auth.identity.from-limit"),
+			limit: &kuadrantv1.Limit{
+				When: kuadrantv1.NewWhenPredicates("auth.identity.from-limit"),
 			},
-			topLevelPredicates: kuadrantv1beta3.NewWhenPredicates("auth.identity.from-top-level"),
+			topLevelPredicates: kuadrantv1.NewWhenPredicates("auth.identity.from-top-level"),
 			limitIdentifier:    "limit.myLimit__d681f6c3",
 			scope:              "my-ns/my-route",
 			expectedAction: wasm.Action{

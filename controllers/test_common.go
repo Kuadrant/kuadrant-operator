@@ -53,7 +53,6 @@ import (
 	maistraapis "github.com/kuadrant/kuadrant-operator/api/external/maistra"
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/fieldindexers"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/reconcilers"
 )
@@ -122,7 +121,6 @@ func BootstrapScheme() *runtime.Scheme {
 		kuadrantdnsv1alpha1.AddToScheme,
 		kuadrantv1.AddToScheme,
 		kuadrantv1beta1.AddToScheme,
-		kuadrantv1beta3.AddToScheme,
 		gatewayapiv1.Install,
 		gatewayapiv1beta1.Install,
 		authorinoopapi.AddToScheme,

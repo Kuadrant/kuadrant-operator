@@ -22,7 +22,6 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	kuadrantv1beta3 "github.com/kuadrant/kuadrant-operator/api/v1beta3"
 	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
@@ -43,7 +42,7 @@ func (r *RateLimitPolicyStatusUpdater) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayClassGroupKind},
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
-			{Kind: &kuadrantv1beta3.RateLimitPolicyGroupKind},
+			{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 			{Kind: &kuadrantv1beta1.LimitadorGroupKind},
 			{Kind: &kuadrantistio.EnvoyFilterGroupKind},
 			{Kind: &kuadrantistio.WasmPluginGroupKind},
@@ -56,8 +55,8 @@ func (r *RateLimitPolicyStatusUpdater) Subscription() controller.Subscription {
 func (r *RateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("RateLimitPolicyStatusUpdater")
 
-	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1beta3.RateLimitPolicy, bool) {
-		p, ok := item.(*kuadrantv1beta3.RateLimitPolicy)
+	policies := lo.FilterMap(topology.Policies().Items(), func(item machinery.Policy, index int) (*kuadrantv1.RateLimitPolicy, bool) {
+		p, ok := item.(*kuadrantv1.RateLimitPolicy)
 		return p, ok
 	})
 
@@ -73,7 +72,7 @@ func (r *RateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 		}
 
 		// copy initial conditions, otherwise status will always be updated
-		newStatus := &kuadrantv1beta3.RateLimitPolicyStatus{
+		newStatus := &kuadrantv1.RateLimitPolicyStatus{
 			Conditions:         slices.Clone(policy.Status.Conditions),
 			ObservedGeneration: policy.Status.ObservedGeneration,
 		}
@@ -103,7 +102,7 @@ func (r *RateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 			continue
 		}
 
-		_, err = r.client.Resource(kuadrantv1beta3.RateLimitPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+		_, err = r.client.Resource(kuadrantv1.RateLimitPoliciesResource).Namespace(policy.GetNamespace()).UpdateStatus(ctx, obj, metav1.UpdateOptions{})
 		if err != nil {
 			logger.Error(err, "unable to update status for ratelimitpolicy", "name", policy.GetName(), "namespace", policy.GetNamespace())
 			// TODO: handle error
@@ -113,8 +112,8 @@ func (r *RateLimitPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []con
 	return nil
 }
 
-func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1beta3.RateLimitPolicy, topology *machinery.Topology, state *sync.Map) *metav1.Condition {
-	policyKind := kuadrantv1beta3.RateLimitPolicyGroupKind.Kind
+func (r *RateLimitPolicyStatusUpdater) enforcedCondition(policy *kuadrantv1.RateLimitPolicy, topology *machinery.Topology, state *sync.Map) *metav1.Condition {
+	policyKind := kuadrantv1.RateLimitPolicyGroupKind.Kind
 
 	effectivePolicies, ok := state.Load(StateEffectiveRateLimitPolicies)
 	if !ok {

@@ -44,7 +44,7 @@ The auth scheme (`rules`), as well as conditions and named patterns can be decla
 #### High-level example and field definition
 
 ```yaml
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: my-auth-policy
@@ -178,7 +178,7 @@ The targeted HTTPRoute's rules and/or hostnames to which the policy must be enfo
 Target a HTTPRoute by setting the `spec.targetRef` field of the AuthPolicy as follows:
 
 ```yaml
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: my-route-auth
@@ -238,7 +238,7 @@ Inversely, a gateway policy that specify _overrides_ declares a set of rules to 
 Target a Gateway HTTPRoute by setting the `spec.targetRef` field of the AuthPolicy as follows:
 
 ```yaml
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: my-gw-auth

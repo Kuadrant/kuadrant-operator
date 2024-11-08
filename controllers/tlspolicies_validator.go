@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -12,6 +13,7 @@ import (
 	"github.com/samber/lo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
@@ -43,10 +45,7 @@ func (t *TLSPoliciesValidator) Subscription() *controller.Subscription {
 func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPoliciesValidator").WithName("Validate")
 
-	policies := lo.Filter(topology.Policies().Items(), func(item machinery.Policy, index int) bool {
-		_, ok := item.(*kuadrantv1.TLSPolicy)
-		return ok
-	})
+	policies := lo.Filter(topology.Policies().Items(), filterForTLSPolicies)
 
 	isPolicyValidErrorMap := make(map[string]error, len(policies))
 
@@ -64,6 +63,12 @@ func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.Reso
 
 		// Validate target ref
 		if err := t.isTargetRefsFound(topology, p); err != nil {
+			isPolicyValidErrorMap[p.GetLocator()] = err
+			continue
+		}
+
+		// Validate if there's a conflicting policy
+		if err := t.isConflict(policies, p); err != nil {
 			isPolicyValidErrorMap[p.GetLocator()] = err
 			continue
 		}
@@ -99,6 +104,22 @@ func (t *TLSPoliciesValidator) isTargetRefsFound(topology *machinery.Topology, p
 	return nil
 }
 
+// isConflict Validates if there's already an older policy with the same target ref
+func (t *TLSPoliciesValidator) isConflict(policies []machinery.Policy, p *kuadrantv1.TLSPolicy) error {
+	conflictingP, ok := lo.Find(policies, func(item machinery.Policy) bool {
+		conflictTLSPolicy := item.(*kuadrantv1.TLSPolicy)
+		return p != conflictTLSPolicy && conflictTLSPolicy.DeletionTimestamp == nil &&
+			conflictTLSPolicy.CreationTimestamp.Before(&p.CreationTimestamp) &&
+			reflect.DeepEqual(conflictTLSPolicy.GetTargetRefs(), p.GetTargetRefs())
+	})
+
+	if ok {
+		return kuadrant.NewErrConflict(kuadrantv1.TLSPolicyGroupKind.Kind, client.ObjectKeyFromObject(conflictingP.(*kuadrantv1.TLSPolicy)).String(), errors.New("conflicting policy"))
+	}
+
+	return nil
+}
+
 // isValidIssuerKind Validates that the Issuer Ref kind is either empty, Issuer or ClusterIssuer
 func (t *TLSPoliciesValidator) isValidIssuerKind(p *kuadrantv1.TLSPolicy) error {
 	if !lo.Contains([]string{"", certmanv1.IssuerKind, certmanv1.ClusterIssuerKind}, p.Spec.IssuerRef.Kind) {
@@ -111,7 +132,7 @@ func (t *TLSPoliciesValidator) isValidIssuerKind(p *kuadrantv1.TLSPolicy) error 
 
 // isIssuerFound Validates that the Issuer specified can be found in the topology
 func (t *TLSPoliciesValidator) isIssuerFound(topology *machinery.Topology, p *kuadrantv1.TLSPolicy) error {
-	_, ok := lo.Find(topology.Objects().Items(), func(item machinery.Object) bool {
+	_, ok := lo.Find(topology.Objects().Children(p), func(item machinery.Object) bool {
 		runtimeObj, ok := item.(*controller.RuntimeObject)
 		if !ok {
 			return false

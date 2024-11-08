@@ -2,11 +2,12 @@ package controllers
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"reflect"
 	"sync"
 
-	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	"github.com/go-logr/logr"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
@@ -18,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	crlog "sigs.k8s.io/controller-runtime/pkg/log"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
@@ -44,6 +44,11 @@ func (t *EffectiveTLSPoliciesReconciler) Subscription() *controller.Subscription
 	}
 }
 
+type CertTarget struct {
+	cert   *certmanagerv1.Certificate
+	target machinery.Targetable
+}
+
 //+kubebuilder:rbac:groups=kuadrant.io,resources=tlspolicies,verbs=get;list;watch;update;patch;delete
 //+kubebuilder:rbac:groups=kuadrant.io,resources=tlspolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=tlspolicies/finalizers,verbs=update
@@ -54,115 +59,52 @@ func (t *EffectiveTLSPoliciesReconciler) Subscription() *controller.Subscription
 func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("EffectiveTLSPoliciesReconciler").WithName("Reconcile")
 
-	listeners := topology.Targetables().Items(func(object machinery.Object) bool {
-		_, ok := object.(*machinery.Listener)
-		return ok
-	})
+	certs := getCertificatesFromTopology(topology)
+	listeners := getListenersFromTopology(topology)
 
-	// Get all certs in the topology for comparison with expected certs to determine orphaned certs later
-	// Only certs owned by TLSPolicies should be in the topology - no need to check again
-	certs := lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
-		r, ok := item.(*controller.RuntimeObject)
-		if !ok {
-			return nil, false
+	var certTargets []CertTarget
+	for _, l := range listeners {
+		if err := validateGatewayListenerBlock(field.NewPath(""), *l.Listener, l.Gateway).ToAggregate(); err != nil {
+			logger.Info("Skipped a listener block: " + err.Error())
+			continue
 		}
-		c, ok := r.Object.(*certmanv1.Certificate)
 
-		return c, ok
-	})
-
-	var expectedCerts []*certmanv1.Certificate
-	filterForTLSPolicies := func(p machinery.Policy, _ int) bool {
-		_, ok := p.(*kuadrantv1.TLSPolicy)
-		return ok
-	}
-
-	for _, listener := range listeners {
-		l := listener.(*machinery.Listener)
-
-		policies := lo.Filter(l.Policies(), filterForTLSPolicies)
-
+		policies := getTLSPoliciesForListener(l)
 		if len(policies) == 0 {
-			policies = lo.Filter(l.Gateway.Policies(), filterForTLSPolicies)
+			continue // No policies to process
 		}
 
-		for _, p := range policies {
-			policy := p.(*kuadrantv1.TLSPolicy)
+		hostname := getListenerHostname(l)
 
-			// Policy is deleted
-			if policy.DeletionTimestamp != nil {
-				logger.V(1).Info("policy is marked for deletion, nothing to do", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
-				continue
-			}
+		for _, certRef := range l.TLS.CertificateRefs {
+			secretRef := getSecretReference(certRef, l)
 
-			// Policy is not valid
-			isValid, _ := IsTLSPolicyValid(ctx, s, policy)
-			if !isValid {
-				logger.V(1).Info("deleting certs for invalid policy", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
-				if err := t.deleteCertificatesForTargetable(ctx, topology, l); err != nil {
-					logger.Error(err, "unable to delete certs for invalid policy", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
-				}
-				continue
-			}
-
-			// Policy is valid
-			// Need to use Gateway as listener hosts can be merged into a singular cert if using the same cert reference
-			expectedCertificates := expectedCertificatesForGateway(ctx, l.Gateway.Gateway, policy)
-
-			for _, cert := range expectedCertificates {
-				resource := t.client.Resource(CertManagerCertificatesResource).Namespace(cert.GetNamespace())
-
-				// Check is cert already in topology
-				objs := topology.Objects().Children(l)
-				obj, ok := lo.Find(objs, func(o machinery.Object) bool {
-					return o.GroupVersionKind().GroupKind() == CertManagerCertificateKind && o.GetNamespace() == cert.GetNamespace() && o.GetName() == cert.GetName()
-				})
-
-				// Create
-				if !ok {
-					expectedCerts = append(expectedCerts, cert)
-					if err := controllerutil.SetControllerReference(policy, cert, t.scheme); err != nil {
-						logger.Error(err, "failed to set owner reference on certificate", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
-						continue
-					}
-
-					un, err := controller.Destruct(cert)
-					if err != nil {
-						logger.Error(err, "unable to destruct cert")
-						continue
-					}
-					_, err = resource.Create(ctx, un, metav1.CreateOptions{})
-					if err != nil && !apierrors.IsAlreadyExists(err) {
-						logger.Error(err, "unable to create certificate", "name", policy.Name, "namespace", policy.Namespace, "uid", policy.GetUID())
-					}
-
+			for _, p := range policies {
+				tlsPolicy := p.(*kuadrantv1.TLSPolicy)
+				if tlsPolicy.DeletionTimestamp != nil {
+					logger.V(1).Info("policy is marked for deletion, nothing to do", "name", tlsPolicy.Name, "namespace", tlsPolicy.Namespace, "uid", tlsPolicy.GetUID())
 					continue
 				}
 
-				// Update
-				tCert := obj.(*controller.RuntimeObject).Object.(*certmanv1.Certificate)
-				expectedCerts = append(expectedCerts, tCert)
-				if reflect.DeepEqual(tCert.Spec, cert.Spec) {
-					logger.V(1).Info("skipping update, cert specs are the same, nothing to do")
+				isValid, _ := IsTLSPolicyValid(ctx, s, tlsPolicy)
+				if !isValid {
 					continue
 				}
 
-				tCert.Spec = cert.Spec
-				un, err := controller.Destruct(tCert)
-				if err != nil {
-					logger.Error(err, "unable to destruct cert")
+				cert := buildCertManagerCertificate(l, tlsPolicy, secretRef, []string{hostname})
+				if err := controllerutil.SetControllerReference(tlsPolicy, cert, t.scheme); err != nil {
+					logger.Error(err, "failed to set owner reference on certificate", "name", tlsPolicy.Name, "namespace", tlsPolicy.Namespace, "uid", tlsPolicy.GetUID())
 					continue
 				}
-				_, err = resource.Update(ctx, un, metav1.UpdateOptions{})
-				if err != nil {
-					logger.Error(err, "unable to update certificate", "policy", policy.Name)
-				}
+				certTargets = append(certTargets, CertTarget{target: l, cert: cert})
 			}
 		}
 	}
+
+	expectedCerts := t.reconcileCertificates(ctx, certTargets, topology, logger)
 
 	// Clean up orphaned certs
-	uniqueExpectedCerts := lo.UniqBy(expectedCerts, func(item *certmanv1.Certificate) types.UID {
+	uniqueExpectedCerts := lo.UniqBy(expectedCerts, func(item *certmanagerv1.Certificate) types.UID {
 		return item.GetUID()
 	})
 	orphanedCerts, _ := lo.Difference(certs, uniqueExpectedCerts)
@@ -177,113 +119,117 @@ func (t *EffectiveTLSPoliciesReconciler) Reconcile(ctx context.Context, _ []cont
 	return nil
 }
 
-func (t *EffectiveTLSPoliciesReconciler) deleteCertificatesForTargetable(ctx context.Context, topology *machinery.Topology, target machinery.Targetable) error {
-	children := topology.Objects().Children(target)
+func (t *EffectiveTLSPoliciesReconciler) reconcileCertificates(ctx context.Context, certTargets []CertTarget, topology *machinery.Topology, logger logr.Logger) []*certmanagerv1.Certificate {
+	expectedCerts := make([]*certmanagerv1.Certificate, 0, len(certTargets))
+	for _, certTarget := range certTargets {
+		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(certTarget.cert.GetNamespace())
 
-	certs := lo.FilterMap(children, func(item machinery.Object, index int) (*certmanv1.Certificate, bool) {
+		// Check is cert already in topology
+		objs := topology.Objects().Children(certTarget.target)
+		obj, ok := lo.Find(objs, func(o machinery.Object) bool {
+			return o.GroupVersionKind().GroupKind() == CertManagerCertificateKind && o.GetNamespace() == certTarget.cert.GetNamespace() && o.GetName() == certTarget.cert.GetName()
+		})
+
+		// Create
+		if !ok {
+			expectedCerts = append(expectedCerts, certTarget.cert)
+			un, err := controller.Destruct(certTarget.cert)
+			if err != nil {
+				logger.Error(err, "unable to destruct cert")
+				continue
+			}
+			_, err = resource.Create(ctx, un, metav1.CreateOptions{})
+			if err != nil {
+				logger.Error(err, "unable to create certificate", "name", certTarget.cert.GetName(), "namespace", certTarget.cert.GetNamespace(), "uid", certTarget.target.GetLocator())
+			}
+
+			continue
+		}
+
+		// Update
+		tCert := obj.(*controller.RuntimeObject).Object.(*certmanagerv1.Certificate)
+		expectedCerts = append(expectedCerts, tCert)
+		if reflect.DeepEqual(tCert.Spec, certTarget.cert.Spec) {
+			logger.V(1).Info("skipping update, cert specs are the same, nothing to do")
+			continue
+		}
+
+		tCert.Spec = certTarget.cert.Spec
+		un, err := controller.Destruct(tCert)
+		if err != nil {
+			logger.Error(err, "unable to destruct cert")
+			continue
+		}
+		_, err = resource.Update(ctx, un, metav1.UpdateOptions{})
+		if err != nil {
+			logger.Error(err, "unable to update certificate", "name", certTarget.cert.GetName(), "namespace", certTarget.cert.GetNamespace(), "uid", certTarget.target.GetLocator())
+		}
+	}
+	return expectedCerts
+}
+
+func getCertificatesFromTopology(topology *machinery.Topology) []*certmanagerv1.Certificate {
+	return lo.FilterMap(topology.Objects().Items(), func(item machinery.Object, index int) (*certmanagerv1.Certificate, bool) {
 		r, ok := item.(*controller.RuntimeObject)
 		if !ok {
 			return nil, false
 		}
-		c, ok := r.Object.(*certmanv1.Certificate)
-
+		c, ok := r.Object.(*certmanagerv1.Certificate)
 		return c, ok
 	})
-
-	var deletionErr error
-	for _, cert := range certs {
-		resource := t.client.Resource(CertManagerCertificatesResource).Namespace(cert.GetNamespace())
-
-		if err := resource.Delete(ctx, cert.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-			deletionErr = errors.Join(err)
-		}
-	}
-
-	return deletionErr
 }
 
-func expectedCertificatesForGateway(ctx context.Context, gateway *gatewayapiv1.Gateway, tlsPolicy *kuadrantv1.TLSPolicy) []*certmanv1.Certificate {
-	log := crlog.FromContext(ctx)
-
-	tlsHosts := make(map[corev1.ObjectReference][]string)
-	for i, l := range gateway.Spec.Listeners {
-		hostname := "*"
-		if l.Hostname != nil {
-			hostname = string(*l.Hostname)
-		}
-
-		err := validateGatewayListenerBlock(field.NewPath("spec", "listeners").Index(i), l, gateway).ToAggregate()
-		if err != nil {
-			log.Info("Skipped a listener block: " + err.Error())
-			continue
-		}
-
-		for _, certRef := range l.TLS.CertificateRefs {
-			secretRef := corev1.ObjectReference{
-				Name: string(certRef.Name),
-			}
-			if certRef.Namespace != nil {
-				secretRef.Namespace = string(*certRef.Namespace)
-			} else {
-				secretRef.Namespace = gateway.GetNamespace()
-			}
-			// Gateway API hostname explicitly disallows IP addresses, so this
-			// should be OK.
-			tlsHosts[secretRef] = append(tlsHosts[secretRef], hostname)
-		}
-	}
-
-	certs := make([]*certmanv1.Certificate, 0, len(tlsHosts))
-	for secretRef, hosts := range tlsHosts {
-		certs = append(certs, buildCertManagerCertificate(tlsPolicy, secretRef, hosts))
-	}
-	return certs
+func getListenersFromTopology(topology *machinery.Topology) []*machinery.Listener {
+	return lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, index int) (*machinery.Listener, bool) {
+		l, ok := item.(*machinery.Listener)
+		return l, ok
+	})
 }
 
-func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *kuadrantv1.TLSPolicy) []*certmanv1.Certificate {
-	tlsHosts := make(map[corev1.ObjectReference][]string)
+func getTLSPoliciesForListener(l *machinery.Listener) []machinery.Policy {
+	policies := lo.Filter(l.Policies(), filterForTLSPolicies)
+	if len(policies) == 0 {
+		policies = lo.Filter(l.Gateway.Policies(), filterForTLSPolicies)
+	}
+	return policies
+}
 
+func getListenerHostname(l *machinery.Listener) string {
 	hostname := "*"
 	if l.Hostname != nil {
 		hostname = string(*l.Hostname)
 	}
-
-	for _, certRef := range l.TLS.CertificateRefs {
-		secretRef := corev1.ObjectReference{
-			Name: string(certRef.Name),
-		}
-		if certRef.Namespace != nil {
-			secretRef.Namespace = string(*certRef.Namespace)
-		} else {
-			secretRef.Namespace = l.GetNamespace()
-		}
-		// Gateway API hostname explicitly disallows IP addresses, so this
-		// should be OK.
-		tlsHosts[secretRef] = append(tlsHosts[secretRef], hostname)
-	}
-
-	certs := make([]*certmanv1.Certificate, 0, len(tlsHosts))
-	for secretRef, hosts := range tlsHosts {
-		certs = append(certs, buildCertManagerCertificate(tlsPolicy, secretRef, hosts))
-	}
-	return certs
+	return hostname
 }
 
-func buildCertManagerCertificate(tlsPolicy *kuadrantv1.TLSPolicy, secretRef corev1.ObjectReference, hosts []string) *certmanv1.Certificate {
-	crt := &certmanv1.Certificate{
+func getSecretReference(certRef gatewayapiv1.SecretObjectReference, l *machinery.Listener) corev1.ObjectReference {
+	secretRef := corev1.ObjectReference{
+		Name: string(certRef.Name),
+	}
+	if certRef.Namespace != nil {
+		secretRef.Namespace = string(*certRef.Namespace)
+	} else {
+		secretRef.Namespace = l.GetNamespace()
+	}
+	return secretRef
+}
+
+func buildCertManagerCertificate(l *machinery.Listener, tlsPolicy *kuadrantv1.TLSPolicy, secretRef corev1.ObjectReference, hosts []string) *certmanagerv1.Certificate {
+	crt := &certmanagerv1.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretRef.Name,
+			Name:      certName(l.Gateway.Name, l.Name),
 			Namespace: secretRef.Namespace,
+			Labels:    CommonLabels(),
 		},
 		TypeMeta: metav1.TypeMeta{
-			Kind:       certmanv1.CertificateKind,
-			APIVersion: certmanv1.SchemeGroupVersion.String(),
+			Kind:       certmanagerv1.CertificateKind,
+			APIVersion: certmanagerv1.SchemeGroupVersion.String(),
 		},
-		Spec: certmanv1.CertificateSpec{
+		Spec: certmanagerv1.CertificateSpec{
 			DNSNames:   hosts,
 			SecretName: secretRef.Name,
 			IssuerRef:  tlsPolicy.Spec.IssuerRef,
-			Usages:     certmanv1.DefaultKeyUsages(),
+			Usages:     certmanagerv1.DefaultKeyUsages(),
 		},
 	}
 	translatePolicy(crt, tlsPolicy.Spec)
@@ -343,7 +289,7 @@ func validateGatewayListenerBlock(path *field.Path, l gatewayapiv1.Listener, ing
 
 // translatePolicy updates the Certificate spec using the TLSPolicy spec
 // converted from https://github.com/cert-manager/cert-manager/blob/master/pkg/controller/certificate-shim/helper.go#L63
-func translatePolicy(crt *certmanv1.Certificate, tlsPolicy kuadrantv1.TLSPolicySpec) {
+func translatePolicy(crt *certmanagerv1.Certificate, tlsPolicy kuadrantv1.TLSPolicySpec) {
 	if tlsPolicy.CommonName != "" {
 		crt.Spec.CommonName = tlsPolicy.CommonName
 	}
@@ -370,7 +316,7 @@ func translatePolicy(crt *certmanv1.Certificate, tlsPolicy kuadrantv1.TLSPolicyS
 
 	if tlsPolicy.PrivateKey != nil {
 		if crt.Spec.PrivateKey == nil {
-			crt.Spec.PrivateKey = &certmanv1.CertificatePrivateKey{}
+			crt.Spec.PrivateKey = &certmanagerv1.CertificatePrivateKey{}
 		}
 
 		if tlsPolicy.PrivateKey.Algorithm != "" {
@@ -389,4 +335,8 @@ func translatePolicy(crt *certmanv1.Certificate, tlsPolicy kuadrantv1.TLSPolicyS
 			crt.Spec.PrivateKey.RotationPolicy = tlsPolicy.PrivateKey.RotationPolicy
 		}
 	}
+}
+
+func certName(gatewayName string, listenerName gatewayapiv1.SectionName) string {
+	return fmt.Sprintf("%s-%s", gatewayName, listenerName)
 }

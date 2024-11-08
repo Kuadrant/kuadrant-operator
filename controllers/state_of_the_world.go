@@ -435,8 +435,8 @@ func certManagerControllerOpts() []controller.ControllerOption {
 		),
 		controller.WithObjectLinks(
 			LinkListenerToCertificateFunc,
-			LinkGatewayToIssuerFunc,
-			LinkGatewayToClusterIssuerFunc,
+			LinkTLSPolicyToIssuerFunc,
+			LinkTLSPolicyToClusterIssuerFunc,
 		),
 	}
 }

@@ -50,10 +50,7 @@ func (t *TLSPolicyStatusUpdater) Subscription() *controller.Subscription {
 func (t *TLSPolicyStatusUpdater) UpdateStatus(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("UpdateStatus")
 
-	policies := lo.Filter(topology.Policies().Items(), func(item machinery.Policy, index int) bool {
-		_, ok := item.(*kuadrantv1.TLSPolicy)
-		return ok
-	})
+	policies := lo.Filter(topology.Policies().Items(), filterForTLSPolicies)
 
 	for _, policy := range policies {
 		p := policy.(*kuadrantv1.TLSPolicy)
@@ -119,29 +116,11 @@ func (t *TLSPolicyStatusUpdater) enforcedCondition(ctx context.Context, policy *
 func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, policy *kuadrantv1.TLSPolicy, topology *machinery.Topology) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPolicyStatusUpdater").WithName("isIssuerReady")
 
-	// Get all gateways
-	gws := lo.FilterMap(topology.Targetables().Items(), func(item machinery.Targetable, index int) (*machinery.Gateway, bool) {
-		gw, ok := item.(*machinery.Gateway)
-		return gw, ok
-	})
-
-	// Find gateway defined by target ref
-	gw, ok := lo.Find(gws, func(item *machinery.Gateway) bool {
-		if item.GetName() == string(policy.GetTargetRef().Name) && item.GetNamespace() == policy.GetNamespace() {
-			return true
-		}
-		return false
-	})
-
-	if !ok {
-		return fmt.Errorf("unable to find target ref %s for policy %s in ns %s in topology", policy.GetTargetRef(), policy.Name, policy.Namespace)
-	}
-
 	var conditions []certmanagerv1.IssuerCondition
 
 	switch policy.Spec.IssuerRef.Kind {
 	case "", certmanagerv1.IssuerKind:
-		objs := topology.Objects().Children(gw)
+		objs := topology.Objects().Children(policy)
 		obj, ok := lo.Find(objs, func(o machinery.Object) bool {
 			return o.GroupVersionKind().GroupKind() == CertManagerIssuerKind && o.GetNamespace() == policy.GetNamespace() && o.GetName() == policy.Spec.IssuerRef.Name
 		})
@@ -159,7 +138,7 @@ func (t *TLSPolicyStatusUpdater) isIssuerReady(ctx context.Context, policy *kuad
 
 		conditions = issuer.Status.Conditions
 	case certmanagerv1.ClusterIssuerKind:
-		objs := topology.Objects().Children(gw)
+		objs := topology.Objects().Children(policy)
 		obj, ok := lo.Find(objs, func(o machinery.Object) bool {
 			return o.GroupVersionKind().GroupKind() == CertManagerClusterIssuerKind && o.GetName() == policy.Spec.IssuerRef.Name
 		})
@@ -192,24 +171,17 @@ func (t *TLSPolicyStatusUpdater) isCertificatesReady(p machinery.Policy, topolog
 		return errors.New("invalid policy")
 	}
 
-	// Get all listeners where the gateway contains this
-	// TODO: Update when targeting by section name is allowed, the listener will contain the policy rather than the gateway
+	// Get all listeners where the gateway or listener contains this policy
 	listeners := lo.FilterMap(topology.Targetables().Items(), func(t machinery.Targetable, index int) (*machinery.Listener, bool) {
 		l, ok := t.(*machinery.Listener)
-		return l, ok && lo.Contains(l.Gateway.Policies(), p)
+		return l, ok && (lo.Contains(l.Policies(), p) || lo.Contains(l.Gateway.Policies(), p))
 	})
 
 	if len(listeners) == 0 {
 		return errors.New("no valid gateways found")
 	}
 
-	for i, l := range listeners {
-		// Not valid - so no need to check if cert is ready since there should not be one created
-		err := validateGatewayListenerBlock(field.NewPath("").Index(i), *l.Listener, l.Gateway).ToAggregate()
-		if err != nil {
-			continue
-		}
-
+	for _, l := range listeners {
 		expectedCertificates := expectedCertificatesForListener(l, policy)
 
 		for _, cert := range expectedCertificates {
@@ -228,11 +200,41 @@ func (t *TLSPolicyStatusUpdater) isCertificatesReady(p machinery.Policy, topolog
 				return metav1.Condition{Reason: c.Reason, Status: metav1.ConditionStatus(c.Status), Type: string(c.Type), Message: c.Message}
 			})
 
-			if !meta.IsStatusConditionTrue(conditions, string(certmanagerv1.CertificateConditionReady)) {
+			cond := meta.FindStatusCondition(conditions, string(certmanagerv1.CertificateConditionReady))
+			if cond == nil {
 				return fmt.Errorf("certificate %s not ready", cert.Name)
+			}
+
+			if cond.Status != metav1.ConditionTrue {
+				msg := fmt.Sprintf("certificate %s is not ready: %s - %s", cert.Name, cond.Reason, cond.Message)
+				if cond.Reason == "IncorrectCertificate" {
+					msg = fmt.Sprintf("%s. Shared TLS certificates refs between listeners not supported. Use unique certificates refs in the Gateway listeners to fully enforce policy", msg)
+				}
+				return errors.New(msg)
 			}
 		}
 	}
 
 	return nil
+}
+
+func expectedCertificatesForListener(l *machinery.Listener, tlsPolicy *kuadrantv1.TLSPolicy) []*certmanagerv1.Certificate {
+	// Not valid - so no need to check if cert is ready since there should not be one created
+	err := validateGatewayListenerBlock(field.NewPath(""), *l.Listener, l.Gateway).ToAggregate()
+	if err != nil {
+		return []*certmanagerv1.Certificate{}
+	}
+
+	certs := make([]*certmanagerv1.Certificate, 0)
+
+	hostname := getListenerHostname(l)
+
+	for _, certRef := range l.TLS.CertificateRefs {
+		secretRef := getSecretReference(certRef, l)
+		// Gateway API hostname explicitly disallows IP addresses, so this
+		// should be OK.
+		certs = append(certs, buildCertManagerCertificate(l, tlsPolicy, secretRef, []string{hostname}))
+	}
+
+	return certs
 }

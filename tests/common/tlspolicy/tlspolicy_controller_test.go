@@ -12,7 +12,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
+	"github.com/samber/lo"
 	k8certsv1 "k8s.io/api/certificates/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -324,7 +326,7 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(certList.Items).To(HaveLen(1))
 				g.Expect(certList.Items).To(
 					ContainElements(
-						HaveField("Name", "test-tls-secret"),
+						HaveField("Name", "test-gateway-test-listener"),
 					))
 			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
 		}, testTimeOut)
@@ -350,47 +352,75 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(certList.Items).To(HaveLen(1))
 				g.Expect(certList.Items).To(
 					ContainElements(
-						HaveField("Name", "test-tls-secret"),
+						HaveField("Name", "test-gateway-test.example.com"),
 					))
 			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
 		}, testTimeOut)
 	})
 
-	Context("with multiple https listener and some shared secrets", func() {
+	Context("with multiple https listener and some shared secrets is not allowed", func() {
 		BeforeEach(func(ctx SpecContext) {
 			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
 				WithHTTPSListener("test1.example.com", "test-tls-secret").
 				WithHTTPSListener("test2.example.com", "test-tls-secret").
 				WithHTTPSListener("test3.example.com", "test2-tls-secret").Gateway
 			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
+		})
+
+		It("should create tls certificates but one cert will not be ready", func(ctx SpecContext) {
 			tlsPolicy = kuadrantv1.NewTLSPolicy("test-tls-policy", testNamespace).
 				WithTargetGateway(gateway.Name).
 				WithIssuerRef(*issuerRef)
 			Expect(k8sClient.Create(ctx, tlsPolicy)).To(BeNil())
-		})
 
-		It("should create tls certificates", func(ctx SpecContext) {
 			Eventually(func(g Gomega, ctx context.Context) {
 				certList := &certmanv1.CertificateList{}
 				err := k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(certList.Items).To(HaveLen(2))
+				g.Expect(certList.Items).To(HaveLen(3))
 				g.Expect(certList.Items).To(
 					ContainElements(
-						HaveField("Name", "test-tls-secret"),
-						HaveField("Name", "test2-tls-secret"),
+						HaveField("Name", "test-gateway-test1.example.com"),
+						HaveField("Name", "test-gateway-test2.example.com"),
+						HaveField("Name", "test-gateway-test3.example.com"),
 					))
 
 				cert1 := &certmanv1.Certificate{}
-				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-tls-secret", Namespace: testNamespace}, cert1)
-				Expect(err).ToNot(HaveOccurred())
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test1.example.com", Namespace: testNamespace}, cert1)
+				g.Expect(err).ToNot(HaveOccurred())
 
 				cert2 := &certmanv1.Certificate{}
-				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test2-tls-secret", Namespace: testNamespace}, cert2)
-				Expect(err).ToNot(HaveOccurred())
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test2.example.com", Namespace: testNamespace}, cert2)
+				g.Expect(err).ToNot(HaveOccurred())
 
-				Expect(cert1.Spec.DNSNames).To(ConsistOf("test1.example.com", "test2.example.com"))
-				Expect(cert2.Spec.DNSNames).To(ConsistOf("test3.example.com"))
+				cert3 := &certmanv1.Certificate{}
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test3.example.com", Namespace: testNamespace}, cert3)
+				g.Expect(err).ToNot(HaveOccurred())
+
+				g.Expect(cert1.Spec.DNSNames).To(ConsistOf("test1.example.com"))
+				g.Expect(cert2.Spec.DNSNames).To(ConsistOf("test2.example.com"))
+				g.Expect(cert3.Spec.DNSNames).To(ConsistOf("test3.example.com"))
+
+				// Only 2 of the certs should be ready
+				readyCertCount := 0
+				for _, cert := range certList.Items {
+					for _, cond := range cert.Status.Conditions {
+						if cond.Type == certmanv1.CertificateConditionReady && cond.Status == certmanmetav1.ConditionTrue {
+							readyCertCount++
+							continue
+						}
+						// Unready cert
+						g.Expect(cond.Reason).To(Equal("IncorrectCertificate"))
+					}
+				}
+				g.Expect(readyCertCount).To(Equal(2))
+
+				// Policy should not be enforced
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy), tlsPolicy)).To(Succeed())
+				enforcedCond := meta.FindStatusCondition(tlsPolicy.Status.Conditions, string(kuadrant.PolicyConditionEnforced))
+				g.Expect(enforcedCond).ToNot(BeNil())
+				g.Expect(enforcedCond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(enforcedCond.Message).To(ContainSubstring("Shared TLS certificates refs between listeners not supported. Use unique certificates refs in the Gateway listeners to fully enforce policy"))
 			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
 		}, testTimeOut)
 	})
@@ -416,21 +446,21 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(certList.Items).To(HaveLen(3))
 				g.Expect(certList.Items).To(
 					ContainElements(
-						HaveField("Name", "test1-tls-secret"),
-						HaveField("Name", "test2-tls-secret"),
-						HaveField("Name", "test3-tls-secret"),
+						HaveField("Name", "test-gateway-test1.example.com"),
+						HaveField("Name", "test-gateway-test2.example.com"),
+						HaveField("Name", "test-gateway-test3.example.com"),
 					))
 
 				cert1 := &certmanv1.Certificate{}
-				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test1-tls-secret", Namespace: testNamespace}, cert1)
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test1.example.com", Namespace: testNamespace}, cert1)
 				Expect(err).ToNot(HaveOccurred())
 
 				cert2 := &certmanv1.Certificate{}
-				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test2-tls-secret", Namespace: testNamespace}, cert2)
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test2.example.com", Namespace: testNamespace}, cert2)
 				Expect(err).ToNot(HaveOccurred())
 
 				cert3 := &certmanv1.Certificate{}
-				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test3-tls-secret", Namespace: testNamespace}, cert3)
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test3.example.com", Namespace: testNamespace}, cert3)
 				Expect(err).ToNot(HaveOccurred())
 
 				Expect(cert1.Spec.DNSNames).To(ConsistOf("test1.example.com"))
@@ -551,7 +581,7 @@ var _ = Describe("TLSPolicy controller", func() {
 					return fmt.Errorf("expected 1 certificates, found: %v", len(certificateList.Items))
 				}
 
-				if certificateList.Items[0].Name != "gateway2-tls-secret" {
+				if certificateList.Items[0].Name != "test-gateway-2-gateway2.example.com" {
 					return fmt.Errorf("expected certificate to be 'gateway2-tls-secret', found: %s", certificateList.Items[0].Name)
 
 				}
@@ -624,11 +654,11 @@ var _ = Describe("TLSPolicy controller", func() {
 				g.Expect(certList.Items).To(HaveLen(1))
 				g.Expect(certList.Items).To(
 					ContainElements(
-						HaveField("Name", "test-tls-secret"),
+						HaveField("Name", "test-gateway-test.example.com"),
 					))
 
 				cert1 := &certmanv1.Certificate{}
-				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-tls-secret", Namespace: testNamespace}, cert1)
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test.example.com", Namespace: testNamespace}, cert1)
 				Expect(err).ToNot(HaveOccurred())
 
 				Expect(cert1.Spec.DNSNames).To(ConsistOf("test.example.com"))
@@ -669,6 +699,338 @@ var _ = Describe("TLSPolicy controller", func() {
 			err := k8sClient.Create(ctx, p)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("Invalid targetRef.kind. The only supported values are 'Gateway'"))
+		}, testTimeOut)
+	})
+
+	Context("section name", func() {
+		BeforeEach(func(ctx SpecContext) {
+			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+				WithHTTPSListener("test1.example.com", "test1-tls-secret").
+				WithHTTPSListener("test2.example.com", "test2-tls-secret").
+				WithHTTPSListener("test3.example.com", "test3-tls-secret").Gateway
+			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
+		})
+
+		It("cert for only the targeted section is created", func(ctx SpecContext) {
+			// Create first TLS Policy targeting one section
+			tlsPolicy1 := kuadrantv1.NewTLSPolicy("test-tls-policy-section-1", testNamespace).
+				WithTargetGatewaySection(gateway.Name, "test1.example.com").
+				WithIssuerRef(*issuerRef)
+			Expect(k8sClient.Create(ctx, tlsPolicy1)).To(Succeed())
+
+			// Only one cert
+			Eventually(func(g Gomega, ctx context.Context) {
+				// Policy should be enforced
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy1), tlsPolicy1)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(tlsPolicy1.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeTrue())
+
+				certList := &certmanv1.CertificateList{}
+				err := k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(certList.Items).To(HaveLen(1))
+				g.Expect(certList.Items).To(
+					ContainElements(
+						HaveField("Name", "test-gateway-test1.example.com"),
+					))
+
+				cert := &certmanv1.Certificate{}
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test1.example.com", Namespace: testNamespace}, cert)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(cert.Spec.DNSNames).To(ConsistOf("test1.example.com"))
+
+			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
+
+			// Create second TLS Policy targeting another section
+			tlsPolicy2 := kuadrantv1.NewTLSPolicy("test-tls-policy-section-2", testNamespace).
+				WithTargetGatewaySection(gateway.Name, "test2.example.com").
+				WithIssuerRef(*issuerRef)
+			Expect(k8sClient.Create(ctx, tlsPolicy2)).To(Succeed())
+
+			// Two certs
+			Eventually(func(g Gomega, ctx context.Context) {
+				// Both policies should be enforced
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy1), tlsPolicy1)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(tlsPolicy1.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeTrue())
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy2), tlsPolicy2)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(tlsPolicy2.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeTrue())
+
+				certList := &certmanv1.CertificateList{}
+				err := k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(certList.Items).To(HaveLen(2))
+				g.Expect(certList.Items).To(
+					ContainElements(
+						HaveField("Name", "test-gateway-test1.example.com"),
+						HaveField("Name", "test-gateway-test2.example.com"),
+					))
+
+				cert1 := &certmanv1.Certificate{}
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test1.example.com", Namespace: testNamespace}, cert1)
+				Expect(err).ToNot(HaveOccurred())
+
+				cert2 := &certmanv1.Certificate{}
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test2.example.com", Namespace: testNamespace}, cert2)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(cert1.Spec.DNSNames).To(ConsistOf("test1.example.com"))
+				Expect(cert2.Spec.DNSNames).To(ConsistOf("test2.example.com"))
+			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
+		})
+
+		It("section name policy and gateway policy", func(ctx SpecContext) {
+			// Create first TLS Policy targeting one section
+			tlsPolicy1 := kuadrantv1.NewTLSPolicy("test-tls-policy-section-1", testNamespace).
+				WithTargetGatewaySection(gateway.Name, "test1.example.com").
+				WithIssuerRef(*issuerRef)
+			tlsPolicy1.Spec.CommonName = "example.com"
+			Expect(k8sClient.Create(ctx, tlsPolicy1)).To(Succeed())
+
+			// Only one cert
+			Eventually(func(g Gomega, ctx context.Context) {
+				// Policy should be enforced
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy1), tlsPolicy1)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(tlsPolicy1.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeTrue())
+
+				certList := &certmanv1.CertificateList{}
+				err := k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(certList.Items).To(HaveLen(1))
+				g.Expect(certList.Items).To(
+					ContainElements(
+						HaveField("Name", "test-gateway-test1.example.com"),
+					))
+				cert := &certmanv1.Certificate{}
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test1.example.com", Namespace: testNamespace}, cert)
+				g.Expect(err).ToNot(HaveOccurred())
+
+				g.Expect(cert.Spec.DNSNames).To(ConsistOf("test1.example.com"))
+			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
+
+			// Create second TLS Policy targeting gateway
+			tlsPolicy2 := kuadrantv1.NewTLSPolicy("test-tls-policy-gw", testNamespace).
+				WithTargetGateway(gateway.Name).
+				WithIssuerRef(*issuerRef)
+			Expect(k8sClient.Create(ctx, tlsPolicy2)).To(Succeed())
+
+			// 3 certs
+			Eventually(func(g Gomega, ctx context.Context) {
+				// Policy should be enforced
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy1), tlsPolicy1)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(tlsPolicy1.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeTrue())
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy2), tlsPolicy2)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(tlsPolicy2.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeTrue())
+
+				certList := &certmanv1.CertificateList{}
+				err := k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(certList.Items).To(HaveLen(3))
+				g.Expect(certList.Items).To(
+					ContainElements(
+						HaveField("Name", "test-gateway-test1.example.com"),
+						HaveField("Name", "test-gateway-test2.example.com"),
+						HaveField("Name", "test-gateway-test3.example.com"),
+					))
+
+				for _, cert := range certList.Items {
+					// should be affected by section name policy
+					if cert.Name == "test-gateway-test1.example.com" {
+						g.Expect(cert.Spec.CommonName).To(Equal("example.com"))
+					} else {
+						// Should be affected by gw policy
+						g.Expect(cert.Spec.CommonName).To(BeEmpty())
+					}
+				}
+			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
+		}, testTimeOut)
+	})
+
+	Context("multiple gateway with a listener referencing the same tls cert ref", func() {
+		It("should report duplication in affected policy - gateway policies", func(ctx SpecContext) {
+			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+				WithHTTPSListener("test1.example.com", "test1-tls-secret").Gateway
+			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
+
+			gateway2 := tests.NewGatewayBuilder("test-gateway-2", gatewayClass.Name, testNamespace).
+				WithHTTPSListener("test2.example.com", "test1-tls-secret").Gateway
+			Expect(k8sClient.Create(ctx, gateway2)).To(BeNil())
+
+			// Create first TLS Policy targeting first gateway
+			tlsPolicy1 := kuadrantv1.NewTLSPolicy("test-tls-policy-section-1", testNamespace).
+				WithTargetGateway(gateway.Name).
+				WithIssuerRef(*issuerRef)
+			Expect(k8sClient.Create(ctx, tlsPolicy1)).To(Succeed())
+
+			// Only one cert
+			Eventually(func(g Gomega, ctx context.Context) {
+				// Policy should be enforced
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy1), tlsPolicy1)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(tlsPolicy1.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeTrue())
+
+				certList := &certmanv1.CertificateList{}
+				err := k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(certList.Items).To(HaveLen(1))
+				g.Expect(certList.Items).To(
+					ContainElements(
+						HaveField("Name", "test-gateway-test1.example.com"),
+					))
+			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
+
+			// Create second TLS Policy targeting second gateway
+			tlsPolicy2 := kuadrantv1.NewTLSPolicy("test-tls-policy-section-2", testNamespace).
+				WithTargetGateway(gateway2.Name).
+				WithIssuerRef(*issuerRef)
+			Expect(k8sClient.Create(ctx, tlsPolicy2)).To(Succeed())
+
+			// Two certs
+			Eventually(func(g Gomega, ctx context.Context) {
+				// Only first policy should be enforced
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy1), tlsPolicy1)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(tlsPolicy1.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeTrue())
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy2), tlsPolicy2)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(tlsPolicy2.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeFalse())
+
+				certList := &certmanv1.CertificateList{}
+				err := k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(certList.Items).To(HaveLen(2))
+				g.Expect(certList.Items).To(
+					ContainElements(
+						HaveField("Name", "test-gateway-test1.example.com"),
+						HaveField("Name", "test-gateway-2-test2.example.com"),
+					))
+
+				cert1 := &certmanv1.Certificate{}
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test1.example.com", Namespace: testNamespace}, cert1)
+				g.Expect(err).ToNot(HaveOccurred())
+				cond, found := lo.Find(cert1.Status.Conditions, func(item certmanv1.CertificateCondition) bool {
+					return item.Type == certmanv1.CertificateConditionReady
+				})
+				g.Expect(found).To(BeTrue())
+				g.Expect(cond.Status).To(Equal(certmanmetav1.ConditionTrue))
+
+				cert2 := &certmanv1.Certificate{}
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-2-test2.example.com", Namespace: testNamespace}, cert2)
+				g.Expect(err).ToNot(HaveOccurred())
+				cond, found = lo.Find(cert2.Status.Conditions, func(item certmanv1.CertificateCondition) bool {
+					return item.Type == certmanv1.CertificateConditionReady
+				})
+				g.Expect(found).To(BeTrue())
+				g.Expect(cond.Status).To(Equal(certmanmetav1.ConditionFalse))
+				g.Expect(cond.Reason).To(Equal("IncorrectCertificate"))
+			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
+		}, testTimeOut)
+
+		It("should report duplication in affected policy - section policies", func(ctx SpecContext) {
+			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+				WithHTTPSListener("test1.example.com", "test1-tls-secret").
+				WithHTTPSListener("test2.example.com", "test2-tls-secret").Gateway
+			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
+
+			gateway2 := tests.NewGatewayBuilder("test-gateway-2", gatewayClass.Name, testNamespace).
+				WithHTTPSListener("test3.example.com", "test1-tls-secret").
+				WithHTTPSListener("test4.example.com", "test3-tls-secret").Gateway
+			Expect(k8sClient.Create(ctx, gateway2)).To(BeNil())
+
+			// Create first TLS Policy targeting first gateway section
+			tlsPolicy1 := kuadrantv1.NewTLSPolicy("test-tls-policy-section-1", testNamespace).
+				WithTargetGatewaySection(gateway.Name, "test1.example.com").
+				WithIssuerRef(*issuerRef)
+			Expect(k8sClient.Create(ctx, tlsPolicy1)).To(Succeed())
+
+			// Only one cert
+			Eventually(func(g Gomega, ctx context.Context) {
+				// Policy should be enforced
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy1), tlsPolicy1)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(tlsPolicy1.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeTrue())
+
+				certList := &certmanv1.CertificateList{}
+				err := k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(certList.Items).To(HaveLen(1))
+				g.Expect(certList.Items).To(
+					ContainElements(
+						HaveField("Name", "test-gateway-test1.example.com"),
+					))
+			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
+
+			// Create second TLS Policy targeting second gateway
+			tlsPolicy2 := kuadrantv1.NewTLSPolicy("test-tls-policy-section-2", testNamespace).
+				WithTargetGatewaySection(gateway2.Name, "test3.example.com").
+				WithIssuerRef(*issuerRef)
+			Expect(k8sClient.Create(ctx, tlsPolicy2)).To(Succeed())
+
+			// Two certs
+			Eventually(func(g Gomega, ctx context.Context) {
+				// Only first policy should be enforced
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy1), tlsPolicy1)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(tlsPolicy1.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeTrue())
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(tlsPolicy2), tlsPolicy2)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(tlsPolicy2.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeFalse())
+
+				certList := &certmanv1.CertificateList{}
+				err := k8sClient.List(ctx, certList, &client.ListOptions{Namespace: testNamespace})
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(certList.Items).To(HaveLen(2))
+				g.Expect(certList.Items).To(
+					ContainElements(
+						HaveField("Name", "test-gateway-test1.example.com"),
+						HaveField("Name", "test-gateway-2-test3.example.com"),
+					))
+
+				cert1 := &certmanv1.Certificate{}
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-test1.example.com", Namespace: testNamespace}, cert1)
+				g.Expect(err).ToNot(HaveOccurred())
+				cond, found := lo.Find(cert1.Status.Conditions, func(item certmanv1.CertificateCondition) bool {
+					return item.Type == certmanv1.CertificateConditionReady
+				})
+				g.Expect(found).To(BeTrue())
+				g.Expect(cond.Status).To(Equal(certmanmetav1.ConditionTrue))
+
+				cert2 := &certmanv1.Certificate{}
+				err = k8sClient.Get(ctx, client.ObjectKey{Name: "test-gateway-2-test3.example.com", Namespace: testNamespace}, cert2)
+				g.Expect(err).ToNot(HaveOccurred())
+				cond, found = lo.Find(cert2.Status.Conditions, func(item certmanv1.CertificateCondition) bool {
+					return item.Type == certmanv1.CertificateConditionReady
+				})
+				g.Expect(found).To(BeTrue())
+				g.Expect(cond.Status).To(Equal(certmanmetav1.ConditionFalse))
+				g.Expect(cond.Reason).To(Equal("IncorrectCertificate"))
+			}, tests.TimeoutLong, time.Second, ctx).Should(Succeed())
+		}, testTimeOut)
+	})
+
+	Context("Multiple policies with same target ref", func() {
+		BeforeEach(func(ctx SpecContext) {
+			gateway = tests.NewGatewayBuilder("test-gateway", gatewayClass.Name, testNamespace).
+				WithHTTPSListener("test1.example.com", "test1-tls-secret").Gateway
+			Expect(k8sClient.Create(ctx, gateway)).To(BeNil())
+		})
+
+		It("Should conflict on the second created policy", func(ctx context.Context) {
+			p1 := kuadrantv1.NewTLSPolicy("test-tls-policy", testNamespace).
+				WithTargetGateway(gateway.Name).
+				WithIssuerRef(*issuerRef)
+			Expect(k8sClient.Create(ctx, p1)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p1), p1)).To(Succeed())
+				g.Expect(meta.IsStatusConditionTrue(p1.Status.Conditions, string(kuadrant.PolicyConditionEnforced))).To(BeTrue())
+			}).WithContext(ctx).Should(Succeed())
+
+			p2 := kuadrantv1.NewTLSPolicy("test-tls-policy-2", testNamespace).
+				WithTargetGateway(gateway.Name).
+				WithIssuerRef(*issuerRef)
+			Expect(k8sClient.Create(ctx, p2)).To(Succeed())
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(p2), p2)).To(Succeed())
+				cond := meta.FindStatusCondition(p2.Status.Conditions, string(gatewayapiv1alpha2.PolicyConditionAccepted))
+				g.Expect(cond).ToNot(BeNil())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(cond.Reason).To(Equal(string(gatewayapiv1alpha2.PolicyReasonConflicted)))
+				g.Expect(cond.Message).To(Equal(fmt.Sprintf("TLSPolicy is conflicted by %s: conflicting policy", client.ObjectKeyFromObject(p1).String())))
+			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)
 	})
 })

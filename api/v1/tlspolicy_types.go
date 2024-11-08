@@ -22,6 +22,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -42,7 +43,7 @@ type TLSPolicySpec struct {
 	// TargetRef identifies an API object to apply policy to.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'Gateway'"
-	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReference `json:"targetRef"`
+	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	CertificateSpec `json:",inline"`
 }
@@ -149,9 +150,9 @@ var _ machinery.Policy = &TLSPolicy{}
 
 func (p *TLSPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
 	return []machinery.PolicyTargetReference{
-		machinery.LocalPolicyTargetReference{
-			LocalPolicyTargetReference: p.Spec.TargetRef,
-			PolicyNamespace:            p.Namespace,
+		machinery.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReferenceWithSectionName: p.Spec.TargetRef,
+			PolicyNamespace: p.Namespace,
 		},
 	}
 }
@@ -190,8 +191,9 @@ func (p *TLSPolicy) GetRulesHostnames() []string {
 	return make([]string, 0)
 }
 
+// DEPRECATED: Use GetTargetRefs instead
 func (p *TLSPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
-	return p.Spec.TargetRef
+	return p.Spec.TargetRef.LocalPolicyTargetReference
 }
 
 // Deprecated: kuadrant.Policy.
@@ -236,10 +238,24 @@ func NewTLSPolicy(policyName, ns string) *TLSPolicy {
 }
 
 func (p *TLSPolicy) WithTargetGateway(gwName string) *TLSPolicy {
-	p.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReference{
-		Group: gatewayapiv1.GroupName,
-		Kind:  "Gateway",
-		Name:  gatewayapiv1.ObjectName(gwName),
+	p.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+		LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			Group: gatewayapiv1.GroupName,
+			Kind:  "Gateway",
+			Name:  gatewayapiv1.ObjectName(gwName),
+		},
+	}
+	return p
+}
+
+func (p *TLSPolicy) WithTargetGatewaySection(gwName string, sectionName string) *TLSPolicy {
+	p.Spec.TargetRef = gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+		LocalPolicyTargetReference: gatewayapiv1alpha2.LocalPolicyTargetReference{
+			Group: gatewayapiv1.GroupName,
+			Kind:  "Gateway",
+			Name:  gatewayapiv1.ObjectName(gwName),
+		},
+		SectionName: ptr.To(gatewayapiv1.SectionName(sectionName)),
 	}
 	return p
 }

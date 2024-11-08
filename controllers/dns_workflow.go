@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
+	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
 )
 
@@ -26,6 +28,9 @@ const (
 	DNSRecordKind             = "DNSRecord"
 	StateDNSPolicyAcceptedKey = "DNSPolicyValid"
 	StateDNSPolicyErrorsKey   = "DNSPolicyErrors"
+
+	PolicyConditionSubResourcesHealthy gatewayapiv1alpha2.PolicyConditionType   = "SubResourcesHealthy"
+	PolicyReasonSubResourcesHealthy    gatewayapiv1alpha2.PolicyConditionReason = "SubResourcesHealthy"
 )
 
 var (
@@ -137,4 +142,28 @@ func dnsPolicyTypeFilterFunc() func(item machinery.Policy, _ int) (*kuadrantv1.D
 		p, ok := item.(*kuadrantv1.DNSPolicy)
 		return p, ok
 	}
+}
+
+func dnsPolicyHealthyCondition(policy kuadrant.Policy, err kuadrant.PolicyError) *metav1.Condition {
+	cond := &metav1.Condition{
+		Type:    string(PolicyConditionSubResourcesHealthy),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyReasonSubResourcesHealthy),
+		Message: fmt.Sprintf("all subresources of %s are healthy", policy.Kind()),
+	}
+
+	if err == nil {
+		return cond
+	}
+
+	// Wrap error into a PolicyError if it is not this type
+	var policyErr kuadrant.PolicyError
+	if !errors.As(err, &policyErr) {
+		policyErr = kuadrant.NewErrUnknown(policy.Kind(), err)
+	}
+	cond.Status = metav1.ConditionFalse
+	cond.Message = policyErr.Error()
+	cond.Reason = string(policyErr.Reason())
+
+	return cond
 }

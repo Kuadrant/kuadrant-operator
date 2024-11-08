@@ -69,7 +69,7 @@ func (p *RateLimitPolicy) GetLocator() string {
 	return machinery.LocatorFromObject(p)
 }
 
-// DEPRECATED: Use GetTargetRefs instead
+// Deprecated: Use GetTargetRefs instead
 func (p *RateLimitPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
 	return p.Spec.TargetRef.LocalPolicyTargetReference
 }

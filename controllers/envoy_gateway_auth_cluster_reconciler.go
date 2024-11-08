@@ -20,9 +20,12 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
+	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
 )
+
+//+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoypatchpolicies,verbs=get;list;watch;create;update;patch;delete
 
 // EnvoyGatewayAuthClusterReconciler reconciles Envoy Gateway EnvoyPatchPolicy custom resources for auth
 type EnvoyGatewayAuthClusterReconciler struct {
@@ -75,7 +78,7 @@ func (r *EnvoyGatewayAuthClusterReconciler) Reconcile(ctx context.Context, _ []c
 	}
 
 	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveAuthPolicies)), func(effectivePolicy EffectiveAuthPolicy, _ int) (*machinery.Gateway, bool) {
-		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
+		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
 		return gateway, gatewayClass.Spec.ControllerName == envoyGatewayGatewayControllerName
 	}), func(gateway *machinery.Gateway) string {
 		return gateway.GetLocator()
@@ -192,7 +195,7 @@ func (r *EnvoyGatewayAuthClusterReconciler) buildDesiredEnvoyPatchPolicy(authori
 	}
 
 	authorinoServiceInfo := authorinoServiceInfoFromAuthorino(authorino)
-	jsonPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(common.KuadrantAuthClusterName, authorinoServiceInfo.Host, int(authorinoServiceInfo.Port), authClusterPatch)
+	jsonPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(kuadrant.KuadrantAuthClusterName, authorinoServiceInfo.Host, int(authorinoServiceInfo.Port), authClusterPatch)
 	if err != nil {
 		return nil, err
 	}

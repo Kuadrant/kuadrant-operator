@@ -18,9 +18,12 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/pkg/authorino"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 )
+
+//+kubebuilder:rbac:groups=authorino.kuadrant.io,resources=authconfigs,verbs=get;list;watch;create;update;patch;delete
 
 type AuthConfigsReconciler struct {
 	client *dynamic.DynamicClient
@@ -36,7 +39,7 @@ func (r *AuthConfigsReconciler) Subscription() controller.Subscription {
 			{Kind: &machinery.GatewayGroupKind},
 			{Kind: &machinery.HTTPRouteGroupKind},
 			{Kind: &kuadrantv1.AuthPolicyGroupKind},
-			{Kind: &kuadrantv1beta1.AuthConfigGroupKind},
+			{Kind: &kuadrantauthorino.AuthConfigGroupKind},
 		},
 	}
 }
@@ -68,7 +71,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	modifiedAuthConfigs := []string{}
 
 	for pathID, effectivePolicy := range effectivePoliciesMap {
-		_, _, _, httpRoute, httpRouteRule, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
+		_, _, _, httpRoute, httpRouteRule, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
 		httpRouteKey := k8stypes.NamespacedName{Name: httpRoute.GetName(), Namespace: httpRoute.GetNamespace()}
 		httpRouteRuleKey := httpRouteRule.Name
 
@@ -76,10 +79,10 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 		desiredAuthConfig := r.buildDesiredAuthConfig(effectivePolicy, authConfigName, authConfigsNamespace)
 		desiredAuthConfigs[k8stypes.NamespacedName{Name: desiredAuthConfig.GetName(), Namespace: desiredAuthConfig.GetNamespace()}] = struct{}{}
 
-		resource := r.client.Resource(kuadrantv1beta1.AuthConfigsResource).Namespace(desiredAuthConfig.GetNamespace())
+		resource := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(desiredAuthConfig.GetNamespace())
 
 		existingAuthConfigObj, found := lo.Find(topology.Objects().Children(httpRouteRule), func(child machinery.Object) bool {
-			return child.GroupVersionKind().GroupKind() == kuadrantv1beta1.AuthConfigGroupKind && child.GetName() == authConfigName && labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredAuthConfig.GetLabels()))
+			return child.GroupVersionKind().GroupKind() == kuadrantauthorino.AuthConfigGroupKind && child.GetName() == authConfigName && labels.Set(child.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(labels.Set(desiredAuthConfig.GetLabels()))
 		})
 
 		// create
@@ -137,10 +140,10 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 	// cleanup authconfigs that are not in the effective policies
 	staleAuthConfigs := topology.Objects().Items(func(o machinery.Object) bool {
 		_, desired := desiredAuthConfigs[k8stypes.NamespacedName{Name: o.GetName(), Namespace: o.GetNamespace()}]
-		return o.GroupVersionKind().GroupKind() == kuadrantv1beta1.AuthConfigGroupKind && labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(AuthObjectLabels()) && !desired
+		return o.GroupVersionKind().GroupKind() == kuadrantauthorino.AuthConfigGroupKind && labels.Set(o.(*controller.RuntimeObject).GetLabels()).AsSelector().Matches(AuthObjectLabels()) && !desired
 	})
 	for _, authConfig := range staleAuthConfigs {
-		if err := r.client.Resource(kuadrantv1beta1.AuthConfigsResource).Namespace(authConfig.GetNamespace()).Delete(ctx, authConfig.GetName(), metav1.DeleteOptions{}); err != nil {
+		if err := r.client.Resource(kuadrantauthorino.AuthConfigsResource).Namespace(authConfig.GetNamespace()).Delete(ctx, authConfig.GetName(), metav1.DeleteOptions{}); err != nil {
 			logger.Error(err, "failed to delete authconfig object", "authconfig", fmt.Sprintf("%s/%s", authConfig.GetNamespace(), authConfig.GetName()))
 			// TODO: handle error
 		}
@@ -150,7 +153,7 @@ func (r *AuthConfigsReconciler) Reconcile(ctx context.Context, _ []controller.Re
 }
 
 func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy EffectiveAuthPolicy, name, namespace string) *authorinov1beta3.AuthConfig {
-	_, _, _, _, httpRouteRule, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
+	_, _, _, _, httpRouteRule, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
 
 	authConfig := &authorinov1beta3.AuthConfig{
 		TypeMeta: metav1.TypeMeta{
@@ -161,7 +164,7 @@ func (r *AuthConfigsReconciler) buildDesiredAuthConfig(effectivePolicy Effective
 			Name:      name,
 			Namespace: namespace,
 			Annotations: map[string]string{
-				kuadrantv1beta1.AuthConfigHTTPRouteRuleAnnotation: httpRouteRule.GetLocator(),
+				kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation: httpRouteRule.GetLocator(),
 			},
 			Labels: AuthObjectLabels(),
 		},
@@ -260,7 +263,7 @@ func equalAuthConfigs(existing, desired *authorinov1beta3.AuthConfig) bool {
 	// httprouterule back ref annotation
 	existingAnnotations := existing.GetAnnotations()
 	desiredAnnotations := desired.GetAnnotations()
-	if existingAnnotations == nil || desiredAnnotations == nil || existingAnnotations[kuadrantv1beta1.AuthConfigHTTPRouteRuleAnnotation] != desiredAnnotations[kuadrantv1beta1.AuthConfigHTTPRouteRuleAnnotation] {
+	if existingAnnotations == nil || desiredAnnotations == nil || existingAnnotations[kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation] != desiredAnnotations[kuadrantauthorino.AuthConfigHTTPRouteRuleAnnotation] {
 		return false
 	}
 

@@ -20,9 +20,12 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
+	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
 )
+
+//+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoypatchpolicies,verbs=get;list;watch;create;update;patch;delete
 
 // EnvoyGatewayRateLimitClusterReconciler reconciles Envoy Gateway EnvoyPatchPolicy custom resources for rate limiting
 type EnvoyGatewayRateLimitClusterReconciler struct {
@@ -75,7 +78,7 @@ func (r *EnvoyGatewayRateLimitClusterReconciler) Reconcile(ctx context.Context, 
 	}
 
 	gateways := lo.UniqBy(lo.FilterMap(lo.Values(effectivePolicies.(EffectiveRateLimitPolicies)), func(effectivePolicy EffectiveRateLimitPolicy, _ int) (*machinery.Gateway, bool) {
-		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
+		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
 		return gateway, gatewayClass.Spec.ControllerName == envoyGatewayGatewayControllerName
 	}), func(gateway *machinery.Gateway) string {
 		return gateway.GetLocator()
@@ -191,7 +194,7 @@ func (r *EnvoyGatewayRateLimitClusterReconciler) buildDesiredEnvoyPatchPolicy(li
 		},
 	}
 
-	jsonPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(common.KuadrantRateLimitClusterName, limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC), rateLimitClusterPatch)
+	jsonPatches, err := kuadrantenvoygateway.BuildEnvoyPatchPolicyClusterPatch(kuadrant.KuadrantRateLimitClusterName, limitador.Status.Service.Host, int(limitador.Status.Service.Ports.GRPC), rateLimitClusterPatch)
 	if err != nil {
 		return nil, err
 	}

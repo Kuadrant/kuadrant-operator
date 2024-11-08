@@ -32,10 +32,11 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	"github.com/kuadrant/kuadrant-operator/pkg/authorino"
 	"github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
 	"github.com/kuadrant/kuadrant-operator/pkg/istio"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift"
 	"github.com/kuadrant/kuadrant-operator/pkg/openshift/consoleplugin"
 )
@@ -48,26 +49,15 @@ var (
 )
 
 // gateway-api permissions
-//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=list;watch
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gatewayclasses,verbs=get;list;watch
+//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways/finalizers,verbs=update
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes/status,verbs=get;update;patch
 
-// istio permissions
-//+kubebuilder:rbac:groups=networking.istio.io,resources=envoyfilters,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=install.istio.io,resources=istiooperators,verbs=get;list;watch;create;update;patch
-//+kubebuilder:rbac:groups=operator.istio.io,resources=istios,verbs=get;list;watch;create;update;patch
-
-// envoy gateway permissions
-//+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoypatchpolicies,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=gateway.envoyproxy.io,resources=envoyextensionpolicies,verbs=get;list;watch;create;update;patch;delete
-
 // kuadrant permissions
-//+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants/finalizers,verbs=update
 
 // core, apps, coordination.k8s,io permissions
 //+kubebuilder:rbac:groups=core,resources=serviceaccounts;configmaps;services,verbs=get;list;watch;create;update;patch;delete
@@ -75,13 +65,6 @@ var (
 //+kubebuilder:rbac:groups=coordination.k8s.io,resources=configmaps;leases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups="",resources=leases,verbs=get;list;watch;create;update;patch;delete
-
-// maistra.io permissions
-// +kubebuilder:rbac:groups=maistra.io,resources=servicemeshcontrolplanes,verbs=get;list;watch;update;use;patch
-// +kubebuilder:rbac:groups=maistra.io,resources=servicemeshmembers,verbs=get;list;watch;create;update;delete;patch
-
-// authorino permissions
-//+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos,verbs=get;list;watch;create;update;delete;patch
 
 func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.DynamicClient, logger logr.Logger) *controller.Controller {
 	// Base options
@@ -139,7 +122,7 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 		)),
 		controller.WithRunnable("authconfig watcher", controller.Watch(
 			&authorinov1beta3.AuthConfig{},
-			kuadrantv1beta1.AuthConfigsResource,
+			authorino.AuthConfigsResource,
 			metav1.NamespaceAll,
 			controller.FilterResourcesByLabel[*authorinov1beta3.AuthConfig](fmt.Sprintf("%s=true", kuadrantManagedLabelKey)),
 		)),
@@ -154,13 +137,13 @@ func NewPolicyMachineryController(manager ctrlruntime.Manager, client *dynamic.D
 			ConfigMapGroupKind,
 			kuadrantv1beta1.LimitadorGroupKind,
 			kuadrantv1beta1.AuthorinoGroupKind,
-			kuadrantv1beta1.AuthConfigGroupKind,
+			authorino.AuthConfigGroupKind,
 		),
 		controller.WithObjectLinks(
 			kuadrantv1beta1.LinkKuadrantToGatewayClasses,
 			kuadrantv1beta1.LinkKuadrantToLimitador,
 			kuadrantv1beta1.LinkKuadrantToAuthorino,
-			kuadrantv1beta1.LinkHTTPRouteRuleToAuthConfig,
+			authorino.LinkHTTPRouteRuleToAuthConfig,
 		),
 	}
 

@@ -22,8 +22,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/controllers"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
@@ -216,7 +215,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 	limitadorContainsLimit := func(ctx context.Context, limits ...limitadorv1alpha1.RateLimit) func(g Gomega) {
 		return func(g Gomega) {
-			limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
+			limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: kuadrantInstallationNS}
 			existingLimitador := &limitadorv1alpha1.Limitador{}
 			g.Expect(k8sClient.Get(ctx, limitadorKey, existingLimitador)).To(Succeed())
 			for i := range limits {
@@ -258,7 +257,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// check limits
 			Eventually(func(g Gomega) {
-				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
+				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: kuadrantInstallationNS}
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
 				// must exist
@@ -331,7 +330,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// check limits
 			Eventually(func(g Gomega) {
-				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
+				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: kuadrantInstallationNS}
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
 				// must exist
@@ -362,7 +361,7 @@ var _ = Describe("RateLimitPolicy controller", func() {
 
 			// check limits
 			Eventually(func(g Gomega) {
-				limitadorKey := client.ObjectKey{Name: common.LimitadorName, Namespace: kuadrantInstallationNS}
+				limitadorKey := client.ObjectKey{Name: kuadrant.LimitadorName, Namespace: kuadrantInstallationNS}
 				existingLimitador := &limitadorv1alpha1.Limitador{}
 				err = k8sClient.Get(ctx, limitadorKey, existingLimitador)
 				// must exist

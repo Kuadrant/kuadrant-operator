@@ -16,9 +16,9 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
 	"github.com/kuadrant/kuadrant-operator/pkg/ratelimit"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 )
 
 type LimitadorLimitsReconciler struct {
@@ -98,7 +98,7 @@ func (r *LimitadorLimitsReconciler) buildLimitadorLimits(ctx context.Context, st
 	rateLimitIndex := ratelimit.NewIndex()
 
 	for pathID, effectivePolicy := range effectivePoliciesMap {
-		_, _, _, httpRoute, _, _ := common.ObjectsInRequestPath(effectivePolicy.Path)
+		_, _, _, httpRoute, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(effectivePolicy.Path)
 		limitsNamespace := LimitsNamespaceFromRoute(httpRoute.HTTPRoute)
 
 		limitRules := lo.Filter(lo.Entries(effectivePolicy.Spec.Rules()),

@@ -13,8 +13,9 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
 )
 
 const (
@@ -31,12 +32,12 @@ func BuildConfigForActionSet(actionSets []ActionSet) Config {
 		Services: map[string]Service{
 			AuthServiceName: {
 				Type:        AuthServiceType,
-				Endpoint:    common.KuadrantAuthClusterName,
+				Endpoint:    kuadrant.KuadrantAuthClusterName,
 				FailureMode: FailureModeDeny,
 			},
 			RateLimitServiceName: {
 				Type:        RateLimitServiceType,
-				Endpoint:    common.KuadrantRateLimitClusterName,
+				Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 				FailureMode: FailureModeAllow,
 			},
 		},
@@ -45,7 +46,7 @@ func BuildConfigForActionSet(actionSets []ActionSet) Config {
 }
 
 func BuildActionSetsForPath(pathID string, path []machinery.Targetable, actions []Action) ([]kuadrantgatewayapi.HTTPRouteMatchConfig, error) {
-	_, _, listener, httpRoute, httpRouteRule, err := common.ObjectsInRequestPath(path)
+	_, _, listener, httpRoute, httpRouteRule, err := kuadrantpolicymachinery.ObjectsInRequestPath(path)
 	if err != nil {
 		return nil, err
 	}

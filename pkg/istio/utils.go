@@ -11,13 +11,12 @@ import (
 	istioapiv1beta1 "istio.io/api/type/v1beta1"
 	istioclientgoextensionv1alpha1 "istio.io/client-go/pkg/apis/extensions/v1alpha1"
 	istioclientgonetworkingv1alpha3 "istio.io/client-go/pkg/apis/networking/v1alpha3"
-	istioclientgosecurityv1beta1 "istio.io/client-go/pkg/apis/security/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 )
 
 var (
@@ -27,14 +26,6 @@ var (
 	EnvoyFilterGroupKind = schema.GroupKind{Group: istioclientgonetworkingv1alpha3.GroupName, Kind: "EnvoyFilter"}
 	WasmPluginGroupKind  = schema.GroupKind{Group: istioclientgoextensionv1alpha1.GroupName, Kind: "WasmPlugin"}
 )
-
-func PolicyTargetRefFromGateway(gateway *gatewayapiv1.Gateway) *istioapiv1beta1.PolicyTargetReference {
-	return &istioapiv1beta1.PolicyTargetReference{
-		Group: gatewayapiv1.GroupName,
-		Kind:  "Gateway",
-		Name:  gateway.Name,
-	}
-}
 
 func EqualTargetRefs(a, b []*istioapiv1beta1.PolicyTargetReference) bool {
 	return len(a) == len(b) && lo.EveryBy(a, func(aTargetRef *istioapiv1beta1.PolicyTargetReference) bool {
@@ -141,24 +132,8 @@ func IsWASMPluginInstalled(restMapper meta.RESTMapper) (bool, error) {
 		istioclientgoextensionv1alpha1.SchemeGroupVersion.Version)
 }
 
-func IsAuthorizationPolicyInstalled(restMapper meta.RESTMapper) (bool, error) {
-	return utils.IsCRDInstalled(
-		restMapper,
-		istioclientgosecurityv1beta1.GroupName,
-		"AuthorizationPolicy",
-		istioclientgosecurityv1beta1.SchemeGroupVersion.Version)
-}
-
 func IsIstioInstalled(restMapper meta.RESTMapper) (bool, error) {
 	ok, err := IsWASMPluginInstalled(restMapper)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, nil
-	}
-
-	ok, err = IsAuthorizationPolicyInstalled(restMapper)
 	if err != nil {
 		return false, err
 	}

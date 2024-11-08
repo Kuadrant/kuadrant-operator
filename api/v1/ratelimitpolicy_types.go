@@ -22,18 +22,10 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
-)
-
-const (
-	// TODO: remove after fixing the integration tests that still depend on these
-	RateLimitPolicyBackReferenceAnnotationName   = "kuadrant.io/ratelimitpolicies"
-	RateLimitPolicyDirectReferenceAnnotationName = "kuadrant.io/ratelimitpolicy"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 )
 
 var (
@@ -150,39 +142,12 @@ func (p *RateLimitPolicy) SetRules(rules map[string]MergeableRule) {
 	}
 }
 
-// DEPRECATED. impl: kuadrant.Policy
 func (p *RateLimitPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
 	return &p.Status
 }
 
-// DEPRECATED. impl: kuadrant.Policy
-func (p *RateLimitPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
-	return kuadrantgatewayapi.InheritedPolicy
-}
-
-// DEPRECATED. impl: kuadrant.Policy
-func (p *RateLimitPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
-	return gatewayapiv1.Namespace(p.GetNamespace())
-}
-
-// DEPRECATED. impl: kuadrant.Policy
-func (p *RateLimitPolicy) GetRulesHostnames() []string {
-	return []string{}
-}
-
-// DEPRECATED. impl: kuadrant.Policy
 func (p *RateLimitPolicy) Kind() string {
 	return RateLimitPolicyGroupKind.Kind
-}
-
-// TODO: remove
-func (p *RateLimitPolicy) DirectReferenceAnnotationName() string {
-	return RateLimitPolicyDirectReferenceAnnotationName
-}
-
-// TODO: remove
-func (p *RateLimitPolicy) BackReferenceAnnotationName() string {
-	return RateLimitPolicyBackReferenceAnnotationName
 }
 
 // +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && has(self.limits))",message="Implicit and explicit defaults are mutually exclusive"
@@ -357,13 +322,6 @@ type RateLimitPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []RateLimitPolicy `json:"items"`
-}
-
-// DEPRECATED. impl: kuadrant.PolicyList
-func (l *RateLimitPolicyList) GetItems() []kuadrant.Policy {
-	return utils.Map(l.Items, func(item RateLimitPolicy) kuadrant.Policy {
-		return &item
-	})
 }
 
 func init() {

@@ -105,7 +105,7 @@ metadata:
     capabilities: Basic Install
     categories: Integration & Delivery
     containerImage: quay.io/kuadrant/kuadrant-operator:latest
-    createdAt: "2024-11-08T14:46:34Z"
+    createdAt: "2024-11-08T16:43:37Z"
     description: A Kubernetes Operator to manage the lifecycle of the Kuadrant system
     operators.operatorframework.io/builder: operator-sdk-v1.32.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
@@ -286,26 +286,20 @@ spec:
           resources:
           - gatewayclasses
           verbs:
+          - get
           - list
           - watch
         - apiGroups:
           - gateway.networking.k8s.io
           resources:
           - gateways
+          - httproutes
           verbs:
-          - create
-          - delete
           - get
           - list
           - patch
           - update
           - watch
-        - apiGroups:
-          - gateway.networking.k8s.io
-          resources:
-          - gateways/finalizers
-          verbs:
-          - update
         - apiGroups:
           - gateway.networking.k8s.io
           resources:
@@ -316,36 +310,14 @@ spec:
           - patch
           - update
         - apiGroups:
-          - gateway.networking.k8s.io
-          resources:
-          - httproutes
-          verbs:
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - install.istio.io
-          resources:
-          - istiooperators
-          verbs:
-          - create
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
           - kuadrant.io
           resources:
           - authpolicies
-          - dnsrecords
+          - dnspolicies
           - kuadrants
           - ratelimitpolicies
+          - tlspolicies
           verbs:
-          - create
-          - delete
           - get
           - list
           - patch
@@ -356,7 +328,6 @@ spec:
           resources:
           - authpolicies/finalizers
           - dnspolicies/finalizers
-          - kuadrants/finalizers
           - ratelimitpolicies/finalizers
           - tlspolicies/finalizers
           verbs:
@@ -376,9 +347,9 @@ spec:
         - apiGroups:
           - kuadrant.io
           resources:
-          - dnspolicies
-          - tlspolicies
+          - dnsrecords
           verbs:
+          - create
           - delete
           - get
           - list
@@ -395,29 +366,6 @@ spec:
           - limitador.kuadrant.io
           resources:
           - limitadors
-          verbs:
-          - create
-          - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - maistra.io
-          resources:
-          - servicemeshcontrolplanes
-          verbs:
-          - get
-          - list
-          - patch
-          - update
-          - use
-          - watch
-        - apiGroups:
-          - maistra.io
-          resources:
-          - servicemeshmembers
           verbs:
           - create
           - delete
@@ -445,17 +393,6 @@ spec:
           verbs:
           - create
           - delete
-          - get
-          - list
-          - patch
-          - update
-          - watch
-        - apiGroups:
-          - operator.istio.io
-          resources:
-          - istios
-          verbs:
-          - create
           - get
           - list
           - patch

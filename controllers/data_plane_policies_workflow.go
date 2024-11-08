@@ -12,6 +12,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
+	kuadrantauthorino "github.com/kuadrant/kuadrant-operator/pkg/authorino"
 	kuadrantenvoygateway "github.com/kuadrant/kuadrant-operator/pkg/envoygateway"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
 )
@@ -37,13 +38,21 @@ var (
 		{Kind: &kuadrantv1.RateLimitPolicyGroupKind},
 		{Kind: &kuadrantv1beta1.LimitadorGroupKind},
 		{Kind: &kuadrantv1.AuthPolicyGroupKind},
-		{Kind: &kuadrantv1beta1.AuthConfigGroupKind},
+		{Kind: &kuadrantauthorino.AuthConfigGroupKind},
 		{Kind: &kuadrantistio.EnvoyFilterGroupKind},
 		{Kind: &kuadrantistio.WasmPluginGroupKind},
 		{Kind: &kuadrantenvoygateway.EnvoyPatchPolicyGroupKind},
 		{Kind: &kuadrantenvoygateway.EnvoyExtensionPolicyGroupKind},
 	}
 )
+
+//+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=kuadrant.io,resources=authpolicies/finalizers,verbs=update
+
+//+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
 
 func NewDataPlanePoliciesWorkflow(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) *controller.Workflow {
 	dataPlanePoliciesValidation := &controller.Workflow{

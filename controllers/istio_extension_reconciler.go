@@ -20,12 +20,14 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	kuadrantv1beta1 "github.com/kuadrant/kuadrant-operator/api/v1beta1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
 	kuadrantistio "github.com/kuadrant/kuadrant-operator/pkg/istio"
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	kuadrantpolicymachinery "github.com/kuadrant/kuadrant-operator/pkg/policymachinery"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 )
+
+//+kubebuilder:rbac:groups=extensions.istio.io,resources=wasmplugins,verbs=get;list;watch;create;update;patch;delete
 
 // IstioExtensionReconciler reconciles Istio WasmPlugin custom resources
 type IstioExtensionReconciler struct {
@@ -170,7 +172,7 @@ func (r *IstioExtensionReconciler) buildWasmConfigs(ctx context.Context, state *
 		pathID := paths[i].Key
 		path := paths[i].Value
 
-		gatewayClass, gateway, _, _, _, _ := common.ObjectsInRequestPath(path)
+		gatewayClass, gateway, _, _, _, _ := kuadrantpolicymachinery.ObjectsInRequestPath(path)
 
 		// ignore if not an istio gateway
 		if gatewayClass.Spec.ControllerName != istioGatewayControllerName {

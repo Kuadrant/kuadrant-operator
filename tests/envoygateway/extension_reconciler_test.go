@@ -21,7 +21,7 @@ import (
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
 	"github.com/kuadrant/kuadrant-operator/controllers"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 	"github.com/kuadrant/kuadrant-operator/pkg/wasm"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
@@ -169,12 +169,12 @@ var _ = Describe("wasm controller", func() {
 				Services: map[string]wasm.Service{
 					wasm.AuthServiceName: {
 						Type:        wasm.AuthServiceType,
-						Endpoint:    common.KuadrantAuthClusterName,
+						Endpoint:    kuadrant.KuadrantAuthClusterName,
 						FailureMode: wasm.FailureModeDeny,
 					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,
-						Endpoint:    common.KuadrantRateLimitClusterName,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 						FailureMode: wasm.FailureModeAllow,
 					},
 				},
@@ -333,12 +333,12 @@ var _ = Describe("wasm controller", func() {
 				Services: map[string]wasm.Service{
 					wasm.AuthServiceName: {
 						Type:        wasm.AuthServiceType,
-						Endpoint:    common.KuadrantAuthClusterName,
+						Endpoint:    kuadrant.KuadrantAuthClusterName,
 						FailureMode: wasm.FailureModeDeny,
 					},
 					wasm.RateLimitServiceName: {
 						Type:        wasm.RateLimitServiceType,
-						Endpoint:    common.KuadrantRateLimitClusterName,
+						Endpoint:    kuadrant.KuadrantRateLimitClusterName,
 						FailureMode: wasm.FailureModeAllow,
 					},
 				},

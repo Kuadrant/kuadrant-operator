@@ -23,9 +23,8 @@ import (
 
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
@@ -1052,8 +1051,8 @@ var _ = Describe("DNSPolicy controller", func() {
 				clusterUID, err := getClusterUID(ctx, k8sClient)
 				Expect(err).To(BeNil())
 
-				clusterHash := common.ToBase36HashLen(clusterUID, utils.ClusterIDLength)
-				gwHash := common.ToBase36HashLen(gateway.Name+"-"+gateway.Namespace, 6)
+				clusterHash := utils.ToBase36HashLen(clusterUID, utils.ClusterIDLength)
+				gwHash := utils.ToBase36HashLen(gateway.Name+"-"+gateway.Namespace, 6)
 
 				endpointMatcher := func(targets ...string) types.GomegaMatcher {
 					return PointTo(MatchFields(IgnoreExtras, Fields{

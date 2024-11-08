@@ -22,8 +22,7 @@ import (
 	kuadrantdnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	"github.com/kuadrant/kuadrant-operator/pkg/common"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 	"github.com/kuadrant/kuadrant-operator/tests"
 )
 
@@ -71,9 +70,9 @@ var _ = Describe("DNSPolicy Single Cluster", func() {
 			Gateway
 		Expect(k8sClient.Create(ctx, gateway)).To(Succeed())
 
-		clusterHash = common.ToBase36HashLen(clusterUID, utils.ClusterIDLength)
+		clusterHash = utils.ToBase36HashLen(clusterUID, utils.ClusterIDLength)
 
-		gwHash = common.ToBase36HashLen(gateway.Name+"-"+gateway.Namespace, 6)
+		gwHash = utils.ToBase36HashLen(gateway.Name+"-"+gateway.Namespace, 6)
 
 		// refresh gateway
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(gateway), gateway)).To(Succeed())

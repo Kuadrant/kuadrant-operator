@@ -33,6 +33,13 @@ var (
 	CertManagerClusterIssuerKind = schema.GroupKind{Group: certmanager.GroupName, Kind: certmanagerv1.ClusterIssuerKind}
 )
 
+//+kubebuilder:rbac:groups=kuadrant.io,resources=tlspolicies,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=kuadrant.io,resources=tlspolicies/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=kuadrant.io,resources=tlspolicies/finalizers,verbs=update
+//+kubebuilder:rbac:groups="cert-manager.io",resources=issuers,verbs=get;list;watch;
+//+kubebuilder:rbac:groups="cert-manager.io",resources=clusterissuers,verbs=get;list;watch;
+//+kubebuilder:rbac:groups="cert-manager.io",resources=certificates,verbs=get;list;watch;create;update;patch;delete
+
 func NewTLSWorkflow(client *dynamic.DynamicClient, scheme *runtime.Scheme, isCertManagerInstalled bool) *controller.Workflow {
 	return &controller.Workflow{
 		Precondition: NewTLSPoliciesValidator(isCertManagerInstalled).Subscription().Reconcile,

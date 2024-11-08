@@ -21,6 +21,8 @@ type AuthorinoReconciler struct {
 	Client *dynamic.DynamicClient
 }
 
+//+kubebuilder:rbac:groups=operator.authorino.kuadrant.io,resources=authorinos,verbs=get;list;watch;create;update;delete;patch
+
 func NewAuthorinoReconciler(client *dynamic.DynamicClient) *AuthorinoReconciler {
 	return &AuthorinoReconciler{Client: client}
 }

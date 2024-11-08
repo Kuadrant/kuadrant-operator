@@ -31,9 +31,8 @@ import (
 	dnsv1alpha1 "github.com/kuadrant/dns-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/machinery"
 
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/library/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
-	"github.com/kuadrant/kuadrant-operator/pkg/library/utils"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
 const (
@@ -198,33 +197,16 @@ func (p *DNSPolicy) Validate() error {
 	return p.Spec.ExcludeAddresses.Validate()
 }
 
-// Deprecated: kuadrant.Policy.
-func (p *DNSPolicy) GetWrappedNamespace() gatewayapiv1.Namespace {
-	return gatewayapiv1.Namespace(p.Namespace)
-}
-
-// Deprecated: kuadrant.Policy.
-func (p *DNSPolicy) GetRulesHostnames() []string {
-	return make([]string, 0)
-}
-
 func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
 	return p.Spec.TargetRef.LocalPolicyTargetReference
 }
 
-// Deprecated: kuadrant.Policy.
 func (p *DNSPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
 	return &p.Status
 }
 
-// Deprecated: kuadrant.Policy.
 func (p *DNSPolicy) Kind() string {
 	return DNSPolicyGroupKind.Kind
-}
-
-// Deprecated: kuadrant.Policy.
-func (p *DNSPolicy) PolicyClass() kuadrantgatewayapi.PolicyClass {
-	return kuadrantgatewayapi.DirectPolicy
 }
 
 //+kubebuilder:object:root=true
@@ -234,13 +216,6 @@ type DNSPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []DNSPolicy `json:"items"`
-}
-
-// Deprecated: kuadrant.PolicyList.
-func (l *DNSPolicyList) GetItems() []kuadrant.Policy {
-	return utils.Map(l.Items, func(item DNSPolicy) kuadrant.Policy {
-		return &item
-	})
 }
 
 func init() {

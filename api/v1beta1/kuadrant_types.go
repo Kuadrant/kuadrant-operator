@@ -19,13 +19,38 @@ package v1beta1
 import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/kuadrant/kuadrant-operator/pkg/library/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+var (
+	KuadrantGroupKind = schema.GroupKind{Group: GroupVersion.Group, Kind: "Kuadrant"}
+
+	KuadrantsResource = GroupVersion.WithResource("kuadrants")
+)
+
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[0].reason`,priority=2
+//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+
+// Kuadrant configures installations of Kuadrant Service Protection components
+type Kuadrant struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   KuadrantSpec   `json:"spec,omitempty"`
+	Status KuadrantStatus `json:"status,omitempty"`
+}
+
+var _ machinery.Object = &Kuadrant{}
+
+func (p *Kuadrant) GetLocator() string {
+	return machinery.LocatorFromObject(p)
+}
 
 // KuadrantSpec defines the desired state of Kuadrant
 type KuadrantSpec struct {
@@ -63,20 +88,6 @@ func (r *KuadrantStatus) Equals(other *KuadrantStatus, logger logr.Logger) bool 
 	}
 
 	return true
-}
-
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[0].reason`,priority=2
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-
-// Kuadrant configures installations of Kuadrant Service Protection components
-type Kuadrant struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   KuadrantSpec   `json:"spec,omitempty"`
-	Status KuadrantStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true

@@ -197,6 +197,7 @@ func (p *DNSPolicy) Validate() error {
 	return p.Spec.ExcludeAddresses.Validate()
 }
 
+// Deprecated: Use GetTargetRefs instead
 func (p *DNSPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
 	return p.Spec.TargetRef.LocalPolicyTargetReference
 }

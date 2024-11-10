@@ -61,6 +61,9 @@ fi
 
 if [ -z $ISTIO_INSTALL_SAIL ]; then
   ISTIO_INSTALL_SAIL=${ISTIO_INSTALL_SAIL:=true}
+fi
+
+if [ -z "$SAIL_VERSION" ] && [ "$ISTIO_INSTALL_SAIL" = "true" ]; then
   SAIL_VERSION=${SAIL_VERSION:="0.1.0"}
 fi
 
@@ -456,6 +459,11 @@ fi
 info "Deploying Kuadrant sample configuration..."
 kubectl -n ${KUADRANT_NAMESPACE} apply -f ${KUADRANT_REPO_RAW}/config/samples/kuadrant_v1beta1_kuadrant.yaml
 success "Kuadrant sample configuration deployed."
+
+# Deploy gateway
+info "Deploying example gateway ..."
+kustomize build config/dependencies/istio/gateway | kubectl apply -f -
+success "Kuadrant sample gateway deployed."
 
 # Install thanos on hub cluster
 if [ "$HUB" -eq 1 ]; then

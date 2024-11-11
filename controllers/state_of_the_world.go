@@ -57,6 +57,7 @@ var (
 
 // kuadrant permissions
 //+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants/finalizers,verbs=update
 //+kubebuilder:rbac:groups=kuadrant.io,resources=kuadrants/status,verbs=get;update;patch
 
 // core, apps, coordination.k8s,io permissions

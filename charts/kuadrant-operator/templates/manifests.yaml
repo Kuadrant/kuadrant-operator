@@ -8679,6 +8679,7 @@ rules:
   resources:
   - authpolicies/finalizers
   - dnspolicies/finalizers
+  - kuadrants/finalizers
   - ratelimitpolicies/finalizers
   - tlspolicies/finalizers
   verbs:

@@ -72,7 +72,7 @@ spec:
       name: headers
 ```
 
-Check out the [API reference](reference/dnspolicy.md) for a full specification of the DNSPolicy CRD.
+Check out the [API reference](../reference/dnspolicy.md) for a full specification of the DNSPolicy CRD.
 
 ## Using the DNSPolicy
 

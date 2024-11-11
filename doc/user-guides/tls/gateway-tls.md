@@ -2,8 +2,6 @@
 
 This user guide walks you through an example of how to configure TLS for all routes attached to an ingress gateway.
 
-<br/>
-
 ## Requisites
 
 - [Docker](https://docker.io)
@@ -26,6 +24,7 @@ make local-setup
 ```
 
 Create a namespace:
+
 ```shell
 kubectl create namespace my-gateways
 ```
@@ -33,6 +32,7 @@ kubectl create namespace my-gateways
 ### Create an ingress gateway
 
 Create a gateway:
+
 ```sh
 kubectl -n my-gateways apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
@@ -62,6 +62,7 @@ EOF
 The TLSPolicy requires a reference to an existing [CertManager Issuer](https://cert-manager.io/docs/configuration/).
 
 Create a CertManager Issuer:
+
 ```shell
 kubectl apply -n my-gateways -f - <<EOF
 apiVersion: cert-manager.io/v1
@@ -78,13 +79,16 @@ EOF
 ```shell
 kubectl get issuer selfsigned-issuer -n my-gateways
 ```
+
 Response:
+
 ```shell
 NAME                        READY   AGE
 selfsigned-issuer   True    18s
 ```
 
 Create a Kuadrant `TLSPolicy` to configure TLS:
+
 ```sh
 kubectl apply -n my-gateways -f - <<EOF
 apiVersion: kuadrant.io/v1
@@ -104,20 +108,26 @@ EOF
 ```
 
 Check policy status:
+
 ```shell
 kubectl get tlspolicy -o wide -n my-gateways
 ```
+
 Response:
+
 ```shell
 NAME       STATUS     TARGETREFKIND   TARGETREFNAME   AGE
 prod-web   Accepted   Gateway         prod-web        13s
 ```
 
 Check a Certificate resource was created:
+
 ```shell
 kubectl get certificates -n my-gateways
 ```
+
 Response
+
 ```shell
 NAME                 READY   SECRET               AGE
 toystore-local-tls   True    toystore-local-tls   7m30s
@@ -125,10 +135,13 @@ toystore-local-tls   True    toystore-local-tls   7m30s
 ```
 
 Check a TLS Secret resource was created:
+
 ```shell
 kubectl get secrets -n my-gateways --field-selector="type=kubernetes.io/tls"
 ```
+
 Response:
+
 ```shell
 NAME                 TYPE                DATA   AGE
 toystore-local-tls   kubernetes.io/tls   3      7m42s
@@ -137,12 +150,14 @@ toystore-local-tls   kubernetes.io/tls   3      7m42s
 ### Deploy a sample API to test TLS
 
 Deploy the sample API:
+
 ```shell
 kubectl -n my-gateways apply -f examples/toystore/toystore.yaml
 kubectl -n my-gateways wait --for=condition=Available deployments toystore --timeout=60s
 ```
 
 Route traffic to the API from our gateway:
+
 ```shell
 kubectl -n my-gateways apply -f - <<EOF
 apiVersion: gateway.networking.k8s.io/v1
@@ -165,20 +180,26 @@ EOF
 ### Verify TLS works by sending requests
 
 Get the gateway address@
+
 ```shell
 GWADDRESS=`kubectl get gateway/prod-web -n my-gateways -o=jsonpath='{.status.addresses[?(@.type=="IPAddress")].value}'`
 echo $GWADDRESS
 ```
+
 Response:
+
 ```shell
 172.18.200.1
 ```
 
 Verify we can access the service via TLS:
+
 ```shell
 curl -vkI https://api.toystore.local --resolve "api.toystore.local:443:$GWADDRESS"
 ```
+
 Response:
+
 ```shell
 * Added api.toystore.local:443:172.18.200.1 to DNS cache
 * Hostname api.toystore.local was found in DNS cache
@@ -223,7 +244,7 @@ Response:
 > Host: api.toystore.local
 > user-agent: curl/7.85.0
 > accept: */*
-> 
+>
 * TLSv1.2 (IN), TLS header, Supplemental data (23):
 * TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
 * TLSv1.3 (IN), TLS handshake, Newsession Ticket (4):
@@ -232,8 +253,8 @@ Response:
 * Connection state changed (MAX_CONCURRENT_STREAMS == 2147483647)!
 * TLSv1.2 (OUT), TLS header, Supplemental data (23):
 * TLSv1.2 (IN), TLS header, Supplemental data (23):
-< HTTP/2 200 
-HTTP/2 200 
+< HTTP/2 200
+HTTP/2 200
 < content-type: application/json
 content-type: application/json
 < server: istio-envoy
@@ -245,7 +266,7 @@ content-length: 1658
 < x-envoy-upstream-service-time: 1
 x-envoy-upstream-service-time: 1
 
-< 
+<
 * Connection #0 to host api.toystore.local left intact
 ```
 

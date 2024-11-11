@@ -7,7 +7,7 @@
     In this document we use AWS route 53 as the example setup.
 
 !!! warning
-    
+
     Kuadrant uses a number of labels to search and filter resources on the cluster.
     All required labels are formatted as `kuadrant.io/*`.
     Removal of any labels with the prefix may cause unexpected behaviour and degradation of the product.
@@ -35,7 +35,6 @@ Set the version of Kuadrant to the latest released version: https://github.com/K
 ```
 export KUADRANT_VERSION='vX.Y.Z'
 ```
-
 
 ### Step 2 - Install Gateway API v1
 
@@ -65,8 +64,7 @@ More installation options at [cert-manager.io](https://cert-manager.io/docs/inst
 You can install the [cert-manager Operator for Red Hat OpenShift](https://docs.openshift.com/container-platform/4.16/security/cert_manager_operator/cert-manager-operator-install.html)
 by using the web console.
 
->**Note:** Before using Kuadrant's `TLSPolicy` you will need to setup a certificate issuer refer to the [cert-manager docs for more details](https://cert-manager.io/docs/configuration/acme/dns01/route53/#creating-an-issuer-or-clusterissuer)
-
+> **Note:** Before using Kuadrant's `TLSPolicy` you will need to setup a certificate issuer refer to the [cert-manager docs for more details](https://cert-manager.io/docs/configuration/acme/dns01/route53/#creating-an-issuer-or-clusterissuer)
 
 ### Step 4 - (Optional) Install and configure Istio with the Sail Operator
 
@@ -134,11 +132,11 @@ spec:
   version: v1.23.0
   values:
     pilot:
-      autoscaleEnabled: false  
+      autoscaleEnabled: false
 EOF
 ```
 
-More details on what can be configured can be found by executing 
+More details on what can be configured can be found by executing
 
 ```
  kubectl explain istio.spec.values
@@ -223,7 +221,7 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/re
 
     There is 1 more metrics configuration that needs to be applied so that all relevant metrics are being scraped.
     That configuration depends on where you deploy your Gateway later.
-    The steps to configure that are detailed in the follow on [Secure, protect, and connect](../user-guides/secure-protect-connect-single-multi-cluster.md) guide.
+    The steps to configure that are detailed in the follow on [Secure, protect, and connect](../user-guides/full-walkthrough/secure-protect-connect-openshift.md) guide.
 
 The [example Grafana dashboards and alerts](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/examples/) for observing Kuadrant functionality use low-level CPU metrics and network metrics available from the user monitoring stack in OpenShift. They also use resource state metrics from Gateway API and Kuadrant resources.
 
@@ -263,7 +261,6 @@ spec:
 EOF
 ```
 
-
 ### Step 8 - Install the Kuadrant Operator
 
 To install the Kuadrant Operator, enter the following command:
@@ -300,7 +297,6 @@ kubectl get installplan -n kuadrant-system -o=jsonpath='{.items[0].status.phase}
 
 After some time, this command should return `complete`.
 
-
 #### Set up a DNSProvider
 
 The example here is for AWS Route 53. It is important the secret for the DNSProvider is setup in the same namespace as the gateway.
@@ -320,12 +316,9 @@ kubectl -n ingress-gateway create secret generic aws-credentials \
 
 For more details on other providers take a look at [DNS Providers](https://docs.kuadrant.io/latest/dns-operator/docs/provider/)
 
-
 #### Setup TLS DNS verification credential
 
-When setting up TLS certs via provider like lets-encrypt, cert-manager will do a DNS based verification. To allow it do this, it will need a similar credential to that one set up for the DNSProvider, but it needs to be created in the cert-manager namespace where the operator is installed.  
-
-
+When setting up TLS certs via provider like lets-encrypt, cert-manager will do a DNS based verification. To allow it do this, it will need a similar credential to that one set up for the DNSProvider, but it needs to be created in the cert-manager namespace where the operator is installed.
 
 ```bash
 kubectl -n cert-manager create secret generic aws-credentials \
@@ -345,7 +338,7 @@ kind: Kuadrant
 metadata:
   name: kuadrant
   namespace: kuadrant-system
-  
+
 EOF
 ```
 
@@ -362,8 +355,6 @@ This will setup and configure a number of Kuadrant subcomponents. Some of these 
 - Limitador (Enforcement Component for RateLimitPolicy)
   - Learn More:(Limitador CRD)[https://docs.kuadrant.io/latest/limitador-operator/#features]
 - DNS Operator (Enforcement Component for DNSPOlicy)
-
-
 
 ### Configuring Redis Storage for Limitador
 
@@ -400,7 +391,6 @@ kubectl wait limitador/limitador -n kuadrant-system --for="condition=Ready=true"
 
 Kuadrant is now ready to use.
 
-
 ### Step 10 - Configure the Kuadrant Console Plugin
 
 When running on OpenShift, the Kuadrant Operator will automatically install and configure the Kuadrant dynamic console plugin.
@@ -422,4 +412,4 @@ Once the plugin is loaded, refresh the console. You should see a new **Kuadrant*
 
 ## Next steps
 
-- [Secure, protect, and connect APIs with Kuadrant on OpenShift](../user-guides/secure-protect-connect-single-multi-cluster.md)
+- [Secure, protect, and connect APIs with Kuadrant on OpenShift](../user-guides/full-walkthrough/secure-protect-connect-openshift.md)

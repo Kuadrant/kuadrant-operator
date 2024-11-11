@@ -2,7 +2,7 @@
 
 A Kuadrant TLSPolicy custom resource:
 
-1. Targets Gateway API networking resources [Gateways](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.Gateway) to provide tls for gateway listeners by managing the lifecycle of tls certificates using [`CertManager`](https://cert-manager.io).
+Targets Gateway API networking resources [Gateways](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.Gateway) to provide tls for gateway listeners by managing the lifecycle of tls certificates using [`CertManager`](https://cert-manager.io).
 
 ## How it works
 
@@ -37,7 +37,7 @@ spec:
     name: mygateway
 ```
 
-Check out the [API reference](reference/tlspolicy.md) for a full specification of the TLSPolicy CRD.
+Check out the [API reference](../reference/tlspolicy.md) for a full specification of the TLSPolicy CRD.
 
 ## Using the TLSPolicy
 

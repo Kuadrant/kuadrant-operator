@@ -11,11 +11,31 @@
 
 | **Field**   | **Type**                                                                                                                                    | **Required** | **Description**                                                                                                                                                                             |
 |-------------|---------------------------------------------------------------------------------------------------------------------------------------------|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `targetRef` | [LocalPolicyTargetReference](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1alpha2.LocalPolicyTargetReference) | Yes          | Reference to a Kubernetes resource that the policy attaches to                                                                                                                              |
+| `targetRef` | [LocalPolicyTargetReferenceWithSectionName](#localpolicytargetreferencewithsectionname) | Yes          | Reference to a Kubernetes resource that the policy attaches to. For more [info](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1alpha2.LocalPolicyTargetReference)                                                                                                                              |
 | `defaults`  | [RateLimitPolicyCommonSpec](#rateLimitPolicyCommonSpec)                                                                                     | No           | Default limit definitions. This field is mutually exclusive with the `limits` field                                                                                                         |
 | `overrides` | [RateLimitPolicyCommonSpec](#rateLimitPolicyCommonSpec)                                                                                     | No           | Overrides limit definitions. This field is mutually exclusive with the `limits` field and `defaults` field. This field is only allowed for policies targeting `Gateway` in `targetRef.kind` |
 | `limits`    | Map<String: [Limit](#limit)>                                                                                                                | No           | Limit definitions. This field is mutually exclusive with the [`defaults`](#rateLimitPolicyCommonSpec) field                                                                                 |
 
+
+
+
+### LocalPolicyTargetReferenceWithSectionName
+| **Field**       | **Type**                                | **Required** | **Description**                                            |
+|------------------|-----------------------------------------|--------------|------------------------------------------------------------|
+| `LocalPolicyTargetReference`         | [LocalPolicyTargetReference](#localpolicytargetreference)          | Yes          | Reference to a local policy target.               |
+| `sectionName`    | [SectionName](#sectionname)                         | No           | Section name for further specificity (if needed). |
+
+### LocalPolicyTargetReference
+| **Field** | **Type**     | **Required** | **Description**                |
+|-----------|--------------|--------------|--------------------------------|
+| `group`   | `Group`      | Yes          | Group of the target resource. |
+| `kind`    | `Kind`       | Yes          | Kind of the target resource.  |
+| `name`    | `ObjectName` | Yes          | Name of the target resource.  |
+
+### SectionName
+| Field       | Type                     | Required | Description                                                                                                                                                                                                                         |
+|-------------|--------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| SectionName | v1.SectionName (String)  | Yes      | SectionName is the name of a section in a Kubernetes resource. <br>In the following resources, SectionName is interpreted as the following: <br>* Gateway: Listener name<br>* HTTPRoute: HTTPRouteRule name<br>* Service: Port name |
 ### RateLimitPolicyCommonSpec
 
 | **Field** | **Type**                     | **Required** | **Description**                                                                                                              |

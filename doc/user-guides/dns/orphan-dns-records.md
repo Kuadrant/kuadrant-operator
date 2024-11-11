@@ -24,33 +24,37 @@ On cluster 2 the DNS Operator managing the existing DNSRecord in that cluster ha
 In prometheus alerts, it spots that the number of owners does not correlate to the number of DNSRecord resources and triggers an alert. 
 To remedy this rather than going to the DNS provider directly and trying to figure out which records to remove, you can instead follow the steps below.
 
-1) Get the owner id of the DNSRecord on cluster 2 for the shared host 
+Get the owner id of the DNSRecord on cluster 2 for the shared host 
 
-```
+```sh
 kubectl get dnsrecord somerecord -n my-gateway-ns -o=jsonpath='{.status.ownerID}'
 ```
 
-2) get all the owner ids
+Get all the owner ids
 
-```
+```sh
 kubectl get dnsrecord.kuadrant.io somerecord -n my-gateway-ns -o=jsonpath='{.status.domainOwners}'
 
-## output
-["26aacm1z","49qn0wp7"]
+# output
+# ["26aacm1z","49qn0wp7"]
 ```
 
-3) create a placeholder DNSRecord with none active ownerID
+Create a placeholder DNSRecord with none active ownerID
 
 
-for each owner id returned that isn't the owner id of the record we got earlier that we want to remove records for, we need to create a dnsrecord resource and delete it. This will trigger the running operator in this cluster to clean up those records.
+For each owner id returned that isn't the owner id of the record that we want to remove records for, we need to create a dnsrecord resource and delete it. This will trigger the running operator in this cluster to clean up those records.
 
-```
-# this is one of the owner id **not** in the existing dnsrecord on cluster
+This is one of the owner id **not** in the existing dnsrecord on cluster
+```sh
+
 export ownerID=26aacm1z  
 
 export rootHost=$(kubectl get dnsrecord.kuadrant.io somerecord -n  my-gateway-ns -o=jsonpath='{.spec.rootHost}')
+```
 
-# export a namespace with the aws credentials in it
+
+Export a namespace with the aws credentials in it
+```sh
 export targetNS=kuadrant-system 
 
 kubectl apply -f - <<EOF
@@ -74,21 +78,21 @@ EOF
 
 ```
 
-4) Delete the dnsrecord
+Delete the DNSrecord
 
-```
+```sh
 kubectl delete dnsrecord.kuadrant.io delete-old-loadbalanced-dnsrecord -n ${targetNS} 
 ```
 
-5) verify 
+Verification 
 
-We can verify by checking the dnsrecord again. Note it may take a several minutes for the other record to update. We can force it by adding a label to the record
+We can verify that the steps worked correctly, by checking the DNSRecord again. Note it may take a several minutes for the other record to update. We can force it by adding a label to the record
 
-```
+```sh
 kubectl label dnsrecord.kuadrant.io somerecord test=test -n ${targetNS}
 
 kubectl get dnsrecord.kuadrant.io somerecord -n my-gateway-ns -o=jsonpath='{.status.domainOwners}'
 
 ```
 
-We should also see our alert eventually stop triggering.
+You should also see your alert eventually stop triggering.

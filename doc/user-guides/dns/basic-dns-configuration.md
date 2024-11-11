@@ -87,7 +87,7 @@ spec:
 
 This resource also needs to be created in the same namespace as your Gateway and the `targetRef` needs to reference your gateway. When this is done we can check the status of the DNSPolicy and the Gateway to check when it is ready.
 
-```
+```sh
 kubectl wait dnspolicy/basic-dnspolicy -n my-gateway-namespace --for="condition=Ready=true" --timeout=300s
 
 ```
@@ -105,7 +105,7 @@ If you look at the gateway status you should also see:
 
 DNS is now setup for your Gateway. After allowing a little time for the DNS propagate to the nameservers, you should be able to test the DNS using a dig command alternatively you can curl your endpoint.
 
-```
+```sh
 dig test.example.com +short
 
 curl -v test.example.com/toy

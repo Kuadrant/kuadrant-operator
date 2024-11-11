@@ -1,49 +1,19 @@
-# Simple Rate Limiting for Application Developers
+# Simple Rate Limiting for Application developers
+
+For more info on the different personas see [Gateway API](https://gateway-api.sigs.k8s.io/concepts/roles-and-personas/#key-roles-and-personas) 
+
 
 This user guide walks you through an example of how to configure rate limiting for an endpoint of an application using Kuadrant.
-
-<br/>
 
 In this guide, we will rate limit a sample REST API called **Toy Store**. In reality, this API is just an echo service that echoes back to the user whatever attributes it gets in the request. The API listens to requests at the hostname `api.toystore.com`, where it exposes the endpoints `GET /toys*` and `POST /toys`, respectively, to mimic operations of reading and writing toy records.
 
 We will rate limit the `POST /toys` endpoint to a maximum of 5rp10s ("5 requests every 10 seconds").
 
-<br/>
+### Setup the environment
 
-## Run the steps ① → ③
+Follow this [setup doc](https://github.com/Kuadrant/kuadrant-operator/blob/main/doc/install/install-make-target.md) to set up your environment before continuing with this doc.
 
-### ① Setup
-
-This step uses tooling from the Kuadrant Operator component to create a containerized Kubernetes server locally using [Kind](https://kind.sigs.k8s.io),
-where it installs Istio, Kubernetes Gateway API and Kuadrant itself.
-
-> **Note:** In production environment, these steps are usually performed by a cluster operator with administrator privileges over the Kubernetes cluster.
-
-Clone the project:
-
-```sh
-git clone https://github.com/Kuadrant/kuadrant-operator && cd kuadrant-operator
-```
-
-Setup the environment:
-
-```sh
-make local-setup
-```
-
-Request an instance of Kuadrant:
-
-```sh
-kubectl -n kuadrant-system apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta1
-kind: Kuadrant
-metadata:
-  name: kuadrant
-spec: {}
-EOF
-```
-
-### ② Deploy the Toy Store API
+### Deploy the Toy Store API
 
 Create the deployment:
 
@@ -108,12 +78,13 @@ curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toys -i
 > kubectl port-forward -n gateway-system service/kuadrant-ingressgateway-istio 9080:80 >/dev/null 2>&1 &
 > export GATEWAY_URL=localhost:9080
 > ```
+>
 > ```sh
 > curl -H 'Host: api.toystore.com' http://$GATEWAY_URL/toys -i
 > # HTTP/1.1 200 OK
 > ```
 
-### ③ Enforce rate limiting on requests to the Toy Store API
+### Enforce rate limiting on requests to the Toy Store API
 
 Create a Kuadrant `RateLimitPolicy` to configure rate limiting:
 
@@ -130,6 +101,7 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: toystore
+    sectionName: rule-2
   limits:
     "create-toy":
       rates:
@@ -141,8 +113,6 @@ EOF
 ```
 
 > **Note:** It may take a couple of minutes for the RateLimitPolicy to be applied depending on your cluster.
-
-<br/>
 
 Verify the rate limiting works by sending requests in a loop.
 

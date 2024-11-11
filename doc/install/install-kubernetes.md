@@ -1,7 +1,6 @@
 # Install Kuadrant on a Kubernetes cluster
 
 !!! note
-
     You must perform these steps on each Kubernetes cluster where you want to use Kuadrant.
 
 !!! warning
@@ -31,7 +30,6 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 ### Install [OLM](https://olm.operatorframework.io/)
 
 !!! note
-
     Currently, we recommend installing our operator via OLM. We plan to support Helm soon.
 
 ```bash
@@ -41,12 +39,10 @@ curl -sL https://github.com/operator-framework/operator-lifecycle-manager/releas
 ### (Optional) Install Istio as a Gateway API provider
 
 !!! note
-
     Skip this step if planing to use [Envoy Gateway](https://gateway.envoyproxy.io/) as Gateway API provider
 
-!!! note
 
-    There are several ways to install Istio (via `istioctl`, Helm chart or Operator) - this is just an example for starting from a bare Kubernetes cluster.
+There are several ways to install Istio (via `istioctl`, Helm chart or Operator) - this is just an example for starting from a bare Kubernetes cluster.
 
 ```bash
 curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.22.5 sh -
@@ -58,12 +54,9 @@ kubectl apply -f https://raw.githubusercontent.com/Kuadrant/kuadrant-operator/ma
 ### (Optional) Install Envoy Gateway as a Gateway API provider
 
 !!! note
-
     Skip this step if planing to use [Istio](https://istio.io/) as Gateway API provider
 
-!!! note
-
-    There are several ways to install Envoy Gateway (via `egctl`, Helm chart or Kubernetes yaml) - this is just an example for starting from a bare Kubernetes cluster.
+There are several ways to install Envoy Gateway (via `egctl`, Helm chart or Kubernetes yaml) - this is just an example for starting from a bare Kubernetes cluster.
 
 ```bash
 helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.1.0 -n envoy-gateway-system --create-namespace
@@ -213,4 +206,4 @@ If you are using a local kind cluster, we recommend using [metallb](https://meta
 
 ## Next Steps
 
-- [Secure, protect, and connect APIs with Kuadrant on Kubernetes](../user-guides/secure-protect-connect.md)
+- [Secure, protect, and connect APIs with Kuadrant on Kubernetes](../user-guides/full-walkthrough/secure-protect-connect-k8s.md)

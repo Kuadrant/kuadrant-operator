@@ -130,7 +130,7 @@ If one or more of the health checks are failing you will see a status in the DNS
 
 Finally, you can also take a look at the underlying individual health check status by inspecting the `dnshealthcheckprobe` resource:
 
->Note: These resources are for view only interactions as they are controlled by the Kuadrant Operator based on the DNSPolicy API
+>**Note**: These resources are for view only interactions as they are controlled by the Kuadrant Operator based on the DNSPolicy API
 
 ```bash
 kubectl get dnshealthcheckprobes n my-dns-policy-namespace -o=wide

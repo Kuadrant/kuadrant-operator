@@ -8,7 +8,7 @@ metadata:
           "apiVersion": "kuadrant.io/v1",
           "kind": "AuthPolicy",
           "metadata": {
-            "name": "toystore"
+            "name": "authpolicy-sample"
           },
           "spec": {
             "rules": {
@@ -16,11 +16,11 @@ metadata:
                 "apikey": {
                   "apiKey": {
                     "selector": {}
-                  }
-                },
-                "credentials": {
-                  "authorizationHeader": {
-                    "prefix": "APIKEY"
+                  },
+                  "credentials": {
+                    "authorizationHeader": {
+                      "prefix": "APIKEY"
+                    }
                   }
                 }
               }
@@ -40,9 +40,13 @@ metadata:
           },
           "spec": {
             "healthCheck": {
-              "endpoint": "/",
               "protocol": "HTTP"
             },
+            "providerRefs": [
+              {
+                "name": "provider-ref"
+              }
+            ],
             "targetRef": {
               "group": "gateway.networking.k8s.io",
               "kind": "Gateway",
@@ -54,7 +58,7 @@ metadata:
           "apiVersion": "kuadrant.io/v1",
           "kind": "RateLimitPolicy",
           "metadata": {
-            "name": "toystore"
+            "name": "ratelimitpolicy-sample"
           },
           "spec": {
             "limits": {

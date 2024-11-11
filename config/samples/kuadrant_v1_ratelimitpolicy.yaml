@@ -2,7 +2,7 @@
 apiVersion: kuadrant.io/v1
 kind: RateLimitPolicy
 metadata:
-  name: toystore
+  name: ratelimitpolicy-sample
 spec:
   targetRef:
     group: gateway.networking.k8s.io

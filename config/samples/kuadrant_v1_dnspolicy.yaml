@@ -9,5 +9,6 @@ spec:
     group: gateway.networking.k8s.io
     kind: Gateway
   healthCheck:
-    endpoint: /
     protocol: HTTP
+  providerRefs:
+   - name: "provider-ref"

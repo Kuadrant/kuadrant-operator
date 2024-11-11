@@ -12,10 +12,11 @@ import (
 	"k8s.io/utils/ptr"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
 type AuthPolicyValidator struct {
+	isGatewayAPIInstalled        bool
 	isAuthorinoOperatorInstalled bool
 }
 
@@ -43,6 +44,10 @@ func (r *AuthPolicyValidator) Validate(ctx context.Context, _ []controller.Resou
 	defer logger.V(1).Info("finished validating auth policies")
 
 	state.Store(StateAuthPolicyValid, lo.SliceToMap(policies, func(policy machinery.Policy) (string, error) {
+		if !r.isGatewayAPIInstalled {
+			return policy.GetLocator(), kuadrant.NewErrDependencyNotInstalled("Gateway API")
+		}
+
 		if !r.isAuthorinoOperatorInstalled {
 			return policy.GetLocator(), kuadrant.NewErrDependencyNotInstalled("Authorino Operator")
 		}

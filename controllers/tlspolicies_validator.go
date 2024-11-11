@@ -19,13 +19,15 @@ import (
 	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
-func NewTLSPoliciesValidator(isCertManagerInstalled bool) *TLSPoliciesValidator {
+func NewTLSPoliciesValidator(isGatewayAPIInstalled, isCertManagerInstalled bool) *TLSPoliciesValidator {
 	return &TLSPoliciesValidator{
+		isGatewayAPIInstalled:  isGatewayAPIInstalled,
 		isCertManagerInstalled: isCertManagerInstalled,
 	}
 }
 
 type TLSPoliciesValidator struct {
+	isGatewayAPIInstalled  bool
 	isCertManagerInstalled bool
 }
 
@@ -42,53 +44,46 @@ func (t *TLSPoliciesValidator) Subscription() *controller.Subscription {
 	}
 }
 
-func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, s *sync.Map) error {
+func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, _ error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("TLSPoliciesValidator").WithName("Validate")
 
 	policies := lo.Filter(topology.Policies().Items(), filterForTLSPolicies)
+	logger.V(1).Info("validating tls policies", "policies", len(policies))
 
-	isPolicyValidErrorMap := make(map[string]error, len(policies))
-
-	for _, policy := range policies {
-		p := policy.(*kuadrantv1.TLSPolicy)
-		if p.DeletionTimestamp != nil {
-			logger.V(1).Info("tls policy is marked for deletion, skipping", "name", p.Name, "namespace", p.Namespace)
-			continue
+	state.Store(TLSPolicyAcceptedKey, lo.SliceToMap(policies, func(p machinery.Policy) (string, error) {
+		if !t.isGatewayAPIInstalled {
+			return p.GetLocator(), kuadrant.NewErrDependencyNotInstalled("Gateway API")
 		}
 
 		if !t.isCertManagerInstalled {
-			isPolicyValidErrorMap[p.GetLocator()] = kuadrant.NewErrDependencyNotInstalled("Cert Manager")
-			continue
+			return p.GetLocator(), kuadrant.NewErrDependencyNotInstalled("Cert Manager")
 		}
 
+		policy := p.(*kuadrantv1.TLSPolicy)
 		// Validate target ref
-		if err := t.isTargetRefsFound(topology, p); err != nil {
-			isPolicyValidErrorMap[p.GetLocator()] = err
-			continue
+		if err := t.isTargetRefsFound(topology, policy); err != nil {
+			return p.GetLocator(), err
 		}
 
 		// Validate if there's a conflicting policy
-		if err := t.isConflict(policies, p); err != nil {
-			isPolicyValidErrorMap[p.GetLocator()] = err
-			continue
+		if err := t.isConflict(policies, policy); err != nil {
+			return p.GetLocator(), err
 		}
 
 		// Validate IssuerRef kind is correct
-		if err := t.isValidIssuerKind(p); err != nil {
-			isPolicyValidErrorMap[p.GetLocator()] = err
-			continue
+		if err := t.isValidIssuerKind(policy); err != nil {
+			return p.GetLocator(), err
 		}
 
 		// Validate Issuer is present on cluster through the topology
-		if err := t.isIssuerFound(topology, p); err != nil {
-			isPolicyValidErrorMap[p.GetLocator()] = err
-			continue
+		if err := t.isIssuerFound(topology, policy); err != nil {
+			return p.GetLocator(), err
 		}
 
-		isPolicyValidErrorMap[p.GetLocator()] = nil
-	}
+		return p.GetLocator(), nil
+	}))
 
-	s.Store(TLSPolicyAcceptedKey, isPolicyValidErrorMap)
+	logger.V(1).Info("finished validating tls policies")
 
 	return nil
 }

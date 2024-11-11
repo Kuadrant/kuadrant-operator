@@ -8,8 +8,6 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
-	authorinov1beta1 "github.com/kuadrant/authorino-operator/api/v1beta1"
-	limitadorv1alpha1 "github.com/kuadrant/limitador-operator/api/v1alpha1"
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 	corev1 "k8s.io/api/core/v1"
@@ -128,43 +126,33 @@ func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, log
 		return cond
 	}
 
-	limitadorObj, err := GetLimitadorFromTopology(topology)
-	if err != nil && !errors.Is(err, ErrMissingLimitador) {
-		logger.V(1).Error(err, "failed getting Limitador resource from topology", "status", "error")
+	if reason := checkLimitadorReady(topology, logger); reason != nil {
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "LimitadorNotReady"
+		cond.Message = *reason
+		return cond
 	}
 
-	if limitadorObj != nil {
-		reason := checkLimitadorReady(limitadorObj)
-		if reason != nil {
-			cond.Status = metav1.ConditionFalse
-			cond.Reason = "limitadornotready"
-			cond.Message = *reason
-			return cond
-		}
+	if reason := checkAuthorinoAvailable(topology, logger); reason != nil {
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "AuthorinoNotReady"
+		cond.Message = *reason
+		return cond
 	}
 
-	authorinoObj, err := GetAuthorinoFromTopology(topology)
-	if err != nil && !errors.Is(err, ErrMissingAuthorino) {
-		logger.V(1).Error(err, "failed getting Authorino resource from topology", "status", "error")
-	}
-
-	if authorinoObj != nil {
-		reason := checkAuthorinoAvailable(authorinoObj)
-		if reason != nil {
-			cond.Status = metav1.ConditionFalse
-			cond.Reason = "AuthorinoNotReady"
-			cond.Message = *reason
-			return cond
-		}
-	}
 	return cond
 }
 
-func checkLimitadorReady(limitadorObj *limitadorv1alpha1.Limitador) *string {
+func checkLimitadorReady(topology *machinery.Topology, logger logr.Logger) *string {
+	limitadorObj, err := GetLimitadorFromTopology(topology)
+	if err != nil {
+		logger.V(1).Error(err, "failed getting Limitador resource from topology", "status", "error")
+		return ptr.To(err.Error())
+	}
+
 	statusConditionReady := meta.FindStatusCondition(limitadorObj.Status.Conditions, "Ready")
 	if statusConditionReady == nil {
-		reason := "Ready condition not found"
-		return &reason
+		return ptr.To("Ready condition not found")
 	}
 	if statusConditionReady.Status != metav1.ConditionTrue {
 		return &statusConditionReady.Message
@@ -173,11 +161,16 @@ func checkLimitadorReady(limitadorObj *limitadorv1alpha1.Limitador) *string {
 	return nil
 }
 
-func checkAuthorinoAvailable(authorinoObj *authorinov1beta1.Authorino) *string {
+func checkAuthorinoAvailable(topology *machinery.Topology, logger logr.Logger) *string {
+	authorinoObj, err := GetAuthorinoFromTopology(topology)
+	if err != nil && !errors.Is(err, ErrMissingAuthorino) {
+		logger.V(1).Error(err, "failed getting Authorino resource from topology", "status", "error")
+		return ptr.To(err.Error())
+	}
+
 	readyCondition := authorino.FindAuthorinoStatusCondition(authorinoObj.Status.Conditions, "Ready")
 	if readyCondition == nil {
-		tmp := "Ready condition not found"
-		return &tmp
+		return ptr.To("Ready condition not found")
 	}
 
 	if readyCondition.Status != corev1.ConditionTrue {

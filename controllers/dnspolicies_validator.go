@@ -52,11 +52,11 @@ func (r *DNSPoliciesValidator) validate(ctx context.Context, _ []controller.Reso
 
 	state.Store(StateDNSPolicyAcceptedKey, lo.SliceToMap(policies, func(p machinery.Policy) (string, error) {
 		if !r.isGatewayAPIInstalled {
-			return p.GetLocator(), kuadrant.NewErrDependencyNotInstalled("Gateway API")
+			return p.GetLocator(), kuadrant.MissingGatewayAPIError()
 		}
 
 		if !r.isDNSOperatorInstalled {
-			return p.GetLocator(), kuadrant.NewErrDependencyNotInstalled("DNS Operator")
+			return p.GetLocator(), kuadrant.MissingDNSOperatorError()
 		}
 
 		policy := p.(*kuadrantv1.DNSPolicy)

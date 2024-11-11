@@ -134,6 +134,7 @@ make bundle [IMG=quay.io/kuadrant/kuadrant-operator:latest] \
             [AUTHORINO_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/authorino-operator-bundle:latest] \
             [DNS_OPERATOR_BUNDLE_IMG=quay.io/kuadrant/dns-operator-bundle:latest] \
             [RELATED_IMAGE_WASMSHIM=oci://quay.io/kuadrant/wasm-shim:latest] \
+            [RELATED_IMAGE_CONSOLEPLUGIN=quay.io/kuadrant/console-plugin:latest] \
             [CHANNELS=alpha] \
             [DEFAULT_CHANNEL=alpha]
 ```

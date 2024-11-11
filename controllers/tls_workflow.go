@@ -40,9 +40,9 @@ var (
 //+kubebuilder:rbac:groups="cert-manager.io",resources=clusterissuers,verbs=get;list;watch;
 //+kubebuilder:rbac:groups="cert-manager.io",resources=certificates,verbs=get;list;watch;create;update;patch;delete
 
-func NewTLSWorkflow(client *dynamic.DynamicClient, scheme *runtime.Scheme, isCertManagerInstalled bool) *controller.Workflow {
+func NewTLSWorkflow(client *dynamic.DynamicClient, scheme *runtime.Scheme, isGatewayAPIInstalled, isCertManagerInstalled bool) *controller.Workflow {
 	return &controller.Workflow{
-		Precondition: NewTLSPoliciesValidator(isCertManagerInstalled).Subscription().Reconcile,
+		Precondition: NewTLSPoliciesValidator(isGatewayAPIInstalled, isCertManagerInstalled).Subscription().Reconcile,
 		Tasks: []controller.ReconcileFunc{
 			NewEffectiveTLSPoliciesReconciler(client, scheme).Subscription().Reconcile,
 		},

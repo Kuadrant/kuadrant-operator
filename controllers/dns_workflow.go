@@ -46,9 +46,9 @@ var (
 //+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=kuadrant.io,resources=dnsrecords/status,verbs=get
 
-func NewDNSWorkflow(client *dynamic.DynamicClient, scheme *runtime.Scheme, isDNSOperatorInstalled bool) *controller.Workflow {
+func NewDNSWorkflow(client *dynamic.DynamicClient, scheme *runtime.Scheme, isGatewayAPIInstalled, isDNSOperatorInstalled bool) *controller.Workflow {
 	return &controller.Workflow{
-		Precondition: NewDNSPoliciesValidator(isDNSOperatorInstalled).Subscription().Reconcile,
+		Precondition: NewDNSPoliciesValidator(isGatewayAPIInstalled, isDNSOperatorInstalled).Subscription().Reconcile,
 		Tasks: []controller.ReconcileFunc{
 			NewEffectiveDNSPoliciesReconciler(client, scheme).Subscription().Reconcile,
 		},

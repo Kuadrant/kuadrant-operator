@@ -391,16 +391,20 @@ func (b *BootOptionsBuilder) getAuthorinoOperatorOptions() []controller.Controll
 	return opts
 }
 
+func (b *BootOptionsBuilder) isGatewayProviderInstalled() bool {
+	return b.isIstioInstalled || b.isEnvoyGatewayInstalled
+}
+
 func (b *BootOptionsBuilder) Reconciler() controller.ReconcileFunc {
 	mainWorkflow := &controller.Workflow{
 		Precondition: initWorkflow(b.client).Run,
 		Tasks: []controller.ReconcileFunc{
-			NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isDNSOperatorInstalled).Run,
-			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isCertManagerInstalled).Run,
-			NewDataPlanePoliciesWorkflow(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
-			NewKuadrantStatusUpdater(b.client, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
+			NewDNSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isDNSOperatorInstalled).Run,
+			NewTLSWorkflow(b.client, b.manager.GetScheme(), b.isGatewayAPIInstalled, b.isCertManagerInstalled).Run,
+			NewDataPlanePoliciesWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled, b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Run,
+			NewKuadrantStatusUpdater(b.client, b.isGatewayAPIInstalled, b.isGatewayProviderInstalled(), b.isLimitadorOperatorInstalled, b.isAuthorinoOperatorInstalled).Subscription().Reconcile,
 		},
-		Postcondition: finalStepsWorkflow(b.client, b.isIstioInstalled, b.isGatewayAPIInstalled).Run,
+		Postcondition: finalStepsWorkflow(b.client, b.isGatewayAPIInstalled, b.isIstioInstalled, b.isEnvoyGatewayInstalled).Run,
 	}
 
 	if b.isConsolePluginInstalled {
@@ -477,12 +481,16 @@ func initWorkflow(client *dynamic.DynamicClient) *controller.Workflow {
 	}
 }
 
-func finalStepsWorkflow(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled bool) *controller.Workflow {
+func finalStepsWorkflow(client *dynamic.DynamicClient, isGatewayAPIInstalled, isIstioInstalled, isEnvoyGatewayInstalled bool) *controller.Workflow {
 	workflow := &controller.Workflow{
-		Tasks: []controller.ReconcileFunc{
+		Tasks: []controller.ReconcileFunc{},
+	}
+
+	if isGatewayAPIInstalled {
+		workflow.Tasks = append(workflow.Tasks,
 			NewGatewayPolicyDiscoverabilityReconciler(client).Subscription().Reconcile,
 			NewHTTPRoutePolicyDiscoverabilityReconciler(client).Subscription().Reconcile,
-		},
+		)
 	}
 
 	if isIstioInstalled {

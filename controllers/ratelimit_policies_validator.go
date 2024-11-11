@@ -12,11 +12,12 @@ import (
 	"k8s.io/utils/ptr"
 
 	kuadrantv1 "github.com/kuadrant/kuadrant-operator/api/v1"
-	kuadrant "github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
 )
 
 type RateLimitPolicyValidator struct {
 	isLimitadorOperatorInstalled bool
+	isGatewayAPIInstalled        bool
 }
 
 // RateLimitPolicyValidator subscribes to events with potential to flip the validity of rate limit policies
@@ -43,6 +44,10 @@ func (r *RateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.
 	defer logger.V(1).Info("finished validating rate limit policies")
 
 	state.Store(StateRateLimitPolicyValid, lo.SliceToMap(policies, func(policy machinery.Policy) (string, error) {
+		if !r.isGatewayAPIInstalled {
+			return policy.GetLocator(), kuadrant.NewErrDependencyNotInstalled("Gateway API")
+		}
+
 		if !r.isLimitadorOperatorInstalled {
 			return policy.GetLocator(), kuadrant.NewErrDependencyNotInstalled("Limitador Operator")
 		}

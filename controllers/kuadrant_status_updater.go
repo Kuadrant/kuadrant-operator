@@ -28,13 +28,20 @@ const (
 
 type KuadrantStatusUpdater struct {
 	Client                       *dynamic.DynamicClient
+	isGatwayAPIInstalled         bool
 	HasGateway                   bool
 	isLimitadorOperatorInstalled bool
 	isAuthorinoOperatorInstalled bool
 }
 
-func NewKuadrantStatusUpdater(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled bool) *KuadrantStatusUpdater {
-	return &KuadrantStatusUpdater{Client: client, HasGateway: isIstioInstalled || isEnvoyGatewayInstalled, isLimitadorOperatorInstalled: isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled: isAuthorinoOperatorInstalled}
+func NewKuadrantStatusUpdater(client *dynamic.DynamicClient, isGatewayAPIInstalled, isGatewayProviderInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled bool) *KuadrantStatusUpdater {
+	return &KuadrantStatusUpdater{
+		Client:                       client,
+		isGatwayAPIInstalled:         isGatewayAPIInstalled,
+		HasGateway:                   isGatewayProviderInstalled,
+		isLimitadorOperatorInstalled: isLimitadorOperatorInstalled,
+		isAuthorinoOperatorInstalled: isAuthorinoOperatorInstalled,
+	}
 }
 
 func (r *KuadrantStatusUpdater) Subscription() *controller.Subscription {
@@ -119,6 +126,13 @@ func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, log
 		Status:  metav1.ConditionTrue,
 		Reason:  "Ready",
 		Message: "Kuadrant is ready",
+	}
+
+	if !r.isGatwayAPIInstalled {
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "GatewayAPI"
+		cond.Message = kuadrant.NewErrDependencyNotInstalled("Gateway API").Error()
+		return cond
 	}
 
 	if !r.HasGateway {

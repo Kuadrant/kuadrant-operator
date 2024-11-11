@@ -59,11 +59,11 @@ var (
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=kuadrant.io,resources=ratelimitpolicies/finalizers,verbs=update
 
-func NewDataPlanePoliciesWorkflow(client *dynamic.DynamicClient, isIstioInstalled, isEnvoyGatewayInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled bool) *controller.Workflow {
+func NewDataPlanePoliciesWorkflow(client *dynamic.DynamicClient, isGatewayAPInstalled, isIstioInstalled, isEnvoyGatewayInstalled, isLimitadorOperatorInstalled, isAuthorinoOperatorInstalled bool) *controller.Workflow {
 	dataPlanePoliciesValidation := &controller.Workflow{
 		Tasks: []controller.ReconcileFunc{
-			(&AuthPolicyValidator{isAuthorinoOperatorInstalled: isAuthorinoOperatorInstalled}).Subscription().Reconcile,
-			(&RateLimitPolicyValidator{isLimitadorOperatorInstalled: isLimitadorOperatorInstalled}).Subscription().Reconcile,
+			(&AuthPolicyValidator{isGatewayAPIInstalled: isGatewayAPInstalled, isAuthorinoOperatorInstalled: isAuthorinoOperatorInstalled}).Subscription().Reconcile,
+			(&RateLimitPolicyValidator{isGatewayAPIInstalled: isGatewayAPInstalled, isLimitadorOperatorInstalled: isLimitadorOperatorInstalled}).Subscription().Reconcile,
 		},
 	}
 

@@ -109,8 +109,8 @@
 
 | **Field** | **Type**                                                 | **Required** | **Description**                                                                                      |
 |-----------|----------------------------------------------------------|:------------:|------------------------------------------------------------------------------------------------------|
-| `headers` | Map<String: [SuccessResponseItem](#successresponseitem)> |      No      | Custom success response items wrapped as HTTP headers to be injected in the request.                 |
-| `filters` | Map<String: [SuccessResponseItem](#successresponseitem)> |      No      | Custom success response items made available to other filters managed by Kuadrant (i.e. Rate Limit). |
+| `headers` | Map&lt;string:[SuccessResponseItem](#successresponseitem)&gt; |      No      | Custom success response items wrapped as HTTP headers to be injected in the request.                 |
+| `filters` | Map&lt;string:[SuccessResponseItem](#successresponseitem)&gt; |      No      | Custom success response items made available to other filters managed by Kuadrant (i.e. Rate Limit). |
 
 ###### SuccessResponseItem
 

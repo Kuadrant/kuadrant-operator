@@ -258,3 +258,29 @@ func (e ErrSystemResource) Error() string {
 func (e ErrSystemResource) Reason() gatewayapiv1alpha2.PolicyConditionReason {
 	return PolicyReasonMissingResource
 }
+
+// Common ErrDependencyNotInstalled errors
+
+func MissingGatewayAPIError() PolicyError {
+	return NewErrDependencyNotInstalled("Gateway API")
+}
+
+func MissingGatewayProviderError() PolicyError {
+	return NewErrDependencyNotInstalled("Gateway API provider (istio / envoy gateway)")
+}
+
+func MissingAuthorinoOperatorError() PolicyError {
+	return NewErrDependencyNotInstalled("Authorino Operator")
+}
+
+func MissingLimitadorOperatorError() PolicyError {
+	return NewErrDependencyNotInstalled("Limitador Operator")
+}
+
+func MissingDNSOperatorError() PolicyError {
+	return NewErrDependencyNotInstalled("DNS Operator")
+}
+
+func MissingCertManagerError() PolicyError {
+	return NewErrDependencyNotInstalled("Cert Manager")
+}

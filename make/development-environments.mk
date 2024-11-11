@@ -94,7 +94,7 @@ gatewayapi-env-setup: ## Install GatewayAPI CRDs and k8s-env-setup
 	$(MAKE) k8s-env-setup
 	$(MAKE) gateway-api-install
 
-.PHONY: local-k8s-env-setup
+.PHONY: local-gatewayapi-env-setup
 local-gatewayapi-env-setup: ## gatewayapi-env-setup based on Kind cluster
 	$(MAKE) kind-delete-cluster
 	$(MAKE) kind-create-cluster

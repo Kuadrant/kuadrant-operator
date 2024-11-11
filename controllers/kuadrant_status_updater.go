@@ -29,7 +29,7 @@ const (
 type KuadrantStatusUpdater struct {
 	Client                       *dynamic.DynamicClient
 	isGatwayAPIInstalled         bool
-	HasGateway                   bool
+	isGatewayProviderInstalled   bool
 	isLimitadorOperatorInstalled bool
 	isAuthorinoOperatorInstalled bool
 }
@@ -38,7 +38,7 @@ func NewKuadrantStatusUpdater(client *dynamic.DynamicClient, isGatewayAPIInstall
 	return &KuadrantStatusUpdater{
 		Client:                       client,
 		isGatwayAPIInstalled:         isGatewayAPIInstalled,
-		HasGateway:                   isGatewayProviderInstalled,
+		isGatewayProviderInstalled:   isGatewayProviderInstalled,
 		isLimitadorOperatorInstalled: isLimitadorOperatorInstalled,
 		isAuthorinoOperatorInstalled: isAuthorinoOperatorInstalled,
 	}
@@ -129,23 +129,34 @@ func (r *KuadrantStatusUpdater) readyCondition(topology *machinery.Topology, log
 	}
 
 	if !r.isGatwayAPIInstalled {
+		err := kuadrant.MissingGatewayAPIError()
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = "GatewayAPI"
-		cond.Message = kuadrant.NewErrDependencyNotInstalled("Gateway API").Error()
+		cond.Reason = string(err.Reason())
+		cond.Message = err.Error()
 		return cond
 	}
 
-	if !r.HasGateway {
+	if !r.isGatewayProviderInstalled {
+		err := kuadrant.MissingGatewayProviderError()
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = "GatewayAPIProviderNotFound"
-		cond.Message = kuadrant.NewErrDependencyNotInstalled("GatewayAPI provider").Error()
+		cond.Reason = string(err.Reason())
+		cond.Message = err.Error()
 		return cond
 	}
 
 	if !r.isLimitadorOperatorInstalled {
+		err := kuadrant.MissingLimitadorOperatorError()
 		cond.Status = metav1.ConditionFalse
-		cond.Reason = "LimitadorAPIProviderNotFound"
-		cond.Message = kuadrant.NewErrDependencyNotInstalled("Limitador Operator").Error()
+		cond.Reason = string(err.Reason())
+		cond.Message = err.Error()
+		return cond
+	}
+
+	if !r.isAuthorinoOperatorInstalled {
+		err := kuadrant.MissingAuthorinoOperatorError()
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = string(err.Reason())
+		cond.Message = err.Error()
 		return cond
 	}
 
@@ -173,7 +184,7 @@ func checkLimitadorReady(topology *machinery.Topology, logger logr.Logger) *stri
 		return ptr.To("limitador resoure not in topology")
 	}
 
-	statusConditionReady := meta.FindStatusCondition(limitadorObj.Status.Conditions, "Ready")
+	statusConditionReady := meta.FindStatusCondition(limitadorObj.Status.Conditions, limitadorv1alpha1.StatusConditionReady)
 	if statusConditionReady == nil {
 		return ptr.To("Ready condition not found")
 	}
@@ -191,7 +202,7 @@ func checkAuthorinoAvailable(topology *machinery.Topology, logger logr.Logger) *
 		return ptr.To("authorino resoure not in topology")
 	}
 
-	readyCondition := authorino.FindAuthorinoStatusCondition(authorinoObj.Status.Conditions, limitadorv1alpha1.StatusConditionReady)
+	readyCondition := authorino.FindAuthorinoStatusCondition(authorinoObj.Status.Conditions, "Ready")
 	if readyCondition == nil {
 		return ptr.To("Ready condition not found")
 	}

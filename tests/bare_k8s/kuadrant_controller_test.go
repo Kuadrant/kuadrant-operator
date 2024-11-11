@@ -55,7 +55,7 @@ var _ = Describe("Kuadrant controller is disabled", func() {
 				cond := meta.FindStatusCondition(kuadrantCR.Status.Conditions, controllers.ReadyConditionType)
 				g.Expect(cond).ToNot(BeNil())
 				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
-				g.Expect(cond.Reason).To(Equal("GatewayAPI"))
+				g.Expect(cond.Reason).To(Equal("MissingDependency"))
 				g.Expect(cond.Message).To(Equal("Gateway API is not installed, please restart pod once dependency has been installed"))
 			}).WithContext(ctx).Should(Succeed())
 		}, testTimeOut)

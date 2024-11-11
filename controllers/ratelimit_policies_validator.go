@@ -18,6 +18,7 @@ import (
 type RateLimitPolicyValidator struct {
 	isLimitadorOperatorInstalled bool
 	isGatewayAPIInstalled        bool
+	isGatewayProviderInstalled   bool
 }
 
 // RateLimitPolicyValidator subscribes to events with potential to flip the validity of rate limit policies
@@ -45,11 +46,15 @@ func (r *RateLimitPolicyValidator) Validate(ctx context.Context, _ []controller.
 
 	state.Store(StateRateLimitPolicyValid, lo.SliceToMap(policies, func(policy machinery.Policy) (string, error) {
 		if !r.isGatewayAPIInstalled {
-			return policy.GetLocator(), kuadrant.NewErrDependencyNotInstalled("Gateway API")
+			return policy.GetLocator(), kuadrant.MissingGatewayAPIError()
+		}
+
+		if !r.isGatewayProviderInstalled {
+			return policy.GetLocator(), kuadrant.MissingGatewayProviderError()
 		}
 
 		if !r.isLimitadorOperatorInstalled {
-			return policy.GetLocator(), kuadrant.NewErrDependencyNotInstalled("Limitador Operator")
+			return policy.GetLocator(), kuadrant.MissingLimitadorOperatorError()
 		}
 
 		var err error

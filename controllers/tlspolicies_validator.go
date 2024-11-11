@@ -52,11 +52,11 @@ func (t *TLSPoliciesValidator) Validate(ctx context.Context, _ []controller.Reso
 
 	state.Store(TLSPolicyAcceptedKey, lo.SliceToMap(policies, func(p machinery.Policy) (string, error) {
 		if !t.isGatewayAPIInstalled {
-			return p.GetLocator(), kuadrant.NewErrDependencyNotInstalled("Gateway API")
+			return p.GetLocator(), kuadrant.MissingGatewayAPIError()
 		}
 
 		if !t.isCertManagerInstalled {
-			return p.GetLocator(), kuadrant.NewErrDependencyNotInstalled("Cert Manager")
+			return p.GetLocator(), kuadrant.MissingCertManagerError()
 		}
 
 		policy := p.(*kuadrantv1.TLSPolicy)

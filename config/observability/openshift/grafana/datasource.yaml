@@ -1,0 +1,20 @@
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: thanos-query-ds
+spec:
+  datasource:
+    access: proxy
+    isDefault: true
+    jsonData:
+      httpHeaderName1: 'Authorization'
+      timeInterval: 5s
+      tlsSkipVerify: true
+    secureJsonData:
+      httpHeaderValue1: 'REPLACED_BY_ENV'
+    name: thanos-query-ds
+    type: prometheus
+    url: 'REPLACED_BY_ENV'
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana

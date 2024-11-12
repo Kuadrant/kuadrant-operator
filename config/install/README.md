@@ -95,3 +95,45 @@ Validate Kuadrant is in a ready state as before:
 kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml
 
 ```
+
+## Set up observability
+
+Verify that user workload monitoring is enabled in your Openshift cluster.
+If it not enabled, check the [Openshift documentation](https://docs.openshift.com/container-platform/4.17/observability/monitoring/enabling-monitoring-for-user-defined-projects.html) for how to do this.
+
+```bash
+kubectl get configmap cluster-monitoring-config -n openshift-monitoring -o jsonpath='{.data.config\.yaml}'|grep enableUserWorkload
+
+(expected output)
+enableUserWorkload: true
+```
+
+Install the gateway & kuadrant metrics components and configuration, including Grafana.
+
+```bash
+kubectl apply -k config/install/configure/observability
+```
+
+Configure the openshift thanos-query instance as a data source in Grafana.
+
+```bash
+TOKEN="Bearer $(oc whoami -t)"
+HOST="$(kubectl -n openshift-monitoring get route thanos-querier -o jsonpath='https://{.status.ingress[].host}')"
+echo "TOKEN=$TOKEN" > config/observability/openshift/grafana/datasource.env
+echo "HOST=$HOST" >> config/observability/openshift/grafana/datasource.env
+kubectl apply -k config/observability/openshift/grafana
+```
+
+Create the example dashboards in Grafana
+
+```bash
+kubectl apply -k examples/dashboards
+```
+
+Access the Grafana UI, using the default user/pass of root/secret.
+You should see the example dashboards in the 'monitoring' folder.
+For more information on the example dashboards, check out the [documentation](https://docs.kuadrant.io/latest/kuadrant-operator/doc/observability/examples/).
+
+```bash
+kubectl -n monitoring get routes grafana-route -o jsonpath="https://{.status.ingress[].host}"
+```

@@ -1,26 +1,23 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+namespace: monitoring
+
 # grafana-dashboard dashboards as configmaps
 configMapGenerator:
 - name: grafana-app-developer
-  namespace: monitoring
   files:
   - ./app_developer.json
 - name: grafana-business-user
-  namespace: monitoring
   files:
   - ./business_user.json
 - name: grafana-platform-engineer
-  namespace: monitoring
   files:
   - ./platform_engineer.json
-- name: grafana-controller-runtime
-  namespace: monitoring
+- name: grafana-controller-runtime-metrics
   files:
   - ./controller-runtime-metrics.json
-- name: grafana-controller-resources
-  namespace: monitoring
+- name: grafana-controller-resources-metrics
   files:
   - ./controller-resources-metrics.json    
 

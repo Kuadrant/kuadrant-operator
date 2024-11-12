@@ -13,4 +13,4 @@ patches:
       metadata:
         name: kuadrant-operator-catalog
       spec:
-        image: quay.io/kuadrant/kuadrant-operator-catalog:1.0.0-rc1  #change this to the version you want to install
+        image: quay.io/kuadrant/kuadrant-operator-catalog:v1.0.0-rc4  #change this to the version you want to install

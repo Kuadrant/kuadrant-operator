@@ -11,16 +11,22 @@
 Install the Sail and Kuadrant Operators via OLM:
 
 
-> Note: By default this will install the "latest" or "main" of kuadrant. To change that, pick a release from the releases page in the kuadrant operator and change the image in the `config/deploy/olm/catalogsource.yaml` or if you are familiar with kustomize you could apply your own kustomization.
+> Note: By default this will install the "latest" or "main" of kuadrant. To change that, pick a release from the releases page in the kuadrant operator and change the image in the `config/deploy/install/standard/kustomization.yaml`.
+
+> Note: We are using the `--context` flag here this is useful if installing on more than one cluster otherwise it is not needed
 
 ```
-kubectl apply -k config/install/standard
+export ctx=replace-with-your-context
+```
+
+```
+kubectl apply -k config/install/standard --context=$ctx
 ``` 
 
 3) verify kuadrant and sail operators are installed. Note this can take a while. You can also take a look at the subscription and installplan resource to help with debugging but the end state should be as below:
 
 ```
-kubectl get deployments -n kuadrant-system
+kubectl get deployments -n kuadrant-system --context=$ctx
 ```
 
 ```
@@ -37,12 +43,13 @@ limitador-operator-controller-manager   1/1     1            1           83m
 
 
 ```
-kubectl get deployments -n gateway-system
+kubectl get deployments -n gateway-system --context=$ctx
 ```
 
 ```
 
 NAME            READY   UP-TO-DATE   AVAILABLE   AGE
+istiod          1/1     1            1           61s
 sail-operator   1/1     1            1           81m
 
 ```
@@ -54,12 +61,12 @@ sail-operator   1/1     1            1           81m
 To setup the DNS and TLS integration (TLS also uses DNS for verification) follow these steps:
 
 1) Depending on your choice of cloud provider:
-    - setup the needed `$CLOUD_PROVIDER-credentals.env` in the cloud provider directory. E.G create `aws-credentials.env` in the `install/configure/aws` directory
+    - setup the needed `$CLOUD_PROVIDER-credentials.env` in the cloud provider directory. E.G create `aws-credentials.env` in the `config/install/configure/aws` directory
 
 3) execute the configure for that cloud provider
 
 ```
-kubectl apply -k config/install/configure/aws
+kubectl apply -k config/install/configure/aws --context=$ctx
 
 ```
 
@@ -70,29 +77,29 @@ This will configure Kuadrant and Sail installing their components as well as set
 Validate Kuadrant is ready via the kuadrant resource status condition
 
 ```
-kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml
+kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml --context=$ctx
 
 ```
 
-At this point Kuadrant is ready to use. Below are some additonal configuration that can be applied.
+At this point Kuadrant is ready to use. Below are some additional configuration that can be applied.
 
 ### External Redis
 
 create a `redis-credential.env` in the `config/install/configure/redis-storage` dir
 
 ```
-kubectl apply -k config/install/configure/redis-storage
+kubectl apply -k config/install/configure/redis-storage --context=$ctx
 
 ```
 
-This will setup limitador to use provided redis connection URL as a backend store for ratelimit counters. Limitador will becomes temporarilly unavailable as it restarts.
+This will setup limitador to use provided redis connection URL as a backend store for ratelimit counters. Limitador will becomes temporarily unavailable as it restarts.
 
 ### Validate
 
 Validate Kuadrant is in a ready state as before:
 
 ```
-kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml
+kubectl get kuadrant kuadrant -n kuadrant-system -o=yaml --context=$ctx
 
 ```
 

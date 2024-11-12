@@ -2,7 +2,7 @@
 apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
-  name: toystore
+  name: authpolicy-sample
 spec:
   targetRef:
     group: gateway.networking.k8s.io
@@ -13,6 +13,6 @@ spec:
       "apikey":
         apiKey:
           selector: {}
-      credentials:
-        authorizationHeader:
-          prefix: APIKEY
+        credentials:
+          authorizationHeader:
+            prefix: APIKEY

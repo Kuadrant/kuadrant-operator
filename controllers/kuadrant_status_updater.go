@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -163,7 +162,7 @@ func checkLimitadorReady(topology *machinery.Topology, logger logr.Logger) *stri
 
 func checkAuthorinoAvailable(topology *machinery.Topology, logger logr.Logger) *string {
 	authorinoObj, err := GetAuthorinoFromTopology(topology)
-	if err != nil && !errors.Is(err, ErrMissingAuthorino) {
+	if err != nil {
 		logger.V(1).Error(err, "failed getting Authorino resource from topology", "status", "error")
 		return ptr.To(err.Error())
 	}

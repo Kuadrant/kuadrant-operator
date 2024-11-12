@@ -25,8 +25,6 @@ $(CATALOG_DOCKERFILE): $(OPM)
 	cd $(PROJECT_PATH)/catalog && $(OPM) generate dockerfile kuadrant-operator-catalog -l quay.expires-after=$(QUAY_IMAGE_EXPIRY)
 catalog-dockerfile: $(CATALOG_DOCKERFILE) ## Generate catalog dockerfile.
 
-CHANNELS ?= preview
-
 $(CATALOG_FILE): $(OPM) $(YQ)
 	@echo "************************************************************"
 	@echo Build kuadrant operator catalog

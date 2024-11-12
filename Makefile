@@ -94,6 +94,8 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+RELEASE_FILE = $(PROJECT_PATH)/make/release.mk
+
 # Kuadrant Namespace
 KUADRANT_NAMESPACE ?= kuadrant-system
 OPERATOR_NAMESPACE ?= $(KUADRANT_NAMESPACE)
@@ -332,7 +334,7 @@ test-unit: clean-cov generate fmt vet ## Run Unit tests.
 build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 build: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 build: generate fmt vet ## Build manager binary.
-	go build -ldflags "-X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -o bin/manager main.go
+	go build -ldflags "-X main.version=v$(VERSION) -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" -o bin/manager main.go
 
 run: export LOG_LEVEL = debug
 run: export LOG_MODE = development
@@ -340,7 +342,7 @@ run: export OPERATOR_NAMESPACE := $(OPERATOR_NAMESPACE)
 run: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 run: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
 run: generate fmt vet ## Run a controller from your host.
-	go run -ldflags "-X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" --race ./main.go
+	go run -ldflags "-X main.version=v$(VERSION) -X main.gitSHA=${GIT_SHA} -X main.dirty=${DIRTY}" --race ./main.go
 
 docker-build: GIT_SHA=$(shell git rev-parse HEAD || echo "unknown")
 docker-build: DIRTY=$(shell $(PROJECT_PATH)/utils/check-git-dirty.sh || echo "unknown")
@@ -349,6 +351,7 @@ docker-build: ## Build docker image with the manager.
 		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
 		--build-arg GIT_SHA=$(GIT_SHA) \
 		--build-arg DIRTY=$(DIRTY) \
+		--build-arg VERSION=v$(VERSION) \
 		--build-arg QUAY_IMAGE_EXPIRY=$(QUAY_IMAGE_EXPIRY) \
 		--load \
 		-t $(IMG) .
@@ -441,7 +444,20 @@ bundle-push: ## Push the bundle image.
 	$(MAKE) docker-push IMG=$(BUNDLE_IMG)
 
 .PHONY: prepare-release
+prepare-release: IMG_TAG=v$(VERSION)
 prepare-release: ## Prepare the manifests for OLM and Helm Chart for a release.
+	echo -e "#Release default values\\n\
+		AUTHORINO_OPERATOR_VERSION=$(AUTHORINO_OPERATOR_VERSION)\\n\
+		LIMITADOR_OPERATOR_VERSION=$(LIMITADOR_OPERATOR_VERSION)\\n\
+		DNS_OPERATOR_VERSION=$(DNS_OPERATOR_VERSION)\\n\
+		WASM_SHIM_VERSION=$(WASM_SHIM_VERSION)\\n\
+		RELATED_IMAGE_CONSOLEPLUGIN=$(RELATED_IMAGE_CONSOLEPLUGIN)\\n\
+		IMG=$(IMAGE_TAG_BASE):$(IMG_TAG)\\n\
+		BUNDLE_IMG=$(IMAGE_TAG_BASE)-bundle:$(IMG_TAG)\\n\
+		CATALOG_IMG=$(IMAGE_TAG_BASE)-catalog:$(IMG_TAG)\\n\
+		CHANNELS=$(CHANNELS)\\n\
+		BUNDLE_CHANNELS=--channels=$(CHANNELS)\\n\
+		VERSION=$(VERSION)" > $(RELEASE_FILE)
 	$(MAKE) bundle VERSION=$(VERSION) \
 		AUTHORINO_OPERATOR_VERSION=$(AUTHORINO_OPERATOR_VERSION) \
 		LIMITADOR_OPERATOR_VERSION=$(LIMITADOR_OPERATOR_VERSION) \
@@ -454,7 +470,17 @@ prepare-release: ## Prepare the manifests for OLM and Helm Chart for a release.
 		DNS_OPERATOR_VERSION=$(DNS_OPERATOR_VERSION) \
 		WASM_SHIM_VERSION=$(WASM_SHIM_VERSION) \
 		RELATED_IMAGE_CONSOLEPLUGIN=$(RELATED_IMAGE_CONSOLEPLUGIN)
-	sed -i -e 's/Version = ".*"/Version = "$(VERSION)"/' $(PROJECT_PATH)/version/version.go
+
+.PHONY: bundle-operator-image-url
+bundle-operator-image-url: $(YQ) ## Read operator image reference URL from the manifest bundle.
+	@$(YQ) '.metadata.annotations.containerImage' bundle/manifests/kuadrant-operator.clusterserviceversion.yaml
+
+.PHONY: read-release-version
+read-release-version: ## Reads release version
+	@echo "v$(VERSION)"
+
+print-bundle-image: ## Pring bundle images.
+	@echo $(BUNDLE_IMG)
 
 ##@ Code Style
 
